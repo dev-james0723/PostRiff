@@ -585,6 +585,24 @@ James 拍板決定 A–D（同 §10 全部建議答案）之後即日落實，�
 - **完成定義：** Harness 入面 edit / approve / cancel / publish 各產生正好一條 event；所有 event body 都冇 draft 原文（test grep 驗證）；
   另一個 tab 冇因為 event 收到 409。
 
+### Phase A 實作記錄（2026-09-16）
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| 訊號（pure） | `src/postriff_phase2/learning_signals.py` | `features()`（長度、段落、第一行、hashtag、emoji、感嘆 / 問號、列點、結尾 CTA、中英比例、全形 / 半形標點）；`edit_distance()`（中文逐字、英文逐詞，`1 − SequenceMatcher.ratio()`）；`redact()`（URL / email / handle / 數字 → placeholder，俾 Phase C2 用）；`derive_events(before, after, actor, now)`：由一個 command 前後嘅 state 推導 `draft.edited`（連前後特徵同 distance）、`draft.update_accepted`、`draft.rejected`（reason chips，note 唔入 event）、`draft.approved`（edit 次數、model 第一版 → 批准版 distance）、`job.cancelled`、`proposal.decided`；`published_event()` 俾 worker 用。`learning.enabled = false` → 唔出 event |
+| Hosted | `src/postriff_phase2/learning_service.py` | `HostedLearning`：`capture()` 係 repository effect（同一 transaction）、`published()`、`sweep()`（cron：過期 event 刪、過期 proposal 標 `expired`）、`export_files()`；寫入用 SAVEPOINT，失敗唔會令 command 失敗，但會計數（cron 結果 `captureFailures`） |
+| Hosted | `src/postriff_phase2/hosted.py` | `PostgresWorkspaceRepository.effects`：`command()` 儲存 state 之後逐個 effect 跑（`cur, workspace_id, before, after, principal`）；`HostedWorkspaceService` 接上 `HostedLearning`；export 多咗 `learning/events.jsonl`、`proposals.json`、`versions.json` |
+| Hosted | `src/postriff_phase2/hosted_worker.py`、`hosted_app.py` | worker verified → `post.published`；cron 加 `learning.sweep()`（冇 learning 嘅 fake service 會略過） |
+| Migration | `migrations/postriff/010_preference_learning.sql`（`tests/phase2/rls.sql` 載入） | `pr_learning_events`（`seq` identity 做穩定次序，180 日過期）、`pr_memory_proposals`、`pr_memory_versions`（同一 scope 一個 current）；RLS 同 005：member 讀自己 workspace，service_role 寫 |
+| Local | `src/postriff_phase2/store.py` | SQLite `learning_events` table；`mutate()` 用 command 前後 state 推導並記錄；`worker_step()` verified → `post.published`；export 加 `learning/events.jsonl`；`learning_events(wid, token)` |
+| Tests | `tests/test_postriff_learning_signals.py`（9）；`tests/test_postriff_phase2_learning.py` 加 1（edit / approve / publish / approve / cancel / feedback 六種 event 順序正確、冇原文、export、learning off 唔記）；`tests/phase2/postgres_learning_events.py`（7 checks：同 transaction 寫入、approve 距離、worker publish、RLS 讀寫邊界、export、sweep、learning off） | 全過：unit 351；PG `learning_events / learning_decide / repository / safety / isolation / memory_egress / ideas` |
+
+**同計劃嘅差異**
+- Local SQLite 只有 `learning_events` 一個 table（proposals 仍然喺 `state.preferences`）；三個 table 嘅版本只喺 hosted。
+- `chat.instruction` event 留 Phase B（memory intent 未做）。
+- Capture 失敗（例如 migration 未 apply）唔會令 user 嘅 command 失敗，但 cron 結果會見到 `captureFailures`。
+- `tests/phase2/postgres_account.py`（另一 session 未 commit 嘅 account-security test）喺我嘅 run 入面 fail 喺 `memberCounts`，同 learning 無關。
+
 ### Phase B — Chat 明確指示 → proposal → decide → prompt
 
 - **內容：**

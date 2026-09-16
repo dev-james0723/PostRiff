@@ -13,7 +13,7 @@ from .contracts import PLANS, LIMITS, SCENARIOS, FixtureImages, FixtureSocial, d
 from .media import decode_upload
 from .content_types import apply_content_action, content_preflight, ensure_content_state, projection as content_projection
 from .outcomes import normalize_result, unknown
-from . import source_policy
+from . import learning_signals as signals, source_policy
 
 TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("submitting", "provider_accepted", "published", "uncertain")
@@ -34,6 +34,10 @@ class Phase2Store(Store):
     def __init__(self, path, clock=time.time, social=None, images=None):
         self.clock, self.social, self.images = clock, social or FixtureSocial(), images or FixtureImages()
         super().__init__(path)
+        with self.connect() as db:
+            # Learning signals (preference-learning design §5.1): ids and numeric features per command, never draft text.
+            db.execute("CREATE TABLE IF NOT EXISTS learning_events (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, created_at REAL NOT NULL, expires_at REAL NOT NULL, consumed_by TEXT)")
+            db.execute("CREATE INDEX IF NOT EXISTS learning_events_workspace ON learning_events (workspace_id, created_at)")
         self.auth = Phase2Auth(self)
 
     def _row(self, db, workspace_id, token):
@@ -76,6 +80,7 @@ class Phase2Store(Store):
             if type(expected_revision) is not int or expected_revision != row["revision"]:
                 raise AlphaError("This workspace changed. Reload the saved version before continuing.", 409)
             s = json.loads(row["state"])
+            before = json.loads(row["state"])
             ensure_content_state(s)
             device = db.execute("SELECT d.id,d.user_id,m.role FROM alpha_devices d JOIN alpha_memberships m ON m.workspace_id=d.workspace_id AND m.user_id=d.user_id WHERE d.workspace_id=? AND d.credential_hash=? AND d.status='active' AND m.status='active'", (wid, hashlib.sha256(token.encode()).hexdigest())).fetchone()
             if not device or device['role'] not in ('owner', 'editor'):
@@ -105,8 +110,21 @@ class Phase2Store(Store):
             self.invalidate(s)
             if action == "p2_delete_account":
                 return {"revision": row["revision"]+1, "state": None, "deleted": True}
+            self._record_events(db, wid, signals.derive_events(before, s, device["user_id"], self.clock(), action, payload))
             db.execute("UPDATE workspaces SET revision=?,state=? WHERE id=?", (row["revision"]+1, json.dumps(s), wid))
             return self._present(s, row["revision"]+1)
+
+    def _record_events(self, db, wid, events):
+        """Learning signals for this workspace, kept 180 days (learning_signals: ids and numbers only)."""
+        for event in events:
+            at = float(event["at"])
+            db.execute("INSERT INTO learning_events VALUES (?,?,?,?,?,?,NULL)", (uid(), wid, event["kind"], json.dumps(event, ensure_ascii=False), at, at + signals.EVENT_TTL_DAYS * 86400))
+
+    def learning_events(self, wid, token, limit=500):
+        with self.connect() as db:
+            self._row(db, wid, token)
+            rows = db.execute("SELECT id, body, consumed_by FROM learning_events WHERE workspace_id=? AND expires_at > ? ORDER BY created_at, rowid LIMIT ?", (wid, self.clock(), limit)).fetchall()
+        return [{**json.loads(r["body"]), "id": r["id"], "consumedBy": r["consumed_by"]} for r in rows]
 
     def art_brief(self, s):
         visuals.ensure(s)
@@ -369,6 +387,7 @@ class Phase2Store(Store):
         out = io.BytesIO()
         with zipfile.ZipFile(out, "a", zipfile.ZIP_DEFLATED) as pack:
             pack.writestr("phase2/workspace.json", json.dumps(snapshot["state"], ensure_ascii=False, indent=2))
+            pack.writestr("learning/events.jsonl", "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in self.learning_events(wid, token, limit=20000)))
             pack.writestr("README.txt", "Private local account export. Contains your drafts, including unapproved work, sources, approved voice, artwork and synthetic receipts. Export does not approve or publish any content.\n")
         return out.getvalue()
 
@@ -443,6 +462,8 @@ class Phase2Store(Store):
             j["providerReference"] = result.get("reference", j.get("providerReference"))
             j["providerConfirmed"] = result["confirmed"]
             j["verification"] = {"method": result.get("verification"), "at": self.clock()} if result["state"] == "verified" else None
+            if result["state"] == "verified":
+                self._record_events(db, wid, [signals.published_event(j, None, self.clock())])
             if j["attempts"] and not reconciliation:
                 j["attempts"][-1]["endedAt"] = self.clock()
             j["leaseOwner"], j["leaseUntil"] = None, 0

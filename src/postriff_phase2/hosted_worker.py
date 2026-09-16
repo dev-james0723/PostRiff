@@ -10,6 +10,7 @@ from .hosted import HostedPhase2Commands
 from .contracts import digest
 from .outcomes import normalize_result, unknown
 from .permissions import Membership
+from .learning_service import record_published
 
 
 class DisabledHostedSocial:
@@ -113,6 +114,9 @@ class PostgresWorker:
                         self.on_verified(cur, claimed["workspaceId"], job)
                     except Exception:
                         job["insights"] = {"availability": "unavailable", "note": "Insights ingestion failed; publication verification is unaffected."}
+                if result["state"] == "verified":
+                    # Learning signal (ids and numbers only); a failure to record never affects the publication.
+                    record_published(cur, claimed["workspaceId"], job, self.clock())
                 if job.get("attempts") and not claimed["reconciliation"]:
                     job["attempts"][-1]["endedAt"] = self.clock()
                 job["leaseOwner"], job["leaseUntil"] = None, 0

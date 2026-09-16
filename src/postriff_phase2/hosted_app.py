@@ -322,6 +322,9 @@ class HostedApplication:
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
                 result["reminders"] = service.run_reminders()
+                learning = getattr(service, "learning", None)
+                if learning is not None:
+                    result["learning"] = learning.sweep()
                 return self._json(start_response, 200, result)
             self._origin(environ, mutation)
             service = self._runtime()

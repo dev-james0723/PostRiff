@@ -60,6 +60,8 @@ class PostgresWorkspaceRepository:
         self.verify_session = verify_session
         self.commands = commands
         self.clock = clock
+        # (cur, workspace_id, before, after, principal) hooks run inside command(), after the state is saved.
+        self.effects = []
 
     @contextmanager
     def transaction(self, token, workspace_id):
@@ -101,6 +103,8 @@ class PostgresWorkspaceRepository:
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             if audit_event:
                 audit(cur, workspace_id, principal, *audit_event(state))
+            for effect in self.effects:
+                effect(cur, workspace_id, source, state, principal)
             return {"revision": revision+1, "state": state, "membership": _membership(row).summary()}
 
     def mutate(self, workspace_id, token, expected_revision, action, payload):
@@ -258,6 +262,10 @@ class HostedWorkspaceService:
         self.reminders = Reminders(self.mailer, self._email_for, clock=clock)
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport)
+        from .learning_service import HostedLearning
+        # Preference learning: every command's implied events are captured in that command's transaction.
+        self.learning = HostedLearning(connection_factory, clock)
+        self.repository.effects.append(self.learning.capture)
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):
@@ -659,10 +667,15 @@ class HostedWorkspaceService:
         return self.assets.storage.get(workspace_id, "media", asset["objectName"]), asset.get("mime", "application/octet-stream")
 
     def export(self, workspace_id, token):
+        from .learning_service import export_files
         snapshot = self.get(workspace_id, token)
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            learning_files = export_files(cur, workspace_id)
         output = io.BytesIO()
         with zipfile.ZipFile(output, "a", zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("phase2/workspace.json", json.dumps(snapshot["state"], ensure_ascii=False, indent=2))
+            for name, body in learning_files.items():
+                archive.writestr(name, body)
             archive.writestr("README.txt", "Private hosted export. It contains drafts and approval records but no access tokens, provider credentials, or media bytes. Export does not publish content.\n")
         return output.getvalue()
 
