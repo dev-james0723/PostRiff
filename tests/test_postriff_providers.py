@@ -190,3 +190,17 @@ class MultiDestination(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HostedPlatformsHaveLimits(unittest.TestCase):
+    def test_every_hosted_oauth_platform_has_publish_limits(self):
+        """build_manifest indexes LIMITS by platform; a connector without an entry would 500 at scheduling."""
+        from postriff_phase2 import providers
+        from postriff_phase2.contracts import LIMITS
+        platforms = {cls.platform for cls in vars(providers).values() if isinstance(cls, type) and issubclass(cls, providers.OAuthProvider) and cls is not providers.OAuthProvider and cls.platform}
+        self.assertTrue(platforms, "no hosted providers found")
+        self.assertTrue(platforms <= set(LIMITS), f"missing LIMITS for {platforms - set(LIMITS)}")
+        for platform in platforms:
+            self.assertGreater(LIMITS[platform]["characters"], 0)
+            self.assertTrue(LIMITS[platform]["operation"])
+

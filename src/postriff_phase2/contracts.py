@@ -9,7 +9,9 @@ from postriff_alpha.domain import AlphaError
 PLANS = {"studio": {"price": 19, "features": ["drafts", "export", "scheduling"]},
          "assist": {"price": 39, "features": ["drafts", "export", "scheduling", "assisted-writing"]}}
 LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters": 3000, "operation": "member_post"},
-          "Instagram": {"version": "local-conservative-2026-09-14", "characters": 2200, "operation": "professional_image"}}
+          "Instagram": {"version": "local-conservative-2026-09-14", "characters": 2200, "operation": "professional_image"},
+          # Threads text limit per the connector audit (500 chars, 250 posts/24h); hosted OAuth connector.
+          "Threads": {"version": "hosted-2026-09-16", "characters": 500, "operation": "text_post"}}
 SCENARIOS = ("success", "denied", "expired", "accepted", "delayed", "failed", "rate_limited", "timeout", "duplicate", "uncertain", "malformed", "capability_loss")
 
 def digest(value):
