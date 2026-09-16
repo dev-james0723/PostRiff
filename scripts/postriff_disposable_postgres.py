@@ -36,7 +36,8 @@ def main(scripts: list[str]) -> int:
             dsn = f"host=127.0.0.1 port={PORT} dbname=postgres"
             subprocess.run([str(PG / "psql"), dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
             for script in scripts:
-                run = subprocess.run([sys.executable, str(ROOT / script)], capture_output=True, text=True)
+                # Tests never reach the web: research is off unless a run sets POSTRIFF_RESEARCH itself.
+                run = subprocess.run([sys.executable, str(ROOT / script)], capture_output=True, text=True, env={**os.environ, "POSTRIFF_RESEARCH": os.environ.get("POSTRIFF_RESEARCH", "0")})
                 results.append({"script": script, "exit": run.returncode, "stdout": run.stdout[-4000:], "stderr": run.stderr[-4000:]})
                 print(f"== {script} exit={run.returncode}")
                 print(run.stdout[-4000:])

@@ -5,6 +5,7 @@ AgentRuntime against a policy projection only; artifacts are candidates until an
 `apply`, which re-checks the projection so stale candidates are never applied silently.
 """
 import copy
+import hashlib
 import json
 from postriff_alpha.domain import AlphaError, clean, uid
 from .contracts import digest
@@ -14,7 +15,7 @@ from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import content_types, intent, memory
+from . import content_types, intent, memory, research
 
 MAX_TEXT = 6000
 MAX_EVENTS = 2000
@@ -75,7 +76,7 @@ class RunSink:
 
 
 class IdeasService:
-    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None, skill_library=None):
+    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None, skill_library=None, researcher=None):
         from .billing import Ledger
         self.repository = repository
         self.commands = commands
@@ -90,6 +91,8 @@ class IdeasService:
                     runtimes.append(cli(clock=self.clock))
         self.runtimes = list(runtimes)
         self.skills = skill_library or SkillLibrary()
+        # Web research runs before drafting when a turn needs facts the workspace lacks (research.py); False disables it.
+        self.researcher = None if researcher is False else (researcher or (research.Researcher() if research.enabled() else None))
 
     # --- routes and models ---------------------------------------------------------
     def model_catalog(self):
@@ -213,11 +216,18 @@ class IdeasService:
         self.ledger.settle(cur, workspace_id, outcome["reservationId"], "completed", int((usage.get("costUsd") or 0) * 1_000_000))
         if outcome["plan"]:
             artifact["plan"] = outcome["plan"]  # a proposal; approval still runs the review → approve chain
+        researched = outcome.get("research") or {}
+        web_pages = researched.get("pages") or []
+        if web_pages:
+            hosts = ", ".join(dict.fromkeys(research.host_of(p["url"]) or p["url"] for p in web_pages))
+            for variant in artifact["variants"]:
+                variant.setdefault("warnings", []).append(f"Some facts came from web research ({hosts}); check them against the pages before scheduling.")
         artifact_hash = digest(artifact)
         usage = {**usage, "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", [])}
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
         context = outcome["context"]
-        summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources.", "runId": run_id, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])]}
+        found = f", {len(web_pages)} found on the web" if web_pages else ""
+        summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources{found}.", "runId": run_id, "research": researched or None, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])]}
         self._settle_message(cur, workspace_id, conversation_id, run_id, summary)
         return artifact_hash
 
@@ -228,6 +238,60 @@ class IdeasService:
             self._append_message(cur, workspace_id, conversation_id, "assistant", body, run_id)
         else:
             cur.execute("UPDATE public.pr_conversations SET updated_at=now() WHERE id::text=%s", (conversation_id,))
+
+    def _research(self, workspace_id, token, payload, text, parsed):
+        """Step ①b: when the turn needs facts the workspace does not hold, look them up on the web before
+        drafting (design §11 Phase 5). Runs outside the run's transaction because it is network I/O; the
+        pages become ordinary third-party sources (use still needs the person's approval to publish) with
+        provenance, so every claim in the draft traces to a page. Returns (new source ids, record)."""
+        if self.researcher is None or payload.get("research") is False:
+            return [], None
+        message = text or clean(payload.get("intentText", ""), MAX_TEXT)
+        snapshot = self.repository.get(workspace_id, token)
+        state = snapshot["state"]
+        stamp(state)
+        # Material the person supplied for this turn (explicit sources with approved facts, other than
+        # the idea text itself) is used as is; the workspace's other sources say nothing about this topic.
+        selected = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else []
+        has_facts = any(f.get("approved") for s in state.get("sources", []) if s.get("active") and s["id"] in selected and s.get("kind") != "idea" for f in s.get("facts", []))
+        explicit = bool(research.urls_in(message)) or parsed["intent"] == "research"
+        # A type that promises the person's own tested method is not served by general steps from the web.
+        own_method = "tested_steps" in (content_types.selected_rule_ids(state) or ())
+        if not research.needs_research(message, parsed["intent"], has_facts) or (own_method and not explicit):
+            return [], None
+        result = self.researcher.run(message, parsed["intent"])
+        record = research.summary(result)
+        record["sourceIds"] = []
+        if not result["pages"]:
+            return [], record
+        added = []
+
+        def command(state, actor):
+            for page in result["pages"]:
+                body, title = research.source_body(page), research.source_title(page)
+                fingerprint = hashlib.sha256(("text" + clean(body, 20000)).encode()).hexdigest()
+                source = next((x for x in state["sources"] if x.get("fingerprint") == fingerprint and x.get("active")), None)
+                if source is None:
+                    self.commands(state, actor, "source", {"kind": "text", "text": body, "title": title})
+                    source = state["sources"][-1]
+                    stamp(state)
+                    source["origin"] = {"kind": "web_research", "url": page["url"], "host": page["host"], "query": result["query"], "published": page.get("published", ""), "fetchedAt": page["fetchedAt"]}
+                    source["unknowns"] = ["Fetched from the public web by PostRiff research; verify each claim against the page before publishing."]
+                    # Public web pages may travel to any route; publishing their words still needs the person's use approval.
+                    source["egressConsent"] = sorted(set(source.get("egressConsent", [])) | {"cloud"})
+                    self.commands(state, actor, "approve_source", {"sourceId": source["id"], "factIds": [f["id"] for f in source["facts"]]})
+                if source["id"] not in added:
+                    added.append(source["id"])
+            return state
+
+        try:
+            self.repository.command(workspace_id, token, snapshot["revision"], command)
+        except AlphaError as error:
+            if error.status != 409:
+                raise
+            self.repository.command(workspace_id, token, self.repository.get(workspace_id, token)["revision"], command)
+        record["sourceIds"] = added
+        return added, record
 
     def turn(self, workspace_id, token, conversation_id, payload):
         text = clean(payload.get("text", ""), MAX_TEXT)
@@ -242,6 +306,7 @@ class IdeasService:
         language = payload.get("language") if payload.get("language") in intent.LANGUAGES else parsed["language"]
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, DEFAULT_DESTINATIONS)
         plan = intent.build_plan(parsed, destinations)
+        research_ids, researched = self._research(workspace_id, token, payload, text, parsed)
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
@@ -249,6 +314,7 @@ class IdeasService:
             state = self._state(row)
             stamp(state)
             source_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("active")][:20]
+            source_ids = list(dict.fromkeys(list(source_ids) + research_ids))
             # A cloud route only receives sources whose egress the person consented to; local routes see local consent.
             provider_class = getattr(runtime, "provider_class", "local")
             context = project_context(state, "draft", provider_class, source_ids)
@@ -287,7 +353,7 @@ class IdeasService:
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", 500_000 if paid else 0, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", [])}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched}
 
             def emit(event):
                 self._insert_event(cur, workspace_id, run_id, event)
@@ -296,6 +362,9 @@ class IdeasService:
             # so the stream keeps its shape: run.started first, run.completed last.
             context_events = [safe_event("warning.created", message=f"{platform} is not available for drafting yet, so it was left out.") for platform in parsed["unsupported"]]
             context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"] + self._memory_notes(shared)]
+            if researched:
+                context_events.append(safe_event("progress.updated", stage="researched", percent=8, pages=len(researched["pages"]), query=researched["query"]))
+                context_events += [safe_event("warning.created", message=note) for note in researched.get("warnings", [])]
             if plan:
                 context_events.append(safe_event("action.proposed", action="schedule_plan", destinations=len(plan["destinations"]), timeZone=plan["timeZone"]))
 
@@ -306,7 +375,7 @@ class IdeasService:
                 emit(safe_event("progress.updated", stage="queued", percent=5))
                 cur.execute("UPDATE public.pr_agent_runs SET usage=%s::jsonb WHERE id::text=%s", (json.dumps({"provenance": "pending", "reservationId": reservation["reservationId"], "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", [])}), run_id))
                 # The assistant turn exists from the start so the conversation can follow the run; the sink fills it in.
-                self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": "", "pending": True, "runId": run_id, "intent": parsed["intent"], "destinations": destinations, "plan": plan, "model": model_id, "skills": skill_ids}, run_id)
+                self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": "", "pending": True, "runId": run_id, "intent": parsed["intent"], "destinations": destinations, "plan": plan, "model": model_id, "skills": skill_ids, "research": researched}, run_id)
                 dispatch = (runtime, run_id, request, RunSink(self, workspace_id, conversation_id, run_id, outcome))
                 response = self._events_for(cur, workspace_id, run_id, 0)
             else:

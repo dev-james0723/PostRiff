@@ -148,6 +148,8 @@ class CodexCliRuntime(ClaudeCliRuntime):
             except (OSError, ValueError):
                 pass
             sink.emit(safe_event("progress.updated", stage="writing", percent=10))
+            for source in request["context"]["sources"]:
+                sink.emit(safe_event("source.added", sourceId=source.get("id"), policy=source.get("policy"), candidateOnly=bool(source.get("candidateOnly")), facts=len(source.get("facts") or [])))
             size, final_text, failure, usage, finished = 0, None, None, None, False
             for line in self._read_lines(process, started):
                 if sink.cancelled():
