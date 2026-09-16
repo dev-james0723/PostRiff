@@ -51,3 +51,19 @@ Hunk-level via `evidence/source-diff.patch` after verifying "after" hashes; dele
 cd /Users/ouxianxing/Documents/James-Au-Studio && (cd studio/web && npm run build:hosted) && LC_ALL=C .venv/bin/python scripts/postriff_dev_hosted.py --port 4331
 ```
 Then open http://127.0.0.1:4331 → **Set up my agency** → **Enter dev workspace**. The dark banner marks everything synthetic.
+
+
+## Dev API on your Mac: run it from a terminal, not the desktop app's Run button
+
+The `postriff-api` entry in `.claude/launch.json` works for browsing the app, but a process the
+Claude desktop app starts that way runs under the app's sandbox helper
+(`Claude.app/Contents/Helpers/disclaimer`), which refuses outbound network connections. Web
+research (Exa search, Jina Reader) then always fails with "Web search was unavailable", and the
+agent drafts without facts. Start the API in Terminal instead:
+
+```bash
+cd /Users/ouxianxing/Documents/James-Au-Studio && LC_ALL=C POSTRIFF_DEV_WEB_ORIGIN=http://localhost:3100 .venv/bin/python scripts/postriff_dev_hosted.py --port 4331
+```
+
+Also note the harness recreates its disposable Postgres on every start, so a restart wipes the
+dev workspace (voice, identity, sources, conversations); re-seed before drafting again.
