@@ -336,6 +336,8 @@ export interface ResearchEgress {
   processors: string[];
   /** False when drafting on the person's own machine, where research is always on. */
   hosted: boolean;
+  /** False when research is switched off for the whole deployment (POSTRIFF_RESEARCH=0): no switch applies. */
+  enabled: boolean;
 }
 
 /* ---------- channels ---------- */

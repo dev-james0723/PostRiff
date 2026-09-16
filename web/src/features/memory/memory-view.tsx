@@ -116,16 +116,19 @@ function WebResearch() {
   const decidedLine = useDecidedLine(research?.decidedAt ?? null, research?.decidedBy ?? null, isOwner);
   if (!research) return null;
   const onText = 'When a draft needs facts you haven’t supplied, PostRiff looks them up.';
+  const offText = 'Drafts use only what you supply.';
   const disclosure = 'A search query drawn from your message goes to Exa, and the pages it finds, or a link you paste, are read through Jina Reader. Neither receives your sources, memory files or drafts.';
 
-  if (!research.hosted) {
+  // No switch applies on the person's own machine (always on) or when research is off for everyone here.
+  if (!research.hosted || research.enabled === false) {
+    const on = research.enabled !== false;
     return (
       <AccessStrip
         title='Web research'
-        on
-        badge='On'
-        description={`${onText} ${disclosure}`}
-        note='Always on when drafting on your own machine.'
+        on={on}
+        badge={on ? 'On' : 'Off'}
+        description={on ? `${onText} ${disclosure}` : offText}
+        note={on ? 'Always on when drafting on your own machine.' : research.hosted ? 'Web research is unavailable right now.' : 'Turned off on this machine (POSTRIFF_RESEARCH=0).'}
         ariaLabel='Web research'
         disabled
       />
@@ -150,7 +153,7 @@ function WebResearch() {
       title='Web research'
       on={research.web}
       badge={research.web ? 'On' : 'Off'}
-      description={`${research.web ? onText : 'Drafts use only what you supply. Turn this on and PostRiff looks up the facts a draft needs.'} ${disclosure}`}
+      description={`${research.web ? onText : `${offText} Turn this on and PostRiff looks up the facts a draft needs.`} ${disclosure}`}
       note={isOwner ? decidedLine ?? 'Nothing is sent until you turn this on.' : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
       switchLabel='Allow'
       ariaLabel='Let PostRiff look facts up on the web'
