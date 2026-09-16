@@ -154,7 +154,8 @@ source = snap["state"]["sources"][-1]
 act("approve_source", {"sourceId": source["id"], "factIds": [fact["id"] for fact in source["facts"]]})
 act("source_done", {})
 act("profile_propose", {"writing": "A small step can be a useful beginning.", "tone": "warm"})
-act("profile_decide", {"decision": "approve"})
+denied(lambda: act("profile_decide", {"decision": "approve"}), 403)  # the voice profile is an owner decision, like learned preferences
+snap = service.mutate(wid_a, "one", snap["revision"], "profile_decide", {"decision": "approve"})
 act("runtime", {"selected": "deterministic-preview"})
 act("generate", {"platform": "LinkedIn", "language": "English"})
 variant = snap["state"]["variants"][0]

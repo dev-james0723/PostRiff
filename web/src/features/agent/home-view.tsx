@@ -15,7 +15,7 @@ import { TextReveal } from '@/components/motion/text-reveal';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { QUICK_STARTS, QUICK_START_GROUPS, type QuickStart, type QuickStartGroup } from '@/config/quick-starts';
-import { keys, useConversations, useModels, useSnapshot } from '@/lib/api/hooks';
+import { keys, useConversations, useMemory, useMemoryProposals, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from '@/lib/ease';
@@ -73,6 +73,11 @@ export function HomeView() {
   const snapshot = useSnapshot();
   const conversations = useConversations();
   const models = useModels();
+  const memory = useMemory();
+  const memoryProposals = useMemoryProposals();
+  const memoryFiles = memory.data?.files?.length ?? null;
+  // Preference-learning design §5.6: a pending proposal is announced here once, quietly, and decided on the Memory page.
+  const pendingProposals = memoryProposals.data?.pending?.length ?? 0;
   const composer = useRef<HTMLTextAreaElement>(null);
   const reduce = useReducedMotion();
 
@@ -252,7 +257,12 @@ export function HomeView() {
           <span className='bg-border h-3.5 w-px' />
           <Link href='/app/workspace/memory' className='hover:text-foreground inline-flex items-center gap-1.5'>
             <Icons.page className='size-3.5' />
-            Memory · <span className='text-foreground font-medium'>5 files</span>
+            Memory · <span className='text-foreground font-medium'>{memoryFiles === null ? '…' : `${memoryFiles} files`}</span>
+            {pendingProposals > 0 && (
+              <span className='bg-primary/10 text-primary rounded-full px-1.5 py-0.5 text-[11px] font-medium' aria-label={`${pendingProposals} learned preference${pendingProposals === 1 ? '' : 's'} waiting for your decision`}>
+                PostRiff noticed {pendingProposals} · review
+              </span>
+            )}
           </Link>
           <span className='bg-border h-3.5 w-px' />
           <Link href='/app/ideas' className='hover:text-foreground inline-flex items-center gap-1.5'>

@@ -694,6 +694,16 @@ James 拍板決定 A–D（同 §10 全部建議答案）之後即日落實，�
 - Performance note 只用 native 絕對值嘅平均，冇做 `insights.compare()` 嘅 cohort 拒絕邏輯（content type 未計入 like-for-like）；下一步可以加 content type 維度。
 - 冇喺 browser 驗證 UI（原因同 Phase B）。
 
+### 跟進決定實作記錄（2026-09-16）— 之前擱置、由 agent 決定最佳版本
+
+- **`profile_decide` 改為 owner-only**（同 `preference` / `learning_settings` 一致：批 voice 同樣改變全隊嘅 draft）。`tests/phase2/postgres_isolation.py` 第 6 步改由 owner 批 voice，editor 試批要 403。Web `voice-setup.tsx` 非 owner 見到一句解釋、兩個按鈕 disabled。
+- **Home 提示（§5.6）**：context bar「Memory · N files」改為真數（`useMemory`）；pending proposal > 0 時加一粒「PostRiff noticed N · review」pill，連去 Memory 頁。只喺呢度提一次，決定喺 Memory 頁做。
+- **Performance note like-for-like 到 content type**：`performance_note` 按 in-scope approvals 嘅 `contentTypeId` 分組，只比較帖數最多嗰一組，note 記 `contentTypeId`；兩種 content type 混埋唔會比較（同 `insights.compare` 一樣）。
+- **C2 cloud model call 入 usage ledger（SPEC §6）**：`HostedLearning._model_observations` 先 `Ledger.reserve(text_model, 10,000 micro-USD, provider="learning", charge_batch=False)`——workspace 月線同 global 日線都生效、唔扣 writing batch——call 完 `settle`。reserve 被拒（stop-line）就跳過 model、`modelBlocked` +1，deterministic 半邊照 propose；用戶自己嘅 CLI 唔入賬。reserve 包喺 savepoint 入面，ledger 出錯唔會拖冧成個 sweep transaction。實際成本暫以估算入賬（gateway 未回 token 用量）。
+- **§8.1 online metric 上 Memory 頁**：`learning_extract.revision_stats(events)` 按 `styleRevision` 計 approvals、mean `editDistance`、unedited share；`GET …/memory/proposals` 回 `stats`；Learned preferences 面板顯示「Since style rev N: … (rev N−1: …)」，少過 5 個 approvals 標 small sample。呢個係「學咗有冇用」嘅數。
+- **文案**：Edit dialog 改為 “Edits stay in the draft history; PostRiff learns from how you edit only through preferences you accept on the Memory page.”；founder UI `expired` 狀態顯示 “Expired without a decision.”。
+- **測試**：unit 382 pass；`postgres_learning_extract` 新增 5b（reserve/settle 兩行、stop-line 拒絕後零入賬、CLI 免費）；`postgres_isolation` 改 owner 批 voice；web typecheck / lint 乾淨（另一 session 未 commit 嘅 account-security 檔除外）。未做 browser 驗證：harness API 係另一 session 嘅 process、連住 live Threads。
+
 ### 協調
 
 以下檔案 2026-09-16 有其他未 commit 嘅工作，動手之前先睇 `git diff HEAD`：

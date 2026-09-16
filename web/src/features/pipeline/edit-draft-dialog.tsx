@@ -52,7 +52,7 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
             Edit draft{variant ? ` · ${variant.platform} · ${variant.language === '繁體中文' ? '繁中' : 'EN'}` : ''}
           </DialogTitle>
-          <DialogDescription>Your words, your call. Edits are kept in the draft history and never sent to a model.</DialogDescription>
+          <DialogDescription>Your words, your call. Edits stay in the draft history; PostRiff learns from how you edit only through preferences you accept on the Memory page.</DialogDescription>
         </DialogHeader>
         {variant ? (
           <>

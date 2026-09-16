@@ -274,20 +274,25 @@ def _in_scope(scope, event_scope):
 
 
 def performance_note(candidate, approved_events, metrics_by_job):
-    """Design §3 signal 11: how posts with and without the feature did, like for like, on the first
-    native metric measured on at least three posts of each kind. An observation attached to a
-    proposal, never a reason to make one, and never a claim of cause."""
+    """Design §3 signal 11: how posts with and without the feature did, like for like (same scope and the
+    same content type, following insights.compare), on the first native metric measured on at least three
+    posts of each kind. An observation attached to a proposal, never a reason to make one, never a cause."""
     present = PRESENCE.get(candidate.get("ruleKey"))
     if present is None:
         return None
-    with_feature, without_feature = [], []
+    by_content_type = {}
     for event in approved_events:
         features = (event.get("features") or {}).get("approved")
         job_id = (event.get("subject") or {}).get("jobId")
         metrics = metrics_by_job.get(job_id) if job_id else None
-        if not isinstance(features, dict) or not metrics or not _in_scope(candidate.get("scope") or {}, event.get("scope") or {}):
+        scope = event.get("scope") or {}
+        if not isinstance(features, dict) or not metrics or not _in_scope(candidate.get("scope") or {}, scope):
             continue
-        (with_feature if present(features) else without_feature).append(metrics)
+        group = by_content_type.setdefault(scope.get("contentTypeId"), ([], []))
+        group[0 if present(features) else 1].append(metrics)
+    if not by_content_type:
+        return None
+    content_type, (with_feature, without_feature) = max(by_content_type.items(), key=lambda item: len(item[1][0]) + len(item[1][1]))
     for metric in PERFORMANCE_METRICS:
         a = [m[metric] for m in with_feature if isinstance(m.get(metric), (int, float))]
         b = [m[metric] for m in without_feature if isinstance(m.get(metric), (int, float))]
@@ -300,9 +305,27 @@ def performance_note(candidate, approved_events, metrics_by_job):
         else:
             better_without = mean_without > mean_with
             direction = "supports" if (better_without == (candidate.get("polarity") == "avoid")) else "contradicts"
-        return {"metric": metric, "withFeature": {"posts": len(a), "mean": round(mean_with, 1)}, "withoutFeature": {"posts": len(b), "mean": round(mean_without, 1)},
-                "direction": direction, "note": f"Observation from {len(a) + len(b)} published posts, not a cause; timing and topic also moved."}
+        return {"metric": metric, "contentTypeId": content_type, "withFeature": {"posts": len(a), "mean": round(mean_with, 1)}, "withoutFeature": {"posts": len(b), "mean": round(mean_without, 1)},
+                "direction": direction, "note": f"Observation from {len(a) + len(b)} published posts of one kind, not a cause; timing and topic also moved."}
     return None
+
+
+def revision_stats(events):
+    """Design §8.1 online metrics: per style revision, how much editing approved drafts needed and how
+    many were approved untouched. Read on the Memory page; the number that says whether learning helps."""
+    buckets = {}
+    for event in events:
+        features = event.get("features") or {}
+        distance = features.get("editDistance")
+        if event.get("kind") != "draft.approved" or not isinstance(distance, (int, float)):
+            continue
+        revision = int(event.get("styleRevision") or 0)
+        bucket = buckets.setdefault(revision, {"approvals": 0, "distance": 0.0, "unedited": 0})
+        bucket["approvals"] += 1
+        bucket["distance"] += distance
+        bucket["unedited"] += 1 if features.get("editCount") == 0 else 0
+    return [{"styleRevision": revision, "approvals": b["approvals"], "meanEditDistance": round(b["distance"] / b["approvals"], 3), "uneditedShare": round(b["unedited"] / b["approvals"], 3)}
+            for revision, b in sorted(buckets.items())]
 
 
 def regressions(state, events, now):

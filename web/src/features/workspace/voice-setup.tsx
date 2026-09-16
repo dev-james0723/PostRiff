@@ -39,6 +39,8 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   const state = snapshot.data?.state;
   const revision = snapshot.data?.revision ?? 0;
   const provisional = state?.speaker?.provisional ?? null;
+  // Approving the voice changes every member's drafts, so it is an owner decision (like learned preferences).
+  const isOwner = snapshot.data?.membership?.role === 'owner';
 
   const [mode, setMode] = useState<BrandMode>((state?.brandHub?.mode as BrandMode) || 'personal');
   const [purpose, setPurpose] = useState(state?.brandHub?.purpose ?? '');
@@ -112,10 +114,11 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
           </div>
         </CardContent>
         <CardFooter className='flex flex-wrap gap-2'>
-          <StatefulButton state={deciding === 'approve' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending} onClick={() => void decide('approve')}>
+          {!isOwner && <p className='text-muted-foreground text-xs'>Only an owner can approve this voice or start again.</p>}
+          <StatefulButton state={deciding === 'approve' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner} onClick={() => void decide('approve')}>
             Use this voice
           </StatefulButton>
-          <StatefulButton variant='outline' state={deciding === 'reject' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending} onClick={() => void decide('reject')}>
+          <StatefulButton variant='outline' state={deciding === 'reject' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner} onClick={() => void decide('reject')}>
             Start again
           </StatefulButton>
         </CardFooter>

@@ -166,8 +166,32 @@ assert cloud.runs == 1 and result["modelRuns"] == 1 and result["proposed"] == 1,
 pending = service.learning.proposals(service.repository, wid, "fixture-one")["pending"]
 p = next(q for q in pending if q["source"] == "model")
 assert (p["ruleKey"], p["statement"], p["scopeLabel"]) == ("other", "Lead with the concrete thing that happened.", "LinkedIn · English"), p
-service.learning.extractor = None
 checks.append("a model extractor runs only with both consents and its candidates clear the same bar")
+
+# 5b. A cloud call is money: reserved in the usage ledger before the call (no writing batch consumed), settled after,
+# and refused entirely when the workspace stop-line would be crossed; the person's own CLI books nothing.
+with connection() as db:
+    rows = db.execute("select kind, estimated_usd_micro, actual_usd_micro, charge_batch from public.pr_usage_ledger where workspace_id=%s and provider='learning' order by at, kind", (wid,)).fetchall()
+    assert [(r[0], r[1], r[2], r[3]) for r in rows] == [("reserve", 10000, None, False), ("settle", 10000, 10000, False)], rows
+    assert db.execute("select spent_usd_micro from public.pr_budgets where scope=%s", (f"workspace:{wid}",)).fetchone()[0] == 10000
+    db.execute("update public.pr_budgets set stop_usd_micro=0 where scope=%s", (f"workspace:{wid}",))
+    db.execute("update public.pr_learning_events set consumed_by=null where workspace_id=%s", (wid,))
+clock[0] += 86400 + 1
+result = service.learning.sweep()["extraction"]
+assert cloud.runs == 1 and result.get("modelBlocked") == 1 and result["modelRuns"] == 0, result
+with connection() as db:
+    assert db.execute("select count(*) from public.pr_usage_ledger where workspace_id=%s and provider='learning'", (wid,)).fetchone()[0] == 2, "a refused reservation books nothing"
+    db.execute("update public.pr_budgets set stop_usd_micro=%s where scope=%s", (50_000_000, f"workspace:{wid}"))
+    db.execute("update public.pr_learning_events set consumed_by=null where workspace_id=%s", (wid,))
+local = FakeExtractor(local=True)
+service.learning.extractor = local
+clock[0] += 86400 + 1
+result = service.learning.sweep()["extraction"]
+assert local.runs == 1 and result["modelRuns"] == 1, result
+with connection() as db:
+    assert db.execute("select count(*) from public.pr_usage_ledger where workspace_id=%s and provider='learning'", (wid,)).fetchone()[0] == 2, "the person's own CLI books nothing"
+service.learning.extractor = None
+checks.append("a cloud model call is reserved and settled in the usage ledger, refused past the stop-line, and free on the person's own CLI")
 
 # 6. Performance: the newest available value per job feeds a like-for-like note (never a proposal by itself).
 from postriff_phase2 import learning_extract as extract  # noqa: E402

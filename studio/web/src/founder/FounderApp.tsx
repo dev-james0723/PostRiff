@@ -2304,7 +2304,9 @@ function VariantEditor({
                       ? "Applies to this post only; your voice profile is unchanged."
                       : p.status === "rejected"
                         ? "Suggestion rejected. Your voice profile is unchanged."
-                        : "Preference removed from your active voice."}
+                        : p.status === "expired"
+                          ? "Expired without a decision."
+                          : "Preference removed from your active voice."}
                 </p>
                 {p.status === "remembered" && (
                   <div className="button-row">

@@ -44,6 +44,26 @@ class PerformanceNote(unittest.TestCase):
         self.assertIsNone(extract.performance_note(candidate(platform="LinkedIn"), events, metrics), "another platform is not like for like")
         self.assertIsNotNone(extract.performance_note(candidate(platform=None), events, metrics), "a language-wide candidate reads every platform")
 
+    def test_like_for_like_means_one_content_type(self):
+        def typed(job, hashtags, content_type):
+            event = approved(job, hashtags)
+            event["scope"]["contentTypeId"] = content_type
+            return event
+        metrics = {**{f"with{n}": {"saved": 10.0} for n in range(3)}, **{f"without{n}": {"saved": 20.0} for n in range(3)}}
+        mixed = [typed(f"with{n}", 2, "reflection") for n in range(3)] + [typed(f"without{n}", 0, "howto") for n in range(3)]
+        self.assertIsNone(extract.performance_note(candidate(), mixed, metrics), "posts of two kinds are not compared")
+        same = [typed(f"with{n}", 2, "reflection") for n in range(3)] + [typed(f"without{n}", 0, "reflection") for n in range(3)]
+        note = extract.performance_note(candidate(), same, metrics)
+        self.assertEqual((note["contentTypeId"], note["direction"]), ("reflection", "supports"))
+
+    def test_revision_stats_summarise_editing_per_style_revision(self):
+        events = [approved(f"r0-{n}", 0, distance=0.3) for n in range(3)] + [approved(f"r1-{n}", 0, distance=0.1) for n in range(2)]
+        for event in events[3:]:
+            event["styleRevision"] = 1
+        events[3]["features"]["editCount"] = 0
+        stats = extract.revision_stats(events + [{"kind": "draft.edited", "features": {}}])
+        self.assertEqual(stats, [{"styleRevision": 0, "approvals": 3, "meanEditDistance": 0.3, "uneditedShare": 0.0}, {"styleRevision": 1, "approvals": 2, "meanEditDistance": 0.1, "uneditedShare": 0.5}])
+
     def test_performance_alone_never_makes_a_proposal(self):
         state = {"learning": learning.initial(migrated_at="x"), "variants": [], "preferences": []}
         events = [approved(f"with{n}", 2, distance=0.0) for n in range(6)]

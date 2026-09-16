@@ -385,6 +385,8 @@ export interface MemoryProposal {
 
 export interface PerformanceNote {
   metric: string;
+  /** Posts are compared within one content type only (like for like). */
+  contentTypeId?: string | null;
   withFeature: { posts: number; mean: number };
   withoutFeature: { posts: number; mean: number };
   direction: 'supports' | 'contradicts' | 'neutral' | string;
@@ -396,6 +398,8 @@ export interface MemoryProposals {
   recent: MemoryProposal[];
   versions: { id: string; scopeKey: string; body: LearnedItem; status: string; proposalId: string | null; validFrom: number; validTo: number | null }[];
   learning: LearningSummary;
+  /** Per style revision: how much editing approved drafts needed (design §8.1). */
+  stats?: { styleRevision: number; approvals: number; meanEditDistance: number; uneditedShare: number }[];
 }
 
 /** What a run received from learned preferences (`usage.memoryBindings`; the assistant turn's `memory`). */

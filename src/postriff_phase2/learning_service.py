@@ -16,6 +16,10 @@ from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError
 from . import learning_signals as signals
 
+# One cent per sweep for a cloud model reading at most three scopes of redacted before/after pairs (Haiku-class prices);
+# booked against the workspace's monthly and the global daily stop-lines like any other text-model call.
+LEARNING_MODEL_ESTIMATE_USD_MICRO = 10_000
+
 TTL_SECONDS = signals.EVENT_TTL_DAYS * 86400
 EVENT_COLUMNS = "id::text,actor::text,kind,subject,scope,features,voice_revision,style_revision,extract(epoch from created_at),extract(epoch from expires_at),consumed_by::text"
 
@@ -234,10 +238,12 @@ class HostedLearning:
         return events
 
     def proposals(self, repository, workspace_id, token):
+        from . import learning_extract as extract
         with repository.transaction(token, workspace_id) as (cur, row, _):
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             return {"pending": [proposal_view(r) for r in pending_proposals(cur, workspace_id)], "recent": [proposal_view(r) for r in recent_proposals(cur, workspace_id)],
-                    "versions": versions(cur, workspace_id), "learning": learning.summary(state)}
+                    "versions": versions(cur, workspace_id), "learning": learning.summary(state),
+                    "stats": extract.revision_stats(events_window(cur, workspace_id, self.clock(), extract.WINDOW_DAYS))}
 
     def propose_from_chat(self, cur, workspace_id, state, proposal, principal, now):
         """Inside a turn's transaction: the proposal a chat instruction implies, plus the chat.instruction event."""
@@ -350,6 +356,34 @@ class HostedLearning:
         settings = state.get("learning") if isinstance(state.get("learning"), dict) else {}
         return bool(settings.get("cloudExtraction")) and memory.egress(state).get("cloud") is True
 
+    def _model_observations(self, cur, workspace_id, state, events, now, batch, stats):
+        """The model half of extraction under the same money rules as drafting (SPEC §6): a cloud call is reserved in
+        the usage ledger first, so the workspace and global stop-lines apply and the spend shows in Usage, without
+        consuming a writing batch; it is settled after the call. The person's own CLI costs nothing and books nothing.
+        A refused reservation skips the model for this sweep; the deterministic rules still propose."""
+        reservation = None
+        if not getattr(self.extractor, "local", False):
+            from .billing import Ledger
+            cur.execute("SAVEPOINT learning_reserve")
+            try:
+                reservation = Ledger().reserve(cur, workspace_id, next(iter(owners(cur, workspace_id)), None), "text_model", LEARNING_MODEL_ESTIMATE_USD_MICRO, f"learning:{batch}",
+                                               charge_batch=False, provider="learning", model=getattr(self.extractor, "model", "") or "", meta={"batch": batch})
+                cur.execute("RELEASE SAVEPOINT learning_reserve")
+            except Exception:  # noqa: BLE001 - a stop-line or a ledger fault: no provider call is made
+                cur.execute("ROLLBACK TO SAVEPOINT learning_reserve")
+                stats["modelBlocked"] = stats.get("modelBlocked", 0) + 1
+                return []
+        found = None
+        try:
+            found = self.extractor.observe(state, events, now)
+            stats["modelRuns"] += 1
+        except Exception:  # noqa: BLE001 - the deterministic half still proposes
+            stats["modelFailures"] = stats.get("modelFailures", 0) + 1
+        if reservation is not None:
+            from .billing import Ledger
+            Ledger().settle(cur, workspace_id, reservation["reservationId"], "completed" if found is not None else "failed", LEARNING_MODEL_ESTIMATE_USD_MICRO if found is not None else 0)
+        return found or []
+
     def extract(self, max_seconds=15, max_workspaces=20):
         """Design §5.2–§5.3: for each workspace that is due, read the last 90 days of events, consolidate
         deterministic observations (and a model extractor's, when one is configured and allowed) into
@@ -383,11 +417,7 @@ class HostedLearning:
                     if self.model_allowed(state):
                         # Decision C: the person's own CLI needs no consent beyond learning being on; a cloud model needs
                         # memory-egress consent plus the cloudExtraction switch (and per-source consent, checked per pair).
-                        try:
-                            support.extend(self.extractor.observe(state, events, now))
-                            stats["modelRuns"] += 1
-                        except Exception:  # noqa: BLE001 - the deterministic half still proposes
-                            stats["modelFailures"] = stats.get("modelFailures", 0) + 1
+                        support.extend(self._model_observations(cur, workspace_id, state, events, now, batch, stats))
                     candidates = extract.consolidate(support, counter, state, now, dismissed_keys(cur, workspace_id, now), recent_decisions(cur, workspace_id))
                     # Phase D: the kill switch adds retire proposals; performance is attached as a note, never as a reason.
                     replaced = {c.get("replaces") for c in candidates}

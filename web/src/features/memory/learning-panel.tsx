@@ -13,6 +13,8 @@ import type { LearnedItem } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { ProposalCard } from './proposal-card';
 
+const pct = (value: number) => `${Math.round(value * 100)}%`;
+
 function scopeLabel(scope: LearnedItem['scope']) {
   const { platform, language, contentTypeId } = scope;
   const base = platform && language ? `${platform} · ${language}` : platform ? `${platform} · all languages` : language ? `All channels · ${language}` : 'All channels';
@@ -39,6 +41,9 @@ export function LearningPanel() {
   const listed = items.filter((item) => item.status === 'active' || item.status === 'paused');
   const retired = items.filter((item) => item.status === 'retired');
   const pending = proposals.data?.pending ?? [];
+  const stats = proposals.data?.stats ?? [];
+  const latest = stats.at(-1);
+  const previous = stats.length > 1 ? stats.at(-2) : undefined;
 
   const update = useMutation({
     mutationFn: (input: { id: string; status: 'active' | 'paused' | 'retired' }) => api.updateLearnedItem(workspaceId, input.id, input.status, revision),
@@ -127,6 +132,15 @@ export function LearningPanel() {
       )}
 
       {proposals.isLoading && <Skeleton className='h-16 w-full' />}
+
+      {latest && (
+        <p className='text-muted-foreground text-xs'>
+          {latest.styleRevision > 0 ? `Since style rev ${latest.styleRevision}: ` : 'Before any learned preference: '}
+          {latest.approvals} approved draft{latest.approvals === 1 ? '' : 's'}, {pct(latest.meanEditDistance)} of the text changed before approval on average, {pct(latest.uneditedShare)} approved untouched
+          {previous ? ` (rev ${previous.styleRevision}: ${pct(previous.meanEditDistance)} changed, ${pct(previous.uneditedShare)} untouched)` : ''}
+          {latest.approvals < 5 ? ' · small sample' : ''}.
+        </p>
+      )}
 
       {pending.length > 0 && (
         <div className='flex flex-col gap-2'>

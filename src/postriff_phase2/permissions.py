@@ -32,8 +32,9 @@ ACTION_CLASSES = {
     # Whether memory files may reach a cloud model is a workspace privacy decision.
     "memory_egress": "owner",
     "research_egress": "owner",
-    # Accepting or undoing a learned preference changes how every member's drafts read (design decision D).
-    "preference": "owner", "learning_settings": "owner", "learning_reset": "owner",
+    # Accepting or undoing a learned preference changes how every member's drafts read (design decision D);
+    # approving the voice profile itself changes them just as much, so it is an owner decision too.
+    "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner",
     "refresh": "read", "p2_refresh": "read",
 }
 
