@@ -20,6 +20,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from postriff_alpha.domain import AlphaError
+
 ENABLE_ENV = "POSTRIFF_RESEARCH"          # "0" turns web research off for this deployment
 EXA_URL_ENV = "POSTRIFF_EXA_MCP_URL"
 READER_URL_ENV = "POSTRIFF_READER_URL"
@@ -63,6 +65,53 @@ _BOILERPLATE = re.compile(r"\b(cookie|cookies|consent|gdpr|privacy policy|terms 
 
 def enabled():
     return os.environ.get(ENABLE_ENV, "1") != "0"
+
+
+# --- consent: who decides that text may leave the workspace ------------------------------
+# On a person's own machine the CLI route is theirs and research is simply on. On a hosted
+# deployment PostRiff would be the one sending a query to Exa and page addresses to the reader,
+# so each workspace's owner opts in first (Memory → Web research), like cloud model access.
+CONSENT_ACTION = "research_egress"
+HOSTED_ENV = "POSTRIFF_HOSTED"
+PROCESSORS = ["Exa search (a query drawn from the message)", "Jina Reader (page addresses)"]
+OFF_NOTE = "Web research is off for this workspace, so this draft used only what you supplied. An owner can turn it on under Memory → Web research."
+
+
+def hosted():
+    return os.environ.get("VERCEL") == "1" or os.environ.get(HOSTED_ENV) == "1"
+
+
+def consent(state):
+    decision = (state or {}).get("researchEgress")
+    return decision if isinstance(decision, dict) else {"web": False}
+
+
+def allowed(state):
+    """Research may run now: switched on for the deployment, and on a hosted one the owner opted in."""
+    return enabled() and (not hosted() or consent(state).get("web") is True)
+
+
+def consent_summary(state):
+    """What the Memory page shows: the decision, who made it, and whether a switch applies here."""
+    decision = consent(state)
+    return {"web": (decision.get("web") is True) if hosted() else enabled(), "decidedAt": decision.get("decidedAt"), "decidedBy": decision.get("decidedBy"),
+            "processors": list(PROCESSORS), "hosted": hosted(), "enabled": enabled()}
+
+
+def apply_research_action(state, action, payload, actor, now):
+    """Handle `research_egress` (owner only, see permissions); return True when consumed."""
+    if action != CONSENT_ACTION:
+        return False
+    web = payload.get("web")
+    if not isinstance(web, bool) or payload.get("confirmed") is not True:
+        raise AlphaError("Choose whether PostRiff may look facts up on the web for this workspace, and confirm it.")
+    state["researchEgress"] = {"web": web, "decidedBy": actor, "decidedAt": now, "processors": list(PROCESSORS)}
+    return True
+
+
+def off_record(query):
+    """The record of a turn that wanted research while it was off: a reminder, never a block."""
+    return {"query": query, "pages": [], "searched": [], "sourceIds": [], "warnings": [OFF_NOTE], "elapsed": 0, "off": True}
 
 
 def urls_in(text):

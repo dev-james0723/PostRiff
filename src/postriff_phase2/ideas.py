@@ -119,7 +119,7 @@ class IdeasService:
     def memory_files(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             state = self._state(row)
-            return {"files": memory.render_files(state), "egress": memory.egress_summary(state)}
+            return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state)}
 
     # --- helpers -------------------------------------------------------------------
     @staticmethod
@@ -252,6 +252,9 @@ class IdeasService:
         stamp(state)
         # Material the person supplied for this turn (explicit sources with approved facts, other than
         # the idea text itself) is used as is; the workspace's other sources say nothing about this topic.
+        if not research.allowed(state):
+            wants = research.needs_research(message, parsed["intent"], False)
+            return [], (research.off_record(research.query_for(message)) if wants else None)
         selected = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else []
         has_facts = any(f.get("approved") for s in state.get("sources", []) if s.get("active") and s["id"] in selected and s.get("kind") != "idea" for f in s.get("facts", []))
         explicit = bool(research.urls_in(message)) or parsed["intent"] == "research"
@@ -355,7 +358,8 @@ class IdeasService:
             context_events = [safe_event("warning.created", message=f"{platform} is not available for drafting yet, so it was left out.") for platform in parsed["unsupported"]]
             context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"] + self._memory_notes(shared) + reminders]
             if researched:
-                context_events.append(safe_event("progress.updated", stage="researched", percent=8, pages=len(researched["pages"]), query=researched["query"]))
+                if not researched.get("off"):
+                    context_events.append(safe_event("progress.updated", stage="researched", percent=8, pages=len(researched["pages"]), query=researched["query"]))
                 context_events += [safe_event("warning.created", message=note) for note in researched.get("warnings", [])]
             if plan:
                 context_events.append(safe_event("action.proposed", action="schedule_plan", destinations=len(plan["destinations"]), timeZone=plan["timeZone"]))

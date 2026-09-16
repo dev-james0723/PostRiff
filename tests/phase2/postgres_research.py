@@ -6,6 +6,7 @@ the same page is never stored twice; a pasted link is read directly.
 Run through scripts/postriff_disposable_postgres.py (loads rls.sql with migrations 004+005).
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -56,6 +57,7 @@ with connection() as db:
     wid = str(db.execute("SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s", (ONE,)).fetchone()[0])
     db.execute("UPDATE public.pr_workspaces SET state='{}'::jsonb WHERE id=%s", (wid,))
 
+os.environ["POSTRIFF_RESEARCH"] = "1"  # the runner switches research off for every suite; this one injects a fake
 service = HostedWorkspaceService(connection, verify, clock=lambda: clock[0])
 fake = FakeResearcher()
 service.ideas.researcher = fake
@@ -124,6 +126,29 @@ if "tested_steps" in content_types.selected_rule_ids(state):
     except AlphaError:
         pass
     assert len(fake.calls) == calls_before, "a how-to keeps its own-method promise: no web steps"
-    print("postgres_research: 7/7 checks passed")
+    checks = 7
 else:
-    print("postgres_research: 6/6 checks passed (tested_steps type unavailable here; check 7 skipped)")
+    checks = 6
+    print("(tested_steps type unavailable here; check 7 skipped)")
+with connection() as db:
+    db.execute("UPDATE public.pr_workspaces SET state = jsonb_set(state, '{contentSystem,selection,contentTypeId}', '\"unclassified\"'::jsonb, true) WHERE id=%s", (wid,))
+
+# 8. On a hosted deployment research waits for the owner's consent; the draft still goes out, with a reminder.
+os.environ["POSTRIFF_HOSTED"] = "1"
+try:
+    calls_before = len(fake.calls)
+    gated = ideas.turn(wid, "one", cid, {"text": "write a post about the newest Claude release", "timeZone": "Asia/Hong_Kong", "sourceIds": []})
+    assert gated["status"] == "completed" and len(fake.calls) == calls_before, (gated["status"], len(fake.calls), calls_before)
+    assert any(e["type"] == "warning.created" and "Web research is off" in e["message"] for e in gated["events"]), [e["type"] for e in gated["events"]]
+    summary = ideas.memory_files(wid, "one")["research"]
+    assert summary["web"] is False and summary["hosted"] is True and summary["decidedBy"] is None
+    service.mutate(wid, "one", service.get(wid, "one")["revision"], "research_egress", {"web": True, "confirmed": True})
+    summary = ideas.memory_files(wid, "one")["research"]
+    assert summary["web"] is True and summary["decidedBy"] == ONE and isinstance(summary["decidedAt"], (int, float))
+    with connection() as db:
+        assert db.execute("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s AND kind='research.egress_decided'", (wid,)).fetchone()[0] == 1
+    allowed = ideas.turn(wid, "one", cid, {"text": "write a post about the newest Claude release", "timeZone": "Asia/Hong_Kong", "sourceIds": []})
+    assert allowed["status"] == "completed" and len(fake.calls) == calls_before + 1
+finally:
+    del os.environ["POSTRIFF_HOSTED"]
+print(f"postgres_research: {checks + 1}/{checks + 1} checks passed")

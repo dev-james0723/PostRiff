@@ -31,6 +31,7 @@ ACTION_CLASSES = {
     "p2_plan": "owner",
     # Whether memory files may reach a cloud model is a workspace privacy decision.
     "memory_egress": "owner",
+    "research_egress": "owner",
     "refresh": "read", "p2_refresh": "read",
 }
 

@@ -1,10 +1,13 @@
 """Web research for a turn: when it runs, what it asks, what it keeps, how it fails softly. No network."""
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from postriff_alpha.domain import AlphaError  # noqa: E402
 from postriff_phase2 import research  # noqa: E402
 
 READER_TEXT = """Title: Introducing v6 - Suno AI
@@ -96,6 +99,30 @@ class ResearchRulesTest(unittest.TestCase):
         self.assertEqual([r["url"] for r in results], ["https://suno.com/blog/introducing-v6", "https://x.com/suno/status/1", "https://www.example-news.com/suno-v6-review"])
         self.assertEqual(results[0]["published"], "2026-09-09T10:34:56.084Z")
         self.assertIn("v6 models are our best yet", results[0]["snippet"])
+
+
+class ConsentTest(unittest.TestCase):
+    def test_local_is_always_on_and_hosted_needs_the_owner(self):
+        with mock.patch.dict(os.environ, {"POSTRIFF_HOSTED": "", "VERCEL": "", "POSTRIFF_RESEARCH": "1"}):
+            self.assertTrue(research.allowed({}))
+            self.assertEqual((research.consent_summary({})["web"], research.consent_summary({})["hosted"]), (True, False))
+        with mock.patch.dict(os.environ, {"POSTRIFF_HOSTED": "1", "VERCEL": "", "POSTRIFF_RESEARCH": "1"}):
+            state = {}
+            self.assertFalse(research.allowed(state))
+            self.assertFalse(research.apply_research_action(state, "memory_egress", {"cloud": True}, "u1", 1.0))
+            with self.assertRaises(AlphaError):
+                research.apply_research_action(state, "research_egress", {"web": True}, "u1", 1.0)
+            self.assertTrue(research.apply_research_action(state, "research_egress", {"web": True, "confirmed": True}, "u1", 1789524000.0))
+            self.assertTrue(research.allowed(state))
+            summary = research.consent_summary(state)
+            self.assertEqual((summary["web"], summary["hosted"], summary["decidedBy"], summary["decidedAt"]), (True, True, "u1", 1789524000.0))
+            research.apply_research_action(state, "research_egress", {"web": False, "confirmed": True}, "u1", 2.0)
+            self.assertFalse(research.allowed(state))
+        with mock.patch.dict(os.environ, {"POSTRIFF_RESEARCH": "0", "POSTRIFF_HOSTED": "", "VERCEL": ""}):
+            self.assertFalse(research.allowed({}))
+            self.assertFalse(research.consent_summary({})["web"])
+        self.assertIn("Memory → Web research", research.off_record("x")["warnings"][0])
+        self.assertTrue(research.off_record("x")["off"])
 
 
 class ResearcherTest(unittest.TestCase):

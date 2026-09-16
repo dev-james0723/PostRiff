@@ -19,7 +19,7 @@ from .contracts import FixtureImages, FixtureSocial, PLANS, digest
 from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
-from . import memory, source_policy
+from . import memory, research, source_policy
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
@@ -109,6 +109,8 @@ class PostgresWorkspaceRepository:
         if not isinstance(action, str) or not isinstance(payload, dict):
             raise AlphaError("Expected a structured command.")
         audit_event = (lambda state: ("memory.egress_decided", "cloud", {"cloud": memory.egress(state).get("cloud") is True})) if action == memory.EGRESS_ACTION else None
+        if action == research.CONSENT_ACTION:
+            audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
         return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event)
 
 
@@ -145,6 +147,8 @@ class HostedPhase2Commands:
             self.engine.invalidate(state)
             return state
         if memory.apply_memory_action(state, action, payload, principal, self.clock()):
+            return state
+        if research.apply_research_action(state, action, payload, principal, self.clock()):
             return state
         if action.startswith("p2_"):
             hosted_action = action[3:]
