@@ -8,35 +8,47 @@ type BreadcrumbItem = {
   link: string;
 };
 
-// This allows to add custom title as well
-const routeMapping: Record<string, BreadcrumbItem[]> = {
-  '/app': [{ title: 'Overview', link: '/app' }],
-  '/app/account/billing': [
-    { title: 'Account', link: '/app/account/profile' },
-    { title: 'Usage & plan', link: '/app/account/billing' }
-  ]
-  // Add more custom mappings as needed
+const TITLES: Record<string, string> = {
+  app: 'Overview',
+  ideas: 'Ideas',
+  calendar: 'Calendar',
+  pipeline: 'Pipeline',
+  library: 'Library',
+  channels: 'Channels',
+  connect: 'Connect',
+  queue: 'Queue',
+  analytics: 'Analytics',
+  inbox: 'Inbox',
+  workspace: 'Workspace',
+  members: 'Members',
+  roles: 'Roles',
+  audit: 'Audit log',
+  brand: 'Brand',
+  account: 'Account',
+  profile: 'Profile',
+  notifications: 'Notifications',
+  billing: 'Usage & plan',
+  privacy: 'Privacy & data',
+  api: 'API & integrations'
+};
+
+/** Group segments without their own page point at the first child instead. */
+const GROUP_LANDING: Record<string, string> = {
+  '/app/workspace': '/app/workspace/members',
+  '/app/account': '/app/account/profile'
 };
 
 export function useBreadcrumbs() {
   const pathname = usePathname();
 
-  const breadcrumbs = useMemo(() => {
-    // Check if we have a custom mapping for this exact path
-    if (routeMapping[pathname]) {
-      return routeMapping[pathname];
-    }
-
-    // If no exact match, fall back to generating breadcrumbs from the path
+  return useMemo<BreadcrumbItem[]>(() => {
     const segments = pathname.split('/').filter(Boolean);
     return segments.map((segment, index) => {
       const path = `/${segments.slice(0, index + 1).join('/')}`;
       return {
-        title: segment.charAt(0).toUpperCase() + segment.slice(1),
-        link: path
+        title: TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1),
+        link: GROUP_LANDING[path] ?? path
       };
     });
   }, [pathname]);
-
-  return breadcrumbs;
 }

@@ -181,7 +181,8 @@ class HostedApplication:
             return
         if environ.get("HTTP_X_POSTRIFF_REQUEST") != "founder-alpha":
             raise AlphaError("This request is missing the application guard.", 403)
-        host = environ.get("HTTP_HOST", "")
+        # Behind a reverse proxy (Vercel, the Next.js dev server) the browser-facing host arrives forwarded.
+        host = (environ.get("HTTP_X_FORWARDED_HOST") or environ.get("HTTP_HOST", "")).split(",")[0].strip()
         proto = environ.get("HTTP_X_FORWARDED_PROTO", environ.get("wsgi.url_scheme", "https")).split(",")[0].strip()
         origin = environ.get("HTTP_ORIGIN")
         if not host or proto not in ("http", "https") or origin and origin != f"{proto}://{host}":

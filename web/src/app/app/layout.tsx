@@ -1,15 +1,14 @@
 import type { Metadata } from 'next';
-import { WorkspaceAccessProvider } from '@/lib/auth/access';
+import { cookies } from 'next/headers';
+import { AppShell } from '@/components/layout/app-shell';
 
 export const metadata: Metadata = {
+  title: { default: 'Workspace', template: '%s · PostRiff' },
   robots: { index: false, follow: false }
 };
 
-// Placeholder shell. Phase B adds the sidebar, KBar and real workspace access.
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <WorkspaceAccessProvider>
-      <div className='flex min-h-svh flex-col'>{children}</div>
-    </WorkspaceAccessProvider>
-  );
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const defaultOpen = cookieStore.get('sidebar_state')?.value !== 'false';
+  return <AppShell defaultOpen={defaultOpen}>{children}</AppShell>;
 }

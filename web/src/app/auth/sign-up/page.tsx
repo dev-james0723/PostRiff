@@ -1,17 +1,17 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { AuthForm } from '@/components/auth/auth-form';
 
 export const metadata: Metadata = {
-  title: 'Start free trial',
-  description: 'Create your PostRiff workspace.',
+  title: 'Start your free trial',
+  description: 'Create a PostRiff workspace. 14-day trial, no card required.',
   robots: { index: false }
 };
 
-// Placeholder until Phase B wires Supabase auth.
 export default function SignUpPage() {
   return (
-    <div className='flex flex-col gap-2 text-center'>
-      <h1 className='text-2xl font-semibold tracking-tight'>Start free trial</h1>
-      <p className='text-muted-foreground text-sm'>Sign up coming in Phase B.</p>
-    </div>
+    <Suspense fallback={null}>
+      <AuthForm intent='sign-up' />
+    </Suspense>
   );
 }

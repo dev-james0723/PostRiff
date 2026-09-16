@@ -1,0 +1,402 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import PageContainer from '@/components/layout/page-container';
+import { Icons } from '@/components/icons';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
+import { ApiError } from '@/lib/api/client';
+import type { Message, Run, RunVariant } from '@/lib/api/types';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { formatDate, relativeTime } from '@/lib/time';
+import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { cn } from '@/lib/utils';
+
+type Platform = 'LinkedIn' | 'Instagram' | 'Threads';
+type Language = 'English' | '繁體中文';
+const PLATFORMS: Platform[] = ['LinkedIn', 'Instagram', 'Threads'];
+
+const infoContent = {
+  title: 'How drafting works',
+  sections: [
+    {
+      title: 'Sources you choose',
+      description: 'Drafts come only from text you paste or sources you approve. Mark your own writing so it may be quoted; anything else is rewritten, never copied.'
+    },
+    {
+      title: 'One candidate per destination',
+      description: 'Each platform and language becomes its own candidate. Adding candidates to drafts never publishes anything.'
+    },
+    {
+      title: 'Cost',
+      description: 'Every run reserves an estimate against your allowance first and settles the real cost after. Runs stop before the plan limit is crossed.'
+    }
+  ]
+};
+
+const destinationLabel = (v: { platform: string; language: string }) => `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`;
+
+function messageText(message: Message) {
+  const body = message.body as { text?: string; excluded?: { id: string; reason: string }[] };
+  return { text: String(body.text ?? ''), excluded: Array.isArray(body.excluded) ? body.excluded : [] };
+}
+
+export function IdeasView() {
+  const params = useSearchParams();
+  const { api, workspaceId } = useWorkspaceApi();
+  const client = useQueryClient();
+  const access = useWorkspaceAccess();
+  const canEdit = checkAccess(access, { permission: 'edit' });
+  const snapshot = useSnapshot();
+  const conversations = useConversations();
+  const models = useModels();
+
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const thread = useMessages(conversationId);
+  const [run, setRun] = useState<Run | null>(null);
+  const [text, setText] = useState('');
+  const [own, setOwn] = useState(true);
+  const [confirm, setConfirm] = useState(false);
+  const [platforms, setPlatforms] = useState<Platform[]>(['LinkedIn', 'Instagram']);
+  const [language, setLanguage] = useState<Language>('English');
+  const [selected, setSelected] = useState(0);
+  const [working, setWorking] = useState(false);
+  const composer = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (params.get('new') === '1') {
+      setConversationId(null);
+      setRun(null);
+      composer.current?.focus();
+    }
+  }, [params]);
+
+  // Reload the last run of a conversation so its candidates show when you come back.
+  const lastRunId = useMemo(() => {
+    const withRun = (thread.data?.messages ?? []).filter((m) => m.runId);
+    return withRun.length ? withRun[withRun.length - 1].runId : null;
+  }, [thread.data]);
+  useEffect(() => {
+    if (lastRunId && run?.runId !== lastRunId) {
+      api.runEvents(workspaceId, lastRunId).then(setRun).catch(() => undefined);
+    }
+  }, [api, lastRunId, run?.runId, workspaceId]);
+
+  const destinations = platforms.map((platform) => ({ platform, language }));
+  const revision = snapshot.data?.revision ?? 0;
+  const variants: RunVariant[] = run?.artifact?.variants ?? [];
+  const qualified = models.data?.models.find((m) => m.qualified);
+
+  async function guard<T>(task: () => Promise<T>): Promise<T | undefined> {
+    setWorking(true);
+    try {
+      return await task();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'The idea could not be processed.');
+      return undefined;
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function quickStart() {
+    const body = text.trim();
+    if (!body || !confirm || destinations.length === 0) return;
+    const result = await guard(() => api.quickStart(workspaceId, revision, { text: body, ownContent: own, confirmUse: true, destinations }));
+    if (!result) return;
+    setText('');
+    setConfirm(false);
+    setConversationId(result.conversationId);
+    setRun(result);
+    setSelected(0);
+    await client.invalidateQueries({ queryKey: keys.conversations(workspaceId) });
+    await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+    await client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
+    toast.success(`Drafted ${result.artifact?.variants.length ?? 0} candidate${result.artifact?.variants.length === 1 ? '' : 's'}. Nothing is published.`);
+  }
+
+  async function sendTurn() {
+    const body = text.trim();
+    if (!conversationId || !body || destinations.length === 0) return;
+    const result = await guard(() => api.turn(workspaceId, conversationId, { text: body, destinations }));
+    if (!result) return;
+    setText('');
+    setRun(result);
+    setSelected(0);
+    await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
+    await client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
+  }
+
+  async function apply() {
+    if (!run?.artifactHash) return;
+    const result = await guard(() => api.applyRun(workspaceId, run.runId, revision, run.artifactHash as string));
+    if (!result) return;
+    setRun({ ...run, status: 'applied' });
+    await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+    toast.success(`${result.variants ?? ''} candidate${result.variants === 1 ? '' : 's'} added to your drafts. Publishing still needs an exact approval.`);
+  }
+
+  const list = conversations.data?.conversations ?? [];
+  const messages = thread.data?.messages ?? [];
+  const currentTitle = conversationId ? list.find((c) => c.conversationId === conversationId)?.title || 'Conversation' : 'Start from a source';
+
+  return (
+    <PageContainer
+      pageTitle='Ideas'
+      pageDescription='Paste a thought, a paragraph or a link. Get a candidate per destination, then add the ones that sound like you.'
+      infoContent={infoContent}
+      pageHeaderAction={
+        <Badge variant='outline' className='gap-1'>
+          <Icons.sparkles className='size-3' />
+          {qualified ? qualified.label : 'Deterministic preview · $0'}
+        </Badge>
+      }
+    >
+      <div className='grid gap-4 lg:grid-cols-[14rem_1fr] xl:grid-cols-[14rem_1fr_24rem]'>
+        {/* Conversations */}
+        <Card className='hidden lg:flex lg:flex-col'>
+          <CardHeader className='flex flex-row items-center justify-between'>
+            <CardTitle className='text-sm'>Conversations</CardTitle>
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={() => {
+                setConversationId(null);
+                setRun(null);
+                composer.current?.focus();
+              }}
+            >
+              <Icons.add className='size-4' /> New
+            </Button>
+          </CardHeader>
+          <CardContent className='p-0'>
+            <ScrollArea className='h-[28rem]'>
+              {conversations.isLoading ? (
+                <div className='flex flex-col gap-2 p-3'>
+                  <Skeleton className='h-8 w-full' />
+                  <Skeleton className='h-8 w-full' />
+                </div>
+              ) : list.length === 0 ? (
+                <p className='text-muted-foreground p-4 text-xs'>No conversations yet.</p>
+              ) : (
+                <ul className='flex flex-col'>
+                  {list.map((c) => (
+                    <li key={c.conversationId}>
+                      <button
+                        type='button'
+                        onClick={() => setConversationId(c.conversationId)}
+                        className={cn(
+                          'hover:bg-accent flex w-full flex-col items-start gap-0.5 px-4 py-2 text-left text-sm',
+                          conversationId === c.conversationId && 'bg-accent'
+                        )}
+                      >
+                        <span className='line-clamp-1'>{c.title || 'Untitled'}</span>
+                        <span className='text-muted-foreground text-xs'>{formatDate(c.updatedAt)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* Thread + composer */}
+        <Card className='flex flex-col'>
+          <CardHeader>
+            <CardTitle className='text-base'>{currentTitle}</CardTitle>
+            {!conversationId && <CardDescription>You get a preview before you connect anything.</CardDescription>}
+          </CardHeader>
+          <CardContent className='flex flex-1 flex-col gap-4'>
+            {conversationId && (
+              <ol className='flex flex-col gap-3'>
+                {thread.isLoading && <Skeleton className='h-16 w-full' />}
+                {messages.map((message) => {
+                  const { text: body, excluded } = messageText(message);
+                  return (
+                    <li key={message.messageId} className={cn('flex flex-col gap-1 rounded-lg border p-3 text-sm', message.role === 'user' ? 'bg-muted/40' : 'bg-card')}>
+                      <span className='text-muted-foreground text-xs'>
+                        {message.role === 'user' ? 'You' : 'PostRiff'} · {relativeTime(message.at)}
+                      </span>
+                      <p className='whitespace-pre-wrap'>{body}</p>
+                      {excluded.length > 0 && (
+                        <ul className='text-muted-foreground text-xs'>
+                          {excluded.map((item) => (
+                            <li key={item.id}>Source excluded — {item.reason.replace(/_/g, ' ')}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+
+            {canEdit ? (
+              <div className='mt-auto flex flex-col gap-3'>
+                <Textarea
+                  ref={composer}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  rows={conversationId ? 3 : 6}
+                  maxLength={20000}
+                  aria-label='Your idea or source'
+                  placeholder={
+                    conversationId
+                      ? 'Ask for another angle, a shorter version, or a different audience…'
+                      : 'e.g. The community garden hosts a free seed-swap on Saturday. Visitors can bring seeds or simply come to learn.'
+                  }
+                />
+                <div className='flex flex-wrap items-center gap-3'>
+                  <ToggleGroup
+                    multiple
+                    value={platforms}
+                    onValueChange={(value) => setPlatforms((value as Platform[]).filter((p) => PLATFORMS.includes(p)))}
+                    aria-label='Destinations'
+                  >
+                    {PLATFORMS.map((platform) => (
+                      <ToggleGroupItem key={platform} value={platform} className='text-xs'>
+                        {platform}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                  <ToggleGroup value={[language]} onValueChange={(value) => value[0] && setLanguage(value[0] as Language)} aria-label='Language'>
+                    <ToggleGroupItem value='English' className='text-xs'>
+                      EN
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value='繁體中文' className='text-xs'>
+                      繁中
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+                {!conversationId && (
+                  <div className='flex flex-col gap-2'>
+                    <Label className='flex items-center gap-2 text-sm font-normal'>
+                      <Checkbox checked={own} onCheckedChange={(value) => setOwn(value === true)} />
+                      This is my own writing (may be quoted publicly)
+                    </Label>
+                    <Label className='flex items-center gap-2 text-sm font-normal'>
+                      <Checkbox checked={confirm} onCheckedChange={(value) => setConfirm(value === true)} />
+                      Use this content to draft with
+                    </Label>
+                  </div>
+                )}
+                <div className='flex flex-wrap items-center gap-3'>
+                  {conversationId ? (
+                    <Button disabled={working || !text.trim() || destinations.length === 0} onClick={() => void sendTurn()}>
+                      {working ? 'Drafting…' : 'Draft again'}
+                    </Button>
+                  ) : (
+                    <Button disabled={working || !text.trim() || !confirm || destinations.length === 0} onClick={() => void quickStart()}>
+                      {working ? 'Drafting…' : `Draft ${destinations.length} preview${destinations.length === 1 ? '' : 's'}`}
+                    </Button>
+                  )}
+                  <span className='text-muted-foreground text-xs'>
+                    {qualified ? `${qualified.label} · metered against your allowance` : 'Deterministic preview · no model request · $0'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className='text-muted-foreground text-sm'>You need the edit permission to draft in this workspace.</p>
+            )}
+
+            {run && (
+              <details className='text-xs'>
+                <summary className='text-muted-foreground cursor-pointer'>
+                  Run log · {run.status} · {run.events.length} events
+                </summary>
+                <ol className='mt-2 flex flex-col gap-1'>
+                  {run.events.map((event) => (
+                    <li key={event.id}>
+                      <code className='bg-muted rounded px-1'>{event.type}</code>
+                      {event.message ? ` — ${event.message}` : event.stage ? ` — ${event.stage} ${event.percent ?? ''}%` : event.policy ? ` — ${event.policy}` : ''}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Candidates */}
+        <Card className='flex flex-col xl:col-start-3'>
+          <CardHeader>
+            <CardTitle className='text-base'>Candidates</CardTitle>
+            <CardDescription>One per destination. Adding them creates reviewable drafts; it never publishes.</CardDescription>
+          </CardHeader>
+          <CardContent className='flex flex-1 flex-col gap-3'>
+            {variants.length === 0 ? (
+              <Empty className='border-0 py-6'>
+                <EmptyHeader>
+                  <EmptyMedia variant='icon'>
+                    <Icons.post />
+                  </EmptyMedia>
+                  <EmptyTitle>Your previews appear here</EmptyTitle>
+                  <EmptyDescription>Draft from a source first; each destination becomes its own candidate.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <Tabs value={String(selected)} onValueChange={(value) => setSelected(Number(value))}>
+                <TabsList className='flex-wrap'>
+                  {variants.map((variant, index) => (
+                    <TabsTrigger key={index} value={String(index)}>
+                      {destinationLabel(variant)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {variants.map((variant, index) => (
+                  <TabsContent key={index} value={String(index)} className='flex flex-col gap-3'>
+                    <article className='rounded-lg border p-3 text-sm whitespace-pre-wrap'>{variant.text}</article>
+                    {variant.warnings && variant.warnings.length > 0 && (
+                      <div className='flex flex-wrap gap-1'>
+                        {variant.warnings.map((warning, i) => (
+                          <Badge key={i} variant='outline'>
+                            {warning}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {variant.unknowns.length > 0 && (
+                      <div className='text-muted-foreground text-xs'>
+                        <p className='text-foreground font-medium'>Unknowns kept out of the draft</p>
+                        <ul className='list-disc pl-4'>
+                          {variant.unknowns.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {variant.candidateOnly && (
+                      <p className='text-xs text-amber-600 dark:text-amber-400'>Rewritten-source candidate — approve public use of the source before publishing.</p>
+                    )}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
+            {variants.length > 0 && canEdit && (
+              <div className='mt-auto flex flex-col gap-1'>
+                <Button disabled={working || run?.status === 'applied' || !run?.artifactHash} onClick={() => void apply()}>
+                  {run?.status === 'applied' ? 'Added to drafts' : 'Add to my drafts for review'}
+                </Button>
+                <span className='text-muted-foreground text-xs'>Publishing still needs an exact approval in the Queue.</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
+  );
+}

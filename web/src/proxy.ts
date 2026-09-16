@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
+import { hasSupabaseEnv } from '@/lib/supabase/env';
+
+/** Set by the sign-in page when the API runs in dev-harness mode (no Supabase). */
+const DEV_COOKIE = 'postriff_dev';
 
 const SIGN_IN_PATH = '/auth/sign-in';
 
@@ -17,6 +21,8 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (isAppRoute(pathname) && !user) {
+    // Local dev harness: identity is simulated client-side; the API still verifies every token.
+    if (!hasSupabaseEnv() && request.cookies.get(DEV_COOKIE)) return response;
     const url = request.nextUrl.clone();
     url.pathname = SIGN_IN_PATH;
     url.search = '';

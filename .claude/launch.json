@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "postriff-api",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio && LC_ALL=C .venv/bin/python scripts/postriff_dev_hosted.py --port 4331"
+      ],
+      "port": 4331
+    },
+    {
+      "name": "postriff-web",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio/web && npm run dev -- -p 3100"
+      ],
+      "port": 3100
+    }
+  ]
+}

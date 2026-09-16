@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { AuthForm } from '@/components/auth/auth-form';
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -6,12 +8,10 @@ export const metadata: Metadata = {
   robots: { index: false }
 };
 
-// Placeholder until Phase B wires Supabase auth.
 export default function SignInPage() {
   return (
-    <div className='flex flex-col gap-2 text-center'>
-      <h1 className='text-2xl font-semibold tracking-tight'>Sign in</h1>
-      <p className='text-muted-foreground text-sm'>Sign in coming in Phase B.</p>
-    </div>
+    <Suspense fallback={null}>
+      <AuthForm intent='sign-in' />
+    </Suspense>
   );
 }
