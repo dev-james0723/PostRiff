@@ -273,3 +273,18 @@ class HostedPhase2Acceptance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AcceptUpdateFromIdeas(unittest.TestCase):
+    def test_accept_update_works_for_hosted_candidates_without_a_local_run(self):
+        """Ideas candidates carry a pr_agent_runs id; accepting their proposed update must not require a local run entry."""
+        from postriff_phase2.hosted import HostedPhase2Commands
+        state = initial_phase2_state("w", "u", "Member", "studio", 1.0, execution="hosted-candidate")
+        state["speaker"]["revisions"].append({"revision": 1, "profile": {"tone": "warm", "writingExample": "", "observations": [], "unknowns": [], "preferences": []}, "approvedAt": "now", "reason": "test"})
+        state["speaker"]["activeRevision"] = 1
+        state["variants"].append({"id": "v1", "revision": 1, "platform": "Threads", "language": "English", "text": "old", "openings": [], "sourceIds": [], "warnings": [], "unknowns": [], "voiceRevision": None, "briefRevision": state["brief"]["revision"], "runId": "hosted-run-not-local", "speakerId": state["speaker"]["id"], "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": "old", "origin": "ideas-candidate"}],
+                                  "proposedUpdate": {"text": "new", "openings": [], "sourceIds": [], "warnings": [], "unknowns": [], "voiceRevision": 1, "briefRevision": state["brief"]["revision"], "runId": "hosted-run-not-local", "baseVariantRevision": 1}})
+        saved = HostedPhase2Commands()(state, "u", "accept_update", {"variantId": "v1"})
+        variant = saved["variants"][0]
+        self.assertEqual((variant["text"], variant["voiceRevision"], variant["revision"], variant["needsReview"], variant["proposedUpdate"]), ("new", 1, 2, False, None))
+

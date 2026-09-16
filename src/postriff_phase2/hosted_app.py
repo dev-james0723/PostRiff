@@ -3,6 +3,7 @@
 It initializes lazily so build and health checks do not require credentials.
 """
 import hmac
+import logging
 import json
 import os
 import ssl
@@ -417,6 +418,8 @@ class HostedApplication:
         except AlphaError as error:
             return self._json(start_response, error.status, {"error": str(error)})
         except Exception:
+            # Content-free: the traceback names code paths, never prompts, post bodies or tokens.
+            logging.getLogger("postriff.hosted").exception("hosted request failed: %s %s", method, path)
             return self._json(start_response, 500, {"error": "The hosted service could not complete this request. Saved state remains authoritative."})
 
 

@@ -359,7 +359,10 @@ class Store:
             v.update({k: candidate[k] for k in ("text", "openings", "sourceIds", "warnings", "unknowns", "voiceRevision", "briefRevision", "runId")})
             v.update({"revision": revision, "customized": False, "needsReview": False, "blockedByRetraction": False, "proposedUpdate": None, "selectedOpening": 0})
             v["revisions"].append({"revision": revision, "text": v["text"], "origin": "accepted-fixture-replacement", "at": now()})
-            next(run for run in s["runs"] if run["id"] == v["runId"])["events"].append({"type": "replacement-accepted", "at": now()})
+            # Hosted Ideas candidates carry a pr_agent_runs id that is not in the local runs list.
+            local_run = next((run for run in s["runs"] if run["id"] == v["runId"]), None)
+            if local_run is not None:
+                local_run["events"].append({"type": "replacement-accepted", "at": now()})
             s["savedAt"] = None
         elif action == "variant_edit":
             v = self._variant(s, p.get("variantId"))
