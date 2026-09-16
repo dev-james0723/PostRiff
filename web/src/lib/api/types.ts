@@ -249,6 +249,8 @@ export interface Run {
   reasoning: string;
   events: SafeEvent[];
   cursor: number;
+  /** A memory turn (a standing instruction) opens no run: `status` is `memory` and this carries the proposal. */
+  memoryProposal?: MemoryProposal | null;
 }
 
 export interface Conversation {
@@ -326,6 +328,72 @@ export interface MemoryEgress {
   shareablePrivacy: string[];
   /** Boundaries marked private, local-only or unlabelled: never sent, even with sharing on. */
   withheldBoundaries: number;
+}
+
+/** One learned preference (preference-learning design §6): about form only, scoped, under its own style revision. */
+export interface LearnedItem {
+  id: string;
+  type: 'writing_preference' | 'working_style' | string;
+  ruleKey: string;
+  polarity: 'do' | 'avoid' | string;
+  scope: { platform: string | null; language: string | null; contentTypeId: string | null };
+  scopeKey: string;
+  statement: string;
+  applyWhen?: string;
+  evidenceState: string;
+  evidenceSummary?: string;
+  source: string;
+  status: 'active' | 'paused' | 'retired' | string;
+  since?: string;
+  retiredReason?: string;
+}
+
+/** `GET /memory` → `learning`: the settings, the style revision and every listed item. */
+export interface LearningSummary {
+  enabled: boolean;
+  teamEdits: boolean;
+  cloudExtraction: boolean;
+  revision: number;
+  resetAt: string | null;
+  items: LearnedItem[];
+  pendingProposals?: number;
+}
+
+/** A suggested change to the learned preferences. Only an owner decides it (`POST /memory/proposals/{id}/decide`). */
+export interface MemoryProposal {
+  id: string;
+  status: 'pending' | 'remembered' | 'edited' | 'dismissed' | 'post_only' | 'expired' | string;
+  op: 'add' | 'update' | 'retire' | string;
+  source: string;
+  at: number;
+  expiresAt: number | null;
+  decidedAt: number | null;
+  type: string;
+  ruleKey: string;
+  polarity: string;
+  scope: { platform: string | null; language: string | null; contentTypeId: string | null };
+  scopeLabel: string;
+  statement: string;
+  applyWhen?: string;
+  why?: string;
+  evidence?: { variantId?: string; eventId?: string; revision?: number }[];
+  variantId?: string | null;
+  replaces?: string | null;
+}
+
+export interface MemoryProposals {
+  pending: MemoryProposal[];
+  recent: MemoryProposal[];
+  versions: { id: string; scopeKey: string; body: LearnedItem; status: string; proposalId: string | null; validFrom: number; validTo: number | null }[];
+  learning: LearningSummary;
+}
+
+/** What a run received from learned preferences (`usage.memoryBindings`; the assistant turn's `memory`). */
+export interface MemoryBinding {
+  styleRevision: number;
+  used: string[];
+  statements: string[];
+  omitted: string[];
 }
 
 /** Whether hosted drafts may look facts up on the web (owner decision). Always on when drafting on your own machine. */

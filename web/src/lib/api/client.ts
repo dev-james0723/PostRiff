@@ -16,10 +16,12 @@ import type {
   Health,
   Invitation,
   InvitationCreated,
+  LearningSummary,
   Member,
   Membership,
   MemoryEgress,
   MemoryFile,
+  MemoryProposals,
   Message,
   ModelCatalog,
   OAuthComplete,
@@ -114,7 +116,13 @@ export function createApi(getToken: TokenSource) {
     media: (w: string, assetId: string) => blob(`${ws(w)}/media/${encodeURIComponent(assetId)}`),
     exportDrafts: (w: string) => blob(`${ws(w)}/export`),
     exportProfile: (w: string) => blob(`${ws(w)}/profile-export`),
-    memory: (w: string) => get<{ files: MemoryFile[]; egress?: MemoryEgress; research?: ResearchEgress }>(`${ws(w)}/memory`),
+    memory: (w: string) => get<{ files: MemoryFile[]; egress?: MemoryEgress; research?: ResearchEgress; learning?: LearningSummary }>(`${ws(w)}/memory`),
+    /* learned preferences: proposals an owner decides, items an owner can pause or retire */
+    memoryProposals: (w: string) => get<MemoryProposals>(`${ws(w)}/memory/proposals`),
+    decideProposal: (w: string, id: string, body: { decision: 'remember' | 'edit' | 'dismiss' | 'post_only'; statement?: string; expectedRevision: number }) =>
+      send<{ revision: number; proposalId: string; status: string; learning: LearningSummary }>('POST', `${ws(w)}/memory/proposals/${encodeURIComponent(id)}/decide`, body),
+    updateLearnedItem: (w: string, id: string, status: 'active' | 'paused' | 'retired', expectedRevision: number) =>
+      send<{ revision: number; itemId: string; status: string; learning: LearningSummary }>('PATCH', `${ws(w)}/memory/versions/${encodeURIComponent(id)}`, { status, expectedRevision }),
     deleteAccount: (w: string, confirmation: string) =>
       send<{ deleted: boolean }>('DELETE', `${ws(w)}/account`, { confirmation }),
 

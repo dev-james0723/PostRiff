@@ -70,6 +70,24 @@ class ParseRequestTest(unittest.TestCase):
         now = intent.parse_request("Post this to Threads now", at("2026-09-16T10:00"), HK, SUPPORTED)
         self.assertEqual(now["intent"], "publish_now")
 
+    def test_standing_instructions_are_memory_but_one_offs_and_topics_are_not(self):
+        memory = {
+            "以後 LinkedIn 唔好用 emoji": ["LinkedIn"],
+            "From now on, keep my Instagram captions short.": ["Instagram"],
+            "Remember: no hashtags on Threads.": ["Threads"],
+            "No hashtags.": [],
+            "Don't end my posts with a call to action": [],
+            "記住每篇最多兩段": [],
+        }
+        for text, platforms in memory.items():
+            with self.subTest(text=text):
+                parsed = intent.parse_request(text, at("2026-09-16T10:00"), HK, SUPPORTED)
+                self.assertEqual((parsed["intent"], list(self.rows(parsed))), ("memory", platforms))
+        for text in ("今次呢篇短啲", "Write a post about why I never skip warm-ups", "Never mind, write about the seed swap", "Always " + "x" * 260, "Remember when we ran the first workshop? Draft that story for LinkedIn."):
+            with self.subTest(text=text):
+                self.assertNotEqual(intent.parse_request(text, at("2026-09-16T10:00"), HK, SUPPORTED)["intent"], "memory")
+        self.assertEqual(intent.parse_request("記住聽日 4 點 post 去 LinkedIn", at("2026-09-16T10:00"), HK, SUPPORTED)["intent"], "schedule", "a time keeps the schedule intent")
+
     def test_plain_numbers_and_weekdays_without_times_are_not_schedules(self):
         parsed = intent.parse_request("The community garden hosts a free seed-swap on Saturday for 5 people.", at("2026-09-16T10:00"), HK, SUPPORTED)
         self.assertEqual(parsed["intent"], "draft")

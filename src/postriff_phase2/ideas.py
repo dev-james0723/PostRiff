@@ -92,6 +92,8 @@ class IdeasService:
                     runtimes.append(cli(clock=self.clock))
         self.runtimes = list(runtimes)
         self.skills = skill_library or SkillLibrary()
+        # The hosted service sets this to its HostedLearning; without it a memory instruction is answered but not kept.
+        self.learning = None
         # Web research runs before drafting when a turn needs facts the workspace lacks (research.py); False disables it.
         self.researcher = None if researcher is False else (researcher or (research.Researcher() if research.enabled() else None))
 
@@ -118,9 +120,43 @@ class IdeasService:
         raise AlphaError("Choose a model listed for this workspace.", 400)
 
     def memory_files(self, workspace_id, token):
+        from .learning_service import pending_proposals
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             state = self._state(row)
-            return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state)}
+            learned = {**learning.summary(state), "pendingProposals": len(pending_proposals(cur, workspace_id))}
+            return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned}
+
+    def _memory_turn(self, workspace_id, token, conversation_id, text, parsed, destinations, model_id):
+        """A standing instruction about how to write: no run, no model, no charge. The instruction becomes a
+        proposal the owner decides (preference-learning design §5.5); the reply carries it as a card."""
+        from .learning_chat import instruction_to_proposal
+        from .learning_service import proposal_view
+        hosted = self.learning
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self._member(row), "edit")
+            self._conversation(cur, workspace_id, conversation_id)
+            state = self._state(row)
+            self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": [], "intent": "memory"})
+            proposal = instruction_to_proposal(text, parsed.get("language"))
+            created, refusal = None, None
+            if hosted is None:
+                refusal = "Preference learning is not available on this deployment, so nothing was kept."
+            else:
+                try:
+                    created = hosted.propose_from_chat(cur, workspace_id, state, proposal, principal, self.clock())
+                except ValueError as error:
+                    refusal = str(error)
+            if created is not None:
+                view = proposal_view(created)
+                reply = f"Remember this for {view['scopeLabel']}? “{view['statement']}” It only shapes future drafts once you accept it."
+            elif refusal:
+                view, reply = None, refusal
+            else:
+                view, reply = None, "That is already how PostRiff writes for you, or a matching suggestion is waiting on the Memory page."
+            body = {"text": reply, "intent": "memory", "memoryProposal": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None}
+            message = self._append_message(cur, workspace_id, conversation_id, "assistant", body)
+        return {"runId": None, "conversationId": conversation_id, "status": "memory", "artifactHash": None, "artifact": None, "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0},
+                "model": model_id, "reasoning": "quick", "events": [], "cursor": 0, "memoryProposal": view, "messageId": message["messageId"]}
 
     # --- helpers -------------------------------------------------------------------
     @staticmethod
@@ -224,11 +260,11 @@ class IdeasService:
             for variant in artifact["variants"]:
                 variant.setdefault("warnings", []).append(f"Some facts came from web research ({hosts}); check them against the pages before scheduling.")
         artifact_hash = digest(artifact)
-        usage = {**usage, "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", [])}
+        usage = {**usage, "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings")}
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
         context = outcome["context"]
         found = f", {len(web_pages)} found on the web" if web_pages else ""
-        summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources{found}.", "runId": run_id, "research": researched or None, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])]}
+        summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources{found}.", "runId": run_id, "research": researched or None, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])], "memory": outcome.get("memoryBindings")}
         self._settle_message(cur, workspace_id, conversation_id, run_id, summary)
         return artifact_hash
 
@@ -310,6 +346,8 @@ class IdeasService:
         language = payload.get("language") if payload.get("language") in intent.LANGUAGES else parsed["language"]
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, DEFAULT_DESTINATIONS)
         plan = intent.build_plan(parsed, destinations)
+        if parsed["intent"] == "memory" and text:
+            return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id)
         research_ids, researched = self._research(workspace_id, token, payload, text, parsed)
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -335,7 +373,8 @@ class IdeasService:
             reminders = [content_types.TUTORIAL_REMINDER] if content_types.missing_tutorial_input(content_types.selected_rule_ids(state), idea, context) else []
             # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
             # Memory files follow the route: a cloud route reads them only with the workspace's consent (memory.projection).
-            shared = memory.projection(state, provider_class)
+            # Learned preferences arrive as the slice that applies to these destinations (design §5.7), recorded on the run.
+            shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None)
             request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"]}
             # Step ③: skills are bound by destination, format, intent and content type, and recorded
             # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
@@ -349,7 +388,7 @@ class IdeasService:
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", 500_000 if paid else 0, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned")}
 
             def emit(event):
                 self._insert_event(cur, workspace_id, run_id, event)

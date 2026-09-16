@@ -21,6 +21,7 @@ export const keys = {
   conversations: (w: string) => ['conversations', w] as const,
   messages: (w: string, id: string) => ['messages', w, id] as const,
   memory: (w: string) => ['memory', w] as const,
+  memoryProposals: (w: string) => ['memory-proposals', w] as const,
   sessions: ['sessions'] as const,
   models: ['models'] as const,
   privacyNotice: ['privacy-notice'] as const
@@ -104,6 +105,12 @@ export function useModels() {
 export function useMemory() {
   const { api, w, enabled } = useScoped();
   return useQuery({ queryKey: keys.memory(w), queryFn: () => api.memory(w), enabled });
+}
+
+/** Preference proposals waiting for an owner, recent decisions, and the learned items (everyone can read). */
+export function useMemoryProposals() {
+  const { api, w, enabled } = useScoped();
+  return useQuery({ queryKey: keys.memoryProposals(w), queryFn: () => api.memoryProposals(w), enabled });
 }
 
 export function usePrivacyNotice() {

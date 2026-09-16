@@ -73,9 +73,10 @@ def boundary_fields(state):
     return fields
 
 
-def render_files(state, shareable=None):
+def render_files(state, shareable=None, destinations=None, content_type_id=None):
     """Return the five core files as {name, purpose, source, body, editHref}. Never includes private field values.
-    With `shareable`, BOUNDARIES.md keeps only boundaries whose privacy is listed and says how many it left out."""
+    With `shareable`, BOUNDARIES.md keeps only boundaries whose privacy is listed and says how many it left out.
+    With `destinations`, VOICE.md carries only the learned preferences that apply to them (a prompt slice)."""
     state = state or {}
     speaker = state.get("speaker") or {}
     hub = state.get("brandHub") or {}
@@ -100,7 +101,7 @@ def render_files(state, shareable=None):
             f"Tone: {profile.get('tone') or '(not set)'}", "",
             "## Observations", "How to handle what you supply. A trait is never a reason to add a detail, habit or admission you did not supply.",
             *([f"- {item}" for item in profile.get("observations") or []] or ["- (none recorded)"]), "",
-            *learning.render_lines(state), "",
+            *learning.render_lines(state, destinations, content_type_id), "",
             "## Writing example", ("> " + str(profile.get("writingExample")).replace("\n", "\n> ")) if profile.get("writingExample") else "(none supplied)", "",
             "## Unknowns kept explicit", *([f"- {item}" for item in profile.get("unknowns") or []] or ["- (none)"]),
         ])
@@ -132,9 +133,9 @@ def render_files(state, shareable=None):
     ]
 
 
-def prompt_fragments(state, names=PROMPT_FILES, shareable=None):
+def prompt_fragments(state, names=PROMPT_FILES, shareable=None, destinations=None, content_type_id=None):
     """The files a writing route receives, in order. AGENT.md is for people; BRAND.md duplicates IDENTITY.md for prompts."""
-    files = {item["name"]: item["body"] for item in render_files(state, shareable)}
+    files = {item["name"]: item["body"] for item in render_files(state, shareable, destinations, content_type_id)}
     return [{"name": name, "body": files[name]} for name in names if name in files]
 
 
@@ -144,15 +145,17 @@ def egress(state):
     return decision if isinstance(decision, dict) else {"cloud": False}
 
 
-def projection(state, provider_class):
+def projection(state, provider_class, destinations=None, content_type_id=None):
     """What a writing route may read. Local routes get every prompt file; a cloud route gets them only
-    when the workspace allowed it, with private, local-only, excluded and unlabelled boundaries removed."""
+    when the workspace allowed it, with private, local-only, excluded and unlabelled boundaries removed.
+    `learned` records which learned preferences the slice carried, for the run's usage."""
+    learned = learning.binding(state, destinations, content_type_id)
     if provider_class != "cloud":
-        return {"files": prompt_fragments(state), "shared": True, "withheldBoundaries": 0}
+        return {"files": prompt_fragments(state, destinations=destinations, content_type_id=content_type_id), "shared": True, "withheldBoundaries": 0, "learned": learned}
     if egress(state).get("cloud") is not True:
-        return {"files": [], "shared": False, "withheldBoundaries": 0}
+        return {"files": [], "shared": False, "withheldBoundaries": 0, "learned": {**learned, "used": [], "statements": [], "omitted": learned["used"] + learned["omitted"]}}
     withheld = sum(1 for f in boundary_fields(state) if f.get("privacy") not in CLOUD_SHAREABLE)
-    return {"files": prompt_fragments(state, shareable=CLOUD_SHAREABLE), "shared": True, "withheldBoundaries": withheld}
+    return {"files": prompt_fragments(state, shareable=CLOUD_SHAREABLE, destinations=destinations, content_type_id=content_type_id), "shared": True, "withheldBoundaries": withheld, "learned": learned}
 
 
 def egress_summary(state):

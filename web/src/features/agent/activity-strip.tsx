@@ -5,7 +5,7 @@ import { motion, useReducedMotion, type Variants } from 'motion/react';
 import { AgentDisclosure } from '@/components/agents/agent-disclosure';
 import { Icons } from '@/components/icons';
 import { ActionSwapIcon, ActionSwapText } from '@/components/motion/action-swap';
-import type { Run, SchedulePlan } from '@/lib/api/types';
+import type { MemoryBinding, Run, SchedulePlan } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
 
 // On first mount the lines settle in one after another; a line that arrives later (a new warning) fades in on its own.
@@ -35,7 +35,7 @@ function Row({ ok, running, children }: { ok?: boolean; running: boolean; childr
  * What the run actually did, from its safe events only: detected intent, sources it was
  * allowed to read, warnings, cost. Lines with no data are omitted rather than faked.
  */
-export function ActivityStrip({ run, plan, intent, destinations, skills }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string }[]; skills?: string[] }) {
+export function ActivityStrip({ run, plan, intent, destinations, skills, memory }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string }[]; skills?: string[]; memory?: MemoryBinding | null }) {
   const [open, setOpen] = useState(false);
   const reduce = useReducedMotion();
   const logId = useId();
@@ -79,6 +79,12 @@ export function ActivityStrip({ run, plan, intent, destinations, skills }: { run
               <b>{id.replace(/^postriff-/, '')}</b>
             </span>
           ))}
+        </Row>
+      )}
+      {memory && memory.used.length > 0 && (
+        <Row running={running}>
+          Memory · <b>{memory.used.length}</b> learned rule{memory.used.length === 1 ? '' : 's'} used
+          {memory.omitted.length > 0 ? ` · ${memory.omitted.length} left out for space` : ''}: {memory.statements.join(' · ')}
         </Row>
       )}
       <Row running={running}>

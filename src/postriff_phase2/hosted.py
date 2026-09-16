@@ -87,9 +87,10 @@ class PostgresWorkspaceRepository:
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             return {"revision": row[0], "state": copy.deepcopy(state), "membership": _membership(row).summary()}
 
-    def command(self, workspace_id, token, revision, trusted_command, requirement="edit", step_up=False, audit_event=None):
+    def command(self, workspace_id, token, revision, trusted_command, requirement="edit", step_up=False, audit_event=None, after=None):
         """trusted_command is application code, never a client-submitted patch. `audit_event(state)` returns
-        (kind, subject, meta) for decisions that belong in the audit log, recorded in the same transaction."""
+        (kind, subject, meta) for decisions that belong in the audit log, recorded in the same transaction.
+        `after(cur, state, principal)` runs last, for rows that must change together with the state."""
         with self.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), requirement)
             if step_up:
@@ -105,6 +106,8 @@ class PostgresWorkspaceRepository:
                 audit(cur, workspace_id, principal, *audit_event(state))
             for effect in self.effects:
                 effect(cur, workspace_id, source, state, principal)
+            if after:
+                after(cur, state, principal)
             return {"revision": revision+1, "state": state, "membership": _membership(row).summary()}
 
     def mutate(self, workspace_id, token, expected_revision, action, payload):
@@ -266,6 +269,7 @@ class HostedWorkspaceService:
         # Preference learning: every command's implied events are captured in that command's transaction.
         self.learning = HostedLearning(connection_factory, clock)
         self.repository.effects.append(self.learning.capture)
+        self.ideas.learning = self.learning
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):

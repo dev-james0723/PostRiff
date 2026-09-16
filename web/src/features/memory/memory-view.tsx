@@ -16,12 +16,13 @@ import { useAct, useInvalidate, useMembers, useMemory, useSnapshot } from '@/lib
 import { downloadBlob } from '@/lib/download';
 import { EASE_OUT } from '@/lib/ease';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { LearningPanel } from './learning-panel';
 
 const infoContent = {
   title: 'Memory files',
   sections: [
-    { title: 'Plain Markdown, yours', description: 'The agent reads these before every draft. Writing routes on your own machine receive exactly this text; the cloud model reads it only if you allow it, and never a boundary marked private or local-only. Today the files are generated from your voice profile and brand context; the agent cannot change them.' },
-    { title: 'Proposals come later', description: 'A later phase lets the agent propose edits as diffs you accept or dismiss. Nothing is learned silently.' },
+    { title: 'Plain Markdown, yours', description: 'The agent reads these before every draft. Writing routes on your own machine receive exactly this text; the cloud model reads it only if you allow it, and never a boundary marked private or local-only. The files are generated from your voice profile, brand context and the preferences you accepted; the agent cannot change them itself.' },
+    { title: 'Proposals, never silent changes', description: 'When you tell the agent how to write, or your edits show a pattern, it proposes a preference you remember, reword or dismiss. Accepted preferences appear in VOICE.md under “Learned from how you edit” and shape future drafts only.' },
     { title: 'Same shape as a coding-agent memory folder', description: 'The layout matches Claude Code memory, so exporting and syncing to your own machine is a plain file copy.' }
   ]
 };
@@ -193,6 +194,7 @@ export function MemoryView() {
       <div className='mb-4 flex flex-col gap-3 empty:hidden'>
         <CloudSharing />
         <WebResearch />
+        <LearningPanel />
       </div>
       <div className='grid gap-4 md:grid-cols-[18rem_1fr]'>
         <div className='bg-card ring-foreground/10 flex flex-col gap-0.5 rounded-xl p-2 ring-1'>
@@ -222,7 +224,7 @@ export function MemoryView() {
               </FileTreeFolder>
             </FileTree>
           )}
-          <p className='text-muted-foreground mt-2 border-t px-2 pt-2 text-xs leading-relaxed'>Learned notes and agent proposals arrive in a later phase; until then these files are generated from your profile.</p>
+          <p className='text-muted-foreground mt-2 border-t px-2 pt-2 text-xs leading-relaxed'>Preferences you accept appear in VOICE.md under “Learned from how you edit”; the rest is generated from your profile and brand context.</p>
         </div>
 
         <div className='bg-card ring-foreground/10 flex flex-col overflow-hidden rounded-xl ring-1'>

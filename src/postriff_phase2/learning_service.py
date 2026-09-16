@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import uuid
 
+from postriff_alpha import learning
+from postriff_alpha.domain import AlphaError
 from . import learning_signals as signals
 
 TTL_SECONDS = signals.EVENT_TTL_DAYS * 86400
@@ -81,18 +83,187 @@ def export_files(cur, workspace_id):
     return files
 
 
+PROPOSAL_COLUMNS = "id::text,scope_key,op,source,body,status,decided_by::text,extract(epoch from decided_at),extract(epoch from created_at),extract(epoch from expires_at)"
+VERSION_COLUMNS = "id::text,scope_key,body,status,proposal_id::text,confirmed_by::text,extract(epoch from valid_from),extract(epoch from valid_to)"
+DECISIONS = {"remember": "remembered", "edit": "edited", "dismiss": "dismissed", "post_only": "post_only"}
+SUPPRESS_SECONDS = 90 * 86400
+
+
+def _proposal(values):
+    keys = ("id", "scopeKey", "op", "source", "body", "status", "decidedBy", "decidedAt", "at", "expiresAt")
+    record = dict(zip(keys, values))
+    for key in ("decidedAt", "at", "expiresAt"):
+        record[key] = float(record[key]) if record[key] is not None else None
+    return record
+
+
+def _version(values):
+    keys = ("id", "scopeKey", "body", "status", "proposalId", "confirmedBy", "validFrom", "validTo")
+    record = dict(zip(keys, values))
+    for key in ("validFrom", "validTo"):
+        record[key] = float(record[key]) if record[key] is not None else None
+    return record
+
+
+def pending_proposals(cur, workspace_id):
+    cur.execute(f"SELECT {PROPOSAL_COLUMNS} FROM public.pr_memory_proposals WHERE workspace_id=%s AND status='pending' ORDER BY created_at, id", (workspace_id,))
+    return [_proposal(values) for values in cur.fetchall()]
+
+
+def recent_proposals(cur, workspace_id, limit=20):
+    cur.execute(f"SELECT {PROPOSAL_COLUMNS} FROM public.pr_memory_proposals WHERE workspace_id=%s AND status<>'pending' ORDER BY decided_at DESC NULLS LAST, created_at DESC LIMIT %s", (workspace_id, limit))
+    return [_proposal(values) for values in cur.fetchall()]
+
+
+def load_proposal(cur, workspace_id, proposal_id):
+    cur.execute(f"SELECT {PROPOSAL_COLUMNS} FROM public.pr_memory_proposals WHERE workspace_id=%s AND id::text=%s", (workspace_id, str(proposal_id)))
+    values = cur.fetchone()
+    if values is None:
+        raise AlphaError("Proposal unavailable.", 404)
+    return _proposal(values)
+
+
+def versions(cur, workspace_id):
+    cur.execute(f"SELECT {VERSION_COLUMNS} FROM public.pr_memory_versions WHERE workspace_id=%s ORDER BY valid_from, id", (workspace_id,))
+    return [_version(values) for values in cur.fetchall()]
+
+
+def suppressed(cur, workspace_id, scope_key, now):
+    """A dismissed proposal keeps its scope quiet for 90 days (design §5.3)."""
+    cur.execute("SELECT 1 FROM public.pr_memory_proposals WHERE workspace_id=%s AND scope_key=%s AND status='dismissed' AND decided_at > to_timestamp(%s) LIMIT 1", (workspace_id, scope_key, now - SUPPRESS_SECONDS))
+    return cur.fetchone() is not None
+
+
+def create_proposal(cur, workspace_id, state, proposal, now, evidence=None):
+    """Server code adds a pending proposal (a chat instruction now, extraction later). Returns the row, or
+    None when there is nothing new to ask: the same preference is active, waiting, recently dismissed, or
+    three are already waiting. Raises ValueError for a statement the lint refuses."""
+    p = learning.normalize_proposal(proposal)
+    if p["type"] not in learning.TYPES or p["polarity"] not in learning.POLARITIES or p["ruleKey"] not in learning.RULE_KEYS:
+        raise ValueError("Unsupported preference proposal.")
+    p["statement"] = learning.lint(p.get("statement"), p["ruleKey"])
+    key = learning.scope_key(p["type"], p["ruleKey"], p["polarity"], p["scope"])
+    current = next((item for item in learning.active_items(state) if item["scopeKey"] == key), None)
+    if current and current["statement"] == p["statement"]:
+        return None
+    if suppressed(cur, workspace_id, key, now):
+        return None
+    pending = pending_proposals(cur, workspace_id)
+    if len(pending) >= learning.MAX_PENDING or any(row["scopeKey"] == key for row in pending):
+        return None
+    body = {k: p[k] for k in ("type", "ruleKey", "polarity", "scope", "statement", "applyWhen", "params", "source")}
+    body.update({"scopeKey": key, "why": " ".join(str(p.get("why") or "").split())[:240], "evidence": evidence or p.get("evidence") or [], "variantId": p.get("variantId"), "replaces": current["id"] if current else None})
+    cur.execute("INSERT INTO public.pr_memory_proposals(workspace_id,scope_key,op,source,body,status,created_at,expires_at) VALUES(%s,%s,%s,%s,%s::jsonb,'pending',to_timestamp(%s),to_timestamp(%s)) RETURNING id::text",
+                (workspace_id, key, "update" if current else "add", p["source"], json.dumps(body, ensure_ascii=False), now, now + learning.PROPOSAL_TTL.total_seconds()))
+    return load_proposal(cur, workspace_id, cur.fetchone()[0])
+
+
+def proposal_view(row):
+    """What a card shows: the proposal, its status and when it expires."""
+    return {"id": row["id"], "status": row["status"], "op": row["op"], "source": row["source"], "at": row["at"], "expiresAt": row["expiresAt"], "decidedAt": row["decidedAt"], **{k: row["body"].get(k) for k in ("type", "ruleKey", "polarity", "scope", "statement", "applyWhen", "why", "evidence", "variantId", "replaces")}, "scopeLabel": learning.scope_label(row["body"].get("scope") or {})}
+
+
 class HostedLearning:
-    """Bound to a service: the repository effect, the worker hook and the cron sweep."""
+    """Bound to a service: the repository effect, the worker hook, the cron sweep, proposals and decisions."""
     def __init__(self, connection_factory, clock):
         self.connection_factory = connection_factory
         self.clock = clock
         self.failures = []
 
     def capture(self, cur, workspace_id, before, after, principal):
-        """Repository effect (hosted.PostgresWorkspaceRepository.command): the events one command implies."""
+        """Repository effect (hosted.PostgresWorkspaceRepository.command): the events one command implies.
+        A reset (learning.resetAt changed) also clears this workspace's learning tables."""
+        if (after.get("learning") or {}).get("resetAt") != (before.get("learning") or {}).get("resetAt"):
+            for table in ("pr_memory_versions", "pr_memory_proposals", "pr_learning_events"):
+                cur.execute(f"DELETE FROM public.{table} WHERE workspace_id=%s", (workspace_id,))
         events = signals.derive_events(before, after, principal, self.clock())
         guarded_insert(cur, workspace_id, events, self.failures)
         return events
+
+    def proposals(self, repository, workspace_id, token):
+        with repository.transaction(token, workspace_id) as (cur, row, _):
+            state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+            return {"pending": [proposal_view(r) for r in pending_proposals(cur, workspace_id)], "recent": [proposal_view(r) for r in recent_proposals(cur, workspace_id)],
+                    "versions": versions(cur, workspace_id), "learning": learning.summary(state)}
+
+    def propose_from_chat(self, cur, workspace_id, state, proposal, principal, now):
+        """Inside a turn's transaction: the proposal a chat instruction implies, plus the chat.instruction event."""
+        created = create_proposal(cur, workspace_id, state, proposal, now)
+        event = {"kind": "chat.instruction", "actor": principal, "at": now, "subject": {"proposalId": created["id"] if created else None, "ruleKey": proposal.get("ruleKey"), "accepted": created is not None},
+                 "scope": {**(proposal.get("scope") or {}), "formatId": None}, "features": {}, "voiceRevision": (state.get("speaker") or {}).get("activeRevision"), "styleRevision": learning.revision(state)}
+        guarded_insert(cur, workspace_id, [event], self.failures)
+        return created
+
+    def decide(self, repository, workspace_id, token, revision, proposal_id, decision, statement=None):
+        """Owner decision on one proposal: remember / edit (a new version, a new style revision), dismiss (quiet
+        for 90 days), post_only (only when the proposal came from a draft). One transaction with the state."""
+        if decision not in DECISIONS:
+            raise AlphaError("Choose remember, edit, dismiss or post_only.")
+        with repository.transaction(token, workspace_id) as (cur, _, _):
+            proposal = load_proposal(cur, workspace_id, proposal_id)
+        if proposal["status"] != "pending":
+            raise AlphaError("This proposal was already decided.", 409)
+        body = dict(proposal["body"])
+        if decision == "edit":
+            body["statement"] = statement if isinstance(statement, str) else ""
+            body["evidenceState"] = "user_confirmed"
+        now = self.clock()
+        result = {}
+
+        def apply(state, principal):
+            learning.ensure(state, now)
+            if decision in ("remember", "edit"):
+                try:
+                    result["item"] = learning.remember(state, {**body, "id": proposal["id"], "source": body.get("source", "chat")}, actor=principal, now=now)
+                except ValueError as error:
+                    raise AlphaError(str(error)) from error
+                if decision == "edit":
+                    result["item"]["evidenceState"] = "user_confirmed"
+                    result["item"]["evidenceSummary"] = "you edited the wording"
+            elif decision == "post_only":
+                variant = next((v for v in state.get("variants") or [] if v.get("id") == body.get("variantId")), None)
+                if variant is None:
+                    raise AlphaError("This suggestion is not tied to a draft. Remember it for future drafts, or dismiss it.")
+                variant["localPreferences"] = dict(body.get("params") or {})
+            return state
+
+        def after(cur, state, principal):
+            cur.execute("UPDATE public.pr_memory_proposals SET status=%s,decided_by=%s,decided_at=to_timestamp(%s),body=%s::jsonb WHERE id::text=%s AND workspace_id=%s AND status='pending' RETURNING id",
+                        (DECISIONS[decision], principal, now, json.dumps(body, ensure_ascii=False), proposal["id"], workspace_id))
+            if cur.fetchone() is None:
+                raise AlphaError("This proposal was already decided.", 409)
+            if decision in ("remember", "edit"):
+                cur.execute("UPDATE public.pr_memory_versions SET status='retired',valid_to=to_timestamp(%s) WHERE workspace_id=%s AND scope_key=%s AND valid_to IS NULL", (now, workspace_id, proposal["scopeKey"]))
+                cur.execute("INSERT INTO public.pr_memory_versions(workspace_id,scope_key,body,status,proposal_id,confirmed_by,valid_from) VALUES(%s,%s,%s::jsonb,'active',%s,%s,to_timestamp(%s)) RETURNING id::text",
+                            (workspace_id, proposal["scopeKey"], json.dumps(result["item"], ensure_ascii=False), proposal["id"], principal, now))
+                result["versionId"] = cur.fetchone()[0]
+            event = {"kind": "proposal.decided", "actor": principal, "at": now, "subject": {"proposalId": proposal["id"], "decision": DECISIONS[decision], "scopeKey": proposal["scopeKey"], "ruleKey": body.get("ruleKey"), "source": body.get("source")},
+                     "scope": {**(body.get("scope") or {}), "formatId": None}, "features": {}, "voiceRevision": (state.get("speaker") or {}).get("activeRevision"), "styleRevision": learning.revision(state)}
+            guarded_insert(cur, workspace_id, [event], self.failures)
+
+        saved = repository.command(workspace_id, token, revision, apply, requirement="owner", after=after)
+        return {"revision": saved["revision"], "proposalId": proposal["id"], "status": DECISIONS[decision], "item": result.get("item"), "versionId": result.get("versionId"), "learning": learning.summary(saved["state"])}
+
+    def update_version(self, repository, workspace_id, token, revision, item_id, status):
+        """Owner: pause, resume or retire one learned item; the version row follows the state."""
+        now = self.clock()
+
+        def apply(state, principal):
+            try:
+                if not learning.set_status(state, item_id, status, now):
+                    raise AlphaError("This learned preference is not in that state.", 409)
+            except ValueError as error:
+                raise AlphaError(str(error)) from error
+            return state
+
+        def after(cur, state, principal):
+            if status == "retired":
+                cur.execute("UPDATE public.pr_memory_versions SET status='retired',valid_to=to_timestamp(%s) WHERE workspace_id=%s AND proposal_id::text=%s AND valid_to IS NULL", (now, workspace_id, item_id))
+            else:
+                cur.execute("UPDATE public.pr_memory_versions SET status=%s WHERE workspace_id=%s AND proposal_id::text=%s AND valid_to IS NULL", (status, workspace_id, item_id))
+
+        saved = repository.command(workspace_id, token, revision, apply, requirement="owner", after=after)
+        return {"revision": saved["revision"], "itemId": item_id, "status": status, "learning": learning.summary(saved["state"])}
 
     def published(self, cur, workspace_id, job):
         return record_published(cur, workspace_id, job, self.clock(), self.failures)

@@ -410,6 +410,18 @@ class HostedApplication:
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "invitations" and method == "DELETE":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_invitation(parts[2], token, parts[4]))
+            if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "memory":
+                # Learned preferences (preference-learning design §6): proposals a person decides, versions they manage.
+                workspace_id, learning = parts[2], service.learning
+                if len(parts) == 5 and parts[4] == "proposals" and method == "GET":
+                    return self._json(start_response, 200, learning.proposals(service.repository, workspace_id, token))
+                if len(parts) == 7 and parts[4] == "proposals" and parts[6] == "decide" and method == "POST":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, learning.decide(service.repository, workspace_id, token, body.get("expectedRevision"), parts[5], body.get("decision"), body.get("statement")))
+                if len(parts) == 6 and parts[4] == "versions" and method == "PATCH":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, learning.update_version(service.repository, workspace_id, token, body.get("expectedRevision"), parts[5], body.get("status")))
+                raise AlphaError("This hosted route is unavailable.", 404)
             if len(parts) in (3, 4) and parts[:2] == ["api", "workspaces"]:
                 workspace_id = parts[2]
                 if len(parts) == 3 and method == "GET":

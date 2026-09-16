@@ -617,6 +617,25 @@ James 拍板決定 A–D（同 §10 全部建議答案）之後即日落實，�
 - **完成定義：** 「以後 LinkedIn 唔好用 emoji」→ 一張卡、冇 run、冇 draft；Remember 之後 VOICE.md 出現；下一個 LinkedIn turn 嘅
   `request["memory"]` 有呢條、Instagram turn 冇；排好嘅 job 冇 `held`。
 
+### Phase B 實作記錄（2026-09-16）
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| Router | `src/postriff_phase2/intent.py` | `memory` intent：句首 imperative（always / never / stop / don't / remember: / no hashtags…）或 from now on / 以後 / 記住 / 唔好再 等標記，≤ 240 字元，而且冇一次性字眼（this post / 今次 / 呢篇）；有時間照舊係 schedule |
+| Chat → proposal | `src/postriff_phase2/learning_chat.py` | deterministic normalizer：否定詞 → polarity；channel / 語言 → scope；hashtag / emoji / 感嘆號 / CTA / 列點 / 段落 / 開頭 / 長度 / 中英夾雜 / 標點 → `ruleKey` + 英文 template statement；唔識嘅保留原句（`other`），問問題類 → `working_style` |
+| Hosted | `src/postriff_phase2/learning_service.py` | `create_proposal()`（lint、同 scope 已 active / pending / 90 日內 dismiss → None、pending ≤ 3、30 日過期）；`HostedLearning.propose_from_chat()`（同一 transaction 寫 `chat.instruction` event）；`decide()`（owner-only；remember / edit / dismiss / post_only；用 `command(after=…)` 同一 transaction 寫 `pr_memory_versions`、改 proposal 狀態、記 `proposal.decided` event；lint 唔過成個 rollback）；`update_version()`（pause / resume / retire）；`proposals()` 列表；reset 會清晒三個 table |
+| Turn | `src/postriff_phase2/ideas.py` | memory intent → `_memory_turn()`：唔開 run、唔 reserve、回一張卡（`memoryProposal`）；其他 turn 嘅 memory projection 按 destinations + content type 揀 slice，`memoryBindings` 記入 run usage 同 assistant message `memory` |
+| Memory 檔 | `src/postriff_phase2/memory.py`、`src/postriff_alpha/learning.py` | `select()`：scope match → 最具體先 → ≤ 12 條 / 1,500 字元，剩低記 `omitted`；`binding()`；`render_lines(destinations)`；Memory 頁仍然顯示全部；paused item 留喺 list 但唔入 prompt；`learning_settings` / `learning_reset` actions（owner） |
+| Prompt | `cli_runtime.py`、`model_runtime.py` | 加一句：learned preferences 只係形式，idea / facts / 今次 request 優先 |
+| Routes | `hosted_app.py`、`permissions.py` | `GET /memory/proposals`、`POST /memory/proposals/{id}/decide`、`PATCH /memory/versions/{id}`；`learning_settings` / `learning_reset` → owner |
+| Web | `web/src/features/memory/{proposal-card,learning-panel}.tsx`（新）；`memory-view.tsx`、`agent/conversation-view.tsx`、`agent/activity-strip.tsx`、`lib/api/{types,client,hooks}.ts` | Proposal 卡（Remember / Edit wording / Only for this post / Don't use；跟 live status，舊 turn 唔會再出掣）；Memory 頁 Learned preferences 面板（pending、items 嘅 Pause / Resume / Retire、Learn switch、兩步 reset）；conversation 入面 memory turn 出卡；activity strip「Memory · N learned rules used」 |
+| Tests | `test_postriff_intent.py` +1；`test_postriff_learning_chat.py`（新，8）；`test_postriff_memory_egress.py` 期望值加 `learned`；`tests/phase2/postgres_memory_proposals.py`（新，7 checks：冇 run 冇扣額、重複 / 事實被拒、editor 403、lint 唔過 rollback、version + style rev + VOICE.md、LinkedIn 有 Instagram 冇、dismiss / pause / retire / reset） | 全過：unit 358；PG 全部 10 套；web `tsc` 同 `oxlint` 乾淨 |
+
+**同計劃嘅差異**
+- Home composer 下面「PostRiff noticed 1 thing」提示未做（Memory 頁同 conversation 已有卡）。
+- Founder alpha（local SQLite）冇 chat，所以 proposal 只喺 hosted table；local 嘅 `preference` action 照用 `state.preferences`。
+- 冇喺 browser 做 UI 驗證：dev harness 嘅 API 係另一 session 嘅 process（冇新 route），而且有 live Threads connection；backend 由 PG test 證明，web 由 typecheck / lint 證明。
+
 ### Phase C — 由 edit 推斷
 
 - **內容：** C1 deterministic feature rules（全部 user）→ C2 細 model（CLI 優先；cloud 要決定 C 嘅兩個同意）；consolidation、上限、

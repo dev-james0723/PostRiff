@@ -30,6 +30,8 @@ RULE_KEYS = ("length.target", "opening.style", "hashtags.use", "emoji.use", "exc
 STATEMENT_LIMIT = 160
 APPLY_WHEN_LIMIT = 120
 MAX_PENDING = 3
+# Statuses that keep an item in the `active` list: only `active` reaches a prompt, `paused` stays listed.
+LISTED = ("active", "paused")
 PROPOSAL_TTL = timedelta(days=30)
 
 _DIGITS = re.compile(r"\d")
@@ -142,10 +144,10 @@ def _item(p, actor, since, evidence_state, summary):
 def _activate(learning, item):
     """One active item per scope; the item it replaces is kept as retired. Every change is a new style revision."""
     for existing in learning["active"]:
-        if existing["status"] == "active" and existing["scopeKey"] == item["scopeKey"]:
+        if existing["status"] in LISTED and existing["scopeKey"] == item["scopeKey"]:
             existing.update({"status": "retired", "validTo": item["since"], "retiredReason": "replaced"})
             learning["retired"].append(existing)
-    learning["active"] = [x for x in learning["active"] if x["status"] == "active"] + [item]
+    learning["active"] = [x for x in learning["active"] if x["status"] in LISTED] + [item]
     learning["revision"] += 1
 
 
@@ -252,24 +254,120 @@ def remember(state, proposal, actor=None, now=None):
 
 
 def retire(state, item_id, now=None, reason="undone"):
+    """Retire an active or paused item; it stays in `retired` for the record and for undo."""
     learning = ensure(state, now)
-    retired = [item for item in learning["active"] if item["id"] == item_id and item["status"] == "active"]
+    retired = [item for item in learning["active"] if item["id"] == item_id and item["status"] in LISTED]
     for item in retired:
         item.update({"status": "retired", "validTo": _iso(now), "retiredReason": reason})
         learning["retired"].append(item)
     if retired:
-        learning["active"] = [x for x in learning["active"] if x["status"] == "active"]
+        learning["active"] = [x for x in learning["active"] if x["status"] in LISTED]
         learning["revision"] += 1
     return bool(retired)
 
 
-def render_lines(state):
-    """The VOICE.md section. Form only; the message and the approved facts always win over these."""
+MAX_PROMPT_ITEMS = 12
+MAX_PROMPT_CHARS = 1500
+
+
+def _line(item):
+    since = str(item.get("since") or "")[:10]
+    return f"- [{scope_label(item.get('scope') or {})}] {item['statement']} — {item.get('evidenceSummary') or 'remembered'}" + (f" · {since}" if since else "")
+
+
+def select(state, destinations, content_type_id=None, max_items=MAX_PROMPT_ITEMS, max_chars=MAX_PROMPT_CHARS):
+    """Items for one turn (design §5.7): those whose scope covers any destination, the most specific first,
+    within a bounded slice. Returns (chosen, omitted ids)."""
+    items = [item for item in active_items(state) if any(applies(item, d.get("platform"), d.get("language"), content_type_id) for d in destinations)]
+
+    def rank(item):
+        scope = item.get("scope") or {}
+        return (bool(scope.get("contentTypeId")), bool(scope.get("platform")), bool(scope.get("language")), item.get("evidenceState") == "user_confirmed", item.get("since") or "")
+
+    chosen, omitted, used = [], [], 0
+    for item in sorted(items, key=rank, reverse=True):
+        length = len(_line(item))
+        if len(chosen) >= max_items or used + length > max_chars:
+            omitted.append(item["id"])
+            continue
+        chosen.append(item)
+        used += length
+    return chosen, omitted
+
+
+def binding(state, destinations=None, content_type_id=None):
+    """What a run received from learning, recorded on the run so the effect of each item can be measured later."""
+    if destinations:
+        chosen, omitted = select(state, destinations, content_type_id)
+    else:
+        chosen, omitted = active_items(state), []
+    return {"styleRevision": revision(state), "used": [item["id"] for item in chosen], "statements": [item["statement"] for item in chosen], "omitted": omitted}
+
+
+def render_lines(state, destinations=None, content_type_id=None):
+    """The VOICE.md section. Form only; the message and the approved facts always win over these.
+    With destinations, only the items that apply to them, within the prompt slice."""
     rev = revision(state)
     lines = ["## Learned from how you edit" + (f" (style rev {rev})" if rev else ""),
              "Form only. The facts and what you ask for in the message win over these."]
-    items = sorted(active_items(state), key=lambda item: (scope_label(item.get("scope") or {}), item.get("since") or ""))
-    for item in items:
-        since = str(item.get("since") or "")[:10]
-        lines.append(f"- [{scope_label(item.get('scope') or {})}] {item['statement']} — {item.get('evidenceSummary') or 'remembered'}" + (f" · {since}" if since else ""))
+    items = select(state, destinations, content_type_id)[0] if destinations else active_items(state)
+    items = sorted(items, key=lambda item: (scope_label(item.get("scope") or {}), item.get("since") or ""))
+    lines.extend(_line(item) for item in items)
     return lines + (["- (none yet)"] if not items else [])
+
+
+def set_status(state, item_id, status, now=None, reason=None):
+    """Pause, resume or retire one item (Memory page). Paused items stay listed but leave the prompt."""
+    if status not in ("active", "paused", "retired"):
+        raise ValueError("Choose active, paused or retired.")
+    if status == "retired":
+        return retire(state, item_id, now, reason or "retired")
+    learning = ensure(state, now)
+    for item in learning["active"]:
+        if item["id"] == item_id and item["status"] in LISTED and item["status"] != status:
+            item["status"] = status
+            item["statusChangedAt"] = _iso(now)
+            learning["revision"] += 1
+            return True
+    return False
+
+
+def all_items(state):
+    """Every item the Memory page lists: active and paused, then retired."""
+    learning = (state or {}).get("learning")
+    if not isinstance(learning, dict):
+        return []
+    return [item for item in learning.get("active") or [] if item.get("status") in LISTED] + list(learning.get("retired") or [])
+
+
+def summary(state):
+    learning = (state or {}).get("learning") if isinstance((state or {}).get("learning"), dict) else initial()
+    return {"enabled": learning.get("enabled", True), "teamEdits": learning.get("teamEdits", False), "cloudExtraction": learning.get("cloudExtraction", False),
+            "revision": int(learning.get("revision", 0) or 0), "resetAt": learning.get("resetAt"), "items": all_items(state)}
+
+
+def apply(store, s, action, p, now=None):
+    """`learning_settings` and `learning_reset` (owner-only on the hosted API). Returns True when consumed."""
+    if action == "learning_settings":
+        learning = ensure(s, now)
+        changed = {}
+        for key in ("enabled", "teamEdits", "cloudExtraction"):
+            if key in p:
+                if not isinstance(p[key], bool):
+                    raise ValueError("Settings are explicit true/false choices.")
+                changed[key] = p[key]
+        if not changed:
+            raise ValueError("Choose a setting to change.")
+        learning.update(changed)
+        learning["settingsChangedAt"] = _iso(now)
+        return True
+    if action == "learning_reset":
+        if p.get("confirmed") is not True:
+            raise ValueError("Confirm that you want PostRiff to forget what it learned.")
+        learning = ensure(s, now)
+        learning.update({"active": [], "retired": [], "revision": learning["revision"] + 1, "resetAt": _iso(now)})
+        for proposal in s.get("preferences") or []:
+            if proposal.get("status") == "proposed":
+                proposal.update({"status": "expired", "expiredAt": _iso(now), "expiredReason": "reset"})
+        return True
+    return False

@@ -190,6 +190,12 @@ class Store:
         if not isinstance(action, str):
             raise AlphaError("Choose a supported local action.")
         learning.ensure(s, now())
+        if action.startswith("learning_"):
+            try:
+                if learning.apply(self, s, action, p, now=now()):
+                    return
+            except ValueError as e:
+                raise AlphaError(str(e)) from e
         if action.startswith("you_"):
             try:
                 visuals.apply(self, s, action, p)

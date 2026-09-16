@@ -12,7 +12,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 LANGUAGES = ("English", "繁體中文")
-INTENTS = ("draft", "schedule", "publish_now", "research")
+INTENTS = ("draft", "schedule", "publish_now", "research", "memory")
+
+
+def is_memory_instruction(text):
+    """A short standing instruction about how to write, not a one-off note for the current draft."""
+    text = text if isinstance(text, str) else ""
+    return bool(text.strip()) and len(text) <= MEMORY_MAX_CHARS and bool(_MEMORY.search(text)) and not _MEMORY_ONCE.search(text)
 DEFAULT_ZONE = "UTC"
 
 # Display platform → aliases. ASCII aliases match on word boundaries, CJK aliases as substrings.
@@ -65,6 +71,11 @@ _PERIOD_PM = re.compile(r"晏晝|晏昼|下晝|下昼|下午|午後|午后|夜�
 _PERIOD_AM = re.compile(r"朝早|上晝|上昼|早上|早晨|上午|凌晨|morning", re.I)
 _PUBLISH_NOW = re.compile(r"(?:post|publish|send|出|發|发)[^。\n]{0,24}(?:right now|\bnow\b|即刻|而家|立即|馬上|马上)|(?:right now|\bnow\b|即刻|而家|立即|馬上|马上)[^。\n]{0,24}(?:post|publish|send|出|發|发)", re.I)
 _RESEARCH = re.compile(r"\bresearch\b|調研|调研|搵(?:下|吓|一下)?(?:資料|资料|素材|例子)|查(?:下|吓|一下)|look up|find sources|搜(?:集|索)|素材", re.I)
+# A standing instruction about how to write (preference-learning design §3 signal 1): imperative at the start,
+# or a "from now on" marker anywhere. A one-off ("this post", "今次") is a drafting instruction, not memory.
+_MEMORY = re.compile(r"^\s*(?:please\s+|唔該\s*|請\s*)?(?:(?:always|never|stop|don'?t|do not)\b|remember(?:\s*[:,]|\s+(?:that|to|no|not|never|always|don'?t|do not)\b)|no\s+(?:more\s+)?(?:hashtags?|emojis?|bullets?|lists?|exclamation|calls? to action|cta)\b)|\b(?:from now on|going forward|in (?:the )?future)\b|以後|以后|今後|今后|從今|从今|記住|记住|記得|记得|下次(?:開始|开始)?|唔好再|不要再|永遠|永远|一律", re.I)
+_MEMORY_ONCE = re.compile(r"\b(?:this post|this one|this time|just this|for now|today only|this draft|never mind)\b|今次|呢篇|這篇|这篇|呢次|這次|这次|今篇|呢個\s*post|這個\s*post|这个\s*post", re.I)
+MEMORY_MAX_CHARS = 240
 _ZH_WEEKDAYS = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
 _EN_WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 _EN_MONTHS = {name: index + 1 for index, name in enumerate(_MONTHS.split("|"))}
@@ -254,6 +265,8 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
         intent = "publish_now"
     elif has_times:
         intent = "schedule"
+    elif is_memory_instruction(text):
+        intent = "memory"
     elif _RESEARCH.search(text):
         intent = "research"
     else:

@@ -21,7 +21,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
 import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { Message as ThreadMessage, Run, SchedulePlan } from '@/lib/api/types';
+import type { MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, SchedulePlan } from '@/lib/api/types';
+import { ProposalCard } from '@/features/memory/proposal-card';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -52,6 +53,10 @@ interface AssistantBody {
   excluded?: { id: string; reason: string }[];
   /** Skill packages bound to the run, by id (design §7). */
   skills?: string[];
+  /** A standing instruction turn: the preference it proposed (preference-learning design §5.5). */
+  memoryProposal?: MemoryProposal | null;
+  /** Which learned preferences the run received (design §5.7). */
+  memory?: MemoryBinding | null;
 }
 
 function bodyOf(message: ThreadMessage): AssistantBody & { text: string } {
@@ -168,7 +173,13 @@ export function ConversationView({ conversationId }: { conversationId: string })
         model: choice.model,
         timeZone
       });
-      client.setQueryData(['agent-run', workspaceId, result.runId], result);
+      if (result.status === 'memory') {
+        // A standing instruction opened no run; the reply carries a proposal for the Memory page and this thread.
+        void client.invalidateQueries({ queryKey: keys.memoryProposals(workspaceId) });
+        void client.invalidateQueries({ queryKey: keys.memory(workspaceId) });
+      } else {
+        client.setQueryData(['agent-run', workspaceId, result.runId], result);
+      }
       setText('');
       setVariantIndex(0);
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
@@ -260,8 +271,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
                       <Icons.sparkles className='size-3.5' />
                     </MessageAvatar>
                     <MessageContent className='items-stretch gap-3'>
-                      {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} />}
+                      {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} memory={body.memory} />}
                       {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
+                      {body.memoryProposal && <ProposalCard proposal={body.memoryProposal} />}
                       {body.excluded && body.excluded.length > 0 && (
                         <ul className='text-muted-foreground text-xs'>
                           {body.excluded.map((item) => (

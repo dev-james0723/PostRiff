@@ -33,7 +33,7 @@ ACTION_CLASSES = {
     "memory_egress": "owner",
     "research_egress": "owner",
     # Accepting or undoing a learned preference changes how every member's drafts read (design decision D).
-    "preference": "owner",
+    "preference": "owner", "learning_settings": "owner", "learning_reset": "owner",
     "refresh": "read", "p2_refresh": "read",
 }
 
