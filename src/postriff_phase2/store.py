@@ -147,7 +147,10 @@ class Phase2Store(Store):
         decisions = [p.get("status") for p in sorted(proposals, key=lambda p: p.get("decidedAt") or "", reverse=True) if p.get("decidedAt")]
         recent = {"remembered": "remembered", "post-only": "post_only", "rejected": "dismissed"}
         budget = 1 - sum(1 for p in proposals if p.get("source") in ("deterministic", "model") and signals_epoch(p.get("createdAt")) > now - 86400)
-        for candidate in extract.consolidate(support, counter, s, now, dismissed, [recent.get(d, d) for d in decisions]):
+        candidates = extract.consolidate(support, counter, s, now, dismissed, [recent.get(d, d) for d in decisions])
+        replaced = {c.get("replaces") for c in candidates}
+        candidates += [r for r in extract.regressions(s, events, now) if r["replaces"] not in replaced]
+        for candidate in candidates:
             if budget <= 0:
                 break
             try:

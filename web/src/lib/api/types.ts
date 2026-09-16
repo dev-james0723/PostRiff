@@ -379,6 +379,16 @@ export interface MemoryProposal {
   evidence?: { variantId?: string; eventId?: string; revision?: number }[];
   variantId?: string | null;
   replaces?: string | null;
+  /** How published posts with and without the feature did, like for like. An observation, never a cause. */
+  performance?: PerformanceNote | null;
+}
+
+export interface PerformanceNote {
+  metric: string;
+  withFeature: { posts: number; mean: number };
+  withoutFeature: { posts: number; mean: number };
+  direction: 'supports' | 'contradicts' | 'neutral' | string;
+  note: string;
 }
 
 export interface MemoryProposals {

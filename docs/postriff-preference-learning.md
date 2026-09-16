@@ -680,6 +680,20 @@ James 拍板決定 A–D（同 §10 全部建議答案）之後即日落實，�
 - **內容：** 表現只改 confidence 標籤（「同類 post 入面，冇 hashtag 嗰 5 篇平均 saves 較高 · 觀察，唔係因果」）；retire 同 kill switch；scope 推廣。
 - **完成定義：** 冇任何 proposal 單靠表現產生（有 test）。
 
+### Phase D 實作記錄（2026-09-16）
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| 表現佐證 | `learning_extract.performance_note()`、`learning_service.latest_metrics_by_job()` | 每個 job 最新一個 `available` 嘅 native metric（`pr_metric_observations`）；同 scope（platform / language 一樣）嘅已批准 post 分「有呢個特徵」同「冇」兩組，第一個兩邊都 ≥ 3 篇有數嘅 metric（saved → likes → views → reach）先出 note：`direction` supports / contradicts / neutral（差 < 10% 當 neutral），字面寫明「observation, not a cause」。**只係 proposal 上嘅一句 note，永遠唔會自己產生 proposal**（有 test） |
+| Kill switch | `learning_extract.regressions()` | 每條 active item：佢 scope 入面生效之後 ≥ 5 篇批准 draft 嘅 edit distance 平均，比生效之前 ≥ 3 篇高 0.05 以上 → `op: retire` proposal，why 寫明前後百分比；hosted cron 同 local 都會加入 candidates（同一 item 已有 replaces 嘅 proposal 就唔重複） |
+| Scope 推廣 | （C1 已做） | 三層計分，最闊而跨 ≥ 2 語言 / platform 嘅層級先提 |
+| Web | `learning-panel.tsx`、`proposal-card.tsx`、`types.ts` | Memory 頁「Learn with a cloud model」switch（owner；要「Cloud model access」開住先可以開，文案講明送出去嘅係 redact 過嘅前後對、只限 cloud consent 嘅 source）；proposal 卡多一行 performance note（In line with this / Against this / No clear difference，連 post 數同平均） |
+| Tests | `test_postriff_learning_performance.py`（4：方向判斷、三篇門檻 / 未知 rule / scope 唔同 → 冇 note、表現單獨唔出 proposal、kill switch 嘅 5 / 3 / margin / scope 條件）；`postgres_learning_extract.py` +1（metric SQL 取最新 available 值 → note） | 全過：unit 380；PG 11 套；web tsc / oxlint 乾淨 |
+
+**同計劃嘅差異**
+- Performance note 只用 native 絕對值嘅平均，冇做 `insights.compare()` 嘅 cohort 拒絕邏輯（content type 未計入 like-for-like）；下一步可以加 content type 維度。
+- 冇喺 browser 驗證 UI（原因同 Phase B）。
+
 ### 協調
 
 以下檔案 2026-09-16 有其他未 commit 嘅工作，動手之前先睇 `git diff HEAD`：

@@ -1,5 +1,5 @@
-"""Phase C1 on the hosted repository: the cron's extraction turns three edits that add hashtags on three
-channels into one language-level proposal, only owners' edits count until team edits are allowed,
+"""Phase C1 on the hosted repository: the cron's extraction turns three edits that add a closing call to action
+on three channels into one language-level proposal, only owners' edits count until team edits are allowed,
 automatic proposals are capped at one a day, events are marked seen, the state is never touched, and
 deciding the proposal follows the same path as a chat one.
 
@@ -169,4 +169,21 @@ assert (p["ruleKey"], p["statement"], p["scopeLabel"]) == ("other", "Lead with t
 service.learning.extractor = None
 checks.append("a model extractor runs only with both consents and its candidates clear the same bar")
 
+# 6. Performance: the newest available value per job feeds a like-for-like note (never a proposal by itself).
+from postriff_phase2 import learning_extract as extract  # noqa: E402
+from postriff_phase2.learning_service import latest_metrics_by_job  # noqa: E402
+with connection() as db:
+    for n in range(6):
+        for observed, value in ((clock[0] - 7200, 5.0), (clock[0] - 60, 10.0 if n < 3 else 20.0)):
+            db.execute("insert into public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at) values(%s,'c','threads',%s,%s,'saved','2026-09',%s,'count','available',to_timestamp(%s))",
+                       (wid, f"post-{n}", f"job-{n}", value, observed))
+        db.execute("insert into public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at) values(%s,'c','threads',%s,%s,'views','2026-09',NULL,'count','unavailable',to_timestamp(%s))",
+                   (wid, f"post-{n}", f"job-{n}", clock[0]))
+    metrics = latest_metrics_by_job(db.cursor(), wid)
+assert metrics["job-0"] == {"saved": 10.0} and metrics["job-5"] == {"saved": 20.0}, metrics
+approvals = [{"kind": "draft.approved", "at": clock[0], "subject": {"variantId": f"v{n}", "jobId": f"job-{n}"}, "scope": {"platform": "Threads", "language": "English"}, "features": {"editDistance": 0.1, "approved": {"hashtags": 2 if n < 3 else 0}}} for n in range(6)]
+note = extract.performance_note({"ruleKey": "hashtags.use", "polarity": "avoid", "scope": {"platform": "Threads", "language": "English", "contentTypeId": None}}, approvals, metrics)
+assert note["direction"] == "supports" and note["withoutFeature"]["mean"] == 20.0, note
+checks.append("the newest available metric per job feeds a like-for-like performance note")
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))
+

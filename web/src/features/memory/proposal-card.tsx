@@ -80,6 +80,12 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
         <p className='text-base leading-snug font-semibold'>{live?.statement ?? proposal.statement}</p>
       )}
       {why && <p className='text-muted-foreground text-xs'>{why}</p>}
+      {proposal.performance && (
+        <p className='text-muted-foreground text-xs'>
+          {proposal.performance.direction === 'supports' ? 'In line with this: ' : proposal.performance.direction === 'contradicts' ? 'Against this: ' : 'No clear difference: '}
+          posts without the feature averaged {proposal.performance.withoutFeature.mean} {proposal.performance.metric} ({proposal.performance.withoutFeature.posts} posts), with it {proposal.performance.withFeature.mean} ({proposal.performance.withFeature.posts} posts). {proposal.performance.note}
+        </p>
+      )}
       {pending ? (
         <>
           <p className='text-muted-foreground border-t border-dashed pt-2 text-xs'>

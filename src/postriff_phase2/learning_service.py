@@ -166,6 +166,15 @@ def events_window(cur, workspace_id, now, days):
     return [_row(values) for values in cur.fetchall()]
 
 
+def latest_metrics_by_job(cur, workspace_id):
+    """The newest available value of each native metric per PostRiff-published job (insights.py definitions)."""
+    cur.execute("SELECT DISTINCT ON (job_id, metric) job_id, metric, value FROM public.pr_metric_observations WHERE workspace_id=%s AND job_id IS NOT NULL AND availability='available' ORDER BY job_id, metric, observed_at DESC", (workspace_id,))
+    metrics = {}
+    for job_id, metric, value in cur.fetchall():
+        metrics.setdefault(job_id, {})[metric] = float(value)
+    return metrics
+
+
 def mark_consumed(cur, workspace_id, batch_id, before):
     cur.execute("UPDATE public.pr_learning_events SET consumed_by=%s WHERE workspace_id=%s AND consumed_by IS NULL AND created_at <= to_timestamp(%s)", (batch_id, workspace_id, before))
     return cur.rowcount
@@ -193,7 +202,8 @@ def create_proposal(cur, workspace_id, state, proposal, now, evidence=None):
     if op == "retire" and (not replaces or replaces not in {item["id"] for item in learning.active_items(state)}):
         return None
     body = {k: p[k] for k in ("type", "ruleKey", "polarity", "scope", "statement", "applyWhen", "params", "source")}
-    body.update({"scopeKey": key, "op": op, "why": " ".join(str(p.get("why") or "").split())[:240], "evidence": evidence or p.get("evidence") or [], "variantId": p.get("variantId"), "replaces": replaces, "support": p.get("support")})
+    body.update({"scopeKey": key, "op": op, "why": " ".join(str(p.get("why") or "").split())[:240], "evidence": evidence or p.get("evidence") or [], "variantId": p.get("variantId"), "replaces": replaces, "support": p.get("support"),
+                 "performance": p.get("performance") if isinstance(p.get("performance"), dict) else None})
     cur.execute("INSERT INTO public.pr_memory_proposals(workspace_id,scope_key,op,source,body,status,created_at,expires_at) VALUES(%s,%s,%s,%s,%s::jsonb,'pending',to_timestamp(%s),to_timestamp(%s)) RETURNING id::text",
                 (workspace_id, key, op, p["source"], json.dumps(body, ensure_ascii=False), now, now + learning.PROPOSAL_TTL.total_seconds()))
     return load_proposal(cur, workspace_id, cur.fetchone()[0])
@@ -201,7 +211,7 @@ def create_proposal(cur, workspace_id, state, proposal, now, evidence=None):
 
 def proposal_view(row):
     """What a card shows: the proposal, its status and when it expires."""
-    return {"id": row["id"], "status": row["status"], "op": row["op"], "source": row["source"], "at": row["at"], "expiresAt": row["expiresAt"], "decidedAt": row["decidedAt"], **{k: row["body"].get(k) for k in ("type", "ruleKey", "polarity", "scope", "statement", "applyWhen", "why", "evidence", "variantId", "replaces")}, "scopeLabel": learning.scope_label(row["body"].get("scope") or {})}
+    return {"id": row["id"], "status": row["status"], "op": row["op"], "source": row["source"], "at": row["at"], "expiresAt": row["expiresAt"], "decidedAt": row["decidedAt"], **{k: row["body"].get(k) for k in ("type", "ruleKey", "polarity", "scope", "statement", "applyWhen", "why", "evidence", "variantId", "replaces", "performance")}, "scopeLabel": learning.scope_label(row["body"].get("scope") or {})}
 
 
 class HostedLearning:
@@ -379,6 +389,16 @@ class HostedLearning:
                         except Exception:  # noqa: BLE001 - the deterministic half still proposes
                             stats["modelFailures"] = stats.get("modelFailures", 0) + 1
                     candidates = extract.consolidate(support, counter, state, now, dismissed_keys(cur, workspace_id, now), recent_decisions(cur, workspace_id))
+                    # Phase D: the kill switch adds retire proposals; performance is attached as a note, never as a reason.
+                    replaced = {c.get("replaces") for c in candidates}
+                    candidates += [r for r in extract.regressions(state, events, now) if r["replaces"] not in replaced]
+                    approved = [e for e in events if e["kind"] == "draft.approved"]
+                    if approved:
+                        metrics = latest_metrics_by_job(cur, workspace_id)
+                        for candidate in candidates:
+                            note = extract.performance_note(candidate, approved, metrics) if metrics else None
+                            if note:
+                                candidate["performance"] = note
                     budget = max(0, 1 - automatic_proposals_since(cur, workspace_id, now - 86400))
                     for candidate in candidates:
                         if budget <= 0:

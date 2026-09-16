@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
-import { useAct, useInvalidate, useMemoryProposals, useSnapshot } from '@/lib/api/hooks';
+import { useAct, useInvalidate, useMemory, useMemoryProposals, useSnapshot } from '@/lib/api/hooks';
 import type { LearnedItem } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { ProposalCard } from './proposal-card';
@@ -26,11 +26,13 @@ function scopeLabel(scope: LearnedItem['scope']) {
 export function LearningPanel() {
   const { api, workspaceId } = useWorkspaceApi();
   const proposals = useMemoryProposals();
+  const memory = useMemory();
   const snapshot = useSnapshot();
   const act = useAct();
   const invalidate = useInvalidate();
   const [confirmReset, setConfirmReset] = useState(false);
   const learning = proposals.data?.learning;
+  const cloudAccess = memory.data?.egress?.cloud === true;
   const isOwner = snapshot.data?.membership?.role === 'owner';
   const revision = snapshot.data?.revision ?? 0;
   const items = learning?.items ?? [];
@@ -54,6 +56,19 @@ export function LearningPanel() {
         onSuccess: () => {
           invalidate('memory', 'memoryProposals');
           toast.success(enabled ? 'PostRiff learns from what you tell it and how you edit again.' : 'Learning is off. Nothing new is recorded or proposed.');
+        },
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
+      }
+    );
+  }
+
+  function setCloudExtraction(cloudExtraction: boolean) {
+    act.mutate(
+      { revision, action: 'learning_settings', payload: { cloudExtraction } },
+      {
+        onSuccess: () => {
+          invalidate('memory', 'memoryProposals');
+          toast.success(cloudExtraction ? 'A cloud model may now read redacted before/after pairs of your edits.' : 'Only the rules that need no model read your edits now.');
         },
         onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
       }
@@ -94,6 +109,22 @@ export function LearningPanel() {
         </div>
         {learning && <Switch checked={learning.enabled} disabled={!isOwner || busy} onCheckedChange={setEnabled} ariaLabel='Learn from what I say and how I edit' label='Learn' />}
       </div>
+
+      {learning && learning.enabled && (
+        <div className='bg-muted/40 flex flex-col gap-2 rounded-lg p-3 sm:flex-row sm:items-start sm:justify-between'>
+          <div className='flex min-w-0 flex-col gap-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <span className='text-xs font-semibold'>Learn with a cloud model</span>
+              <Badge variant={learning.cloudExtraction && cloudAccess ? 'secondary' : 'outline'}>{learning.cloudExtraction && cloudAccess ? 'On' : 'Off'}</Badge>
+            </div>
+            <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>
+              Without this, only counting rules read your edits (hashtags, emoji, openings, closings, length). With it, a small cloud model reads before/after pairs of your edits with links, handles and numbers removed, and only for drafts whose sources you allowed on the cloud.
+              {!cloudAccess ? ' It needs “Cloud model access” above to be on.' : ''}
+            </p>
+          </div>
+          <Switch checked={learning.cloudExtraction} disabled={!isOwner || busy || !cloudAccess} onCheckedChange={setCloudExtraction} ariaLabel='Learn from my edits with a cloud model' label='Allow' />
+        </div>
+      )}
 
       {proposals.isLoading && <Skeleton className='h-16 w-full' />}
 

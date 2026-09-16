@@ -254,3 +254,75 @@ def consolidate(support, counter, state, now, dismissed_keys=(), recent_decision
                               "source": "deterministic", "op": "retire", "replaces": item["id"], "evidence": group["evidence"][-MAX_EVIDENCE:],
                               "why": f"Your last {len(group['drafts'])} drafts on {learning.scope_label(item['scope'])} went the other way.", "support": round(group["support"], 2)})
     return proposals
+
+
+# --- Phase D: performance as supporting evidence, and the kill switch -------------------------------
+
+PERFORMANCE_METRICS = ("saved", "likes", "views", "reach")
+MIN_MEASURED = 3
+NEUTRAL_BAND = 0.10
+# Whether the feature a rule is about is present in an approved text.
+PRESENCE = {
+    "hashtags.use": lambda f: f.get("hashtags", 0) > 0, "emoji.use": lambda f: f.get("emoji", 0) > 0, "exclamation.use": lambda f: f.get("exclamations", 0) > 0,
+    "closing.cta": lambda f: bool(f.get("closingCta")), "lists.use": lambda f: f.get("listLines", 0) > 0,
+}
+REGRESSION_AFTER, REGRESSION_BEFORE, REGRESSION_MARGIN = 5, 3, 0.05
+
+
+def _in_scope(scope, event_scope):
+    return all(scope.get(key) in (None, event_scope.get(key)) for key in ("platform", "language"))
+
+
+def performance_note(candidate, approved_events, metrics_by_job):
+    """Design §3 signal 11: how posts with and without the feature did, like for like, on the first
+    native metric measured on at least three posts of each kind. An observation attached to a
+    proposal, never a reason to make one, and never a claim of cause."""
+    present = PRESENCE.get(candidate.get("ruleKey"))
+    if present is None:
+        return None
+    with_feature, without_feature = [], []
+    for event in approved_events:
+        features = (event.get("features") or {}).get("approved")
+        job_id = (event.get("subject") or {}).get("jobId")
+        metrics = metrics_by_job.get(job_id) if job_id else None
+        if not isinstance(features, dict) or not metrics or not _in_scope(candidate.get("scope") or {}, event.get("scope") or {}):
+            continue
+        (with_feature if present(features) else without_feature).append(metrics)
+    for metric in PERFORMANCE_METRICS:
+        a = [m[metric] for m in with_feature if isinstance(m.get(metric), (int, float))]
+        b = [m[metric] for m in without_feature if isinstance(m.get(metric), (int, float))]
+        if len(a) < MIN_MEASURED or len(b) < MIN_MEASURED:
+            continue
+        mean_with, mean_without = statistics.mean(a), statistics.mean(b)
+        larger = max(mean_with, mean_without) or 1.0
+        if abs(mean_with - mean_without) / larger < NEUTRAL_BAND:
+            direction = "neutral"
+        else:
+            better_without = mean_without > mean_with
+            direction = "supports" if (better_without == (candidate.get("polarity") == "avoid")) else "contradicts"
+        return {"metric": metric, "withFeature": {"posts": len(a), "mean": round(mean_with, 1)}, "withoutFeature": {"posts": len(b), "mean": round(mean_without, 1)},
+                "direction": direction, "note": f"Observation from {len(a) + len(b)} published posts, not a cause; timing and topic also moved."}
+    return None
+
+
+def regressions(state, events, now):
+    """Design §8.3 kill switch: an active item whose scope's approved drafts needed more editing since it
+    took effect (five approvals after against at least three before, by edit distance) becomes a retire
+    proposal. The person decides; nothing retires on its own."""
+    approvals = [e for e in events if e.get("kind") == "draft.approved" and isinstance((e.get("features") or {}).get("editDistance"), (int, float))]
+    proposals = []
+    for item in learning.active_items(state):
+        since = _epoch(item.get("since"))
+        in_scope = [e for e in approvals if learning.applies(item, (e.get("scope") or {}).get("platform"), (e.get("scope") or {}).get("language"))]
+        before = [e["features"]["editDistance"] for e in in_scope if _epoch(e.get("at")) < since]
+        after = [e for e in in_scope if _epoch(e.get("at")) >= since]
+        if len(after) < REGRESSION_AFTER or len(before) < REGRESSION_BEFORE:
+            continue
+        mean_after, mean_before = statistics.mean(e["features"]["editDistance"] for e in after), statistics.mean(before)
+        if mean_after <= mean_before + REGRESSION_MARGIN:
+            continue
+        proposals.append({"type": item["type"], "ruleKey": item["ruleKey"], "polarity": item["polarity"], "scope": item["scope"], "statement": item["statement"], "params": item.get("params") or {},
+                          "source": "deterministic", "op": "retire", "replaces": item["id"], "evidence": [{k: (e.get(k) or (e.get("subject") or {}).get("variantId")) for k in ("id",)} | {"variantId": (e.get("subject") or {}).get("variantId")} for e in after[-MAX_EVIDENCE:]],
+                          "why": f"Since this rule, your drafts on {learning.scope_label(item['scope'])} needed more editing ({mean_after:.0%} of the text changed before approval, against {mean_before:.0%} before).",
+                          "support": round(mean_after - mean_before, 3)})
+    return proposals
