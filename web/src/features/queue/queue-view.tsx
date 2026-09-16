@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
+import { ManifestPreview } from '@/components/application/post-preview/manifest-preview';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
@@ -15,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
@@ -99,27 +101,37 @@ function ReviewCard({ review, revision, canApprove }: { review: Review; revision
   const needsReview = review.status === 'needs_review';
   return (
     <Card className='h-full'>
-      <CardHeader>
-        <CardTitle className='flex flex-wrap items-center gap-2 text-base'>
-          <ChannelIcon platform={manifest.platform} name={manifest.platform} />
-          {manifest.platform} · {manifest.account}
-          <AnimatedBadge size='sm' status={needsReview ? 'warning' : 'neutral'} pulse={needsReview && !expired}>
-            {review.status.replace(/_/g, ' ')}
-          </AnimatedBadge>
-          {expired && (
-            <AnimatedBadge size='sm' status='danger'>
-              expired
-            </AnimatedBadge>
-          )}
-        </CardTitle>
-        <CardDescription>
-          {manifest.timing.local} ({manifest.timing.timeZone}) · {manifest.payload.language} · {manifest.media.length} media ·{' '}
-          <span className='font-mono'>{review.digest.slice(0, 12)}…</span>
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className='line-clamp-6 text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
-      </CardContent>
+      {/* The phone shows exactly what the approval covers, drawn in the destination app, beside the frozen details. */}
+      <div className='grid gap-(--card-spacing) md:grid-cols-[minmax(0,1fr)_auto]'>
+        <div className='flex min-w-0 flex-col gap-(--card-spacing)'>
+          <CardHeader>
+            <CardTitle className='flex flex-wrap items-center gap-2 text-base'>
+              <ChannelIcon platform={manifest.platform} name={manifest.platform} />
+              {manifest.platform} · {manifest.account}
+              <AnimatedBadge size='sm' status={needsReview ? 'warning' : 'neutral'} pulse={needsReview && !expired}>
+                {review.status.replace(/_/g, ' ')}
+              </AnimatedBadge>
+              {expired && (
+                <AnimatedBadge size='sm' status='danger'>
+                  expired
+                </AnimatedBadge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              {manifest.timing.local} ({manifest.timing.timeZone}) · {manifest.payload.language} · {manifest.media.length} media ·{' '}
+              <span className='font-mono'>{review.digest.slice(0, 12)}…</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className='line-clamp-[12] text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
+          </CardContent>
+        </div>
+        <ManifestPreview
+          manifest={manifest}
+          scale={0.5}
+          className='mx-(--card-spacing) border-t pt-(--card-spacing) md:mx-0 md:border-t-0 md:border-l md:px-(--card-spacing) md:pt-0'
+        />
+      </div>
       {canApprove && review.status === 'needs_review' && (
         <CardFooter className='flex flex-wrap items-center gap-3'>
           <StatefulButton
@@ -225,7 +237,7 @@ export function QueueView() {
                   Nothing to approve. Use “Schedule a draft” to prepare one for a channel and time.
                 </motion.p>
               ) : (
-                <motion.div key='reviews' exit={REVIEW_EXIT} className='grid gap-4 xl:grid-cols-2'>
+                <motion.div key='reviews' exit={REVIEW_EXIT} className='grid gap-4 min-[1400px]:grid-cols-2'>
                   <AnimatePresence>
                     {reviews.map((review, index) => (
                       <motion.div
@@ -327,25 +339,46 @@ export function QueueView() {
                           {last ? `${last.message} · ${relativeTime(last.at)}` : '—'}
                         </TableCell>
                         <TableCell className='text-right'>
-                          {canApprove && WAITING.has(job.state) && !job.cancelRequested && (
-                            <HoldActionButton
-                              key={holdEpoch}
-                              type='horizontal'
-                              holdDuration={900}
-                              holdingLabel='Keep holding…'
-                              completeLabel='Cancelling…'
-                              disabled={act.isPending}
-                              onHoldComplete={() => cancel(job)}
-                              aria-label={`Hold to cancel ${job.manifest.platform} post`}
-                              title='Press and hold (or hold Space) to cancel this post before it is submitted.'
-                              className={HOLD_CANCEL_CLASS}
-                              fillClassName={HOLD_CANCEL_FILL}
-                              waveClassName={HOLD_CANCEL_WAVE}
-                              labelClassName='text-xs'
-                            >
-                              Hold to cancel
-                            </HoldActionButton>
-                          )}
+                          <span className='flex items-center justify-end gap-2'>
+                            <Popover>
+                              <PopoverTrigger
+                                render={<Button variant='ghost' size='icon-sm' />}
+                                aria-label={`Preview the ${job.manifest.platform} post`}
+                                title='Preview in the app'
+                              >
+                                <Icons.eye />
+                              </PopoverTrigger>
+                              <PopoverContent align='end' className='w-auto max-w-[calc(100vw-1rem)]'>
+                                <div className='max-h-[calc(var(--available-height,100vh)-1.5rem)] overflow-y-auto'>
+                                  <ManifestPreview manifest={job.manifest} />
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                            {/* A fixed slot keeps the preview buttons in one column whether or not a row can still be cancelled. */}
+                            {canApprove && (
+                              <span className='flex w-[7rem] justify-end'>
+                                {WAITING.has(job.state) && !job.cancelRequested && (
+                                  <HoldActionButton
+                                    key={holdEpoch}
+                                    type='horizontal'
+                                    holdDuration={900}
+                                    holdingLabel='Keep holding…'
+                                    completeLabel='Cancelling…'
+                                    disabled={act.isPending}
+                                    onHoldComplete={() => cancel(job)}
+                                    aria-label={`Hold to cancel ${job.manifest.platform} post`}
+                                    title='Press and hold (or hold Space) to cancel this post before it is submitted.'
+                                    className={HOLD_CANCEL_CLASS}
+                                    fillClassName={HOLD_CANCEL_FILL}
+                                    waveClassName={HOLD_CANCEL_WAVE}
+                                    labelClassName='text-xs'
+                                  >
+                                    Hold to cancel
+                                  </HoldActionButton>
+                                )}
+                              </span>
+                            )}
+                          </span>
                         </TableCell>
                       </MotionTableRow>
                     );

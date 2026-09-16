@@ -8,9 +8,8 @@
  * from `@react-aria/i18n`. See README.md for the API.
  */
 
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  getLocalTimeZone,
   now,
   today,
   type CalendarDate,
@@ -404,12 +403,4 @@ function DayPanel<T>({ date, byDay, timeZone, firstDayOfWeek, noun, countLabel, 
   );
 }
 
-const subscribeToNothing = () => () => {};
-
-/**
- * This browser's IANA time zone, or `null` on the server and while hydrating, so nothing zone-dependent is
- * rendered into HTML that the client would then disagree with.
- */
-export function useLocalTimeZone() {
-  return useSyncExternalStore(subscribeToNothing, getLocalTimeZone, () => null);
-}
+export { useLocalTimeZone } from '@/hooks/use-local-time-zone';

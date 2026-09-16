@@ -73,7 +73,7 @@ export function EventButton<T>({
       <PopoverTrigger aria-label={label} tabIndex={tabIndex} className={classes} style={style}>
         {body}
       </PopoverTrigger>
-      <PopoverContent align='start' className='w-80'>
+      <PopoverContent align='start' className='w-auto max-w-[calc(100vw-1rem)]'>
         {renderDetails(event, 'popover')}
       </PopoverContent>
     </Popover>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { fromDate, isToday, parseDate, today, type CalendarDate } from '@internationalized/date';
 import { parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
 import { Calendar, useLocalTimeZone } from '@/components/application/calendar/calendar';
+import { ManifestPreview } from '@/components/application/post-preview/manifest-preview';
 import {
   EVENT_COLORS,
   type CalendarDetailsContext,
@@ -33,6 +34,7 @@ interface Post {
   /** The zone the time was approved in. */
   approvedZone: string;
   cancelRequested: boolean;
+  manifest: Manifest;
 }
 
 const KIND_META: Record<Kind, { label: string; color: CalendarEventColor; status: AnimatedBadgeStatus }> = {
@@ -99,8 +101,8 @@ function PostDetails({ event, context, timeZone }: { event: CalendarEvent<Post>;
   const approvedElsewhere = post.approvedZone && post.approvedZone !== timeZone ? zoneTime(post.at, post.approvedZone) : null;
   const final = post.kind === 'verified' || post.kind === 'failed' || post.kind === 'canceled';
 
-  return (
-    <div className='flex min-w-0 flex-col gap-2'>
+  const details = (
+    <div className={cn('flex min-w-0 flex-col gap-2', context === 'popover' && 'w-72 shrink-0')}>
       <div className='flex items-center justify-between gap-2'>
         <span className='flex min-w-0 items-center gap-2 font-medium'>
           <ChannelIcon platform={post.platform} name={post.platform} size='xs' />
@@ -121,6 +123,14 @@ function PostDetails({ event, context, timeZone }: { event: CalendarEvent<Post>;
           Open the queue <LearnMoreChevron />
         </Link>
       )}
+    </div>
+  );
+
+  if (context !== 'popover') return details;
+  return (
+    <div className='flex max-h-[calc(var(--available-height,100vh)-1rem)] flex-col gap-4 overflow-y-auto sm:flex-row sm:items-start'>
+      {details}
+      <ManifestPreview manifest={post.manifest} timeZone={timeZone} className='border-t pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4' />
     </div>
   );
 }
@@ -160,7 +170,8 @@ export function CalendarView() {
           text: manifest.payload.text,
           at,
           approvedZone: manifest.timing.timeZone,
-          cancelRequested
+          cancelRequested,
+          manifest
         }
       });
     };
