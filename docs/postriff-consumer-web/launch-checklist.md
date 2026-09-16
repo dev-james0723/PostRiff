@@ -1,6 +1,6 @@
 # PostRiff — launch checklist (code complete → paid beta)
 
-**Date:** 2026-09-16 · **Branch:** `consumer-saas` · **State:** everything below marked ✅ is implemented and verified locally (unit 227/227, PostgreSQL suites pass, `web/` builds 82 routes, browser-checked at desktop and 375 px). Items marked 🔑 can only be done by the founder because they need accounts, credentials, money or a signature.
+**Date:** 2026-09-16 · **Branch:** `consumer-saas` · **State:** everything below marked ✅ is implemented and verified locally (unit 229/229, PostgreSQL suites pass, `web/` builds 82 routes, browser-checked at desktop and 375 px). Items marked 🔑 can only be done by the founder because they need accounts, credentials, money or a signature.
 
 ## What is done (✅)
 
@@ -20,6 +20,9 @@
 - Email (Resend): invitation, welcome, trial ending/ended, subscription activated, payment failed — deduped in `pr_notifications`; reminder sweep on the cron tick.
 - Migration 008 (`provider_price_id`, `pr_notifications`).
 - Origin guard honours `X-Forwarded-Host`.
+
+### Verified end to end (dev harness)
+Connect → voice → draft → schedule → approve → worker publish → verified → analytics, in the new app; see `receipts/consumer-saas-e2e.md` (two backend defects found and fixed on the way).
 
 ## Founder-only gates (🔑), in order
 
