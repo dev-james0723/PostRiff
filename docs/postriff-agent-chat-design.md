@@ -277,6 +277,11 @@ Route A 嘅 tool 由 PostRiff MCP stdio server（`integrations/postriff` 嘅 `po
 - Agent **唔可以直接寫**。佢出 `memoryProposals[]` → `pr_memory_proposals` → Inspector「Memory · 1」/ Memory 頁顯示 diff → user Accept / Edit / Dismiss。
   Accept 先 bump revision。（等於 OpenDesign 嘅 Keep gate，但係人手。）
 - `privacy: private / local_only` 嘅內容永遠唔入 public draft，唔入 export（除非 user 揀）。
+- **Cloud route 要 consent 先讀 memory**（2026-09-16 實作）：本地 route（Claude Code / Codex）照舊讀齊 VOICE / IDENTITY / BOUNDARIES。
+  Managed cloud route（`ServerModelRuntime`）預設**乜都唔讀**，要 workspace owner 喺 Memory 頁開 `memory_egress`（寫入 audit log）。
+  開咗之後都只會送 `public` / `workspace_only` 嘅 boundary；`private`、`local_only`、`excluded` 同冇標 privacy 嘅一律留低，
+  BOUNDARIES.md 會寫明「N 條冇分享」。冇 consent 或者有 boundary 被扣起，嗰個 turn 會出 warning。實作：`memory.projection()`、
+  `memory.apply_memory_action()`、`permissions.ACTION_CLASSES["memory_egress"] = "owner"`；privacy notice 已同步。
 - Revision 綁入 manifest：`voiceRevision` 已經係 `build_manifest` 嘅一部分，改咗 VOICE.md 舊 approval 自然 stale。
 - **Sync to Claude Code**：companion 將 `memory/` copy 去 `~/PostRiff/<workspace>/memory/`，run 時 `--add-dir` 掛上；
   格式刻意同 Claude Code memory folder 一樣（frontmatter `name / description / type`），所以 James 喺 terminal 開 Claude Code 都用得。
@@ -602,8 +607,14 @@ Phase 3：**skills 綁定 + Codex route**。原則照 §7：skills 帶方法、m
 
 ## 12. 要你答嘅問題
 
-1. Home 取代 Overview（決定 2）— OK？定係保留 `/app` Overview，Home 放 `/app/agent`？
-2. Phase 1 嘅 managed route 用邊個 model？（`ServerModelRuntime` 仲係 `qualified: false`；如果暫時淨係 fixture + Claude Code 本地，consumer 就要等 Phase 2。）
+**已經由實作答咗（2026-09-16 核對）**
+
+1. ~~Home 取代 Overview？~~ → **係**。`/app` = Home，Overview 搬咗去 `/app/overview`（`nav-config.ts`）。
+2. ~~Managed route 用邊個 model？~~ → `ServerModelRuntime` 經 Vercel AI Gateway，`qualified: True`，預設 `anthropic/claude-sonnet-5`，
+   `POSTRIFF_MODEL_ID` / `POSTRIFF_MODEL_IDS` 可改（只喺有 `AI_GATEWAY_API_KEY` 先 mount）。
+4. ~~`IDENTITY.md` 定 `PROFILE.md`？~~ → **`IDENTITY.md`**（`memory.py` `FILE_ORDER`）。
+
+**仲開住**
+
 3. Facebook 呢類 local channel，plan card 批咗之後 job 等 companion——如果 Mac 瞓咗，job 應該 `needs_review` 定係自動延後？
-4. Memory 檔名用 `IDENTITY.md`（新）定沿用 `PROFILE.md`（`profiles.py` 現有）？
 5. 中文 UI 文案：Home 嘅 greeting 同 activity strip 係咪跟 user 語言（zh-HK / en）？

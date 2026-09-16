@@ -72,6 +72,11 @@ class FakeCloudRuntime(AgentRuntime):
         return {"artifact": artifact, "usage": usage}
 
 
+def act(action, payload):
+    revision = service.get(wid, "one")["revision"]
+    return service.mutate(wid, "one", revision, action, payload)
+
+
 def edit_state(workspace_id, change):
     """Test-only: shape workspace state directly (voice profile, boundaries, content selection)."""
     with connection() as db:
@@ -126,7 +131,8 @@ check("consent: the turn names the withheld boundary", any("marked private or lo
 check("consent: the run completed", run["status"] == "completed", run["status"])
 
 # 4. A how-to with nothing approved to teach asks for the steps: failed run, clear message, no model call.
-edit_state(wid, lambda state: state["contentSystem"]["selection"].update({"contentTypeId": "tutorial_how_to"}))
+act("p2_content_install_pack", {"packId": "pack.creator", "version": "1.0.0"})
+act("p2_content_select", {"contentTypeId": "pack.creator:tutorial_how_to", "contentTypeVersion": "1.0.0", "formatId": "carousel"})
 calls = len(cloud.requests)
 run = ideas.turn(wid, "one", cid, {"text": "A carousel for first-timers on how to wedge clay.", "model": cloud.model, "timeZone": "Asia/Hong_Kong"})
 check("how-to guard: no model request", len(cloud.requests) == calls, len(cloud.requests))
@@ -139,9 +145,8 @@ run = ideas.turn(wid, "one", cid, {"text": "How I wedge:\n1. Cut the clay in hal
 check("how-to with supplied steps: drafted", run["status"] == "completed" and len(cloud.requests) == calls + 1, run["status"])
 
 # 6. Withdrawing consent stops sharing on the next turn.
-revision = service.get(wid, "one")["revision"]
-service.mutate(wid, "one", revision, "memory_egress", {"cloud": False, "confirmed": True})
-edit_state(wid, lambda state: state["contentSystem"]["selection"].update({"contentTypeId": "unclassified"}))
+act("memory_egress", {"cloud": False, "confirmed": True})
+act("p2_content_select", {"contentTypeId": "pack.creator:personal_reflection", "contentTypeVersion": "1.0.0"})
 ideas.turn(wid, "one", cid, {"text": "Write about glazing for LinkedIn.", "model": cloud.model, "timeZone": "Asia/Hong_Kong"})
 check("withdrawn consent: nothing is sent again", cloud.requests[-1]["memory"] == [])
 

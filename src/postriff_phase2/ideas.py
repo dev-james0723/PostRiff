@@ -262,7 +262,7 @@ class IdeasService:
             selection = ((state.get("contentSystem") or {}).get("selection") or {})
             content_type_id = selection.get("contentTypeId")
             # A how-to with nothing approved to teach is asked for, not written: no model request, no charge.
-            needs = content_types.missing_tutorial_input(content_type_id, idea, context)
+            needs = content_types.missing_tutorial_input(content_types.selected_rule_ids(state), idea, context)
             if needs:
                 message = f"PostRiff did not draft. It needs: {needs}. Nothing was applied."
                 cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'failed',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning if reasoning in ("quick", "standard", "deep") else "quick", digest(context), context["policyEpoch"], key))

@@ -18,9 +18,21 @@ def tutorial_steps_supplied(text):
     return len(_STEP_LINE.findall(text)) >= 2 or len(_SEQUENCE.findall(text)) >= 2
 
 
-def missing_tutorial_input(content_type_id, idea, context):
-    """What a how-to still needs before it can be written honestly; "" when nothing is missing."""
-    if content_type_id != "tutorial_how_to":
+def selected_rule_ids(state):
+    """Preflight rule ids of the workspace's selected content type; () when none is selected or it is unavailable."""
+    selected = ((state or {}).get("contentSystem") or {}).get("selection") or {}
+    if selected.get("contentTypeId") in (None, "unclassified"):
+        return ()
+    try:
+        return tuple(definition(state, selected["contentTypeId"], selected.get("contentTypeVersion")).get("preflightRuleIds", ()))
+    except (AlphaError, KeyError, TypeError):
+        return ()
+
+
+def missing_tutorial_input(rule_ids, idea, context):
+    """What a how-to still needs before it can be written honestly; "" when nothing is missing. Applies to any
+    type that requires tested steps (the starter pack's tutorial, the core practical tip, workspace types)."""
+    if "tested_steps" not in (rule_ids or ()):
         return ""
     if any(source.get("facts") for source in (context or {}).get("sources", [])) or tutorial_steps_supplied(idea):
         return ""

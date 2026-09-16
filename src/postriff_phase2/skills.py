@@ -62,7 +62,9 @@ FALLBACK_ORDER = (
     (ENGINE_SKILL, None),
 )
 RESEARCH_INTENTS = {"research"}
-CITED_CONTENT_TYPES = {"article_news_commentary", "deep_point_of_view", "product_feature_launch"}
+# Local names of content types whose preflight asks for evidence or citation. Catalog ids are namespaced
+# (pack.creator:article_news_commentary, postriff:promote, workspace_x:...), so matching uses the part after ":".
+CITED_CONTENT_TYPES = {"article_news_commentary", "deep_point_of_view", "product_feature_launch", "promote"}
 DEFAULT_LANGUAGE = "English"
 CHANNEL_SKILLS = {
     "LinkedIn": "postriff-channel-linkedin", "Instagram": "postriff-channel-instagram", "Threads": "postriff-channel-threads",
@@ -97,7 +99,8 @@ def budget_for(cost_class):
 
 def cites_sources(intent, content_type):
     """A turn that researches, or whose content type requires citation, carries the claim rules."""
-    return intent in RESEARCH_INTENTS or content_type in CITED_CONTENT_TYPES
+    local_name = content_type.rsplit(":", 1)[-1] if isinstance(content_type, str) else None
+    return intent in RESEARCH_INTENTS or local_name in CITED_CONTENT_TYPES
 
 
 def default_root():
