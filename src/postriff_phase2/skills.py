@@ -17,19 +17,65 @@ SKILLS_DIR_ENV = "POSTRIFF_SKILLS_DIR"
 CORE_SKILL = "postriff-content-craft"
 CORE_REFERENCES = ("references/editorial-workflow.md", "references/human-voice-pass.md", "references/platform-playbooks.md")
 VISUAL_REFERENCE = "references/visual-handoff.md"
+# Write-time discovery: titles, hooks, hashtags, link placement, retention. The `postriff-discoverability`
+# package plans a DiscoverabilityBrief instead, which a copy run's output schema cannot carry.
+DISCOVERY_REFERENCE = "references/algorithm-practice.md"
 VISUAL_FORMATS = {"carousel", "image_caption", "quote_card", "story", "short_video", "long_video"}
+# Claim-level evidence discipline for turns that cite sources. Asset production
+# (`postriff-social-graphics`) is not bound to a copy run: its half that shapes copy is VISUAL_REFERENCE.
+RESEARCH_SKILL = "postriff-research-and-source-log"
+RESEARCH_REFERENCES = ("references/provenance-ledger.md",)
+# The voice contract. Its SKILL.md is what every draft needs; the rest is split into references
+# so a turn carries the part it uses instead of a truncated whole. `references/operations.md` is
+# operator documentation (queue routine, publishing chain, analytics) and is never bound here.
+ENGINE_SKILL = "postriff-content-engine"
+ENGINE_WORKFLOWS = "references/content-pillars-and-workflows.md"
+ENGINE_LOCALIZATION = "references/localization.md"
+ENGINE_RESEARCH = "references/research-and-sensitivity.md"
+ENGINE_TEMPLATES = "references/platform-and-templates.md"
+# What every channel adapter shares (asset rules, setup, browser fallback, approval, payload
+# mapping, verification) lives once here instead of once per destination. An adapter overrides a
+# section by repeating its heading.
+ADAPTER_CONTRACT = "postriff-adapter-contract"
+# When a turn would exceed MAX_TEXT_CHARS, these optional references are left out whole, in this
+# order, until it fits. Everything else a turn selected is mandatory for it: the voice contract,
+# the adapter contract and adapters, and the editorial core, localization and research rules.
+# Leaving a whole file out keeps every recorded hash true to what the model actually received.
+DROP_ORDER = (
+    (ENGINE_SKILL, ENGINE_WORKFLOWS),
+    (ENGINE_SKILL, ENGINE_TEMPLATES),
+    (CORE_SKILL, DISCOVERY_REFERENCE),
+    (CORE_SKILL, VISUAL_REFERENCE),
+    (CORE_SKILL, "references/platform-playbooks.md"),
+)
+RESEARCH_INTENTS = {"research"}
+CITED_CONTENT_TYPES = {"article_news_commentary", "deep_point_of_view", "product_feature_launch"}
+DEFAULT_LANGUAGE = "English"
 CHANNEL_SKILLS = {
     "LinkedIn": "postriff-channel-linkedin", "Instagram": "postriff-channel-instagram", "Threads": "postriff-channel-threads",
     "Facebook": "postriff-channel-facebook", "X": "postriff-channel-x", "TikTok": "postriff-channel-tiktok", "YouTube": "postriff-channel-youtube",
     "Xiaohongshu": "postriff-channel-xiaohongshu", "Bilibili": "postriff-channel-bilibili", "Zhihu": "postriff-channel-zhihu", "Weibo": "postriff-channel-weibo",
     "Douyin": "postriff-channel-douyin", "WeChat Channels": "postriff-channel-wechat-channels", "Pinterest": "postriff-channel-pinterest", "Reddit": "postriff-channel-reddit",
     "Bluesky": "postriff-channel-bluesky", "Telegram": "postriff-channel-telegram", "Mastodon": "postriff-channel-mastodon", "Snapchat": "postriff-channel-snapchat", "Discord": "postriff-channel-discord",
+    # Adapters ship for these too. They are ahead of the drafting vocabulary in `intent.py`, so
+    # that adding a platform there binds its adapter instead of silently writing without one.
+    "Dcard": "postriff-channel-dcard", "Feishu / Lark": "postriff-channel-feishu-lark",
+    "Google Business Profile": "postriff-channel-google-business-profile", "KakaoTalk Channel": "postriff-channel-kakaotalk-channel",
+    "Kuaishou": "postriff-channel-kuaishou", "LINE Official Account": "postriff-channel-line-official-account",
+    "Moj": "postriff-channel-moj", "Naver Blog": "postriff-channel-naver-blog", "note": "postriff-channel-note-jp",
+    "Pixelfed": "postriff-channel-pixelfed", "ShareChat": "postriff-channel-sharechat",
+    "Tencent QQ": "postriff-channel-tencent-qq", "WhatsApp Channels": "postriff-channel-whatsapp-channels",
 }
 MAX_TEXT_CHARS = 60_000
 MAX_FILE_CHARS = 20_000
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 _VERSION = re.compile(r"^\s*version:\s*([\w.+-]+)\s*$", re.M)
 _SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,80}$")
+
+
+def cites_sources(intent, content_type):
+    """A turn that researches, or whose content type requires citation, carries the claim rules."""
+    return intent in RESEARCH_INTENTS or content_type in CITED_CONTENT_TYPES
 
 
 def default_root():
@@ -88,38 +134,86 @@ class SkillLibrary:
             "references": [{"path": f["path"], "text": f["text"]} for f in files[1:]],
         }
 
-    def bind(self, destinations, format_id=None):
-        """Skills for a turn: the editorial core, a visual handoff for visual formats, one adapter per
-        destination platform. Returns bindings (metadata only), composed text, and warnings."""
+    @staticmethod
+    def _engine_references(destinations, format_id, intent, content_type):
+        """The parts of the voice contract this turn actually uses."""
+        references = []
+        if format_id or content_type:
+            references.append(ENGINE_WORKFLOWS)
+        languages = {d.get("language") for d in destinations if d.get("language")}
+        if len(languages) > 1 or (languages and languages != {DEFAULT_LANGUAGE}):
+            references.append(ENGINE_LOCALIZATION)
+        if cites_sources(intent, content_type):
+            references.append(ENGINE_RESEARCH)
+        if format_id in VISUAL_FORMATS:
+            references.append(ENGINE_TEMPLATES)
+        return tuple(references)
+
+    def bind(self, destinations, format_id=None, intent=None, content_type=None):
+        """Skills for a turn: the voice contract, the editorial core with write-time discovery, a visual
+        handoff for visual formats, the claim rules when the turn cites sources, and the adapter
+        contract plus one adapter per destination platform. Returns bindings (metadata only),
+        composed text, and warnings."""
         if not self.available():
             return {"bindings": [], "text": "", "warnings": ["No skill library is installed on this host, so the run received the editorial policy only."]}
-        wanted = [(CORE_SKILL, CORE_REFERENCES + ((VISUAL_REFERENCE,) if format_id in VISUAL_FORMATS else ()))]
-        seen = set()
+        wanted = [(ENGINE_SKILL, self._engine_references(destinations, format_id, intent, content_type)),
+                  (CORE_SKILL, CORE_REFERENCES + ((VISUAL_REFERENCE,) if format_id in VISUAL_FORMATS else ()) + (DISCOVERY_REFERENCE,))]
+        if cites_sources(intent, content_type):
+            wanted.append((RESEARCH_SKILL, RESEARCH_REFERENCES))
+        adapters, unmapped = [], []
         for destination in destinations:
-            skill_id = CHANNEL_SKILLS.get(destination.get("platform"))
-            if skill_id and skill_id not in seen:
-                seen.add(skill_id)
-                wanted.append((skill_id, ()))
-        bindings, sections, warnings = [], [], []
+            platform = destination.get("platform")
+            skill_id = CHANNEL_SKILLS.get(platform)
+            if skill_id is None:
+                if platform and platform not in unmapped:
+                    unmapped.append(platform)
+            elif skill_id not in adapters:
+                adapters.append(skill_id)
+        # The shared contract rides with the adapters, once, and only when at least one is installed.
+        if any((self.root / skill_id / "SKILL.md").is_file() for skill_id in adapters):
+            wanted.append((ADAPTER_CONTRACT, ()))
+        wanted.extend((skill_id, ()) for skill_id in adapters)
+        warnings = [f"No channel adapter is mapped for {platform}; the run wrote for it without one." for platform in unmapped]
+        selected = []  # [skill_id, [references], loaded]
         for skill_id, references in wanted:
             loaded = self.load(skill_id, references)
             if loaded is None:
                 warnings.append(f"Skill {skill_id} is not installed on this host; the run wrote without it.")
                 continue
+            selected.append([skill_id, [r["path"] for r in loaded["references"]], loaded])
+
+        def composed():
+            return "\n\n".join(self._section(entry[2]) for entry in selected)
+
+        for skill_id, reference in DROP_ORDER:
+            if len(composed()) <= MAX_TEXT_CHARS:
+                break
+            for entry in selected:
+                if entry[0] == skill_id and reference in entry[1]:
+                    entry[1].remove(reference)
+                    entry[2] = self.load(skill_id, tuple(entry[1]))
+                    warnings.append(f"Left out {skill_id}/{reference} to keep the skills within {MAX_TEXT_CHARS} characters.")
+
+        bindings = []
+        for _, _, loaded in selected:
             bindings.append({k: loaded[k] for k in ("id", "version", "sha256", "files")})
-            parts = [f"## Skill: {loaded['id']} (v{loaded['version']})", loaded["body"][:MAX_FILE_CHARS]]
             if len(loaded["body"]) > MAX_FILE_CHARS:
                 warnings.append(f"Skill {loaded['id']}: SKILL.md was cut at {MAX_FILE_CHARS} characters.")
             for reference in loaded["references"]:
-                parts.append(f"### {loaded['id']}/{reference['path']}\n{reference['text'][:MAX_FILE_CHARS]}")
                 if len(reference["text"]) > MAX_FILE_CHARS:
                     warnings.append(f"Skill {loaded['id']}: {reference['path']} was cut at {MAX_FILE_CHARS} characters.")
-            sections.append("\n\n".join(parts))
-        text = "\n\n".join(sections)
+        text = composed()
         if len(text) > MAX_TEXT_CHARS:
+            # Mandatory skills alone exceed the budget: the last resort, never reached by a normal turn.
             text = text[:MAX_TEXT_CHARS]
             warnings.append(f"Skill text was cut at {MAX_TEXT_CHARS} characters; later sections were left out.")
         return {"bindings": bindings, "text": text, "warnings": warnings}
+
+    @staticmethod
+    def _section(loaded):
+        parts = [f"## Skill: {loaded['id']} (v{loaded['version']})", loaded["body"][:MAX_FILE_CHARS]]
+        parts += [f"### {loaded['id']}/{r['path']}\n{r['text'][:MAX_FILE_CHARS]}" for r in loaded["references"]]
+        return "\n\n".join(parts)
 
 
 def summary(bindings):

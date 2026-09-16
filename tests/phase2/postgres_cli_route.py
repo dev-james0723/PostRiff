@@ -125,8 +125,9 @@ assert assistant["runId"] == run["runId"] and assistant["body"]["model"] == "cla
 # Skills were bound by destination (design §7): the editorial core plus one adapter per platform, hashed and recorded.
 bound = fake.last_request["skills"]
 if ideas.skills.available():
-    assert [b["id"] for b in bound["bindings"]] == ["postriff-content-craft", "postriff-channel-linkedin", "postriff-channel-threads"], bound["bindings"]
+    assert [b["id"] for b in bound["bindings"]] == ["postriff-content-engine", "postriff-content-craft", "postriff-adapter-contract", "postriff-channel-linkedin", "postriff-channel-threads"], bound["bindings"]
     assert all(len(b["sha256"]) == 64 for b in bound["bindings"]) and "## Skill: postriff-content-craft" in bound["text"]
+    assert "## Skill: postriff-content-engine" in bound["text"] and bound["text"].count("## Skill: postriff-adapter-contract") == 1
     assert assistant["body"]["skills"] == [b["id"] for b in bound["bindings"]]
     assert [b["id"] for b in done["usage"]["skillBindings"]] == assistant["body"]["skills"]
 else:

@@ -259,9 +259,12 @@ class IdeasService:
             idea = text or state.get("brief", {}).get("idea", "")
             # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
             request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": memory.prompt_fragments(state)}
-            # Step ③: skills are bound by destination and format and recorded by id/version/sha256 (design §7).
-            format_id = ((state.get("contentSystem") or {}).get("selection") or {}).get("formatId")
-            bound = self.skills.bind(destinations, format_id)
+            # Step ③: skills are bound by destination, format, intent and content type, and recorded
+            # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
+            selection = ((state.get("contentSystem") or {}).get("selection") or {})
+            content_type_id = selection.get("contentTypeId")
+            bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
+                                     content_type_id if content_type_id != "unclassified" else None)
             request["skills"] = bound
             skill_ids = [b["id"] for b in bound["bindings"]]
             cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning if reasoning in ("quick", "standard", "deep") else "quick", digest(context), context["policyEpoch"], key))

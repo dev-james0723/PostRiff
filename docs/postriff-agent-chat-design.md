@@ -303,33 +303,92 @@ Route A 嘅 tool 由 PostRiff MCP stdio server（`integrations/postriff` 嘅 `po
 
 ## 7. Skills
 
+> **2026-09-16 更新——已去人格化，並且接咗線。** §7 原本全部掛 `james-au-*`，即係將「方法」同「James 呢個人」焊死咗。
+> 而家 `skills/postriff-*/` 有一套對外可用嘅 duplicate（45 package）：方法照舊，人格層改成讀 workspace 自己嘅
+> memory 檔（§5）。原有 `skills/james-au-*` 同 `~/.claude/skills/james-au-*` 一個都冇 delete。
+> Hosted 寫作 run 經 `src/postriff_phase2/skills.py` 真係會收到呢套 skills。
+> 逐個 skill 嘅 Purpose、點解幫到 user 出 content、同改咗乜 → [`docs/postriff-skills-generalization.md`](postriff-skills-generalization.md)。
+
 ### 7.1 用邊啲
 
-| 類別 | Skill | 幾時掛 |
+**會掛入寫作 run 嘅**（`SkillLibrary.bind(destinations, format_id, intent, content_type)`，按呢個次序 compose）：
+
+| Skill / 檔 | 幾時掛 | 超出預算時 |
 |---|---|---|
-| 永遠 | `docs/james-au-social-content-engine.md`、`james-au-content-craft`（editorial-workflow、human-voice-pass）、`james-au-security-and-approval` | 每個 draft run |
-| 每 channel | `james-au-channel-<x>`（33 條）+ content-craft `platform-playbooks.md` 對應 section | 淨係選中嘅 channel |
-| Research | `james-au-research-and-source-log`、`james-au-source-extraction-providers`、`agent-reach` | intent = research 或 content type 需要 citation |
-| 視覺 | `james-au-social-graphics`、content-craft `visual-handoff.md` | format = carousel / image_caption / story |
-| 影片 | `james-au-video-transcript-intake`、`james-au-hyperframes-motion` | intent = video script / youtube_derivative |
-| 排程 | `james-au-conversation-director`（timing / identity slots）、`james-au-publish-and-verify` | intent = schedule |
-| Discoverability | `james-au-discoverability` | draft 最後一步（title / hook / hashtags policy） |
+| `postriff-content-engine` SKILL.md（voice contract） | 每個 run | 必要 |
+| ↳ `references/content-pillars-and-workflows.md` | 揀咗 format 或 content type | 第 1 個省略 |
+| ↳ `references/localization.md` | 有非英文、或者多過一種語言嘅 destination | 必要 |
+| ↳ `references/research-and-sensitivity.md` | intent = research，或 content type 要 citation | 必要 |
+| ↳ `references/platform-and-templates.md` | 視覺 format | 第 2 個省略 |
+| `postriff-content-craft` SKILL.md + `editorial-workflow` + `human-voice-pass` | 每個 run | 必要 |
+| ↳ `references/algorithm-practice.md`（寫作時嘅 discoverability：title、hook、hashtags、link placement） | 每個 run | 第 3 個省略 |
+| ↳ `references/visual-handoff.md` | 視覺 format | 第 4 個省略 |
+| ↳ `references/platform-playbooks.md` | 每個 run | 第 5 個省略 |
+| `postriff-research-and-source-log` + `provenance-ledger` | intent = research，或 content type 要 citation（`article_news_commentary` / `deep_point_of_view` / `product_feature_launch`） | 必要 |
+| `postriff-adapter-contract` | 有任何 channel adapter 嗰陣掛**一次** | 必要 |
+| `postriff-channel-<x>`（33 條） | 每個 destination 一條；冇 mapping 嘅 platform 會出 warning | 必要 |
 
-### 7.2 Routing table（intent × context → skills）
+**唔會掛入寫作 run 嘅**——寫作 run 嘅 output schema 係 `variants[{platform, language, text, sourceIds, unknowns, notes}]` + `warnings`（`cli_runtime.OUTPUT_SCHEMA`，strict），以下 skills 嘅產出裝唔落：
 
-寫成 data（`src/postriff_phase2/skill_routes.py`），格式跟 `orchestrator.py` 嘅 `ROUTES`，但 key 係 `(intent, contentTypeId?, formatId?)`，
-value 係 ordered skill ids。Content types 已經有 `skillRouteIds`（例如 `postriff.editorial-craft`）——呢度做 mapping 去實體 skill 檔。
+| Skill | 點解 | 佢嘅寫作嗰半由邊個負責 |
+|---|---|---|
+| `postriff-social-graphics` | 產出 asset manifest、contact sheet、validation report | content-craft `visual-handoff.md`（明確 hand off 過去） |
+| `postriff-discoverability` | 產出 `DiscoverabilityBrief`（連 measurement plan） | content-craft `algorithm-practice.md` |
+| `postriff-source-extraction-providers`、`agent-reach`、`postriff-video-transcript-intake` | 取材，喺 run 之前做；run 收到嘅係已批准嘅 sources | — |
+| `postriff-hyperframes-motion` | motion plan，唔係 copy | — |
+| `postriff-conversation-director` | intake 由 `intent.py` 做 | — |
+| `postriff-security-and-approval`、`postriff-publish-and-verify` | Host 嘅責任（`tools.py`、`store.py`），唔係 prompt 嘅責任 | — |
+
+`james-au-social-orchestrator` **冇**做 duplicate：佢做嘅 routing 由 §4.1 ① intent router + `skills.py` 頂上，佢嘅 research 路由由 §4.3 `research.search` 頂上，而佢入面三處寫死咗本機絕對路徑。
+
+### 7.1a 人格層點供應（呢個係去 James 化嘅核心）
+
+Skill **只帶方法**。所有「呢個人係邊個」由 §5 嘅 memory 檔供應（`src/postriff_phase2/memory.py` 生成）：
+
+| Memory 檔 | 內容 | 寫作 run 收唔收到 |
+|---|---|---|
+| `IDENTITY.md` | speaker、purpose、audience、subject、identity sentence | 收到 |
+| `VOICE.md` | tone、observations、preferences、已批准嘅 writing example、明確列出嘅 unknowns | 收到 |
+| `BOUNDARIES.md` | 唔入內容嘅題目 / 私隱類別 | 收到 |
+| `BRAND.md` | workspace 嘅 brand layers，俾人睇 | **收唔到** |
+| `AGENT.md` | agent 點同你合作，俾人睇 | **收唔到** |
+
+「收到」嗰欄跟 `memory.prompt_fragments()` 實際送出嘅檔；engine 入面嗰張表有 test 對住佢，兩邊唔同步就會 fail。Engine 叫 model 淨係用收到嘅檔：缺咗嘅檔會講嘅嘢當 unknown，**唔好**將「冇收到某個檔」當成發現寫入 notes。
+
+Voice profile 薄嗰陣（新 user 答咗 5 條就 Skip，§6）：缺嘅 field 標 `unknown` 入 warnings，**唔准**作職業、背景、資歷、意見或個人經歷去填氹，亦唔准借另一個 workspace 嘅聲音。
+
+原本嘅品牌表（James Au / My Best Life OS / Fantasia Studio / D Festival）改成四種**形態**（Personal / Product / Service / Institution）。跟 `memory.py` 嘅實作：**一個 workspace 一個 brand**，有幾個 brand 就開幾個 workspace；形態由 `IDENTITY.md` 睇出嚟。Model 唔准作出第二個 brand。（§5.1 仲寫住 `BRAND.md`「每個 brand 嘅 voice 差異」，嗰個係實作之前嘅提案。）Content pillars 改成掛 `content_types.py` 嘅 11 個 type（同 §8.1a Quick Starts 同一個來源）。
+
+順手修正咗一個同 ledger 抵觸嘅地方：content engine 原本寫「Green: may auto-schedule」，同 §3 決定 3 同 `tools.py` `FORBIDDEN_EFFECTS` 衝突。新版三級只決定張 plan card **點呈現**——Green 可以即刻俾 Approve、Yellow 要先出 warning、Red 唔會出現喺 destination 上（仍然可以 draft，理由入 warnings）。冇任何 tier 授權 publish。
+
+### 7.2 Routing（intent × context → skills）
+
+已經實作：`src/postriff_phase2/skills.py`，唔係原本諗嘅 `skill_routes.py`。`ideas.turn()` 將 destinations、`contentSystem.selection.formatId`、`parsed["intent"]` 同 `contentTypeId`（`unclassified` 當冇）傳入 `bind()`，條件全部寫喺 §7.1 第一張表。`content_types.py` 嘅 `skillRouteIds` 仲未被 `bind()` 讀——而家嘅 routing 淨係靠 content type id 本身。
 
 ### 7.3 點注入
 
 - **Route A**：companion 將選中 skills **copy** 去 `<workdir>/.postriff-skills/<name>-<sha10>/`（跟 OpenDesign），
-  `--add-dir` 掛上；SKILL.md 全文 compose 入 system prompt（跟 `studio_codex.py` `BINDING_FILES` 做法），references 留喺 folder 俾 agentic run 自己讀。
-- **Route B/C**：淨係 compose 入 prompt（冇 filesystem）。
-- 每個 run 記 `skillBindings[{id, version, sha256}]`（`studio_agent.py` 已有呢個 field）；UI 嘅 activity strip 顯示「Skills · content-craft, channel-instagram…」。
-- **只帶指令，唔帶 runtime**：原 `james-au-*` 每個 package 夾住一份 248 KB 嘅 `runtime/src/james_au_social/`（33 條 channel 各夾一份 ≈ 8 MB 重複 Python）。`postriff-*` 唔抄——`runtime/` 從來唔入 prompt，而 hosted adapter 邏輯已經喺 `src/postriff_phase2/`（`channels.py`、`contracts.py`、`store.py`、`tools.py`、`intent.py`、`source_policy.py`）。每個 package 尾嘅「PostRiff runtime binding」明寫：得指令、冇 Python、冇 credential、冇 transport，host 冇提供就報 `runtime_dependency_missing`。Copy 量由約 8 MB 跌到約 200 KB。
-- Skills 來源：Phase 1 用 repo `skills/postriff-*`；Phase 3 先做 workspace-level skill upload / marketplace。
-- **Voice contract 本身就係一個 skill**：`skills/postriff-content-engine/SKILL.md`（790 行）。放喺 `skills/` 而唔係 `docs/`，係因為 `vercel.json` 嘅 API function bundle 排除咗 `docs/**`——Phase 2 route B/C 要 server 端 compose 嗰陣，喺 `docs/` 就攞唔到。
-- **未接線**：`studio_codex.py` `BINDING_FILES`（第 34–46 行）仲係指住 `skills/james-au-*` 同 `docs/james-au-social-content-engine.md`。切過去會令 `skillBindings` 嘅 sha256 全部變，要同時決定舊 approval receipt 點處理（同 §5.2 `voiceRevision` 令舊 approval stale 係同一個道理）。
+  `--add-dir` 掛上；SKILL.md 全文 compose 入 system prompt，references 留喺 folder 俾 agentic run 自己讀。
+- **Route B/C**：淨係 compose 入 prompt（冇 filesystem）。`cli_runtime.compose()` 將 skills 放喺 policy 同 memory 檔之後，標明「method only, never identity」。
+- 每個 run 記 `skillBindings[{id, version, sha256, files}]`；UI 嘅 activity strip 顯示「Skills · content-engine, content-craft, adapter-contract, channel-instagram…」。
+- **只帶指令，唔帶 runtime**：原 `james-au-*` 每個 package 夾住一份 248 KB 嘅 `runtime/src/james_au_social/`（33 條 channel 各夾一份 ≈ 8 MB 重複 Python）。`postriff-*` 唔抄——hosted adapter 邏輯已經喺 `src/postriff_phase2/`。每個 package 尾嘅「PostRiff runtime binding」明寫：得指令、冇 Python、冇 credential、冇 transport。
+- **Voice contract 拆開咗**：`skills/postriff-content-engine/SKILL.md` 約 15.2k 字元（`MAX_FILE_CHARS` 20k 以下，唔會被截），其餘拆做 5 個 reference，按 §7.1 條件掛。`references/operations.md`（排程習慣、publish 鏈、analytics）係俾人睇嘅，永遠唔掛入 run。放喺 `skills/` 唔放 `docs/`，因為 `vercel.json` 嘅 API bundle 排除咗 `docs/**`。
+- **Adapter contract 抽出咗**：33 條 adapter 嘅 §5–§10 同 runtime 段原本逐字相同，每多一個 destination 就重複送約 3.2k 字元。而家集中喺 `postriff-adapter-contract`，每個 run 掛一次；每條 adapter 淨係留 §1–§4（purpose、語言、native formats、caption 規則）。淨係 `x`（§6/§7/§8/§10 + controlled-browser route）同 `reddit`（§7/§8）有真正嘅 override，照原文留喺 adapter。每條 adapter 平均由約 4.8k 跌到約 1.8k 字元；contract 本身約 4.6k。
+- **Memory 檔以實際送出嘅為準**：engine 原本話五個 memory 檔「loaded before this engine runs」，仲有一句「`BRAND.md` 冇宣告就喺 notes 講出嚟」。但 run 從來收唔到 `BRAND.md`，所以**每一個** variant 都會多一句假 note。已改成跟 `prompt_fragments()`，並加咗 test（用 mutation 驗證過：`memory.py` 一開始送 `BRAND.md`，test 就會 fail）。
+- **Skills 描述嘅係真 schema**：之前 bound skills 叫 model 出 `channelId`、`formatId`、`copy`、`fields`、`canonicalBrief`，全部係 strict schema 會拒絕嘅欄位（寫嘅時候跟咗 §4.1 嘅*提案* schema，唔係實作）。而家 title、description、slide text 呢類 native field 一律放 `notes` 並標明，缺嘅嘢放 `unknowns`。`tests/test_postriff_skills.py` 有兩個全庫 guard：bound skills 唔准出現 schema 會拒絕嘅欄位名；SKILL.md 唔准 link 一個 binder 永遠唔會送出去嘅檔（因為 `compose()` 同 model 講「every file a skill refers to is included inline」）。content-craft 嘅 `source-review.md` 係俾 maintainer 睇嘅，所以改成唔 link。
+- **預算**：`MAX_TEXT_CHARS` = 60,000。超出嗰陣按 `DROP_ORDER` **成個檔**咁省略可省嘅 reference，每省一個出一條 warning；`skillBindings` 嘅 files 同 sha256 只記錄真係送咗出去嘅嘢。以前嘅做法係喺尾度 `text[:60000]` 硬截，可以將 adapter contract 嘅 approval 規則斬開一半，而 hash 仲記住 model 從來冇收過嘅文字。而家硬截只係最後防線：
+
+  | 情況 | 字元 | 省略咗 |
+  |---|---|---|
+  | 1 channel，英文 post | 45,759（76%） | — |
+  | 3 channels，雙語 carousel | 56,371（94%） | workflows |
+  | 2 channels，news + research | 58,109（97%） | workflows |
+  | 5 channels，視覺 + citation + 中文 | 59,319（99%） | workflows、templates、algorithm-practice |
+  | 8 channels，視覺 + citation + 中文 | 55,222（92%） | 以上 + visual-handoff、platform-playbooks |
+  | 一個 turn 20 個 platform | 60,000 | 全部可省嘅都省咗之後仲要硬截（不切實際嘅情況） |
+
+  **要你決定**：2–3 個 channel 嘅普通 turn 已經經常要省略 workflows。`MAX_TEXT_CHARS` 係另一個 session 定嘅限制，我冇郁佢。如果想要常見 turn 唔使省略，就要將上限升到約 70–75k 字元。
+- **本地 Studio 刻意保留 `james-au-*`**：`studio_codex.py` `BINDING_FILES` 冇切去 generic set，原因兩個，都有 test 守住（`tests/test_studio_bindings.py`）。(1) Studio 嘅 input 冇 voice、identity 或 brand 資料，James 嘅聲音淨係喺 `docs/james-au-social-content-engine.md` 入面；切過去就會出冇聲音嘅 draft。(2) Studio 用嘅係 `CANDIDATE_SCHEMA`（`canonicalBrief`、`channelId`、`copy`），`james-au-*` 描述嘅正正係呢啲欄位；generic set 描述嘅係 hosted schema（`text`、`unknowns`），切過去會喺另一個方向製造同一個 schema 錯配。呢個 test 做過 mutation 驗證：喺記憶體將 Studio 換做 generic set，test 會 fail 並講明原因。Studio 嘅 binding 文件冇改，所以冇 reviewed input 會變 stale。
 
 ---
 

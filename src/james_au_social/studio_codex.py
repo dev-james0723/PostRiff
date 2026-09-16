@@ -31,6 +31,11 @@ DISABLED_FEATURES = (
     'shell_tool', 'code_mode', 'code_mode_host', 'image_generation',
     'view_image', 'sleep_tool',
 )
+# Studio is one person's local workspace, so it deliberately binds the personal `james-au-*` set, not
+# the generic `postriff-*` set the hosted product uses. Two reasons, both checked by
+# tests/test_studio_bindings.py: the Studio input carries no voice or identity (the personal content
+# engine is the only place the voice lives), and these documents describe CANDIDATE_SCHEMA's fields
+# (`canonicalBrief`, `copy`) while the generic set describes the hosted run's (`text`, `unknowns`).
 BINDING_FILES = (
     ('studio-content-bridge', 'studio/agent/bridge-policy.md'),
     ('james-au-social-orchestrator', 'skills/james-au-social-orchestrator/SKILL.md'),
