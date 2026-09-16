@@ -1,7 +1,9 @@
 'use client';
 
+import { useLayoutEffect, useState } from 'react';
+import { DigitSwap } from '@/components/motion/digit-swap';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { RunVariant } from '@/lib/api/types';
 
 /** Local conservative text limits (`postriff_phase2.contracts.LIMITS`; Threads is the platform's own). */
@@ -10,14 +12,21 @@ const LIMITS: Record<string, number> = { LinkedIn: 3000, Instagram: 2200, Thread
 export const destinationLabel = (v: { platform: string; language: string }) => `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`;
 
 export function VariantCard({ variants, selected, onSelect }: { variants: RunVariant[]; selected: number; onSelect: (index: number) => void }) {
+  const active = Math.min(selected, variants.length - 1);
+  // A panel mounts fresh each time its tab opens, so its count starts on the length the reader just saw on the
+  // previous tab and rolls to its own before paint. Both numbers are real text lengths.
+  const [countFrom, setCountFrom] = useState(active);
+  useLayoutEffect(() => {
+    setCountFrom(active);
+  }, [active]);
   if (variants.length === 0) return null;
   return (
     <div className='bg-card ring-foreground/10 flex flex-col overflow-hidden rounded-xl ring-1'>
-      <Tabs value={String(Math.min(selected, variants.length - 1))} onValueChange={(value) => onSelect(Number(value))}>
+      <Tabs value={String(active)} onValueChange={(value) => onSelect(Number(value))} variant='segment' className='flex flex-col gap-2'>
         <div className='flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2'>
-          <TabsList>
+          <TabsList className='bg-muted max-w-full flex-wrap'>
             {variants.map((variant, index) => (
-              <TabsTrigger key={index} value={String(index)}>
+              <TabsTrigger key={index} value={String(index)} className='px-3 py-1'>
                 {destinationLabel(variant)}
               </TabsTrigger>
             ))}
@@ -26,8 +35,9 @@ export function VariantCard({ variants, selected, onSelect }: { variants: RunVar
         {variants.map((variant, index) => {
           const limit = LIMITS[variant.platform];
           const over = limit ? variant.text.length > limit : false;
+          const shownLength = index === active ? (variants[countFrom] ?? variant).text.length : variant.text.length;
           return (
-            <TabsContent key={index} value={String(index)} className='flex flex-col'>
+            <TabsContent key={index} value={String(index)} className='mt-0 flex flex-col'>
               <article className='px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap'>{variant.text}</article>
               <div className='bg-background/60 flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2'>
                 <div className='flex flex-wrap items-center gap-1.5'>
@@ -47,9 +57,9 @@ export function VariantCard({ variants, selected, onSelect }: { variants: RunVar
                     </Badge>
                   )}
                 </div>
-                <span className={over ? 'font-mono text-xs text-red-600' : 'text-muted-foreground font-mono text-xs'}>
-                  {variant.text.length}
-                  {limit ? ` / ${limit.toLocaleString()}` : ''}
+                <span className={over ? 'inline-flex items-center font-mono text-xs text-red-600' : 'text-muted-foreground inline-flex items-center font-mono text-xs'}>
+                  <DigitSwap value={shownLength} />
+                  {limit ? <span className='whitespace-pre'>{` / ${limit.toLocaleString()}`}</span> : null}
                 </span>
               </div>
               {variant.unknowns.length > 0 && (

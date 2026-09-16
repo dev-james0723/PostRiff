@@ -11,6 +11,9 @@
 
 @import './theme.css';
 
+/* transitions.dev motion tokens and t-* transitions (see the file header). */
+@import './transitions.css';
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -637,5 +640,49 @@
     animation: none;
     background-image: none;
     -webkit-text-fill-color: currentColor;
+  }
+}
+
+/* ============================================================
+   Motion components (beUI, src/components/motion) — the CSS they
+   expect from beUI's own globals: marquee tracks and a hidden
+   scrollbar for capped agent viewports.
+   ============================================================ */
+
+@theme {
+  --animate-marquee: marquee 30s linear infinite;
+  --animate-marquee-vertical: marquee-vertical 30s linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100% - var(--gap, 1rem)));
+    }
+  }
+
+  @keyframes marquee-vertical {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(calc(-100% - var(--gap, 1rem)));
+    }
+  }
+}
+
+@utility scrollbar-hide {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-marquee-vertical {
+    animation: none;
   }
 }

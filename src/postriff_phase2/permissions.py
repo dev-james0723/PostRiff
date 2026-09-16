@@ -29,6 +29,8 @@ ACTION_CLASSES = {
     "p2_channel_add": "manage_connections", "p2_channel_verify": "manage_connections",
     "p2_channel_disconnect": "manage_connections",
     "p2_plan": "owner",
+    # Whether memory files may reach a cloud model is a workspace privacy decision.
+    "memory_egress": "owner",
     "refresh": "read", "p2_refresh": "read",
 }
 

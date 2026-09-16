@@ -30,7 +30,7 @@ def notice():
     return {
         "schema": "postriff.privacy-notice.v1",
         "status": "draft — requires qualified legal review before public sale; not a legal approval",
-        "aiProcessing": "Drafts are produced only from sources you select and approve. Today the runtime is a deterministic preview with no model request. When a model provider is contracted, egress requires your explicit per-source consent and is metered to your workspace.",
+        "aiProcessing": "Drafts are produced only from sources you select and approve. Today the runtime is a deterministic preview with no model request. When a model provider is contracted, egress requires your explicit per-source consent and is metered to your workspace. Your voice profile, identity and boundaries reach a cloud model only if a workspace owner allows it on the Memory page, and a boundary marked private or local-only never does.",
         "providerAccess": "PostRiff connects social accounts only through your own OAuth grant, requests the minimum scopes for the capability you enable, stores tokens encrypted, and revokes on disconnect.",
         "ingestion": "Post metrics and comments are read only for accounts you connect with those capabilities enabled, and are shown with native definitions and freshness.",
         "retention": RETENTION_CLASSES,

@@ -4,13 +4,22 @@ import { Icons } from '@/components/icons';
 import { useTheme } from 'next-themes';
 import * as React from 'react';
 
+import { ActionSwapIcon } from '@/components/motion/action-swap';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Kbd } from '@/components/ui/kbd';
 import { startThemeTransition } from '@/lib/theme-transition';
 
+const subscribeToNothing = () => () => {};
+const onClient = () => true;
+const onServer = () => false;
+
 export function ThemeModeToggle() {
   const { setTheme, resolvedTheme } = useTheme();
+  // The resolved theme only exists in the browser: the server and the hydration pass render the
+  // neutral icon, then the sun or moon takes over without a mismatch.
+  const mounted = React.useSyncExternalStore(subscribeToNothing, onClient, onServer);
+  const mode = resolvedTheme === 'dark' ? 'dark' : 'light';
 
   const handleThemeToggle = React.useCallback(
     (e?: React.MouseEvent) => {
@@ -54,7 +63,13 @@ export function ThemeModeToggle() {
           />
         }
       >
-        <Icons.brightness />
+        {mounted ? (
+          <ActionSwapIcon value={mode} animation='roll'>
+            {mode === 'dark' ? <Icons.moon /> : <Icons.sun />}
+          </ActionSwapIcon>
+        ) : (
+          <Icons.brightness />
+        )}
         <span className='sr-only'>Toggle theme</span>
       </TooltipTrigger>
       <TooltipContent>

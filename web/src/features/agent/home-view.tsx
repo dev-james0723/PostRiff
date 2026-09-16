@@ -4,17 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { NotificationStack } from '@/components/motion/notification-stack';
+import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
+import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
+import { TextReveal } from '@/components/motion/text-reveal';
 import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { QUICK_STARTS, QUICK_START_GROUPS, type QuickStart, type QuickStartGroup } from '@/config/quick-starts';
 import { keys, useConversations, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from '@/lib/ease';
 import { relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
@@ -40,6 +44,16 @@ const MODES: { id: ModeId; label: string; icon: keyof typeof Icons; placeholder:
   { id: 'schedule', label: 'Schedule week', icon: 'calendar', placeholder: 'Tell me what goes out this week and when, e.g. “LinkedIn Tuesday 9am, Instagram Thursday 4pm, Threads Friday noon”…', platforms: ['LinkedIn', 'Instagram', 'Threads'] }
 ];
 
+/** Something on Home that is waiting on the writer; built only from the workspace snapshot. */
+interface NeedsYou {
+  id: string;
+  icon: keyof typeof Icons;
+  title: string;
+  description: string;
+  href: string;
+  action: string;
+}
+
 const infoContent = {
   title: 'How the agent works',
   sections: [
@@ -60,6 +74,7 @@ export function HomeView() {
   const conversations = useConversations();
   const models = useModels();
   const composer = useRef<HTMLTextAreaElement>(null);
+  const reduce = useReducedMotion();
 
   const [mode, setMode] = useState<ModeId>('post');
   const [text, setText] = useState('');
@@ -87,6 +102,20 @@ export function HomeView() {
   });
   const activeSources = (state?.sources ?? []).filter((s) => s.active).length;
   const needsReview = (state?.phase2?.reviews ?? []).filter((r) => r.status === 'needs_review').length;
+  const needsYou: NeedsYou[] = [];
+  if (!snapshot.isLoading && !voiceActive) {
+    needsYou.push({ id: 'voice', icon: 'user', title: 'Set up your voice', description: 'Previews work now, but drafts can only be scheduled once a voice profile is active.', href: '/app/workspace/brand', action: 'Set up your voice' });
+  }
+  if (needsReview > 0) {
+    needsYou.push({ id: 'review', icon: 'clock', title: `${needsReview} draft${needsReview === 1 ? '' : 's'} waiting for approval`, description: 'Nothing publishes until you approve the exact text, media and time.', href: '/app/queue', action: 'Review now' });
+  }
+  // The API's display state is the next step it asks for (Connect, Reconnect, Finish setup); only "Reconnect" is titled as one.
+  for (const channel of channels) {
+    if (!channel.displayState || channel.displayState === 'Ready for posting') continue;
+    const title = channel.displayState === 'Reconnect' ? `Reconnect ${channel.platform}` : `${channel.platform} is not ready for posting`;
+    const description = channel.account ? `${channel.account}: ${channel.displayState}` : channel.displayState;
+    needsYou.push({ id: `channel-${channel.id}`, icon: 'broadcast', title, description, href: '/app/channels', action: 'Open channels' });
+  }
   const choice = useModelChoice(models.data);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
@@ -166,32 +195,31 @@ export function HomeView() {
     <PageContainer infoContent={infoContent}>
       <div className='mx-auto flex w-full max-w-3xl flex-col gap-6 pt-6 md:pt-10'>
         <div className='flex flex-col items-center gap-1.5 text-center'>
-          <h1 className='text-2xl font-semibold tracking-tight md:text-[28px]'>What are we putting out this week?</h1>
-          <p className='text-muted-foreground text-sm'>Tell me the topic. I write it in your voice for each channel and line up the schedule for you to approve.</p>
+          <TextReveal as='h1' split='word' once text='What are we putting out this week?' className='text-2xl font-semibold tracking-tight md:text-[28px]' />
+          {/* The initial style is the same with reduced motion (no hydration drift); only the timing drops to zero. */}
+          <motion.p
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={reduce ? { duration: 0 } : { duration: 0.6, delay: 0.45, ease: EASE_OUT }}
+            className='text-muted-foreground text-sm'
+          >
+            Tell me the topic. I write it in your voice for each channel and line up the schedule for you to approve.
+          </motion.p>
         </div>
 
-        <div className='flex flex-wrap justify-center gap-2' role='tablist' aria-label='What to make'>
-          {MODES.map((item) => {
-            const Icon = Icons[item.icon];
-            const on = item.id === mode;
-            return (
-              <button
-                key={item.id}
-                type='button'
-                role='tab'
-                aria-selected={on}
-                onClick={() => pickMode(item.id)}
-                className={cn(
-                  'inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors',
-                  on ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'
-                )}
-              >
-                <Icon className='size-4' />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs value={mode} onValueChange={(value) => pickMode(value as ModeId)} variant='pill' className='flex justify-center'>
+          <TabsList aria-label='What to make' className='bg-muted/60 flex-wrap justify-center rounded-3xl'>
+            {MODES.map((item) => {
+              const Icon = Icons[item.icon];
+              return (
+                <TabsTrigger key={item.id} value={item.id} className='h-9 gap-1.5 py-0'>
+                  <Icon className='size-4' />
+                  {item.label}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
 
         {canEdit ? (
           <Composer
@@ -249,31 +277,36 @@ export function HomeView() {
           </div>
         )}
 
-        {!snapshot.isLoading && !voiceActive && (
-          <Alert>
-            <Icons.info className='size-4' />
-            <AlertTitle>Set up your voice first</AlertTitle>
-            <AlertDescription className='flex flex-col gap-2'>
-              <span>Previews work now, but drafts can only be scheduled once a voice profile is active. It takes two minutes.</span>
-              <Link href='/app/workspace/brand' className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-fit')}>
-                Set up your voice
-              </Link>
-            </AlertDescription>
-          </Alert>
-        )}
-        {needsReview > 0 && (
-          <Alert>
-            <Icons.clock className='size-4' />
-            <AlertTitle>
-              {needsReview} draft{needsReview === 1 ? '' : 's'} waiting for approval
-            </AlertTitle>
-            <AlertDescription className='flex flex-col gap-2'>
-              <span>Nothing publishes until you approve the exact text, media and time.</span>
-              <Link href='/app/queue' className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-fit')}>
-                Review now
-              </Link>
-            </AlertDescription>
-          </Alert>
+        {needsYou.length > 0 && (
+          <div>
+            {/* The stack is one button labelled by its count, so the items themselves are listed for screen readers here. */}
+            <ul className='sr-only'>
+              {needsYou.map((item) => (
+                <li key={item.id}>
+                  {item.title}. {item.description}
+                </li>
+              ))}
+            </ul>
+            <NotificationStack
+              items={needsYou.map((item) => {
+                const Icon = Icons[item.icon];
+                return {
+                  id: item.id,
+                  title: (
+                    <span className='inline-flex items-center gap-1.5'>
+                      <Icon className='text-muted-foreground size-3.5 shrink-0' />
+                      {item.title}
+                    </span>
+                  ),
+                  description: item.description
+                };
+              })}
+              collapsedLabel='Needs you'
+              expandedLabel={needsYou.length === 1 ? needsYou[0].action : 'Open overview'}
+              onViewAll={() => router.push(needsYou.length === 1 ? needsYou[0].href : '/app/overview')}
+              classNames={{ content: 'py-3', count: 'bg-primary text-primary-foreground dark:bg-primary' }}
+            />
+          </div>
         )}
 
         <section className='flex flex-col gap-3'>
@@ -282,41 +315,43 @@ export function HomeView() {
               <h2 className='text-base font-semibold'>Quick starts</h2>
               <p className='text-muted-foreground text-xs'>Eleven kinds of post people actually publish. Pick one, replace the brackets, send.</p>
             </div>
-            <div className='flex flex-wrap gap-1.5' role='tablist' aria-label='Quick start groups'>
-              {QUICK_START_GROUPS.map((item) => (
-                <button
+            <Tabs value={group} onValueChange={(value) => setGroup(value as QuickStartGroup | 'all')} variant='pill'>
+              <TabsList aria-label='Quick start groups' className='bg-muted/60 flex-wrap rounded-2xl'>
+                {QUICK_START_GROUPS.map((item) => (
+                  <TabsTrigger key={item.id} value={item.id} className='h-6 px-2.5 py-0 text-xs'>
+                    {item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+          {/* `relative` anchors cards popped out of the grid while they exit; layoutDependency limits the glide to group changes, not every re-render. */}
+          <div className='relative grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+            <AnimatePresence initial={false} mode='popLayout'>
+              {QUICK_STARTS.filter((item) => group === 'all' || item.group === group).map((item) => (
+                <motion.button
                   key={item.id}
                   type='button'
-                  role='tab'
-                  aria-selected={group === item.id}
-                  onClick={() => setGroup(item.id)}
+                  aria-pressed={template?.id === item.id}
+                  onClick={() => pickTemplate(item)}
+                  layout={reduce ? false : 'position'}
+                  layoutDependency={group}
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  whileTap={reduce ? undefined : { scale: 0.98 }}
+                  transition={reduce ? { duration: 0 } : { opacity: { duration: 0.2, ease: EASE_OUT }, scale: SPRING_PRESS, layout: SPRING_LAYOUT }}
                   className={cn(
-                    'inline-flex h-6 items-center rounded-full border px-2.5 text-xs font-medium transition-colors',
-                    group === item.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'
+                    'bg-card ring-foreground/10 hover:bg-muted/40 flex flex-col gap-1.5 rounded-xl p-3.5 text-left ring-1 transition-colors',
+                    template?.id === item.id && 'ring-primary ring-2'
                   )}
                 >
-                  {item.label}
-                </button>
+                  <span className='text-sm font-medium'>{item.title}</span>
+                  <span className='text-muted-foreground text-xs leading-relaxed'>{item.explanation}</span>
+                  <span className='text-muted-foreground/80 mt-auto pt-1 text-[11px] leading-relaxed'>Usually: {item.usually}</span>
+                </motion.button>
               ))}
-            </div>
-          </div>
-          <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-            {QUICK_STARTS.filter((item) => group === 'all' || item.group === group).map((item) => (
-              <button
-                key={item.id}
-                type='button'
-                aria-pressed={template?.id === item.id}
-                onClick={() => pickTemplate(item)}
-                className={cn(
-                  'bg-card ring-foreground/10 hover:bg-muted/40 flex flex-col gap-1.5 rounded-xl p-3.5 text-left ring-1 transition-colors',
-                  template?.id === item.id && 'ring-primary ring-2'
-                )}
-              >
-                <span className='text-sm font-medium'>{item.title}</span>
-                <span className='text-muted-foreground text-xs leading-relaxed'>{item.explanation}</span>
-                <span className='text-muted-foreground/80 mt-auto pt-1 text-[11px] leading-relaxed'>Usually: {item.usually}</span>
-              </button>
-            ))}
+            </AnimatePresence>
           </div>
         </section>
 
@@ -336,10 +371,10 @@ export function HomeView() {
             ) : recent.length === 0 ? (
               <p className='text-muted-foreground p-4 text-sm'>No conversations yet. Your first message starts one.</p>
             ) : (
-              <ul className='divide-y'>
+              <SharedLayoutBg as='ul' inset={0} pillClassName='rounded-none bg-muted/60' className='divide-y'>
                 {recent.slice(0, 8).map((c) => (
                   <li key={c.conversationId}>
-                    <Link href={`/app/agent/${encodeURIComponent(c.conversationId)}`} className='hover:bg-muted/40 flex items-center gap-3 px-4 py-3'>
+                    <Link href={`/app/agent/${encodeURIComponent(c.conversationId)}`} className='flex items-center gap-3 px-4 py-3'>
                       <span className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>
                         <Icons.sparkles className='size-4' />
                       </span>
@@ -351,7 +386,7 @@ export function HomeView() {
                     </Link>
                   </li>
                 ))}
-              </ul>
+              </SharedLayoutBg>
             )}
           </div>
         </section>

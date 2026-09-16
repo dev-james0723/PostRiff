@@ -3,12 +3,23 @@
 Plain Markdown, owned by the workspace. This phase renders them from the active voice profile
 and brand context; the agent cannot change them. The same rendering feeds the Memory page and
 the prompt of any writing route, so what the person sees is exactly what the model is given.
+
+A cloud route is the exception that is decided, not assumed: it reads these files only when the
+workspace allowed it, and never a boundary marked private, local-only or excluded. The Memory page
+shows that decision and what it withholds.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from postriff_alpha.domain import AlphaError
+
 FILE_ORDER = ("AGENT.md", "IDENTITY.md", "VOICE.md", "BOUNDARIES.md", "BRAND.md")
+PROMPT_FILES = ("VOICE.md", "IDENTITY.md", "BOUNDARIES.md")
+EGRESS_ACTION = "memory_egress"
+# Boundary privacy states (postriff_alpha.profiles.PRIVACY) that may reach a cloud model once the
+# workspace allows it. private, local_only, excluded and unlabelled boundaries never leave.
+CLOUD_SHAREABLE = ("public", "workspace_only")
 BRAND_HREF = "/app/workspace/brand"
 AGENT_RULES = (
     "Channels and times named in a message win over the composer chips.",
@@ -17,6 +28,7 @@ AGENT_RULES = (
     "Only sources the person added and marked usable are read; nothing else in the workspace is visible to the agent.",
     "Unknown facts stay out of drafts until the person confirms they are excluded.",
     "Approving a plan binds the exact text, media, account and time of each row (one job per destination).",
+    "A cloud model reads these files only if you allow it, and never a boundary marked private or local-only.",
 )
 
 
@@ -40,16 +52,23 @@ def active_profile(state):
     return next((r for r in speaker.get("revisions", []) if r.get("revision") == active), None)
 
 
-def render_files(state):
-    """Return the five core files as {name, purpose, source, body, editHref}. Never includes private field values."""
+def boundary_fields(state):
+    fields = [f for f in (((state or {}).get("profile") or {}).get("fields") or []) if isinstance(f, dict)]
+    return [f for f in fields if any(word in f"{f.get('section', '')} {f.get('key', '')} {f.get('id', '')}".lower() for word in ("boundar", "privacy"))]
+
+
+def render_files(state, shareable=None):
+    """Return the five core files as {name, purpose, source, body, editHref}. Never includes private field values.
+    With `shareable`, BOUNDARIES.md keeps only boundaries whose privacy is listed and says how many it left out."""
     state = state or {}
     speaker = state.get("speaker") or {}
     hub = state.get("brandHub") or {}
     you = state.get("you") if isinstance(state.get("you"), dict) else {}
     revision = active_profile(state)
     profile = (revision or {}).get("profile") or {}
-    fields = [f for f in ((state.get("profile") or {}).get("fields") or []) if isinstance(f, dict)]
-    boundaries = [f for f in fields if any(word in f"{f.get('section', '')} {f.get('key', '')} {f.get('id', '')}".lower() for word in ("boundar", "privacy"))]
+    all_boundaries = boundary_fields(state)
+    boundaries = all_boundaries if shareable is None else [f for f in all_boundaries if f.get("privacy") in shareable]
+    withheld = len(all_boundaries) - len(boundaries)
 
     identity = "\n".join([
         "# Identity", "",
@@ -75,8 +94,12 @@ def render_files(state):
 
     if boundaries:
         body = "\n".join(["# Boundaries", ""] + [f"- {f.get('label') or f.get('key') or f.get('id')}: {f.get('value', '')}" + (f" _({f['privacy']})_" if f.get("privacy") else "") for f in boundaries])
+    elif withheld:
+        body = "# Boundaries"
     else:
         body = "# Boundaries\n\nNo boundaries recorded yet.\n\nName the topics and personal details that must stay out of public content. Categories only, never secret values."
+    if withheld:
+        body += f"\n\n> {withheld} more boundar{'y is' if withheld == 1 else 'ies are'} private or local-only and not shared here. Keep drafts conservative about personal details."
 
     agent = "\n".join(["# Agent", "", "How the PostRiff agent works with you today. These are the rules the current build enforces, not aspirations.", ""] + [f"- {rule}" for rule in AGENT_RULES])
     brand = "\n".join([
@@ -94,7 +117,43 @@ def render_files(state):
     ]
 
 
-def prompt_fragments(state, names=("VOICE.md", "IDENTITY.md", "BOUNDARIES.md")):
+def prompt_fragments(state, names=PROMPT_FILES, shareable=None):
     """The files a writing route receives, in order. AGENT.md is for people; BRAND.md duplicates IDENTITY.md for prompts."""
-    files = {item["name"]: item["body"] for item in render_files(state)}
+    files = {item["name"]: item["body"] for item in render_files(state, shareable)}
     return [{"name": name, "body": files[name]} for name in names if name in files]
+
+
+def egress(state):
+    """The workspace's decision about memory files and cloud models. Absent means not allowed."""
+    decision = (state or {}).get("memoryEgress")
+    return decision if isinstance(decision, dict) else {"cloud": False}
+
+
+def projection(state, provider_class):
+    """What a writing route may read. Local routes get every prompt file; a cloud route gets them only
+    when the workspace allowed it, with private, local-only, excluded and unlabelled boundaries removed."""
+    if provider_class != "cloud":
+        return {"files": prompt_fragments(state), "shared": True, "withheldBoundaries": 0}
+    if egress(state).get("cloud") is not True:
+        return {"files": [], "shared": False, "withheldBoundaries": 0}
+    withheld = sum(1 for f in boundary_fields(state) if f.get("privacy") not in CLOUD_SHAREABLE)
+    return {"files": prompt_fragments(state, shareable=CLOUD_SHAREABLE), "shared": True, "withheldBoundaries": withheld}
+
+
+def egress_summary(state):
+    """For the Memory page: the current decision and exactly what a cloud model would and would not read."""
+    decision = egress(state)
+    return {"cloud": decision.get("cloud") is True, "decidedAt": decision.get("decidedAt"), "decidedBy": decision.get("decidedBy"),
+            "sharedFiles": list(PROMPT_FILES), "shareablePrivacy": list(CLOUD_SHAREABLE),
+            "withheldBoundaries": sum(1 for f in boundary_fields(state) if f.get("privacy") not in CLOUD_SHAREABLE)}
+
+
+def apply_memory_action(state, action, payload, actor, now):
+    """Handle `memory_egress` (owner only, see permissions); return True when consumed."""
+    if action != EGRESS_ACTION:
+        return False
+    cloud = payload.get("cloud")
+    if not isinstance(cloud, bool) or payload.get("confirmed") is not True:
+        raise AlphaError("Choose whether a cloud model may read your memory files, and confirm it.")
+    state["memoryEgress"] = {"cloud": cloud, "decidedBy": actor, "decidedAt": now, "shareablePrivacy": list(CLOUD_SHAREABLE)}
+    return True

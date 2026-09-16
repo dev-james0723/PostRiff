@@ -14,7 +14,7 @@ from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import intent, memory
+from . import content_types, intent, memory
 
 MAX_TEXT = 6000
 MAX_EVENTS = 2000
@@ -115,7 +115,8 @@ class IdeasService:
 
     def memory_files(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
-            return {"files": memory.render_files(self._state(row))}
+            state = self._state(row)
+            return {"files": memory.render_files(state), "egress": memory.egress_summary(state)}
 
     # --- helpers -------------------------------------------------------------------
     @staticmethod
@@ -249,7 +250,8 @@ class IdeasService:
             stamp(state)
             source_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("active")][:20]
             # A cloud route only receives sources whose egress the person consented to; local routes see local consent.
-            context = project_context(state, "draft", getattr(runtime, "provider_class", "local"), source_ids)
+            provider_class = getattr(runtime, "provider_class", "local")
+            context = project_context(state, "draft", provider_class, source_ids)
             cur.execute("SELECT id::text,status FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
             existing = cur.fetchone()
             if existing:
@@ -257,12 +259,24 @@ class IdeasService:
             if text:
                 self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": parsed["intent"]})
             idea = text or state.get("brief", {}).get("idea", "")
-            # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
-            request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": memory.prompt_fragments(state)}
-            # Step ③: skills are bound by destination, format, intent and content type, and recorded
-            # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
             selection = ((state.get("contentSystem") or {}).get("selection") or {})
             content_type_id = selection.get("contentTypeId")
+            # A how-to with nothing approved to teach is asked for, not written: no model request, no charge.
+            needs = content_types.missing_tutorial_input(content_type_id, idea, context)
+            if needs:
+                message = f"PostRiff did not draft. It needs: {needs}. Nothing was applied."
+                cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'failed',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning if reasoning in ("quick", "standard", "deep") else "quick", digest(context), context["policyEpoch"], key))
+                run_id = cur.fetchone()[0]
+                self._insert_event(cur, workspace_id, run_id, safe_event("run.started", model=model_id, reasoning="quick", contextDigest=digest(context)))
+                self._insert_event(cur, workspace_id, run_id, safe_event("run.failed", message=message))
+                self._settle_message(cur, workspace_id, conversation_id, run_id, {"text": message, "runId": run_id, "failed": True, "intent": parsed["intent"], "destinations": destinations, "plan": None, "model": model_id})
+                return self._events_for(cur, workspace_id, run_id, 0)
+            # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
+            # Memory files follow the route: a cloud route reads them only with the workspace's consent (memory.projection).
+            shared = memory.projection(state, provider_class)
+            request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"]}
+            # Step ③: skills are bound by destination, format, intent and content type, and recorded
+            # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
             bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
                                      content_type_id if content_type_id != "unclassified" else None,
                                      max_chars=budget_for(runtime.cost_class))
@@ -281,7 +295,7 @@ class IdeasService:
             # Context notes (unsupported channels, assumed times, the proposed plan) follow run.started
             # so the stream keeps its shape: run.started first, run.completed last.
             context_events = [safe_event("warning.created", message=f"{platform} is not available for drafting yet, so it was left out.") for platform in parsed["unsupported"]]
-            context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"]]
+            context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"] + self._memory_notes(shared)]
             if plan:
                 context_events.append(safe_event("action.proposed", action="schedule_plan", destinations=len(plan["destinations"]), timeZone=plan["timeZone"]))
 
@@ -317,6 +331,16 @@ class IdeasService:
             runtime, run_id, request, sink = dispatch
             runtime.dispatch(run_id, request, sink)
         return response
+
+    @staticmethod
+    def _memory_notes(shared):
+        """What the person should know when a cloud route could not read all of their memory files."""
+        if not shared["shared"]:
+            return ["Your voice profile, identity and boundaries were not shared with this cloud model, so the draft may not sound like you or respect your boundaries. Allow sharing on the Memory page."]
+        withheld = shared["withheldBoundaries"]
+        if withheld:
+            return [f"{withheld} boundar{'y' if withheld == 1 else 'ies'} marked private or local-only {'was' if withheld == 1 else 'were'} not shared with this cloud model. Check the draft against {'it' if withheld == 1 else 'them'} before approving."]
+        return []
 
     @staticmethod
     def _tone(state):

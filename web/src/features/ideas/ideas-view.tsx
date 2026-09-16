@@ -1,22 +1,26 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
+import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import Link from 'next/link';
+import { AgentDisclosure } from '@/components/agents/agent-disclosure';
+import { ActionSwapText } from '@/components/motion/action-swap';
+import { StatefulButton } from '@/components/motion/button';
+import { Checkbox } from '@/components/motion/checkbox';
+import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SourcesPanel } from './sources-panel';
@@ -25,12 +29,15 @@ import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/l
 import { ApiError } from '@/lib/api/client';
 import type { Message, Run, RunVariant } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { SPRING_SWAP } from '@/lib/ease';
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 
 type Platform = 'LinkedIn' | 'Instagram' | 'Threads';
 type Language = 'English' | '繁體中文';
+/** Which request is in flight, so only the button that started it shows a spinner. */
+type Pending = 'draft' | 'apply';
 const PLATFORMS: Platform[] = ['LinkedIn', 'Instagram', 'Threads'];
 
 const infoContent = {
@@ -77,10 +84,15 @@ export function IdeasView() {
   const [platforms, setPlatforms] = useState<Platform[]>(['LinkedIn', 'Instagram']);
   const [language, setLanguage] = useState<Language>('English');
   const [selected, setSelected] = useState(0);
-  const [working, setWorking] = useState(false);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const working = pending !== null;
   const [model, setModel] = useState<string>('');
   const [reasoning, setReasoning] = useState<'quick' | 'standard' | 'deep'>('quick');
   const [defaultedPlatforms, setDefaultedPlatforms] = useState(false);
+  // The run log follows the run (open when it failed) until you toggle it for that run.
+  const [logToggle, setLogToggle] = useState<{ runId: string; open: boolean } | null>(null);
+  const logId = useId();
+  const reduce = useReducedMotion();
   const composer = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -123,22 +135,22 @@ export function IdeasView() {
   }, [connectedPlatforms, defaultedPlatforms]);
   const qualified = activeModel;
 
-  async function guard<T>(task: () => Promise<T>): Promise<T | undefined> {
-    setWorking(true);
+  async function guard<T>(action: Pending, task: () => Promise<T>): Promise<T | undefined> {
+    setPending(action);
     try {
       return await task();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'The idea could not be processed.');
       return undefined;
     } finally {
-      setWorking(false);
+      setPending(null);
     }
   }
 
   async function quickStart() {
     const body = text.trim();
     if (!body || !confirm || destinations.length === 0) return;
-    const result = await guard(() => api.quickStart(workspaceId, revision, { text: body, ownContent: own, confirmUse: true, destinations, ...(activeModel ? { model: activeModel.id, reasoning } : {}) }));
+    const result = await guard('draft', () => api.quickStart(workspaceId, revision, { text: body, ownContent: own, confirmUse: true, destinations, ...(activeModel ? { model: activeModel.id, reasoning } : {}) }));
     if (!result) return;
     setText('');
     setConfirm(false);
@@ -154,7 +166,7 @@ export function IdeasView() {
   async function sendTurn() {
     const body = text.trim();
     if (!conversationId || !body || destinations.length === 0) return;
-    const result = await guard(() => api.turn(workspaceId, conversationId, { text: body, destinations, ...(activeModel ? { model: activeModel.id, reasoning } : {}) }));
+    const result = await guard('draft', () => api.turn(workspaceId, conversationId, { text: body, destinations, ...(activeModel ? { model: activeModel.id, reasoning } : {}) }));
     if (!result) return;
     setText('');
     setRun(result);
@@ -165,7 +177,7 @@ export function IdeasView() {
 
   async function apply() {
     if (!run?.artifactHash) return;
-    const result = await guard(() => api.applyRun(workspaceId, run.runId, revision, run.artifactHash as string));
+    const result = await guard('apply', () => api.applyRun(workspaceId, run.runId, revision, run.artifactHash as string));
     if (!result) return;
     setRun({ ...run, status: 'applied' });
     await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
@@ -175,6 +187,7 @@ export function IdeasView() {
   const list = conversations.data?.conversations ?? [];
   const messages = thread.data?.messages ?? [];
   const currentTitle = conversationId ? list.find((c) => c.conversationId === conversationId)?.title || 'Conversation' : 'Start from a source';
+  const logOpen = run ? (logToggle?.runId === run.runId ? logToggle.open : run.status === 'failed') : false;
 
   return (
     <PageContainer
@@ -227,14 +240,15 @@ export function IdeasView() {
               ) : list.length === 0 ? (
                 <p className='text-muted-foreground p-4 text-xs'>No conversations yet.</p>
               ) : (
-                <ul className='flex flex-col'>
+                // The hover highlight glides between rows; the open conversation keeps its own background.
+                <SharedLayoutBg as='ul' inset={0} pillClassName='rounded-none bg-accent'>
                   {list.map((c) => (
                     <li key={c.conversationId}>
                       <button
                         type='button'
                         onClick={() => setConversationId(c.conversationId)}
                         className={cn(
-                          'hover:bg-accent flex w-full flex-col items-start gap-0.5 px-4 py-2 text-left text-sm',
+                          'flex w-full flex-col items-start gap-0.5 px-4 py-2 text-left text-sm',
                           conversationId === c.conversationId && 'bg-accent'
                         )}
                       >
@@ -243,7 +257,7 @@ export function IdeasView() {
                       </button>
                     </li>
                   ))}
-                </ul>
+                </SharedLayoutBg>
               )}
             </ScrollArea>
           </CardContent>
@@ -349,25 +363,29 @@ export function IdeasView() {
                 )}
                 {!conversationId && (
                   <div className='flex flex-col gap-2'>
-                    <Label className='flex items-center gap-2 text-sm font-normal'>
-                      <Checkbox checked={own} onCheckedChange={(value) => setOwn(value === true)} />
-                      This is my own writing (may be quoted publicly)
-                    </Label>
-                    <Label className='flex items-center gap-2 text-sm font-normal'>
-                      <Checkbox checked={confirm} onCheckedChange={(value) => setConfirm(value === true)} />
-                      Use this content to draft with
-                    </Label>
+                    <Checkbox checked={own} onCheckedChange={setOwn} label='This is my own writing (may be quoted publicly)' />
+                    <Checkbox checked={confirm} onCheckedChange={setConfirm} label='Use this content to draft with' />
                   </div>
                 )}
                 <div className='flex flex-wrap items-center gap-3'>
                   {conversationId ? (
-                    <Button disabled={working || !text.trim() || destinations.length === 0} onClick={() => void sendTurn()}>
-                      {working ? 'Drafting…' : 'Draft again'}
-                    </Button>
+                    <StatefulButton
+                      state={pending === 'draft' ? 'loading' : 'idle'}
+                      loadingText='Drafting…'
+                      disabled={working || !text.trim() || destinations.length === 0}
+                      onClick={() => void sendTurn()}
+                    >
+                      Draft again
+                    </StatefulButton>
                   ) : (
-                    <Button disabled={working || !text.trim() || !confirm || destinations.length === 0} onClick={() => void quickStart()}>
-                      {working ? 'Drafting…' : `Draft ${destinations.length} preview${destinations.length === 1 ? '' : 's'}`}
-                    </Button>
+                    <StatefulButton
+                      state={pending === 'draft' ? 'loading' : 'idle'}
+                      loadingText='Drafting…'
+                      disabled={working || !text.trim() || !confirm || destinations.length === 0}
+                      onClick={() => void quickStart()}
+                    >
+                      {`Draft ${destinations.length} preview${destinations.length === 1 ? '' : 's'}`}
+                    </StatefulButton>
                   )}
                   <span className='text-muted-foreground text-xs'>
                     {paid ? `${qualified?.label} · paid, metered against your allowance` : 'Deterministic preview · no model request · $0'}
@@ -379,20 +397,42 @@ export function IdeasView() {
             )}
 
             {run && (
-              <details className='text-xs' open={run.status === 'failed'}>
-                <summary className='text-muted-foreground cursor-pointer'>
-                  Run log · {run.status} · {run.events.length} events · {run.model}
-                  {typeof (run.usage as { costUsd?: number })?.costUsd === 'number' && ` · $${((run.usage as { costUsd: number }).costUsd).toFixed(4)} (${String((run.usage as { provenance?: string }).provenance ?? '').replace(/_/g, ' ')})`}
-                </summary>
-                <ol className='mt-2 flex flex-col gap-1'>
-                  {run.events.map((event) => (
-                    <li key={event.id}>
-                      <code className='bg-muted rounded px-1'>{event.type}</code>
-                      {event.message ? ` — ${event.message}` : event.stage ? ` — ${event.stage} ${event.percent ?? ''}%` : event.policy ? ` — ${event.policy}` : ''}
-                    </li>
-                  ))}
-                </ol>
-              </details>
+              <div className='text-xs'>
+                <button
+                  type='button'
+                  aria-expanded={logOpen}
+                  aria-controls={logId}
+                  onClick={() => setLogToggle({ runId: run.runId, open: !logOpen })}
+                  className='text-muted-foreground hover:text-foreground flex items-start gap-1 text-left transition-colors'
+                >
+                  <motion.span
+                    aria-hidden='true'
+                    initial={false}
+                    animate={{ rotate: logOpen ? 90 : 0 }}
+                    transition={reduce ? { duration: 0 } : SPRING_SWAP}
+                    className='mt-px inline-flex shrink-0'
+                  >
+                    <Icons.chevronRight className='size-3.5' />
+                  </motion.span>
+                  <ActionSwapText value={logOpen ? 'hide' : 'show'} animation='roll' className='shrink-0'>
+                    {logOpen ? 'Hide run log' : 'Show run log'}
+                  </ActionSwapText>
+                  <span className='min-w-0'>
+                    · {run.status} · {run.events.length} events · {run.model}
+                    {typeof (run.usage as { costUsd?: number })?.costUsd === 'number' && ` · $${((run.usage as { costUsd: number }).costUsd).toFixed(4)} (${String((run.usage as { provenance?: string }).provenance ?? '').replace(/_/g, ' ')})`}
+                  </span>
+                </button>
+                <AgentDisclosure id={logId} open={logOpen}>
+                  <ol className='mt-2 flex flex-col gap-1'>
+                    {run.events.map((event) => (
+                      <li key={event.id}>
+                        <code className='bg-muted rounded px-1'>{event.type}</code>
+                        {event.message ? ` — ${event.message}` : event.stage ? ` — ${event.stage} ${event.percent ?? ''}%` : event.policy ? ` — ${event.policy}` : ''}
+                      </li>
+                    ))}
+                  </ol>
+                </AgentDisclosure>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -418,8 +458,8 @@ export function IdeasView() {
                 </EmptyHeader>
               </Empty>
             ) : (
-              <Tabs value={String(selected)} onValueChange={(value) => setSelected(Number(value))}>
-                <TabsList className='flex-wrap'>
+              <Tabs value={String(selected)} onValueChange={(value) => setSelected(Number(value))} variant='underline'>
+                <TabsList className='flex w-full flex-wrap' aria-label='Candidates'>
                   {variants.map((variant, index) => (
                     <TabsTrigger key={index} value={String(index)}>
                       {destinationLabel(variant)}
@@ -457,9 +497,15 @@ export function IdeasView() {
             )}
             {variants.length > 0 && canEdit && (
               <div className='mt-auto flex flex-col gap-1'>
-                <Button disabled={working || run?.status === 'applied' || !run?.artifactHash} onClick={() => void apply()}>
-                  {run?.status === 'applied' ? 'Added to drafts' : 'Add to my drafts for review'}
-                </Button>
+                <StatefulButton
+                  state={pending === 'apply' ? 'loading' : run?.status === 'applied' ? 'success' : 'idle'}
+                  loadingText='Adding…'
+                  successText='Added to drafts'
+                  disabled={working || run?.status === 'applied' || !run?.artifactHash}
+                  onClick={() => void apply()}
+                >
+                  Add to my drafts for review
+                </StatefulButton>
                 <span className='text-muted-foreground text-xs'>Publishing still needs an exact approval in the Queue.</span>
               </div>
             )}

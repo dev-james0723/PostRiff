@@ -1,0 +1,624 @@
+/* ============================================================
+   transitions.dev motion layer
+
+   Tokens and t-* rules from the transitions.dev agent skill
+   (https://github.com/Jakubantalik/transitions.dev,
+   skills/transitions-dev + skills/transitions-polish).
+
+   The skill's snippets toggle `.is-open` / `.is-closing` from
+   JavaScript. Base UI already exposes the same moments as
+   attributes, so the hooks are wired to those instead:
+     .is-open     → the resting state after [data-starting-style]
+     .is-closing  → [data-ending-style]
+   Base UI waits for these transitions to finish before it
+   unmounts a popup, so no timers are needed.
+   ============================================================ */
+
+:root {
+  /* ── Motion tokens — shared scale ─────────────────────────── */
+  /* Durations */
+  --duration-stagger: 40ms; /* per-item stagger offset */
+  --duration-micro: 80ms; /* tooltip/path delay, shake segment, large stagger */
+  --duration-quick: 150ms; /* modal/dropdown close, text swap, tooltip appear */
+  --duration-fast: 250ms; /* icon swap, dropdown/modal open, tabs sliding, page slide */
+  --duration-medium: 350ms; /* panel close, toast close */
+  --duration-slow: 400ms; /* panel open, skeleton content reveal, input clear */
+  --duration-very-slow: 500ms; /* emphasis moments, badge appear, text reveal, success check */
+  /* Easings. The skill's --ease-out and --ease-in-out are the plain keywords;
+     Tailwind already owns those two variable names (ease-out / ease-in-out
+     utilities), so the snippets below use the keywords directly. */
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1); /* open + close, page slide, resize */
+  --ease-linear: linear; /* shimmer, skeleton pulse, spinner */
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1); /* badge pop open */
+  --ease-bounce-strong: cubic-bezier(0.34, 3.85, 0.64, 1); /* bouncy hover-out */
+  /* Distances */
+  --distance-micro: 4px; /* text swap */
+  --distance-small: 6px; /* error shake (small segment) */
+  --distance-base: 8px; /* badge diagonal reveal, page slide */
+  --distance-medium: 12px; /* text reveal */
+  --distance-large: 30px; /* check badge appear */
+  /* Scales */
+  --scale-large: 0.96; /* modal open / close */
+  --scale-medium: 0.97; /* dropdown open */
+  --scale-small: 0.98; /* tooltip open */
+  --scale-tiny: 0.99; /* dropdown close */
+  /* Blur */
+  --blur-small: 2px; /* panel reveal, icon swap, text swap, skeleton reveal */
+  --blur-medium: 3px; /* page slide, text reveal */
+  --blur-large: 8px; /* success check open */
+
+  /* 03 · Notification badge */
+  --badge-slide-dur: 260ms;
+  --badge-pop-dur: 500ms;
+  --badge-pop-close-dur: 180ms;
+  --badge-fade-dur: 400ms;
+  --badge-fade-close-dur: 180ms;
+  --badge-blur: 2px;
+  --badge-offset-x: -8.2px;
+  --badge-offset-y: 12.4px;
+  --badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  /* 05 · Menu dropdown */
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 06 · Modal open / close */
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 07 · Panel reveal */
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 08 · Page side-by-side */
+  --page-slide-dur: 250ms;
+  --page-fade-dur: 250ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 10 · Success check */
+  --check-opacity-dur: 500ms;
+  --check-rotate-dur: 500ms;
+  --check-rotate-from: 80deg;
+  --check-bob-dur: 500ms;
+  --check-y-amount: 40px;
+  --check-blur-dur: 500ms;
+  --check-blur-from: 10px;
+  --check-path-dur: 500ms;
+  --check-path-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 11 · Avatar group hover */
+  --avatar-lift: -4px;
+  --avatar-dur: 320ms;
+  --avatar-scale: 1.05;
+  --avatar-falloff: 0.45;
+  --avatar-ease-in: cubic-bezier(0.22, 1, 0.36, 1);
+  --avatar-ease-out: cubic-bezier(0.34, 3.85, 0.64, 1);
+  /* 14 · Skeleton loader and reveal */
+  --pulse-dur: 1000ms;
+  --pulse-min: 0.5;
+  --reveal-dur: 400ms;
+  --reveal-blur: 2px;
+  /* 16 · Tabs sliding */
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 17 · Tooltip open / close */
+  --tt-in-dur: 150ms;
+  --tt-out-dur: 50ms;
+  --tt-scale: 0.98;
+  --tt-delay: 80ms;
+  /* 18 · Texts reveal */
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 22 · Toast open / close */
+  --toast-open: 350ms;
+  --toast-close: 250ms;
+  --toast-blur: 2px;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 30 · Streaming text */
+  --stream-gap: 60ms;
+  --stream-fade: 350ms;
+  --stream-blur: 1px;
+  --stream-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 24 · Learn more hover */
+  --learn-shift: 2px;
+  --learn-spread: 8deg;
+  --learn-in: 350ms;
+  --learn-out: 350ms;
+  --learn-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 25 · Checkbox check */
+  --check-box: 150ms;
+  --check-draw: 350ms;
+  --check-delay: 0ms;
+  --check-uncheck: 150ms;
+  --check-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── 05 · Menu dropdown ─────────────────────────────────────────
+   Dropdown menus, selects and popovers grow from their trigger.
+   Base UI writes the trigger-facing corner to --transform-origin,
+   which replaces the skill's data-origin attribute. */
+.t-dropdown {
+  transform-origin: var(--transform-origin, top left);
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    opacity var(--dropdown-open-dur) var(--dropdown-ease);
+  will-change: transform, opacity;
+}
+.t-dropdown[data-starting-style] {
+  transform: scale(var(--dropdown-pre-scale));
+  opacity: 0;
+}
+.t-dropdown[data-ending-style] {
+  transform: scale(var(--dropdown-closing-scale));
+  opacity: 0;
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    opacity var(--dropdown-close-dur) var(--dropdown-ease);
+}
+/* A select laid over its own trigger has no direction to grow from: fade only. */
+.t-dropdown[data-align-trigger='true'][data-starting-style],
+.t-dropdown[data-align-trigger='true'][data-ending-style] {
+  transform: none;
+}
+
+/* ── 06 · Modal open / close ────────────────────────────────────
+   Dialogs scale up from 0.96, and close faster than they open.
+   The backdrop fades on the same clocks. */
+.t-modal {
+  transform-origin: center;
+  transition:
+    transform var(--modal-open-dur) var(--modal-ease),
+    opacity var(--modal-open-dur) var(--modal-ease);
+  will-change: transform, opacity;
+}
+.t-modal[data-starting-style] {
+  transform: scale(var(--modal-scale));
+  opacity: 0;
+}
+.t-modal[data-ending-style] {
+  transform: scale(var(--modal-scale-close));
+  opacity: 0;
+  transition:
+    transform var(--modal-close-dur) var(--modal-ease),
+    opacity var(--modal-close-dur) var(--modal-ease);
+}
+.t-modal-backdrop {
+  transition: opacity var(--modal-open-dur) var(--modal-ease);
+}
+.t-modal-backdrop[data-starting-style] {
+  opacity: 0;
+}
+.t-modal-backdrop[data-ending-style] {
+  opacity: 0;
+  transition: opacity var(--modal-close-dur) var(--modal-ease);
+}
+
+/* ── 07 · Panel reveal ──────────────────────────────────────────
+   Sheets slide in from their side with a cross-blur; the skill's
+   vertical travel is applied along whichever edge the sheet owns. */
+.t-panel {
+  transition:
+    translate var(--panel-open-dur) var(--panel-ease),
+    opacity var(--panel-open-dur) var(--panel-ease),
+    filter var(--panel-open-dur) var(--panel-ease);
+  will-change: translate, opacity, filter;
+}
+.t-panel[data-starting-style],
+.t-panel[data-ending-style] {
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+}
+.t-panel[data-ending-style] {
+  transition:
+    translate var(--panel-close-dur) var(--panel-ease),
+    opacity var(--panel-close-dur) var(--panel-ease),
+    filter var(--panel-close-dur) var(--panel-ease);
+}
+.t-panel[data-side='right']:is([data-starting-style], [data-ending-style]) {
+  translate: var(--panel-translate-y) 0;
+}
+.t-panel[data-side='left']:is([data-starting-style], [data-ending-style]) {
+  translate: calc(var(--panel-translate-y) * -1) 0;
+}
+.t-panel[data-side='bottom']:is([data-starting-style], [data-ending-style]) {
+  translate: 0 var(--panel-translate-y);
+}
+.t-panel[data-side='top']:is([data-starting-style], [data-ending-style]) {
+  translate: 0 calc(var(--panel-translate-y) * -1);
+}
+
+/* ── 08 · Page slide ────────────────────────────────────────────
+   Every workspace route settles in with the page-slide clocks.
+   Sidebar navigation has no forward/back, so the travel is a short
+   rise instead of a sideways slide. `backwards` fill: once it ends
+   the page keeps no filter or transform (either would trap fixed
+   children in a new containing block). */
+.t-page-enter {
+  animation:
+    t-page-enter-fade var(--page-fade-dur) var(--page-fade-ease) backwards,
+    t-page-enter-slide var(--page-slide-dur) var(--page-slide-ease) backwards;
+}
+@keyframes t-page-enter-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes t-page-enter-slide {
+  from {
+    transform: translateY(var(--page-slide-distance));
+    filter: blur(var(--page-blur));
+  }
+}
+
+/* ── 14 · Skeleton loader ───────────────────────────────────────
+   The skill's pulse, repeated until the data arrives. */
+.t-skel-pulse {
+  animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite;
+}
+@keyframes t-skel-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: var(--pulse-min);
+  }
+}
+
+/* ── 16 · Tabs sliding ──────────────────────────────────────────
+   Base UI's Tabs.Indicator measures the active tab into
+   --active-tab-*, which replaces the skill's offsetLeft /
+   offsetWidth writes; it paints no transition on first render. */
+.t-tabs-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--active-tab-width);
+  height: var(--active-tab-height);
+  translate: var(--active-tab-left) var(--active-tab-top);
+  transition:
+    translate var(--tabs-dur) var(--tabs-ease),
+    width var(--tabs-dur) var(--tabs-ease),
+    height var(--tabs-dur) var(--tabs-ease);
+  will-change: translate, width;
+  z-index: 0;
+  pointer-events: none;
+}
+.t-tab {
+  transition: color var(--tabs-dur) var(--tabs-ease);
+}
+
+/* ── 17 · Tooltip open / close ──────────────────────────────────
+   Delayed fade + scale in, near-instant out. Base UI marks a
+   tooltip that moves between triggers as data-instant, which is
+   the skill's "travels without re-appearing" case. */
+.t-tooltip {
+  transform-origin: var(--transform-origin, 50% 100%);
+  transition:
+    opacity var(--tt-in-dur) ease-out var(--tt-delay),
+    scale var(--tt-in-dur) ease-out var(--tt-delay);
+}
+.t-tooltip[data-starting-style] {
+  opacity: 0;
+  scale: var(--tt-scale);
+}
+.t-tooltip[data-ending-style] {
+  opacity: 0;
+  scale: var(--tt-scale);
+  transition:
+    opacity var(--tt-out-dur) ease-out,
+    scale var(--tt-out-dur) ease-out;
+}
+.t-tooltip[data-instant] {
+  transition: none;
+}
+
+/* ── 03 · Notification badge ────────────────────────────────────
+   A count slides onto its nav row and the dot pops. */
+@keyframes t-badge-slide-in {
+  from {
+    transform: translate(var(--badge-offset-x), var(--badge-offset-y));
+  }
+  to {
+    transform: translate(0, 0);
+  }
+}
+.t-badge {
+  pointer-events: none;
+  will-change: transform;
+}
+.t-badge[data-open='true'] {
+  animation: t-badge-slide-in var(--badge-slide-dur) var(--badge-slide-ease);
+}
+.t-badge-dot {
+  display: block;
+  transform-origin: center;
+  transform: scale(1);
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    transform var(--badge-pop-dur) var(--badge-pop-ease),
+    opacity var(--badge-fade-dur) var(--badge-pop-ease),
+    filter var(--badge-pop-dur) var(--badge-pop-ease);
+  will-change: transform, opacity, filter;
+}
+.t-badge[data-open='false'] .t-badge-dot {
+  transform: scale(0);
+  opacity: 0;
+  filter: blur(var(--badge-blur));
+  transition:
+    transform var(--badge-pop-close-dur) var(--badge-close-ease),
+    opacity var(--badge-fade-close-dur) var(--badge-close-ease),
+    filter var(--badge-pop-close-dur) var(--badge-close-ease);
+}
+
+/* ── 18 · Texts reveal ──────────────────────────────────────────
+   Server-rendered headline copy rises out of a soft blur on first
+   paint, one --stagger-stagger step per line (--stagger-i). A mount
+   animation replaces the skill's .is-shown toggle, so no JavaScript
+   runs before the copy is readable; `backwards` fill leaves no
+   filter or transform behind once it settles. */
+.t-stagger-line {
+  animation: t-stagger-in var(--stagger-dur) var(--stagger-ease) backwards;
+  animation-delay: calc(var(--stagger-stagger) * var(--stagger-i, 0));
+}
+@keyframes t-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--stagger-distance));
+    filter: blur(var(--stagger-blur));
+  }
+}
+
+/* ── 22 · Toast open / close ────────────────────────────────────
+   Sonner's data-mounted / data-removed stand in for .is-open. The
+   rise comes from Sonner's own offset; these rules add the skill's
+   cross-blur and its slower-in, faster-out clocks. Swiping keeps
+   Sonner's own `transition: none`. */
+[data-sonner-toast]:not([data-swiping='true']) {
+  filter: blur(var(--toast-blur));
+  transition:
+    transform var(--toast-close) var(--toast-ease),
+    opacity var(--toast-close) var(--toast-ease),
+    filter var(--toast-close) var(--toast-ease),
+    height var(--toast-close) var(--toast-ease),
+    box-shadow 200ms;
+}
+[data-sonner-toast][data-mounted='true']:not([data-swiping='true']) {
+  filter: blur(0);
+  transition:
+    transform var(--toast-open) var(--toast-ease),
+    opacity var(--toast-open) var(--toast-ease),
+    filter var(--toast-open) var(--toast-ease),
+    height var(--toast-open) var(--toast-ease),
+    box-shadow 200ms;
+}
+[data-sonner-toast][data-removed='true']:not([data-swiping='true']) {
+  filter: blur(var(--toast-blur));
+  transition:
+    transform var(--toast-close) var(--toast-ease),
+    opacity var(--toast-close) var(--toast-ease),
+    filter var(--toast-close) var(--toast-ease),
+    height var(--toast-close) var(--toast-ease),
+    box-shadow 200ms;
+}
+
+/* ── 24 · Learn more hover ──────────────────────────────────────
+   "Open …" links: the chevron shifts and its arms spread into an
+   arrow. */
+.t-learn-chevron {
+  display: inline-flex;
+  transform: translateX(0);
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn-arm {
+  transform-box: view-box;
+  transform-origin: 10px 8px;
+  vector-effect: non-scaling-stroke;
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn:is(:hover, :focus-visible) .t-learn-chevron {
+  transform: translateX(var(--learn-shift));
+  transition-duration: var(--learn-in);
+}
+.t-learn:is(:hover, :focus-visible) .t-learn-arm {
+  transition-duration: var(--learn-in);
+}
+.t-learn:is(:hover, :focus-visible) .t-learn-arm-top {
+  transform: rotate(var(--learn-spread));
+}
+.t-learn:is(:hover, :focus-visible) .t-learn-arm-bot {
+  transform: rotate(calc(var(--learn-spread) * -1));
+}
+
+/* ── 25 · Checkbox check ────────────────────────────────────────
+   The box fills, then the mark draws. Base UI mounts the
+   indicator when checked, so the draw runs as a mount animation;
+   unchecking fades the mark on the uncheck clock. */
+.t-check {
+  transition:
+    background-color var(--check-box) var(--check-ease),
+    border-color var(--check-box) var(--check-ease),
+    box-shadow var(--check-box) var(--check-ease);
+}
+.t-check svg path:not([stroke='none']) {
+  stroke-dasharray: var(--check-len, 22);
+  animation: t-checkbox-draw var(--check-draw) var(--check-ease) var(--check-delay) backwards;
+}
+.t-check [data-ending-style] {
+  opacity: 0;
+  transition: opacity var(--check-uncheck) var(--check-ease);
+}
+@keyframes t-checkbox-draw {
+  from {
+    stroke-dashoffset: var(--check-len, 22);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ── 10 · Success check ─────────────────────────────────────────
+   Fade + rotate + blur + Y-bob on the wrapper and a stroke draw on
+   the mark, for the moment an action is confirmed. The mark ships
+   with its measured length (--success-len). */
+.t-success-check {
+  display: inline-block;
+  transform-origin: center;
+  opacity: 0;
+  will-change: transform, opacity, filter;
+}
+.t-success-check svg {
+  display: block;
+  overflow: visible;
+}
+.t-success-check svg path {
+  stroke-dasharray: var(--success-len, 20);
+  stroke-dashoffset: var(--success-len, 20);
+}
+.t-success-check[data-state='in'] {
+  animation:
+    t-success-fade var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+    t-success-rotate var(--check-rotate-dur) var(--check-ease-rotate) forwards,
+    t-success-blur var(--check-blur-dur) var(--check-ease-out) forwards,
+    t-success-bob var(--check-bob-dur) var(--check-ease-bob) forwards;
+}
+.t-success-check[data-state='in'] svg path {
+  animation: t-success-draw var(--check-path-dur) var(--check-ease-path)
+    var(--check-path-delay, 0ms) forwards;
+}
+/* Already confirmed before this view mounted: show the mark at rest. */
+.t-success-check[data-state='rest'] {
+  opacity: 1;
+}
+.t-success-check[data-state='rest'] svg path {
+  stroke-dashoffset: 0;
+}
+@keyframes t-success-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes t-success-rotate {
+  from {
+    transform: rotate(var(--check-rotate-from));
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+@keyframes t-success-blur {
+  from {
+    filter: blur(var(--check-blur-from));
+  }
+  to {
+    filter: blur(0);
+  }
+}
+@keyframes t-success-bob {
+  from {
+    translate: 0 var(--check-y-amount);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+@keyframes t-success-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ── 11 · Avatar group hover ────────────────────────────────────
+   Distance-falloff lift across a row of chips; HoverLiftGroup
+   writes --shift / --scale-active and the direction-aware ease. */
+.t-avatar {
+  transform-origin: center;
+  transform: translateY(var(--shift, 0px)) scale(var(--scale-active, 1));
+  transition: transform var(--avatar-dur) var(--avatar-ease-in);
+  will-change: transform;
+}
+
+/* ── 30 · Streaming text ────────────────────────────────────────
+   Each streamed word resolves through opacity + a small blur as it
+   arrives; words already on screen stay put. */
+.t-stream-w {
+  opacity: 0;
+  filter: blur(var(--stream-blur));
+  transition:
+    opacity var(--stream-fade) var(--stream-ease),
+    filter var(--stream-fade) var(--stream-ease);
+}
+.t-stream-w.is-in {
+  opacity: 1;
+  filter: blur(0);
+}
+
+/* Every snippet ships a reduced-motion guard; they are gathered here. */
+@media (prefers-reduced-motion: reduce) {
+  .t-dropdown,
+  .t-modal,
+  .t-modal-backdrop,
+  .t-panel,
+  .t-tooltip,
+  .t-tabs-pill,
+  .t-tab,
+  .t-check,
+  .t-check [data-ending-style],
+  .t-learn-chevron,
+  .t-learn-arm {
+    transition: none !important;
+  }
+  .t-page-enter,
+  .t-stagger-line,
+  .t-skel-pulse,
+  .t-check svg path,
+  .t-badge,
+  .t-badge-dot {
+    animation: none !important;
+  }
+  .t-badge-dot {
+    transition: none !important;
+  }
+  .t-panel[data-starting-style],
+  .t-panel[data-ending-style],
+  [data-sonner-toast] {
+    filter: none !important;
+  }
+  .t-success-check {
+    animation: none !important;
+    opacity: 1;
+  }
+  .t-success-check svg path {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+  .t-avatar {
+    transition: none !important;
+    transform: none !important;
+  }
+  .t-stream-w {
+    transition: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+  }
+}

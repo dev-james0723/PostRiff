@@ -1,24 +1,29 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
+import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
+import { TodoList, type TodoItem, type TodoItemStatus } from '@/components/agents/todo-list';
 import { Icons } from '@/components/icons';
 import { LevelBadge } from '@/components/app/level-badge';
+import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import { StatefulButton } from '@/components/motion/button';
+import { Checkbox } from '@/components/motion/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
+import { buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SuccessCheck } from '@/components/ui/success-check';
 import { keys } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Run, SchedulePlan, Snapshot } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { EASE_OUT } from '@/lib/ease';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
-import { approvePlan, variantForRow, type PlanRow } from './plan';
+import { approvePlan, variantForRow, type ApproveStep, type PlanRow } from './plan';
 
 interface RowState {
   include: boolean;
@@ -28,7 +33,35 @@ interface RowState {
   alt: string;
 }
 
+/** One approval attempt as its checklist shows it: the rows it covers and how far the chain got. */
+interface Approval {
+  apply: boolean;
+  rows: { platform: string; localTime: string }[];
+  step: ApproveStep | null;
+  outcome: 'running' | 'succeeded' | 'failed';
+}
+
 const READY = 'Ready for posting';
+
+/** How long the finished checklist stays before the done row replaces it. */
+const SUCCESS_HOLD_MS = 900;
+
+/** Badge tone per job state; the label is always the job's own state. */
+const JOB_STATUS: Record<string, AnimatedBadgeStatus> = {
+  scheduled: 'info',
+  approved: 'info',
+  claimed: 'info',
+  submitting: 'loading',
+  provider_accepted: 'loading',
+  uncertain: 'loading',
+  published: 'success',
+  verified: 'success',
+  failed: 'danger',
+  canceled: 'neutral'
+};
+
+/** Acknowledgement checkboxes: the motion Checkbox renders its own label, sized down to the card's small print. */
+const ACK = 'items-start gap-2 [&>span]:pt-0.5 [&>span]:text-xs';
 
 function describeWhen(localTime: string) {
   const parsed = new Date(localTime);
@@ -39,6 +72,34 @@ function describeWhen(localTime: string) {
   if (diff < 60) return `${when} · in ${Math.round(diff)} min`;
   if (diff < 60 * 36) return `${when} · in ${Math.floor(diff / 60)}h ${Math.round(diff % 60)}m`;
   return `${when} · in ${Math.round(diff / 60 / 24)} days`;
+}
+
+/** Checklist items from the chain's latest step: done before it, working on it, waiting after it. */
+function approvalItems(approval: Approval): TodoItem[] {
+  const count = approval.rows.length;
+  const items: TodoItem[] = [
+    ...(approval.apply ? [{ id: 'apply', title: 'Save the candidates as drafts' }] : []),
+    ...approval.rows.map((row, index) => ({ id: `row-${index}`, title: `Prepare the exact ${row.platform} review`, detail: describeWhen(row.localTime) })),
+    { id: 'approve', title: `Approve ${count} destination${count === 1 ? '' : 's'}` }
+  ];
+  const offset = approval.apply ? 1 : 0;
+  const step = approval.step;
+  const current = !step || step.id === 'apply' ? 0 : step.id === 'row' ? offset + step.index : offset + count;
+  return items.map((item, index) => {
+    const status: TodoItemStatus =
+      approval.outcome === 'succeeded' || index < current ? 'completed' : index > current ? 'pending' : approval.outcome === 'failed' ? 'cancelled' : 'in-progress';
+    return { ...item, status };
+  });
+}
+
+/** Plan rows settle in one after another when the card first shows them. */
+function RowReveal({ index, className, children }: { index: number; className?: string; children: ReactNode }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: EASE_OUT, delay: Math.min(index, 5) * 0.05 }}>
+      <div className={className}>{children}</div>
+    </motion.div>
+  );
 }
 
 /**
@@ -64,6 +125,9 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
   const [checks, setChecks] = useState({ unknowns: false, warnings: false, rights: false });
   const [progress, setProgress] = useState<string | null>(null);
   const [justApproved, setJustApproved] = useState<number | null>(null);
+  const [approval, setApproval] = useState<Approval | null>(null);
+  const [saving, setSaving] = useState(false);
+  const reduce = useReducedMotion();
 
   // Rows already scheduled from this run (survives reloads): a live job for the row's variant.
   const scheduled = useMemo(() => {
@@ -85,7 +149,13 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
     );
   }, [plan, channels]);
 
+  // A failed checklist stays on screen until the reader acts again.
+  function clearFailed() {
+    setApproval((current) => (current?.outcome === 'failed' ? null : current));
+  }
+
   function update(index: number, patch: Partial<RowState>) {
+    clearFailed();
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
 
@@ -108,21 +178,43 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
   const needsUnknowns = unknowns.length > 0;
   const needsWarnings = warnings.length > 0;
   const ready = count > 0 && voiceActive && checks.rights && (!needsUnknowns || checks.unknowns) && (!needsWarnings || checks.warnings);
+  // While the finished checklist is held, nothing can start a second approval or save.
+  const holding = approval?.outcome === 'succeeded';
 
   async function approve() {
     const selected: PlanRow[] = plan.destinations
       .map((d, index) => ({ d, row: rows[index], ok: included[index] }))
       .filter((item) => item.ok)
       .map(({ d, row }) => ({ platform: d.platform, language: d.language, localTime: row.localTime, channelId: row.channelId, assetId: row.assetId || undefined, alt: row.alt }));
+    setApproval({ apply: run.status !== 'applied', rows: selected.map((row) => ({ platform: row.platform, localTime: row.localTime })), step: null, outcome: 'running' });
     setProgress('Starting…');
     try {
-      const result = await approvePlan({ api, workspaceId, run, snapshot, rows: selected, timeZone, onProgress: setProgress });
+      const result = await approvePlan({
+        api,
+        workspaceId,
+        run,
+        snapshot,
+        rows: selected,
+        timeZone,
+        onProgress: (message, step) => {
+          setProgress(message);
+          if (step) setApproval((current) => (current ? { ...current, step } : current));
+        }
+      });
       client.setQueryData(keys.snapshot(workspaceId), result.snapshot);
       void client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
-      setJustApproved(result.jobs);
       onApproved?.(result.jobs);
       toast.success(`${result.jobs} post${result.jobs === 1 ? '' : 's'} scheduled. See them in the Queue and Calendar.`);
+      // Every step is done: hold the finished checklist a moment, then the done row takes over.
+      setProgress(null);
+      setApproval((current) => (current ? { ...current, outcome: 'succeeded' } : current));
+      await new Promise((resolve) => setTimeout(resolve, SUCCESS_HOLD_MS));
+      setJustApproved(result.jobs);
+      setApproval(null);
     } catch (err) {
+      // A row that could not start names itself on the error; otherwise the chain stopped at its latest step.
+      const failedAt = err instanceof Error && 'step' in err ? (err.step as ApproveStep) : null;
+      setApproval((current) => (current ? { ...current, step: failedAt ?? current.step, outcome: 'failed' } : current));
       toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'The plan could not be approved.');
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } finally {
@@ -132,6 +224,8 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
 
   async function saveDrafts() {
     if (!run.artifactHash || run.status === 'applied') return;
+    clearFailed();
+    setSaving(true);
     setProgress('Adding the candidates to your drafts…');
     try {
       const result = await api.applyRun(workspaceId, run.runId, snapshot.revision, run.artifactHash);
@@ -141,6 +235,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
       toast.error(err instanceof ApiError ? err.message : 'The drafts could not be saved.');
     } finally {
       setProgress(null);
+      setSaving(false);
     }
   }
 
@@ -163,14 +258,16 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
           const job = scheduled[index];
           if (job) {
             return (
-              <div key={`${d.platform}-${index}`} className='flex flex-wrap items-center justify-between gap-3 px-4 py-3'>
+              <RowReveal key={`${d.platform}-${index}`} index={index} className='flex flex-wrap items-center justify-between gap-3 px-4 py-3'>
                 <div className='flex items-center gap-3'>
                   <Icons.circleCheck className='size-4 text-emerald-500' />
                   <div className='flex flex-col gap-0.5'>
                     <span className='flex flex-wrap items-center gap-2 text-sm font-medium'>
                       {d.platform}
                       <span className='text-muted-foreground font-normal'>{job.manifest.account}</span>
-                      <Badge variant='outline'>{job.state.replace(/_/g, ' ')}</Badge>
+                      <AnimatedBadge status={JOB_STATUS[job.state] ?? 'neutral'} size='sm'>
+                        {job.state.replace(/_/g, ' ')}
+                      </AnimatedBadge>
                     </span>
                     <span className='text-muted-foreground text-xs'>{describeWhen(job.manifest.timing.local)}</span>
                   </div>
@@ -178,13 +275,13 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                 <Link href='/app/queue' className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
                   Open in Queue
                 </Link>
-              </div>
+              </RowReveal>
             );
           }
           return (
-            <div key={`${d.platform}-${index}`} className={cn('grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-center', !row.include && 'opacity-60')}>
+            <RowReveal key={`${d.platform}-${index}`} index={index} className={cn('grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-center', !row.include && 'opacity-60')}>
               <div className='flex items-start gap-3'>
-                <Checkbox className='mt-0.5' checked={row.include} disabled={Boolean(blocker) || Boolean(done)} onCheckedChange={(v) => update(index, { include: v === true })} aria-label={`Include ${d.platform}`} />
+                <Checkbox className='mt-0.5' checked={row.include} disabled={Boolean(blocker) || Boolean(done)} onCheckedChange={(v) => update(index, { include: v })} aria-label={`Include ${d.platform}`} />
                 <div className='flex min-w-0 flex-col gap-1'>
                   <span className='flex flex-wrap items-center gap-2 text-sm font-medium'>
                     {d.platform}
@@ -257,7 +354,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                   <span className='text-muted-foreground text-xs'>Text only</span>
                 )}
               </div>
-            </div>
+            </RowReveal>
           );
         })}
       </div>
@@ -283,7 +380,8 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
         {done ? (
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <span className='flex items-center gap-2 text-sm'>
-              <Icons.circleCheck className='size-4 text-emerald-500' />
+              {/* transitions.dev success check: it celebrates an approval made in this view; a reload shows it at rest. */}
+              <SuccessCheck animate={justApproved !== null} className='size-4 text-emerald-500' />
               {done.jobs} post{done.jobs === 1 ? '' : 's'} approved and waiting for their time.
               {count > 0 && <span className='text-muted-foreground'> {count} row{count === 1 ? '' : 's'} still unscheduled.</span>}
             </span>
@@ -307,38 +405,70 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
           <>
             <div className='flex flex-col gap-1.5'>
               {needsUnknowns && (
-                <Label className='flex items-start gap-2 text-xs font-normal'>
-                  <Checkbox checked={checks.unknowns} onCheckedChange={(v) => setChecks((c) => ({ ...c, unknowns: v === true }))} />
-                  <span>
-                    Confirm the {unknowns.length} unknown{unknowns.length === 1 ? '' : 's'} stay out of the drafts: {unknowns.join(' ')}
-                  </span>
-                </Label>
+                <Checkbox
+                  className={ACK}
+                  checked={checks.unknowns}
+                  onCheckedChange={(v) => {
+                    clearFailed();
+                    setChecks((c) => ({ ...c, unknowns: v }));
+                  }}
+                  label={`Confirm the ${unknowns.length} unknown${unknowns.length === 1 ? '' : 's'} stay out of the drafts: ${unknowns.join(' ')}`}
+                />
               )}
               {needsWarnings && (
-                <Label className='flex items-start gap-2 text-xs font-normal'>
-                  <Checkbox checked={checks.warnings} onCheckedChange={(v) => setChecks((c) => ({ ...c, warnings: v === true }))} />
-                  <span>I acknowledge: {warnings.join('; ')}</span>
-                </Label>
+                <Checkbox
+                  className={ACK}
+                  checked={checks.warnings}
+                  onCheckedChange={(v) => {
+                    clearFailed();
+                    setChecks((c) => ({ ...c, warnings: v }));
+                  }}
+                  label={`I acknowledge: ${warnings.join('; ')}`}
+                />
               )}
-              <Label className='flex items-start gap-2 text-xs font-normal'>
-                <Checkbox checked={checks.rights} onCheckedChange={(v) => setChecks((c) => ({ ...c, rights: v === true }))} />
-                <span>I have the rights to publish these texts (and any image) on the selected accounts.</span>
-              </Label>
+              <Checkbox
+                className={ACK}
+                checked={checks.rights}
+                onCheckedChange={(v) => {
+                  clearFailed();
+                  setChecks((c) => ({ ...c, rights: v }));
+                }}
+                label='I have the rights to publish these texts (and any image) on the selected accounts.'
+              />
             </div>
+            {approval && (
+              <motion.div initial={reduce ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: EASE_OUT }}>
+                <TodoList items={approvalItems(approval)} title='Scheduling this plan' defaultOpen collapseOnComplete={false} />
+              </motion.div>
+            )}
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <span className='text-muted-foreground flex items-center gap-1.5 text-xs'>
                 <Icons.shieldCheck className='size-3.5' />
                 {progress ?? 'Approval binds the exact text, media, account and time of each row.'}
               </span>
               <div className='flex gap-2'>
-                <Button variant='outline' size='sm' disabled={Boolean(progress) || run.status === 'applied' || !run.artifactHash} onClick={() => void saveDrafts()}>
+                <StatefulButton
+                  variant='outline'
+                  size='sm'
+                  state={saving ? 'loading' : 'idle'}
+                  loadingText='Saving…'
+                  disabled={Boolean(progress) || holding || run.status === 'applied' || !run.artifactHash}
+                  onClick={() => void saveDrafts()}
+                >
                   {run.status === 'applied' ? 'Saved as drafts' : 'Just save drafts'}
-                </Button>
+                </StatefulButton>
                 {canApprove ? (
-                  <Button size='sm' disabled={!ready || Boolean(progress)} onClick={() => void approve()}>
-                    {progress ? <Icons.spinner className='size-3.5 animate-spin' /> : null}
-                    Review &amp; approve {count > 0 ? `all ${count}` : ''}
-                  </Button>
+                  <StatefulButton
+                    variant='primary'
+                    size='sm'
+                    state={approval?.outcome === 'running' ? 'loading' : holding ? 'success' : 'idle'}
+                    loadingText='Approving…'
+                    successText='Scheduled'
+                    disabled={!ready || Boolean(progress) || holding}
+                    onClick={() => void approve()}
+                  >
+                    {count > 0 ? `Review & approve all ${count}` : 'Review & approve'}
+                  </StatefulButton>
                 ) : (
                   <Badge variant='outline'>Ask an approver to schedule</Badge>
                 )}

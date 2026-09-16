@@ -1,9 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { motion, useReducedMotion, type Variants } from 'motion/react';
+import { AgentDisclosure } from '@/components/agents/agent-disclosure';
 import { Icons } from '@/components/icons';
+import { ActionSwapIcon, ActionSwapText } from '@/components/motion/action-swap';
 import type { Run, SchedulePlan } from '@/lib/api/types';
-import { cn } from '@/lib/utils';
+import { EASE_OUT } from '@/lib/ease';
+
+// On first mount the lines settle in one after another; a line that arrives later (a new warning) fades in on its own.
+const STRIP: Variants = { hidden: {}, shown: { transition: { staggerChildren: 0.04 } } };
+const LINE: Variants = { hidden: { opacity: 0, y: 3 }, shown: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE_OUT } } };
+
+/** One line of the strip. Module scope so its icon keeps its identity across polls and can swap spinner → check. */
+function Row({ ok, running, children }: { ok?: boolean; running: boolean; children: ReactNode }) {
+  const state = ok === false ? 'warning' : running ? 'running' : 'done';
+  return (
+    <motion.div variants={LINE} className='text-muted-foreground flex min-h-6 items-start gap-2 text-xs'>
+      <ActionSwapIcon value={state} className='mt-0.5 size-3.5'>
+        {state === 'warning' ? (
+          <Icons.warning className='size-3.5 text-amber-500' />
+        ) : state === 'running' ? (
+          <Icons.spinner className='size-3.5 animate-spin' />
+        ) : (
+          <Icons.check className='size-3.5 text-emerald-500' />
+        )}
+      </ActionSwapIcon>
+      <span className='[&_b]:text-foreground [&_b]:font-medium'>{children}</span>
+    </motion.div>
+  );
+}
 
 /**
  * What the run actually did, from its safe events only: detected intent, sources it was
@@ -11,6 +37,8 @@ import { cn } from '@/lib/utils';
  */
 export function ActivityStrip({ run, plan, intent, destinations, skills }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string }[]; skills?: string[] }) {
   const [open, setOpen] = useState(false);
+  const reduce = useReducedMotion();
+  const logId = useId();
   const events = run.events;
   const sources = events.filter((e) => e.type === 'source.added').length;
   const warnings = events.filter((e) => e.type === 'warning.created').map((e) => e.message ?? '');
@@ -28,23 +56,10 @@ export function ActivityStrip({ run, plan, intent, destinations, skills }: { run
         : '';
   const failed = run.status === 'failed' || run.status === 'cancelled';
 
-  const Row = ({ ok, children }: { ok?: boolean; children: React.ReactNode }) => (
-    <div className='text-muted-foreground flex min-h-6 items-start gap-2 text-xs'>
-      {ok === false ? (
-        <Icons.warning className='mt-0.5 size-3.5 shrink-0 text-amber-500' />
-      ) : running ? (
-        <Icons.spinner className='mt-0.5 size-3.5 shrink-0 animate-spin' />
-      ) : (
-        <Icons.check className='mt-0.5 size-3.5 shrink-0 text-emerald-500' />
-      )}
-      <span className='[&_b]:text-foreground [&_b]:font-medium'>{children}</span>
-    </div>
-  );
-
   return (
-    <div className='bg-muted/60 flex flex-col gap-0.5 rounded-lg px-3 py-2'>
+    <motion.div variants={STRIP} initial={reduce ? false : 'hidden'} animate='shown' className='bg-muted/60 flex flex-col gap-0.5 rounded-lg px-3 py-2'>
       {intent && (
-        <Row>
+        <Row running={running}>
           Detected <b>{intent.replace('_', ' ')}</b>
           {destinations && destinations.length > 0 && (
             <>
@@ -56,7 +71,7 @@ export function ActivityStrip({ run, plan, intent, destinations, skills }: { run
         </Row>
       )}
       {skills && skills.length > 0 && (
-        <Row>
+        <Row running={running}>
           Skills ·{' '}
           {skills.map((id, index) => (
             <span key={id}>
@@ -66,16 +81,16 @@ export function ActivityStrip({ run, plan, intent, destinations, skills }: { run
           ))}
         </Row>
       )}
-      <Row>
+      <Row running={running}>
         Sources · <b>{sources}</b> approved source{sources === 1 ? '' : 's'} read; nothing else from your workspace
       </Row>
       {warnings.slice(0, 4).map((message, index) => (
-        <Row key={index} ok={false}>
+        <Row key={index} ok={false} running={running}>
           {message}
         </Row>
       ))}
-      {warnings.length > 4 && <Row ok={false}>{warnings.length - 4} more warnings in the run log</Row>}
-      <div className='text-muted-foreground flex min-h-6 items-center justify-between gap-2 text-xs'>
+      {warnings.length > 4 && <Row ok={false} running={running}>{warnings.length - 4} more warnings in the run log</Row>}
+      <motion.div variants={LINE} className='text-muted-foreground flex min-h-6 items-center justify-between gap-2 text-xs'>
         <span className='flex items-center gap-2'>
           <Icons.clock className='size-3.5 shrink-0' />
           <span>
@@ -84,12 +99,16 @@ export function ActivityStrip({ run, plan, intent, destinations, skills }: { run
             {running ? '' : cost}
           </span>
         </span>
-        <button type='button' className='underline underline-offset-2' onClick={() => setOpen((v) => !v)}>
-          {open ? 'Hide run log' : 'Show run log'}
+        <button type='button' aria-expanded={open} aria-controls={logId} onClick={() => setOpen((v) => !v)}>
+          {/* The underline sits on the text itself: decoration does not reach into the swap's inline-block layers. */}
+          <ActionSwapText value={open ? 'hide' : 'show'} animation='roll'>
+            <span className='underline underline-offset-2'>{open ? 'Hide run log' : 'Show run log'}</span>
+          </ActionSwapText>
         </button>
-      </div>
-      {open && (
-        <ol className={cn('mt-1 flex flex-col gap-1 border-t pt-2 text-xs')}>
+      </motion.div>
+      {/* -mt-0.5 cancels the strip's gap while closed; open, the log sits 6px below the status line as before. */}
+      <AgentDisclosure id={logId} open={open} className='-mt-0.5'>
+        <ol className='mt-1.5 flex flex-col gap-1 border-t pt-2 text-xs'>
           {events.map((event) => (
             <li key={event.id} className='text-muted-foreground'>
               <code className='bg-background rounded px-1'>{event.type}</code>
@@ -97,7 +116,7 @@ export function ActivityStrip({ run, plan, intent, destinations, skills }: { run
             </li>
           ))}
         </ol>
-      )}
-    </div>
+      </AgentDisclosure>
+    </motion.div>
   );
 }

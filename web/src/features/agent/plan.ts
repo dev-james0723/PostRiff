@@ -26,6 +26,9 @@ export interface ApproveResult {
   snapshot: Snapshot;
 }
 
+/** Which part of the chain a progress message belongs to: the apply, one row (by index in `rows`), or the final approve. */
+export type ApproveStep = { id: 'apply' } | { id: 'row'; index: number } | { id: 'approve' };
+
 /** The variant `apply` created (or updated) for this run and destination. */
 export function variantForRow(state: SnapshotState, run: Run, row: { platform: string; language: string }): SnapshotVariant | undefined {
   const matches = (state.variants ?? []).filter((v) => v.platform === row.platform && v.language === row.language && !v.blockedByRetraction);
@@ -43,7 +46,7 @@ export async function approvePlan(input: {
   snapshot: Snapshot;
   rows: PlanRow[];
   timeZone: string;
-  onProgress?: (message: string) => void;
+  onProgress?: (message: string, step?: ApproveStep) => void;
 }): Promise<ApproveResult> {
   const { api, workspaceId, run, rows, timeZone, onProgress } = input;
   let snapshot = input.snapshot;
@@ -54,23 +57,25 @@ export async function approvePlan(input: {
 
   if (run.status !== 'applied') {
     if (!run.artifactHash) throw new Error('This candidate has no reviewable text yet.');
-    onProgress?.('Adding the candidates to your drafts…');
+    onProgress?.('Adding the candidates to your drafts…', { id: 'apply' });
     await api.applyRun(workspaceId, run.runId, snapshot.revision, run.artifactHash);
     snapshot = await api.snapshot(workspaceId);
   }
 
   const reviews: { reviewId: string; digest: string }[] = [];
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
+    const step: ApproveStep = { id: 'row', index };
     let variant = variantForRow(snapshot.state, run, row);
-    if (!variant) throw new Error(`No ${row.platform} draft was created for this run.`);
+    // Thrown before this row's first progress message, so the error names its step for progress displays.
+    if (!variant) throw Object.assign(new Error(`No ${row.platform} draft was created for this run.`), { step });
     const activeVoice = snapshot.state.speaker?.activeRevision ?? null;
     if (variant.proposedUpdate && variant.proposedUpdate.voiceRevision === activeVoice) {
-      onProgress?.(`Accepting the updated ${row.platform} draft…`);
+      onProgress?.(`Accepting the updated ${row.platform} draft…`, step);
       await act('accept_update', { variantId: variant.id });
       variant = variantForRow(snapshot.state, run, row) ?? variant;
     }
     if (variant.needsReview || variant.unknowns.length > 0) {
-      onProgress?.(`Confirming unknowns stay out of the ${row.platform} draft…`);
+      onProgress?.(`Confirming unknowns stay out of the ${row.platform} draft…`, step);
       await act('p2_variant_review', {
         variantId: variant.id,
         variantRevision: variant.revision,
@@ -79,7 +84,7 @@ export async function approvePlan(input: {
       });
       variant = snapshot.state.variants?.find((v) => v.id === variant!.id) ?? variant;
     }
-    onProgress?.(`Preparing the exact ${row.platform} review…`);
+    onProgress?.(`Preparing the exact ${row.platform} review…`, step);
     await act('p2_review', {
       variantId: variant.id,
       channelId: row.channelId,
@@ -95,7 +100,7 @@ export async function approvePlan(input: {
     reviews.push({ reviewId: review.id, digest: review.digest });
   }
 
-  onProgress?.(`Approving ${reviews.length} destination${reviews.length === 1 ? '' : 's'}…`);
+  onProgress?.(`Approving ${reviews.length} destination${reviews.length === 1 ? '' : 's'}…`, { id: 'approve' });
   const before = new Set((snapshot.state.phase2?.jobs ?? []).map((job) => job.id));
   await act('p2_approve_many', { reviews, confirmed: true });
   const created = (snapshot.state.phase2?.jobs ?? []).filter((job) => !before.has(job.id));

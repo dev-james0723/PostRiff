@@ -1,14 +1,15 @@
 'use client';
 
+import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
+import { Switch } from '@/components/motion/switch';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { SnapshotSource, SourcePolicy } from '@/lib/api/types';
+import { EASE_OUT } from '@/lib/ease';
 
 const POLICIES: { id: SourcePolicy; label: string; note: string }[] = [
   { id: 'public_quote', label: 'My own writing', note: 'May be quoted publicly.' },
@@ -25,6 +26,7 @@ const POLICIES: { id: SourcePolicy; label: string; note: string }[] = [
 export function SourcesPanel({ cloudAvailable }: { cloudAvailable: boolean }) {
   const snapshot = useSnapshot();
   const act = useAct();
+  const reduce = useReducedMotion();
   const sources = (snapshot.data?.state.sources ?? []).filter((s) => s.active);
   const revision = snapshot.data?.revision ?? 0;
 
@@ -50,12 +52,18 @@ export function SourcesPanel({ cloudAvailable }: { cloudAvailable: boolean }) {
         </CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
-        {sources.map((source) => {
+        {sources.map((source, index) => {
           const policy = (source.sourcePolicy ?? '') as SourcePolicy | '';
           const cloud = (source.egressConsent ?? []).includes('cloud');
           const facts = (source.facts ?? []).filter((f) => f.approved).length;
           return (
-            <div key={source.id} className='flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between'>
+            <motion.div
+              key={source.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={reduce ? { duration: 0 } : { duration: 0.24, delay: Math.min(index * 0.04, 0.2), ease: EASE_OUT }}
+              className='flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between'
+            >
               <div className='min-w-0'>
                 <p className='truncate text-sm font-medium'>{source.title || source.kind}</p>
                 <p className='text-muted-foreground text-xs'>
@@ -83,18 +91,18 @@ export function SourcesPanel({ cloudAvailable }: { cloudAvailable: boolean }) {
                     ))}
                   </SelectContent>
                 </Select>
-                <Label className='flex items-center gap-2 text-xs font-normal'>
+                <div className='flex items-center gap-2'>
                   <Switch
                     checked={cloud}
                     disabled={act.isPending || !policy || policy === 'prohibited'}
-                    onCheckedChange={(checked) => update(source, (policy || 'public_quote') as SourcePolicy, checked === true)}
-                    aria-label='Allow cloud drafting'
+                    onCheckedChange={(checked) => update(source, (policy || 'public_quote') as SourcePolicy, checked)}
+                    ariaLabel='Allow cloud drafting'
+                    label='Allow AI model (cloud)'
                   />
-                  Allow AI model (cloud)
-                  {!cloudAvailable && <span className='text-muted-foreground'>· no paid route yet</span>}
-                </Label>
+                  {!cloudAvailable && <span className='text-muted-foreground text-xs'>· no paid route yet</span>}
+                </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </CardContent>

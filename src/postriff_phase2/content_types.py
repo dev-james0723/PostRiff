@@ -6,6 +6,26 @@ import re
 from postriff_alpha.domain import AlphaError, clean, uid
 from .contracts import digest
 
+# A tutorial teaches a method the person actually uses. Without approved facts the steps must come
+# from the person's own message: two ordered steps (a numbered or bulleted line each, or sequence words).
+_STEP_LINE = re.compile(r"^\s*(?:\d{1,2}[.)、．]|[-*•·]|[①-⑳]|step\s*\d+|第[一二三四五六七八九十\d]+步)", re.I | re.M)
+_SEQUENCE = re.compile(r"\b(?:first|second|third|then|next|after that|finally|lastly)\b|首先|其次|然後|然后|接著|接着|之後|之后|最後|最后|第[一二三四五六七八九十\d]+步", re.I)
+TUTORIAL_NEEDS = "the steps you actually teach, in order (one per line in your message) or an approved source that describes the method"
+
+
+def tutorial_steps_supplied(text):
+    text = text if isinstance(text, str) else ""
+    return len(_STEP_LINE.findall(text)) >= 2 or len(_SEQUENCE.findall(text)) >= 2
+
+
+def missing_tutorial_input(content_type_id, idea, context):
+    """What a how-to still needs before it can be written honestly; "" when nothing is missing."""
+    if content_type_id != "tutorial_how_to":
+        return ""
+    if any(source.get("facts") for source in (context or {}).get("sources", [])) or tutorial_steps_supplied(idea):
+        return ""
+    return TUTORIAL_NEEDS
+
 
 CATALOG_VERSION = "postriff-content-catalog-2026.09.14.1"
 CREATOR_PACK_ID = "pack.creator"

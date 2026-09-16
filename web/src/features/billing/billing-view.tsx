@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import { NumberTicker } from '@/components/motion/number-ticker';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +18,7 @@ import { useChannels, useUsage } from '@/lib/api/hooks';
 import { ApiError, cents, usd } from '@/lib/api/client';
 import type { PlanTerms, Usage } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { EASE_OUT } from '@/lib/ease';
 import { daysUntil, formatDate, formatDateTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
@@ -40,13 +43,15 @@ const infoContent = {
 };
 
 function Meter({ value, max, label }: { value: number; max: number; label: string }) {
+  const reduce = useReducedMotion();
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
     <div className='flex flex-col gap-1.5'>
       <div className='flex items-center justify-between text-sm'>
         <span>{label}</span>
-        <span className='text-muted-foreground tabular-nums'>
-          {value} / {max}
+        <span className='text-muted-foreground inline-flex items-center gap-1 tabular-nums'>
+          <NumberTicker value={value} locale />
+          <span>/ {max.toLocaleString()}</span>
         </span>
       </div>
       <div
@@ -57,7 +62,13 @@ function Meter({ value, max, label }: { value: number; max: number; label: strin
         aria-valuemax={100}
         className='bg-muted h-2 w-full overflow-hidden rounded-full'
       >
-        <div className={cn('h-full rounded-full', pct >= 90 ? 'bg-amber-500' : 'bg-primary')} style={{ width: `${pct}%` }} />
+        {/* Full-width fill slid in from the left (transform only), so its rounded end keeps its shape. */}
+        <motion.div
+          className={cn('h-full w-full rounded-full', pct >= 90 ? 'bg-amber-500' : 'bg-primary')}
+          initial={reduce ? false : { x: '-100%' }}
+          animate={{ x: `${pct - 100}%` }}
+          transition={reduce ? { duration: 0 } : { duration: 0.9, ease: EASE_OUT }}
+        />
       </div>
     </div>
   );

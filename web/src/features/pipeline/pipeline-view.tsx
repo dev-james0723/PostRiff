@@ -2,15 +2,29 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { motion, useReducedMotion } from 'motion/react';
+import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from '@/components/motion/context-menu';
+import { DigitSwap } from '@/components/motion/digit-swap';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { EASE_OUT } from '@/lib/ease';
+import { useHoverCapable } from '@/lib/hooks/use-hover-capable';
 import { ScheduleDialog } from '@/features/queue/schedule-dialog';
 import { EditDraftDialog } from './edit-draft-dialog';
 import { cn } from '@/lib/utils';
@@ -46,9 +60,22 @@ const infoContent = {
 
 const WAITING = new Set(['scheduled', 'approved', 'claimed', 'submitting', 'provider_accepted', 'published', 'uncertain']);
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard.');
+  } catch {
+    toast.error('Could not copy the text.');
+  }
+}
+
 export function PipelineView() {
   const snapshot = useSnapshot();
+  const router = useRouter();
   const access = useWorkspaceAccess();
+  const reduce = useReducedMotion();
+  // The lift is a hover affordance: a touch device would keep a tapped card raised.
+  const lift = useHoverCapable() && !reduce;
   const canSchedule = checkAccess(access, { permission: 'edit' });
   const [scheduling, setScheduling] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -111,12 +138,12 @@ export function PipelineView() {
       ) : (
         <ScrollArea className='w-full'>
           <div className='flex min-w-max gap-4 pb-4'>
-            {columns.map((column) => (
+            {columns.map((column, columnIndex) => (
               <section key={column.key} aria-labelledby={`col-${column.key}`} className='bg-muted/40 flex w-72 shrink-0 flex-col rounded-xl border'>
                 <header className='flex items-center justify-between px-3 py-2'>
                   <div>
-                    <h3 id={`col-${column.key}`} className='text-sm font-semibold'>
-                      {column.title} <span className='text-muted-foreground font-normal'>{column.items.length}</span>
+                    <h3 id={`col-${column.key}`} className='flex items-center gap-1.5 text-sm font-semibold'>
+                      {column.title} <DigitSwap value={column.items.length} className='text-muted-foreground font-normal' />
                     </h3>
                     <p className='text-muted-foreground text-xs'>{column.hint}</p>
                   </div>
@@ -125,37 +152,77 @@ export function PipelineView() {
                   {column.items.length === 0 ? (
                     <p className='text-muted-foreground px-1 py-4 text-center text-xs'>Empty</p>
                   ) : (
-                    column.items.slice(0, 30).map((item) => (
-                      <article key={item.id} className='bg-card flex flex-col gap-1 rounded-lg border p-3 text-sm shadow-xs'>
-                        <div className='flex items-center justify-between gap-2'>
-                          <span className='flex min-w-0 items-center gap-1.5 font-medium'>
-                            {item.platform && <ChannelIcon platform={item.platform} name={item.platform} size='xs' />}
-                            <span className='truncate'>{item.title}</span>
-                          </span>
-                          {item.subtitle && (
-                            <Badge variant={item.tone ?? 'outline'} className='shrink-0 truncate'>
-                              {item.subtitle}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className='text-muted-foreground line-clamp-3 text-xs whitespace-pre-wrap'>{item.body}</p>
-                        {item.tag && <span className='text-xs text-amber-600 dark:text-amber-400'>{item.tag}</span>}
-                        {item.schedulable && canSchedule && (
-                          <div className='mt-1 flex items-center gap-3 text-xs'>
-                            <button type='button' className='text-primary underline-offset-2 hover:underline' onClick={() => setEditing(item.id)}>
-                              Edit
-                            </button>
-                            <button type='button' className='text-primary underline-offset-2 hover:underline' onClick={() => setScheduling(item.id)}>
-                              Schedule…
-                            </button>
-                            {item.edited && <span className='text-muted-foreground'>edited</span>}
-                          </div>
-                        )}
-                      </article>
+                    column.items.slice(0, 30).map((item, index) => (
+                      // Entrance on the wrapper, lift on the card: sharing one element, the entrance delay would also hold
+                      // the card up after the pointer leaves.
+                      <motion.div
+                        key={item.id}
+                        initial={reduce ? false : { opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.24, ease: EASE_OUT, delay: columnIndex * 0.04 + Math.min(index, 8) * 0.03 }}
+                      >
+                        <ContextMenu>
+                          <ContextMenuTrigger>
+                            <motion.article
+                              whileHover={lift ? { y: -2 } : undefined}
+                              transition={{ duration: 0.18, ease: EASE_OUT }}
+                              className='bg-card flex flex-col gap-1 rounded-lg border p-3 text-sm shadow-xs'
+                            >
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='flex min-w-0 items-center gap-1.5 font-medium'>
+                                  {item.platform && <ChannelIcon platform={item.platform} name={item.platform} size='xs' />}
+                                  <span className='truncate'>{item.title}</span>
+                                </span>
+                                {item.subtitle && (
+                                  <Badge variant={item.tone ?? 'outline'} className='shrink-0 truncate'>
+                                    {item.subtitle}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className='text-muted-foreground line-clamp-3 text-xs whitespace-pre-wrap'>{item.body}</p>
+                              {item.tag && <span className='text-xs text-amber-600 dark:text-amber-400'>{item.tag}</span>}
+                              {item.schedulable && canSchedule && (
+                                <div className='mt-1 flex items-center gap-3 text-xs'>
+                                  <button type='button' className='text-primary underline-offset-2 hover:underline' onClick={() => setEditing(item.id)}>
+                                    Edit
+                                  </button>
+                                  <button type='button' className='text-primary underline-offset-2 hover:underline' onClick={() => setScheduling(item.id)}>
+                                    Schedule…
+                                  </button>
+                                  {item.edited && <span className='text-muted-foreground'>edited</span>}
+                                </div>
+                              )}
+                            </motion.article>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent ariaLabel={`Actions for ${item.title}`}>
+                            {item.schedulable && canSchedule && (
+                              <>
+                                <ContextMenuItem onSelect={() => setEditing(item.id)}>
+                                  <Icons.edit className='text-muted-foreground size-4' aria-hidden />
+                                  Edit draft
+                                </ContextMenuItem>
+                                <ContextMenuItem onSelect={() => setScheduling(item.id)}>
+                                  <Icons.calendarEvent className='text-muted-foreground size-4' aria-hidden />
+                                  Schedule…
+                                </ContextMenuItem>
+                              </>
+                            )}
+                            <ContextMenuItem onSelect={() => void copyText(item.body)}>
+                              <Icons.copy className='text-muted-foreground size-4' aria-hidden />
+                              Copy text
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem onSelect={() => router.push(column.href)}>
+                              <Icons.arrowRight className='text-muted-foreground size-4' aria-hidden />
+                              {column.cta}
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
+                      </motion.div>
                     ))
                   )}
-                  <Link href={column.href} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'justify-start')}>
-                    {column.cta} <Icons.chevronRight className='size-4' />
+                  <Link href={column.href} className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), 'justify-start')}>
+                    {column.cta} <LearnMoreChevron />
                   </Link>
                 </div>
               </section>

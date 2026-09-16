@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Icons } from '@/components/icons';
@@ -21,6 +22,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -31,6 +33,7 @@ import {
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { navGroups } from '@/config/nav-config';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
+import { useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useAuth } from '@/lib/auth/session';
 import { WorkspaceSwitcher } from './workspace-switcher';
@@ -40,12 +43,36 @@ function isActivePath(pathname: string, url: string) {
   return pathname === url || pathname.startsWith(url + '/');
 }
 
+/**
+ * A live count on a nav row (transitions.dev notification badge): it slides onto
+ * the row and pops when the count appears, and shrinks away when it reaches zero.
+ * The last count stays painted while the dot closes.
+ */
+function NavCount({ count }: { count: number }) {
+  const [shown, setShown] = useState(count);
+  useEffect(() => {
+    if (count > 0) setShown(count);
+  }, [count]);
+  return (
+    <SidebarMenuBadge aria-hidden data-open={count > 0} className='t-badge'>
+      <span className='t-badge-dot bg-primary text-primary-foreground min-w-5 rounded-md px-1 text-center text-[11px] leading-5 font-semibold tabular-nums'>
+        {count > 0 ? count : shown}
+      </span>
+    </SidebarMenuBadge>
+  );
+}
+
 export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
   const access = useWorkspaceAccess();
   const groups = useFilteredNavGroups(navGroups);
+  const snapshot = useSnapshot();
+  // Approvals waiting on someone: the only count the sidebar shows, read from the workspace ledger.
+  const counts: Record<string, number> = {
+    '/app/queue': (snapshot.data?.state.phase2?.reviews ?? []).filter((r) => r.status === 'needs_review').length
+  };
 
   return (
     <Sidebar collapsible='icon'>
@@ -87,13 +114,14 @@ export default function AppSidebar() {
                 ) : (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      render={<Link href={item.url} aria-label={item.title} />}
+                      render={<Link href={item.url} aria-label={counts[item.url] ? `${item.title}, ${counts[item.url]} waiting for approval` : item.title} />}
                       tooltip={item.title}
                       isActive={active}
                     >
                       <Icon />
                       <span>{item.title}</span>
                     </SidebarMenuButton>
+                    {item.url in counts && <NavCount count={counts[item.url]} />}
                   </SidebarMenuItem>
                 );
               })}

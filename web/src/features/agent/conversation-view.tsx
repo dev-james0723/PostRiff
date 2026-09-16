@@ -3,17 +3,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
+import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
+import { AgentProgress } from '@/components/agents/loading-states/agent-progress';
+import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
+import { Message, MessageAvatar, MessageBubble, MessageBubbleContent, MessageContent } from '@/components/agents/message';
 import { Icons } from '@/components/icons';
+import { AnimatedBadge } from '@/components/motion/animated-badge';
+import { Loader } from '@/components/motion/loader';
+import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { StreamingText } from '@/components/ui/streaming-text';
 import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { Message, Run, SchedulePlan } from '@/lib/api/types';
+import type { Message as ThreadMessage, Run, SchedulePlan } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -21,15 +29,20 @@ import { cn } from '@/lib/utils';
 import { ActivityStrip } from './activity-strip';
 import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform, type Language } from './composer';
 import { PlanCard } from './plan-card';
-import { shortLabel, useModelChoice } from './use-model';
+import { ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
 import { useRun } from './use-run';
 import { VariantCard, destinationLabel } from './variant-card';
 
+/** The short verb beside the live timer (`writing` comes from either CLI route). */
 const STAGE_LABELS: Record<string, string> = {
-  queued: 'Waiting for Claude Code on this machine…',
-  writing: 'Claude Code is writing…',
-  drafting: 'Drafting…'
+  writing: 'Writing',
+  drafting: 'Drafting'
 };
+
+/** `queued` is emitted for every background runtime: name the local CLI only when the run's model belongs to one. */
+function queuedLabel(route: string | undefined) {
+  return route && ROUTE_LABELS[route] ? `Waiting for ${ROUTE_LABELS[route]} on this machine…` : 'Queued…';
+}
 
 interface AssistantBody {
   text?: string;
@@ -41,9 +54,36 @@ interface AssistantBody {
   skills?: string[];
 }
 
-function bodyOf(message: Message): AssistantBody & { text: string } {
+function bodyOf(message: ThreadMessage): AssistantBody & { text: string } {
   const body = message.body as AssistantBody;
   return { ...body, text: String(body.text ?? '') };
+}
+
+/** Live stage row. The timer counts from the run's first event (read once per mount) and stays hidden until there is one. */
+function StageProgress({ label, startedAt }: { label: string; startedAt?: number }) {
+  const [initialSeconds] = useState(() => (startedAt === undefined ? 0 : Math.max(0, Date.now() / 1000 - startedAt)));
+  return (
+    <AgentProgress
+      label={label}
+      initialSeconds={initialSeconds}
+      running={startedAt !== undefined}
+      className={cn('gap-2 text-xs [&>span:first-child]:size-4', startedAt === undefined && '[&>span:last-child]:hidden')}
+    />
+  );
+}
+
+/** Terminal-style caret after streamed text; left out when the reader prefers reduced motion. */
+function StreamCaret() {
+  const reduce = useReducedMotion();
+  if (reduce) return null;
+  return (
+    <motion.span
+      aria-hidden
+      className='bg-foreground/60 ml-0.5 inline-block h-[1em] w-[2px] align-[-0.15em]'
+      animate={{ opacity: [1, 1, 0, 0] }}
+      transition={{ duration: 1.06, times: [0, 0.45, 0.55, 1], repeat: Infinity, ease: 'linear' }}
+    />
+  );
 }
 
 export function ConversationView({ conversationId }: { conversationId: string }) {
@@ -68,6 +108,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const [language, setLanguage] = useState<Language>('English');
   const [busy, setBusy] = useState(false);
   const [variantIndex, setVariantIndex] = useState(0);
+  const [inspectorTab, setInspectorTab] = useState('preview');
+
+  // Turns already in the thread when it first loads render still; only turns that arrive after that pop in.
+  const loadedIds = useRef<{ conversationId: string; ids: Set<string> } | null>(null);
+  if (thread.data && loadedIds.current?.conversationId !== conversationId) {
+    loadedIds.current = { conversationId, ids: new Set(thread.data.messages.map((m) => m.messageId)) };
+  }
+  const arrived = (messageId: string) => loadedIds.current !== null && !loadedIds.current.ids.has(messageId);
 
   // The composer follows the last turn's destinations so "draft again" keeps the same targets.
   useEffect(() => {
@@ -85,11 +133,13 @@ export function ConversationView({ conversationId }: { conversationId: string })
     return { platform, account: account?.account, state: account?.displayState };
   });
   const choice = useModelChoice(models.data);
-  const runModelLabel = run ? shortLabel(choice.options.find((m) => m.id === run.model), run.model) : choice.label;
+  const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
+  const runModelLabel = run ? shortLabel(runOption, run.model) : choice.label;
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const running = run?.status === 'running';
   const streamed = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'message.delta').map((e) => e.text ?? '').join(''), [run?.events]);
   const stage = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'progress.updated').at(-1)?.stage ?? null, [run?.events]);
+  const firstEventAt = run?.events[0]?.at;
 
   // When a background run finishes, the assistant turn and the workspace snapshot changed on the server.
   const settledRun = run && !running ? `${run.runId}:${run.status}` : null;
@@ -102,6 +152,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const list = conversations.data?.conversations ?? [];
   const title = list.find((c) => c.conversationId === conversationId)?.title || thread.data?.title || 'Conversation';
   const plan = run?.artifact?.plan ?? null;
+  const planApplied = run?.status === 'applied';
   const variants = run?.artifact?.variants ?? [];
   const sources = (state?.sources ?? []).filter((s) => s.active);
 
@@ -147,19 +198,19 @@ export function ConversationView({ conversationId }: { conversationId: string })
                 <Skeleton className='h-9 w-full' />
               </div>
             ) : (
-              <ul className='flex flex-col gap-0.5'>
+              <SharedLayoutBg as='ul' inset={0} className='gap-0.5' pillClassName='rounded-lg bg-muted/60'>
                 {list.map((c) => (
                   <li key={c.conversationId}>
                     <Link
                       href={`/app/agent/${encodeURIComponent(c.conversationId)}`}
-                      className={cn('hover:bg-muted flex flex-col gap-0.5 rounded-lg px-2.5 py-2 text-sm', c.conversationId === conversationId && 'bg-muted font-medium')}
+                      className={cn('flex flex-col gap-0.5 rounded-lg px-2.5 py-2 text-sm', c.conversationId === conversationId && 'bg-muted font-medium')}
                     >
                       <span className='line-clamp-1'>{c.title || 'Untitled'}</span>
                       <span className='text-muted-foreground text-xs font-normal'>{formatDate(c.updatedAt)}</span>
                     </Link>
                   </li>
                 ))}
-              </ul>
+              </SharedLayoutBg>
             )}
           </ScrollArea>
         </aside>
@@ -169,7 +220,11 @@ export function ConversationView({ conversationId }: { conversationId: string })
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <h1 className='truncate text-base font-semibold'>{title}</h1>
             <div className='flex items-center gap-2'>
-              {plan && run?.status !== 'applied' && <Badge variant='outline' className='border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'>Plan awaiting your approval</Badge>}
+              {plan && (
+                <AnimatedBadge status={planApplied ? 'success' : 'warning'} size='sm' pulse={!planApplied}>
+                  {planApplied ? 'Plan applied' : 'Plan awaiting your approval'}
+                </AnimatedBadge>
+              )}
               <Badge variant='outline' className='gap-1 font-normal'>
                 <Icons.sparkles className='size-3' />
                 <span className='font-mono text-[11px]'>{runModelLabel}</span>
@@ -184,67 +239,91 @@ export function ConversationView({ conversationId }: { conversationId: string })
             {thread.isLoading && <Skeleton className='h-24 w-full' />}
             {messages.map((message) => {
               const body = bodyOf(message);
+              const animateIn = arrived(message.messageId);
               if (message.role === 'user') {
                 return (
-                  <li key={message.messageId} className='flex justify-end'>
-                    <div className='bg-secondary text-secondary-foreground max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap'>{body.text}</div>
+                  <li key={message.messageId}>
+                    <Message from='user' animateIn={animateIn}>
+                      <MessageBubble animateIn={animateIn}>
+                        {/* The soft bubble's surface is its first child span; recolor it to today's secondary look. */}
+                        <MessageBubbleContent className='text-secondary-foreground max-w-[80%] px-4 leading-relaxed whitespace-pre-wrap [&>span]:bg-secondary'>{body.text}</MessageBubbleContent>
+                      </MessageBubble>
+                    </Message>
                   </li>
                 );
               }
               const isCurrent = message.runId != null && message.runId === lastRunId;
               return (
-                <li key={message.messageId} className='flex gap-3'>
-                  <span className='bg-primary text-primary-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg'>
-                    <Icons.sparkles className='size-3.5' />
-                  </span>
-                  <div className='flex min-w-0 flex-1 flex-col gap-3'>
-                    {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} />}
-                    {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
-                    {body.excluded && body.excluded.length > 0 && (
-                      <ul className='text-muted-foreground text-xs'>
-                        {body.excluded.map((item) => (
-                          <li key={item.id}>Source excluded — {item.reason.replace(/_/g, ' ')}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {isCurrent && run ? (
-                      <>
-                        {running && (
-                          <div className='bg-card ring-foreground/10 flex flex-col gap-2 rounded-xl p-4 ring-1'>
-                            <span className='text-muted-foreground flex items-center gap-2 text-xs'>
-                              <Icons.spinner className='size-3.5 animate-spin' />
-                              {STAGE_LABELS[stage ?? ''] ?? 'Working…'}
-                              <button type='button' className='ml-auto underline underline-offset-2' onClick={() => void api.cancelRun(workspaceId, run.runId)}>
-                                Cancel
-                              </button>
-                            </span>
-                            {streamed ? <p className='text-sm leading-relaxed whitespace-pre-wrap'>{streamed}</p> : <Skeleton className='h-16 w-full' />}
-                          </div>
-                        )}
-                        {run.status === 'failed' && !(message.body as { failed?: boolean }).failed && (
-                          <p className='text-sm text-amber-700 dark:text-amber-300'>{run.events.findLast((e) => e.type === 'run.failed')?.message ?? 'The run did not complete.'}</p>
-                        )}
-                        {variants.length > 0 && <VariantCard variants={variants} selected={variantIndex} onSelect={setVariantIndex} />}
-                        {plan && snapshot.data && <PlanCard run={run} plan={plan} snapshot={snapshot.data} />}
-                        {!plan && variants.length > 0 && (
+                <li key={message.messageId}>
+                  <Message from='assistant' animateIn={animateIn} className='gap-3'>
+                    <MessageAvatar className='bg-primary text-primary-foreground mt-0.5 rounded-lg'>
+                      <Icons.sparkles className='size-3.5' />
+                    </MessageAvatar>
+                    <MessageContent className='items-stretch gap-3'>
+                      {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} />}
+                      {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
+                      {body.excluded && body.excluded.length > 0 && (
+                        <ul className='text-muted-foreground text-xs'>
+                          {body.excluded.map((item) => (
+                            <li key={item.id}>Source excluded — {item.reason.replace(/_/g, ' ')}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {isCurrent && run ? (
+                        <>
+                          {running && (
+                            <div className='bg-card ring-foreground/10 flex flex-col gap-2 rounded-xl p-4 ring-1'>
+                              <span className='text-muted-foreground flex items-center gap-2 text-xs'>
+                                {stage === 'queued' ? (
+                                  <>
+                                    <span aria-hidden className='inline-flex'>
+                                      <Loader variant='ascii-braille' size={13} className='text-muted-foreground' />
+                                    </span>
+                                    <ThinkingShimmer>{queuedLabel(runOption?.route)}</ThinkingShimmer>
+                                  </>
+                                ) : (
+                                  <StageProgress key={firstEventAt ?? 'no-events'} label={STAGE_LABELS[stage ?? ''] ?? 'Working'} startedAt={firstEventAt} />
+                                )}
+                                <button type='button' className='ml-auto underline underline-offset-2' onClick={() => void api.cancelRun(workspaceId, run.runId)}>
+                                  Cancel
+                                </button>
+                              </span>
+                              {streamed ? (
+                                <p className='text-sm leading-relaxed whitespace-pre-wrap'>
+                                  {/* transitions.dev streaming text: each word the run sends resolves out of a soft blur. */}
+                                  <StreamingText text={streamed} />
+                                  <StreamCaret />
+                                </p>
+                              ) : (
+                                <Skeleton className='h-16 w-full' />
+                              )}
+                            </div>
+                          )}
+                          {run.status === 'failed' && !(message.body as { failed?: boolean }).failed && (
+                            <p className='text-sm text-amber-700 dark:text-amber-300'>{run.events.findLast((e) => e.type === 'run.failed')?.message ?? 'The run did not complete.'}</p>
+                          )}
+                          {variants.length > 0 && <VariantCard variants={variants} selected={variantIndex} onSelect={setVariantIndex} />}
+                          {plan && snapshot.data && <PlanCard run={run} plan={plan} snapshot={snapshot.data} />}
+                          {!plan && variants.length > 0 && (
+                            <p className='text-muted-foreground text-xs'>
+                              No times were named, so nothing is scheduled. Say when each post should go out, or{' '}
+                              <Link href='/app/queue' className='underline underline-offset-2'>
+                                schedule a draft in the Queue
+                              </Link>
+                              .
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        body.plan && (
                           <p className='text-muted-foreground text-xs'>
-                            No times were named, so nothing is scheduled. Say when each post should go out, or{' '}
-                            <Link href='/app/queue' className='underline underline-offset-2'>
-                              schedule a draft in the Queue
-                            </Link>
-                            .
+                            Proposed {body.plan.destinations.length} post{body.plan.destinations.length === 1 ? '' : 's'} ({body.plan.destinations.map((d) => d.platform).join(', ')}) · earlier turn
                           </p>
-                        )}
-                      </>
-                    ) : (
-                      body.plan && (
-                        <p className='text-muted-foreground text-xs'>
-                          Proposed {body.plan.destinations.length} post{body.plan.destinations.length === 1 ? '' : 's'} ({body.plan.destinations.map((d) => d.platform).join(', ')}) · earlier turn
-                        </p>
-                      )
-                    )}
-                    <span className='text-muted-foreground text-[11px]'>{relativeTime(message.at)}</span>
-                  </div>
+                        )
+                      )}
+                      <span className='text-muted-foreground text-[11px]'>{relativeTime(message.at)}</span>
+                    </MessageContent>
+                  </Message>
                 </li>
               );
             })}
@@ -276,16 +355,16 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
         {/* Inspector */}
         <aside className='hidden xl:block'>
-          <Tabs defaultValue='preview'>
+          <Tabs value={inspectorTab} onValueChange={setInspectorTab} variant='underline'>
             <TabsList className='w-full'>
-              <TabsTrigger value='preview' className='flex-1'>
+              <TabsTrigger value='preview' className='flex-1 justify-center'>
                 Preview
               </TabsTrigger>
-              <TabsTrigger value='sources' className='flex-1'>
+              <TabsTrigger value='sources' className='flex-1 justify-center'>
                 Sources · {sources.length}
               </TabsTrigger>
             </TabsList>
-            <TabsContent value='preview' className='flex flex-col gap-3'>
+            <TabsContent value='preview' className='mt-3 flex flex-col gap-3'>
               {variants[variantIndex] ? (
                 <div className='bg-card ring-foreground/10 overflow-hidden rounded-xl ring-1'>
                   <div className='flex items-center gap-2 px-3 py-2.5'>
@@ -308,7 +387,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
               )}
               <p className='text-muted-foreground text-[11px]'>A preview, not a guarantee of how the provider renders it.</p>
             </TabsContent>
-            <TabsContent value='sources' className='flex flex-col gap-2'>
+            <TabsContent value='sources' className='mt-3 flex flex-col gap-2'>
               {sources.length === 0 ? (
                 <p className='text-muted-foreground text-xs'>No usable sources in this workspace yet.</p>
               ) : (

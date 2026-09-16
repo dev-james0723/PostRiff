@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { NumberTicker } from '@/components/motion/number-ticker';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,7 +20,13 @@ export function StatCard({ label, value, hint, badge, footer, loading }: StatCar
       <CardHeader>
         <CardDescription>{label}</CardDescription>
         <CardTitle className='text-2xl font-semibold tabular-nums @[250px]/card:text-3xl'>
-          {loading ? <Skeleton className='h-8 w-20' /> : value}
+          {loading ? (
+            <Skeleton className='h-8 w-20' />
+          ) : typeof value === 'number' ? (
+            <NumberTicker value={value} locale />
+          ) : (
+            value
+          )}
         </CardTitle>
         {badge && (
           <CardAction>

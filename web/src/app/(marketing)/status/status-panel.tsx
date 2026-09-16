@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 
 type State = 'checking' | 'ok' | 'degraded' | 'down';
 
@@ -47,7 +47,8 @@ export function StatusPanel() {
     };
   }, []);
 
-  const tone: Record<State, 'default' | 'secondary' | 'destructive' | 'outline'> = { ok: 'default', checking: 'outline', degraded: 'secondary', down: 'destructive' };
+  // `checking` is a real in-flight request, so it gets the spinner; the badge rolls to the result when the check returns.
+  const tone: Record<State, AnimatedBadgeStatus> = { ok: 'success', checking: 'loading', degraded: 'warning', down: 'danger' };
   const label: Record<State, string> = { ok: 'Operational', checking: 'Checking', degraded: 'Degraded', down: 'Unavailable' };
 
   return (
@@ -59,7 +60,9 @@ export function StatusPanel() {
               <p className='font-medium'>{component.name}</p>
               <p className='text-muted-foreground text-xs'>{component.detail}</p>
             </div>
-            <Badge variant={tone[component.state]}>{label[component.state]}</Badge>
+            <AnimatedBadge status={tone[component.state]} size='sm'>
+              {label[component.state]}
+            </AnimatedBadge>
           </li>
         ))}
       </ul>

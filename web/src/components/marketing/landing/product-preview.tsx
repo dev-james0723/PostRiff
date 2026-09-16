@@ -1,6 +1,7 @@
 import { ChannelIcon } from '@/components/channel-icon';
 import { CapabilityBadge } from '@/components/marketing/capability-badge';
 import { Section } from '@/components/marketing/section';
+import { TiltCard } from '@/components/motion/tilt-card';
 import { cn } from '@/lib/utils';
 
 const NAV = ['Overview', 'Ideas', 'Calendar', 'Pipeline', 'Channels', 'Queue', 'Analytics', 'Inbox'];
@@ -14,7 +15,9 @@ const DOTS: Record<number, string[]> = { 3: ['bg-sky-500'], 5: ['bg-amber-500', 
 export function ProductPreview() {
   return (
     <Section id='product-preview' eyebrow='Product preview' title='A calm workspace for a loud job.' description='Everything scheduled, everything that needs you, and what each channel can really do — on one screen.'>
-      <div className='bg-card overflow-hidden rounded-2xl border shadow-sm'>
+      {/* TiltCard already clips to rounded-2xl, so the frame's fill, border and shadow sit on it directly. No glare:
+          it is painted in --foreground, which reads as a dark smudge over the UI in light themes. Figures stay static. */}
+      <TiltCard max={3} glare={false} className='bg-card border shadow-sm'>
         <div className='flex items-center gap-2 border-b px-4 py-2'>
           <span className='bg-muted size-2.5 rounded-full' />
           <span className='bg-muted size-2.5 rounded-full' />
@@ -81,7 +84,7 @@ export function ProductPreview() {
             </div>
           </div>
         </div>
-      </div>
+      </TiltCard>
       <p className='text-muted-foreground mt-3 text-xs'>Illustrative layout built from the real interface components; figures are examples.</p>
     </Section>
   );

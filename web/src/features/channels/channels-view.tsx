@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { LevelBadge } from '@/components/app/level-badge';
 import { ChannelIcon } from '@/components/channel-icon';
 import { CapabilityBadge } from '@/components/marketing/capability-badge';
+import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import { StatefulButton } from '@/components/motion/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +21,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -33,15 +35,18 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { HoverLiftGroup } from '@/components/ui/hover-lift-group';
 import { localChannels } from '@/config/channels';
 import { keys, useChannels } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { ChannelView, OAuthStart, ProviderView } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { EASE_OUT } from '@/lib/ease';
 import { formatDate } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { useFlash } from '@/hooks/use-flash';
 
 const CAPS: { key: string; label: string }[] = [
   { key: 'identity', label: 'Identity' },
@@ -74,16 +79,21 @@ const infoContent = {
   ]
 };
 
-function stateTone(state: string) {
-  if (state === 'publish_verified' || state === 'read_verified') return 'default';
-  if (state === 'disconnected') return 'secondary';
-  return 'destructive';
+const VERIFIED_STATES = new Set(['publish_verified', 'read_verified']);
+
+function connectionStatus(state: string): AnimatedBadgeStatus {
+  if (VERIFIED_STATES.has(state)) return 'success';
+  if (state === 'disconnected') return 'neutral';
+  if (state === 'token_expired' || state === 'reauthorization_required' || state === 'scope_missing') return 'warning';
+  return 'danger';
 }
 
 function ConnectedCard({ channel, canManage }: { channel: ChannelView; canManage: boolean }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyOutcome, flashVerifyOutcome] = useFlash<{ state: 'success' | 'error'; label: string }>();
 
   async function refresh() {
     await client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
@@ -92,14 +102,19 @@ function ConnectedCard({ channel, canManage }: { channel: ChannelView; canManage
 
   async function verify() {
     setBusy(true);
+    setVerifying(true);
     try {
       const result = await api.verifyChannel(workspaceId, channel.id);
       toast.success(`Verification: ${result.state.replace(/_/g, ' ')}${result.detail ? ` — ${result.detail}` : ''}`);
       await refresh();
+      // The request can succeed while the check fails (an expired token): only a verified state earns "Verified".
+      flashVerifyOutcome(VERIFIED_STATES.has(result.state) ? { state: 'success', label: 'Verified' } : { state: 'error', label: 'Not verified' });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Verification failed.');
+      flashVerifyOutcome({ state: 'error', label: 'Try again' });
     } finally {
       setBusy(false);
+      setVerifying(false);
     }
   }
 
@@ -117,14 +132,16 @@ function ConnectedCard({ channel, canManage }: { channel: ChannelView; canManage
   }
 
   return (
-    <Card>
+    <Card className='h-full'>
       <CardHeader>
         <div className='flex flex-wrap items-start justify-between gap-2'>
           <div>
             <CardTitle className='flex items-center gap-2'>
               <ChannelIcon platform={channel.platform} name={channel.platform} />
               {channel.platform}
-              <Badge variant={stateTone(channel.connectionState)}>{channel.connectionState.replace(/_/g, ' ')}</Badge>
+              <AnimatedBadge size='sm' status={connectionStatus(channel.connectionState)}>
+                {channel.connectionState.replace(/_/g, ' ')}
+              </AnimatedBadge>
             </CardTitle>
             <CardDescription>
               {channel.account} · {channel.accountType || 'account'}
@@ -163,9 +180,18 @@ function ConnectedCard({ channel, canManage }: { channel: ChannelView; canManage
         </p>
         {canManage && (
           <div className='flex flex-wrap gap-2'>
-            <Button variant='outline' size='sm' disabled={busy} onClick={() => void verify()}>
+            <StatefulButton
+              variant='outline'
+              size='sm'
+              state={verifying ? 'loading' : (verifyOutcome?.state ?? 'idle')}
+              loadingText='Verifying…'
+              successText={verifyOutcome?.label ?? 'Verified'}
+              errorText={verifyOutcome?.label ?? 'Try again'}
+              disabled={busy}
+              onClick={() => void verify()}
+            >
               Re-verify
-            </Button>
+            </StatefulButton>
             <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />
           </div>
         )}
@@ -265,9 +291,9 @@ function ProviderRow({ provider, canManage }: { provider: ProviderView; canManag
               ))}
             </SelectContent>
           </Select>
-          <Button disabled={busy} onClick={() => void start()}>
+          <StatefulButton state={busy ? 'loading' : 'idle'} loadingText='Connecting…' onClick={() => void start()}>
             Connect
-          </Button>
+          </StatefulButton>
         </div>
       )}
       <Dialog open={Boolean(pending)} onOpenChange={(open) => !open && setPending(null)}>
@@ -299,6 +325,7 @@ function ProviderRow({ provider, canManage }: { provider: ProviderView; canManag
 export function ChannelsView() {
   const { data, isLoading, error } = useChannels();
   const access = useWorkspaceAccess();
+  const reduce = useReducedMotion();
   const canManage = checkAccess(access, { permission: 'manage_connections' });
   const connected = data?.channels ?? [];
   const providers = data?.providers ?? [];
@@ -332,8 +359,15 @@ export function ChannelsView() {
             </Empty>
           ) : (
             <div className='grid gap-4 xl:grid-cols-2'>
-              {connected.map((channel) => (
-                <ConnectedCard key={channel.id} channel={channel} canManage={canManage} />
+              {connected.map((channel, index) => (
+                <motion.div
+                  key={channel.id}
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, ease: EASE_OUT, delay: Math.min(index, 6) * 0.05 }}
+                >
+                  <ConnectedCard channel={channel} canManage={canManage} />
+                </motion.div>
               ))}
             </div>
           )}
@@ -356,8 +390,15 @@ export function ChannelsView() {
             </p>
           ) : (
             <div className='flex flex-col gap-3'>
-              {providers.map((provider) => (
-                <ProviderRow key={provider.id} provider={provider} canManage={canManage} />
+              {providers.map((provider, index) => (
+                <motion.div
+                  key={provider.id}
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, ease: EASE_OUT, delay: Math.min(index, 6) * 0.05 }}
+                >
+                  <ProviderRow provider={provider} canManage={canManage} />
+                </motion.div>
               ))}
             </div>
           )}
@@ -372,7 +413,8 @@ export function ChannelsView() {
               These platforms have no third-party publishing API a small studio can use honestly. The companion signs in on your own machine and publishes through your own session — never from our servers.
             </p>
           </div>
-          <div className='flex flex-wrap gap-2'>
+          {/* transitions.dev avatar group hover: the hovered chip lifts and its neighbours follow. */}
+          <HoverLiftGroup className='flex flex-wrap gap-2'>
             {localChannels.map((channel) => (
               <Link
                 key={channel.slug}
@@ -384,7 +426,7 @@ export function ChannelsView() {
                 {channel.nameZh && <span className='text-muted-foreground'>{channel.nameZh}</span>}
               </Link>
             ))}
-          </div>
+          </HoverLiftGroup>
         </section>
       </div>
     </PageContainer>

@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/icons';
+import { TextScramble } from '@/components/motion/text-scramble';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,6 +20,8 @@ import { ROUTE_LABELS, shortLabel } from './use-model';
 
 /** The composer's model pill: PostRiff routes first, then each local CLI, like a settings picker in miniature. */
 export function ModelPicker({ options, model, onChoose, disabled }: { options: ModelOption[]; model: string; onChoose: (id: string) => void; disabled?: boolean }) {
+  // The label scrambles only after the writer picks a model, not when the remembered choice loads.
+  const [picked, setPicked] = useState(false);
   const current = options.find((m) => m.id === model);
   const ready = current?.qualified ?? model === 'deterministic-preview';
   const cliRoutes = Array.from(new Set(options.map((m) => m.route).filter((r): r is string => Boolean(r) && r !== 'fixture' && r !== 'managed')));
@@ -33,7 +37,7 @@ export function ModelPicker({ options, model, onChoose, disabled }: { options: M
         render={<Button variant='outline' size='sm' className='h-7 gap-1.5 px-2.5 font-normal' title={current?.detail} aria-label='Model' />}
       >
         <span aria-hidden className={cn('size-1.5 rounded-full', ready ? 'bg-emerald-500' : 'bg-amber-500')} />
-        <span className='font-mono text-[11.5px]'>{shortLabel(current, model)}</span>
+        <TextScramble text={shortLabel(current, model)} animate={picked} className='font-mono text-[11.5px]' />
         <Icons.chevronDown className='size-3' />
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-80'>
@@ -42,7 +46,10 @@ export function ModelPicker({ options, model, onChoose, disabled }: { options: M
             {index > 0 && <DropdownMenuSeparator />}
             <DropdownMenuLabel className='text-muted-foreground text-xs'>{group.title}</DropdownMenuLabel>
             {group.items.map((item) => (
-              <DropdownMenuItem key={item.id} disabled={!item.qualified} onClick={() => onChoose(item.id)} className='flex flex-col items-start gap-0.5'>
+              <DropdownMenuItem key={item.id} disabled={!item.qualified} onClick={() => {
+                  setPicked(true);
+                  onChoose(item.id);
+                }} className='flex flex-col items-start gap-0.5'>
                 <span className='flex w-full items-center gap-2 text-sm'>
                   <span className={cn('size-1.5 shrink-0 rounded-full', item.qualified ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
                   <span className='flex-1 truncate'>{item.label}</span>

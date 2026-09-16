@@ -2,16 +2,18 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import { FileTree, FileTreeFile, FileTreeFolder } from '@/components/motion/file-tree';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemory } from '@/lib/api/hooks';
 import { downloadBlob } from '@/lib/download';
+import { EASE_OUT } from '@/lib/ease';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { cn } from '@/lib/utils';
 
 const infoContent = {
   title: 'Memory files',
@@ -28,6 +30,7 @@ export function MemoryView() {
   const files = memory.data?.files ?? [];
   const [selected, setSelected] = useState('VOICE.md');
   const file = files.find((f) => f.name === selected) ?? files[0];
+  const reduce = useReducedMotion();
 
   async function exportPackage() {
     try {
@@ -58,29 +61,36 @@ export function MemoryView() {
               <Skeleton className='h-9 w-full' />
             </div>
           )}
-          {files.map((item) => (
-            <button
-              key={item.name}
-              type='button'
-              onClick={() => setSelected(item.name)}
-              className={cn('hover:bg-muted flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-left', item.name === file?.name && 'bg-muted')}
+          {files.length > 0 && (
+            <FileTree
+              ariaLabel='Memory files'
+              value={file?.name ?? null}
+              // The folder row only expands and collapses; the panel follows files.
+              onValueChange={(value) => {
+                if (files.some((f) => f.name === value)) setSelected(value);
+              }}
+              defaultExpandedIds={['memory']}
+              classNames={{ label: 'font-mono text-[13px]' }}
             >
-              <Icons.page className='mt-0.5 size-4 shrink-0' />
-              <span className='flex min-w-0 flex-col'>
-                <span className='font-mono text-[13px] font-medium'>{item.name}</span>
-                <span className='text-muted-foreground text-xs'>{item.purpose}</span>
-              </span>
-            </button>
-          ))}
+              <FileTreeFolder value='memory' name='memory/'>
+                {files.map((item) => (
+                  <FileTreeFile key={item.name} value={item.name} name={item.name} />
+                ))}
+              </FileTreeFolder>
+            </FileTree>
+          )}
           <p className='text-muted-foreground mt-2 border-t px-2 pt-2 text-xs leading-relaxed'>Learned notes and agent proposals arrive in a later phase; until then these files are generated from your profile.</p>
         </div>
 
         <div className='bg-card ring-foreground/10 flex flex-col overflow-hidden rounded-xl ring-1'>
           <div className='flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3'>
-            <div className='flex flex-wrap items-center gap-2'>
-              <span className='font-mono text-sm font-semibold'>{file?.name ?? '…'}</span>
-              {file && <Badge variant='secondary'>{file.source}</Badge>}
-              <Badge variant='outline'>Read every draft</Badge>
+            <div className='flex min-w-0 flex-col gap-1'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <span className='font-mono text-sm font-semibold'>{file?.name ?? '…'}</span>
+                {file && <Badge variant='secondary'>{file.source}</Badge>}
+                <Badge variant='outline'>Read every draft</Badge>
+              </div>
+              {file?.purpose && <p className='text-muted-foreground text-xs'>{file.purpose}</p>}
             </div>
             {file?.editHref && (
               <Link href={file.editHref} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
@@ -95,7 +105,18 @@ export function MemoryView() {
               <Skeleton className='h-4 w-3/4' />
             </div>
           ) : (
-            <pre className='overflow-x-auto px-5 py-4 font-sans text-sm leading-relaxed whitespace-pre-wrap'>{file.body}</pre>
+            <AnimatePresence mode='wait'>
+              <motion.pre
+                key={file.name}
+                initial={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: -4, filter: 'blur(4px)' }}
+                transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
+                className='overflow-x-auto px-5 py-4 font-sans text-sm leading-relaxed whitespace-pre-wrap'
+              >
+                {file.body}
+              </motion.pre>
+            </AnimatePresence>
           )}
           <div className='text-muted-foreground border-t px-4 py-2.5 text-xs'>Workspace only. Never quoted verbatim in a public post. Included in the export package and given to whichever route writes your drafts.</div>
         </div>
