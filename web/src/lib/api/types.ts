@@ -102,6 +102,16 @@ export interface SnapshotVariant {
   needsReview: boolean;
   blockedByRetraction: boolean;
   contentTypeId?: string;
+  customized?: boolean;
+  /** A regenerated version (for example after a voice change) waiting to be accepted. */
+  proposedUpdate?: {
+    text: string;
+    voiceRevision: number | null;
+    briefRevision: number;
+    baseVariantRevision: number;
+    unknowns: string[];
+    warnings: string[];
+  } | null;
 }
 
 export interface SnapshotSource {

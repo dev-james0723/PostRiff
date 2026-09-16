@@ -68,7 +68,7 @@ export function PipelineView() {
       cta: 'Draft more',
       items: (state?.variants ?? [])
         .filter((v) => !reviewedVariantIds.has(v.id) && !v.blockedByRetraction)
-        .map((v) => ({ id: v.id, schedulable: true, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.needsReview ? 'needs review' : undefined, body: v.text, tag: v.warnings[0] }))
+        .map((v) => ({ id: v.id, schedulable: true, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.proposedUpdate ? 'update proposed' : v.needsReview ? 'needs review' : undefined, body: v.proposedUpdate?.text ?? v.text, tag: v.warnings[0] }))
     },
     {
       key: 'review',

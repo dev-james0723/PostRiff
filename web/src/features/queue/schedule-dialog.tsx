@@ -40,11 +40,13 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
   const state = snapshot.data?.state;
   const revision = snapshot.data?.revision ?? 0;
 
-  const drafts = useMemo(() => (state?.variants ?? []).filter((v) => !v.blockedByRetraction && v.voiceRevision === state?.speaker?.activeRevision), [state?.variants, state?.speaker?.activeRevision]);
+  const activeVoice = state?.speaker?.activeRevision ?? null;
+  const usable = (v: SnapshotVariant) => v.voiceRevision === activeVoice || v.proposedUpdate?.voiceRevision === activeVoice;
+  const drafts = useMemo(() => (state?.variants ?? []).filter((v) => !v.blockedByRetraction && usable(v)), [state?.variants, activeVoice]); // eslint-disable-line react-hooks/exhaustive-deps
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const assets = useMemo(() => (state?.phase2?.assets ?? []).filter((a) => !a.deleted), [state?.phase2?.assets]);
   const voiceActive = Boolean(state?.speaker?.activeRevision);
-  const staleDrafts = (state?.variants ?? []).filter((v) => !v.blockedByRetraction && v.voiceRevision !== state?.speaker?.activeRevision).length;
+  const staleDrafts = (state?.variants ?? []).filter((v) => !v.blockedByRetraction && !usable(v)).length;
 
   const [variantId, setVariantId] = useState<string>(preselected ?? '');
   const [channelId, setChannelId] = useState<string>('');
@@ -59,32 +61,42 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
   const channelsForVariant = channels.filter((c) => !variant || c.platform === variant.platform);
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
-  const ready = Boolean(variant && channelId && localTime && rights && (!variant.warnings.length || acknowledge) && (!asset || alt.trim()));
+  const ready = Boolean(variant && channelId && localTime && rights && (!variant.warnings.length || acknowledge) && (!asset || alt.trim()) && (!(variant.needsReview || variant.unknowns.length) || resolveUnknowns));
 
   async function submit() {
     if (!variant) return;
     try {
       let currentRevision = revision;
-      if (variant.needsReview && variant.unknowns.length && resolveUnknowns) {
+      let current: SnapshotVariant = variant;
+      // 1. A regenerated version (e.g. written after the voice profile changed) is accepted first.
+      if (current.proposedUpdate && current.proposedUpdate.voiceRevision === activeVoice) {
+        const accepted = await act.mutateAsync({ revision: currentRevision, action: 'accept_update', payload: { variantId: current.id } });
+        currentRevision = accepted.revision;
+        current = accepted.state.variants?.find((v) => v.id === current.id) ?? current;
+      }
+      // 2. Unknown facts must be confirmed as excluded before an exact review can exist.
+      if (current.needsReview && resolveUnknowns) {
         const reviewed = await act.mutateAsync({
           revision: currentRevision,
           action: 'p2_variant_review',
-          payload: { variantId: variant.id, variantRevision: variant.revision, confirmed: true, excludedUnknowns: variant.unknowns }
+          payload: { variantId: current.id, variantRevision: current.revision, confirmed: true, excludedUnknowns: current.unknowns }
         });
         currentRevision = reviewed.revision;
+        current = reviewed.state.variants?.find((v) => v.id === current.id) ?? current;
       }
+      // 3. Freeze text, media, account and time into a review.
       const result = await act.mutateAsync({
         revision: currentRevision,
         action: 'p2_review',
         payload: {
-          variantId: variant.id,
+          variantId: current.id,
           channelId,
           assetId: assetId || undefined,
           alt: alt.trim(),
           rightsConfirmed: rights,
           localTime,
           timeZone,
-          acknowledgedWarnings: acknowledge ? variant.warnings : []
+          acknowledgedWarnings: acknowledge ? current.warnings : []
         }
       });
       const created = result.state.phase2?.reviews.at(-1);
@@ -130,10 +142,17 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
                 ))}
               </SelectContent>
             </Select>
-            {variant && variant.needsReview && variant.unknowns.length > 0 && (
+            {variant?.proposedUpdate && variant.proposedUpdate.voiceRevision === activeVoice && (
+              <p className='text-muted-foreground text-xs'>A version written with your current voice profile is waiting; it will be accepted as the draft text when you prepare the review.</p>
+            )}
+            {variant && (variant.needsReview || variant.unknowns.length > 0) && (
               <Label className='flex items-start gap-2 text-xs font-normal'>
                 <Checkbox checked={resolveUnknowns} onCheckedChange={(v) => setResolveUnknowns(v === true)} />
-                <span>Confirm the {variant.unknowns.length} unknown{variant.unknowns.length === 1 ? '' : 's'} stay out of the draft (required before review)</span>
+                <span>
+                  {variant.unknowns.length > 0
+                    ? `Confirm the ${variant.unknowns.length} unknown${variant.unknowns.length === 1 ? '' : 's'} stay out of the draft (required before review)`
+                    : 'Confirm this draft is reviewed as written (required before review)'}
+                </span>
               </Label>
             )}
           </div>
