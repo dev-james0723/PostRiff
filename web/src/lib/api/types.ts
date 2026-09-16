@@ -114,6 +114,8 @@ export interface SnapshotVariant {
   } | null;
 }
 
+export type SourcePolicy = 'public_quote' | 'rewrite_approval' | 'internal_reference' | 'prohibited';
+
 export interface SnapshotSource {
   id: string;
   kind: string;
@@ -122,6 +124,9 @@ export interface SnapshotSource {
   active: boolean;
   visibility: string;
   reviewedAt?: string;
+  sourcePolicy?: SourcePolicy | null;
+  egressConsent?: ('local' | 'cloud')[];
+  facts?: { id: string; text: string; approved: boolean }[];
 }
 
 export interface Phase2State {

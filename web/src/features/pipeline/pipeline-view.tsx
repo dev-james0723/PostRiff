@@ -12,11 +12,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { ScheduleDialog } from '@/features/queue/schedule-dialog';
+import { EditDraftDialog } from './edit-draft-dialog';
 import { cn } from '@/lib/utils';
 
 interface CardItem {
   id: string;
   schedulable?: boolean;
+  edited?: boolean;
   platform?: string;
   title: string;
   subtitle?: string;
@@ -49,9 +51,11 @@ export function PipelineView() {
   const access = useWorkspaceAccess();
   const canSchedule = checkAccess(access, { permission: 'edit' });
   const [scheduling, setScheduling] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const state = snapshot.data?.state;
   const phase2 = state?.phase2;
-  const reviewedVariantIds = new Set([...(phase2?.reviews ?? []).map((r) => r.manifest.variantId), ...(phase2?.jobs ?? []).map((j) => j.manifest.variantId)]);
+  // Keyed on the exact content revision: an edit after a review (or a publication) makes the draft schedulable again.
+  const reviewedKeys = new Set([...(phase2?.reviews ?? []), ...(phase2?.jobs ?? [])].map((r) => `${r.manifest.variantId}:${r.manifest.contentRevision}`));
 
   const columns: Column[] = [
     {
@@ -69,8 +73,8 @@ export function PipelineView() {
       href: '/app/ideas',
       cta: 'Draft more',
       items: (state?.variants ?? [])
-        .filter((v) => !reviewedVariantIds.has(v.id) && !v.blockedByRetraction)
-        .map((v) => ({ id: v.id, schedulable: true, platform: v.platform, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.proposedUpdate ? 'update proposed' : v.needsReview ? 'needs review' : undefined, body: v.proposedUpdate?.text ?? v.text, tag: v.warnings[0] }))
+        .filter((v) => (!reviewedKeys.has(`${v.id}:${v.revision}`) || Boolean(v.proposedUpdate)) && !v.blockedByRetraction)
+        .map((v) => ({ id: v.id, schedulable: true, edited: v.customized, platform: v.platform, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.proposedUpdate ? 'update proposed' : v.needsReview ? 'needs review' : undefined, body: v.proposedUpdate?.text ?? v.text, tag: v.warnings[0] }))
     },
     {
       key: 'review',
@@ -101,6 +105,7 @@ export function PipelineView() {
   return (
     <PageContainer pageTitle='Pipeline' pageDescription='Where every idea is, from source to confirmed publication.' infoContent={infoContent}>
       {scheduling && <ScheduleDialog key={scheduling} open onOpenChange={(open) => !open && setScheduling(null)} variantId={scheduling} />}
+      {editing && <EditDraftDialog key={editing} open onOpenChange={(open) => !open && setEditing(null)} variantId={editing} />}
       {snapshot.isLoading ? (
         <Skeleton className='h-[32rem] w-full' />
       ) : (
@@ -136,9 +141,15 @@ export function PipelineView() {
                         <p className='text-muted-foreground line-clamp-3 text-xs whitespace-pre-wrap'>{item.body}</p>
                         {item.tag && <span className='text-xs text-amber-600 dark:text-amber-400'>{item.tag}</span>}
                         {item.schedulable && canSchedule && (
-                          <button type='button' className='text-primary mt-1 w-fit text-xs underline-offset-2 hover:underline' onClick={() => setScheduling(item.id)}>
-                            Schedule…
-                          </button>
+                          <div className='mt-1 flex items-center gap-3 text-xs'>
+                            <button type='button' className='text-primary underline-offset-2 hover:underline' onClick={() => setEditing(item.id)}>
+                              Edit
+                            </button>
+                            <button type='button' className='text-primary underline-offset-2 hover:underline' onClick={() => setScheduling(item.id)}>
+                              Schedule…
+                            </button>
+                            {item.edited && <span className='text-muted-foreground'>edited</span>}
+                          </div>
                         )}
                       </article>
                     ))

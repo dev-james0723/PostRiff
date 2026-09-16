@@ -17,5 +17,9 @@
 2. Fund the gateway (it needs a small balance); the ledger stop-lines ($6 / workspace / month, $10 / day global — candidates) refuse requests before a call once crossed.
 3. Redeploy. `/api/ideas/models` then lists the paid model as qualified next to the deterministic preview.
 
-## UI
-Ideas page: model selector (from `/api/ideas/models`), per-source **cloud consent** switch (`source_policy` action with `egressConsent: ["local","cloud"]`), estimated cost shown before drafting, provenance and cost in the run log.
+## UI (shipped)
+- **Ideas** (`web/src/features/ideas/ideas-view.tsx`): writing-model `Select` over the qualified entries of `/api/ideas/models` (cost class shown per option), reasoning toggle only for a paid model, `model` + `reasoning` sent on `quick-start` and `turn`; destinations default to the connected channels (green dot = connected); run log shows `usage.costUsd` and provenance; a `pending` assistant row (asynchronous runtimes) renders as “Writing…”.
+- **Sources & consent** (`web/src/features/ideas/sources-panel.tsx`): per-source policy select and an “Allow AI model (cloud)” switch — both call `source_policy {sourceId, policy, egressConsent, confirmed: true}`. Nothing reaches the paid route without the switch (server refuses with 403 regardless of the UI).
+- **Draft editing** (`web/src/features/pipeline/edit-draft-dialog.tsx`): `variant_edit {variantId, variantRevision, text}` from the Pipeline card; accepts a pending `proposedUpdate` first (same chain as the Schedule dialog). Pipeline keys “already reviewed” on `variantId:contentRevision`, so an edited draft is schedulable again.
+- **First-run checklist** (`web/src/features/overview/getting-started.tsx`): voice → channel → first draft → first approval, read from workspace state; hidden once complete.
+- Not yet: an estimated cost *before* drafting (needs `price_quote` exposed on a route).

@@ -18,6 +18,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SourcesPanel } from './sources-panel';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
@@ -52,8 +54,8 @@ const infoContent = {
 const destinationLabel = (v: { platform: string; language: string }) => `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`;
 
 function messageText(message: Message) {
-  const body = message.body as { text?: string; excluded?: { id: string; reason: string }[] };
-  return { text: String(body.text ?? ''), excluded: Array.isArray(body.excluded) ? body.excluded : [] };
+  const body = message.body as { text?: string; pending?: boolean; excluded?: { id: string; reason: string }[] };
+  return { text: body.pending === true ? 'Writing…' : String(body.text ?? ''), excluded: Array.isArray(body.excluded) ? body.excluded : [] };
 }
 
 export function IdeasView() {
@@ -76,6 +78,9 @@ export function IdeasView() {
   const [language, setLanguage] = useState<Language>('English');
   const [selected, setSelected] = useState(0);
   const [working, setWorking] = useState(false);
+  const [model, setModel] = useState<string>('');
+  const [reasoning, setReasoning] = useState<'quick' | 'standard' | 'deep'>('quick');
+  const [defaultedPlatforms, setDefaultedPlatforms] = useState(false);
   const composer = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -101,7 +106,22 @@ export function IdeasView() {
   const revision = snapshot.data?.revision ?? 0;
   const voiceActive = Boolean(snapshot.data?.state.speaker?.activeRevision);
   const variants: RunVariant[] = run?.artifact?.variants ?? [];
-  const qualified = models.data?.models.find((m) => m.qualified);
+  const qualifiedModels = useMemo(() => (models.data?.models ?? []).filter((m) => m.qualified), [models.data]);
+  const activeModel = qualifiedModels.find((m) => m.id === model) ?? qualifiedModels[0];
+  const paid = Boolean(activeModel && 'costClass' in activeModel && (activeModel as { costClass?: string }).costClass === 'paid');
+  const cloudAvailable = qualifiedModels.some((m) => (m as { costClass?: string }).costClass === 'paid');
+  const connectedPlatforms = useMemo(
+    () => (snapshot.data?.state.phase2?.channels ?? []).map((c) => c.platform).filter((p): p is Platform => PLATFORMS.includes(p as Platform)),
+    [snapshot.data]
+  );
+  useEffect(() => {
+    // Default the destinations to the connected accounts once, so a first draft can be scheduled.
+    if (!defaultedPlatforms && connectedPlatforms.length > 0) {
+      setPlatforms([...new Set(connectedPlatforms)]);
+      setDefaultedPlatforms(true);
+    }
+  }, [connectedPlatforms, defaultedPlatforms]);
+  const qualified = activeModel;
 
   async function guard<T>(task: () => Promise<T>): Promise<T | undefined> {
     setWorking(true);
@@ -118,7 +138,7 @@ export function IdeasView() {
   async function quickStart() {
     const body = text.trim();
     if (!body || !confirm || destinations.length === 0) return;
-    const result = await guard(() => api.quickStart(workspaceId, revision, { text: body, ownContent: own, confirmUse: true, destinations }));
+    const result = await guard(() => api.quickStart(workspaceId, revision, { text: body, ownContent: own, confirmUse: true, destinations, ...(activeModel ? { model: activeModel.id, reasoning } : {}) }));
     if (!result) return;
     setText('');
     setConfirm(false);
@@ -134,7 +154,7 @@ export function IdeasView() {
   async function sendTurn() {
     const body = text.trim();
     if (!conversationId || !body || destinations.length === 0) return;
-    const result = await guard(() => api.turn(workspaceId, conversationId, { text: body, destinations }));
+    const result = await guard(() => api.turn(workspaceId, conversationId, { text: body, destinations, ...(activeModel ? { model: activeModel.id, reasoning } : {}) }));
     if (!result) return;
     setText('');
     setRun(result);
@@ -285,6 +305,7 @@ export function IdeasView() {
                     {PLATFORMS.map((platform) => (
                       <ToggleGroupItem key={platform} value={platform} className='text-xs'>
                         {platform}
+                        {connectedPlatforms.includes(platform) && <span className='ml-1 size-1.5 rounded-full bg-emerald-500' aria-label='connected' />}
                       </ToggleGroupItem>
                     ))}
                   </ToggleGroup>
@@ -296,7 +317,36 @@ export function IdeasView() {
                       繁中
                     </ToggleGroupItem>
                   </ToggleGroup>
+                  {qualifiedModels.length > 0 && (
+                    <Select value={activeModel?.id ?? ''} onValueChange={(value) => setModel(String(value))}>
+                      <SelectTrigger className='h-8 w-56' aria-label='Writing model'>
+                        <SelectValue>{activeModel?.label ?? 'Model'}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {qualifiedModels.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            <span className='flex flex-col'>
+                              <span>{m.label}</span>
+                              <span className='text-muted-foreground text-xs'>{(m as { costClass?: string }).costClass === 'paid' ? 'Paid · metered to your allowance' : '$0 · no model request'}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {paid && (
+                    <ToggleGroup value={[reasoning]} onValueChange={(value) => value[0] && setReasoning(value[0] as 'quick' | 'standard' | 'deep')} aria-label='Reasoning'>
+                      {(models.data?.reasoning ?? []).map((r) => (
+                        <ToggleGroupItem key={r.id} value={r.id} className='text-xs' disabled={!r.available} title={r.detail}>
+                          {r.id}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  )}
                 </div>
+                {paid && (
+                  <p className='text-muted-foreground text-xs'>Only sources with “Allow AI model (cloud)” switched on are sent to the model. Cost settles from the provider’s usage and counts against your writing allowance.</p>
+                )}
                 {!conversationId && (
                   <div className='flex flex-col gap-2'>
                     <Label className='flex items-center gap-2 text-sm font-normal'>
@@ -320,7 +370,7 @@ export function IdeasView() {
                     </Button>
                   )}
                   <span className='text-muted-foreground text-xs'>
-                    {qualified ? `${qualified.label} · metered against your allowance` : 'Deterministic preview · no model request · $0'}
+                    {paid ? `${qualified?.label} · paid, metered against your allowance` : 'Deterministic preview · no model request · $0'}
                   </span>
                 </div>
               </div>
@@ -329,9 +379,10 @@ export function IdeasView() {
             )}
 
             {run && (
-              <details className='text-xs'>
+              <details className='text-xs' open={run.status === 'failed'}>
                 <summary className='text-muted-foreground cursor-pointer'>
-                  Run log · {run.status} · {run.events.length} events
+                  Run log · {run.status} · {run.events.length} events · {run.model}
+                  {typeof (run.usage as { costUsd?: number })?.costUsd === 'number' && ` · $${((run.usage as { costUsd: number }).costUsd).toFixed(4)} (${String((run.usage as { provenance?: string }).provenance ?? '').replace(/_/g, ' ')})`}
                 </summary>
                 <ol className='mt-2 flex flex-col gap-1'>
                   {run.events.map((event) => (
@@ -346,6 +397,9 @@ export function IdeasView() {
           </CardContent>
         </Card>
 
+        <div className='lg:col-start-2'>
+          <SourcesPanel cloudAvailable={cloudAvailable} />
+        </div>
         {/* Candidates */}
         <Card className='flex flex-col xl:col-start-3'>
           <CardHeader>

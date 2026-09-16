@@ -5,6 +5,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { StatCard } from '@/components/app/stat-card';
 import { LevelBadge } from '@/components/app/level-badge';
+import { GettingStarted } from './getting-started';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { buttonVariants } from '@/components/ui/button';
@@ -161,6 +162,7 @@ export function OverviewView() {
       }
     >
       <div className='flex flex-1 flex-col gap-4'>
+        <GettingStarted />
         <div className='*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4'>
           <StatCard
             label='Scheduled'
