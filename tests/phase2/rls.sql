@@ -21,6 +21,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/005_consumer_web_ideas.sql
 \ir ../../migrations/postriff/006_consumer_web_channels.sql
 \ir ../../migrations/postriff/007_consumer_web_billing.sql
+\ir ../../migrations/postriff/008_billing_provider_notifications.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000002','assist') as two \gset

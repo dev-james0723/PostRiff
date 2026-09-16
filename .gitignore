@@ -23,3 +23,8 @@ node_modules/
 studio/web/dist/
 studio/broker/node_modules/
 *.command
+
+# --- web (Next.js consumer app)
+web/node_modules/
+web/.next/
+!web/.env.example

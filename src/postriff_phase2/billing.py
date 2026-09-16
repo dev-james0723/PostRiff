@@ -160,8 +160,9 @@ class Billing:
         "subscription.grace": "grace", "subscription.cancelled": "cancelled", "subscription.expired": "expired",
     }
 
-    def __init__(self, provider=None, ledger=None, clock=time.time):
-        self.provider, self.ledger, self.clock = provider or FixturePaymentProvider(), ledger or Ledger(), clock
+    def __init__(self, provider=None, ledger=None, clock=time.time, on_applied=None):
+        """`on_applied(event, status)` runs only for outcome 'applied' (e.g. notifications); its failures never break the webhook."""
+        self.provider, self.ledger, self.clock, self.on_applied = provider or FixturePaymentProvider(), ledger or Ledger(), clock, on_applied
 
     def process_webhook(self, cur, signature, body):
         """Signature-verified, replay-safe (unique provider+event id), out-of-order safe (event_at vs last_event_at)."""
@@ -170,6 +171,12 @@ class Billing:
         cur.execute("SELECT outcome FROM public.pr_billing_events WHERE provider=%s AND event_id=%s", (self.provider.id, event["id"]))
         if cur.fetchone():
             return {"eventId": event["id"], "outcome": "duplicate"}
+        if not event.get("planTermsId") and event.get("priceId"):
+            # Live providers carry their price id; only an 'active' terms row (D3) may be bound to it.
+            cur.execute("SELECT id FROM public.pr_plan_terms WHERE provider_price_id=%s AND status='active'", (event["priceId"],))
+            resolved = cur.fetchone()
+            if resolved:
+                event["planTermsId"] = resolved[0]
         kind = event["type"]
         status = self.TRANSITIONS.get(kind)
         outcome = "ignored" if status is None else "applied"
@@ -191,7 +198,22 @@ class Billing:
                     if terms_id and status == "active":
                         self._reconcile_entitlement(cur, event["workspaceId"], terms_id, terms[0], event.get("currentPeriodEnd"))
         cur.execute("INSERT INTO public.pr_billing_events(provider,event_id,kind,event_at,payload_digest,outcome) VALUES(%s,%s,%s,to_timestamp(%s),%s,%s)", (self.provider.id, event["id"], kind, float(event["createdAt"]), payload_digest, outcome))
+        if outcome == "applied" and self.on_applied is not None:
+            try:
+                self.on_applied(event, status)
+            except Exception:  # noqa: BLE001 — a notification failure must never fail the webhook
+                pass
         return {"eventId": event["id"], "outcome": outcome, "status": status}
+
+    def availability(self, cur, workspace_id):
+        """'billing' block for the usage view: mounted provider and whether checkout/portal can be offered.
+        Checkout needs the live provider plus at least one 'active' terms row bound to a provider price (D3)."""
+        live = self.provider.id == "stripe"
+        cur.execute("SELECT 1 FROM public.pr_plan_terms WHERE status='active' AND coalesce(provider_price_id,'')<>'' LIMIT 1")
+        purchasable = cur.fetchone() is not None
+        cur.execute("SELECT provider_customer_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, self.provider.id))
+        row = cur.fetchone()
+        return {"provider": self.provider.id, "checkoutAvailable": live and purchasable, "portalAvailable": live and bool(row and row[0])}
 
     @staticmethod
     def _reconcile_entitlement(cur, workspace_id, terms_id, ent, period_end):

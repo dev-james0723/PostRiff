@@ -45,6 +45,7 @@ def validate_structure(root=ROOT):
         "migrations/postriff/005_consumer_web_ideas.sql",
         "migrations/postriff/006_consumer_web_channels.sql",
         "migrations/postriff/007_consumer_web_billing.sql",
+        "migrations/postriff/008_billing_provider_notifications.sql",
     ]
     missing = [name for name in required if not (root / name).is_file()]
     checks.append(_result("deployment-files", "pass" if not missing else "fail", "complete" if not missing else "missing: " + ", ".join(missing)))

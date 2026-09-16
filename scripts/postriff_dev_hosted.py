@@ -1,6 +1,6 @@
 """LOCAL DEV HARNESS: run the real hosted PostRiff code on a disposable PostgreSQL.
 
-What is real: migrations 001–007, HostedWorkspaceService, permissions, Ideas runtime,
+What is real: migrations 001–008, HostedWorkspaceService, permissions, Ideas runtime,
 source policy, OAuth transactions + encrypted custody, worker, ledger, audience.
 What is simulated (and labelled 'dev-synthetic' in the UI banner): identity (no Supabase;
 `Bearer dev:<uuid>`), the three providers (a local consent page + canned responses), and

@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /auth
+Disallow: /app
+Disallow: /api
+Disallow: /monitoring
