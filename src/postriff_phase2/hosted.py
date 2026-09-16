@@ -217,7 +217,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -227,6 +227,13 @@ class HostedWorkspaceService:
         self.clock = clock
         self.identity = identity
         self.ideas = IdeasService(self.repository, self.commands, clock=clock)
+        if ideas_runtime is not None:
+            # A paid server-side route sits next to the deterministic preview when the service knows
+            # several runtimes; a single-runtime service uses it as the only route.
+            if hasattr(self.ideas, "runtimes"):
+                self.ideas.runtimes.append(ideas_runtime)
+            else:
+                self.ideas.runtime = ideas_runtime
         from .oauth import CredentialVault, OAuthService
         from .billing import Billing, Ledger
         from .privacy import DataRequests

@@ -84,6 +84,26 @@ def client_label(environ):
     return label or "unknown"
 
 
+def ideas_runtime_from_environment(values):
+    """Mount the paid model route only with a gateway key (AI_GATEWAY_API_KEY); never by default.
+    POSTRIFF_MODEL_ID picks the default model; POSTRIFF_MODEL_IDS (comma list) the selectable set;
+    POSTRIFF_MODEL_PRICES a JSON object {model: [inputUsdPerMTok, outputUsdPerMTok]} for estimates."""
+    key = values.get("AI_GATEWAY_API_KEY")
+    if not key:
+        return None
+    from .model_runtime import DEFAULT_MODEL, ServerModelRuntime
+    model = values.get("POSTRIFF_MODEL_ID") or DEFAULT_MODEL
+    models = [m.strip() for m in (values.get("POSTRIFF_MODEL_IDS") or "").split(",") if m.strip()] or [model]
+    prices = None
+    if values.get("POSTRIFF_MODEL_PRICES"):
+        try:
+            prices = {k: (float(v[0]), float(v[1])) for k, v in json.loads(values["POSTRIFF_MODEL_PRICES"]).items()}
+        except (ValueError, TypeError, IndexError) as error:
+            raise ValueError("POSTRIFF_MODEL_PRICES must be a JSON object of model → [input, output] USD per million tokens.") from error
+    endpoint = values.get("AI_GATEWAY_ENDPOINT") or None
+    return ServerModelRuntime(key, model=model, models=models, prices=prices, **({"endpoint": endpoint} if endpoint else {}))
+
+
 def billing_from_environment(values):
     """Stripe mounts only with both secrets; otherwise billing is disabled (never the public-secret fixture).
     Email mounts with Resend when RESEND_API_KEY is set, which then requires EMAIL_FROM and the public base URL."""
@@ -117,7 +137,7 @@ def runtime_from_environment(environ=None):
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer)
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, ideas_runtime=ideas_runtime_from_environment(values))
     social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
     worker = PostgresWorker(database, social=social)
     return service, worker, {"projectUrl": project_url, "publishableKey": publishable, "provider": "supabase", "flow": "pkce"}
@@ -272,8 +292,15 @@ class HostedApplication:
                 self._runtime()
                 return self._json(start_response, 200, self.public_auth)
             if path == "/api/ideas/models" and method == "GET":
-                runtime = FixtureAgentRuntime()
-                return self._json(start_response, 200, {"models": runtime.list_supported_models(), "reasoning": runtime.list_supported_reasoning()})
+                # Every route this deployment can write with (fixture, a local CLI where one is installed…).
+                try:
+                    model_catalog = getattr(self._runtime().ideas, "model_catalog", None)
+                except AlphaError:
+                    model_catalog = None
+                if model_catalog is None:
+                    runtime = FixtureAgentRuntime()
+                    return self._json(start_response, 200, {"models": runtime.list_supported_models(), "reasoning": runtime.list_supported_reasoning(), "agents": []})
+                return self._json(start_response, 200, model_catalog())
             if path == "/api/tools" and method == "GET":
                 return self._json(start_response, 200, {"tools": tools.catalog(), "isolation": tools.isolation_status()})
             oauth_parts = path.strip("/").split("/")
@@ -388,6 +415,8 @@ class HostedApplication:
                     return self._json(start_response, 200, service.members(workspace_id, token))
                 if len(parts) == 4 and parts[3] == "audit" and method == "GET":
                     return self._json(start_response, 200, service.audit_events(workspace_id, token))
+                if len(parts) == 4 and parts[3] == "memory" and method == "GET":
+                    return self._json(start_response, 200, service.ideas.memory_files(workspace_id, token))
                 if len(parts) == 4 and parts[3] == "invitations" and method == "GET":
                     return self._json(start_response, 200, service.invitations(workspace_id, token))
                 if len(parts) == 4 and parts[3] == "invitations" and method == "POST":
