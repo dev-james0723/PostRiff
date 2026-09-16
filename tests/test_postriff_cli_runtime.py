@@ -178,6 +178,22 @@ class ClaudeCliRuntimeTest(unittest.TestCase):
         self.assertIn("no Threads · English candidate", self.run_to_end(self.runtime(mode="missing")).failed)
         self.assertIn("no structured candidate", self.run_to_end(self.runtime(mode="noschema")).failed)
 
+    def test_fact_ids_cited_by_the_model_resolve_to_their_source(self):
+        req = request()
+        req["context"]["sources"] = [{"id": "src-a", "policy": "quote", "candidateOnly": False, "facts": [{"id": "fact-a-1", "text": "x", "sourceId": "src-a", "locator": ""}], "hash": "h"}]
+        structured = {"variants": [
+            {"platform": "LinkedIn", "language": "English", "text": "T", "sourceIds": ["fact-a-1", "src-a", "src-nope"], "unknowns": [], "notes": ""},
+            {"platform": "Threads", "language": "English", "text": "T", "sourceIds": [], "unknowns": [], "notes": ""}], "warnings": []}
+        artifact = normalize_output(structured, req)
+        self.assertEqual(artifact["variants"][0]["sourceIds"], ["src-a"], "a cited fact resolves to its source, once")
+        self.assertTrue(any("src-nope" in w for w in artifact["variants"][0]["warnings"]), "an id that matches nothing is reported, not silently dropped")
+        self.assertEqual(artifact["variants"][1]["sourceIds"], [])
+
+    def test_system_prompt_keeps_voice_traits_from_inventing(self):
+        system, _ = self.runtime().compose(request())
+        self.assertIn("never a\n  licence to supply it", system)
+        self.assertIn("id of each approved source you used", system)
+
     def test_auth_failure_is_classified_with_guidance(self):
         sink = self.run_to_end(self.runtime(mode="auth"))
         self.assertIn("claude auth login", sink.failed)

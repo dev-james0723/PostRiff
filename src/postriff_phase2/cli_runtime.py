@@ -58,7 +58,12 @@ facts and the idea they supplied. Rules that never bend:
 - Draft only from the approved facts and the idea. Never invent first-person experience, results,
   credentials, numbers, names or quotes. Put anything you needed but did not have into `unknowns`
   and keep it out of the text.
-- Reference facts by their `sourceIds`; list nothing you did not use.
+- In `sourceIds`, list the id of each approved source you used (the source's own id, not the ids
+  of its facts); list nothing you did not use.
+- A voice trait in VOICE.md describes how to handle material the person supplied; it is never a
+  licence to supply it. If a trait calls for a detail, a habit, an admission or a physical
+  particular that is not in the facts or the idea, leave that move out and name what was missing
+  in `unknowns`.
 - Respect each destination's language and character limit. Adapt the framing and rhythm to the
   platform instead of translating one text mechanically.
 - Follow VOICE.md and BOUNDARIES.md. No hashtags, emojis, exclamation marks or rhetorical questions
@@ -96,6 +101,8 @@ def normalize_output(structured, request, author="Claude Code"):
     if not isinstance(structured, dict) or not isinstance(structured.get("variants"), list):
         raise AlphaError("Claude Code returned no structured candidate.", 502)
     allowed = {source["id"] for source in request["context"]["sources"]}
+    # Models cite the fact ids they were shown as often as the source ids; both resolve to the source.
+    fact_sources = {fact["id"]: source["id"] for source in request["context"]["sources"] for fact in source.get("facts", []) if isinstance(fact, dict) and fact.get("id")}
     warnings_all = [str(w)[:300] for w in structured.get("warnings", []) if isinstance(w, str)][:10]
     variants = []
     for destination in request["destinations"]:
@@ -111,9 +118,20 @@ def normalize_output(structured, request, author="Claude Code"):
         if isinstance(notes, str) and notes.strip():
             warnings.append(notes.strip()[:300])
         warnings.extend(warnings_all)
+        source_ids, unknown_ids = [], []
+        for cited in match.get("sourceIds", []):
+            if not isinstance(cited, str):
+                continue
+            resolved = cited if cited in allowed else fact_sources.get(cited)
+            if resolved is None:
+                unknown_ids.append(cited[:60])
+            elif resolved not in source_ids:
+                source_ids.append(resolved)
+        if unknown_ids:
+            warnings.append(f"Cited ids that match no approved source were dropped: {', '.join(unknown_ids[:5])}. Check the claims they supported.")
         variants.append({
             "platform": destination["platform"], "language": destination["language"], "text": text,
-            "sourceIds": [s for s in match.get("sourceIds", []) if isinstance(s, str) and s in allowed],
+            "sourceIds": source_ids,
             "unknowns": [str(u)[:300] for u in match.get("unknowns", []) if isinstance(u, str) and u.strip()][:10],
             "warnings": warnings, "candidateOnly": bool(request["context"].get("candidateOnly")),
         })

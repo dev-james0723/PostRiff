@@ -570,6 +570,7 @@ Phase 2 嘅第一個 slice：**Claude Code 變成一條真正嘅寫稿 route**�
 - Fake `claude`（`POSTRIFF_CLAUDE_BIN`）：Home 揀 `Claude Code · sonnet` → 送出 → conversation 顯示 streaming → 5 秒完成 → variant 帶「Written by Claude Code」warning → plan card → Models 頁見 agent card。
 - 真 `claude`（James 部 Mac）：`claude auth status` 話 loggedIn，但 `-p` run 回 401「OAuth access token has expired」→ UI 顯示「Claude Code is not signed in… Run `claude auth login`」。**要 James 喺 Terminal 跑一次 `claude auth login` 先有真 run。**
 - `claude auth status` 有存過 credentials 就話 loggedIn，過期 token 都係咁講；所以（Phase 3 後補）run 一次被拒 401 之後，runtime 會將 probe 標成 `expired`，picker 同 Models 頁即刻轉「Sign-in required」，直至 rescan 或者下一次成功 run。Codex route 同一機制（`codex login`）。
+- 另一 session 用真 Claude Code 跑咗 19 次（38 篇）之後發現兩個 prompt / normaliser 缺陷，已修：(1) model 成日引用 fact id（`fact-…`）而唔係 source id，`normalize_output` 以前靜靜丟走 → 而家 fact id 會 resolve 去所屬 source，對唔上嘅 id 出 warning，prompt 改為「list the id of each approved source you used」；(2) 豐富嘅 voice profile 會令 model 為咗演出「admits what still goes wrong」之類嘅 trait 而作出細節 → SYSTEM_PROMPT 加規則「trait 只係處理你供應嘅材料嘅方法，唔係供應材料嘅牌照；冇嘅就留空並寫入 unknowns」，VOICE.md 嘅 Observations 標題下同樣註明。
 
 **同 §11 Phase 2 嘅差異**
 - Companion transport（CLI probe 上報、claim、device events、memory sync 到 `~/PostRiff/<ws>/memory/`）未做——而家 CLI 喺 API process 內 spawn；hosted（Vercel）冇 CLI 所以自動唔列出呢條 route。
