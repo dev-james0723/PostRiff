@@ -284,7 +284,7 @@ B2（全部放 state JSON，好似 alpha `preferences`）：簡單，但背景�
 
 - **Key** = `(type, ruleKey, scope, polarity)`；`other` 用正規化後嘅 statement hash。
 - **支持分數** `s = Σ weight × 0.5^(age_days / 45)`；反證（相反方向嘅 edit、原文照批但包含被禁嘅嘢）用負權重。
-- **提議條件：** 明確指示即時提議；其他要 `s ≥ 3`、≥ 2 篇唔同 draft、反證比例 ≤ 25%。
+- **提議條件：** 明確指示即時提議；其他要 `s ≥ 2.5`（三次新鮮嘅 edit 係 3.0，等一日就跌到 2.95，所以門檻放喺 2.5：三次喺約 12 日內、或者四次喺一個月內先過，兩次永遠唔過）、≥ 2 篇唔同 draft、反證比例 ≤ 25%。
 - **Scope 推廣：** 同一條 rule 喺 ≥ 2 個 platform 成立 → 提議上一層（language 或者 all channels）。CIPHER 用「最近 k 個 context」
   聚合偏好；我哋用明確 scope 做同一件事，user 睇得明點解一條規則會用喺呢篇。
 - **衝突：** 同一 scope 已有相反嘅 active item → 出「update」proposal（顯示 diff），唔係再加一條；同更闊 scope 衝突 → 出窄 scope 例外。
@@ -643,6 +643,21 @@ James 拍板決定 A–D（同 §10 全部建議答案）之後即日落實，�
 - **Tests：** consolidation pure tests（門檻、衝突 → update、scope 推廣、抑制、每日上限）；fake `claude` / `codex` extraction
   （schema 錯 → 成批作廢）；cloud 冇同意 → fake transport 收到 0 個 request；replay gate（§8.2）。
 - **完成定義：** Synthetic persona replay 過 gate；James 自己 workspace dogfood 兩星期，accept 率 ≥ 50%，invented-claim rate 冇升。
+
+### Phase C 實作記錄（2026-09-16）— C1 deterministic
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| 抽取（pure） | `src/postriff_phase2/learning_extract.py` | `observations(events)`：`draft.edited` 前後特徵 → hashtag / emoji / 感嘆號 / CTA / 列點 / 開頭問句 / 開頭縮短 / 整體縮短（length target）/ 段落變短；`draft.rejected` too_long → length；原文照批（editCount 0）→ 反證。`consolidate()`：每個 observation 同時計入三個層級（platform+language、language、全部），45 日半衰期，門檻 2.5、≥ 2 篇 draft、反證 ≤ 25%；揀最闊而且跨 ≥ 2 語言（或 ≥ 2 platform）嘅層級提一次，否則逐個 platform；dismiss 90 日靜音；已 active 同一句唔重提；反方向 active → `replaces`（update）；user 反過嚟改 ≥ 2.5 → `op: retire`；最近 10 個決定 accept < 30% → 門檻加倍；length target 用中位數，中文寫 characters |
+| Hosted cron | `src/postriff_phase2/learning_service.py` | `sweep()` 加 `extract()`：due workspace（≥ 5 條未處理 event，或最舊嗰條等咗一日）；`learning.enabled = false` → 只標 consumed；非 owner 嘅 event 唔計除非 `teamEdits`；每日最多 1 個自動 proposal（duplicate 唔佔額）；唔寫 workspace row（開住嘅 tab 冇 409）；event 標 `consumed_by` |
+| Decide | `learning_service.py`、`learning.py` | proposal 帶 `op` / `replaces`：remember 一個 `replaces` 嘅 proposal 會喺同一個 style revision 退休舊 item；`op: retire` 嘅 proposal remember 即退休（唔加新 item）；version row 跟住改 |
+| Local | `src/postriff_phase2/store.py` | `mutate()` 記完 event 之後 inline 跑同一套抽取，proposal 入 `state.preferences`（founder alpha 嘅卡照用） |
+| Tests | `test_postriff_learning_extract.py`（9：規則對應、反證、拒絕理由、門檻 / 篇數 / 衰減 / dismiss / accept 率、跨 platform → language、跨語言 → 全部、length 中位數、衝突 → update、反向 → retire）；`test_postriff_phase2_learning.py` +1（三個 channel 加 CTA → 一個 language-level proposal → remember → VOICE.md）；`tests/phase2/postgres_learning_extract.py`（4 checks：cron 抽取、每日上限、team edits gating、決定路徑） | 全過：unit 368；PG 11 套 |
+
+**同計劃嘅差異**
+- C2（細 model 抽取）下一個 commit 做：`HostedLearning(extractor=…)` 已預留位，同意條件（memory egress + `cloudExtraction` + source cloud consent）喺嗰度執行。
+- 門檻由 3 改做 2.5（見 §5.3 註）。
+- Fixture 嘅 Instagram draft 本身有 hashtag 同 emoji、有 facts 嘅 draft 有 "• " bullet，所以 test 用 CTA 同段落做訊號。
 
 ### Phase D — 表現佐證、退休、推廣
 

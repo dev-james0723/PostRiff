@@ -23,6 +23,20 @@ DAILY_LIMITS = {"Instagram": 100, "Threads": 250, "LinkedIn": 150}
 FEEDBACK_REASONS = ("wrong_facts", "not_my_voice", "too_long", "too_short", "wrong_angle", "wrong_language", "other")
 
 
+def signals_epoch(value):
+    """ISO or epoch → epoch seconds; 0 when absent (used for the local learning windows)."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value:
+        try:
+            from datetime import datetime, timezone
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
 def find(items, key):
     found = next((x for x in items if x["id"] == key), None)
     if found is None:
@@ -111,8 +125,37 @@ class Phase2Store(Store):
             if action == "p2_delete_account":
                 return {"revision": row["revision"]+1, "state": None, "deleted": True}
             self._record_events(db, wid, signals.derive_events(before, s, device["user_id"], self.clock(), action, payload))
+            self._learn(db, wid, s)
             db.execute("UPDATE workspaces SET revision=?,state=? WHERE id=?", (row["revision"]+1, json.dumps(s), wid))
             return self._present(s, row["revision"]+1)
+
+    def _learn(self, db, wid, s):
+        """Local extraction (design §5.2 C1) inline: once five events wait, or one has waited a day, the
+        deterministic rules over the last 90 days become proposals in this workspace's own list."""
+        from . import learning_extract as extract
+        now = self.clock()
+        if (s.get("learning") or {}).get("enabled") is False:
+            return
+        pending = db.execute("SELECT count(*), min(created_at) FROM learning_events WHERE workspace_id=? AND consumed_by IS NULL", (wid,)).fetchone()
+        if not pending[0] or (pending[0] < 5 and pending[1] > now - 86400):
+            return
+        rows = db.execute("SELECT id, body FROM learning_events WHERE workspace_id=? AND created_at > ? ORDER BY created_at, rowid", (wid, now - extract.WINDOW_DAYS * 86400)).fetchall()
+        events = [{**json.loads(r["body"]), "id": r["id"]} for r in rows]
+        support, counter = extract.observations(events)
+        proposals = s.get("preferences") or []
+        dismissed = {p.get("scopeKey") for p in proposals if p.get("status") == "rejected" and signals_epoch(p.get("decidedAt")) > now - 90 * 86400}
+        decisions = [p.get("status") for p in sorted(proposals, key=lambda p: p.get("decidedAt") or "", reverse=True) if p.get("decidedAt")]
+        recent = {"remembered": "remembered", "post-only": "post_only", "rejected": "dismissed"}
+        budget = 1 - sum(1 for p in proposals if p.get("source") in ("deterministic", "model") and signals_epoch(p.get("createdAt")) > now - 86400)
+        for candidate in extract.consolidate(support, counter, s, now, dismissed, [recent.get(d, d) for d in decisions]):
+            if budget <= 0:
+                break
+            try:
+                if learning.propose(s, candidate, now) is not None:
+                    budget -= 1
+            except ValueError:
+                continue
+        db.execute("UPDATE learning_events SET consumed_by=? WHERE workspace_id=? AND consumed_by IS NULL AND created_at <= ?", (uid(), wid, now))
 
     def _record_events(self, db, wid, events):
         """Learning signals for this workspace, kept 180 days (learning_signals: ids and numbers only)."""

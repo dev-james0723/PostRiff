@@ -208,6 +208,30 @@ class LearningOnPhase2Store(unittest.TestCase):
         self.j.act("variant_edit", variantId=t["id"], variantRevision=t["revision"], text="Edited while learning is off.")
         self.assertEqual(len(self.store.learning_events(self.j.id, self.j.token)), 6, "learning off means nothing is captured")
 
+    def test_three_edits_that_add_a_closing_cta_become_one_proposal_the_person_can_remember(self):
+        self.j.setup()
+        for platform in ("LinkedIn", "Threads", "Instagram"):
+            self.j.act("generate", platform=platform, language="English")
+            v = self.variant(platform)
+            self.j.act("variant_edit", variantId=v["id"], variantRevision=v["revision"], text=v["text"] + "\n\nDrop a comment below if this helped.")
+        self.assertEqual(self.j.state["preferences"], [], "three events wait; nothing is proposed before the batch is due")
+        v = self.variant("LinkedIn")
+        self.j.act("variant_edit", variantId=v["id"], variantRevision=v["revision"], text=v["text"] + " (a small fix)")
+        self.assertEqual(self.j.state["preferences"], [], "four events still wait")
+        v = self.variant("LinkedIn")
+        self.j.act("variant_edit", variantId=v["id"], variantRevision=v["revision"], text=v["text"] + " (and another)")
+        proposals = [p for p in self.j.state["preferences"] if p["status"] == "proposed"]
+        self.assertEqual(len(proposals), 1)
+        p = proposals[0]
+        self.assertEqual((p["ruleKey"], p["polarity"], p["statement"], p["scope"], p["source"]), ("closing.cta", "do", "End with a call to action.", {"platform": None, "language": "English", "contentTypeId": None}, "deterministic"))
+        self.assertEqual(len(p["evidence"]), 3)
+        self.assertIn("3 of your drafts", p["why"])
+        self.assertTrue(all(e["consumedBy"] for e in self.store.learning_events(self.j.id, self.j.token)), "the batch marked the events seen")
+        self.j.act("preference", preferenceId=p["id"], decision="remember")
+        voice = next(f["body"] for f in memory.render_files(self.j.state) if f["name"] == "VOICE.md")
+        self.assertIn("- [All channels · English] End with a call to action. — from 3 edits", voice)
+        self.assertEqual(self.j.state["speaker"]["activeRevision"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

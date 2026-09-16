@@ -126,6 +126,8 @@ def normalize_proposal(raw):
     p["source"] = p.get("source") if p.get("source") in SOURCES else "legacy"
     p["applyWhen"] = p.get("applyWhen") if isinstance(p.get("applyWhen"), str) else ""
     p["evidence"] = [e for e in (p.get("evidence") or []) if isinstance(e, dict)]
+    p["op"] = p.get("op") if p.get("op") in ("add", "update", "retire") else "add"
+    p["replaces"] = p.get("replaces") if isinstance(p.get("replaces"), str) else None
     return p
 
 
@@ -224,6 +226,7 @@ def propose(state, proposal, now=None):
     created = _moment(now)
     record = {"id": p.get("id") or uuid.uuid4().hex, "type": p["type"], "ruleKey": p["ruleKey"], "polarity": p["polarity"], "scope": p["scope"],
               "scopeKey": key, "statement": p["statement"], "applyWhen": p["applyWhen"], "params": p["params"], "source": p["source"],
+              "op": p["op"], "replaces": p["replaces"],
               "evidence": p["evidence"], "why": " ".join(str(p.get("why") or "").split())[:240], "label": p.get("label") or p["statement"],
               "variantId": p.get("variantId"), "platform": p["scope"]["platform"], "language": p["scope"]["language"],
               "status": "proposed", "createdAt": created.isoformat(), "expiresAt": (created + PROPOSAL_TTL).isoformat()}
@@ -249,21 +252,30 @@ def remember(state, proposal, actor=None, now=None):
         evidence_state = "observed_in_approved_example"
         summary = f"from {len(p['evidence'])} edits" if p["evidence"] else "from your edits"
     item = _item(p, actor, _iso(now), evidence_state, summary)
+    if p["replaces"]:
+        # An update or a conflict: the item this one supersedes retires in the same style revision.
+        _retire(learning, p["replaces"], now, "replaced")
     _activate(learning, item)
     return item
 
 
-def retire(state, item_id, now=None, reason="undone"):
-    """Retire an active or paused item; it stays in `retired` for the record and for undo."""
-    learning = ensure(state, now)
+def _retire(learning, item_id, now, reason):
     retired = [item for item in learning["active"] if item["id"] == item_id and item["status"] in LISTED]
     for item in retired:
         item.update({"status": "retired", "validTo": _iso(now), "retiredReason": reason})
         learning["retired"].append(item)
     if retired:
         learning["active"] = [x for x in learning["active"] if x["status"] in LISTED]
-        learning["revision"] += 1
     return bool(retired)
+
+
+def retire(state, item_id, now=None, reason="undone"):
+    """Retire an active or paused item; it stays in `retired` for the record and for undo."""
+    learning = ensure(state, now)
+    if _retire(learning, item_id, now, reason):
+        learning["revision"] += 1
+        return True
+    return False
 
 
 MAX_PROMPT_ITEMS = 12

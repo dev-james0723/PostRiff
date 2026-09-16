@@ -9,6 +9,7 @@ command that caused it still succeeds and the cron result shows that learning is
 from __future__ import annotations
 
 import json
+import time
 import uuid
 
 from postriff_alpha import learning
@@ -134,6 +135,42 @@ def suppressed(cur, workspace_id, scope_key, now):
     return cur.fetchone() is not None
 
 
+def dismissed_keys(cur, workspace_id, now):
+    cur.execute("SELECT DISTINCT scope_key FROM public.pr_memory_proposals WHERE workspace_id=%s AND status='dismissed' AND decided_at > to_timestamp(%s)", (workspace_id, now - SUPPRESS_SECONDS))
+    return {values[0] for values in cur.fetchall()}
+
+
+def recent_decisions(cur, workspace_id, limit=10):
+    cur.execute("SELECT status FROM public.pr_memory_proposals WHERE workspace_id=%s AND decided_at IS NOT NULL ORDER BY decided_at DESC LIMIT %s", (workspace_id, limit))
+    return [values[0] for values in cur.fetchall()]
+
+
+def automatic_proposals_since(cur, workspace_id, since):
+    cur.execute("SELECT count(*) FROM public.pr_memory_proposals WHERE workspace_id=%s AND source IN ('deterministic','model','performance') AND created_at > to_timestamp(%s)", (workspace_id, since))
+    return cur.fetchone()[0]
+
+
+def owners(cur, workspace_id):
+    cur.execute("SELECT user_id::text FROM public.pr_memberships WHERE workspace_id=%s AND role='owner' AND status='active'", (workspace_id,))
+    return {values[0] for values in cur.fetchall()}
+
+
+def workspaces_due(cur, now, min_events=5, max_age_seconds=86400, limit=20):
+    """Workspaces with enough unconsumed events, or one that has waited a day (design §5.2)."""
+    cur.execute("SELECT workspace_id::text, count(*), extract(epoch from min(created_at)) FROM public.pr_learning_events WHERE consumed_by IS NULL GROUP BY workspace_id HAVING count(*) >= %s OR min(created_at) < to_timestamp(%s) ORDER BY min(created_at) LIMIT %s", (min_events, now - max_age_seconds, limit))
+    return [values[0] for values in cur.fetchall()]
+
+
+def events_window(cur, workspace_id, now, days):
+    cur.execute(f"SELECT {EVENT_COLUMNS} FROM public.pr_learning_events WHERE workspace_id=%s AND created_at > to_timestamp(%s) ORDER BY seq", (workspace_id, now - days * 86400))
+    return [_row(values) for values in cur.fetchall()]
+
+
+def mark_consumed(cur, workspace_id, batch_id, before):
+    cur.execute("UPDATE public.pr_learning_events SET consumed_by=%s WHERE workspace_id=%s AND consumed_by IS NULL AND created_at <= to_timestamp(%s)", (batch_id, workspace_id, before))
+    return cur.rowcount
+
+
 def create_proposal(cur, workspace_id, state, proposal, now, evidence=None):
     """Server code adds a pending proposal (a chat instruction now, extraction later). Returns the row, or
     None when there is nothing new to ask: the same preference is active, waiting, recently dismissed, or
@@ -151,10 +188,14 @@ def create_proposal(cur, workspace_id, state, proposal, now, evidence=None):
     pending = pending_proposals(cur, workspace_id)
     if len(pending) >= learning.MAX_PENDING or any(row["scopeKey"] == key for row in pending):
         return None
+    op = p["op"] if p["op"] == "retire" else ("update" if (current or p["replaces"]) else "add")
+    replaces = p["replaces"] or (current["id"] if current else None)
+    if op == "retire" and (not replaces or replaces not in {item["id"] for item in learning.active_items(state)}):
+        return None
     body = {k: p[k] for k in ("type", "ruleKey", "polarity", "scope", "statement", "applyWhen", "params", "source")}
-    body.update({"scopeKey": key, "why": " ".join(str(p.get("why") or "").split())[:240], "evidence": evidence or p.get("evidence") or [], "variantId": p.get("variantId"), "replaces": current["id"] if current else None})
+    body.update({"scopeKey": key, "op": op, "why": " ".join(str(p.get("why") or "").split())[:240], "evidence": evidence or p.get("evidence") or [], "variantId": p.get("variantId"), "replaces": replaces, "support": p.get("support")})
     cur.execute("INSERT INTO public.pr_memory_proposals(workspace_id,scope_key,op,source,body,status,created_at,expires_at) VALUES(%s,%s,%s,%s,%s::jsonb,'pending',to_timestamp(%s),to_timestamp(%s)) RETURNING id::text",
-                (workspace_id, key, "update" if current else "add", p["source"], json.dumps(body, ensure_ascii=False), now, now + learning.PROPOSAL_TTL.total_seconds()))
+                (workspace_id, key, op, p["source"], json.dumps(body, ensure_ascii=False), now, now + learning.PROPOSAL_TTL.total_seconds()))
     return load_proposal(cur, workspace_id, cur.fetchone()[0])
 
 
@@ -165,10 +206,12 @@ def proposal_view(row):
 
 class HostedLearning:
     """Bound to a service: the repository effect, the worker hook, the cron sweep, proposals and decisions."""
-    def __init__(self, connection_factory, clock):
+    def __init__(self, connection_factory, clock, extractor=None):
         self.connection_factory = connection_factory
         self.clock = clock
         self.failures = []
+        # A model extractor (design §5.2 C2) adds observations from the drafts' text; None keeps extraction deterministic.
+        self.extractor = extractor
 
     def capture(self, cur, workspace_id, before, after, principal):
         """Repository effect (hosted.PostgresWorkspaceRepository.command): the events one command implies.
@@ -212,7 +255,11 @@ class HostedLearning:
 
         def apply(state, principal):
             learning.ensure(state, now)
-            if decision in ("remember", "edit"):
+            if decision in ("remember", "edit") and body.get("op") == "retire":
+                # The person agreed to stop a preference they had been editing against.
+                if not learning.retire(state, body.get("replaces"), now, "retired"):
+                    raise AlphaError("That learned preference is no longer active.", 409)
+            elif decision in ("remember", "edit"):
                 try:
                     result["item"] = learning.remember(state, {**body, "id": proposal["id"], "source": body.get("source", "chat")}, actor=principal, now=now)
                 except ValueError as error:
@@ -234,9 +281,12 @@ class HostedLearning:
                 raise AlphaError("This proposal was already decided.", 409)
             if decision in ("remember", "edit"):
                 cur.execute("UPDATE public.pr_memory_versions SET status='retired',valid_to=to_timestamp(%s) WHERE workspace_id=%s AND scope_key=%s AND valid_to IS NULL", (now, workspace_id, proposal["scopeKey"]))
-                cur.execute("INSERT INTO public.pr_memory_versions(workspace_id,scope_key,body,status,proposal_id,confirmed_by,valid_from) VALUES(%s,%s,%s::jsonb,'active',%s,%s,to_timestamp(%s)) RETURNING id::text",
-                            (workspace_id, proposal["scopeKey"], json.dumps(result["item"], ensure_ascii=False), proposal["id"], principal, now))
-                result["versionId"] = cur.fetchone()[0]
+                if body.get("replaces"):
+                    cur.execute("UPDATE public.pr_memory_versions SET status='retired',valid_to=to_timestamp(%s) WHERE workspace_id=%s AND proposal_id::text=%s AND valid_to IS NULL", (now, workspace_id, str(body["replaces"])))
+                if body.get("op") != "retire":
+                    cur.execute("INSERT INTO public.pr_memory_versions(workspace_id,scope_key,body,status,proposal_id,confirmed_by,valid_from) VALUES(%s,%s,%s::jsonb,'active',%s,%s,to_timestamp(%s)) RETURNING id::text",
+                                (workspace_id, proposal["scopeKey"], json.dumps(result["item"], ensure_ascii=False), proposal["id"], principal, now))
+                    result["versionId"] = cur.fetchone()[0]
             event = {"kind": "proposal.decided", "actor": principal, "at": now, "subject": {"proposalId": proposal["id"], "decision": DECISIONS[decision], "scopeKey": proposal["scopeKey"], "ruleKey": body.get("ruleKey"), "source": body.get("source")},
                      "scope": {**(body.get("scope") or {}), "formatId": None}, "features": {}, "voiceRevision": (state.get("speaker") or {}).get("activeRevision"), "styleRevision": learning.revision(state)}
             guarded_insert(cur, workspace_id, [event], self.failures)
@@ -272,9 +322,62 @@ class HostedLearning:
         with repository.transaction(token, workspace_id) as (cur, _, _):
             return {"events": list_events(cur, workspace_id, limit)}
 
-    def sweep(self):
+    def sweep(self, max_seconds=15):
+        """Cron entry: retention and expiry, then extraction for the workspaces that are due."""
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 result = sweep(cur, self.clock())
         result["captureFailures"] = len(self.failures)
+        result["extraction"] = self.extract(max_seconds=max_seconds)
         return result
+
+    def extract(self, max_seconds=15, max_workspaces=20):
+        """Design §5.2–§5.3: for each workspace that is due, read the last 90 days of events, consolidate
+        deterministic observations (and a model extractor's, when one is configured and allowed) into
+        proposals, and mark the events seen. Never touches workspace state, so open tabs see no 409."""
+        from . import learning_extract as extract
+        started, now = time.monotonic(), self.clock()
+        stats = {"workspaces": 0, "proposed": 0, "skipped": 0, "modelRuns": 0}
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                due = workspaces_due(cur, now, limit=max_workspaces)
+        for workspace_id in due:
+            if time.monotonic() - started > max_seconds:
+                break
+            stats["workspaces"] += 1
+            batch = uuid.uuid4().hex
+            with self.connection_factory() as db:
+                with db.cursor() as cur:
+                    cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
+                    row = cur.fetchone()
+                    if row is None:
+                        continue
+                    state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                    settings = state.get("learning") if isinstance(state.get("learning"), dict) else {}
+                    if settings.get("enabled") is False:
+                        mark_consumed(cur, workspace_id, batch, now)
+                        stats["skipped"] += 1
+                        continue
+                    allowed_actors = None if settings.get("teamEdits") else owners(cur, workspace_id)
+                    events = [e for e in events_window(cur, workspace_id, now, extract.WINDOW_DAYS) if allowed_actors is None or e["actor"] is None or e["actor"] in allowed_actors]
+                    support, counter = extract.observations(events)
+                    if self.extractor is not None and settings.get("cloudExtraction") or (self.extractor is not None and getattr(self.extractor, "local", False)):
+                        try:
+                            support.extend(self.extractor.observe(state, events, now))
+                            stats["modelRuns"] += 1
+                        except Exception:  # noqa: BLE001 - the deterministic half still proposes
+                            stats["modelFailures"] = stats.get("modelFailures", 0) + 1
+                    candidates = extract.consolidate(support, counter, state, now, dismissed_keys(cur, workspace_id, now), recent_decisions(cur, workspace_id))
+                    budget = max(0, 1 - automatic_proposals_since(cur, workspace_id, now - 86400))
+                    for candidate in candidates:
+                        if budget <= 0:
+                            break
+                        try:
+                            created = create_proposal(cur, workspace_id, state, candidate, now)
+                        except ValueError:
+                            created = None
+                        if created is not None:
+                            stats["proposed"] += 1
+                            budget -= 1
+                    mark_consumed(cur, workspace_id, batch, now)
+        return stats

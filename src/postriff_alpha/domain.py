@@ -410,7 +410,10 @@ class Store:
             # text and voice bound into existing approvals stay valid (build_manifest, current()).
             if decision == "remember":
                 try:
-                    learning.remember(s, preference, now=now())
+                    if preference.get("op") == "retire":
+                        learning.retire(s, preference.get("replaces"), now(), "retired")
+                    else:
+                        learning.remember(s, preference, now=now())
                 except ValueError as e:
                     raise AlphaError(str(e)) from e
             elif decision in ("undo", "delete"):
