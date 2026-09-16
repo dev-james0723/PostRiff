@@ -1,0 +1,32 @@
+--- scripts/verify_project.py
++++ scripts/verify_project.py
+@@ -776,7 +776,28 @@
+         if backup_hash != old_orchestrator_hash:
+             fail("Orchestrator update backup bytes drifted")
+         if installed_orchestrator_hash != candidate_orchestrator_hash:
+-            fail("Installed orchestrator does not match approved candidate")
++            # The explicitly requested Zhihu extension is an exact two-file overlay.
++            # Preserve the historical candidate/backup; reject every other drift.
++            extension = ROOT / "artifacts/zhihu-browser-integration/installed-receipt.json"
++            if not extension.is_file():
++                fail("Installed orchestrator does not match approved candidate")
++            receipt = json.loads(extension.read_text())
++            if receipt.get("state") != "installed_scoped_checksum_verified":
++                fail("Zhihu extension lacks a verified installation receipt")
++            expected = {item["path"]: item for item in canonical_file_inventory(ORCHESTRATOR_UPDATE_PACKAGE)}
++            rows = [row for row in receipt["files"] if Path(row["target"]).parent == installed_orchestrator
++                    or Path(row["target"]).parent == installed_orchestrator / "references"]
++            if {str(Path(row["target"]).relative_to(installed_orchestrator)) for row in rows} != {"SKILL.md", "references/zhihu-browser.md"}:
++                fail("Zhihu extension scope drifted")
++            for row in rows:
++                relative = str(Path(row["target"]).relative_to(installed_orchestrator))
++                prior = expected.get(relative)
++                if row["before"] != (prior["sha256"].removeprefix("sha256:") if prior else None):
++                    fail("Zhihu extension baseline drifted")
++                data = (installed_orchestrator / relative).read_bytes()
++                expected[relative] = {"path": relative, "sha256": "sha256:" + row["after"], "size": len(data)}
++            if canonical_file_inventory(installed_orchestrator) != sorted(expected.values(), key=lambda item: item["path"]):
++                fail("Installed orchestrator differs from exact approved Zhihu overlay")
+         if update_receipt.get("external_account_actions") != []:
+             fail("Orchestrator update receipt reports external account actions")
+         _validate_skill_package(installed_orchestrator)

@@ -1,0 +1,72 @@
+{
+  "checkedAt": "2026-09-14T21:43:00-04:00",
+  "execution": "hosted-preview-validated",
+  "deployment": {
+    "provider": "vercel",
+    "project": "postriff-phase2-private",
+    "team": "jamesau0723-6572s-projects",
+    "target": "preview",
+    "status": "READY",
+    "id": "dpl_3oFbMAJBfJBP7nfJrijADGonPtdX",
+    "url": "https://postriff-phase2-private-i09esnd9x-jamesau0723-6572s-projects.vercel.app",
+    "productionPromoted": false
+  },
+  "supabase": {
+    "project": "postriff-phase2-private",
+    "projectRef": "buoyhkbodnhzngaotoel",
+    "region": "us-east-1",
+    "status": "ACTIVE_HEALTHY",
+    "migrationApplied": true,
+    "tables": 13,
+    "forcedRlsTables": 13,
+    "privateBucket": "postriff-private"
+  },
+  "environment": {
+    "target": "preview-only",
+    "configuredNames": [
+      "POSTRIFF_SUPABASE_URL",
+      "POSTRIFF_SUPABASE_PUBLISHABLE_KEY",
+      "POSTRIFF_DATABASE_URL",
+      "POSTRIFF_SUPABASE_SECRET_KEY",
+      "CRON_SECRET"
+    ],
+    "secretValuesRecorded": false
+  },
+  "checks": {
+    "python": "pass: 102 tests",
+    "frontend": "pass: 70 tests",
+    "hostedBuild": "pass: TypeScript, Vite and Python service build",
+    "npmProductionAudit": "pass: 0 vulnerabilities",
+    "deploymentInspect": "pass: Preview Ready",
+    "apiHealth": "pass: 200 and configured true",
+    "authConfig": "pass: 200 with public Supabase PKCE configuration",
+    "spaDeepRoute": "pass: 200 with root application shell",
+    "unauthorizedCron": "pass: 401",
+    "syntheticHostedValidation": {
+      "status": "pass",
+      "users": 2,
+      "distinctWorkspaces": true,
+      "bootstrapTokenReflected": false,
+      "ownWorkspace": 200,
+      "crossWorkspace": 403,
+      "mutationRevisionAdvanced": true,
+      "privateMediaRead": 200,
+      "crossMedia": 403,
+      "privateMediaDeleted": true,
+      "workerExternalExecution": false
+    },
+    "cleanup": {
+      "databaseRowsRemoved": true,
+      "authUsersRemoved": 2,
+      "expectedAuthUsers": 2
+    }
+  },
+  "limitations": [
+    "Phase 0 remains incomplete at 0 of 5 full external interviews and customerValidated remains false",
+    "No production cron, custom domain, live OAuth, social transport, production promotion or billing was configured",
+    "Hosted recovery, session revocation and export were not exercised in this synthetic run",
+    "An initial interrupted Vercel source upload began before the final exclusion boundary; it created no deployment record, but retention of partial content-addressed upload chunks was not independently verified",
+    "Vercel Services is a beta platform capability",
+    "Vite reports one main JavaScript chunk above its 500 kB advisory threshold before gzip"
+  ]
+}

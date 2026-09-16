@@ -1,0 +1,358 @@
+--- a/src/james_au_social/studio_api.py
++++ b/src/james_au_social/studio_api.py
+@@ -191,8 +191,10 @@
+                 connection_broker.start()
+             if delivery_supervisor is not None:
+                 delivery_supervisor.start()
++            tiktok_publishing.start()
+             yield
+         finally:
++            tiktok_publishing.shutdown()
+             try:
+                 if delivery_supervisor is not None:
+                     delivery_supervisor.shutdown()
+@@ -322,6 +324,10 @@
+ 
+     from .studio_delivery_api import register_delivery_routes
+     register_delivery_routes(app, store, _body)
++
++    from .studio_tiktok_publish import register_tiktok_publishing
++    tiktok_publishing = register_tiktok_publishing(app, store, _body)
++    app.state.tiktok_publishing = tiktok_publishing
+ 
+     from .studio_setup import register_setup_routes
+     register_setup_routes(app, _body, connection_broker)
+--- a/studio/web/src/TikTokConnection.tsx
++++ b/studio/web/src/TikTokConnection.tsx
+@@ -1,5 +1,6 @@
+ import {useEffect,useState} from 'react';
+ import {connectionsApi,type TikTokConnection as State} from './connectionsApi';
++import TikTokPublishing from './TikTokPublishing';
+ 
+ export default function TikTokConnection(){
+  const [connection,setConnection]=useState<State|null>(null),[username,setUsername]=useState('');
+@@ -9,7 +10,7 @@
+  async function verify(){setBusy(true);setError('');try{setConnection(await connectionsApi.verifyTikTok());}catch(cause){setError(cause instanceof Error?cause.message:'Verification unavailable.');}finally{setBusy(false);}}
+  async function connect(event:React.SubmitEvent<HTMLFormElement>){event.preventDefault();if(!consent)return;setBusy(true);setError('');try{window.location.assign(await connectionsApi.prepareTikTok(username));}catch(cause){setError(cause instanceof Error?cause.message:'TikTok sign-in could not start.');setBusy(false);}}
+  const unresolved=connection?.state==='connection_unresolved';
+- return <section className="setup-panel" aria-label="TikTok account connection"><h3>Connect your TikTok identity</h3>
++ return <><TikTokPublishing/><details><summary>Optional official OAuth identity connection</summary><section className="setup-panel" aria-label="TikTok account connection"><h3>Connect your TikTok identity</h3>
+   <p>Connect one exact TikTok username. Read permissions: <code>user.info.basic</code> and <code>user.info.profile</code>. These identify your account and public profile; they do not allow uploading or publishing.</p>
+   {error&&<p role="alert" className="error-banner">{error}</p>}
+   {unresolved?<p role="alert">The previous authorization or refresh has an unresolved outcome. Reconcile it before starting another connection. Studio has not confirmed a connected identity.</p>:connection?.verifiedAt?<div className="callout"><strong>{connection.state==='connected_identity'?'Identity connected':'Verification required'}: @{connection.username}</strong><p>{connection.displayName}</p><p>{connection.state==='connected_identity'?'The OAuth account ID matched an independent TikTok User Info response and the selected username.':'A fresh TikTok identity check is required.'} Email ownership is not verified by this connection. Publishing remains disabled.</p><small>Last verified {connection.verifiedAt} · Access expires {connection.expiresAt}</small></div>:<>
+@@ -21,5 +22,5 @@
+     <button type="submit" className="button primary" disabled={!consent||!username.trim()}>Continue to TikTok</button>
+    </fieldset></form></>}
+   <button type="button" className="button" onClick={()=>void (connection?.verifiedAt&&!unresolved?verify():refresh())} disabled={busy}>{busy?'Checking…':'Check connection'}</button>
+- </section>;
++ </section></details></>;
+ }
+--- a/src/james_au_social/studio_tiktok_publish.py
++++ b/src/james_au_social/studio_tiktok_publish.py
+@@ -0,0 +1,225 @@
++"""Persistent owner-approved TikTok queue. No automatic retry after dispatch."""
++import fcntl
++import hashlib
++import json
++import os
++from pathlib import Path
++import shutil
++import sqlite3
++import subprocess
++import threading
++import time
++import uuid
++from datetime import datetime, timezone
++
++from .studio import StudioError
++
++
++def fail(message):
++    raise StudioError('tiktok_publish_rejected', message, 422)
++
++
++def digest(path):
++    with path.open('rb') as stream:
++        return hashlib.file_digest(stream, 'sha256').hexdigest()
++
++
++def plain_path(path):
++    path = Path(path).absolute()
++    if any(p.is_symlink() for p in (path, *path.parents)):
++        fail('Symbolic links are not accepted for publishing files.')
++    return path
++
++
++class TikTokPublishing:
++    def __init__(self, data_dir, project_root, transport=None, now=time.time):
++        self.root = plain_path(Path(data_dir) / 'tiktok-publishing')
++        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
++        self.root.chmod(0o700)
++        self.project_root = Path(project_root)
++        self.db_path = plain_path(self.root / 'queue.sqlite3')
++        self.now = now
++        self.transport = transport or self.execute
++        self.stop_event = threading.Event()
++        self.thread = None
++        self.lock_file = None
++        with self.db() as db:
++            db.execute('CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, state TEXT NOT NULL, manifest TEXT NOT NULL, hash TEXT NOT NULL, due REAL NOT NULL, result TEXT, created REAL NOT NULL)')
++            db.execute('CREATE TABLE IF NOT EXISTS control (id INTEGER PRIMARY KEY, paused INTEGER NOT NULL)')
++            db.execute('INSERT OR IGNORE INTO control VALUES (1,0)')
++        self.db_path.chmod(0o600)
++
++    def db(self):
++        connection = sqlite3.connect(self.db_path, timeout=10)
++        connection.row_factory = sqlite3.Row
++        return connection
++
++    def unpack(self, row):
++        return {'id': row['id'], 'state': row['state'], 'manifest': json.loads(row['manifest']), 'hash': row['hash'], 'result': json.loads(row['result']) if row['result'] else None}
++
++    def get(self, identifier):
++        with self.db() as db:
++            row = db.execute('SELECT * FROM jobs WHERE id=?', (identifier,)).fetchone()
++        if row is None:
++            fail('TikTok review not found.')
++        return self.unpack(row)
++
++    def status(self):
++        with self.db() as db:
++            jobs = [self.unpack(r) for r in db.execute('SELECT * FROM jobs ORDER BY created DESC LIMIT 100')]
++            paused = bool(db.execute('SELECT paused FROM control WHERE id=1').fetchone()[0])
++        return {'account': '@jamesaucreates', 'route': 'unofficial_session_uploader', 'workerRunning': bool(self.thread and self.thread.is_alive()), 'paused': paused, 'jobs': jobs}
++
++    def prepare(self, value):
++        if set(value) != {'path', 'caption', 'visibility', 'dueUtc', 'timezone', 'comments', 'duet', 'stitch', 'rightsConfirmed', 'derivatives'}:
++            fail('Use only the displayed review fields.')
++        if value['rightsConfirmed'] is not True or value['derivatives'] != 'none':
++            fail('Confirm rights and the no-derivatives choice for this video.')
++        if value['visibility'] not in ('private', 'public'):
++            fail('Choose Only me or Everyone explicitly.')
++        if any(type(value[k]) is not bool for k in ('comments','duet','stitch')):
++            fail('Invalid interaction settings.')
++        if not isinstance(value['caption'], str) or not 1 <= len(value['caption']) <= 2200:
++            fail('Enter a caption of 1–2200 characters.')
++        from zoneinfo import ZoneInfo
++        try:
++            zone = ZoneInfo(value['timezone'])
++            due = datetime.fromisoformat(value['dueUtc'].replace('Z', '+00:00')) if value['dueUtc'] else None
++            if due and due.utcoffset() is None: raise ValueError()
++            if due and not self.now()+15 <= due.timestamp() <= self.now()+30*86400: raise ValueError()
++        except (ValueError, TypeError, KeyError):
++            fail('Choose a future time within 30 days and a valid timezone.')
++        if not isinstance(value['path'], str) or not Path(value['path']).is_absolute():
++            fail('Enter an absolute local MP4 path.')
++        source = plain_path(value['path'])
++        if not source.is_file() or source.suffix.lower() != '.mp4' or not 0 < source.stat().st_size <= 500*1024*1024:
++            fail('Select a local MP4 under 500 MB.')
++        identifier = uuid.uuid4().hex
++        media = self.root / (identifier + '.mp4')
++        try:
++            with source.open('rb') as incoming, media.open('xb') as outgoing:
++                os.fchmod(outgoing.fileno(), 0o600)
++                total = 0
++                while chunk := incoming.read(1024*1024):
++                    total += len(chunk)
++                    if total > 500*1024*1024: fail('Video exceeds 500 MB.')
++                    outgoing.write(chunk)
++            probe = subprocess.run([shutil.which('ffprobe') or '/opt/homebrew/bin/ffprobe','-v','error','-show_entries','format=duration:stream=codec_type,codec_name,width,height','-of','json',str(media)], capture_output=True, timeout=30, check=True)
++            info = json.loads(probe.stdout)
++            video = next(s for s in info['streams'] if s['codec_type']=='video')
++            duration = float(info['format']['duration'])
++            if video['codec_name'] != 'h264' or not 0 < duration <= 600:
++                fail('This route currently accepts H.264 MP4 videos up to 10 minutes.')
++            frozen = {**value, 'path': str(media), 'sourceName': source.name, 'account':'@jamesaucreates', 'sha256':digest(media), 'duration':duration, 'width':video['width'], 'height':video['height'], 'dueUtc':due.astimezone(timezone.utc).isoformat() if due else None, 'dueLocal':due.astimezone(zone).isoformat() if due else 'Immediately after approval', 'route':'unofficial_session_uploader'}
++            encoded = json.dumps(frozen, sort_keys=True)
++            with self.db() as db:
++                db.execute('INSERT INTO jobs VALUES (?,?,?,?,?,?,?)',(identifier,'review',encoded,hashlib.sha256(encoded.encode()).hexdigest(),due.timestamp() if due else 0,None,self.now()))
++        except BaseException:
++            media.unlink(missing_ok=True)
++            raise
++        return self.get(identifier)
++
++    def approve(self, identifier, supplied_hash):
++        with self.db() as db:
++            db.execute('BEGIN IMMEDIATE')
++            row = db.execute('SELECT * FROM jobs WHERE id=?',(identifier,)).fetchone()
++            if not row or row['hash'] != supplied_hash: fail('The review changed. Reload it before approval.')
++            if row['state'] != 'review': return self.unpack(row)
++            if row['due'] and row['due'] <= self.now(): fail('This time has passed. Prepare a new review.')
++            manifest = json.loads(row['manifest'])
++            if digest(plain_path(manifest['path'])) != manifest['sha256']: fail('The reviewed media changed.')
++            db.execute('UPDATE jobs SET state=?,due=? WHERE id=?',('queued',row['due'] or self.now(),identifier))
++        return self.get(identifier)
++
++    def cancel(self, identifier):
++        with self.db() as db:
++            changed = db.execute("UPDATE jobs SET state='cancelled' WHERE id=? AND state IN ('review','queued','needs_review')",(identifier,)).rowcount
++            if not changed: fail('Only unsent jobs can be cancelled.')
++        return self.get(identifier)
++
++    def pause(self, paused):
++        if type(paused) is not bool: fail('Invalid pause value.')
++        with self.db() as db: db.execute('UPDATE control SET paused=? WHERE id=1',(int(paused),))
++        return self.status()
++
++    def tick(self):
++        with self.db() as db:
++            db.execute('BEGIN IMMEDIATE')
++            if db.execute('SELECT paused FROM control WHERE id=1').fetchone()[0]: return
++            db.execute("UPDATE jobs SET state='needs_review' WHERE state='queued' AND due<?",(self.now()-300,))
++            row = db.execute("SELECT * FROM jobs WHERE state='queued' AND due<=? ORDER BY due LIMIT 1",(self.now(),)).fetchone()
++            if not row: return
++            db.execute("UPDATE jobs SET state='sending' WHERE id=?",(row['id'],))
++        job = self.unpack(row)
++        try:
++            if digest(plain_path(job['manifest']['path'])) != job['manifest']['sha256']:
++                result = {'state':'needs_review','reason':'Reviewed video changed.'}
++            else: result = self.transport(job)
++        except Exception:
++            result = {'state':'unresolved','reason':'Attempt interrupted. Check TikTok before any new submission.'}
++        if result.get('state') not in ('submitted','unresolved','needs_review'):
++            result = {'state':'unresolved','reason':'Unexpected uploader result.'}
++        with self.db() as db:
++            db.execute('UPDATE jobs SET state=?,result=? WHERE id=?',(result['state'],json.dumps(result),job['id']))
++
++    def execute(self, job):
++        runtime = self.project_root / 'studio/tiktok-runtime'
++        process = subprocess.Popen([str(runtime/'.venv/bin/python'),str(runtime/'runner.py')],cwd=runtime/'source',stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env={**os.environ,'PYTHON_DOTENV_DISABLED':'1'})
++        try:
++            output, _ = process.communicate(json.dumps(job),timeout=300)
++            if process.returncode != 0: return {'state':'unresolved','reason':'Uploader stopped. Inspect TikTok before another attempt.'}
++            return json.loads(output)
++        except subprocess.TimeoutExpired:
++            process.kill(); process.communicate()
++            return {'state':'unresolved','reason':'Uploader timed out. No automatic retry.'}
++
++    def start(self):
++        self.lock_file = (self.root/'worker.lock').open('a')
++        try: fcntl.flock(self.lock_file,fcntl.LOCK_EX|fcntl.LOCK_NB)
++        except BlockingIOError:
++            self.lock_file.close(); self.lock_file=None; return
++        with self.db() as db:
++            db.execute("UPDATE jobs SET state='unresolved',result=? WHERE state='sending'",(json.dumps({'reason':'Studio restarted during an attempt. Check TikTok.'}),))
++        self.thread=threading.Thread(target=self.loop,daemon=True,name='tiktok-publishing')
++        self.thread.start()
++
++    def loop(self):
++        while not self.stop_event.is_set():
++            try: self.tick()
++            except Exception: pass
++            self.stop_event.wait(3)
++
++    def shutdown(self):
++        self.stop_event.set()
++        if self.thread: self.thread.join(timeout=305)
++        if self.lock_file: self.lock_file.close()
++
++
++def register_tiktok_publishing(app, store, body_parser):
++    from fastapi import Request
++    from fastapi.responses import FileResponse
++    from starlette.concurrency import run_in_threadpool
++    service = TikTokPublishing(store.data_dir, store.project_root)
++    @app.get('/api/tiktok-publishing')
++    def status(): return service.status()
++    @app.post('/api/tiktok-publishing/reviews')
++    async def review(request: Request): return await run_in_threadpool(service.prepare, await body_parser(request))
++    @app.post('/api/tiktok-publishing/{identifier}/approve')
++    async def approve(identifier: str, request: Request):
++        data=await body_parser(request)
++        if set(data)!={'hash'}: fail('Invalid approval fields.')
++        return await run_in_threadpool(service.approve,identifier,data['hash'])
++    @app.post('/api/tiktok-publishing/{identifier}/cancel')
++    async def cancel(identifier: str, request: Request):
++        if await body_parser(request): fail('Invalid cancellation fields.')
++        return service.cancel(identifier)
++    @app.post('/api/tiktok-publishing/control')
++    async def pause(request: Request):
++        data=await body_parser(request)
++        if set(data)!={'paused'}: fail('Invalid control fields.')
++        return service.pause(data['paused'])
++    @app.get('/api/tiktok-publishing/{identifier}/video')
++    def preview(identifier: str):
++        job=service.get(identifier)
++        return FileResponse(job['manifest']['path'],media_type='video/mp4')
++    return service
+--- a/studio/web/src/TikTokPublishing.tsx
++++ b/studio/web/src/TikTokPublishing.tsx
+@@ -0,0 +1,38 @@
++import {useEffect,useState} from 'react';
++import {api} from './api';
++type Manifest={account:string;caption:string;visibility:string;dueUtc:string|null;dueLocal:string;timezone:string;sourceName:string;sha256:string;duration:number;width:number;height:number;comments:boolean;duet:boolean;stitch:boolean};
++type Job={id:string;state:string;hash:string;manifest:Manifest;result:{reason?:string}|null};
++type Status={workerRunning:boolean;paused:boolean;jobs:Job[]};
++const endpoint='/api/tiktok-publishing';
++export default function TikTokPublishing(){
++ const [status,setStatus]=useState<Status|null>(null),[path,setPath]=useState(''),[caption,setCaption]=useState(''),[visibility,setVisibility]=useState(''),[when,setWhen]=useState(''),[mode,setMode]=useState('now'),[rights,setRights]=useState(false),[derivatives,setDerivatives]=useState(false),[review,setReview]=useState<Job|null>(null),[approved,setApproved]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
++ const zone=Intl.DateTimeFormat().resolvedOptions().timeZone;
++ async function refresh(){try{setStatus(await api<Status>(endpoint));}catch(e){setError(e instanceof Error?e.message:'Queue unavailable.');}}
++ useEffect(()=>{void refresh();const timer=setInterval(()=>void refresh(),5000);return()=>clearInterval(timer);},[]);
++ async function action(work:()=>Promise<void>){setBusy(true);setError('');try{await work();await refresh();}catch(e){setError(e instanceof Error?e.message:'Operation failed.');}finally{setBusy(false);}}
++ async function prepare(){await action(async()=>{if(mode==='schedule'&&!when)throw Error('Choose a scheduled time.'); const due=mode==='schedule'?new Date(when):null;if(due&&Number.isNaN(due.valueOf()))throw Error('Invalid scheduled time.');setReview(await api<Job>(endpoint+'/reviews',{method:'POST',body:JSON.stringify({path,caption,visibility,dueUtc:due?.toISOString()||null,timezone:zone,comments:false,duet:false,stitch:false,rightsConfirmed:rights,derivatives:derivatives?'none':''})}));setApproved(false);});}
++ return <section className="setup-panel" aria-label="TikTok publishing"><h3>TikTok · upload and schedule</h3><p>Account: <strong>@jamesaucreates</strong> · saved browser session. One private upload was verified. This connection uses the unofficial uploader; OAuth setup below is separate.</p>
++ <p>Keep Studio running and this Mac awake for scheduled posts. Jobs over five minutes late require a new review. Uncertain submissions stop for a TikTok check.</p>
++ {error&&<p role="alert" className="error-banner">{error}</p>}
++ <p>{status?.workerRunning?'Scheduler running':'Scheduler unavailable'}{status?.paused?' · Paused':''}</p>
++ <button className="button" disabled={busy||!status} onClick={()=>void action(async()=>{await api(endpoint+'/control',{method:'POST',body:JSON.stringify({paused:!status?.paused})});})}>{status?.paused?'Resume queue':'Pause queue'}</button>
++ {!review?<form onSubmit={e=>{e.preventDefault();void prepare();}}><fieldset className="setup-fields" disabled={busy}>
++ <label className="field">Local MP4 path<input required value={path} onChange={e=>setPath(e.target.value)} placeholder="/Users/…/video.mp4"/></label>
++ <label className="field">Caption<textarea required maxLength={2200} value={caption} onChange={e=>setCaption(e.target.value)}/></label>
++ <label className="field">Who can watch?<select required value={visibility} onChange={e=>setVisibility(e.target.value)}><option value="">Choose visibility</option><option value="private">Only me</option><option value="public">Everyone</option></select></label>
++ <label className="field">Timing<select value={mode} onChange={e=>setMode(e.target.value)}><option value="now">After approval</option><option value="schedule">Schedule</option></select></label>
++ {mode==='schedule'&&<label className="field">Date and time · {zone}<input required type="datetime-local" value={when} onChange={e=>setWhen(e.target.value)}/><small>The next review shows the resolved time, offset, and UTC. Check daylight-saving transitions carefully.</small></label>}
++ <p>Comments, Duet, and Stitch are off for this integration.</p>
++ <label className="check-field"><input type="checkbox" required checked={rights} onChange={e=>setRights(e.target.checked)}/> I have permission to publish this video and its audio.</label>
++ <label className="check-field"><input type="checkbox" required checked={derivatives} onChange={e=>setDerivatives(e.target.checked)}/> Post this video only, with no derivatives or reposts.</label>
++ <button className="button primary" type="submit">Prepare video preview</button></fieldset></form>:<div className="callout">
++ <h4>Approve this exact post</h4><video controls preload="metadata" style={{width:'100%',maxHeight:320}} src={`${endpoint}/${review.id}/video`}/>
++ <p><strong>{review.manifest.account}</strong> · {review.manifest.visibility==='private'?'Only me':'Everyone'}</p><p>{review.manifest.caption}</p>
++ <p>{review.manifest.sourceName} · {review.manifest.duration.toFixed(1)} seconds · {review.manifest.width}×{review.manifest.height}</p>
++ <p>{review.manifest.dueLocal} ({review.manifest.timezone}){review.manifest.dueUtc&&<> · UTC: {review.manifest.dueUtc}</>}</p><p>Comments, Duet, Stitch off. No derivatives.</p>
++ <label className="check-field"><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/> I approve this exact video, caption, account, visibility, and time.</label>
++ <button className="button primary" disabled={busy||!approved} onClick={()=>void action(async()=>{await api(`${endpoint}/${review.id}/approve`,{method:'POST',body:JSON.stringify({hash:review.hash})});setReview(null);setApproved(false);})}>{review.manifest.dueUtc?'Approve scheduled post':'Approve and upload'}</button>
++ <button className="button" disabled={busy} onClick={()=>void action(async()=>{await api(`${endpoint}/${review.id}/cancel`,{method:'POST',body:'{}'});setReview(null);})}>Discard review</button></div>}
++ <h4>Publishing queue</h4>{status?.jobs.length===0&&<p>No TikTok jobs yet.</p>}{status?.jobs.map(job=><article key={job.id} className="callout"><strong>{job.manifest.sourceName}</strong><p>{job.manifest.caption}</p><p>{job.state.replaceAll('_',' ')} · {job.manifest.visibility==='private'?'Only me':'Everyone'} · {job.manifest.dueLocal}</p>{job.result?.reason&&<p>{job.result.reason}</p>}{job.state==='submitted'&&<p>TikTok acknowledged submission. Confirm the video and visibility in TikTok before reporting it as published.</p>}{['review','queued','needs_review'].includes(job.state)&&<button className="button" disabled={busy} onClick={()=>void action(async()=>{await api(`${endpoint}/${job.id}/cancel`,{method:'POST',body:'{}'});})}>Cancel</button>}{job.state==='review'&&<button className="button" onClick={()=>{setReview(job);setApproved(false);}}>Review</button>}</article>)}
++ </section>;
++}
+--- a/studio/web/src/App.tsx
++++ b/studio/web/src/App.tsx
+@@ -118,7 +118,7 @@
+           </>}
+           {view==='Calendar'&&<><div className="callout">All items below are <strong>Planned</strong>. Local handoff tasks require a separate exact review in Delivery. No platform schedule is created.</div><div className="calendar-heading"><h2>{month.toLocaleDateString([],{month:'long',year:'numeric'})}</h2><div className="flex gap-2"><button className="button" aria-label="Previous month" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()-1,1))}>←</button><button className="button" onClick={()=>setMonth(new Date(new Date().getFullYear(),new Date().getMonth(),1))}>This month</button><button className="button" aria-label="Next month" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()+1,1))}>→</button></div></div><Calendar month={month} drafts={planned} channels={data.channels} onOpen={openDraft}/></>}
+           {view==='Delivery'&&<DeliveryView drafts={data.drafts} channels={data.channels} onPrepare={setHandoffDraft} onOpenDraft={openDraft}/>}
+-          {view==='Channels'&&<><div className="workspace-stats"><span><b>{data.channels.length}</b> managed here</span><span><b>{data.channels.filter(channel=>channel.connection==='connected_identity').length}</b> identity connected</span><span><b>{data.channels.filter(channel=>channel.publishReady).length}</b> publish-ready</span></div><div className="callout">All channels can have drafts and local plans. Open a channel to preview its exact setup plan. Account identity and publishing readiness are verified separately. Every live post still requires exact review and approval.</div><div className="toolbar"><Field label="Find a channel"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Name or channel ID"/></Field><Field label="Channel group"><select value={group} onChange={event=>setGroup(event.target.value)}><option value="all">All groups</option>{[...new Set(data.channels.map(channel=>channel.group))].map(value=><option key={value}>{value}</option>)}</select></Field><p className="muted" role="status">{channelResults.length} channels</p></div><div className="channel-grid">{channelResults.map(channel=><button className="channel-card" key={channel.id} onClick={()=>setSelectedChannel(channel)}><ChannelIcon id={channel.id} name={channel.name}/><h2>{channel.name}</h2><p>{channel.group}</p><span className="connection-status">{channel.publishReady?'● Publish-ready':channel.connection==='connected_identity'?'● Identity connected':'○ Not connected'}</span><small>{channel.formats.length} draft format{channel.formats.length===1?'':'s'} →</small></button>)}</div>{!channelResults.length&&<Empty title="No matching channels.">Try the name or a different group.</Empty>}</>}
++          {view==='Channels'&&<><div className="workspace-stats"><span><b>{data.channels.length}</b> managed here</span><span><b>{data.channels.filter(channel=>channel.connection==='connected_identity').length}</b> identity connected</span><span><b>{data.channels.filter(channel=>channel.publishReady).length}</b> publish-ready</span></div><div className="callout">All channels can have drafts and local plans. Open a channel to preview its exact setup plan. Account identity and publishing readiness are verified separately. Every live post still requires exact review and approval.</div><div className="toolbar"><Field label="Find a channel"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Name or channel ID"/></Field><Field label="Channel group"><select value={group} onChange={event=>setGroup(event.target.value)}><option value="all">All groups</option>{[...new Set(data.channels.map(channel=>channel.group))].map(value=><option key={value}>{value}</option>)}</select></Field><p className="muted" role="status">{channelResults.length} channels</p></div><div className="channel-grid">{channelResults.map(channel=><button className="channel-card" key={channel.id} onClick={()=>setSelectedChannel(channel)}><ChannelIcon id={channel.id} name={channel.name}/><h2>{channel.name}</h2><p>{channel.group}</p><span className="connection-status">{channel.id==='tiktok'?'Upload & schedule':channel.publishReady?'● Publish-ready':channel.connection==='connected_identity'?'● Identity connected':'○ Not connected'}</span><small>{channel.formats.length} draft format{channel.formats.length===1?'':'s'} →</small></button>)}</div>{!channelResults.length&&<Empty title="No matching channels.">Try the name or a different group.</Empty>}</>}
+           {view==='Templates'&&<><div className="callout">Markdown is stored as text, never executed. Personal edits create immutable versions; defaults are preserved.</div><div className="template-grid">{templatesLatest.map((template,index)=><article className="template-card" key={template.id}><div className="template-topline"><span>0{index+1}</span><span className="eyebrow">{template.kind} · {template.origin}</span></div><h2>{template.name}</h2><div className="template-sample"><span/><span/><span/></div><p className="hint">Version {template.version} · {template.origin==='default'?'Reviewed default structure':'Your reusable Markdown'}</p><div className="flex flex-wrap gap-2 mt-5"><button className="button primary" onClick={()=>chooseTemplate(template)}>Use template</button><button className="button" onClick={()=>openTemplate(template)}>{template.origin==='personal'?'View / new version':'View Markdown'}</button></div></article>)}</div><section className="reference-section"><div className="section-heading"><div><p className="eyebrow">GUIZANG DESIGN REFERENCES</p><h2>Choose a visual language.</h2></div><span className="status-tag">Reference only</span></div><p className="hint mb-5">All {data.visualCatalog.themes.length} themes and {data.visualCatalog.layouts.length} layouts remain available in each draft’s Template & plan section. These choices do not run third-party rendering.</p><div className="reference-catalog">{data.visualCatalog.themes.map(theme=><button className="theme-card" key={theme.id} onClick={()=>{newDraft({visualRef:{theme:theme.id,layouts:[]}});setStep(2);}}><span className="theme-art" aria-hidden="true">Aa<span>一</span></span><strong>{theme.name}</strong><small>{theme.system} · Use reference →</small></button>)}</div><details className="layout-picker mt-5"><summary>Browse all {data.visualCatalog.layouts.length} layout references</summary><div className="layout-options">{data.visualCatalog.layouts.map(layout=><div className="reference-layout" key={layout.id}><strong>{layout.name}</strong><small>{layout.system}</small></div>)}</div></details></section></>}
+           {view==='Activity'&&<><div className="section-heading"><h2>Local activity</h2><button className="button" disabled={loading} onClick={()=>void refresh()}>{loading?'Refreshing…':'Refresh activity'}</button></div>{data.activity.length?<ol className="activity-list">{data.activity.map((event,index)=><li key={event.id||index}><span className="activity-point"/><div><strong>{event.message||event.label||String(event.action||event.kind||'Workspace change').replaceAll('_',' ')}</strong><p>{event.createdAt||event.timestamp?dateLabel(String(event.createdAt||event.timestamp)):'Recorded in local ledger'}</p></div></li>)}</ol>:<Empty title="A clean page.">Saved drafts, templates and assets will appear here. No activity is invented.</Empty>}</>}
+           {view==='Settings'&&<><div className="settings-card"><p className="eyebrow">WORKSPACE STORAGE</p><h2>A local home for your work.</h2><dl className="settings-list"><div><dt>Workspace</dt><dd>{data.workspace.name}</dd></div><div><dt>Storage</dt><dd>{data.workspace.storage}</dd></div><div><dt>Application version</dt><dd>{data.workspace.version}</dd></div><div><dt>Publishing</dt><dd>{data.capabilities.publishing?'YouTube video upload enabled':'Not enabled'}</dd></div><div><dt>Local handoff queue</dt><dd>Manual only · controls in Delivery</dd></div><div><dt>Drafting bridge</dt><dd>{agentStatus?.available&&agentStatus.authentication==='ready'?'Codex CLI available':agentStatus?.authentication==='login_required'?'Private Codex sign-in needed':'Generation unavailable'}</dd></div></dl><p className="hint">Closing your browser does not remove saved data. This service does not publish posts. Its separate local worker only advances approved handoff tasks. Model generation requires a separate explicit input review.</p></div><div className="settings-card"><p className="eyebrow">BACKUP & RECOVERY</p><h2>Keep a copy of the studio.</h2><p>Download a consistent database backup together with its local asset manifest and files. Backups contain your private drafts; store them somewhere you trust.</p><button className="button primary mt-5" onClick={()=>void runDownload('/api/backup','james-au-studio-backup.zip')}>Download local backup</button><p className="hint mt-4">Restore uses the documented local command and a new empty directory. Existing work is not overwritten, and execution remains disabled.</p></div></>}
+@@ -127,7 +127,7 @@
+     </div>
+     <div className={`toast ${notice?'visible':''}`} role="status" aria-live="polite">{notice}</div>
+     {handoffDraft&&data&&<DeliveryComposer draft={handoffDraft} channels={data.channels} onClose={()=>setHandoffDraft(null)} onQueued={()=>{setHandoffDraft(null);setEditor(null);setView('Delivery');setNotice('Queued a local handoff task. Resume the local worker if paused; nothing was published or scheduled on a platform.');}}/>}
+-    {selectedChannel&&<Dialog title={selectedChannel.name} onClose={()=>setSelectedChannel(null)}><p className="callout">Managed locally · {selectedChannel.connection==='connected_identity'?'identity connected':'not connected'} · {selectedChannel.publishReady?'publish-ready':'not publish-ready'}</p><p>Prepare native drafts and an exact account setup candidate here.</p><dl className="settings-list"><div><dt>Channel ID</dt><dd>{selectedChannel.id}</dd></div><div><dt>Default language</dt><dd>{selectedChannel.defaultLanguage}</dd></div></dl><h3>Available draft formats</h3><ul className="format-list">{selectedChannel.formats.map(format=><li key={format.id}>{format.label}<code>{format.id}</code></li>)}</ul><ChannelSetup key={selectedChannel.id} channel={selectedChannel}/><div className="dialog-actions"><button className="button" onClick={()=>setSelectedChannel(null)}>Close</button><button className="button primary" onClick={()=>{const channel=selectedChannel;setSelectedChannel(null);newDraft({channels:[channel.id],languages:{[channel.id]:channel.defaultLanguage},formats:{[channel.id]:channel.formats[0]?.id||''}});}}>Draft for this channel</button></div></Dialog>}
++    {selectedChannel&&<Dialog title={selectedChannel.name} onClose={()=>setSelectedChannel(null)}><p className="callout">{selectedChannel.id==='tiktok'?'Uploader controls below · official OAuth status: ':'Managed locally · '}{selectedChannel.connection==='connected_identity'?'identity connected':'not connected'} · {selectedChannel.publishReady?'publish-ready':'not publish-ready'}</p><p>Prepare native drafts and an exact account setup candidate here.</p><dl className="settings-list"><div><dt>Channel ID</dt><dd>{selectedChannel.id}</dd></div><div><dt>Default language</dt><dd>{selectedChannel.defaultLanguage}</dd></div></dl><h3>Available draft formats</h3><ul className="format-list">{selectedChannel.formats.map(format=><li key={format.id}>{format.label}<code>{format.id}</code></li>)}</ul><ChannelSetup key={selectedChannel.id} channel={selectedChannel}/><div className="dialog-actions"><button className="button" onClick={()=>setSelectedChannel(null)}>Close</button><button className="button primary" onClick={()=>{const channel=selectedChannel;setSelectedChannel(null);newDraft({channels:[channel.id],languages:{[channel.id]:channel.defaultLanguage},formats:{[channel.id]:channel.formats[0]?.id||''}});}}>Draft for this channel</button></div></Dialog>}
+     {templateModal&&<Dialog title={templateModal==='new'?'Create a reusable template':templateModal.origin==='default'?'Default Markdown template':'Create a new template version'} onClose={closeTemplate}><form onSubmit={event=>{event.preventDefault();void saveTemplate();}}><fieldset disabled={busy}><p className="hint mb-5">{templateModal!=='new'&&templateModal.origin==='default'?'The default remains unchanged. Edit these fields and save a personal copy.':'A template provides structure, not factual claims or permission to publish.'}</p>{templateError&&<div className="error-banner" role="alert">{templateError}</div>}<Field label="Template name"><input value={templateForm.name} onChange={event=>setTemplateForm({...templateForm,name:event.target.value})} required maxLength={200}/></Field><Field label="Template type"><select value={templateForm.kind} onChange={event=>setTemplateForm({...templateForm,kind:event.target.value as Template['kind']})}>{['article','caption','visual','motion'].map(kind=><option key={kind}>{kind}</option>)}</select></Field><Field label="Markdown structure" hint="Plain text only. HTML, scripts and embedded instructions are not executed."><textarea className="code-field" value={templateForm.body} onChange={event=>setTemplateForm({...templateForm,body:event.target.value})} rows={14} required placeholder={'# Hook\n\n## Main idea\n\n## Evidence and sources\n\n## Closing thought'}/></Field><div className="dialog-actions"><button type="button" className="button" onClick={closeTemplate}>Cancel</button><button type="submit" className="button primary">{busy?'Saving…':templateModal==='new'?'Save template':templateModal.origin==='default'?'Save personal copy':'Save new version'}</button></div></fieldset></form></Dialog>}
+   </>;
+ }
+--- a/scripts/studio.py
++++ b/scripts/studio.py
+@@ -192,7 +192,7 @@
+             raise ValueError(f"Studio did not start. Inspect the local log: {log_path}")
+         if health(port):
+             return {"status": "running", "url": f"http://127.0.0.1:{port}",
+-                    "pid": child.pid, "dataDir": str(data), "publishing": False}
++                    "pid": child.pid, "dataDir": str(data), "publishing": "per_channel_approval_required"}
+         time.sleep(0.15)
+     raise ValueError("Startup is unresolved; inspect status/log before retrying")
+ 
+@@ -247,7 +247,7 @@
+             port = record["port"] if record else args.port
+             result = {"status": "running" if record and matches_process(record) else "stopped",
+                       "health": health(port), "url": f"http://127.0.0.1:{port}",
+-                      "dataDir": str(data), "scheduling": False, "publishing": False,
++                      "dataDir": str(data), "scheduling": "tiktok_queue_requires_running_service", "publishing": "per_channel_approval_required",
+                       "localHandoffWorker": "supervised_when_service_running"}
+         elif args.command == "backup":
+             if not args.output or args.output.exists() or args.output.is_symlink():

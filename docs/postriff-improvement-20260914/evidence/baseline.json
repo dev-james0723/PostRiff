@@ -1,0 +1,17 @@
+{
+  "capturedAt": "2026-09-15T02:02:25.045598+00:00",
+  "root": "/Users/ouxianxing/Documents/James-Au-Studio",
+  "git": "validation_unavailable: installed source has no .git",
+  "files": {
+    "src/postriff_phase2/store.py": "10c3198c78408c0c55290d476f0abb802cad8d547f6939e946906e264633d716",
+    "src/postriff_phase2/hosted_worker.py": "930dfe6605ca27919e31174c941ea0ff9362b82df26bc555831afe055baa9315",
+    "src/postriff_phase2/contracts.py": "910cdde36989fd16c957c2a7aac51b317d20c6bde76bf8e6c4ce6b746d56eb6e",
+    "tests/phase2/postgres_repository.py": "5a7d788d42e168ac651d5b75128bbb763108d8389e527729e2595f08a9f50c13"
+  },
+  "report": {
+    "path": "/Users/ouxianxing/Documents/Codex/2026-09-14/how-s-the-mirro-fish-running/MiroFish-PostRiff-Full-Report.pdf",
+    "sha256": "4ead7524b84a7ee3512e7d1325d295fcce995b41a63c7edc5622c52c4a6366e7",
+    "pages": 33
+  },
+  "externalExecution": false
+}

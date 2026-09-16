@@ -1,0 +1,1 @@
+1443ad0b162f65c60836ae05bba85bd732b59cf4d8fa011906342d186acc960d  desktop/artifacts/PostRiff-0.3.0-macos-arm64-local.zip

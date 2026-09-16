@@ -1,0 +1,15 @@
+{
+  "sourceHashes": {
+    "src/postriff_phase3/worker.py": "5cdc319056e9829885933d8e1549326187edd49d4675312a55a9d6627fed7f67",
+    "src/postriff_phase3/adapters.py": "90ee1934d60f1d79e46d712ce10095477360ecad4d83fffe8c06517bb560fae3",
+    "tests/test_postriff_phase3.py": "e901b704e0c99ff88b8dec992f6ba95c3a50ded5970ffed7e966b88b8646c2ef",
+    "scripts/prepare_postriff_writing_review.py": "13e945cab93a561da520244ba80343c5e6bd7853bacfeffbfe88c7c80361ddef"
+  },
+  "zip": "/Users/ouxianxing/Documents/James-Au-Studio/desktop/artifacts/PostRiff-0.3.0-macos-arm64-runtime-followup.zip",
+  "zipSha256": "bab75bcf933eee00accfb7acd7fb35f38db473ae581e4ac24c176b14ece0cf94",
+  "zipIntegrity": "pass",
+  "requestHash": "d2f0746bed8dd1a651436d25422cb5a0d87d094c508bba5f5c31b68d4700ecae",
+  "reviewMatchesAdapter": true,
+  "credentialsExcludedFromReview": true,
+  "execution": "local validation only"
+}

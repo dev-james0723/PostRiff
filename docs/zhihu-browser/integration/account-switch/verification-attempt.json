@@ -1,0 +1,10 @@
+{
+  "http_status": 409,
+  "verification": {
+    "error": {
+      "code": "browser_busy_close_login_window",
+      "message": "Zhihu stopped: browser busy close login window."
+    }
+  },
+  "publication_submitted": false
+}

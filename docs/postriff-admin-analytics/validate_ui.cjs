@@ -1,0 +1,28 @@
+const {chromium}=require('/Users/ouxianxing/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const fs=require('fs');const path=require('path');
+(async()=>{const b=await chromium.launch({headless:true});const checks=[],errors=[];const dir=__dirname;try{
+ const p=await b.newPage({viewport:{width:1440,height:1050}});p.on('pageerror',e=>errors.push(e.message));
+ await p.route('http://**',r=>r.abort());await p.route('https://**',r=>r.abort());
+ await p.goto('file://'+path.join(dir,'index.html'));await p.getByRole('heading',{name:'這星期，產品有沒有幫到人？'}).waitFor();checks.push('admin overview renders');
+ if(!await p.locator('.banner').innerText().then(s=>s.includes('synthetic')))throw Error('missing synthetic banner');checks.push('synthetic state always labelled');
+ if(!await p.locator('#page').innerText().then(s=>s.includes('未達10人成熟分母')))throw Error('immature cohort gate');checks.push('immature cohort cannot appear to pass ten-person report gate');
+ if(await p.locator('#range').count())throw Error('inert business filter');checks.push('business windows labelled without nonfunctional range filter');
+ await p.screenshot({path:path.join(dir,'evidence/admin-demo.png'),fullPage:true});
+ await p.getByRole('button',{name:'品牌社交成效',exact:true}).click();await p.locator('#platform').selectOption('youtube');
+ if(!await p.locator('#socialBody').innerText().then(s=>s.includes('12,400')))throw Error('sample data');
+ await p.locator('#range').selectOption('7');if(!await p.locator('#socialBody').innerText().then(s=>s.includes('3,100')))throw Error('range');checks.push('social account and period controls');
+ const rows=await p.locator('#socialBody details tbody tr').allTextContents();if(rows.length!==7||!rows[0].includes('2026-09-01')||!rows[6].includes('2026-09-07'))throw Error('native dates');
+ const total=await p.locator('#socialBody details tbody tr td:last-child').allTextContents().then(v=>v.reduce((a,s)=>a+Number(s),0));if(total!==3100)throw Error('chart/card mismatch');checks.push('chart dates, accessible table and period card agree');
+ await p.screenshot({path:path.join(dir,'evidence/social-demo.png'),fullPage:true});
+ await p.getByRole('button',{name:'預覽同步範圍',exact:true}).click();await p.locator('dialog[open]').waitFor();if(!await p.locator('dialog').innerText().then(s=>s.includes('沒有外部API呼叫')))throw Error('plan disclaimer');await p.getByRole('button',{name:'關閉詳情'}).click();checks.push('read-only sync preview has no submission');
+ await p.locator('#platform').selectOption('instagram');if(!await p.locator('#socialBody').innerText().then(s=>s.includes('capability_unqualified')))throw Error('ig');checks.push('Instagram unqualified state rather than zero');
+ await p.locator('#platform').selectOption('linkedin');if(!await p.locator('#socialBody').innerText().then(s=>s.includes('scope_missing')))throw Error('li');checks.push('LinkedIn scope missing state');
+ await p.locator('#role').selectOption('customer');if(await p.getByRole('button',{name:'經營總覽',exact:true}).count())throw Error('customer nav');checks.push('customer view hides business nav, demo only');
+ await p.locator('#mode').selectOption('empty');await p.getByRole('heading',{name:'尚未接入分析資料',exact:true}).waitFor();checks.push('no-data mode not fake live analytics');
+ await p.screenshot({path:path.join(dir,'evidence/customer-empty.png'),fullPage:true});
+ await p.setViewportSize({width:390,height:844});if(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('overflow');checks.push('390px no horizontal page overflow');
+ await p.screenshot({path:path.join(dir,'evidence/mobile-demo.png'),fullPage:true});
+ await p.locator('#mode').selectOption('sample');await p.getByRole('button',{name:'內容表現',exact:true}).click();await p.getByRole('button',{name:'Demo：如何整理一個教學觀點'}).click();await p.locator('dialog[open]').waitFor();await p.keyboard.press('Escape');if(await p.locator('dialog[open]').count())throw Error('escape');checks.push('post detail drawer and keyboard close');
+ if(errors.length)throw Error(errors.join(';'));checks.push('no JavaScript page errors');
+ fs.writeFileSync(path.join(dir,'evidence/ui-validation.json'),JSON.stringify({status:'pass',execution:'local-interactive-mockup',checks,test_count:checks.length,limitations:['No product runtime integration','UI role selector is a demonstration, not authorization','No live analytics or provider calls']},null,2));console.log(JSON.stringify({status:'pass',checks:checks.length}));
+ }finally{await b.close()}})().catch(e=>{console.error(e);process.exitCode=1});

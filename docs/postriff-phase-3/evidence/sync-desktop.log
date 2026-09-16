@@ -1,0 +1,3 @@
+Delayed acknowledgement preserves newer local text: passed
+Lost response reconciles after reload: passed
+Desktop acceptance passed

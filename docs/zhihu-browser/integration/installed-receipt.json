@@ -1,0 +1,88 @@
+{
+  "state": "installed_scoped_checksum_verified",
+  "files": [
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/00-zhihu_browser.py",
+      "before": null,
+      "after": "d7992875afe21ddaf19705049e9946e7f9a7f98ded86d3b8ef91d89664f12727"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/studio/web/src/ZhihuConnection.tsx",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/01-ZhihuConnection.tsx",
+      "before": null,
+      "after": "1264ba1bd42209887c617d1e3e9ce9ca5ebf17d910770f390340528c7d3be7c5"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/studio_api.py",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/02-studio_api.py",
+      "before": "89f75f91f16b5df808a1c4fbdd6e1a6819eab31cd163604f78b524e4515009b8",
+      "after": "d89e7342450db9bf6cc40e3c1835e9d660dc9462c8ce8b432709dbd4873d8638"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/studio/web/src/ChannelSetup.tsx",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/03-ChannelSetup.tsx",
+      "before": "8badb3b60ff43e6e807707b40ba61cf8e968325d8ce5c4c6ab4240eb0864ee27",
+      "after": "544f3b6dabd832f1d4a89f612327c46d2510c8a7911c705f296931d300ae0658"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/studio_setup.py",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/04-studio_setup.py",
+      "before": "9023ae0917753a863ea19a2eb84d907250501652baa1a5bfdc90e2f376cb84c5",
+      "after": "39b2c298424386ab25f179e5d7b86ddfa23426d9875ed8eb9a4a70bc2f1ade09"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/studio/requirements.txt",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/05-requirements.txt",
+      "before": "5f405c356872ae823734cac45b3396b246497524949bee8078252ff5d67d225d",
+      "after": "39826d0663c0a1b2ac5621b30c3702f72eec5855c8e8369b524c81b1f2986489"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/studio/requirements.lock.txt",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/06-requirements.lock.txt",
+      "before": "3c848bc5696ad8ffdc03d73fe801f7dbf481279d5e3d9ada5bf58b6dc3865ef6",
+      "after": "e3e9d94200e4ce9852ab4e048009ab183caf238de27b992809fc37fd5f086b98"
+    },
+    {
+      "target": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/SKILL.md",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/07-SKILL.md",
+      "before": "1d841cd2aaa5690d63302a5aedd935a893b2909ae3764a2eb26e48a4bcf44cd0",
+      "after": "80d8a7b3eb368b363b323c13d3be09032bfb7ee58832fdc497f8160aa2b36ce5"
+    },
+    {
+      "target": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/references/zhihu-browser.md",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/08-zhihu-browser.md",
+      "before": null,
+      "after": "86d4644e340cf8c251bee88ce852f6bfce368a0a5f45b1dad7745b89b44042ca"
+    },
+    {
+      "target": "/Users/ouxianxing/.codex/skills/james-au-social-orchestrator/SKILL.md",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/09-SKILL.md",
+      "before": "1d841cd2aaa5690d63302a5aedd935a893b2909ae3764a2eb26e48a4bcf44cd0",
+      "after": "80d8a7b3eb368b363b323c13d3be09032bfb7ee58832fdc497f8160aa2b36ce5"
+    },
+    {
+      "target": "/Users/ouxianxing/.codex/skills/james-au-social-orchestrator/references/zhihu-browser.md",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/10-zhihu-browser.md",
+      "before": null,
+      "after": "86d4644e340cf8c251bee88ce852f6bfce368a0a5f45b1dad7745b89b44042ca"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/skills/james-au-social-orchestrator/SKILL.md",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/11-SKILL.md",
+      "before": "1d841cd2aaa5690d63302a5aedd935a893b2909ae3764a2eb26e48a4bcf44cd0",
+      "after": "80d8a7b3eb368b363b323c13d3be09032bfb7ee58832fdc497f8160aa2b36ce5"
+    },
+    {
+      "target": "/Users/ouxianxing/Documents/James-Au-Studio/skills/james-au-social-orchestrator/references/zhihu-browser.md",
+      "candidate": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/artifacts/zhihu-browser-integration/candidate/12-zhihu-browser.md",
+      "before": null,
+      "after": "86d4644e340cf8c251bee88ce852f6bfce368a0a5f45b1dad7745b89b44042ca"
+    }
+  ],
+  "live_connected": true,
+  "live_posted": false,
+  "browser": "Google Chrome stable",
+  "live_publication_state": "unknown",
+  "selected_profile": "https://www.zhihu.com/people/sing-sing-66"
+}

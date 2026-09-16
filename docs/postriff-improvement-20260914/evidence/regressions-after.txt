@@ -1,0 +1,14 @@
+test_cancel_during_rate_limit_does_not_retry (test_postriff_safety_regressions.SafetyRegressions.test_cancel_during_rate_limit_does_not_retry) ... ok
+test_malformed_receipt_does_not_crash_or_claim_publication (test_postriff_safety_regressions.SafetyRegressions.test_malformed_receipt_does_not_crash_or_claim_publication) ... ok
+test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) ... ok
+test_one_draft_edit_memory_export_without_social_connection (test_postriff_safety_regressions.SafetyRegressions.test_one_draft_edit_memory_export_without_social_connection) ... ok
+test_provider_exception_is_recorded_without_error_secrets (test_postriff_safety_regressions.SafetyRegressions.test_provider_exception_is_recorded_without_error_secrets) ... ok
+test_reconciliation_cannot_restore_automatic_submission (test_postriff_safety_regressions.SafetyRegressions.test_reconciliation_cannot_restore_automatic_submission) ... ok
+test_removed_fact_cannot_be_reapproved_as_current_draft (test_postriff_safety_regressions.SafetyRegressions.test_removed_fact_cannot_be_reapproved_as_current_draft) ... ok
+test_revoked_approver_holds_waiting_job (test_postriff_safety_regressions.SafetyRegressions.test_revoked_approver_holds_waiting_job) ... ok
+test_viewer_cannot_mutate (test_postriff_safety_regressions.SafetyRegressions.test_viewer_cannot_mutate) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.227s
+
+OK

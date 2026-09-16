@@ -1,0 +1,2 @@
+const {packager}=require('@electron/packager');
+(async()=>{await packager({dir:__dirname,name:'PostRiff',platform:process.argv[2]||'darwin',arch:process.argv[3]||'arm64',out:__dirname+'/artifacts',overwrite:true,asar:false,appBundleId:'studio.postriff.local',appVersion:'0.3.0',osxSign:undefined,ignore:(p)=>{if(!p)return false;const first=p.replace(/^\//,'').split('/')[0];return !['main.cjs','preload.cjs','boundary.cjs','package.json','bundle'].includes(first);}})})().catch(e=>{console.error(e.message);process.exit(1)});

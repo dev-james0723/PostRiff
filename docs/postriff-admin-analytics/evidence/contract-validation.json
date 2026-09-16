@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "execution": "candidate-contract-conformance",
+  "checks": [
+    "valid measured example",
+    "valid missing example",
+    "valid zero example",
+    "valid stale example",
+    "valid admin_unavailable example",
+    "unknown metric rejected",
+    "missing metric cannot be invented zero",
+    "measured cannot be null",
+    "negative native count rejected",
+    "floating count rejected",
+    "unqualified YouTube derived metric rejected",
+    "unqualified real API claim rejected",
+    "unknown coverage cannot be complete",
+    "added token field rejected",
+    "social metric cannot impersonate first-party global aggregate",
+    "social metrics require workspace and account",
+    "all first-party definitions contain reviewable formulas",
+    "no cross-platform or cross-tenant aggregate defaults",
+    "three selected providers and zero authorization assumed",
+    "all OpenAPI refs resolve locally",
+    "OpenAPI operation IDs unique and path params match",
+    "read contract has no publication operation",
+    "42 unique metric definitions",
+    "native Pacific DST day contract preserves 23h"
+  ],
+  "test_count": 24,
+  "limitations": [
+    "No live provider requests or JWT validation",
+    "Full OpenAPI/JSON Schema standard validator validation_unavailable: no validator installed; local refs/required fields/negative cases checked",
+    "Worker concurrency and billing end-to-end tests specified but not implemented"
+  ]
+}

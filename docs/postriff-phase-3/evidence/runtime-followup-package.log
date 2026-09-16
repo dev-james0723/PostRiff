@@ -1,0 +1,104 @@
+
+> james-au-studio-web@0.1.0 build:hosted
+> tsc --noEmit && vite build --config vite.alpha.config.ts
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 72 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-alpha/index.html                   0.42 kB │ gzip:   0.29 kB
+dist-alpha/assets/index-SXxjsmDn.css   55.61 kB │ gzip:  12.58 kB
+dist-alpha/assets/index-DJxdptZT.js   588.40 kB │ gzip: 162.32 kB
+
+✓ built in 149ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+67 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.7
+68 INFO: Python: 3.14.5
+78 INFO: Platform: macOS-15.1-arm64-arm-64bit-Mach-O
+78 INFO: Python environment: /Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv
+78 INFO: wrote /Users/ouxianxing/Documents/James-Au-Studio/desktop/postriff-sidecar.spec
+82 INFO: Removing temporary files and cleaning cache in /Users/ouxianxing/Library/Application Support/pyinstaller
+100 INFO: Module search paths (PYTHONPATH):
+['/Users/ouxianxing/Documents/James-Au-Studio',
+ '/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python314.zip',
+ '/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14',
+ '/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/lib-dynload',
+ '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages',
+ '/Users/ouxianxing/Documents/James-Au-Studio/desktop',
+ '/Users/ouxianxing/Documents/James-Au-Studio/src']
+224 INFO: Appending 'datas' from .spec
+224 INFO: checking Analysis
+224 INFO: Building Analysis because Analysis-00.toc is non existent
+224 INFO: Looking for Python shared library...
+227 INFO: Using Python shared library: /opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/Python
+227 INFO: Running Analysis Analysis-00.toc
+227 INFO: Target bytecode optimization level: 0
+227 INFO: Initializing module dependency graph...
+228 INFO: Initializing module graph hook caches...
+238 INFO: Analyzing modules for base_library.zip ...
+1350 INFO: Processing standard module hook 'hook-encodings.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+1643 INFO: Processing standard module hook 'hook-pickle.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+1856 INFO: Processing standard module hook 'hook-math.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+1979 INFO: Processing standard module hook 'hook-difflib.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+1991 INFO: Processing standard module hook 'hook-heapq.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+4262 INFO: Caching module dependency graph...
+4292 INFO: Analyzing /Users/ouxianxing/Documents/James-Au-Studio/desktop/sidecar_entry.py
+4481 INFO: Processing standard module hook 'hook-sqlite3.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+4665 INFO: Processing standard module hook 'hook-platform.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+4701 INFO: Processing standard module hook 'hook-xml.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+4740 INFO: Processing standard module hook 'hook-sysconfig.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+4754 INFO: Processing standard module hook 'hook-_osx_support.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+4758 INFO: Processing standard module hook 'hook-_ctypes.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+4854 INFO: Processing standard module hook 'hook-zoneinfo.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+4949 INFO: Processing standard module hook 'hook-PIL.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+5064 INFO: Processing standard module hook 'hook-PIL.Image.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+5292 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+5480 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+5803 INFO: Processing module hooks (post-graph stage)...
+6127 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks'
+6253 INFO: Performing binary vs. data reclassification (3 entries)
+6255 INFO: Looking for ctypes DLLs
+6264 INFO: Analyzing run-time hooks ...
+6265 INFO: Including run-time hook 'pyi_rth_inspect.py' from '/Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/hooks/rthooks'
+6271 INFO: Creating base_library.zip...
+6283 INFO: Looking for dynamic libraries
+6409 INFO: Warnings written to /Users/ouxianxing/Documents/James-Au-Studio/desktop/build-sidecar/postriff-sidecar/warn-postriff-sidecar.txt
+6421 INFO: Graph cross-reference written to /Users/ouxianxing/Documents/James-Au-Studio/desktop/build-sidecar/postriff-sidecar/xref-postriff-sidecar.html
+6486 INFO: checking PYZ
+6486 INFO: Building PYZ because PYZ-00.toc is non existent
+6486 INFO: Building PYZ (ZlibArchive) /Users/ouxianxing/Documents/James-Au-Studio/desktop/build-sidecar/postriff-sidecar/PYZ-00.pyz
+6734 INFO: Building PYZ (ZlibArchive) /Users/ouxianxing/Documents/James-Au-Studio/desktop/build-sidecar/postriff-sidecar/PYZ-00.pyz completed successfully.
+6738 INFO: EXE target arch: arm64
+6738 INFO: Code signing identity: None
+6740 INFO: checking PKG
+6740 INFO: Building PKG because PKG-00.toc is non existent
+6740 INFO: Building PKG (CArchive) postriff-sidecar.pkg
+6750 INFO: Building PKG (CArchive) postriff-sidecar.pkg completed successfully.
+6750 INFO: Bootloader /Users/ouxianxing/Documents/James-Au-Studio/.phase3-build-venv/lib/python3.14/site-packages/PyInstaller/bootloader/Darwin-64bit/run
+6750 INFO: checking EXE
+6750 INFO: Building EXE because EXE-00.toc is non existent
+6750 INFO: Building EXE from EXE-00.toc
+6750 INFO: Copying bootloader EXE to /Users/ouxianxing/Documents/James-Au-Studio/desktop/build-sidecar/postriff-sidecar/postriff-sidecar
+6751 INFO: Converting EXE to target arch (arm64)
+6769 INFO: Removing signature(s) from EXE
+6784 INFO: Modifying Mach-O image UUID(s) in EXE
+6787 INFO: Appending PKG archive to EXE
+6788 INFO: Fixing EXE headers for code signing
+6792 INFO: Rewriting the executable's macOS SDK version (26.2.0) to match the SDK version of the Python library (15.4.0) in order to avoid inconsistent behavior and potential UI issues in the frozen application.
+6792 INFO: Re-signing the EXE
+6822 INFO: Building EXE from EXE-00.toc completed successfully.
+6823 INFO: checking COLLECT
+6823 INFO: Building COLLECT because COLLECT-00.toc is non existent
+6823 INFO: Building COLLECT COLLECT-00.toc
+9384 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+9385 INFO: Build complete! The results are available in: /Users/ouxianxing/Documents/James-Au-Studio/desktop/bundle
+
+> postriff-desktop@0.3.0 package:mac
+> node package.cjs darwin arm64
+
+Packaging app for platform darwin arm64 using electron v44.3.0

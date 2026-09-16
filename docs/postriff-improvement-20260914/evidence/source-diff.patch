@@ -1,0 +1,405 @@
+--- a/src/postriff_phase2/store.py
++++ b/src/postriff_phase2/store.py
+@@ -12,6 +12,7 @@
+ from .contracts import PLANS, LIMITS, SCENARIOS, FixtureImages, FixtureSocial, digest, resolve_time
+ from .media import decode_upload
+ from .content_types import apply_content_action, content_preflight, ensure_content_state, projection as content_projection
++from .outcomes import normalize_result, unknown
+ 
+ TERMINAL = ("verified", "failed", "canceled")
+ IN_FLIGHT = ("submitting", "provider_accepted", "published", "uncertain")
+@@ -71,7 +72,9 @@
+                 raise AlphaError("This workspace changed. Reload the saved version before continuing.", 409)
+             s = json.loads(row["state"])
+             ensure_content_state(s)
+-            device = db.execute("SELECT id,user_id FROM alpha_devices WHERE workspace_id=? AND credential_hash=?", (wid, hashlib.sha256(token.encode()).hexdigest())).fetchone()
++            device = db.execute("SELECT d.id,d.user_id,m.role FROM alpha_devices d JOIN alpha_memberships m ON m.workspace_id=d.workspace_id AND m.user_id=d.user_id WHERE d.workspace_id=? AND d.credential_hash=? AND d.status='active' AND m.status='active'", (wid, hashlib.sha256(token.encode()).hexdigest())).fetchone()
++            if not device or device['role'] not in ('owner', 'editor'):
++                raise AlphaError("Read-only or revoked membership.", 403)
+             if action.startswith("p2_"):
+                 self.apply_phase2(db, s, action[3:], payload, device)
+             else:
+@@ -199,7 +202,7 @@
+             v = self._variant(s, p.get("variantId"))
+             if p.get("variantRevision") != v["revision"] or p.get("confirmed") is not True:
+                 raise AlphaError("Read this exact draft and confirm the source and uncertainty review.", 409)
+-            if v["blockedByRetraction"] or v["voiceRevision"] != s["speaker"]["activeRevision"] or any(not self._source(s, i)["active"] for i in v["sourceIds"]):
++            if v["blockedByRetraction"] or v.get("briefRevision") != s["brief"]["revision"] or v["voiceRevision"] != s["speaker"]["activeRevision"] or any(not self._source(s, i)["active"] for i in v["sourceIds"]):
+                 raise AlphaError("Regenerate against current approved sources and voice before reviewing.")
+             if p.get("excludedUnknowns") != v["unknowns"]:
+                 raise AlphaError("Review every unknown. Confirm that unsupported details are excluded from this draft.")
+@@ -253,7 +256,7 @@
+             raise AlphaError("Trial expired. Export remains available; scheduling is held.")
+         if self.channel_state(c) != "Ready for posting":
+             raise AlphaError("Verify this exact fixture account and its capability first.")
+-        if v["needsReview"] or v["blockedByRetraction"] or v["unknowns"] or any(not self._source(s, i)["active"] for i in v["sourceIds"]):
++        if v["needsReview"] or v["blockedByRetraction"] or v["unknowns"] or v.get("briefRevision") != s["brief"]["revision"] or any(not self._source(s, i)["active"] for i in v["sourceIds"]):
+             raise AlphaError("Resolve draft review, retracted sources and unknown facts before scheduling.")
+         if not s["speaker"]["activeRevision"] or v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"] or v["language"] != c["language"]:
+             raise AlphaError("The variant, language and current speaker must match this destination.")
+@@ -277,16 +280,32 @@
+         evidence = c.get("evidenceSource", "synthetic")
+         selection = ensure_content_state(s)["selection"]
+         manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
++        manifest["briefRevision"] = s["brief"]["revision"]
++        manifest["sourceDigest"] = self.source_digest(s, v)
++        manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
+         manifest["idempotencyKey"] = digest(manifest)
+         return manifest
++
++    def source_digest(self, s, variant):
++        return digest([{"id": source["id"], "active": source["active"],
++                        "facts": [fact for fact in source["facts"] if fact["approved"]]}
++                       for source in (self._source(s, i) for i in variant["sourceIds"])])
+ 
+     def current(self, s, m):
+         try:
+             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
++            if (m.get("workspaceId") != s["workspace"]["id"]
++                    or m.get("brandHubId") != s["brandHub"]["id"]
++                    or m.get("briefRevision") != s["brief"]["revision"]
++                    or v.get("briefRevision") != s["brief"]["revision"]
++                    or m.get("sourceDigest") != self.source_digest(s, v)
++                    or m.get("providerAccountId") != c.get("providerAccountId", c["account"])
++                    or m["capability"]["scopes"] != c["scopes"]):
++                return False
+             media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"])
+             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s), "skillRouteIds": v.get("contentSkillRouteIds", [])}
+             return bool(media_ok and content_type_ok and not v["needsReview"] and not v["blockedByRetraction"] and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["language"] == v["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and all(self._source(s, i)["active"] for i in v["sourceIds"]))
+-        except AlphaError:
++        except (AlphaError, KeyError, TypeError, ValueError):
+             return False
+ 
+     def event(self, job, state, message):
+@@ -332,9 +351,19 @@
+                 for j in s["phase2"]["jobs"]:
+                     if j["leaseUntil"] > self.clock() or j["nextAt"] > self.clock() or j["state"] in (*TERMINAL, "held"):
+                         continue
++                    if j.get("cancelRequested") and j["state"] not in IN_FLIGHT:
++                        self.event(j, "canceled", "Canceled before provider submission")
++                        continue
+                     if j["state"] == "submitting":
+                         self.event(j, "uncertain", "Worker lease expired after submission started; reconcile before retry")
+                     reconciliation = j["state"] in IN_FLIGHT
++                    if not reconciliation:
++                        member = db.execute("SELECT role FROM alpha_memberships WHERE workspace_id=? AND user_id=? AND status='active'", (row["id"], j["approvedBy"])).fetchone()
++                        if (not member or member['role'] not in ('owner', 'editor')
++                                or j['approvalDigest'] != digest(j['manifest'])
++                                or j['approvedBy'] != j['manifest']['actor']):
++                            self.event(j, "held", "Approval authority changed; a new review is required")
++                            continue
+                     if not reconciliation and len(j["attempts"]) >= 3:
+                         self.event(j, "failed", "Bounded retry limit reached")
+                         continue
+@@ -356,7 +385,11 @@
+         if not selected or crash == "before_submit":
+             return bool(selected)
+         wid, job, scenario, reconciliation = selected
+-        result = self.social.reconcile(job["manifest"], scenario, job["checks"]) if reconciliation else self.social.submit(job["manifest"], scenario)
++        try:
++            result = self.social.reconcile(job["manifest"], scenario, job["checks"]) if reconciliation else self.social.submit(job["manifest"], scenario)
++        except Exception:
++            # Provider errors may contain tokens or request bodies. Preserve only a safe state.
++            result = unknown()
+         if crash in ("after_submit", "after_acceptance"):
+             return True
+         with self.connect() as db:
+@@ -368,9 +401,7 @@
+             j = find(s["phase2"]["jobs"], job["id"])
+             if j["leaseOwner"] != owner or j.get("leaseId") != job.get("leaseId"):
+                 return True
+-            allowed = {"uncertain", "held", "scheduled", "failed", "provider_accepted", "published", "verified"}
+-            if not isinstance(result, dict) or result.get("state") not in allowed:
+-                result = {"state": "uncertain", "confirmed": "Malformed adapter response; reconcile"}
++            result = normalize_result(result, j, reconciliation)
+             self.event(j, result["state"], result["confirmed"])
+             j["providerReference"] = result.get("reference", j.get("providerReference"))
+             j["providerConfirmed"] = result["confirmed"]
+--- a/src/postriff_phase2/hosted_worker.py
++++ b/src/postriff_phase2/hosted_worker.py
+@@ -7,6 +7,8 @@
+ from postriff_alpha.domain import AlphaError
+ from .store import IN_FLIGHT, TERMINAL, find
+ from .hosted import HostedPhase2Commands
++from .contracts import digest
++from .outcomes import normalize_result, unknown
+ 
+ 
+ class DisabledHostedSocial:
+@@ -52,6 +54,14 @@
+                         if job.get("state") == "submitting":
+                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
+                         reconciliation = job.get("state") in IN_FLIGHT
++                        if not reconciliation:
++                            cur.execute("SELECT m.role FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
++                            member = cur.fetchone()
++                            if (not member or member[0] not in ('owner', 'editor')
++                                    or job['approvalDigest'] != digest(job['manifest'])
++                                    or job['approvedBy'] != job['manifest']['actor']):
++                                self._event(job, 'held', 'Approval authority changed; a new review is required')
++                                continue
+                         if not reconciliation and len(job.get("attempts", [])) >= 3:
+                             self._event(job, "failed", "Bounded retry limit reached")
+                             continue
+@@ -75,9 +85,6 @@
+         return None
+ 
+     def complete(self, claimed, result):
+-        allowed = {"uncertain", "held", "scheduled", "failed", "provider_accepted", "published", "verified"}
+-        if not isinstance(result, dict) or result.get("state") not in allowed or not isinstance(result.get("confirmed"), str):
+-            result = {"state": "uncertain", "confirmed": "Malformed adapter response; reconcile before retry"}
+         with self.connection_factory() as db:
+             with db.cursor() as cur:
+                 cur.execute("SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (claimed["workspaceId"],))
+@@ -89,6 +96,7 @@
+                 job = find(state["phase2"]["jobs"], claimed["job"]["id"])
+                 if job.get("leaseOwner") != self.worker_id or job.get("leaseId") != claimed["job"].get("leaseId"):
+                     return False
++                result = normalize_result(result, job, claimed['reconciliation'])
+                 self._event(job, result["state"], result["confirmed"])
+                 if result.get("reference"):
+                     job["providerReference"] = result["reference"]
+@@ -116,10 +124,13 @@
+         claimed = self.claim()
+         if not claimed or crash == "after_claim":
+             return bool(claimed)
+-        if claimed["reconciliation"]:
+-            result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
+-        else:
+-            result = self.social.submit(claimed["job"]["manifest"])
++        try:
++            if claimed["reconciliation"]:
++                result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
++            else:
++                result = self.social.submit(claimed["job"]["manifest"])
++        except Exception:
++            result = unknown()
+         if crash == "after_provider":
+             return True
+         self.complete(claimed, result)
+--- a/tests/phase2/postgres_repository.py
++++ b/tests/phase2/postgres_repository.py
+@@ -88,7 +88,7 @@
+         return {'state':'provider_accepted','confirmed':'Disposable adapter accepted','reference':'disposable-1'}
+     def reconcile(self,manifest,job):
+         self.reconciles+=1
+-        return {'state':'verified','confirmed':'Disposable lookup matched','verification':'disposable_lookup'}
++        return {'state':'verified','confirmed':'Disposable lookup matched','verification':'disposable_lookup','reference':'disposable-1'}
+ social=Social();worker=PostgresWorker(connection,social=social,clock=lambda:clock[0],worker_id='disposable-worker')
+ clock[0]+=61
+ assert worker.step(crash='after_provider')
+--- /dev/null
++++ b/src/postriff_phase2/outcomes.py
+@@ -0,0 +1,27 @@
++"""Validate adapter results at the worker boundary, independently of transports."""
++
++
++def unknown(message="Provider outcome is unknown; reconcile before retry"):
++    return {"state": "uncertain", "confirmed": message}
++
++
++def normalize_result(result, job, reconciliation=False):
++    allowed = {"uncertain", "held", "scheduled", "failed", "provider_accepted", "published", "verified"}
++    if (not isinstance(result, dict) or not isinstance(result.get("state"), str) or result["state"] not in allowed
++            or not isinstance(result.get("confirmed"), str)
++            or not 1 <= len(result["confirmed"]) <= 2000):
++        return unknown("Malformed adapter response; reconcile before retry")
++    reference = result.get("reference", job.get("providerReference"))
++    if reference is not None and (not isinstance(reference, str) or not 1 <= len(reference) <= 500):
++        return unknown("Invalid provider reference; reconcile before retry")
++    if reconciliation and result["state"] in ("scheduled", "held", "failed"):
++        # A lookup failure or retry suggestion cannot prove that a prior POST did not run.
++        return unknown("Reconciliation did not resolve the prior submission; manual review required")
++    if result["state"] in ("published", "verified") and not reference:
++        return unknown("Publication receipt is missing a provider reference")
++    if result["state"] == "verified" and (not isinstance(result.get("verification"), str)
++                                             or not 1 <= len(result["verification"]) <= 200):
++        return unknown("Publication receipt is missing verification evidence")
++    if job.get("cancelRequested") and result["state"] == "scheduled":
++        return {"state": "canceled", "confirmed": "Canceled after the adapter confirmed rejection before acceptance"}
++    return {key: result[key] for key in ("state", "confirmed", "reference", "verification") if key in result}
+--- /dev/null
++++ b/tests/test_postriff_safety_regressions.py
+@@ -0,0 +1,135 @@
++"""Synthetic regressions for approval authority and ambiguous provider outcomes."""
++import copy
++import io
++import json
++import tempfile
++import unittest
++import zipfile
++from pathlib import Path
++import test_postriff_phase2 as p2
++from postriff_alpha.domain import AlphaError
++from postriff_phase2.store import Phase2Store
++
++
++class SafetyRegressions(unittest.TestCase):
++    setUp = p2.Phase2Acceptance.setUp
++    tearDown = p2.Phase2Acceptance.tearDown
++    channel = p2.Phase2Acceptance.channel
++    draft = p2.Phase2Acceptance.draft
++    review = p2.Phase2Acceptance.review
++    enqueue = p2.Phase2Acceptance.enqueue
++
++    def test_removed_fact_cannot_be_reapproved_as_current_draft(self):
++        self.draft()
++        source = self.j.state['sources'][0]
++        self.j.act('approve_source', sourceId=source['id'], factIds=[])
++        v = self.j.state['variants'][0]
++        with self.assertRaises(AlphaError):
++            self.j.act('p2_variant_review', variantId=v['id'], variantRevision=v['revision'],
++                       confirmed=True, excludedUnknowns=v['unknowns'])
++
++    def test_manifest_is_bound_to_workspace_and_brief(self):
++        job = self.enqueue()
++        for key, value in [('workspaceId', 'other-workspace'), ('brandHubId', 'other-brand'),
++                           ('briefRevision', -1)]:
++            with self.subTest(key=key):
++                manifest = copy.deepcopy(job['manifest'])
++                manifest[key] = value
++                self.assertFalse(self.store.current(self.j.state, manifest))
++
++    def test_viewer_cannot_mutate(self):
++        with self.store.connect() as db:
++            db.execute("UPDATE alpha_memberships SET role='viewer' WHERE workspace_id=?", (self.j.id,))
++        self.j.refresh()
++        with self.assertRaises(AlphaError):
++            self.j.act('idea', idea='Unauthorized edit')
++
++    def test_revoked_approver_holds_waiting_job(self):
++        self.enqueue()
++        with self.store.connect() as db:
++            db.execute("UPDATE alpha_memberships SET status='revoked' WHERE workspace_id=?", (self.j.id,))
++        self.now += 61
++        self.store.worker_step()
++        with self.store.connect() as db:
++            state = json.loads(db.execute('SELECT state FROM workspaces WHERE id=?', (self.j.id,)).fetchone()[0])
++        self.assertEqual(state['phase2']['jobs'][0]['state'], 'held')
++        self.assertEqual(state['phase2']['jobs'][0]['attempts'], [])
++
++    def test_reconciliation_cannot_restore_automatic_submission(self):
++        class BrokenAdapter:
++            submits = 0
++            def submit(adapter, *_):
++                adapter.submits += 1
++                return {'state': 'uncertain', 'confirmed': 'Timed out'}
++            def reconcile(adapter, *_):
++                return {'state': 'scheduled', 'confirmed': 'Try again'}
++        adapter = BrokenAdapter()
++        self.store.social = adapter
++        self.enqueue()
++        self.now += 61
++        for _ in range(4):
++            self.store.worker_step()
++            self.now += 61
++        self.assertEqual(adapter.submits, 1)
++        self.assertEqual(self.j.refresh().state['phase2']['jobs'][0]['state'], 'uncertain')
++
++    def test_cancel_during_rate_limit_does_not_retry(self):
++        class CancelDuringSubmit:
++            submits = 0
++            def submit(adapter, *_):
++                adapter.submits += 1
++                job = self.j.refresh().state['phase2']['jobs'][0]
++                self.j.act('p2_cancel', jobId=job['id'])
++                return {'state': 'scheduled', 'confirmed': 'Rejected before acceptance'}
++        adapter = CancelDuringSubmit()
++        self.store.social = adapter
++        self.enqueue()
++        self.now += 61
++        self.store.worker_step()
++        self.now += 61
++        self.store.worker_step()
++        self.assertEqual(adapter.submits, 1)
++        self.assertEqual(self.j.refresh().state['phase2']['jobs'][0]['state'], 'canceled')
++
++    def test_provider_exception_is_recorded_without_error_secrets(self):
++        class BrokenAdapter:
++            def submit(adapter, *_):
++                raise TimeoutError('PRIVATE_PROVIDER_SECRET')
++        self.store.social = BrokenAdapter()
++        self.enqueue()
++        self.now += 61
++        self.store.worker_step()
++        job = self.j.refresh().state['phase2']['jobs'][0]
++        self.assertEqual(job['state'], 'uncertain')
++        self.assertNotIn('PRIVATE_PROVIDER_SECRET', json.dumps(job))
++
++    def test_malformed_receipt_does_not_crash_or_claim_publication(self):
++        class BrokenAdapter:
++            def submit(adapter, *_):
++                return {'state': 'verified'}
++        self.store.social = BrokenAdapter()
++        self.enqueue()
++        self.now += 61
++        self.store.worker_step()
++        self.assertEqual(self.j.refresh().state['phase2']['jobs'][0]['state'], 'uncertain')
++
++    def test_non_string_provider_state_is_uncertain(self):
++        from postriff_phase2.outcomes import normalize_result
++        for state in (None, [], {}, True, 1):
++            self.assertEqual(normalize_result({'state': state, 'confirmed': 'bad'}, {})['state'], 'uncertain')
++
++    def test_one_draft_edit_memory_export_without_social_connection(self):
++        self.j.setup().act('generate', platform='LinkedIn', language='English')
++        pref = self.j.edit()
++        self.j.act('preference', preferenceId=pref['id'], decision='remember')
++        self.j.act('preference', preferenceId=pref['id'], decision='undo')
++        self.assertEqual(self.j.state['phase2']['channels'], [])
++        with zipfile.ZipFile(io.BytesIO(self.store.export(self.j.id, self.j.token))) as archive:
++            state = json.loads(archive.read('phase2/workspace.json'))
++        self.assertEqual(len(state['variants']), 1)
++        self.assertEqual(state['preferences'][0]['status'], 'undone')
++        self.assertEqual(state['phase2']['jobs'], [])
++
++
++if __name__ == '__main__':
++    unittest.main()
+--- /dev/null
++++ b/tests/phase2/postgres_safety.py
+@@ -0,0 +1,44 @@
++"""Run after postgres_repository.py, against its disposable loopback fixtures only."""
++import copy,json,sys,time
++from pathlib import Path
++sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'src'))
++import psycopg
++from postriff_phase2.hosted_worker import PostgresWorker
++DSN='host=127.0.0.1 port=55438 dbname=postgres'
++def connection(): return psycopg.connect(DSN)
++with connection() as db:
++ wid,base=db.execute("SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'phase2'").fetchone()
++actor=base['phase2']['jobs'][0]['approvedBy'];clock=[time.time()+120]
++class Broken:
++ def __init__(self): self.submits=0
++ def submit(self,*_):self.submits+=1;return {'state':'uncertain','confirmed':'Ambiguous fixture'}
++ def reconcile(self,*_):return {'state':'scheduled','confirmed':'Unsafe retry suggestion'}
++def reset():
++ s=copy.deepcopy(base);job=s['phase2']['jobs'][0]
++ job.update(state='scheduled',attempts=[],checks=0,nextAt=0,leaseUntil=0,leaseOwner=None,cancelRequested=False)
++ with connection() as db:
++  db.execute("UPDATE public.pr_workspaces SET state=%s WHERE id=%s",(json.dumps(s),wid))
++  db.execute("UPDATE public.pr_memberships SET status='active',role='owner' WHERE user_id=%s",(actor,))
++def job():
++ with connection() as db:return db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]['phase2']['jobs'][0]
++checks=[]
++reset();social=Broken();worker=PostgresWorker(connection,social=social,clock=lambda:clock[0])
++for _ in range(4):worker.step();clock[0]+=61
++assert social.submits==1 and job()['state']=='uncertain';checks.append('unknown reconciliation cannot requeue submission')
++reset()
++with connection() as db:db.execute("UPDATE public.pr_memberships SET status='revoked' WHERE user_id=%s",(actor,))
++worker.step();assert job()['state']=='held' and not job()['attempts'];checks.append('revoked approver blocked at durable claim')
++reset()
++with connection() as db:db.execute("UPDATE public.pr_memberships SET role='viewer' WHERE user_id=%s",(actor,))
++worker.step();assert job()['state']=='held';checks.append('read-only approver blocked at durable claim')
++reset()
++claimed=worker.claim()
++with connection() as db:
++ s=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]
++ s['phase2']['jobs'][0].update(cancelRequested=True,state='uncertain')
++ db.execute('UPDATE public.pr_workspaces SET state=%s WHERE id=%s',(json.dumps(s),wid))
++worker.complete(claimed,{'state':'scheduled','confirmed':'Rejected before acceptance'})
++assert job()['state']=='canceled';checks.append('cancel and rate-limit completion race')
++reset();claimed=worker.claim();worker.complete(claimed,{'state':'verified','confirmed':'Missing verification reference'})
++assert job()['state']=='uncertain';checks.append('incomplete publication evidence rejected')
++print(json.dumps({'status':'pass','execution':'disposable-local-postgres','checks':checks},indent=2))

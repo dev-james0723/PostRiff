@@ -1,0 +1,212 @@
+--- before/studio/web/src/founder/RuntimePanel.tsx
++++ after/studio/web/src/founder/RuntimePanel.tsx
+@@ -1,7 +1,7 @@
+-import {useEffect,useState} from 'react';
++import {useEffect,useState,useRef} from 'react';
+ import type {Access,AlphaState,Snapshot} from './types';
+ import {api,readLocal,writeLocal} from './api';
+-import {pendingKey,retainedEdit,recoveryLabel,type PendingEdit} from './runtime-state';
++import {pendingKey,retainedEdit,recoveryLabel,submission,reconcileEdits,type PendingEdit} from './runtime-state';
+ import './runtime.css';
+ type Act=(action:string,payload:Record<string,unknown>)=>Promise<Snapshot|undefined>;
+ interface Enrollment {id:string;code:string;name:string;workspaceId:string;expiresAt:number}
+@@ -13,8 +13,31 @@
+  const [online,setOnline]=useState(navigator.onLine);
+  useEffect(()=>{const change=()=>setOnline(navigator.onLine);window.addEventListener('online',change);window.addEventListener('offline',change);return()=>{window.removeEventListener('online',change);window.removeEventListener('offline',change);};},[]);
+  const active=runtime.jobs.some(j=>['waiting','running'].includes(j.status));
+- useEffect(()=>{if(!active||busy)return;const timer=window.setInterval(()=>void api.get(access).then(onSnapshot).catch(()=>setMessage('Connection lost. Saved candidates and unsent edits are retained.')),1000);return()=>clearInterval(timer);},[active,busy,access.workspaceId,revision]);
+- function savePending(next:Record<string,PendingEdit>){setPending(next);writeLocal(pendingKey(state.workspace.id),next);}
++ const pendingRef=useRef(pending);
++ function savePending(next:Record<string,PendingEdit>){pendingRef.current=next;setPending(next);try{writeLocal(pendingKey(state.workspace.id),next);}catch{setMessage('Device storage is unavailable. Keep this page open and copy your unsent text before leaving.');}}
++ useEffect(()=>{const next=reconcileEdits(pendingRef.current,runtime.operations??[]);if(next!==pendingRef.current)savePending(next);},[runtime.operations]);
++ useEffect(()=>{
++  if(busy)return;
++  let disposed=false,inFlight=false;
++  const refresh=async()=>{
++   if(disposed||inFlight||!navigator.onLine||document.visibilityState==='hidden')return;
++   inFlight=true;
++   try{const next=await api.get(access);if(!disposed&&next.revision>=revision)onSnapshot(next);}
++   catch{if(!disposed)setMessage('Connection lost or session ended. Unsent edits are retained; sign in again if needed.');}
++   finally{inFlight=false;}
++  };
++  void refresh();
++  const timer=window.setInterval(()=>void refresh(),active?1000:5000);
++  window.addEventListener('online',refresh);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
++  return()=>{disposed=true;clearInterval(timer);window.removeEventListener('online',refresh);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
++ },[active,busy,access.workspaceId,access.token,revision]);
++ async function sync(id:string){
++  const edit=pendingRef.current[id];if(!edit)return;
++  const sent=submission(edit);
++  savePending({...pendingRef.current,[id]:{...edit,submitted:sent}});
++  const result=await act('p3_sync_edit',{...sent});
++  if(result)savePending(reconcileEdits(pendingRef.current,result.state.phase3?.operations??[]));
++ }
+  async function pair(){if(!enrollment||!window.postriffDesktop)return;try{const result=await window.postriffDesktop.pair({workspaceId:access.workspaceId,token:access.token,expectedRevision:revision,enrollmentId:enrollment.id,code:enrollment.code,name:enrollment.name});if(!result.canceled){onSnapshot(result);setEnrollment(null);setMessage('Paired locally. Hosted cross-device acceptance remains pending.');}}catch(e){setMessage(e instanceof Error?e.message:'Pairing failed.');}}
+  return <details className="p3-runtime"><summary>Writing runtime & devices <span>{runtime.routes.find(r=>r.id===runtime.selected)?.label}</span></summary>
+  <div className="p3-body">
+@@ -43,9 +66,9 @@
+  {runtime.devices.map(d=><p key={d.id}>{d.name} · {d.connection} · last seen {new Date(d.lastSeen*1000).toLocaleString()} {d.status!=='revoked'&&<button disabled={busy} onClick={()=>void act('p3_revoke',{deviceId:d.id})}>Revoke</button>}</p>)}
+  </details>
+  <details><summary>Offline edits & conflict recovery</summary><p role="status">{online?'Connection available':'Offline'} · unsent edits stay in this browser/device. Synchronize each edit explicitly.</p>
+- {state.variants.map(v=><section key={v.id}><label>{v.platform} · {v.language}<textarea value={pending[v.id]?.text??v.text} onChange={e=>savePending({...pending,[v.id]:retainedEdit(pending[v.id],v,e.target.value)})}/></label>
+- {pending[v.id]&&<><p>{pending[v.id].variantRevision===v.revision?'Unsent local edit':'Conflict: saved revision changed. Your local edit is retained below.'}</p>{pending[v.id].variantRevision!==v.revision&&<><details><summary>Compare saved text</summary><p className="p3-draft">{v.text}</p></details><button onClick={()=>savePending({...pending,[v.id]:{...pending[v.id],variantRevision:v.revision,idempotencyKey:crypto.randomUUID()}})}>Use my text against this saved revision</button></>}
+- <button disabled={busy||!online||pending[v.id].variantRevision!==v.revision} onClick={async()=>{const result=await act('p3_sync_edit',{...pending[v.id]});if(result){const next={...pending};delete next[v.id];savePending(next);}}}>Synchronize this edit</button></>}
++ {state.variants.map(v=><section key={v.id}><label>{v.platform} · {v.language}<textarea value={pending[v.id]?.text??v.text} onChange={e=>savePending({...pendingRef.current,[v.id]:retainedEdit(pendingRef.current[v.id],v,e.target.value)})}/></label>
++ {pending[v.id]&&<><p>{pending[v.id].variantRevision===v.revision?'Unsent local edit':'Conflict: saved revision changed. Your local edit is retained below.'}</p>{pending[v.id].submitted&&<p>Previous save awaiting confirmation. Retry checks that same save before sending newer text.</p>}{pending[v.id].variantRevision!==v.revision&&<><details><summary>Compare saved text</summary><p className="p3-draft">{v.text}</p></details><button onClick={()=>savePending({...pending,[v.id]:{variantId:v.id,text:pendingRef.current[v.id].text,variantRevision:v.revision,idempotencyKey:crypto.randomUUID()}})}>Use my text against this saved revision</button></>}
++ <button disabled={busy||!online||(!pending[v.id].submitted&&pending[v.id].variantRevision!==v.revision)} onClick={()=>void sync(v.id)}>{pending[v.id].submitted?'Check previous save':'Synchronize this edit'}</button></>}
+  </section>)}
+  </details>
+  {message&&<p role="status">{message}</p>}
+--- before/studio/web/src/founder/runtime-state.ts
++++ after/studio/web/src/founder/runtime-state.ts
+@@ -1,9 +1,31 @@
+ export interface RuntimeRoute {id:string;label:string;status:string;detail:string;usage:string}
+ export interface RuntimeJob {id:string;route:string;status:string;inputHash:string;artifactHash?:string;manifest:Record<string,unknown>;events:{id:string;seq:number;type:string;text?:string}[];artifact?:{variants?:{platform:string;language:string;text:string}[];fields?:unknown[]};usage:{provenance:string;modelRequests?:number}}
+-export interface RuntimeState {selected:string;templateId?:string|null;cloudVoiceRevision?:number|null;routes:RuntimeRoute[];devices:{id:string;name:string;connection:string;lastSeen:number;status:string}[];jobs:RuntimeJob[];sourceVisibility:Record<string,string>}
+-export interface PendingEdit {idempotencyKey:string;variantId:string;variantRevision:number;text:string}
++export interface SyncReceipt {id:string;variantId:string;variantRevision:number}
++export interface RuntimeState {operations?:SyncReceipt[];selected:string;templateId?:string|null;cloudVoiceRevision?:number|null;routes:RuntimeRoute[];devices:{id:string;name:string;connection:string;lastSeen:number;status:string}[];jobs:RuntimeJob[];sourceVisibility:Record<string,string>}
++export interface EditPayload {idempotencyKey:string;variantId:string;variantRevision:number;text:string}
++export interface PendingEdit extends EditPayload {submitted?:EditPayload}
+ export function pendingKey(workspaceId:string){return `postriff-p3-pending:${workspaceId}`;}
+ export function retainedEdit(previous:PendingEdit|undefined,variant:{id:string;revision:number;text:string},text:string):PendingEdit {
+- return {idempotencyKey:previous?.idempotencyKey||crypto.randomUUID(),variantId:variant.id,variantRevision:previous?.variantRevision??variant.revision,text};
++ return {idempotencyKey:previous?.text===text?previous.idempotencyKey:crypto.randomUUID(),variantId:variant.id,variantRevision:previous?.variantRevision??variant.revision,text,...(previous?.submitted?{submitted:previous.submitted}:{})};
+ }
+ export function recoveryLabel(status:string){return ({interrupted:'Interrupted · partial text retained',revoked:'Device revoked · writes stopped',expired:'Expired · prepare a new request',completed:'Candidate ready for review',applied:'Candidate saved for editorial review',waiting:'Waiting for runtime',running:'Running',prepared:'Review source scope before starting'} as Record<string,string>)[status]||status;}
++
++export function submission(edit:PendingEdit):EditPayload {
++ return edit.submitted??{idempotencyKey:edit.idempotencyKey,variantId:edit.variantId,variantRevision:edit.variantRevision,text:edit.text};
++}
++export function reconcileEdits(pending:Record<string,PendingEdit>,receipts:SyncReceipt[]):Record<string,PendingEdit> {
++ let next=pending;
++ for(const [id,edit] of Object.entries(pending)) {
++  const sent=edit.submitted;
++  if(!sent)continue;
++  const receipt=receipts.find(r=>r.id===sent.idempotencyKey&&r.variantId===id);
++  if(!receipt)continue;
++  if(next===pending)next={...pending};
++  if(edit.idempotencyKey===sent.idempotencyKey&&edit.text===sent.text)delete next[id];
++  else {
++   const {submitted:_,...local}=edit;
++   next[id]={...local,variantRevision:receipt.variantRevision};
++  }
++ }
++ return next;
++}
+--- before/studio/web/tests/runtime-recovery.test.ts
++++ after/studio/web/tests/runtime-recovery.test.ts
+@@ -1,11 +1,30 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+-import {pendingKey,retainedEdit,recoveryLabel} from '../src/founder/runtime-state.ts';
++import {pendingKey,retainedEdit,recoveryLabel,submission,reconcileEdits} from '../src/founder/runtime-state.ts';
+ test('offline edit keeps its original revision across changes and remains workspace scoped',()=>{
+  const first=retainedEdit(undefined,{id:'variant',revision:2,text:'saved'},'local edit');
+  const second=retainedEdit(first,{id:'variant',revision:3,text:'remote edit'},'continued local edit');
+- assert.equal(second.variantRevision,2);assert.equal(second.idempotencyKey,first.idempotencyKey);assert.notEqual(pendingKey('one'),pendingKey('two'));
++ assert.equal(second.variantRevision,2);assert.notEqual(second.idempotencyKey,first.idempotencyKey);assert.notEqual(pendingKey('one'),pendingKey('two'));
+ });
+ test('runtime recovery labels do not imply publication or provider fallback',()=>{
+  assert.match(recoveryLabel('interrupted'),/partial text retained/);assert.match(recoveryLabel('completed'),/review/);assert.match(recoveryLabel('revoked'),/writes stopped/);
+ });
++
++test('lost response is reconciled after restart without sending a second edit',()=>{
++ const edit=retainedEdit(undefined,{id:'v',revision:2,text:'saved'},'sent');
++ const pending=JSON.parse(JSON.stringify({v:{...edit,submitted:submission(edit)}}));
++ assert.deepEqual(reconcileEdits(pending,[{id:edit.idempotencyKey,variantId:'v',variantRevision:3}]),{});
++});
++test('typing while save is in flight preserves new text and detects a later remote edit',()=>{
++ const sent=retainedEdit(undefined,{id:'v',revision:2,text:'saved'},'first');
++ const newer=retainedEdit({...sent,submitted:submission(sent)},{id:'v',revision:4,text:'remote'},'new local words');
++ assert.equal(submission(newer).text,'first');
++ const recovered=reconcileEdits({v:newer},[{id:sent.idempotencyKey,variantId:'v',variantRevision:3}]).v;
++ assert.equal(recovered.text,'new local words');assert.equal(recovered.variantRevision,3);
++ assert.equal(recovered.submitted,undefined);assert.notEqual(recovered.variantRevision,4);
++});
++test('foreign or absent acknowledgements never discard local text',()=>{
++ const edit=retainedEdit(undefined,{id:'v',revision:1,text:'saved'},'local');
++ const pending={v:{...edit,submitted:submission(edit)}};
++ assert.equal(reconcileEdits(pending,[{id:edit.idempotencyKey,variantId:'other',variantRevision:2}]),pending);
++});
+--- before/src/postriff_phase3/contracts.py
++++ after/src/postriff_phase3/contracts.py
+@@ -209,7 +209,7 @@
+   require(type(p.get('variantRevision')) is int and variant['revision']==p['variantRevision'],'Conflict: your local text is retained. Review the current saved variant.',409)
+   text=clean(p.get('text'),12000);variant.update({'text':text,'revision':variant['revision']+1,'customized':True,'needsReview':True})
+   variant['revisions'].append({'revision':variant['revision'],'text':text,'origin':'explicit-sync'})
+-  data['operations'].append({'id':key,'hash':binding})
++  data['operations'].append({'id':key,'hash':binding,'actor':actor,'variantId':variant['id'],'variantRevision':variant['revision']})
+  else: raise AlphaError('Unsupported runtime action.',404)
+ 
+ 
+--- before/tests/test_postriff_phase3.py
++++ after/tests/test_postriff_phase3.py
+@@ -270,3 +270,16 @@
+   self.j.act('variant_edit',variantId=variant['id'],variantRevision=variant['revision'],text='Independently edited after candidate acceptance.')
+   restarted=Phase3Store(self.store.path,clock=lambda:self.now)
+   self.assertEqual(restarted.get(self.j.id,self.j.token)['state']['variants'][0]['text'],'Independently edited after candidate acceptance.')
++
++ def test_lost_sync_response_receipt_survives_restart_and_remote_conflict(self):
++  self.j.act('generate',platform='LinkedIn',language='English');v=self.j.state['variants'][0]
++  payload={'idempotencyKey':'lost-response','variantId':v['id'],'variantRevision':v['revision'],'text':'First device edit'}
++  self.command('sync_edit',**payload)
++  restarted=Phase3Store(self.store.path,clock=lambda:self.now)
++  current=restarted.get(self.j.id,self.j.token)
++  receipt=current['state']['phase3']['operations'][-1]
++  self.assertEqual(receipt['variantRevision'],v['revision']+1);self.assertEqual(receipt['variantId'],v['id'])
++  replay=restarted.runtime_action(self.j.id,self.j.token,current['revision'],'sync_edit',payload)
++  self.assertEqual(replay['state']['variants'][0]['revision'],v['revision']+1)
++  with self.assertRaises(AlphaError):restarted.runtime_action(self.j.id,self.j.token,replay['revision'],'sync_edit',{**payload,'idempotencyKey':'second-device','text':'Conflicting remote edit'})
++  self.assertEqual(restarted.get(self.j.id,self.j.token)['state']['variants'][0]['text'],'First device edit')
+--- before/desktop/tests/sync-acceptance.cjs
++++ after/desktop/tests/sync-acceptance.cjs
+@@ -0,0 +1,48 @@
++// Extend the existing packaged acceptance journey with a delayed successful save.
++const fs=require('node:fs');const path=require('node:path');
++const evidence=path.resolve(__dirname,'../../docs/postriff-phase-3/evidence/sync-desktop');
++fs.mkdirSync(evidence,{recursive:true});
++let source=fs.readFileSync(path.join(__dirname,'acceptance.cjs'),'utf8').replace("path.join(root,'docs/postriff-phase-3/evidence')",JSON.stringify(evidence));
++const original="await area.fill('独立編輯：保留這段文字。');await page.getByRole('button',{name:'Synchronize this edit',exact:true}).click();";
++const replacement=`
++ let release,committed;
++ const held=new Promise(resolve=>{release=resolve;});
++ const savedOnServer=new Promise(resolve=>{committed=resolve;});
++ let delayed=false;
++ await page.route('**/actions',async route=>{
++  const body=route.request().postDataJSON();
++  if(body.action!=='p3_sync_edit'||delayed)return route.continue();
++  delayed=true;const response=await route.fetch();committed();await held;await route.fulfill({response});
++ });
++ await area.fill('First save held in transit');
++ await page.getByRole('button',{name:'Synchronize this edit',exact:true}).click();
++ await savedOnServer;
++ await area.fill('New text typed while the first save is pending');
++ release();
++ await page.getByRole('button',{name:'Synchronize this edit',exact:true}).waitFor();
++ assert.equal(await area.inputValue(),'New text typed while the first save is pending');
++ await page.getByRole('button',{name:'Synchronize this edit',exact:true}).click();
++ await page.getByText('Unsent local edit',{exact:true}).waitFor({state:'hidden'});
++ assert.equal(await area.inputValue(),'New text typed while the first save is pending');
++ await page.unroute('**/actions');
++ console.log('Delayed acknowledgement preserves newer local text: passed');
++ let responseLost=false;
++ await page.route('**/actions',async route=>{
++  const body=route.request().postDataJSON();
++  if(body.action!=='p3_sync_edit'||responseLost)return route.continue();
++  responseLost=true;await route.fetch();await route.abort('failed');
++ });
++ await area.fill('Saved on server but response lost');
++ await page.getByRole('button',{name:'Synchronize this edit',exact:true}).click();
++ await page.getByRole('button',{name:'Check previous save',exact:true}).waitFor();
++ await page.unroute('**/actions');
++ await page.reload();
++ await page.getByText('Writing runtime & devices').click();
++ await page.getByText('Offline edits & conflict recovery',{exact:true}).click();
++ assert.equal(await page.locator('.p3-body textarea').first().inputValue(),'Saved on server but response lost');
++ await page.getByRole('button',{name:'Check previous save',exact:true}).waitFor({state:'hidden'});
++ console.log('Lost response reconciles after reload: passed');
++`;
++if(!source.includes(original))throw Error('Base acceptance harness changed; inspect before updating');
++source=source.replace(original,replacement);
++new Function('require','__dirname',source)(require,__dirname);

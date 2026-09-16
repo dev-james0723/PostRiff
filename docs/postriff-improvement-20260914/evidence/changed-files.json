@@ -1,0 +1,30 @@
+{
+  "capturedAt": "2026-09-15T02:34:26.648311+00:00",
+  "files": {
+    "src/postriff_phase2/store.py": {
+      "before": "10c3198c78408c0c55290d476f0abb802cad8d547f6939e946906e264633d716",
+      "after": "9bd5deb1c0c8754f1fd3807151da63ef11aefc6e6bfcf8c44fd51ccee67961e3"
+    },
+    "src/postriff_phase2/hosted_worker.py": {
+      "before": "930dfe6605ca27919e31174c941ea0ff9362b82df26bc555831afe055baa9315",
+      "after": "1568d712dbb64ca65535e0acac6a842699b3e155263549423a6d26e30c2044d9"
+    },
+    "tests/phase2/postgres_repository.py": {
+      "before": "5a7d788d42e168ac651d5b75128bbb763108d8389e527729e2595f08a9f50c13",
+      "after": "d307b39d8d21cfd7cb819f64b5a205d0d960384fb213bc5ebbf786d9489f6857"
+    },
+    "src/postriff_phase2/outcomes.py": {
+      "before": null,
+      "after": "17aa8d33961780e1bf755e2c92a6d778f06bff1e112c989f12a73b64cafab100"
+    },
+    "tests/test_postriff_safety_regressions.py": {
+      "before": null,
+      "after": "d0f6af22c80e4c01608e735f2b421f2fcd9d8d98d9c1668f2c457671a64a182a"
+    },
+    "tests/phase2/postgres_safety.py": {
+      "before": null,
+      "after": "43f0d32f17848a336a34a9f89eaeda73569369e99d43a0f003fb5d797122170d"
+    }
+  },
+  "excluded": "Phase3, UI and concurrent contracts.py changes are not attributed to this task"
+}

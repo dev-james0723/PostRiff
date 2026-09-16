@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/liuboacean/zhihu-automation-skill",
+  "commit": "9aca95da75ffd0238174ba9ed2438f4c519ce233",
+  "license": "MIT",
+  "execution": "selective_adaptation_not_upstream_install",
+  "files": {
+    "LICENSE": "7e68fb9155a99ff5316d2d0cd4ae93359a812ace2f47f19e73c1f0cf6fd4fabf",
+    "scripts/zhihu-publish.js": "135fe18c7ad2bbeeab842e2ff5ddf88de9205852c029f8041c1001bf6953e609",
+    "config/selectors.json": "632800eb4e630e2716597ac201a20786946ef9e1400f2a4464da44efa513df9b"
+  },
+  "excluded": [
+    "cookie export",
+    "HTTP signature code",
+    "crash-retry publishing",
+    "engagement",
+    "generic success reports"
+  ],
+  "scope": "text-only zhihu.idea browser pilot; articles/answers remain draft-only"
+}

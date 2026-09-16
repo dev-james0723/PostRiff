@@ -1,0 +1,6 @@
+{
+  "sourceNotes": {
+    "type": "boolean",
+    "default": true
+  }
+}

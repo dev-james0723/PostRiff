@@ -1,0 +1,11 @@
+{
+  "sources": {
+    "postriff-agent-aware-onboarding-workflow.md": "e8c474bd9fe98d9a801699d49171a0ea8571c8a06646fcb6152e81ba25b03516",
+    "postriff-personal-voice-profile-builder-prompt.md": "761d61ca6a9aa513269a8471409a77c2dad48c93b9b136adfd8e7e14ecac301a",
+    "postriff-phase-1-execution-prompt.md": "c426f8cf1639000baf1d9f897af566c5f04820b2f87b51bb23257ade0e269695",
+    "postriff-product-plan/product-spec.md": "24bb264e2e1b31b45b16a35c26f24e28f5d8c65570007439a4852df4a326746b",
+    "postriff-product-plan/implementation-plan.md": "3ee591bfba6400332c9c433e6c2d732863c7d3883d93ca330591acffc13fa351"
+  },
+  "customerPromptSha256": "51bd79de61ab2aafe52a1165dd43e5fe2fc1042135e218443ae3e5d6fcf47d3c",
+  "neutralization": "Three founder-specific references were replaced with neutral privacy instructions; all other builder rules preserved. Alpha adds a structured companion schema for field-level import."
+}

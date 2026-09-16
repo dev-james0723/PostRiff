@@ -1,0 +1,39 @@
+{
+  "observed_at": "2026-09-15T04:23:33+00:00",
+  "image_generation": {
+    "approved_budget_usd": 0.08,
+    "vercel_minimum_budget_usd": 1,
+    "budget_mutated": false,
+    "current_budget_count": 0,
+    "request_sent": false,
+    "reason": "Vercel rejected the budget before mutation because --limit must be at least 1."
+  },
+  "instagram": {
+    "account": "@jamesaucreates",
+    "scopes": [
+      "instagram_business_basic",
+      "instagram_business_content_publish"
+    ],
+    "callback": "https://look-constant-majority-nitrogen.trycloudflare.com/callback",
+    "studio_health": "ok",
+    "tunnel_boundary_http": 403,
+    "oauth_state": "connected_identity",
+    "next_action": "Implement and validate the hosted OAuth/token vault and hosted provider route; local qualification does not establish a hosted connection.",
+    "tester_role": "accepted",
+    "callback_allowlisted": true,
+    "local_identity": "verified @jamesaucreates Media_Creator",
+    "local_route_state": "publish_ready",
+    "local_route_test_id": "instagram-2390b6cf28974f8f149e1edd5088ef824b4f265e",
+    "local_route_signals": [
+      "identity_reverified",
+      "publishing_quota_read"
+    ],
+    "local_publication": false,
+    "hosted_grant": "not_created"
+  },
+  "linkedin": {
+    "local_identity": "connected",
+    "hosted_grant": "not_created",
+    "publication": false
+  }
+}

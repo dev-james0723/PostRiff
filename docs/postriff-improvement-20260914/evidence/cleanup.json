@@ -1,0 +1,14 @@
+{
+  "status": "pass",
+  "at": "2026-09-15T02:36:55.541372+00:00",
+  "scope": "only this task disposable UI and PostgreSQL",
+  "ports": {
+    "45319": {
+      "listening": false
+    },
+    "55438": {
+      "listening": false
+    }
+  },
+  "retained": "synthetic backup and evidence; no user processes changed"
+}

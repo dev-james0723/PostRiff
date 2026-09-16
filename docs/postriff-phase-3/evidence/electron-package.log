@@ -1,0 +1,5 @@
+
+> postriff-desktop@0.3.0 package:mac
+> node package.cjs darwin arm64
+
+Packaging app for platform darwin arm64 using electron v44.3.0

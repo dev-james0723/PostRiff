@@ -1,0 +1,48 @@
+{
+  "execution": "local browser using synthetic workshop data",
+  "status": "pass for listed flows",
+  "fullPhase2Complete": false,
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "checks": {
+    "googleFixtureSignIn": "pass",
+    "trialPlanSwitch": "pass",
+    "emailFixtureLink": "pass",
+    "exportAndLogout": "pass",
+    "reSignInAfterProcessRestart": "three receipts and artwork restored",
+    "artworkConsentAndSelection": "pass; procedural only",
+    "graphListParity": "same one seeded approved node; broader regression tests also passed",
+    "keyboardProfileTabs": "End moved to Account & Privacy",
+    "channelCapability": "separate identity/capability checks with fixture readiness",
+    "exactManifestApproval": "passed visible text, account, revision and timezone review",
+    "listCalendarKanban": "same three destination records",
+    "outcomes": [
+      "verified synthetic",
+      "failed synthetic",
+      "uncertain synthetic"
+    ],
+    "mobileOverflow": "fixed select intrinsic sizing; document width <= viewport width on recheck",
+    "browserConsoleErrorsAfterRestart": []
+  },
+  "screenshots": [
+    "channels-desktop.png",
+    "artwork-selection-desktop.png",
+    "artwork-mobile-detail.png",
+    "partial-outcomes-desktop.png",
+    "kanban-mobile.png"
+  ],
+  "testDataSetup": "Visible sign-in created the synthetic account; a bounded backend seed added fictional source/profile/drafts. This is not an end-to-end real-user onboarding observation.",
+  "limitations": [
+    "Full-page capture stitching was unreliable; primary artifact/partial-outcome evidence uses inspected viewport captures",
+    "Native datetime fill through browser driver did not populate field; quick-time UI and backend DST conversions were verified",
+    "Actual provider and hosted flows not tested"
+  ]
+}

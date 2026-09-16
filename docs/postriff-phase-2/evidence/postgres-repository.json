@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "driver": "3.3.5",
+  "checks": [
+    "real PostgreSQL command persistence",
+    "existing alpha command reuse without SQLite",
+    "two-user membership denial",
+    "stale revision rejection",
+    "transaction rollback",
+    "viewer write denial"
+  ],
+  "execution": "disposable-local-postgres"
+}

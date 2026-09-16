@@ -1,0 +1,6 @@
+{
+  "pid": 56142,
+  "port": 4326,
+  "fixtureStore": false,
+  "scope": "loopback only"
+}

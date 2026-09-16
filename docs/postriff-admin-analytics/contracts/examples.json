@@ -1,0 +1,173 @@
+{
+  "status": "synthetic_contract_examples",
+  "measured": {
+    "metricKey": "youtube.views",
+    "definitionVersion": 1,
+    "accountId": "synthetic-youtube-account",
+    "objectKey": "channel",
+    "value": "1200",
+    "valueStatus": "measured",
+    "unit": "count",
+    "sourceKind": "provider_api",
+    "execution": "synthetic",
+    "freshness": "fresh",
+    "period": {
+      "grain": "period",
+      "start": "2026-09-01T07:00:00Z",
+      "end": "2026-09-08T07:00:00Z",
+      "timezone": "America/Los_Angeles",
+      "nativePeriodKey": "2026-09-01/2026-09-08"
+    },
+    "observedAt": "2026-09-09T12:00:00Z",
+    "availableThrough": "2026-09-08T07:00:00Z",
+    "coverage": {
+      "expected": 7,
+      "observed": 7,
+      "definition": "complete requested native dates",
+      "complete": true
+    },
+    "evidenceRef": "synthetic-fetch-1",
+    "policyVersion": "youtube.native-only.v1",
+    "derived": false,
+    "lastKnownValue": null,
+    "dataDomain": "social",
+    "workspaceId": "synthetic-workspace",
+    "currency": null
+  },
+  "missing": {
+    "metricKey": "instagram.reach",
+    "definitionVersion": 1,
+    "accountId": "synthetic-ig-account",
+    "objectKey": "channel",
+    "value": null,
+    "valueStatus": "scope_missing",
+    "unit": "count",
+    "sourceKind": "provider_api",
+    "execution": "synthetic",
+    "freshness": "unknown",
+    "period": {
+      "grain": "period",
+      "start": "2026-09-01T07:00:00Z",
+      "end": "2026-09-08T07:00:00Z",
+      "timezone": "America/Los_Angeles",
+      "nativePeriodKey": "2026-09-01/2026-09-08"
+    },
+    "observedAt": "2026-09-09T12:00:00Z",
+    "availableThrough": null,
+    "coverage": {
+      "expected": null,
+      "observed": 0,
+      "definition": "capability not qualified",
+      "complete": false
+    },
+    "evidenceRef": "synthetic-fetch-1",
+    "policyVersion": "instagram.unqualified.v1",
+    "derived": false,
+    "lastKnownValue": null,
+    "dataDomain": "social",
+    "workspaceId": "synthetic-workspace",
+    "currency": null
+  },
+  "zero": {
+    "metricKey": "youtube.views",
+    "definitionVersion": 1,
+    "accountId": "synthetic-youtube-account",
+    "objectKey": "channel",
+    "value": "0",
+    "valueStatus": "measured",
+    "unit": "count",
+    "sourceKind": "provider_api",
+    "execution": "synthetic",
+    "freshness": "fresh",
+    "period": {
+      "grain": "period",
+      "start": "2026-09-01T07:00:00Z",
+      "end": "2026-09-08T07:00:00Z",
+      "timezone": "America/Los_Angeles",
+      "nativePeriodKey": "2026-09-01/2026-09-08"
+    },
+    "observedAt": "2026-09-09T12:00:00Z",
+    "availableThrough": "2026-09-08T07:00:00Z",
+    "coverage": {
+      "expected": 7,
+      "observed": 7,
+      "definition": "complete requested native dates",
+      "complete": true
+    },
+    "evidenceRef": "synthetic-fetch-1",
+    "policyVersion": "youtube.native-only.v1",
+    "derived": false,
+    "lastKnownValue": null,
+    "dataDomain": "social",
+    "workspaceId": "synthetic-workspace",
+    "currency": null
+  },
+  "stale": {
+    "metricKey": "youtube.views",
+    "definitionVersion": 1,
+    "accountId": "synthetic-youtube-account",
+    "objectKey": "channel",
+    "value": null,
+    "valueStatus": "stale",
+    "unit": "count",
+    "sourceKind": "provider_api",
+    "execution": "synthetic",
+    "freshness": "stale",
+    "period": {
+      "grain": "period",
+      "start": "2026-09-01T07:00:00Z",
+      "end": "2026-09-08T07:00:00Z",
+      "timezone": "America/Los_Angeles",
+      "nativePeriodKey": "2026-09-01/2026-09-08"
+    },
+    "observedAt": "2026-09-09T12:00:00Z",
+    "availableThrough": "2026-09-08T07:00:00Z",
+    "coverage": {
+      "expected": 7,
+      "observed": 7,
+      "definition": "complete requested native dates",
+      "complete": true
+    },
+    "evidenceRef": "synthetic-fetch-1",
+    "policyVersion": "youtube.native-only.v1",
+    "derived": false,
+    "lastKnownValue": "1200",
+    "dataDomain": "social",
+    "workspaceId": "synthetic-workspace",
+    "currency": null
+  },
+  "admin_unavailable": {
+    "metricKey": "postriff.mrr",
+    "definitionVersion": 1,
+    "accountId": null,
+    "objectKey": "platform",
+    "value": null,
+    "valueStatus": "unavailable",
+    "unit": "currency",
+    "sourceKind": "first_party",
+    "execution": "synthetic",
+    "freshness": "unknown",
+    "period": {
+      "grain": "period",
+      "start": "2026-09-01T07:00:00Z",
+      "end": "2026-09-08T07:00:00Z",
+      "timezone": "America/Los_Angeles",
+      "nativePeriodKey": "2026-09-01/2026-09-08"
+    },
+    "observedAt": "2026-09-09T12:00:00Z",
+    "availableThrough": null,
+    "coverage": {
+      "expected": null,
+      "observed": 0,
+      "definition": "billing not integrated; unknown is not zero",
+      "complete": false
+    },
+    "evidenceRef": "synthetic-fetch-1",
+    "policyVersion": "postriff.first-party.v1",
+    "derived": true,
+    "lastKnownValue": null,
+    "dataDomain": "first_party",
+    "workspaceId": null,
+    "currency": "USD"
+  }
+}

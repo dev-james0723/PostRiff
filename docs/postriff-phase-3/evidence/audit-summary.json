@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "scope": "owned Phase 3 sources and packaged allowlist",
+  "git": "validation_unavailable: no .git",
+  "sharedFilesWithPreservedConcurrentHunks": [
+    "studio/web/src/founder/FounderApp.tsx"
+  ],
+  "neutralTemplatesUnchanged": true,
+  "packageTreeSha256": "e6b8a305ae68f616c2cd656843d05bd8a40a59da6a02c91a1604e8ce2a3b1ee5",
+  "packageFiles": 361,
+  "packageRoot": "/Users/ouxianxing/Documents/James-Au-Studio/desktop/artifacts/PostRiff-darwin-arm64/PostRiff.app",
+  "privateDataFilesInPackage": false
+}

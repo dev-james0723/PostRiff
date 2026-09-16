@@ -1,0 +1,19 @@
+--- /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/src/james_au_social/zhihu_browser.py
++++ /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/src/james_au_social/zhihu_browser.py
+@@ -93,7 +93,7 @@
+ def browser(root):
+     from playwright.sync_api import sync_playwright
+     with sync_playwright() as pw:
+-        ctx=pw.chromium.launch_persistent_context(str(private_dir(Path(root)/'profile')),headless=False,
++        ctx=pw.chromium.launch_persistent_context(str(private_dir(Path(root)/'chrome-profile')),channel='chrome',headless=False,
+                 accept_downloads=False,chromium_sandbox=True)
+         try: yield ctx
+         finally: ctx.close()
+@@ -191,6 +191,7 @@
+     try:
+         with store.lock(), browser(root) as ctx:
+             page=ctx.new_page(); page.goto('https://www.zhihu.com/signin',wait_until='domcontentloaded')
++            print('{"state":"private_handoff","browser":"Google Chrome"}',flush=True)
+             # No snapshots, cookies, network logging or DOM observations during login.
+             while ctx.pages:
+                 try: ctx.pages[0].wait_for_timeout(500)

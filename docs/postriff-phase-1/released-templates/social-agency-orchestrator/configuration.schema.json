@@ -1,0 +1,10 @@
+{
+  "guidance": {
+    "type": "enum",
+    "values": [
+      "guided",
+      "compact"
+    ],
+    "default": "guided"
+  }
+}

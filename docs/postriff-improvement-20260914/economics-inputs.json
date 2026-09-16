@@ -1,0 +1,1543 @@
+{
+  "currency": "USD",
+  "actuals": {
+    "MRR": null,
+    "customers": null,
+    "cash": null,
+    "weekly_hours": null,
+    "runway_months": null,
+    "actual_payment_processor": null,
+    "actual_provider_cost": null,
+    "actual_channel_capacity": null
+  },
+  "scenarios": {
+    "conservative": {
+      "plans": [
+        {
+          "price": 19,
+          "batches": 4,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.2,
+          "embedding": 0.1,
+          "storage": 0.2,
+          "media": 0,
+          "support_minutes": 20
+        },
+        {
+          "price": 39,
+          "batches": 8,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.4,
+          "embedding": 0.1,
+          "storage": 0.4,
+          "media": 0,
+          "support_minutes": 15
+        },
+        {
+          "price": 79,
+          "batches": 16,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.8,
+          "embedding": 0.2,
+          "storage": 1,
+          "media": 0,
+          "support_minutes": 60
+        }
+      ],
+      "new_plan_mix": [
+        0,
+        1,
+        0
+      ],
+      "migration": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "churn": 0.1,
+      "reactivation": 0,
+      "discount": 0,
+      "refund_rate": 0.05,
+      "annual_share": 0,
+      "annual_discount": 0.15,
+      "support_paid_fraction": 0,
+      "hourly_rate": 30,
+      "payment_pct": 0.036,
+      "payment_fixed": 0.3,
+      "ai_multiplier": 1,
+      "support_multiplier": 1,
+      "trial_cash": 0.8,
+      "trial_support_minutes": 15,
+      "conversion_delay_months": 1,
+      "collection_delay_months": 1,
+      "fixed_infra": 100,
+      "fixed_other": 50,
+      "engineering_cash": 0,
+      "operations_cash": 0,
+      "founder_product_hours": 52,
+      "founder_capacity_hours": 120,
+      "opening_cash": 10000,
+      "onboarding_take_rate": 0,
+      "onboarding_price": 99,
+      "onboarding_cash_cost": 0,
+      "onboarding_hours": 1,
+      "channels": [
+        {
+          "id": "founder",
+          "qualified_month1": 24.0,
+          "qualified_cap": 80,
+          "growth": 0,
+          "trial_rate": 0.5,
+          "activation_rate": 0.44999999999999996,
+          "paid_rate": 0.27999999999999997,
+          "cash_month": 20,
+          "hours_month": 16
+        },
+        {
+          "id": "partners",
+          "qualified_month1": 12.0,
+          "qualified_cap": 80,
+          "growth": 0,
+          "trial_rate": 0.4,
+          "activation_rate": 0.44999999999999996,
+          "paid_rate": 0.24499999999999997,
+          "cash_month": 100,
+          "hours_month": 8
+        },
+        {
+          "id": "case_content",
+          "qualified_month1": 12.0,
+          "qualified_cap": 80,
+          "growth": 0,
+          "trial_rate": 0.15,
+          "activation_rate": 0.375,
+          "paid_rate": 0.175,
+          "cash_month": 0,
+          "hours_month": 8
+        }
+      ],
+      "founder_draw": 0
+    },
+    "base": {
+      "plans": [
+        {
+          "price": 19,
+          "batches": 4,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.2,
+          "embedding": 0.1,
+          "storage": 0.2,
+          "media": 0,
+          "support_minutes": 20
+        },
+        {
+          "price": 39,
+          "batches": 8,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.4,
+          "embedding": 0.1,
+          "storage": 0.4,
+          "media": 0,
+          "support_minutes": 15
+        },
+        {
+          "price": 79,
+          "batches": 16,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.8,
+          "embedding": 0.2,
+          "storage": 1,
+          "media": 0,
+          "support_minutes": 60
+        }
+      ],
+      "new_plan_mix": [
+        0,
+        1,
+        0
+      ],
+      "migration": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "churn": 0.06,
+      "reactivation": 0,
+      "discount": 0,
+      "refund_rate": 0.02,
+      "annual_share": 0,
+      "annual_discount": 0.15,
+      "support_paid_fraction": 0,
+      "hourly_rate": 30,
+      "payment_pct": 0.036,
+      "payment_fixed": 0.3,
+      "ai_multiplier": 1,
+      "support_multiplier": 1,
+      "trial_cash": 0.8,
+      "trial_support_minutes": 10,
+      "conversion_delay_months": 1,
+      "collection_delay_months": 1,
+      "fixed_infra": 100,
+      "fixed_other": 50,
+      "engineering_cash": 0,
+      "operations_cash": 0,
+      "founder_product_hours": 52,
+      "founder_capacity_hours": 120,
+      "opening_cash": 10000,
+      "onboarding_take_rate": 0,
+      "onboarding_price": 99,
+      "onboarding_cash_cost": 0,
+      "onboarding_hours": 1,
+      "channels": [
+        {
+          "id": "founder",
+          "qualified_month1": 40,
+          "qualified_cap": 80,
+          "growth": 0.02,
+          "trial_rate": 0.5,
+          "activation_rate": 0.6,
+          "paid_rate": 0.4,
+          "cash_month": 20,
+          "hours_month": 16
+        },
+        {
+          "id": "partners",
+          "qualified_month1": 20,
+          "qualified_cap": 80,
+          "growth": 0.03,
+          "trial_rate": 0.4,
+          "activation_rate": 0.6,
+          "paid_rate": 0.35,
+          "cash_month": 100,
+          "hours_month": 8
+        },
+        {
+          "id": "case_content",
+          "qualified_month1": 20,
+          "qualified_cap": 80,
+          "growth": 0.03,
+          "trial_rate": 0.15,
+          "activation_rate": 0.5,
+          "paid_rate": 0.25,
+          "cash_month": 0,
+          "hours_month": 8
+        }
+      ],
+      "founder_draw": 0
+    },
+    "optimistic": {
+      "plans": [
+        {
+          "price": 19,
+          "batches": 4,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.2,
+          "embedding": 0.1,
+          "storage": 0.2,
+          "media": 0,
+          "support_minutes": 20
+        },
+        {
+          "price": 39,
+          "batches": 8,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.4,
+          "embedding": 0.1,
+          "storage": 0.4,
+          "media": 0,
+          "support_minutes": 15
+        },
+        {
+          "price": 79,
+          "batches": 16,
+          "attempt_cost": 0.3,
+          "attempts_per_success": 1.25,
+          "parse": 0.8,
+          "embedding": 0.2,
+          "storage": 1,
+          "media": 0,
+          "support_minutes": 60
+        }
+      ],
+      "new_plan_mix": [
+        0,
+        1,
+        0
+      ],
+      "migration": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "churn": 0.04,
+      "reactivation": 0,
+      "discount": 0,
+      "refund_rate": 0.02,
+      "annual_share": 0,
+      "annual_discount": 0.15,
+      "support_paid_fraction": 0,
+      "hourly_rate": 30,
+      "payment_pct": 0.036,
+      "payment_fixed": 0.3,
+      "ai_multiplier": 1,
+      "support_multiplier": 1,
+      "trial_cash": 0.8,
+      "trial_support_minutes": 10,
+      "conversion_delay_months": 1,
+      "collection_delay_months": 1,
+      "fixed_infra": 100,
+      "fixed_other": 50,
+      "engineering_cash": 0,
+      "operations_cash": 0,
+      "founder_product_hours": 52,
+      "founder_capacity_hours": 120,
+      "opening_cash": 10000,
+      "onboarding_take_rate": 0,
+      "onboarding_price": 99,
+      "onboarding_cash_cost": 0,
+      "onboarding_hours": 1,
+      "channels": [
+        {
+          "id": "founder",
+          "qualified_month1": 50.0,
+          "qualified_cap": 80,
+          "growth": 0.04,
+          "trial_rate": 0.5,
+          "activation_rate": 0.6,
+          "paid_rate": 0.4,
+          "cash_month": 20,
+          "hours_month": 16
+        },
+        {
+          "id": "partners",
+          "qualified_month1": 25.0,
+          "qualified_cap": 80,
+          "growth": 0.04,
+          "trial_rate": 0.4,
+          "activation_rate": 0.6,
+          "paid_rate": 0.35,
+          "cash_month": 100,
+          "hours_month": 8
+        },
+        {
+          "id": "case_content",
+          "qualified_month1": 25.0,
+          "qualified_cap": 80,
+          "growth": 0.04,
+          "trial_rate": 0.15,
+          "activation_rate": 0.5,
+          "paid_rate": 0.25,
+          "cash_month": 0,
+          "hours_month": 8
+        }
+      ],
+      "founder_draw": 0
+    }
+  },
+  "input_provenance": {
+    "actuals.MRR": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "actuals.customers": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "actuals.cash": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "actuals.weekly_hours": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "actuals.runway_months": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "actuals.actual_payment_processor": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "actuals.actual_provider_cost": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "actuals.actual_channel_capacity": {
+      "type": "unknown",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.conservative.plans[0].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[0].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.conservative.plans[1].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[1].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.conservative.plans[2].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.plans[2].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.new_plan_mix[0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.new_plan_mix[1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.new_plan_mix[2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[0][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[0][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[0][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[1][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[1][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[1][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[2][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[2][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.migration[2][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.churn": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.reactivation": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.discount": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.refund_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.annual_share": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.annual_discount": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.support_paid_fraction": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.hourly_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.payment_pct": {
+      "type": "new_assumption",
+      "source": "Candidate US domestic cards 2.9% + $0.30 plus assumed subscription billing 0.7%; https://stripe.com/pricing checked 2026-09-15 UTC. No processor chosen; jurisdiction/contract unknown."
+    },
+    "scenarios.conservative.payment_fixed": {
+      "type": "new_assumption",
+      "source": "Candidate US domestic cards 2.9% + $0.30 plus assumed subscription billing 0.7%; https://stripe.com/pricing checked 2026-09-15 UTC. No processor chosen; jurisdiction/contract unknown."
+    },
+    "scenarios.conservative.ai_multiplier": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.support_multiplier": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.trial_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.trial_support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.conversion_delay_months": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.collection_delay_months": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.fixed_infra": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.fixed_other": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.engineering_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.operations_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.founder_product_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.founder_capacity_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.opening_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.onboarding_take_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.onboarding_price": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.onboarding_cash_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.onboarding_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[0].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[1].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.channels[2].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.base.plans[0].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[0].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.base.plans[1].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[1].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.base.plans[2].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.plans[2].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.new_plan_mix[0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.new_plan_mix[1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.new_plan_mix[2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[0][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[0][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[0][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[1][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[1][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[1][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[2][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[2][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.migration[2][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.churn": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.reactivation": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.discount": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.refund_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.annual_share": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.annual_discount": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.support_paid_fraction": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.hourly_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.payment_pct": {
+      "type": "new_assumption",
+      "source": "Candidate US domestic cards 2.9% + $0.30 plus assumed subscription billing 0.7%; https://stripe.com/pricing checked 2026-09-15 UTC. No processor chosen; jurisdiction/contract unknown."
+    },
+    "scenarios.base.payment_fixed": {
+      "type": "new_assumption",
+      "source": "Candidate US domestic cards 2.9% + $0.30 plus assumed subscription billing 0.7%; https://stripe.com/pricing checked 2026-09-15 UTC. No processor chosen; jurisdiction/contract unknown."
+    },
+    "scenarios.base.ai_multiplier": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.support_multiplier": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.trial_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.trial_support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.conversion_delay_months": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.collection_delay_months": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.fixed_infra": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.fixed_other": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.engineering_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.operations_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.founder_product_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.founder_capacity_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.opening_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.onboarding_take_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.onboarding_price": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.onboarding_cash_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.onboarding_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[0].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[1].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.base.channels[2].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.optimistic.plans[0].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[0].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.optimistic.plans[1].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[1].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].price": {
+      "type": "report_assumption",
+      "source": "MiroFish pp16-17; proposed prices only, no real payment evidence."
+    },
+    "scenarios.optimistic.plans[2].batches": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].attempt_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].attempts_per_success": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].parse": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].embedding": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].storage": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].media": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.plans[2].support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.new_plan_mix[0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.new_plan_mix[1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.new_plan_mix[2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[0][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[0][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[0][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[1][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[1][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[1][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[2][0]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[2][1]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.migration[2][2]": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.churn": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.reactivation": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.discount": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.refund_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.annual_share": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.annual_discount": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.support_paid_fraction": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.hourly_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.payment_pct": {
+      "type": "new_assumption",
+      "source": "Candidate US domestic cards 2.9% + $0.30 plus assumed subscription billing 0.7%; https://stripe.com/pricing checked 2026-09-15 UTC. No processor chosen; jurisdiction/contract unknown."
+    },
+    "scenarios.optimistic.payment_fixed": {
+      "type": "new_assumption",
+      "source": "Candidate US domestic cards 2.9% + $0.30 plus assumed subscription billing 0.7%; https://stripe.com/pricing checked 2026-09-15 UTC. No processor chosen; jurisdiction/contract unknown."
+    },
+    "scenarios.optimistic.ai_multiplier": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.support_multiplier": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.trial_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.trial_support_minutes": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.conversion_delay_months": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.collection_delay_months": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.fixed_infra": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.fixed_other": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.engineering_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.operations_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.founder_product_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.founder_capacity_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.opening_cash": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.onboarding_take_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.onboarding_price": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.onboarding_cash_cost": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.onboarding_hours": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[0].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[1].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].id": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].qualified_month1": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].qualified_cap": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].growth": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].trial_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].activation_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].paid_rate": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].cash_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.optimistic.channels[2].hours_month": {
+      "type": "new_assumption",
+      "source": "No operating data verified; editable planning input."
+    },
+    "scenarios.conservative.founder_draw": {
+      "type": "new_assumption",
+      "source": "Illustrative unpaid founder view; actual living withdrawals unknown. Stress scenario deducts $2000/month cash without double-counting opportunity-cost expense."
+    },
+    "scenarios.base.founder_draw": {
+      "type": "new_assumption",
+      "source": "Illustrative unpaid founder view; actual living withdrawals unknown. Stress scenario deducts $2000/month cash without double-counting opportunity-cost expense."
+    },
+    "scenarios.optimistic.founder_draw": {
+      "type": "new_assumption",
+      "source": "Illustrative unpaid founder view; actual living withdrawals unknown. Stress scenario deducts $2000/month cash without double-counting opportunity-cost expense."
+    }
+  }
+}

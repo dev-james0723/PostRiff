@@ -1,0 +1,15 @@
+{
+  "tone": {
+    "type": "enum",
+    "values": [
+      "warm",
+      "direct",
+      "reflective"
+    ],
+    "default": "warm"
+  },
+  "shortOpenings": {
+    "type": "boolean",
+    "default": false
+  }
+}

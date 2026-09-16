@@ -1,0 +1,24 @@
+{
+  "captured_at": "2026-09-14T13:25:27.047622-04:00",
+  "repo": "/Users/ouxianxing/Documents/James-Au-Studio",
+  "git_status": "validation_unavailable",
+  "git_reason": "fatal: not a git repository (or any of the parent directories): .git",
+  "method": "SHA-256 of bounded audit source files before final validation",
+  "files": {
+    "scripts/studio.py": "d4de82859bb9215141c6a6bdf11222d2733dfcfde05e2e0c2621a1461df76ea3",
+    "studio/README.md": "480c5e75663ef2364316139eb8cf486021065f9493a324fa09a18b42fd21f563",
+    "studio/web/package.json": "4587d27492838050a4911fd94f70cc9fcbdb1ba22751deebfdb28b26df85e899",
+    "studio/web/src/App.tsx": "68ae60aa2e5a35951f48e7320858c93064ac1163d70a613966a1a64920aa7e59",
+    "studio/web/src/AgentPanel.tsx": "e52d6a27bfda5e9503a93aaad7434e98cdeb97c368d596afc3ce7d6261b831fb",
+    "studio/web/src/ChannelSetup.tsx": "5622f0cddafbe375004b4b74cd19d822941e199e04c06a4086dffb0a59b4e4e6",
+    "studio/web/src/DeliveryView.tsx": "0e46e518a62e77cb947c773c892b539fbc7b123252376c18ac174a94c67cb9dd",
+    "studio/web/src/types.ts": "261439276af9b88fed1b955142f36069853b17a0dc600a560ca7fda19dbfce67",
+    "studio/web/src/agentApi.ts": "c94c40d27c59cdd9c5e400cbe5d46b708ab6058757f7da54e898ff599d68ca06",
+    "src/james_au_social/studio.py": "05bd9414e0ee59823bc8636a5284a1e8d0eb7d76338b124e9d1bebee082867a6",
+    "src/james_au_social/studio_api.py": "d250fbf493fc6d5849ef21079aa0db52b393a0cdf8143227171be467983341a8",
+    "src/james_au_social/studio_agent.py": "00a9e59be5592d9058314aa6565f31698700d708abce4a1de9721691764703a1",
+    "src/james_au_social/studio_agent_api.py": "5efe625caccf850622a8cd993dc683d909902902cd201c7d8f7314e58411343d",
+    "src/james_au_social/studio_codex.py": "390189c16742a6df6f93887f488b6552cadaf5ad86281d806570294c4b57233d",
+    "src/james_au_social/content.py": "2368b128cac3ef15c97cd835945471ee67f81910ce0d2a0d8527c023890c184e"
+  }
+}

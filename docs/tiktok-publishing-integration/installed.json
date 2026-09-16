@@ -1,0 +1,8 @@
+{
+  "src/james_au_social/studio_api.py": "70a483763ed586c3031600927c51323d04f124ebba41a537b2f8f9503bf71ed9",
+  "studio/web/src/TikTokConnection.tsx": "f101b9b3313b2c1cfeedae5386466b0e48453f7c031edfb286fecb000afee722",
+  "src/james_au_social/studio_tiktok_publish.py": "dc5c8316ea4d9ddcd3f31929b86ffd3c4b40dedcaccd9c84dd6aec25abaad150",
+  "studio/web/src/TikTokPublishing.tsx": "806d352d5b3dad4f3fd69ae6d735afb3b3d8bf58a5f9cdde9952e1b8685d2dae",
+  "studio/web/src/App.tsx": "68ae60aa2e5a35951f48e7320858c93064ac1163d70a613966a1a64920aa7e59",
+  "scripts/studio.py": "d4de82859bb9215141c6a6bdf11222d2733dfcfde05e2e0c2621a1461df76ea3"
+}

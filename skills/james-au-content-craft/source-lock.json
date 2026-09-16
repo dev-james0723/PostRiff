@@ -1,0 +1,344 @@
+{
+  "version": "1.0.0",
+  "reviewed_at": "2026-09-14T03:39:34.455451+00:00",
+  "state": "adapted-editorial-only",
+  "upstream_code_installed": false,
+  "sources": [
+    {
+      "repo": "sergebulaev/linkedin-skills",
+      "url": "https://github.com/sergebulaev/linkedin-skills",
+      "commit": "ed05c4ff2ccb18607a26a9ca801ce0c403edf120",
+      "license": "MIT",
+      "selected_skills": [
+        "linkedin-post-writer",
+        "linkedin-humanizer",
+        "linkedin-interviewer",
+        "linkedin-repurposer"
+      ],
+      "reviewed_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "1a21cf7c208981ef516dcf2edb4517dab907b8dc94c2cfc523565c794ea8e148"
+        },
+        {
+          "path": "skills/linkedin-post-writer/SKILL.md",
+          "sha256": "f39e9ce09ac5aa869fea05039f0d7256d4ec0ec14ca2e0042b15f273886c3a64"
+        },
+        {
+          "path": "skills/linkedin-humanizer/SKILL.md",
+          "sha256": "3bf5d57f18f91bc43af4616cbbd5f2f008bf5bfcb67f3d32e6706557feec400c"
+        },
+        {
+          "path": "skills/linkedin-interviewer/SKILL.md",
+          "sha256": "ac15996dcfd71862428bda0697bf930a0df3e7dc15e28f8d2b25c01901b7ea68"
+        },
+        {
+          "path": "skills/linkedin-repurposer/SKILL.md",
+          "sha256": "74916ad16d58d1ea0462c60e0b03ccdcb5d853c9d8372d7fe36800618fa7d15b"
+        },
+        {
+          "path": "references/story-bank.md",
+          "sha256": "1accec677836ceadc2ab803161cec6468e9555b24d45690ce46f08a2bd2456f2"
+        },
+        {
+          "path": "references/founder-topics.md",
+          "sha256": "ff48ff651362cc0bfc8eaeefc4a9684f49f777dcd0d048810304e5c7d0482b9e"
+        },
+        {
+          "path": "skills/linkedin-humanizer/references/scrub-rules.md",
+          "sha256": "9716865a9f78fb06f191c1b09836f28dcdb7753bee5336fe55d3754d6e90540d"
+        },
+        {
+          "path": "skills/linkedin-humanizer/references/audit-checklist.md",
+          "sha256": "94c200a1b8a90396bc59cae7d624e47f53b1222efb5a18c3ca8f9dda7f1489f4"
+        },
+        {
+          "path": "skills/linkedin-interviewer/references/question-bank.md",
+          "sha256": "eebde9772408326129a1cc98b8431034292bb58bd451ab494c58dad5c465ef9b"
+        },
+        {
+          "path": "skills/linkedin-post-writer/references/hook-formulas.md",
+          "sha256": "3140a869ea0857039fbb12a11bb5e418d7ee8f49e7315afddcb6507bc214f0de"
+        },
+        {
+          "path": "skills/linkedin-post-writer/references/humanizer-checklist.md",
+          "sha256": "36340062a0c8d119fae3da31923a6d1791cf7b6819f0cb263d95426a3e9290d8"
+        },
+        {
+          "path": "references/algorithm-heuristics.md",
+          "sha256": "e1e13dadebc6b20ee5ceb0f30d4b3fbbad29de87478eebc28b42549131506f83"
+        }
+      ],
+      "algorithm_reference": "references/algorithm-heuristics.md"
+    },
+    {
+      "repo": "sergebulaev/x-skills",
+      "url": "https://github.com/sergebulaev/x-skills",
+      "commit": "56c66ecf96751b0039ceb469ccac2cae5773b74c",
+      "license": "MIT",
+      "selected_skills": [
+        "x-post-writer",
+        "x-thread-builder",
+        "x-repurposer"
+      ],
+      "reviewed_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "1a21cf7c208981ef516dcf2edb4517dab907b8dc94c2cfc523565c794ea8e148"
+        },
+        {
+          "path": "skills/x-post-writer/SKILL.md",
+          "sha256": "cd8479b254a4a34e24553bc0313be4d89b5def464249d5e304d490ccf2492430"
+        },
+        {
+          "path": "skills/x-thread-builder/SKILL.md",
+          "sha256": "3a310f985194b06a77477cc1a17345e25cc9fc81e7cb7e7e10caa2469b20ec15"
+        },
+        {
+          "path": "skills/x-repurposer/SKILL.md",
+          "sha256": "13ea72b2eb8cd4d5294f15f8bcea3cd9b0376ef0d5074d1ef6cbfa82f534c5b8"
+        },
+        {
+          "path": "skills/x-post-writer/references/single-tweet-checklist.md",
+          "sha256": "8b5e8a3c18c4c33da24e72e777c194c934206c9a9d1cdeacb3491da52dcb6f31"
+        },
+        {
+          "path": "skills/x-thread-builder/references/thread-structure.md",
+          "sha256": "d824b25da3ed309dd34e4da8db4e024957aeb913e0da0ab3662d6ea938fd0f80"
+        },
+        {
+          "path": "references/algorithm-heuristics.md",
+          "sha256": "7a003cea1bbdb1c30ec08b610be81c67360928847181430c3d96043e5a8d0b67"
+        }
+      ],
+      "algorithm_reference": "references/algorithm-heuristics.md"
+    },
+    {
+      "repo": "sergebulaev/instagram-skills",
+      "url": "https://github.com/sergebulaev/instagram-skills",
+      "commit": "e543d2d8982969b138d5b92520ad22a6eeb0ff7d",
+      "license": "MIT",
+      "selected_skills": [
+        "ig-caption-writer",
+        "ig-carousel-planner",
+        "ig-repurposer"
+      ],
+      "reviewed_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "1a21cf7c208981ef516dcf2edb4517dab907b8dc94c2cfc523565c794ea8e148"
+        },
+        {
+          "path": "skills/ig-caption-writer/SKILL.md",
+          "sha256": "17e36d2b30e36fe05913ccd6782bdcfab18d912261d04b7a9f49bd5052cd8f5b"
+        },
+        {
+          "path": "skills/ig-carousel-planner/SKILL.md",
+          "sha256": "7d8c394a655a472f8f961f365f3741fd79eca9b5e7fcef5d869ee34758222673"
+        },
+        {
+          "path": "skills/ig-repurposer/SKILL.md",
+          "sha256": "f5c39083380ee9c75c0506eaa8072094277effbf15fa8a6fd560218325a3145f"
+        },
+        {
+          "path": "skills/ig-caption-writer/references/caption-checklist.md",
+          "sha256": "96eae3773105436058dbfc6c1b4fd9cbe359acc95efefcc00766a0943bae916f"
+        },
+        {
+          "path": "skills/ig-carousel-planner/references/slide-architecture.md",
+          "sha256": "2f023be7465bff488f0551326c48ba2b932ed3affb8fae53e3c9d5919a8a45aa"
+        },
+        {
+          "path": "references/algorithm-heuristics.md",
+          "sha256": "332979baa0297ca001f7a1d0b5d0502b4d89fa74a5a314e6e6e2b61b663efb2f"
+        }
+      ],
+      "algorithm_reference": "references/algorithm-heuristics.md"
+    },
+    {
+      "repo": "sergebulaev/youtube-skills",
+      "url": "https://github.com/sergebulaev/youtube-skills",
+      "commit": "6edcee22c309a7c65e20a6e8031835d9d3f757ce",
+      "license": "MIT",
+      "selected_skills": [
+        "yt-title-optimizer",
+        "yt-description-writer",
+        "yt-hook-scripter",
+        "yt-thumbnail-brief",
+        "yt-community-post-writer",
+        "yt-repurposer"
+      ],
+      "reviewed_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "1a21cf7c208981ef516dcf2edb4517dab907b8dc94c2cfc523565c794ea8e148"
+        },
+        {
+          "path": "skills/yt-title-optimizer/SKILL.md",
+          "sha256": "0dbe555c605574667e23b71eebed2b8281a4a8f18c351f6c53b526348c8cc156"
+        },
+        {
+          "path": "skills/yt-description-writer/SKILL.md",
+          "sha256": "4d0a3026494083adfc10db14e00af4b2647e628a189c3822c0613a84f1addd38"
+        },
+        {
+          "path": "skills/yt-hook-scripter/SKILL.md",
+          "sha256": "e0cbbaafbaf5991d8c8abfd3079d19af9aa75d65b84a475595822ac71049c86d"
+        },
+        {
+          "path": "skills/yt-thumbnail-brief/SKILL.md",
+          "sha256": "8a43fccbf648adbd95fc073cce1472482a26842154407bc5c35f770b2f80e281"
+        },
+        {
+          "path": "skills/yt-community-post-writer/SKILL.md",
+          "sha256": "59704ac0fd896301881c47c9d11c98badbfccf36a4138b0214f3c3efce1497a8"
+        },
+        {
+          "path": "skills/yt-repurposer/SKILL.md",
+          "sha256": "a68f4e54b10cb0e4cdcb091a8347e5e24ccdfedb53b65ce461e839bb0ae2562c"
+        },
+        {
+          "path": "references/thumbnail-principles.md",
+          "sha256": "ec97aa11c07d5b6722652d40d108b5f9f1fe5c90ad78870c2e9dd026e025d651"
+        },
+        {
+          "path": "skills/yt-community-post-writer/references/post-types.md",
+          "sha256": "f1036b73d1bd96b54d8cf9ab450c83d56c78ee43c73aa59d0025eb2d7716a562"
+        },
+        {
+          "path": "skills/yt-description-writer/references/description-template.md",
+          "sha256": "8ba04d3a4e5ad8f8365118012ad313b4892ab8b96d160755f9b1fe44ab9056f5"
+        },
+        {
+          "path": "skills/yt-hook-scripter/references/retention-beats.md",
+          "sha256": "2699fca655f72ea7cb99688789cf7c2f24bfc756fe9ecd012344ef55b16503cc"
+        },
+        {
+          "path": "skills/yt-thumbnail-brief/references/brief-template.md",
+          "sha256": "42310fdf6baf089dc6afba3c17d25e025788c1b980c50240f903acf58f7837b4"
+        },
+        {
+          "path": "skills/yt-title-optimizer/references/title-checklist.md",
+          "sha256": "d4a419d494609ec2f359064ec0c33d44da607606a493dcae4b20d7542755830c"
+        },
+        {
+          "path": "references/algorithm-heuristics.md",
+          "sha256": "08b924c31356e233f2e22d1388534429205b56aa4b8be9a2b36eb82fcabdb6e9"
+        }
+      ],
+      "algorithm_reference": "references/algorithm-heuristics.md"
+    },
+    {
+      "repo": "sergebulaev/threads-skills",
+      "url": "https://github.com/sergebulaev/threads-skills",
+      "commit": "d5346cbbdaad2c0a91ca485d0084e1bac2391168",
+      "license": "MIT",
+      "selected_skills": [
+        "threads-post-writer",
+        "threads-repurposer"
+      ],
+      "reviewed_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "1a21cf7c208981ef516dcf2edb4517dab907b8dc94c2cfc523565c794ea8e148"
+        },
+        {
+          "path": "skills/threads-post-writer/SKILL.md",
+          "sha256": "d60be5f4d0b659a35431b55138427652273d482a8cd582147ff3e7d03828807e"
+        },
+        {
+          "path": "skills/threads-repurposer/SKILL.md",
+          "sha256": "770b4ce483ae2e68e41e771345d1870c0018317db253031d7e119620e3e361a2"
+        },
+        {
+          "path": "skills/threads-post-writer/references/single-post-checklist.md",
+          "sha256": "12d0f25694623b8c8f21abf5de26c1ff7508317cc4d19a7a15196714be5896b9"
+        },
+        {
+          "path": "skills/threads-post-writer/references/thread-structure.md",
+          "sha256": "bb314b60e778af8b92048c9f8c9fabedb4678d40ae2865417fd90cd18449bb7d"
+        },
+        {
+          "path": "references/algorithm-heuristics.md",
+          "sha256": "021d477be309ee231bd82f45c1d9a1d8a79e7fc6029f1eb117f919eccc5b684d"
+        }
+      ],
+      "algorithm_reference": "references/algorithm-heuristics.md"
+    },
+    {
+      "repo": "sergebulaev/tiktok-skills",
+      "url": "https://github.com/sergebulaev/tiktok-skills",
+      "commit": "10de73b9ce2d9cc65e6e27100832b8e22df5a2fd",
+      "license": "MIT",
+      "selected_skills": [
+        "tt-hook-scripter",
+        "tt-caption-writer",
+        "tt-repurposer"
+      ],
+      "reviewed_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "1a21cf7c208981ef516dcf2edb4517dab907b8dc94c2cfc523565c794ea8e148"
+        },
+        {
+          "path": "skills/tt-hook-scripter/SKILL.md",
+          "sha256": "8d3801741ad0b3368b779ad6ec251846959feae511cb3e0a82b7e335af3a9db4"
+        },
+        {
+          "path": "skills/tt-caption-writer/SKILL.md",
+          "sha256": "9674652f9b56273c35c7eb302f543e0ae5641fa071c839784a3f18f8c501918d"
+        },
+        {
+          "path": "skills/tt-repurposer/SKILL.md",
+          "sha256": "ffe0534ebcb05b6dc10f308f74ccd16773ca4c90da22dd7b4a8bc04d36a018ee"
+        },
+        {
+          "path": "skills/tt-caption-writer/references/settings-matrix.md",
+          "sha256": "a3437eaa8bce93b965db1cbe69d189cd129bd8b1f2d4559b9edba9eac6dd56ec"
+        },
+        {
+          "path": "skills/tt-hook-scripter/references/hook-anatomy.md",
+          "sha256": "6f7bf7e138e592436ab31ca0b245159e87e06a0d162af3aca4eff93fcfecf54f"
+        },
+        {
+          "path": "references/algorithm-heuristics.md",
+          "sha256": "2c10573161f8c34072caa570511c572303bbfa096d167c3cb4ddca612f227b37"
+        }
+      ],
+      "algorithm_reference": "references/algorithm-heuristics.md"
+    },
+    {
+      "repo": "sergebulaev/facebook-skills",
+      "url": "https://github.com/sergebulaev/facebook-skills",
+      "commit": "8cb9beea77edd5274e09c93b98f8ed669f47d6db",
+      "license": "MIT",
+      "selected_skills": [
+        "fb-post-writer",
+        "fb-repurposer"
+      ],
+      "reviewed_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "1a21cf7c208981ef516dcf2edb4517dab907b8dc94c2cfc523565c794ea8e148"
+        },
+        {
+          "path": "skills/fb-post-writer/SKILL.md",
+          "sha256": "cbf6d267963c139e1351a57aeb80632a6262ab4905bdd835c3f511d98abcbbd4"
+        },
+        {
+          "path": "skills/fb-repurposer/SKILL.md",
+          "sha256": "1a8a89ad945e72d35abf89b8df8d2f1c2b9231b7c20557257c08164fc761ed38"
+        },
+        {
+          "path": "skills/fb-post-writer/references/short-post-checklist.md",
+          "sha256": "432a4da256a70c8fa99cc74976e6dd484bf1eec37cb4acc6a4bc2ce77f1461a5"
+        },
+        {
+          "path": "references/algorithm-heuristics.md",
+          "sha256": "1006e363fd011808dbad1ee09fef109e5e5e51af2aceb50547cb4c881e8489b0"
+        }
+      ],
+      "algorithm_reference": "references/algorithm-heuristics.md"
+    }
+  ]
+}

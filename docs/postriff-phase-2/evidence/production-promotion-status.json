@@ -1,0 +1,26 @@
+{
+  "observed_at": "2026-09-14T23:07:00-04:00",
+  "vercel_project": "jamesau0723-6572s-projects/postriff-phase2-private",
+  "source_preview_deployment": "dpl_5V8Tqgbayyiqf7XzA9fZYZ3wQV34",
+  "production_deployment": "dpl_3cA573dgFvhXipWn4KxjfZLe6tY4",
+  "production_url": "https://postriff-phase2-private.vercel.app",
+  "production_status": "Ready",
+  "cron": {
+    "path": "/api/cron/worker",
+    "schedule": "* * * * *",
+    "registered": true
+  },
+  "runtime": {
+    "health_status": "ok",
+    "configured": true,
+    "phase0": "incomplete",
+    "customerValidated": false,
+    "worker_result": "200 hosted-worker, externalExecution false, processed 0"
+  },
+  "environment_scope": {
+    "required_variables": 5,
+    "preview_scoped": 5,
+    "production_scoped": 5
+  },
+  "interpretation": "The final production deployment is Ready, the UI identifies the hosted private beta, and the one-minute cron is active. Five successive scheduled invocations returned HTTP 200, and the social adapter remains fail-closed with externalExecution false."
+}

@@ -1,0 +1,78 @@
+{
+  "status": "pass",
+  "at": "2026-09-15T03:34:08.605235+00:00",
+  "execution": "local_design_package_review",
+  "checks": [
+    "all relative document and demo links resolve",
+    "all contract JSON files parse",
+    "42 definitions comprise 18 first-party and 24 social candidates",
+    "candidate SQL is a seven-table subset, labelled not a full migration",
+    "three scoped validation receipts present, 20 SQL / 24 contract / 14 UI",
+    "disposable SQL cluster cleanup receipt confirms stopped and port closed",
+    "canonical CSV is explicitly synthetic and retains measured zero"
+  ],
+  "test_count": 7,
+  "manifest": [
+    {
+      "path": "docs/superpowers/specs/2026-09-14-postriff-admin-analytics-design.md",
+      "sha256": "28fc5862203cec012c486fe854f7cc94ffc9bc5676f945cfc1719de0b1bb78bb"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/ENGINEERING.md",
+      "sha256": "d86515fb0338c09a0e4e4ad411eec7b6129772ae53614190fd89c870c2f8505f"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/SOURCES.md",
+      "sha256": "295f5375f5e2d7396f6850bbf089a90ef1f817027c900793dec399cbbbe686b4"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/DELIVERY.md",
+      "sha256": "478c6c57b592e8978a1a5aee327667ea0f7eb3a0a4230c9de3a0f1055747b442"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/index.html",
+      "sha256": "8976ea113b1bde524322fc6e422efc920ecd55199eafc86ba50998090d68188b"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/analytics-candidate.sql",
+      "sha256": "d5a81fc381ee336a160385014db578bd20eade94dbe00269043d3012fd9c0453"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/metric-point.schema.json",
+      "sha256": "41ae423b8090ff3444fa416064627f77d82fd18f8a121c8fcf0db0fcfc11add4"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/examples.json",
+      "sha256": "bb90e2f96e34e9aac06d3acf3525b5be5a6abeccfc6620b081aa656ea4fc59b7"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/provider-capabilities.json",
+      "sha256": "cbc81f5b4b1b0af620ac615a191b430ea6c9ed54799c12b5a547920e122a68df"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/metric-registry.json",
+      "sha256": "53b29579942d43bffb01674b739a2e8eaddab86a6edb8a46fada5171897ef22d"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/canonical-import-template.csv",
+      "sha256": "8bbe2faec6ee022b0a0c532fb8cd50fe49f692b93ff59eadf5c1b33d1462e36b"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/product-event.schema.json",
+      "sha256": "996250589cf01ca03f22ed25bb0043ef7114369b0aca8e3c1de3167928b8df27"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/canonical-import-example.csv",
+      "sha256": "20d66b744fde9b44abd356bd6d33f194b099d208154179748f361e85e39c1cbd"
+    },
+    {
+      "path": "docs/postriff-admin-analytics/contracts/openapi.json",
+      "sha256": "487c1e84d776e8806b31a8bb2361ccf6a97e7a826efac7f8aa794ecbeff8fee9"
+    }
+  ],
+  "limits": [
+    "Not production app validation",
+    "Source hashes record observations and are not Git diffs",
+    "Full standards validator and live-provider qualification unavailable as documented"
+  ]
+}

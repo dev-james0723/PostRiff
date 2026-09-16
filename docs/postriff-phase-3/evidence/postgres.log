@@ -1,0 +1,1 @@
+{"status": "pass", "execution": "disposable-local-postgresql", "pairing": "single-use", "isolation": "two users/workspaces", "directBrowserRead": "denied", "membershipRevocation": "denied", "hostedAcceptance": false}

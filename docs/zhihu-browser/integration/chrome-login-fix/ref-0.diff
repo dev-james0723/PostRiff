@@ -1,0 +1,14 @@
+--- /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/references/zhihu-browser.md
++++ /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/references/zhihu-browser.md
+@@ -4,9 +4,9 @@
+ 
+ ## Operate
+ 
+-Open Studio at http://127.0.0.1:4310 and choose Channels → Zhihu. Durable implementation: `/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py`. Use the dedicated browser sign-in button; after login, close its browser and verify the exact public profile. James selected `https://www.zhihu.com/people/tie4gka` in the 2026-09-13 task. This is a destination choice, not proof of authentication.
++Open Studio at http://127.0.0.1:4310 and choose Channels → Zhihu. Durable implementation: `/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py`. Use the dedicated installed Google Chrome (stable channel) sign-in button; after login, close its browser and verify the exact public profile. James selected `https://www.zhihu.com/people/tie4gka` in the 2026-09-13 task. This is a destination choice, not proof of authentication.
+ 
+-The user/project standing setup authorization covers starting this connection; do not restart first-run intake or request OAuth consent. Human-only password, phone/MFA, QR and CAPTCHA steps remain private handoffs. Do not observe login surfaces or export/read cookies. Browser session stays under owner-only `~/Library/Application Support/JamesAuStudio/zhihu-browser/profile`.
++The user/project standing setup authorization covers starting this connection; do not restart first-run intake or request OAuth consent. Human-only password, phone/MFA, QR and CAPTCHA steps remain private handoffs. Do not observe login surfaces or export/read cookies. Browser session stays under owner-only `~/Library/Application Support/JamesAuStudio/zhihu-browser/chrome-profile`.
+ 
+ ## Publishing pilot
+ 

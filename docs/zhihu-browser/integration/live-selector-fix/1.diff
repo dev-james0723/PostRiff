@@ -1,0 +1,54 @@
+--- before
++++ /Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py
+@@ -102,6 +102,8 @@
+     def __init__(self, ctx):
+         self.ctx=ctx; self.page=ctx.new_page(); self.page.set_default_timeout(10000)
+     def one(self, locator):
++        try: locator.wait_for(state='visible',timeout=10000)
++        except Exception: raise Stop('ui_changed') from None
+         if locator.count()!=1 or not locator.is_visible(): raise Stop('ui_changed')
+         return locator
+     def public_page(self, page, url):
+@@ -119,7 +121,7 @@
+             own=self.one(p.get_by_role('link',name='我的主页',exact=True))
+             if urljoin('https://www.zhihu.com',own.get_attribute('href') or '').rstrip('/')!=account:
+                 raise Stop('identity_mismatch')
+-            self.one(p.get_by_role('button',name='编辑个人资料',exact=True))
++            self.one(p.locator('.ProfileHeader').get_by_role('button',name='编辑个人资料',exact=True))
+             return ['authenticated_header_profile','own_profile_edit_control']
+         finally: p.close()
+     def links(self, account):
+@@ -128,7 +130,7 @@
+                 if re.fullmatch(r'(https://www\.zhihu\.com)?/pin/[0-9]+',x.get_attribute('href') or '')}
+     def compose(self,text):
+         self.public_page(self.page,'https://www.zhihu.com')
+-        self.one(self.page.get_by_role('button',name='发想法',exact=True)).click()
++        self.one(self.page.get_by_text('分享此刻的想法...',exact=True)).click()
+         self.one(self.page.locator('[contenteditable="true"]')).fill(text)
+         self.assert_text(text)
+     def assert_text(self,text):
+@@ -163,18 +165,20 @@
+         ui.identity(value['profile'])
+         before=sorted(ui.links(value['profile']))
+         # Claim before composition: even autosaved drafts are approval-bound.
+-        record=dict(state='attempting',manifest=value,hash=key,previousLinks=before,claimedAt=time.time())
++        record=dict(state='attempting',stage='compose_started',manifest=value,hash=key,previousLinks=before,claimedAt=time.time())
+         store.put(key,record)
+         try:
+             ui.compose(value['text']); ui.identity(value['profile']); ui.assert_text(value['text'])
+-            store.put(key,{**record,'state':'submitting'})
++            record.update(state='submitting', stage='submit_started')
++            store.put(key,record)
+             ui.submit()
+             evidence=ui.find_new(before,value)
+             record.update(state='published_verified',evidence=evidence)
+             connection=store.get('connection') or {}
+             if connection.get('profile')==value['profile']: store.put('connection',{**connection,'liveTestVerified':True})
+-        except Exception:
+-            record.update(state='unknown',reason='reconcile_before_retry')
++        except Exception as error:
++            record.update(state='unknown',reason='reconcile_before_retry',
++                          failureCode=str(error) if isinstance(error,Stop) else type(error).__name__)
+         return store.put(key,record)
+ 
+ def reconcile(store,key,url,ui):

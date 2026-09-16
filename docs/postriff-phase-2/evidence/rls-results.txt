@@ -1,0 +1,90 @@
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE SCHEMA
+CREATE TABLE
+CREATE FUNCTION
+GRANT
+GRANT
+CREATE SCHEMA
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+GRANT
+GRANT
+GRANT
+BEGIN
+CREATE SCHEMA
+REVOKE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE FUNCTION
+GRANT
+GRANT
+REVOKE
+DO
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+REVOKE
+GRANT
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+INSERT 0 1
+CREATE POLICY
+COMMIT
+INSERT 0 2
+             pr_bootstrap             
+--------------------------------------
+ 3ccb1f09-785b-4966-8083-f1982c3f6f6e
+(1 row)
+
+DO
+INSERT 0 2
+DO
+              set_config              
+--------------------------------------
+ 5eabc9ce-e0f6-493b-a5f0-65da2be62ccb
+(1 row)
+
+SET
+              set_config              
+--------------------------------------
+ 00000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+              set_config              
+--------------------------------------
+ 00000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+SET
+DO
+RESET
+UPDATE 1
+SET
+DO
+RESET
+                                                                    result                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ PASS: two-user RLS, 9 object families, forged IDs, CRUD denials, private storage, revoked membership, service-only bootstrap and trial replay
+(1 row)
+

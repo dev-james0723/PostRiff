@@ -1,0 +1,852 @@
+{
+  "checks": [
+    {
+      "contrastProblems": [
+        {
+          "background": [
+            198,
+            213,
+            179
+          ],
+          "color": "rgb(93, 101, 92)",
+          "contrast": 3.9,
+          "font": "10px",
+          "text": "1"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(115, 123, 108)",
+          "contrast": 4.1,
+          "font": "12px",
+          "text": "/"
+        },
+        {
+          "background": [
+            232,
+            238,
+            217
+          ],
+          "color": "rgb(99, 112, 87)",
+          "contrast": 4.43,
+          "font": "9px",
+          "text": "PICK UP WHERE YOU LEFT OFF"
+        }
+      ],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "personal-desktop-return-after-server-restart"
+    },
+    {
+      "contrastProblems": [
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(115, 123, 108)",
+          "contrast": 4.1,
+          "font": "12px",
+          "text": "/"
+        },
+        {
+          "background": [
+            236,
+            240,
+            226
+          ],
+          "color": "rgb(102, 112, 95)",
+          "contrast": 4.48,
+          "font": "10px",
+          "text": "These answers stay editable. No biography or expertise is inferre"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your starting point"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your first idea"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "03"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your voice"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "04"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Writing setup"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "05"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Make it yours"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "06"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Save & return"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "07"
+        }
+      ],
+      "focused": "INPUT",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "niche-desktop-context"
+    },
+    {
+      "contrastProblems": [
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(115, 123, 108)",
+          "contrast": 4.1,
+          "font": "12px",
+          "text": "/"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your starting point"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Purpose & audience"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your voice"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "04"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Writing setup"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "05"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Make it yours"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "06"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Save & return"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "07"
+        }
+      ],
+      "focused": "BODY",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "niche-desktop-source"
+    },
+    {
+      "contrastProblems": [
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(115, 123, 108)",
+          "contrast": 4.1,
+          "font": "12px",
+          "text": "/"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your starting point"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Purpose & audience"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your first idea"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Your voice"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Make it yours"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "06"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "11px",
+          "text": "Save & return"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(116, 124, 108)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "07"
+        }
+      ],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "niche-desktop-runtime"
+    },
+    {
+      "contrastProblems": [
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(115, 123, 108)",
+          "contrast": 4.1,
+          "font": "12px",
+          "text": "/"
+        },
+        {
+          "background": [
+            238,
+            239,
+            227
+          ],
+          "color": "rgb(103, 112, 94)",
+          "contrast": 4.46,
+          "font": "10px",
+          "text": "The author · Curious beginners"
+        },
+        {
+          "background": [
+            255,
+            254,
+            250
+          ],
+          "color": "rgb(110, 128, 96)",
+          "contrast": 4.23,
+          "font": "11px",
+          "text": "01"
+        },
+        {
+          "background": [
+            237,
+            242,
+            223
+          ],
+          "color": "rgb(114, 131, 101)",
+          "contrast": 3.57,
+          "font": "9px",
+          "text": "01"
+        },
+        {
+          "background": [
+            255,
+            254,
+            250
+          ],
+          "color": "rgb(114, 131, 101)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "02"
+        },
+        {
+          "background": [
+            255,
+            254,
+            250
+          ],
+          "color": "rgb(114, 131, 101)",
+          "contrast": 4.04,
+          "font": "9px",
+          "text": "03"
+        },
+        {
+          "background": [
+            255,
+            254,
+            250
+          ],
+          "color": "rgb(110, 128, 96)",
+          "contrast": 4.23,
+          "font": "11px",
+          "text": "02"
+        }
+      ],
+      "focused": "preference-a3fd72b0785e45d39538706fbd674747",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "niche-desktop-drafts"
+    },
+    {
+      "contrastProblems": [
+        {
+          "background": [
+            198,
+            213,
+            179
+          ],
+          "color": "rgb(93, 101, 92)",
+          "contrast": 3.9,
+          "font": "10px",
+          "text": "1"
+        },
+        {
+          "background": [
+            248,
+            247,
+            242
+          ],
+          "color": "rgb(115, 123, 108)",
+          "contrast": 4.1,
+          "font": "12px",
+          "text": "/"
+        },
+        {
+          "background": [
+            232,
+            238,
+            217
+          ],
+          "color": "rgb(99, 112, 87)",
+          "contrast": 4.43,
+          "font": "9px",
+          "text": "PICK UP WHERE YOU LEFT OFF"
+        }
+      ],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "niche-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BODY",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "account-desktop"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-1f31502079024770898c3e84487f6ee1",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "INPUT",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-scope"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-field-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-0800b5589adc49078e6204ef3a0797fc",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-document-import"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-f6c2b58470034d309fa3bd5748ff77e5",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "INPUT",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-scope"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-75fa3a45a2e74994aa4ab1e923bb47e1",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-return"
+    }
+  ],
+  "flows": [
+    {
+      "mode": "personal",
+      "viewport": "desktop",
+      "branch": "new-to-AI",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Remember this"
+    },
+    {
+      "mode": "niche",
+      "viewport": "desktop",
+      "branch": "experienced-portable",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Only for this post"
+    },
+    {
+      "mode": "business",
+      "viewport": "desktop",
+      "branch": "new-to-AI-document-import",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Don’t use this"
+    },
+    {
+      "mode": "hybrid",
+      "viewport": "desktop",
+      "branch": "experienced-compare",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Remember this"
+    }
+  ],
+  "guidedValues": {
+    "What kind of work, knowledge, or experience would you like to share?": "Make community learning approachable.",
+    "Who would you most like to help or reach?": "Curious beginners",
+    "What subject, business, or offer should this agency draw from?": "Community workshops",
+    "What are two or three things you know especially well?": "Preparing simple workshop materials",
+    "Where would support help?": "Organizing ideas into clear, useful drafts",
+    "How would you like your writing to feel?": "Warm, clear and practical",
+    "What should PostRiff avoid making you sound like?": "Too certain or overly promotional",
+    "Which languages should PostRiff understand?": "English and Traditional Chinese",
+    "Which topics or personal details should stay out of your content?": "Private family details"
+  },
+  "helpers": {
+    "audit": "async function(label){let result=await alphaTab.playwright.evaluate(()=>{const rgb=s=>(s.match(/[\\d.]+/g)||[]).map(Number);const linear=n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4};const lum=c=>.2126*linear(c[0])+.7152*linear(c[1])+.0722*linear(c[2]);const problems=[];for(const el of document.querySelectorAll('body *')){if(el.closest('.welcome-art,[aria-hidden=\"true\"],.sr-only,button:disabled')||!el.getBoundingClientRect().width)continue;const text=[...el.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim();if(!text)continue;const st=getComputedStyle(el);if(st.visibility==='hidden'||Number(st.opacity)<.99)continue;let bg=[248,247,242];for(let p=el;p;p=p.parentElement){const c=rgb(getComputedStyle(p).backgroundColor);if(c.length===3||(c.length===4&&c[3]===1)){bg=c;break;}}const fg=rgb(st.color);if(fg.length<3)continue;const contrast=(Math.max(lum(fg),lum(bg))+.05)/(Math.min(lum(fg),lum(bg))+.05);const size=Number(st.fontSize.replace('px',''));const large=size>=24||(size>=18.66&&Number(st.fontWeight)>=700);if(contrast<(large?3:4.5))problems.push({text:text.slice(0,65),contrast:Math.round(contrast*100)/100,color:st.color,background:bg,font:st.fontSize});}return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth,h1Count:document.querySelectorAll('h1').length,focused:document.activeElement?.id||document.activeElement?.tagName,contrastProblems:problems,unnamedControls:[...document.querySelectorAll('input,select,textarea,button')].filter(e=>e.getBoundingClientRect().width>0&&!e.getAttribute('aria-label')&&!e.closest('label')&&!e.textContent.trim()).map(e=>e.tagName)};});result.label=label;alphaChecks.push(result);return result;}",
+    "newAccount": "async function(provider,mode,view){if(await alphaTab.playwright.getByRole('button',{name:'Toggle navigation'}).isVisible())await alphaTab.playwright.getByRole('button',{name:'Toggle navigation'}).click();await alphaTab.playwright.getByRole('button',{name:'Agency settings',exact:true}).click();await alphaTab.playwright.getByRole('button',{name:'Sign out of local preview',exact:true}).click();await alphaTab.playwright.getByRole('button',{name:'Set up my agency',exact:true}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('button',{name:'Set up my agency',exact:true}).click();await alphaTab.playwright.getByText('Founder testing controls',{exact:true}).click();await alphaTab.playwright.getByRole('button',{name:'Use a new preview identity',exact:true}).click();const label=provider==='email'||provider==='phone'?provider:provider[0].toUpperCase()+provider.slice(1);await alphaTab.playwright.getByRole('button',{name:`Continue with ${label} Preview`,exact:true}).click();if(provider==='email'||provider==='phone'){await alphaTab.playwright.getByRole('textbox',{name:'Preview verification code'}).fill('123456');await alphaTab.playwright.getByRole('button',{name:'Verify local preview'}).click();}else await alphaTab.playwright.getByRole('button',{name:'Simulate verified callback'}).click();await alphaTab.playwright.getByRole('heading',{name:'What are you building?'}).waitFor({state:'visible'});const names={personal:/01 My personal brand/,niche:/02 A niche or expertise/,business:/03 My business/,hybrid:/04 A mix of these/};await alphaTab.playwright.getByRole('radio',{name:names[mode]}).check();await alphaFs.writeFile(alphaEvidence+'r21-'+mode+'-'+view+'-mode.png',await alphaTab.getScreenshot({emit:false}));await alphaTab.playwright.getByRole('button',{name:'Continue',exact:true}).click();await alphaTab.playwright.getByRole('heading',{name:'Do you already use AI as part of your work or creative life?'}).waitFor({state:'visible'});nodeRepl.write({provider,mode,view,localIdentityCreated:true});}",
+    "guided": "async function(mode,view,reviewOnly=false){let steps=[];for(let i=0;i<20;i++){await alphaTab.playwright.domSnapshot();const q=await alphaTab.playwright.locator('h1').innerText();if(q==='Does this feel like a useful starting point?')break;steps.push(q);if(q==='Which parts should this agency bring together?'){await alphaTab.playwright.getByRole('checkbox',{name:'My voice',exact:true}).check();await alphaTab.playwright.getByRole('checkbox',{name:'A business',exact:true}).check();await alphaTab.playwright.getByRole('button',{name:'Continue ↗',exact:true}).click();}else if(q==='Who should be speaking in this first post?'){await alphaTab.playwright.getByRole('radio',{name:'The business',exact:true}).check();await alphaTab.playwright.getByRole('button',{name:'Continue ↗',exact:true}).click();}else if(alphaGuidedValues[q]){await alphaTab.playwright.getByRole('textbox',{name:q,exact:true}).fill(alphaGuidedValues[q]);if(i===0){await alphaFs.writeFile(alphaEvidence+'r21-'+mode+'-'+view+'-guided.png',await alphaTab.getScreenshot({emit:false}));nodeRepl.write(await alphaAudit('r21-'+mode+'-'+view+'-guided'));}await alphaTab.playwright.getByRole('button',{name:'Continue ↗',exact:true}).click();}else{await alphaTab.playwright.getByRole('button',{name:/Not sure · skip for now|Skip · not useful to me/}).click();}await alphaTab.playwright.getByRole('heading',{name:q,exact:true}).waitFor({state:'hidden'});}nodeRepl.write({mode,view,oneQuestionSteps:steps});await alphaTab.playwright.getByRole('button',{name:'Approve my stated answers',exact:true}).click();await alphaTab.playwright.getByRole('button',{name:'Use this reviewed profile'}).waitFor({state:'visible'});nodeRepl.write(await alphaAudit('r21-'+mode+'-'+view+'-profile-review'));await alphaFs.writeFile(alphaEvidence+'r21-'+mode+'-'+view+'-profile.png',await alphaTab.getScreenshot({emit:false}));if(reviewOnly)return;await alphaTab.playwright.getByRole('button',{name:'Use this reviewed profile'}).click();await alphaTab.playwright.getByRole('heading',{name:'What would you like to create first?'}).waitFor({state:'visible'});nodeRepl.write({mode,view,profileActivated:true});}",
+    "experienced": "async function(mode,view,route){const answers=[['checkbox','ChatGPT / GPT'],['radio','More than three years'],['radio','Almost every day'],['radio','It usually understands my working style and voice'],['checkbox','My writing or speaking voice'],['checkbox','Saved memory or custom instructions']];for(const [role,name] of answers){await alphaTab.playwright.getByRole(role,{name,exact:true}).waitFor({state:'visible'});const heading=await alphaTab.playwright.locator('h1').innerText();await alphaTab.playwright.getByRole(role,{name,exact:true}).check();if(name==='ChatGPT / GPT')await alphaTab.playwright.getByRole('checkbox',{name:'Grok',exact:true}).check();await alphaTab.playwright.getByRole('button',{name:'Continue ↗',exact:true}).click();await alphaTab.playwright.getByRole('heading',{name:heading,exact:true}).waitFor({state:'hidden'});nodeRepl.write({relationshipQuestion:heading,answered:true});}await alphaTab.playwright.getByRole('button',{name:route==='cli'?/Use a CLI on this computer/:route==='compare'?/Use both and let me compare/:/Copy a prompt into my AI/}).click();await alphaTab.playwright.getByRole('heading',{name:'What may your AI use to prepare this profile?'}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('checkbox',{name:/This conversation only/}).check();await alphaTab.playwright.getByRole('checkbox',{name:/I approve only this scope/}).check();nodeRepl.write(await alphaAudit('r21-'+mode+'-'+view+'-scope'));await alphaFs.writeFile(alphaEvidence+'r21-'+mode+'-'+view+'-scope.png',await alphaTab.getScreenshot({emit:false}));await alphaTab.playwright.getByRole('button',{name:'Prepare scoped request'}).click();await alphaTab.playwright.getByRole('heading',{name:'Bring useful context. Keep the final say.'}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('button',{name:'Download builder prompt',exact:true}).click();nodeRepl.write(await alphaTab.playwright.domSnapshot());}",
+    "finish": "async function(mode,view,branch,decision){await alphaTab.playwright.getByRole('button',{name:'Try a sample topic',exact:true}).click();await alphaTab.playwright.getByRole('button',{name:'Add fictional sample'}).click();await alphaTab.playwright.getByRole('button',{name:'Confirm selected facts'}).waitFor({state:'visible'});for(const box of await alphaTab.playwright.getByRole('checkbox').all())await box.check();await alphaTab.playwright.getByRole('button',{name:'Confirm selected facts'}).click();await alphaTab.playwright.getByText('Reviewed',{exact:true}).waitFor({state:'visible'});nodeRepl.write(await alphaAudit('r21-'+mode+'-'+view+'-sources'));await alphaTab.playwright.getByRole('button',{name:'Continue to writing setup'}).click();await alphaTab.playwright.getByRole('button',{name:'Continue with local preview'}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('button',{name:'Continue with local preview'}).click();await alphaTab.playwright.getByRole('button',{name:'Create first draft'}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('button',{name:'Create first draft'}).click();await alphaTab.playwright.getByRole('textbox',{name:'LinkedIn English draft'}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('button',{name:'Create another variant'}).click();await alphaTab.playwright.getByRole('textbox',{name:'Instagram 繁體中文 draft'}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('textbox',{name:'LinkedIn English draft'}).fill('A small place to start.\\n\\nThe community garden hosts a free seed-swap on Saturday. Visitors can bring seeds or simply come to learn.\\n\\nWhat would you like to learn from your neighbors?');await alphaTab.playwright.getByRole('button',{name:'Save edit',exact:true}).first().click();await alphaTab.playwright.getByRole('button',{name:decision,exact:true}).waitFor({state:'visible'});await alphaTab.playwright.getByRole('button',{name:decision,exact:true}).click();await alphaTab.playwright.getByRole('button',{name:'Remember this',exact:true}).waitFor({state:'hidden'});nodeRepl.write(await alphaAudit('r21-'+mode+'-'+view+'-drafts'));await alphaFs.writeFile(alphaEvidence+'r21-'+mode+'-'+view+'-drafts.png',await alphaTab.getScreenshot({emit:false}));await alphaTab.playwright.getByRole('button',{name:'Save in Ideas'}).click();await alphaTab.playwright.getByRole('heading',{name:'Your first PostRiff is ready.'}).waitFor({state:'visible'});await alphaFs.writeFile(alphaEvidence+'r21-'+mode+'-'+view+'-ready.png',await alphaTab.getScreenshot({emit:false}));await alphaTab.playwright.getByRole('button',{name:'Export drafts'}).click();await alphaTab.playwright.getByText(/Your private draft pack is ready for download/).waitFor({state:'visible'});await alphaTab.reload();await alphaTab.playwright.getByRole('heading',{name:'Welcome back to your agency.'}).waitFor({state:'visible'});nodeRepl.write(await alphaAudit('r21-'+mode+'-'+view+'-return'));const r={mode,viewport:view,branch,saved:true,exportTriggered:true,returnVerified:true,preference:decision};alphaFinalFlows.push(r);nodeRepl.write(r);}"
+  }
+}

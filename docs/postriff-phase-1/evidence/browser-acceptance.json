@@ -1,0 +1,627 @@
+{
+  "execution": "synthetic local fixtures only",
+  "flows": [
+    {
+      "mode": "personal",
+      "viewport": "desktop",
+      "branch": "new-to-AI",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Remember this"
+    },
+    {
+      "mode": "niche",
+      "viewport": "desktop",
+      "branch": "experienced-portable",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Only for this post"
+    },
+    {
+      "mode": "business",
+      "viewport": "desktop",
+      "branch": "new-to-AI-document-import",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Don’t use this"
+    },
+    {
+      "mode": "hybrid",
+      "viewport": "desktop",
+      "branch": "experienced-compare",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Remember this"
+    },
+    {
+      "mode": "personal",
+      "viewport": "mobile",
+      "branch": "experienced-CLI-blocked-guided-fallback",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Remember this"
+    },
+    {
+      "mode": "niche",
+      "viewport": "mobile",
+      "branch": "new-to-AI",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Only for this post"
+    },
+    {
+      "mode": "business",
+      "viewport": "mobile",
+      "branch": "experienced-portable",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Don’t use this"
+    },
+    {
+      "mode": "hybrid",
+      "viewport": "mobile",
+      "branch": "new-to-AI",
+      "saved": true,
+      "exportTriggered": true,
+      "returnVerified": true,
+      "preference": "Remember this"
+    }
+  ],
+  "checks": [
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-1f31502079024770898c3e84487f6ee1",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-personal-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "INPUT",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-scope"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-field-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-0800b5589adc49078e6204ef3a0797fc",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-niche-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-document-import"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-f6c2b58470034d309fa3bd5748ff77e5",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-business-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "INPUT",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-scope"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-75fa3a45a2e74994aa4ab1e923bb47e1",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r21-hybrid-desktop-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "INPUT",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-personal-mobile-scope"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-personal-mobile-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-personal-mobile-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-personal-mobile-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-00673d9d86d74a55a16bc3ea22c07b8e",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-personal-mobile-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-personal-mobile-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-niche-mobile-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-niche-mobile-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-niche-mobile-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-89db458085384467b8abfad14e20ef50",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-niche-mobile-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-niche-mobile-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "INPUT",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-business-mobile-scope"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-business-mobile-import-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-business-mobile-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-675b1c58c7a24c55a50d430e38284043",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-business-mobile-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-business-mobile-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "TEXTAREA",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-hybrid-mobile-guided"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-hybrid-mobile-profile-review"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-hybrid-mobile-sources"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "preference-00f5961abb6a49ce936c0a4d7feaf77e",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-hybrid-mobile-drafts"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-hybrid-mobile-return"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-server-restart-persistence"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "alpha-error",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r21-mobile-auth-error"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "main-title",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r22-you-desktop-overview"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "you-tab-1",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r22-you-keyboard-voice"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "you-tab-2",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r22-you-skills"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "you-tab-3",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r22-you-usage-desktop"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "you-tab-4",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r22-you-account-desktop"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "you-tab-4",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r22-you-account-mobile"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "you-tab-0",
+      "h1Count": 1,
+      "height": 844,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 390,
+      "label": "r22-you-mobile-overview"
+    },
+    {
+      "contrastProblems": [],
+      "focused": "BUTTON",
+      "h1Count": 1,
+      "height": 1000,
+      "overflow": false,
+      "unnamedControls": [],
+      "width": 1440,
+      "label": "r22-final-constellation-desktop"
+    }
+  ],
+  "additional": {
+    "serverRestart": true,
+    "keyboardSignIn": true,
+    "graphListEquivalent": true,
+    "graphListNodeCount": 9,
+    "fieldReviewFocus": true,
+    "artBriefOptIn": true,
+    "artRemoval": true,
+    "artRefreshAndIdentityPersist": true,
+    "sharedBriefPreviewAndAccept": true,
+    "quotaFailurePreservesWork": true,
+    "anonymousSampleHasNoPrivateInput": true,
+    "finalConsoleErrors": 0,
+    "visuallyReviewed": [
+      "personal-desktop",
+      "personal-mobile",
+      "niche-desktop",
+      "niche-mobile",
+      "business-desktop",
+      "business-mobile",
+      "hybrid-desktop",
+      "hybrid-mobile",
+      "You-desktop-hero",
+      "You-desktop-constellation",
+      "You-mobile-hero",
+      "You-mobile-constellation"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "scope": "confirmed in-thread R22 founder-alpha amendment; no remote image generation",
+  "sources": {
+    "postriff-you-profile-and-watercolor-spec.md": "1c8d24ec7887658552a32b01cf7cc00e3a50e73518ca48f584c1a713a651258c",
+    "postriff-phase-1-execution-prompt.md": "4e57ceeab3e5d88b132efbf34535d0817e028fb7a4007acbf154d37db01cd9ec",
+    "postriff-product-plan/product-spec.md": "f660304c1aac5915e10e6d932d3736c17bb65a2ff8278274145313d4224cd6b3",
+    "postriff-product-plan/implementation-plan.md": "c52af5eeff75263d984431b35910bf81a3f9183db7485a8b8857bcdb26a5a329"
+  }
+}

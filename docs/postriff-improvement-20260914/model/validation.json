@@ -1,0 +1,38 @@
+{
+  "status": "pass",
+  "execution": "scenario_calculation_not_forecast",
+  "months": 36,
+  "scenarios": 3,
+  "stress_scenarios": 9,
+  "top3": [
+    {
+      "variable": "paid_rate",
+      "shock": "+20%",
+      "delta_month36_full_result": 877.7749952130807,
+      "absolute_delta": 877.7749952130807
+    },
+    {
+      "variable": "hourly_rate",
+      "shock": "+20%",
+      "delta_month36_full_result": -837.0665570805645,
+      "absolute_delta": 837.0665570805645
+    },
+    {
+      "variable": "qualified_volume",
+      "shock": "+20%",
+      "delta_month36_full_result": 795.4726726735307,
+      "absolute_delta": 795.4726726735307
+    }
+  ],
+  "checks": [
+    "cohort stock-flow conservation every month",
+    "plan mix/migration sums",
+    "zero conversions produce undefined CAC",
+    "cash receipts separated from recognized recurring revenue"
+  ],
+  "limitations": [
+    "Annual billing is a sensitivity-only approximation: expected churn/refunds, no contract-level proration or deferred-revenue balance sheet.",
+    "All business inputs are assumptions or unknown, not observed growth.",
+    "Capacity-exceeding and negative-cash rows are infeasible unless funding or staffing changes."
+  ]
+}

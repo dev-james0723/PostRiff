@@ -1,0 +1,454 @@
+--- /Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py
++++ /Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py
+@@ -0,0 +1,261 @@
++"""Text-only Zhihu browser pilot. Selective MIT upstream flow adaptation.
++Upstream: liuboacean/zhihu-automation-skill @ 9aca95da75ffd0238174ba9ed2438f4c519ce233.
++No cookie export, HTTP endpoints, blind retries, or generic-success inference.
++"""
++from __future__ import annotations
++import argparse
++import contextlib
++import fcntl
++import hashlib
++import json
++import os
++from pathlib import Path
++import re
++import sqlite3
++import subprocess
++import sys
++import time
++from urllib.parse import urljoin
++from fastapi import Request
++
++VERSION = 'zhihu-browser/1'
++DEFAULT_ROOT = Path.home() / 'Library/Application Support/JamesAuStudio/zhihu-browser'
++
++class Stop(ValueError):
++    pass
++
++def canonical(value):
++    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
++
++def digest(value):
++    return hashlib.sha256(canonical(value).encode()).hexdigest()
++
++def profile(value):
++    if not isinstance(value, str): raise Stop('invalid_profile')
++    if re.fullmatch(r'[A-Za-z0-9_-]{1,100}', value): value = 'https://www.zhihu.com/people/' + value
++    if not re.fullmatch(r'https://www\.zhihu\.com/people/[A-Za-z0-9_-]{1,100}', value): raise Stop('invalid_profile')
++    return value
++
++def permalink(value):
++    if not isinstance(value, str) or not re.fullmatch(r'https://www\.zhihu\.com/pin/[0-9]+', value): raise Stop('invalid_permalink')
++    return value
++
++def manifest(account, text):
++    if not isinstance(text, str) or not text.strip() or len(text) > 1000 or any(ord(c)<32 and c not in '\n\t' for c in text):
++        raise Stop('invalid_text')  # Conservative pilot bound, not platform limit.
++    return dict(version=VERSION, channel='zhihu', nativeFormat='zhihu.idea', profile=profile(account),
++                text=text, audience='public', timing='now', media=[], derivatives=[])
++
++def validate(value):
++    if not isinstance(value, dict) or value != manifest(value.get('profile'), value.get('text')): raise Stop('invalid_manifest')
++    return value
++
++def private_dir(root):
++    root = Path(os.path.abspath(root))
++    if any(p.is_symlink() for p in [root, *root.parents]): raise Stop('unsafe_private_path')
++    root.mkdir(parents=True, exist_ok=True, mode=0o700); root.chmod(0o700)
++    return root
++
++class Store:
++    def __init__(self, root):
++        self.root = private_dir(root)
++        p = self.root / 'state.sqlite3'
++        if p.is_symlink(): raise Stop('unsafe_private_path')
++        fd = os.open(p, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600); os.close(fd)
++        p.chmod(0o600)
++        self.db = sqlite3.connect(p, isolation_level=None)
++        self.db.execute('PRAGMA synchronous=FULL')
++        self.db.execute('CREATE TABLE IF NOT EXISTS records (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
++    def close(self): self.db.close()
++    def get(self, key):
++        row=self.db.execute('SELECT value FROM records WHERE key=?',(key,)).fetchone()
++        return json.loads(row[0]) if row else None
++    def put(self, key, value):
++        self.db.execute('INSERT OR REPLACE INTO records VALUES (?,?)',(key,canonical(value)))
++        return value
++    @contextlib.contextmanager
++    def lock(self):
++        fd=os.open(self.root/'browser.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
++        try:
++            try: fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
++            except BlockingIOError: raise Stop('browser_busy_close_login_window') from None
++            yield
++        finally: os.close(fd)
++    def status(self):
++        c=self.get('connection') or {}
++        fresh=time.time()-c.get('verifiedAt',0)<900
++        return dict(provider='zhihu', route='controlled_browser', routeDriver=VERSION,
++                    state='connected_identity' if fresh else 'login_or_verification_required',
++                    profile=c.get('profile'), identitySignals=c.get('identitySignals',[]) if fresh else [],
++                    publishReady=False, publishing=False, liveTestVerified=bool(c.get('liveTestVerified')))
++
++@contextlib.contextmanager
++def browser(root):
++    from playwright.sync_api import sync_playwright
++    with sync_playwright() as pw:
++        ctx=pw.chromium.launch_persistent_context(str(private_dir(Path(root)/'profile')),headless=False,
++                accept_downloads=False,chromium_sandbox=True)
++        try: yield ctx
++        finally: ctx.close()
++
++class ZhihuUI:
++    def __init__(self, ctx):
++        self.ctx=ctx; self.page=ctx.new_page(); self.page.set_default_timeout(10000)
++    def one(self, locator):
++        if locator.count()!=1 or not locator.is_visible(): raise Stop('ui_changed')
++        return locator
++    def public_page(self, page, url):
++        page.goto(url,wait_until='domcontentloaded')
++        if page.url.rstrip('/') != url: raise Stop('login_or_ui_changed')
++        if page.locator('input[type="password"], .SignFlow, .Captcha, iframe[src*="captcha"]').count():
++            raise Stop('private_handoff_required')
++    def identity(self, account):
++        p=self.ctx.new_page()
++        try:
++            p.set_default_timeout(10000); self.public_page(p,account)
++            # Header's own-account link is distinct from the profile's owner-only control.
++            avatar=self.one(p.locator('.AppHeader-profileAvatar'))
++            avatar.click()
++            own=self.one(p.get_by_role('link',name='我的主页',exact=True))
++            if urljoin('https://www.zhihu.com',own.get_attribute('href') or '').rstrip('/')!=account:
++                raise Stop('identity_mismatch')
++            self.one(p.get_by_role('button',name='编辑个人资料',exact=True))
++            return ['authenticated_header_profile','own_profile_edit_control']
++        finally: p.close()
++    def links(self, account):
++        self.public_page(self.page,account+'/pins')
++        return {urljoin('https://www.zhihu.com',x.get_attribute('href')) for x in self.page.locator('a[href*="/pin/"]').all()
++                if re.fullmatch(r'(https://www\.zhihu\.com)?/pin/[0-9]+',x.get_attribute('href') or '')}
++    def compose(self,text):
++        self.public_page(self.page,'https://www.zhihu.com')
++        self.one(self.page.get_by_role('button',name='发想法',exact=True)).click()
++        self.one(self.page.locator('[contenteditable="true"]')).fill(text)
++        self.assert_text(text)
++    def assert_text(self,text):
++        if self.one(self.page.locator('[contenteditable="true"]')).inner_text()!=text: raise Stop('rendered_text_mismatch')
++    def submit(self):
++        self.one(self.page.get_by_role('button',name='发布',exact=True)).click()
++    def verify(self,url,value):
++        permalink(url); p=self.ctx.new_page()
++        try:
++            p.set_default_timeout(10000); self.public_page(p,url)
++            card=self.one(p.locator('.PinItem'))
++            author=self.one(card.locator('.AuthorInfo a[href*="/people/"]'))
++            if urljoin('https://www.zhihu.com',author.get_attribute('href') or '').rstrip('/')!=value['profile']:
++                raise Stop('wrong_author')
++            if self.one(card.locator('.RichContent-inner .RichText')).inner_text()!=value['text']: raise Stop('wrong_content')
++            return dict(permalink=url,profile=value['profile'],textHash=digest(value['text']),independentRead=True)
++        finally: p.close()
++    def find_new(self,before,value):
++        for _ in range(3):
++            for url in sorted(self.links(value['profile'])-set(before)):
++                try: return self.verify(url,value)
++                except Stop: continue
++            self.page.wait_for_timeout(1500)
++        raise Stop('publication_unresolved')
++
++def execute(store, value, approved_hash, ui):
++    validate(value); key=digest(value)
++    if approved_hash!=key: raise Stop('exact_approval_required')
++    with store.lock():
++        existing=store.get(key)
++        if existing: return existing
++        ui.identity(value['profile'])
++        before=sorted(ui.links(value['profile']))
++        # Claim before composition: even autosaved drafts are approval-bound.
++        record=dict(state='attempting',manifest=value,hash=key,previousLinks=before,claimedAt=time.time())
++        store.put(key,record)
++        try:
++            ui.compose(value['text']); ui.identity(value['profile']); ui.assert_text(value['text'])
++            store.put(key,{**record,'state':'submitting'})
++            ui.submit()
++            evidence=ui.find_new(before,value)
++            record.update(state='published_verified',evidence=evidence)
++            connection=store.get('connection') or {}
++            if connection.get('profile')==value['profile']: store.put('connection',{**connection,'liveTestVerified':True})
++        except Exception:
++            record.update(state='unknown',reason='reconcile_before_retry')
++        return store.put(key,record)
++
++def reconcile(store,key,url,ui):
++    record=store.get(key)
++    if not record or record.get('hash')!=key: raise Stop('attempt_missing')
++    with store.lock():
++        if url in record['previousLinks']: raise Stop('preexisting_post')
++        ui.identity(record['manifest']['profile'])
++        evidence=ui.verify(permalink(url),record['manifest'])
++        return store.put(key,{**record,'state':'published_verified','evidence':evidence})
++
++def login(root):
++    store=Store(root)
++    try:
++        with store.lock(), browser(root) as ctx:
++            page=ctx.new_page(); page.goto('https://www.zhihu.com/signin',wait_until='domcontentloaded')
++            # No snapshots, cookies, network logging or DOM observations during login.
++            while ctx.pages:
++                try: ctx.pages[0].wait_for_timeout(500)
++                except Exception: break
++    finally: store.close()
++
++def register_routes(app,data_dir,body_parser):
++    from fastapi import Request
++    from starlette.concurrency import run_in_threadpool
++    from .studio import StudioError
++    root=Path(data_dir)/'zhihu-browser'
++    def work(operation,value):
++        store=Store(root)
++        try:
++            if operation=='status': return store.status()
++            if operation=='preview':
++                if set(value)!={'profile','text'}: raise Stop('invalid_manifest')
++                m=manifest(value['profile'],value['text']); return dict(manifest=m,hash=digest(m),state='local_preview')
++            if operation=='login':
++                if value!={}: raise Stop('invalid_request')
++                with store.lock(): pass
++                subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'login','--root',str(root)],
++                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,stdin=subprocess.DEVNULL,
++                    env={k:os.environ[k] for k in ('PATH','HOME','TMPDIR') if k in os.environ},start_new_session=True)
++                return dict(state='private_handoff',instruction='Sign in to Zhihu in the dedicated browser, then close that browser and verify your public profile here.')
++            if operation=='verify':
++                if set(value)!={'profile'}: raise Stop('invalid_request')
++                account=profile(value['profile'])
++                with store.lock(), browser(root) as ctx:
++                    signals=ZhihuUI(ctx).identity(account)
++                    previous=store.get('connection') or {}
++                    if previous.get('profile') not in (None,account): raise Stop('identity_mismatch')
++                    store.put('connection',dict(profile=account,verifiedAt=time.time(),identitySignals=signals,
++                              liveTestVerified=previous.get('liveTestVerified',False)))
++                return store.status()
++            if operation=='publish':
++                if set(value)!={'manifest','approvedHash','publicationConsent'} or value['publicationConsent'] is not True: raise Stop('exact_approval_required')
++                m=validate(value['manifest'])
++                if value['approvedHash']!=digest(m): raise Stop('exact_approval_required')
++                connection=store.status()
++                if connection['state']!='connected_identity' or connection['profile']!=m['profile']: raise Stop('verify_exact_profile_first')
++                existing=store.get(digest(m))
++                if existing: return existing
++                with browser(root) as ctx: return execute(store,m,value['approvedHash'],ZhihuUI(ctx))
++            if operation=='reconcile':
++                if set(value)!={'hash','permalink'} or not re.fullmatch('[a-f0-9]{64}',value.get('hash','')): raise Stop('invalid_request')
++                permalink(value['permalink'])
++                with browser(root) as ctx: return reconcile(store,value['hash'],value['permalink'],ZhihuUI(ctx))
++            raise Stop('unsupported_operation')
++        except Stop as error: raise StudioError(str(error),'Zhihu stopped: '+str(error).replace('_',' ')+'.',409) from None
++        except Exception: raise StudioError('zhihu_browser_unavailable','Zhihu browser operation could not complete. Close sign-in windows before verifying; check an uncertain post before retrying.',503) from None
++        finally: store.close()
++    @app.get('/api/connections/zhihu/status')
++    def status(): return work('status',{})
++    @app.post('/api/connections/zhihu/{operation}')
++    async def action(operation: str, request: Request):
++        return await run_in_threadpool(work,operation,await body_parser(request))
++
++if __name__=='__main__':
++    parser=argparse.ArgumentParser(); parser.add_argument('operation',choices=['login','status']); parser.add_argument('--root',type=Path,default=DEFAULT_ROOT)
++    args=parser.parse_args()
++    try:
++        if args.operation=='login': login(args.root)
++        else:
++            s=Store(args.root)
++            try: print(canonical(s.status()))
++            finally: s.close()
++    except Exception: print('{"state":"browser_unavailable"}'); sys.exit(1)
+--- /Users/ouxianxing/Documents/James-Au-Studio/studio/web/src/ZhihuConnection.tsx
++++ /Users/ouxianxing/Documents/James-Au-Studio/studio/web/src/ZhihuConnection.tsx
+@@ -0,0 +1,31 @@
++import {useEffect,useState} from 'react';
++import {api} from './api';
++type State={state:string;profile:string|null;identitySignals:string[];liveTestVerified:boolean};
++type Preview={manifest:{profile:string;text:string;audience:string;timing:string};hash:string;state:string};
++export default function ZhihuConnection(){
++ const [state,setState]=useState<State|null>(null),[profile,setProfile]=useState(''),[text,setText]=useState('这是一条发布流程测试，用来检查文字是否完整显示。'),[preview,setPreview]=useState<Preview|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[consent,setConsent]=useState(false),[result,setResult]=useState<{state:string;evidence?:{permalink:string}}|null>(null);
++ const [reconcileHash,setReconcileHash]=useState(''),[reconcileUrl,setReconcileUrl]=useState('');
++ async function refresh(){const s=await api<State>('/api/connections/zhihu/status');setState(s);if(s.profile)setProfile(s.profile);}
++ useEffect(()=>{refresh().catch(()=>setMessage('Zhihu status unavailable.'));},[]);
++ async function action(operation:string,body:unknown){setBusy(true);setMessage('');try{
++  const value=await api<Record<string,unknown>>('/api/connections/zhihu/'+operation,{method:'POST',body:JSON.stringify(body)});
++  if(operation==='preview'){setPreview(value as unknown as Preview);setConsent(false);}
++  else if(operation==='publish'||operation==='reconcile'){setResult(value as unknown as {state:string;evidence?:{permalink:string}});if(typeof value.hash==='string')setReconcileHash(value.hash);}
++  else {setMessage(operation==='login'?'Sign in in the dedicated browser. Complete any phone, QR or CAPTCHA step yourself, then close that browser and verify here.':'Profile verified for 15 minutes. Each post checks identity again.');await refresh();}
++ }catch(e){setMessage(e instanceof Error?e.message:'Zhihu operation unavailable.');}finally{setBusy(false);}}
++ function changed(){setPreview(null);setConsent(false);setResult(null);}
++ return <section aria-label="Zhihu browser connection" className="setup-panel"><h3>Connect Zhihu in your browser</h3>
++ <p>No OAuth or API key. Use the dedicated browser to sign in to your intended Zhihu account. Passwords and login codes stay in that browser.</p>
++ <p role="status">{state?.state==='connected_identity'?'Profile verified':'Login and profile verification required'} · {state?.liveTestVerified?'A live text test has been verified':'Live posting not yet verified'}</p>
++ <fieldset disabled={busy} className="setup-fields"><button className="button" onClick={()=>action('login',{})}>Open Zhihu sign-in</button>
++ <label className="field">Public profile URL or handle<input value={profile} onChange={e=>{setProfile(e.target.value);changed();}} placeholder="https://www.zhihu.com/people/your-handle" autoComplete="off"/></label>
++ <button className="button" disabled={!profile.trim()} onClick={()=>action('verify',{profile})}>Verify after closing sign-in browser</button>
++ <h3>Test a text 想法</h3><label className="field">Exact post text<textarea value={text} maxLength={1000} onChange={e=>{setText(e.target.value);changed();}}/></label>
++ <button className="button" disabled={!profile.trim()||!text.trim()} onClick={()=>action('preview',{profile,text})}>Preview test post</button>
++ {preview&&<div aria-label="Zhihu exact publication preview"><p><strong>{preview.manifest.profile}</strong><br/>Public 想法 · Publish now · No media or derivatives</p><p style={{whiteSpace:'pre-wrap'}}>{preview.manifest.text}</p>
++ <label><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I approve publishing this exact text publicly to this profile now.</label>
++ <button className="button" disabled={!consent||state?.state!=='connected_identity'||state?.profile!==preview.manifest.profile} onClick={()=>action('publish',{manifest:preview.manifest,approvedHash:preview.hash,publicationConsent:true})}>Publish approved test</button></div>}
++ <details><summary>Reconcile an uncertain test</summary><p>This checks an existing post without submitting again.</p><label className="field">Attempt hash<input value={reconcileHash} onChange={e=>setReconcileHash(e.target.value)}/></label><label className="field">Zhihu post permalink<input value={reconcileUrl} onChange={e=>setReconcileUrl(e.target.value)}/></label><button className="button" disabled={!reconcileHash||!reconcileUrl} onClick={()=>action('reconcile',{hash:reconcileHash,permalink:reconcileUrl})}>Verify existing post</button></details>
++ </fieldset>{message&&<p role="status">{message}</p>}{result&&<p role="status">{result.state}{result.evidence&&<> · <a href={result.evidence.permalink} target="_blank" rel="noreferrer">View verified post</a></>}</p>}
++ <p className="hint">This pilot supports text 想法 only. Articles and answers use the draft handoff. No recurring schedule is enabled.</p></section>;
++}
+--- /Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/studio_api.py
++++ /Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/studio_api.py
+@@ -341,6 +341,8 @@
+     from .studio_setup import register_setup_routes
+     register_setup_routes(app, _body, connection_broker)
+ 
++    from .zhihu_browser import register_routes as register_zhihu_routes
++    register_zhihu_routes(app, data_dir, _body)
+     from .studio_connections import ConnectionBroker, register_connection_routes
+     register_connection_routes(app, connection_broker or ConnectionBroker(project_root, data_dir, port), _body)
+ 
+--- /Users/ouxianxing/Documents/James-Au-Studio/studio/web/src/ChannelSetup.tsx
++++ /Users/ouxianxing/Documents/James-Au-Studio/studio/web/src/ChannelSetup.tsx
+@@ -5,6 +5,7 @@
+ import BlueskyConnection from './BlueskyConnection';
+ import YouTubeConnection from './YouTubeConnection';
+ import InstagramConnection from './InstagramConnection';
++import ZhihuConnection from './ZhihuConnection';
+ import TikTokConnection from './TikTokConnection';
+ import ThreadsConnection from './ThreadsConnection';
+ import PinterestConnection from './PinterestConnection';
+@@ -33,6 +34,7 @@
+     {channel.id==='bluesky'&&<BlueskyConnection/>}
+     {channel.id==='youtube'&&<YouTubeConnection/>}
+     {channel.id==='instagram'&&<InstagramConnection/>}
++    {channel.id==='zhihu'&&<ZhihuConnection/>}
+     {channel.id==='tiktok'&&<TikTokConnection/>}
+     {channel.id==='threads'&&<ThreadsConnection/>}
+     {channel.id==='pinterest'&&<PinterestConnection/>}
+--- /Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/studio_setup.py
++++ /Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/studio_setup.py
+@@ -11,6 +11,10 @@
+ 
+ 
+ def _pilot(channel):
++    if channel == 'zhihu':
++        return {'candidateRoute': 'controlled_browser', 'pilotScope': 'Dedicated browser login and exact-approval text idea pilot',
++                'documentationState': 'partial_review', 'sources': [{'url': 'https://github.com/liuboacean/zhihu-automation-skill',
++                'checkedAt': '2026-09-13', 'state': 'reviewed', 'note': 'Selective adaptation at 9aca95da75ffd0238174ba9ed2438f4c519ce233. Live selectors and account remain unqualified.'}]}
+     if channel == 'bluesky':
+         return {'candidateRoute': 'official_api', 'pilotScope': 'Text-only post candidate',
+                 'documentationState': 'partial_review',
+--- /Users/ouxianxing/Documents/James-Au-Studio/studio/requirements.txt
++++ /Users/ouxianxing/Documents/James-Au-Studio/studio/requirements.txt
+@@ -4,3 +4,6 @@
+ python-multipart==0.0.32
+ Pillow==12.3.0
+ httpx==0.28.1
++
++# Zhihu dedicated browser pilot
++playwright==1.62.0
+--- /Users/ouxianxing/Documents/James-Au-Studio/studio/requirements.lock.txt
++++ /Users/ouxianxing/Documents/James-Au-Studio/studio/requirements.lock.txt
+@@ -18,3 +18,6 @@
+ typing-inspection==0.4.4
+ typing_extensions==4.16.0
+ uvicorn==0.52.4
++
++# Zhihu dedicated browser pilot
++playwright==1.62.0
+--- /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/SKILL.md
++++ /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/SKILL.md
+@@ -30,3 +30,7 @@
+ ## Hard boundary
+ 
+ An installed wrapper does not activate a provider or connect an account. Never read raw credentials or cookies. Never create an account/app, submit consent, spend money, render remotely, upload, schedule, publish, delete, retry an ambiguous write, or report live success without the exact current gate and independent evidence required by V14.
++
++## Zhihu browser connection and text pilot
++
++For Zhihu setup or posting, read [references/zhihu-browser.md](references/zhihu-browser.md). This user-selected route bypasses OAuth/API setup and preserves the standing connection authorization. Use the dedicated Studio browser pilot; exact live-post approval and independent verification still apply.
+--- /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/references/zhihu-browser.md
++++ /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/references/zhihu-browser.md
+@@ -0,0 +1,19 @@
++# Zhihu browser route
++
++James explicitly selected browser automation using liuboacean/zhihu-automation-skill. Route `controlled_browser`; route_driver `zhihu-browser/1`. No OAuth/API onboarding for this route. This is a selective MIT adaptation at commit `9aca95da75ffd0238174ba9ed2438f4c519ce233`, not the upstream skill installed unchanged.
++
++## Operate
++
++Open Studio at http://127.0.0.1:4310 and choose Channels → Zhihu. Durable implementation: `/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py`. Use the dedicated browser sign-in button; after login, close its browser and verify the exact public profile. James selected `https://www.zhihu.com/people/tie4gka` in the 2026-09-13 task. This is a destination choice, not proof of authentication.
++
++The user/project standing setup authorization covers starting this connection; do not restart first-run intake or request OAuth consent. Human-only password, phone/MFA, QR and CAPTCHA steps remain private handoffs. Do not observe login surfaces or export/read cookies. Browser session stays under owner-only `~/Library/Application Support/JamesAuStudio/zhihu-browser/profile`.
++
++## Publishing pilot
++
++Only immediate public text `zhihu.idea` (upstream `thought`) is implemented, with at most 1000 characters as a local pilot bound. Articles, answers, media, engagement and schedules remain unavailable through this driver. Prepare the full text and exact profile in Studio, show public visibility, immediate time and zero derivatives, then obtain content-bound approval. Approval is checked against the complete manifest hash. Do not click the approval checkbox or submit without James's exact instruction for the displayed content.
++
++Two independent identity signals are required: authenticated header profile link and owner-only profile edit control. Unrecognized UI fails closed. A durable record is written before composition/final submission. Any uncertain attempt is retained and never resubmitted automatically. Reconcile using its attempt hash and public `/pin/<id>` permalink; independent read must match full text and author.
++
++`local_preview`, fixture tests and an installed driver are not live success. `connected_identity` expires after 15 minutes and each post checks identity again. `published_verified` requires a fresh matching permalink read. This pilot never sets global/channel `publishReady` or enables recurring jobs.
++
++Upstream crash recovery, cookie-export scripts, HTTP signature code and generic success reports are deliberately excluded. Review evidence and test receipt are in the source project's `artifacts/zhihu-browser-integration/`.
+--- /Users/ouxianxing/.codex/skills/james-au-social-orchestrator/SKILL.md
++++ /Users/ouxianxing/.codex/skills/james-au-social-orchestrator/SKILL.md
+@@ -30,3 +30,7 @@
+ ## Hard boundary
+ 
+ An installed wrapper does not activate a provider or connect an account. Never read raw credentials or cookies. Never create an account/app, submit consent, spend money, render remotely, upload, schedule, publish, delete, retry an ambiguous write, or report live success without the exact current gate and independent evidence required by V14.
++
++## Zhihu browser connection and text pilot
++
++For Zhihu setup or posting, read [references/zhihu-browser.md](references/zhihu-browser.md). This user-selected route bypasses OAuth/API setup and preserves the standing connection authorization. Use the dedicated Studio browser pilot; exact live-post approval and independent verification still apply.
+--- /Users/ouxianxing/.codex/skills/james-au-social-orchestrator/references/zhihu-browser.md
++++ /Users/ouxianxing/.codex/skills/james-au-social-orchestrator/references/zhihu-browser.md
+@@ -0,0 +1,19 @@
++# Zhihu browser route
++
++James explicitly selected browser automation using liuboacean/zhihu-automation-skill. Route `controlled_browser`; route_driver `zhihu-browser/1`. No OAuth/API onboarding for this route. This is a selective MIT adaptation at commit `9aca95da75ffd0238174ba9ed2438f4c519ce233`, not the upstream skill installed unchanged.
++
++## Operate
++
++Open Studio at http://127.0.0.1:4310 and choose Channels → Zhihu. Durable implementation: `/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py`. Use the dedicated browser sign-in button; after login, close its browser and verify the exact public profile. James selected `https://www.zhihu.com/people/tie4gka` in the 2026-09-13 task. This is a destination choice, not proof of authentication.
++
++The user/project standing setup authorization covers starting this connection; do not restart first-run intake or request OAuth consent. Human-only password, phone/MFA, QR and CAPTCHA steps remain private handoffs. Do not observe login surfaces or export/read cookies. Browser session stays under owner-only `~/Library/Application Support/JamesAuStudio/zhihu-browser/profile`.
++
++## Publishing pilot
++
++Only immediate public text `zhihu.idea` (upstream `thought`) is implemented, with at most 1000 characters as a local pilot bound. Articles, answers, media, engagement and schedules remain unavailable through this driver. Prepare the full text and exact profile in Studio, show public visibility, immediate time and zero derivatives, then obtain content-bound approval. Approval is checked against the complete manifest hash. Do not click the approval checkbox or submit without James's exact instruction for the displayed content.
++
++Two independent identity signals are required: authenticated header profile link and owner-only profile edit control. Unrecognized UI fails closed. A durable record is written before composition/final submission. Any uncertain attempt is retained and never resubmitted automatically. Reconcile using its attempt hash and public `/pin/<id>` permalink; independent read must match full text and author.
++
++`local_preview`, fixture tests and an installed driver are not live success. `connected_identity` expires after 15 minutes and each post checks identity again. `published_verified` requires a fresh matching permalink read. This pilot never sets global/channel `publishReady` or enables recurring jobs.
++
++Upstream crash recovery, cookie-export scripts, HTTP signature code and generic success reports are deliberately excluded. Review evidence and test receipt are in the source project's `artifacts/zhihu-browser-integration/`.
+--- /Users/ouxianxing/Documents/James-Au-Studio/skills/james-au-social-orchestrator/SKILL.md
++++ /Users/ouxianxing/Documents/James-Au-Studio/skills/james-au-social-orchestrator/SKILL.md
+@@ -30,3 +30,7 @@
+ ## Hard boundary
+ 
+ An installed wrapper does not activate a provider or connect an account. Never read raw credentials or cookies. Never create an account/app, submit consent, spend money, render remotely, upload, schedule, publish, delete, retry an ambiguous write, or report live success without the exact current gate and independent evidence required by V14.
++
++## Zhihu browser connection and text pilot
++
++For Zhihu setup or posting, read [references/zhihu-browser.md](references/zhihu-browser.md). This user-selected route bypasses OAuth/API setup and preserves the standing connection authorization. Use the dedicated Studio browser pilot; exact live-post approval and independent verification still apply.
+--- /Users/ouxianxing/Documents/James-Au-Studio/skills/james-au-social-orchestrator/references/zhihu-browser.md
++++ /Users/ouxianxing/Documents/James-Au-Studio/skills/james-au-social-orchestrator/references/zhihu-browser.md
+@@ -0,0 +1,19 @@
++# Zhihu browser route
++
++James explicitly selected browser automation using liuboacean/zhihu-automation-skill. Route `controlled_browser`; route_driver `zhihu-browser/1`. No OAuth/API onboarding for this route. This is a selective MIT adaptation at commit `9aca95da75ffd0238174ba9ed2438f4c519ce233`, not the upstream skill installed unchanged.
++
++## Operate
++
++Open Studio at http://127.0.0.1:4310 and choose Channels → Zhihu. Durable implementation: `/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py`. Use the dedicated browser sign-in button; after login, close its browser and verify the exact public profile. James selected `https://www.zhihu.com/people/tie4gka` in the 2026-09-13 task. This is a destination choice, not proof of authentication.
++
++The user/project standing setup authorization covers starting this connection; do not restart first-run intake or request OAuth consent. Human-only password, phone/MFA, QR and CAPTCHA steps remain private handoffs. Do not observe login surfaces or export/read cookies. Browser session stays under owner-only `~/Library/Application Support/JamesAuStudio/zhihu-browser/profile`.
++
++## Publishing pilot
++
++Only immediate public text `zhihu.idea` (upstream `thought`) is implemented, with at most 1000 characters as a local pilot bound. Articles, answers, media, engagement and schedules remain unavailable through this driver. Prepare the full text and exact profile in Studio, show public visibility, immediate time and zero derivatives, then obtain content-bound approval. Approval is checked against the complete manifest hash. Do not click the approval checkbox or submit without James's exact instruction for the displayed content.
++
++Two independent identity signals are required: authenticated header profile link and owner-only profile edit control. Unrecognized UI fails closed. A durable record is written before composition/final submission. Any uncertain attempt is retained and never resubmitted automatically. Reconcile using its attempt hash and public `/pin/<id>` permalink; independent read must match full text and author.
++
++`local_preview`, fixture tests and an installed driver are not live success. `connected_identity` expires after 15 minutes and each post checks identity again. `published_verified` requires a fresh matching permalink read. This pilot never sets global/channel `publishReady` or enables recurring jobs.
++
++Upstream crash recovery, cookie-export scripts, HTTP signature code and generic success reports are deliberately excluded. Review evidence and test receipt are in the source project's `artifacts/zhihu-browser-integration/`.

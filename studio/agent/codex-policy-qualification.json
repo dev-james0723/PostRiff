@@ -1,0 +1,31 @@
+{
+  "result": "PASS",
+  "version": "0.154.0",
+  "model": "gpt-5.5",
+  "reasoningEffort": "low",
+  "platform": "macOS aarch64",
+  "policyHash": "8757fa4400956cea685306cd94866bbd74d439ae002eff07ae80e072c148377f",
+  "binaryHash": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc",
+  "exactExecNoModelProbe": true,
+  "execution": "offline synthetic tool-isolation qualification; no real model generation",
+  "evidence": "artifacts/studio-phase-b/codex-offline-isolation-probe.json",
+  "checks": {
+    "productionArgumentsAndPolicyImported": true,
+    "modelPinnedAndObserved": true,
+    "noAuthenticationHeaderAtFakeProvider": true,
+    "shellCallUnsupported": true,
+    "viewImageCallUnsupported": true,
+    "noninteractiveUserInputUnsupported": true,
+    "workspacePatchCreateRejected": true,
+    "siblingPatchUpdateReadSandboxDenied": true,
+    "noCanaryWrites": true,
+    "noCanaryDisclosure": true,
+    "noImageOutput": true,
+    "noCommandLoopbackRequests": true,
+    "allExposedToolsCovered": true,
+    "completedWithoutTimeout": true
+  },
+  "realModelTransportVerified": false,
+  "internalCliZeroRetriesVerified": false,
+  "publishingEnabled": false
+}

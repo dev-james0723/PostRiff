@@ -1,0 +1,401 @@
+{
+  "schema": "postriff.consumer-web.changes.v1",
+  "files": [
+    {
+      "path": "docs/postriff-consumer-web/connector-audit.md",
+      "before": null,
+      "after": "4363d3d8793523cea8994a2923a90fba9d80defead48d1536be98648edcfec85",
+      "state": "added"
+    },
+    {
+      "path": "docs/postriff-consumer-web/consumer-web-release-receipt.md",
+      "before": null,
+      "after": "dd3296dc2b86bc2be4ed308d85e36a54fd08f2a985ba2340920920989b7576b7",
+      "state": "added"
+    },
+    {
+      "path": "docs/postriff-consumer-web/decisions.md",
+      "before": "17a8e5700a1c84018d65e7825bd09f46a2f3a01860b0b7d9104d049b0fd72247",
+      "after": "c4db6e7e2e1c7b73e4d680280cf25a754a1c02366ba5b41d2956d48ed45d29ae",
+      "state": "modified"
+    },
+    {
+      "path": "docs/postriff-consumer-web/implementation-plan.md",
+      "before": "8e8298d3e1c77064d9449cff93ffdb94abb02b1d8a02b340029d7c7c1cde575d",
+      "after": "1bd0246570904c1f08075ec8385079ac3180007f9b21138217e1624cc798c45f",
+      "state": "modified"
+    },
+    {
+      "path": "docs/postriff-consumer-web/receipts/milestone-a.md",
+      "before": "b997ae97bc58dbcdba33c96ce2069d21dd6ee586d2ca59a64edead99e054317a",
+      "after": "b997ae97bc58dbcdba33c96ce2069d21dd6ee586d2ca59a64edead99e054317a",
+      "state": "unchanged"
+    },
+    {
+      "path": "docs/postriff-consumer-web/receipts/milestone-b.md",
+      "before": null,
+      "after": "8ba742f012377e38cdcf64d7664af6234bf904859209b11a10fbf40658499180",
+      "state": "added"
+    },
+    {
+      "path": "docs/postriff-consumer-web/receipts/milestone-c.md",
+      "before": null,
+      "after": "23e5cf81709cde099f9e328506b52815634cdf18ca82a776001a34c562527b32",
+      "state": "added"
+    },
+    {
+      "path": "docs/postriff-consumer-web/receipts/milestone-d.md",
+      "before": null,
+      "after": "77603e07278e7d51daaf57de71879e3acad55810f3ba110492415ef430020280",
+      "state": "added"
+    },
+    {
+      "path": "docs/postriff-consumer-web/receipts/milestone-e.md",
+      "before": null,
+      "after": "2ed4ec43f03219e4d2315189fcfb5ea4ec4c0e28b197323889600738b71bb7aa",
+      "state": "added"
+    },
+    {
+      "path": "docs/postriff-consumer-web/requirements-ledger.md",
+      "before": "d2f4cfabd7e9c764f0854401159e892337532c20042a508699860c1f4dc3717a",
+      "after": "0221efc564fabc8c6ab3e9b6297ddf1198125501457000f73868b5cfea6bb638",
+      "state": "modified"
+    },
+    {
+      "path": "migrations/postriff/004_consumer_web_tenancy.sql",
+      "before": null,
+      "after": "9b9f44b41b9660bf82b47beafbc280803a68678079d0b7c9e28a5be2aaf948fa",
+      "state": "added"
+    },
+    {
+      "path": "migrations/postriff/005_consumer_web_ideas.sql",
+      "before": null,
+      "after": "baae632e07c0e30e1299838b8f32448771cb41eb5bc59e1b16211b049a93b78e",
+      "state": "added"
+    },
+    {
+      "path": "migrations/postriff/006_consumer_web_channels.sql",
+      "before": null,
+      "after": "43626c283cb3b16106411bb247b17b2a73a67c294a2bb1e82a537f99547650b3",
+      "state": "added"
+    },
+    {
+      "path": "migrations/postriff/007_consumer_web_billing.sql",
+      "before": null,
+      "after": "adff5e5d36ec6f8e3c253898d0843df972a151079f511a32457488b6ae9179de",
+      "state": "added"
+    },
+    {
+      "path": "requirements.txt",
+      "before": "0ec0f2861f8bd09d4b0edbf63956e6ec1ff74237c2eecdf34dd8744356ec6a00",
+      "after": "3f19c6f91adc4fbae9d45ea9a34386020785aeda5cefdaad2f8d181cc71e09ba",
+      "state": "modified"
+    },
+    {
+      "path": "scripts/check_postriff_hosted_preflight.py",
+      "before": "7c0bad894dea1d10f3e7db5b4f2671f1492b37c0e932c15eefd224f061a60fa5",
+      "after": "3953725ada3a3ba7917f9454ba861cd0f3166136785173ea152b4b85276b7594",
+      "state": "modified"
+    },
+    {
+      "path": "scripts/postriff_consumer_web_evidence.py",
+      "before": "d7b619f30482d3a853ff8fd8ab76c415b1ce5b28e999a8f423113bfd7ca8b380",
+      "after": "d7b619f30482d3a853ff8fd8ab76c415b1ce5b28e999a8f423113bfd7ca8b380",
+      "state": "unchanged"
+    },
+    {
+      "path": "scripts/postriff_dev_hosted.py",
+      "before": null,
+      "after": "7b6a61100f241cecc021ea06809223c1ce80663819186fc6338c11f8a5255c23",
+      "state": "added"
+    },
+    {
+      "path": "scripts/postriff_disposable_postgres.py",
+      "before": null,
+      "after": "608e1b4fb56cb26a2af6413cdc58d157bc79758f9c32f2ca80f58656a25a3db1",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/agent_runtime.py",
+      "before": null,
+      "after": "7d471a91d03149d381c9908b9576eee1e00409e564e50fd404ab4a5bc89c1733",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/audience.py",
+      "before": null,
+      "after": "fab0986c922bc4b18b37b8d08b8836b321709ca394d5e635d4e484c06464e39f",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/auth.py",
+      "before": "5a21cb55679b65b22d12b37380cd9044406d69e9af4e0a9087d9a3a537ebbb41",
+      "after": "5a21cb55679b65b22d12b37380cd9044406d69e9af4e0a9087d9a3a537ebbb41",
+      "state": "unchanged"
+    },
+    {
+      "path": "src/postriff_phase2/billing.py",
+      "before": null,
+      "after": "7fad9dff4abbc8988aa19de45762f743ba72c70dd0fbc794159f03e81693121b",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/channels.py",
+      "before": null,
+      "after": "69faa7501dd2a67b02d5a690be5b8a330aaf0926d000d6b146fb5cfd4fe29595",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/content_types.py",
+      "before": "8e194b9c0c18c3586e7a93f500bd61c84e7eb4668a22d579a9669e633fa2aff2",
+      "after": "179c083b49d58f661e04342f0a7cd5de007ca1311d5db1079129ea9398e97696",
+      "state": "modified"
+    },
+    {
+      "path": "src/postriff_phase2/contracts.py",
+      "before": "910cdde36989fd16c957c2a7aac51b317d20c6bde76bf8e6c4ce6b746d56eb6e",
+      "after": "3e3bea207f46b579b01e24e3cee4188a70e48f9e4bec5734ba4f9c05e4f96d59",
+      "state": "modified"
+    },
+    {
+      "path": "src/postriff_phase2/hosted.py",
+      "before": "c27365f336738082a0c027e932e7a18ef770d597054fda63e7b4c86a0104842f",
+      "after": "c86aaf61953e22e4e161fd5f63cc5f0e692866d2bbc160e2a536515232a193a8",
+      "state": "modified"
+    },
+    {
+      "path": "src/postriff_phase2/hosted_app.py",
+      "before": "62a4debbf59cee3301b81f7dc0f7f24a8f36d60694dddd42abf5384550103899",
+      "after": "2c3a9359f07a68eb95743f507c6aa1a873a01dec8287dbf17eb1ed7aff152772",
+      "state": "modified"
+    },
+    {
+      "path": "src/postriff_phase2/hosted_identity.py",
+      "before": "d5f1ce3d322119c3504cc12d9a55593de1f0acf8e0e1fea15bfd9699c1b5ca0c",
+      "after": "174b3b2081b397bcf2a37da75ac45a24ccea010d097fcf36c9f0e3f40b1845ba",
+      "state": "modified"
+    },
+    {
+      "path": "src/postriff_phase2/hosted_social.py",
+      "before": null,
+      "after": "8db2e80222c827f7cd2c5897fe873c61b1d7b0930b6d6432d3e9f4d6c7c8b0c5",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/hosted_worker.py",
+      "before": "1568d712dbb64ca65535e0acac6a842699b3e155263549423a6d26e30c2044d9",
+      "after": "c64232855c82746537d14450c317a04de0fec140e6ce30bfe5b1124ee58b8644",
+      "state": "modified"
+    },
+    {
+      "path": "src/postriff_phase2/ideas.py",
+      "before": null,
+      "after": "00805ab6773b461441d108da3f853e35d5798204b7cd341facc080b8e58e0442",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/insights.py",
+      "before": null,
+      "after": "fe9f9dd2c21b00ecd1a1af345cfc931d146b7970b9fcaee1e8549854490db1de",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/oauth.py",
+      "before": null,
+      "after": "791f8584ff790082ae7bd66b288dc5a450789d71037b7757817e392128dcede9",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/permissions.py",
+      "before": null,
+      "after": "bb281254f22834b9c05cd1160a01757bf8d7f6588c42e9bf705bc539165794c4",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/privacy.py",
+      "before": null,
+      "after": "21b47fe8481ba6dabe903a7ae1a625368f4f5da2df00d63ee338ccd11532a663",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/providers.py",
+      "before": null,
+      "after": "744caef25737e6d37b1cf6f83347be19c94cedb77d2c72da32053fca49bf5c46",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/source_policy.py",
+      "before": null,
+      "after": "23d2338fbf3bb1b20f2f5324679049baf3eb6be797df0da2e0211c94650b44a1",
+      "state": "added"
+    },
+    {
+      "path": "src/postriff_phase2/store.py",
+      "before": "9bd5deb1c0c8754f1fd3807151da63ef11aefc6e6bfcf8c44fd51ccee67961e3",
+      "after": "19b3414a2c4ae38270d9da8c9d5f2a113319f1452862aec4c3225eb91677f671",
+      "state": "modified"
+    },
+    {
+      "path": "src/postriff_phase2/tools.py",
+      "before": null,
+      "after": "563a1640a4f8c545c59d3ce59bda415f99b9074a765e12fa8b15afb18fb1b28a",
+      "state": "added"
+    },
+    {
+      "path": "studio/web/alpha/index.html",
+      "before": "1faf46e21fc9eab34d2a77bc588790e2ca50f25cc56d417d62e4627e89a7bc7c",
+      "after": "30e49b9d9e91be0aae471234c8a7a84bbe103393f5af820386beb50ccf922f9c",
+      "state": "modified"
+    },
+    {
+      "path": "studio/web/alpha/manifest.webmanifest",
+      "before": null,
+      "after": null,
+      "state": "unchanged"
+    },
+    {
+      "path": "studio/web/alpha/public/icon-maskable.svg",
+      "before": "9164e47997dde1fc70242f0dd2d2b01dbaefd2e49bb350eba9b6acea0d6a1a5c",
+      "after": "9164e47997dde1fc70242f0dd2d2b01dbaefd2e49bb350eba9b6acea0d6a1a5c",
+      "state": "unchanged"
+    },
+    {
+      "path": "studio/web/alpha/public/icon.svg",
+      "before": "5befed14ca18c85fded9ed9320b2f3eee4b3035b90c45920b157c9c17aea3866",
+      "after": "5befed14ca18c85fded9ed9320b2f3eee4b3035b90c45920b157c9c17aea3866",
+      "state": "unchanged"
+    },
+    {
+      "path": "studio/web/alpha/public/manifest.webmanifest",
+      "before": "8f3a9a462565dcf6bb998212421d67dc1fff5906dc8c49fcdb929415eedfd6bf",
+      "after": "8f3a9a462565dcf6bb998212421d67dc1fff5906dc8c49fcdb929415eedfd6bf",
+      "state": "unchanged"
+    },
+    {
+      "path": "studio/web/alpha/public/sw.js",
+      "before": "e19ac10f2ac6b92377994cdb0a63318ae38e7ddaa2bba875e663a78a80b78ed5",
+      "after": "e19ac10f2ac6b92377994cdb0a63318ae38e7ddaa2bba875e663a78a80b78ed5",
+      "state": "unchanged"
+    },
+    {
+      "path": "studio/web/alpha/sw.js",
+      "before": null,
+      "after": null,
+      "state": "unchanged"
+    },
+    {
+      "path": "studio/web/src/founder/AuthEntry.tsx",
+      "before": "ba2999cf6cea7142ca2a5497d602fa99476b798a1d2edd51e92c10c0926b4252",
+      "after": "13a155c47758121350c2cbc7cb7937529706459e0b353534818176e35d45ce80",
+      "state": "modified"
+    },
+    {
+      "path": "studio/web/src/founder/Cloud.tsx",
+      "before": null,
+      "after": "2b0fd7d8076a8dd866f181d0cdc5205236c7a3fa19abeb97b1d2c845f1b5dfb5",
+      "state": "added"
+    },
+    {
+      "path": "studio/web/src/founder/FounderApp.tsx",
+      "before": "a779e7c4e1f42f04dc27e4d02e0bccf8f6844625d7daaa0e3984cffa03a5776c",
+      "after": "2a10e1dfef006c26b09a2d04f7e948201d347e33b60d3f226e43fcd1a7b8ffd4",
+      "state": "modified"
+    },
+    {
+      "path": "studio/web/src/founder/api.ts",
+      "before": "caef6ce49db34ab1a9e72dd60fe16a5a7eec9f8493311ca166ead6a63ff220e1",
+      "after": "fb483d8066bef2a9a24503649d642a0d39bb85b4d5a8278d7ec353d727d52ae3",
+      "state": "modified"
+    },
+    {
+      "path": "studio/web/src/founder/cloud-api.ts",
+      "before": null,
+      "after": "3f3860889556b79fcc79f7782baf0bd9c33e8baf705ab3c62d23092d88de070a",
+      "state": "added"
+    },
+    {
+      "path": "studio/web/src/founder/cloud.css",
+      "before": null,
+      "after": "aecd2d11f28a45bbedd26a8468e4361d859348e7ab2d598ee22dc2bb6706c4ae",
+      "state": "added"
+    },
+    {
+      "path": "studio/web/src/founder/hosted-auth.ts",
+      "before": "ee2c38bd6776685ad8a2ca03920f85b0fec486c3901ec8edc1d2174772429233",
+      "after": "ee2c38bd6776685ad8a2ca03920f85b0fec486c3901ec8edc1d2174772429233",
+      "state": "unchanged"
+    },
+    {
+      "path": "studio/web/src/founder/types.ts",
+      "before": "30ac11738b85c143bf9bdf5b4f272248e98cb95699f046666a0c4a34f44ef9ae",
+      "after": "3725f44c149e098249538cd892d7c06dc7967de8df7d86afad780679f02d8341",
+      "state": "modified"
+    },
+    {
+      "path": "studio/web/vite.alpha.config.ts",
+      "before": "8e8a584319497568ac993d85aad89198c184e25676f93e64c9655cbed9fdbf02",
+      "after": "8e8a584319497568ac993d85aad89198c184e25676f93e64c9655cbed9fdbf02",
+      "state": "unchanged"
+    },
+    {
+      "path": "tests/phase2/postgres_billing.py",
+      "before": null,
+      "after": "0e0e42b04879597cd4d48b56a70973f83ed553044ee6002b3b99f943e601944a",
+      "state": "added"
+    },
+    {
+      "path": "tests/phase2/postgres_channels.py",
+      "before": null,
+      "after": "5abc59f2a7077931e4aef268ef48e13d28f53c9a15a401d7ae13d10c43bf018b",
+      "state": "added"
+    },
+    {
+      "path": "tests/phase2/postgres_ideas.py",
+      "before": null,
+      "after": "2e4d9bb5bbeef446975e08db47e3dc4c83ed93b43ed09c5e13835bdc2878de90",
+      "state": "added"
+    },
+    {
+      "path": "tests/phase2/postgres_isolation.py",
+      "before": null,
+      "after": "f80ce9cc9853acfa1cb0a2f3f9320773c6f287b4b2f0702fc285f9de057bffc9",
+      "state": "added"
+    },
+    {
+      "path": "tests/phase2/rls.sql",
+      "before": "11905653aba524c7079eb55134ecc462d016698ee949e73e42ae02be731b9285",
+      "after": "7b692a4f8578de9d4bcce39261cd6ca664f096e4744e8464f7b6acc69594c644",
+      "state": "modified"
+    },
+    {
+      "path": "tests/test_postriff_billing.py",
+      "before": null,
+      "after": "b6172692516c9afd9b89eba35c3ee686da794582e0100f1172c1805e4769aa04",
+      "state": "added"
+    },
+    {
+      "path": "tests/test_postriff_channels.py",
+      "before": null,
+      "after": "be55fe18023b7818242e7740a4b600f7715053774702e61f8fa50d12919fbc1e",
+      "state": "added"
+    },
+    {
+      "path": "tests/test_postriff_consumer_web.py",
+      "before": null,
+      "after": "89ccdbeaa017d9db08208a479c99d0faeb034f42e9db30f93a7cfedaaec848dd",
+      "state": "added"
+    },
+    {
+      "path": "tests/test_postriff_phase2_hosted.py",
+      "before": "e2a09585aa8366bc29208a937965aa4a617b3e5c54f1ad3c918c6297b3d67158",
+      "after": "f90ecbc6462b62ad8883d377bf9a48cded8e20df19fd8c2523db5cf6fe9b846b",
+      "state": "modified"
+    },
+    {
+      "path": "tests/test_postriff_providers.py",
+      "before": null,
+      "after": "d50de5b548f8c16dad4b063c2fbc542f76e700ef1dea876bb73427c58a9ab7c8",
+      "state": "added"
+    }
+  ]
+}

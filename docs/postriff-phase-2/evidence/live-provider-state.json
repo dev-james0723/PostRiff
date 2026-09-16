@@ -1,0 +1,25 @@
+{
+  "observedAt": "2026-09-14T23:00:00-04:00",
+  "linkedin": {
+    "state": "connected_identity",
+    "account": "James Au",
+    "scope": "openid profile email w_member_social",
+    "publishReady": true,
+    "schedulingAvailable": true,
+    "route": "official_api",
+    "tokenLocation": "local-owner-only-broker",
+    "hostedToken": false
+  },
+  "instagram": {
+    "state": "not_connected",
+    "username": "jamesaucreates",
+    "oauthClientPresent": true,
+    "publishReady": false,
+    "hostedToken": false
+  },
+  "externalActions": {
+    "accountModified": false,
+    "oauthConsentStarted": false,
+    "published": false
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "status": "founder-alpha-fixture-release",
+  "version": "1.0.0",
+  "entitlements": "same released templates for all plan and trial fixtures",
+  "templates": [
+    {
+      "id": "social-agency-orchestrator",
+      "version": "1.0.0",
+      "dependencies": [
+        "content-pack",
+        "content-craft"
+      ]
+    },
+    {
+      "id": "content-pack",
+      "version": "1.0.0",
+      "dependencies": []
+    },
+    {
+      "id": "content-craft",
+      "version": "1.0.0",
+      "dependencies": []
+    }
+  ]
+}

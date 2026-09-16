@@ -1,0 +1,16 @@
+{
+  "state": "native_browser_identity_verified",
+  "profile": "https://www.zhihu.com/people/tie4gka",
+  "name": "James Au",
+  "route": "controlled_browser",
+  "route_driver": "codex_native_chrome_extension",
+  "verified_at": "2026-09-14T03:54:38.071687+00:00",
+  "signals": [
+    "Signed-in homepage account menu names James Au and own composer links tie4gka",
+    "Exact tie4gka profile has owner-only Edit personal profile controls and My activity"
+  ],
+  "publish_ready": false,
+  "published": false,
+  "studio_standalone_profile_connected": false,
+  "next": "Exact approval for public text idea test; no media or derivatives; then independent permalink verification."
+}

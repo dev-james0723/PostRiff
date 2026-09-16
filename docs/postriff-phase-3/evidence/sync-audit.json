@@ -1,0 +1,13 @@
+{
+  "sources": {
+    "studio/web/src/founder/RuntimePanel.tsx": "86ae1785b8d4bb4ac107ee1f9133a84860bcbada00d03a91d0e07f3e18f025fd",
+    "studio/web/src/founder/runtime-state.ts": "5945d7c130c50689e06af848406d7ddae77724288707cacc910c5874e7ee7e4e",
+    "studio/web/tests/runtime-recovery.test.ts": "675c7b079673869edc7831f3543f4972c42d38a3b95cd71e71cce820dd38a5d5",
+    "src/postriff_phase3/contracts.py": "48ed537f06652f199df6aa3423522a5b884f79db324bca72f167214d7e0c13e7",
+    "tests/test_postriff_phase3.py": "9c140c4bc080a17721f4abed4db61f68c9888d81eda04f06d309e507814f8ed8",
+    "desktop/tests/sync-acceptance.cjs": "078ade5c0111b9c6cf9f3bafebfa1e9040be249ba2d59ab828b65068381935e4"
+  },
+  "zipSha256": "a57d8ac9ea0eb2f0c75f343a508aa962cbd783c76333ff0446ab94ff39d8bd8d",
+  "zipIntegrity": "pass",
+  "execution": "local synthetic acceptance; no hosted deployment or provider request"
+}

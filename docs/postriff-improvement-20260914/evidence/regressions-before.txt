@@ -1,0 +1,144 @@
+test_all_modes_skills_trial_and_sample_isolation (test_postriff_phase2.Phase2Acceptance.test_all_modes_skills_trial_and_sample_isolation) ... ok
+test_art_failure_no_charge_and_private_export_no_credentials (test_postriff_phase2.Phase2Acceptance.test_art_failure_no_charge_and_private_export_no_credentials) ... ok
+test_art_privacy_consent_cache_selection_deletion (test_postriff_phase2.Phase2Acceptance.test_art_privacy_consent_cache_selection_deletion) ... ok
+test_auth_replay_expiry_pkce_cancel_and_no_duplicate_trial (test_postriff_phase2.Phase2Acceptance.test_auth_replay_expiry_pkce_cancel_and_no_duplicate_trial) ... ok
+test_bulk_approvals_are_atomic_and_idempotent (test_postriff_phase2.Phase2Acceptance.test_bulk_approvals_are_atomic_and_idempotent) ... ok
+test_cancel_before_claim_and_during_submit (test_postriff_phase2.Phase2Acceptance.test_cancel_before_claim_and_during_submit) ... ok
+test_candidate_image_private_values_and_verified_user_boundary (test_postriff_phase2.Phase2Acceptance.test_candidate_image_private_values_and_verified_user_boundary) ... ok
+test_candidate_requests_require_exact_server_authorization (test_postriff_phase2.Phase2Acceptance.test_candidate_requests_require_exact_server_authorization) ... ok
+test_changed_approval_bindings_and_cross_workspace_objects (test_postriff_phase2.Phase2Acceptance.test_changed_approval_bindings_and_cross_workspace_objects) ... ok
+test_claims_and_stale_commands_are_atomic (test_postriff_phase2.Phase2Acceptance.test_claims_and_stale_commands_are_atomic) ... ok
+test_crash_before_and_after_submit_never_duplicate (test_postriff_phase2.Phase2Acceptance.test_crash_before_and_after_submit_never_duplicate) ... ok
+test_disconnect_expiry_and_reconnect_do_not_release (test_postriff_phase2.Phase2Acceptance.test_disconnect_expiry_and_reconnect_do_not_release) ... ok
+test_every_fixture_scenario_has_a_truthful_outcome (test_postriff_phase2.Phase2Acceptance.test_every_fixture_scenario_has_a_truthful_outcome) ... ok
+test_link_recovery_collision_and_last_method (test_postriff_phase2.Phase2Acceptance.test_link_recovery_collision_and_last_method) ... ok
+test_manifest_approval_idempotency_and_tampering (test_postriff_phase2.Phase2Acceptance.test_manifest_approval_idempotency_and_tampering) ... ok
+test_media_decoding_rejects_filename_lies_and_clears_metadata (test_postriff_phase2.Phase2Acceptance.test_media_decoding_rejects_filename_lies_and_clears_metadata) ... ok
+test_media_preflight_and_deleted_asset_invalidates (test_postriff_phase2.Phase2Acceptance.test_media_preflight_and_deleted_asset_invalidates) ... ok
+test_no_callback_can_bypass_capability_preflight (test_postriff_phase2.Phase2Acceptance.test_no_callback_can_bypass_capability_preflight) ... ok
+test_rate_limit_bounded_and_other_destination_unaffected (test_postriff_phase2.Phase2Acceptance.test_rate_limit_bounded_and_other_destination_unaffected) ... ok
+test_separate_process_worker_and_fenced_heartbeat (test_postriff_phase2.Phase2Acceptance.test_separate_process_worker_and_fenced_heartbeat) ... ok
+test_session_expiry_and_account_deletion_tombstone (test_postriff_phase2.Phase2Acceptance.test_session_expiry_and_account_deletion_tombstone) ... ok
+test_sign_in_same_identity_restores_and_revocation_rejects_replay (test_postriff_phase2.Phase2Acceptance.test_sign_in_same_identity_restores_and_revocation_rejects_replay) ... ok
+test_timezone_dst_gap_ambiguity_and_past (test_postriff_phase2.Phase2Acceptance.test_timezone_dst_gap_ambiguity_and_past) ... ok
+test_two_users_cannot_read_mutate_export_or_delete (test_postriff_phase2.Phase2Acceptance.test_two_users_cannot_read_mutate_export_or_delete) ... ok
+test_uncertain_reconciles_without_resubmit (test_postriff_phase2.Phase2Acceptance.test_uncertain_reconciles_without_resubmit) ... ok
+test_worker_verified_and_persistent_restart (test_postriff_phase2.Phase2Acceptance.test_worker_verified_and_persistent_restart) ... ok
+test_cancel_during_rate_limit_does_not_retry (test_postriff_safety_regressions.SafetyRegressions.test_cancel_during_rate_limit_does_not_retry) ... FAIL
+test_malformed_receipt_does_not_crash_or_claim_publication (test_postriff_safety_regressions.SafetyRegressions.test_malformed_receipt_does_not_crash_or_claim_publication) ... ERROR
+test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) ... 
+  test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) (key='workspaceId') ... FAIL
+  test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) (key='brandHubId') ... FAIL
+  test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) (key='briefRevision') ... FAIL
+test_one_draft_edit_memory_export_without_social_connection (test_postriff_safety_regressions.SafetyRegressions.test_one_draft_edit_memory_export_without_social_connection) ... ok
+test_provider_exception_is_recorded_without_error_secrets (test_postriff_safety_regressions.SafetyRegressions.test_provider_exception_is_recorded_without_error_secrets) ... ERROR
+test_reconciliation_cannot_restore_automatic_submission (test_postriff_safety_regressions.SafetyRegressions.test_reconciliation_cannot_restore_automatic_submission) ... FAIL
+test_removed_fact_cannot_be_reapproved_as_current_draft (test_postriff_safety_regressions.SafetyRegressions.test_removed_fact_cannot_be_reapproved_as_current_draft) ... FAIL
+test_revoked_approver_holds_waiting_job (test_postriff_safety_regressions.SafetyRegressions.test_revoked_approver_holds_waiting_job) ... FAIL
+test_viewer_cannot_mutate (test_postriff_safety_regressions.SafetyRegressions.test_viewer_cannot_mutate) ... FAIL
+
+======================================================================
+ERROR: test_malformed_receipt_does_not_crash_or_claim_publication (test_postriff_safety_regressions.SafetyRegressions.test_malformed_receipt_does_not_crash_or_claim_publication)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 113, in test_malformed_receipt_does_not_crash_or_claim_publication
+    self.store.worker_step()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/ouxianxing/Documents/James-Au-Studio/src/postriff_phase2/store.py", line 374, in worker_step
+    self.event(j, result["state"], result["confirmed"])
+                                   ~~~~~~^^^^^^^^^^^^^
+KeyError: 'confirmed'
+
+======================================================================
+ERROR: test_provider_exception_is_recorded_without_error_secrets (test_postriff_safety_regressions.SafetyRegressions.test_provider_exception_is_recorded_without_error_secrets)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 101, in test_provider_exception_is_recorded_without_error_secrets
+    self.store.worker_step()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/ouxianxing/Documents/James-Au-Studio/src/postriff_phase2/store.py", line 359, in worker_step
+    result = self.social.reconcile(job["manifest"], scenario, job["checks"]) if reconciliation else self.social.submit(job["manifest"], scenario)
+                                                                                                    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 97, in submit
+    raise TimeoutError('PRIVATE_PROVIDER_SECRET')
+TimeoutError: PRIVATE_PROVIDER_SECRET
+
+======================================================================
+FAIL: test_cancel_during_rate_limit_does_not_retry (test_postriff_safety_regressions.SafetyRegressions.test_cancel_during_rate_limit_does_not_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 91, in test_cancel_during_rate_limit_does_not_retry
+    self.assertEqual(adapter.submits, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) (key='workspaceId')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 38, in test_manifest_is_bound_to_workspace_and_brief
+    self.assertFalse(self.store.current(self.j.state, manifest))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) (key='brandHubId')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 38, in test_manifest_is_bound_to_workspace_and_brief
+    self.assertFalse(self.store.current(self.j.state, manifest))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_manifest_is_bound_to_workspace_and_brief (test_postriff_safety_regressions.SafetyRegressions.test_manifest_is_bound_to_workspace_and_brief) (key='briefRevision')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 38, in test_manifest_is_bound_to_workspace_and_brief
+    self.assertFalse(self.store.current(self.j.state, manifest))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_reconciliation_cannot_restore_automatic_submission (test_postriff_safety_regressions.SafetyRegressions.test_reconciliation_cannot_restore_automatic_submission)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 73, in test_reconciliation_cannot_restore_automatic_submission
+    self.assertEqual(adapter.submits, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: test_removed_fact_cannot_be_reapproved_as_current_draft (test_postriff_safety_regressions.SafetyRegressions.test_removed_fact_cannot_be_reapproved_as_current_draft)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 27, in test_removed_fact_cannot_be_reapproved_as_current_draft
+    with self.assertRaises(AlphaError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AlphaError not raised
+
+======================================================================
+FAIL: test_revoked_approver_holds_waiting_job (test_postriff_safety_regressions.SafetyRegressions.test_revoked_approver_holds_waiting_job)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 55, in test_revoked_approver_holds_waiting_job
+    self.assertEqual(state['phase2']['jobs'][0]['state'], 'held')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'provider_accepted' != 'held'
+- provider_accepted
++ held
+
+
+======================================================================
+FAIL: test_viewer_cannot_mutate (test_postriff_safety_regressions.SafetyRegressions.test_viewer_cannot_mutate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ouxianxing/Documents/James-Au-Studio/tests/test_postriff_safety_regressions.py", line 44, in test_viewer_cannot_mutate
+    with self.assertRaises(AlphaError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AlphaError not raised
+
+----------------------------------------------------------------------
+Ran 35 tests in 1.233s
+
+FAILED (failures=8, errors=2)

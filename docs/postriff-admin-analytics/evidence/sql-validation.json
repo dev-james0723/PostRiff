@@ -1,0 +1,33 @@
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres-with-synthetic-auth-stub",
+  "checks": [
+    "candidate DDL applied to disposable PostgreSQL 17",
+    "foreign workspace account tuple rejected",
+    "duplicate canonical metric point rejected",
+    "measured zero retained",
+    "missing status cannot carry invented zero",
+    "measured status cannot omit value",
+    "invalid reversed period rejected",
+    "NaN metric value rejected",
+    "duplicate fetch cannot duplicate observation",
+    "revision cannot cross account tuple",
+    "late older response cannot win latest view",
+    "own granted account visible",
+    "other tenant account invisible",
+    "browser cannot write metric rows",
+    "browser cannot read admin membership table",
+    "other tenant cannot read revisions or invoker view",
+    "platform owner is not automatic social grant",
+    "stale consent grant loses access immediately",
+    "deleted profile loses analytics access",
+    "event semantic duplicate rejected"
+  ],
+  "test_count": 20,
+  "at": "2026-09-15T03:18:13.874856+00:00",
+  "limitations": [
+    "Not a production migration",
+    "Auth stub is only for RLS contract testing, not real JWT verification",
+    "Budget, worker, billing and provider API acceptance tests remain implementation work"
+  ]
+}

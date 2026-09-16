@@ -1,0 +1,18 @@
+{
+  "state": "unknown",
+  "manifest": {
+    "version": "zhihu-browser/1",
+    "channel": "zhihu",
+    "nativeFormat": "zhihu.idea",
+    "profile": "https://www.zhihu.com/people/sing-sing-66",
+    "text": "这是一条发布流程测试，用来检查文字是否完整显示。",
+    "audience": "public",
+    "timing": "now",
+    "media": [],
+    "derivatives": []
+  },
+  "hash": "1610b3fceaa1ba12b0297affa80b3dfd1efe65d2b177794a4cc9360fafe09823",
+  "previousLinks": [],
+  "claimedAt": 1789360036.2883499,
+  "reason": "reconcile_before_retry"
+}

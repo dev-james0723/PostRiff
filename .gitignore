@@ -1,0 +1,25 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.vercel/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+studio/web/node_modules/
+studio/web/dist-alpha/
+.vercel
+.env*
+
+# --- added 2026-09-16: local secrets, venvs, build output, broker session dirs ---
+.*-broker-*/
+broker.key
+studio-install-manifest.json
+.venv/
+.phase3-build-venv/
+.phase3-qualification/
+.upgrade-backup-*/
+node_modules/
+studio/web/dist/
+studio/broker/node_modules/
+*.command

@@ -1,0 +1,12 @@
+{
+  "state": "blocked_provider_real_name_verification",
+  "account": "https://www.zhihu.com/people/tie4gka",
+  "route_driver": "codex_native_chrome_extension_with_native_accessibility",
+  "approval": "User explicitly approved the previously displayed exact public text idea, immediate timing, no media or derivatives.",
+  "text": "这是一条发布流程测试，用来检查文字是否完整显示。",
+  "observed": "Account real-name verification dialog appeared when focusing the composer.",
+  "text_entered": false,
+  "final_submit_attempted": false,
+  "published": false,
+  "recorded_at": "2026-09-14T04:02:05.800208+00:00"
+}

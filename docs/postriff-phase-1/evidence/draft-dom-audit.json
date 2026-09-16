@@ -1,0 +1,37 @@
+{
+  "focus": "BODY",
+  "headings": [
+    "One idea. A few good riffs."
+  ],
+  "inputs": [
+    {
+      "name": "LinkedIn English draftA small place to start.\n\nThe community garden hosts a free seed-swap",
+      "width": 802
+    },
+    {
+      "name": "Instagram 繁體中文 draft留一點時間，讓新想法發芽。🌱\n\n主題（作者提供）：一起交換種子，也交換種植心得\n\n• 社區花園將於星期六舉辦免費種子交換活動。\n• 參加者",
+      "width": 802
+    },
+    {
+      "name": "PlatformLinkedInInstagramThreads",
+      "width": 245
+    },
+    {
+      "name": "LanguageEnglish繁體中文",
+      "width": 245
+    },
+    {
+      "name": "Fixture failuretimeoutcancelledmalformedquotamissingunauthenticatedunsupported",
+      "width": 248
+    }
+  ],
+  "overflow": false,
+  "resourceAttributes": [
+    "/assets/index-BOP7oQMq.js",
+    "/assets/index-BINWpXoA.css"
+  ],
+  "viewport": {
+    "height": 1000,
+    "width": 1440
+  }
+}

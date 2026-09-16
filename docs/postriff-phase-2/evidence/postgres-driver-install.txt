@@ -1,0 +1,13 @@
+Collecting psycopg[binary]
+  Downloading psycopg-3.3.5-py3-none-any.whl.metadata (4.3 kB)
+Collecting psycopg-binary==3.3.5 (from psycopg[binary])
+  Downloading psycopg_binary-3.3.5-cp314-cp314-macosx_11_0_arm64.whl.metadata (2.7 kB)
+Downloading psycopg-3.3.5-py3-none-any.whl (213 kB)
+Downloading psycopg_binary-3.3.5-cp314-cp314-macosx_11_0_arm64.whl (4.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 19.8 MB/s  0:00:00
+Installing collected packages: psycopg-binary, psycopg
+
+Successfully installed psycopg-3.3.5 psycopg-binary-3.3.5
+
+[notice] A new release of pip is available: 26.1.1 -> 26.2.1
+[notice] To update, run: /private/tmp/postriff-phase2-runtime-20260914/bin/python3.14 -m pip install --upgrade pip

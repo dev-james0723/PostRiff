@@ -1,0 +1,21 @@
+{
+  "status": "pass",
+  "execution": "local-synthetic-browser",
+  "checks": [
+    "one draft without social connection",
+    "save edit",
+    "remember then undo",
+    "private export download",
+    "desktop and mobile no horizontal overflow"
+  ],
+  "pageErrors": [],
+  "variants": 1,
+  "channels": 0,
+  "jobs": 0,
+  "exportBytes": 6325,
+  "limitations": [
+    "No real model usefulness evaluation",
+    "Private export is a full workspace ZIP, not public handoff",
+    "No live auth or publication"
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "xhs-rednote-route-tests-20260914-v1",
+  "state": "pending_exact_user_approval",
+  "createdAt": "2026-09-14T06:31:32-04:00",
+  "purpose": "Qualify self-only image upload/publish, video upload/publish, and native scheduling for the authenticated RedNote route.",
+  "liveEffects": [
+    "two immediate self-only notes",
+    "one self-only scheduled note"
+  ],
+  "cancellationOrDeletionAuthorized": false,
+  "jobs": [
+    {
+      "operation": "publish_image_note",
+      "account": {
+        "nickname": "小红薯6AA7E810",
+        "rednoteId": "94556602041",
+        "profileId": "6aa748a9000000000301c840",
+        "profileUrl": "https://www.rednote.com/user/profile/6aa748a9000000000301c840"
+      },
+      "destination": "RedNote main profile via Creator Center",
+      "visibility": "仅自己可见",
+      "derivatives": [],
+      "route": "browser",
+      "routeDriver": "local_mcp_browser_rednote",
+      "driverVersion": "v2.5.0+studio-rednote.1",
+      "driverCommit": "9f073e1bc31cdd5a6a304e8f09e7978b542f4d02",
+      "jobId": "xhs-rednote-image-route-test-20260914-v1",
+      "nativeFormat": "xiaohongshu.note",
+      "title": "Studio 圖文測試",
+      "content": "這是 James Au Studio 的私人連接測試，用於驗證圖文上傳與發佈流程。",
+      "tags": [
+        "連接測試"
+      ],
+      "media": [
+        {
+          "path": "/Users/ouxianxing/Documents/James-Au-Studio/docs/xiaohongshu-route-tests/2026-09-14/rednote-image-route-test.png",
+          "sha256": "sha256:9288420a9a08d5aaff5b777fcbe1846f07f13f8aa23d8f808849fc9ef024fd47",
+          "mimeType": "image/png",
+          "width": 1080,
+          "height": 1440
+        }
+      ],
+      "scheduledAt": null,
+      "timing": "immediately after exact approval",
+      "dependsOn": null,
+      "expectedVerification": "Creator Center note-management record matching title, image-note type, self-only audience, and submission time",
+      "approvalReceiptHash": "sha256:871e2fd4121f9b9ec2d84a23d5bebdb4000b20977cd13fad0eca0e18024dbbb1",
+      "idempotencyKey": "sha256:3bcb01e314706a27f76acafc0db459a33f2984970cb1e816e98ebf74ecdc08c0",
+      "approvalState": "pending_exact_user_approval"
+    },
+    {
+      "operation": "publish_video_note",
+      "account": {
+        "nickname": "小红薯6AA7E810",
+        "rednoteId": "94556602041",
+        "profileId": "6aa748a9000000000301c840",
+        "profileUrl": "https://www.rednote.com/user/profile/6aa748a9000000000301c840"
+      },
+      "destination": "RedNote main profile via Creator Center",
+      "visibility": "仅自己可见",
+      "derivatives": [],
+      "route": "browser",
+      "routeDriver": "local_mcp_browser_rednote",
+      "driverVersion": "v2.5.0+studio-rednote.1",
+      "driverCommit": "9f073e1bc31cdd5a6a304e8f09e7978b542f4d02",
+      "jobId": "xhs-rednote-video-route-test-20260914-v1",
+      "nativeFormat": "xiaohongshu.video",
+      "title": "Studio 影片測試",
+      "content": "這是 James Au Studio 的私人影片連接測試，用於驗證影片上傳與發佈流程。",
+      "tags": [
+        "連接測試"
+      ],
+      "media": [
+        {
+          "path": "/Users/ouxianxing/Documents/James-Au-Studio/docs/xiaohongshu-route-tests/2026-09-14/rednote-video-route-test.mp4",
+          "sha256": "sha256:c0522148bd61263faa5f9a2ecf87be754eae60b6c04b6a47486a57d339004781",
+          "mimeType": "video/mp4",
+          "width": 1080,
+          "height": 1920,
+          "durationSeconds": 4
+        }
+      ],
+      "scheduledAt": null,
+      "timing": "after the image-note test independently verifies",
+      "dependsOn": "xhs-rednote-image-route-test-20260914-v1 verified_published",
+      "expectedVerification": "Creator Center note-management record matching title, video-note type, self-only audience, playable media, and submission time",
+      "approvalReceiptHash": "sha256:f6da996545e6c2f012818c1dd339784a10dbe2b5b90e160c4fe9ae82087b6647",
+      "idempotencyKey": "sha256:f8244e6ab9e08026a4aee5c4fc21d252556e69e7c391916596c1f223c0ef796e",
+      "approvalState": "pending_exact_user_approval"
+    },
+    {
+      "operation": "schedule_image_note",
+      "account": {
+        "nickname": "小红薯6AA7E810",
+        "rednoteId": "94556602041",
+        "profileId": "6aa748a9000000000301c840",
+        "profileUrl": "https://www.rednote.com/user/profile/6aa748a9000000000301c840"
+      },
+      "destination": "RedNote main profile via Creator Center",
+      "visibility": "仅自己可见",
+      "derivatives": [],
+      "route": "browser",
+      "routeDriver": "local_mcp_browser_rednote",
+      "driverVersion": "v2.5.0+studio-rednote.1",
+      "driverCommit": "9f073e1bc31cdd5a6a304e8f09e7978b542f4d02",
+      "jobId": "xhs-rednote-schedule-route-test-20260914-v1",
+      "nativeFormat": "xiaohongshu.note",
+      "title": "Studio 排程測試",
+      "content": "這是 James Au Studio 的私人排程測試，預定於 2026 年 9 月 15 日 10:30（美東時間）發佈。",
+      "tags": [
+        "連接測試"
+      ],
+      "media": [
+        {
+          "path": "/Users/ouxianxing/Documents/James-Au-Studio/docs/xiaohongshu-route-tests/2026-09-14/rednote-schedule-route-test.png",
+          "sha256": "sha256:61082eb2132a25b39b9b0b2b59ba59be69d97958e580d25bcabf0552c23ce5e7",
+          "mimeType": "image/png",
+          "width": 1080,
+          "height": 1440
+        }
+      ],
+      "scheduledAt": "2026-09-15T10:30:00-04:00",
+      "timezone": "America/Indiana/Indianapolis",
+      "timing": "submit only after image and video tests independently verify",
+      "dependsOn": "both immediate route tests verified_published",
+      "expectedVerification": "Creator Center scheduled-note record matching title, image-note type, self-only audience, and 2026-09-15 10:30 EDT",
+      "approvalReceiptHash": "sha256:4b9dd596cded6f8e38e0bccb6a995afa6560c5e4c6dd31300240b7756b60bc39",
+      "idempotencyKey": "sha256:9f9256cfdac555906fc39110d21d61f20c61c3290cdea93778f2bec5b8c9b5cd",
+      "approvalState": "pending_exact_user_approval"
+    }
+  ],
+  "manifestHash": "sha256:67d329f7b409ee6c40444bb9128bf65bef72727b75051932fef678be4f87b65a"
+}

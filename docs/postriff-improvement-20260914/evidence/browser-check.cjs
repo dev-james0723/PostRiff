@@ -1,0 +1,32 @@
+const {chromium}=require('/Users/ouxianxing/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const fs=require('fs');const path=require('path');
+(async()=>{
+ const out=__dirname;const access=JSON.parse(fs.readFileSync('/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/postriff-safety-ui-62c7erui/access.json','utf8'));
+ const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ await page.addInitScript(a=>localStorage.setItem('postriff-alpha-access-v1',JSON.stringify(a)),access);
+ await page.goto('http://127.0.0.1:45319');await page.getByRole('heading').first().waitFor();
+ await page.waitForTimeout(500);
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.getByRole('textbox',{name:'LinkedIn English draft'}).fill('A shorter opening.\n\nA useful question about the fictional seed swap.');
+ await page.getByRole('button',{name:'Save edit',exact:true}).click();
+ await page.getByRole('button',{name:'Remember this',exact:true}).click();
+ await page.getByText('Remembered for English LinkedIn.',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Undo',exact:true}).click();
+ await page.getByText('Preference removed from your active voice.',{exact:true}).waitFor();
+ const desktopOverflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
+
+ await page.screenshot({path:path.join(out,'desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'mobile.png'),fullPage:true});
+ const mobileOverflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
+ await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'You',exact:true}).click();
+ await page.getByRole('tab',{name:'Account & Privacy',exact:true}).click();
+ const downloadPromise=page.waitForEvent('download');
+ await page.getByRole('button',{name:'Export private account data',exact:true}).click();
+ const download=await downloadPromise;await download.saveAs(path.join(out,'synthetic-ui-export.zip'));
+ const state=await page.evaluate(async a=>(await fetch('/api/workspaces/'+a.workspaceId,{headers:{Authorization:'Bearer '+a.token}})).json(),access);
+ if(state.state.phase2.channels.length || state.state.phase2.jobs.length || state.state.preferences[0].status!=='undone' || errors.length || desktopOverflow || mobileOverflow) throw new Error('Browser acceptance failed');
+ fs.writeFileSync(path.join(out,'browser-result.json'),JSON.stringify({status:'pass',execution:'local-synthetic-browser',checks:['one draft without social connection','save edit','remember then undo','private export download','desktop and mobile no horizontal overflow'],pageErrors:errors,variants:state.state.variants.length,channels:0,jobs:0,exportBytes:fs.statSync(path.join(out,'synthetic-ui-export.zip')).size,limitations:['No real model usefulness evaluation','Private export is a full workspace ZIP, not public handoff','No live auth or publication']},null,2));
+ console.log(fs.readFileSync(path.join(out,'browser-result.json'),'utf8'));
+ await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});

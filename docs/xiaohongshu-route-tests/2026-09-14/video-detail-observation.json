@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-09-14T13:28:21.081517Z",
+  "source": "authenticated_note_detail_read",
+  "success": true,
+  "noteId": "6aa7f4f9000000000e03f400",
+  "title": "Studio 影片測試",
+  "type": "video",
+  "authorUserId": "6aa748a9000000000301c840",
+  "durationSeconds": 4,
+  "streamVariants": {
+    "EF4": 1,
+    "EF5": 0,
+    "EF6": 0,
+    "EF7": 0
+  },
+  "hasVideo": true
+}

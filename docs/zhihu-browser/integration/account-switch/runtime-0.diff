@@ -1,0 +1,11 @@
+--- /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/src/james_au_social/zhihu_browser.py
++++ /private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/src/james_au_social/zhihu_browser.py
+@@ -86,7 +86,7 @@
+         fresh=time.time()-c.get('verifiedAt',0)<900
+         return dict(provider='zhihu', route='controlled_browser', routeDriver=VERSION,
+                     state='connected_identity' if fresh else 'login_or_verification_required',
+-                    profile=c.get('profile'), identitySignals=c.get('identitySignals',[]) if fresh else [],
++                    profile=c.get('profile') or self.get('selected_profile'), identitySignals=c.get('identitySignals',[]) if fresh else [],
+                     publishReady=False, publishing=False, liveTestVerified=bool(c.get('liveTestVerified')))
+ 
+ @contextlib.contextmanager

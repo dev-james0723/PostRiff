@@ -1,0 +1,17 @@
+{
+  "status": "pass",
+  "execution": "synthetic-local-restore",
+  "postgres_workspaces": 2,
+  "recovery_seconds": 0.785,
+  "snapshot_loss_rows": 0,
+  "state_revision_jobs_equal": true,
+  "restored_RLS_own_workspace_only": true,
+  "worker_started_on_restore": false,
+  "production_RPO_RTO": "validation_unavailable",
+  "limitations": [
+    "No cloud recovery",
+    "No Storage object bytes in database dump",
+    "No real OAuth vault/Auth recovery",
+    "Zero snapshot loss is not an achieved production RPO"
+  ]
+}

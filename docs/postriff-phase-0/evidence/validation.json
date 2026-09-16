@@ -1,0 +1,117 @@
+{
+  "schema": "postriff-phase0.validation/v1",
+  "validated_at": "2026-09-14T14:21:58.276350-04:00",
+  "execution_state": "p01_summary_approved_phase1_readiness_gate_unmet",
+  "interviews_completed": 0,
+  "interviews_required": 5,
+  "passed": true,
+  "checks": [
+    {
+      "name": "required_artifacts",
+      "passed": true,
+      "detail": {
+        "expected": 13,
+        "found": 13
+      }
+    },
+    {
+      "name": "question_participant_coverage",
+      "passed": true,
+      "detail": {
+        "rows": 60,
+        "unique": 60
+      }
+    },
+    {
+      "name": "evidence_provenance_and_pending_status",
+      "passed": true,
+      "detail": "6 P01 rows have participant-approved summary evidence; 54 rows await answers. Full interviews completed: 0. Founder summaries approved: 1."
+    },
+    {
+      "name": "unrun_interviews_honest",
+      "passed": true,
+      "detail": "P01 assistant-authored summary now confirmed through P01-E01; full interview incomplete. P02–P05 remain not recruited."
+    },
+    {
+      "name": "exact_first_question",
+      "passed": true,
+      "detail": "Original first question remains in the guide. The P01 summary has been approved; no repeat approval question remains in P01."
+    },
+    {
+      "name": "no_premature_phase1_decision",
+      "passed": true,
+      "detail": "Phase 0 decision remains pending. Phase 1 readiness report records failed five-interview gate and a founder-only candidate requiring explicit scope change."
+    },
+    {
+      "name": "local_links_and_line_references",
+      "passed": true,
+      "detail": {
+        "links_checked": 154,
+        "line_references": 39,
+        "heading_anchors": 8,
+        "errors": [],
+        "scope": "Phase 0 and Phase 1 Markdown documents"
+      }
+    },
+    {
+      "name": "audited_source_unchanged",
+      "passed": true,
+      "detail": {
+        "files_compared": 15,
+        "changed": [],
+        "scope": "15 selected source files; not whole repository or runtime database"
+      },
+      "result_reused_from": "2026-09-14T13:30:15.684214-04:00",
+      "reuse_reason": "This continuation edited four research Markdown files only; audited app source unchanged by the task."
+    },
+    {
+      "name": "evidence_json_parse",
+      "passed": true,
+      "detail": {
+        "files": 4
+      }
+    },
+    {
+      "name": "key_requirement_presence",
+      "passed": true,
+      "detail": {
+        "missing": [],
+        "note": "Term presence only; semantic/manual review is separate"
+      }
+    },
+    {
+      "name": "prompt_provenance",
+      "passed": true,
+      "detail": "Original source prompt hash unchanged"
+    }
+  ],
+  "manual_review": [
+    "Current study scope overrides older implementation phase labels.",
+    "Quotes, reported behavior, observations, interpretation and recommendations are distinguished.",
+    "Questions are one per turn; concept and pricing follow the recent-task story.",
+    "Every plan/trial retains generalized skills and personalization; James originals remain private.",
+    "10 source/UI findings do not count as interviews or validated runtime/provider capabilities."
+  ],
+  "validation_unavailable": [
+    {
+      "check": "Git diff/history",
+      "reason": "fatal: not a git repository (or any of the parent directories): .git",
+      "fallback": "15 selected source file SHA-256 comparisons"
+    }
+  ],
+  "not_exercised": [
+    "Application mutation tests/build",
+    "Authenticated model generation",
+    "Provider verification or publishing",
+    "Customer interviews",
+    "Outreach",
+    "Phase 1 implementation"
+  ],
+  "continuation_review": [
+    "P01 approval recorded without repeating the confirmation.",
+    "No unknown time, publication, recurrence or purchasing field was filled from approval alone.",
+    "Phase 1 prompt read and its explicit gate applied.",
+    "Only readiness-report.md created in Phase 1; no application changes."
+  ],
+  "founder_summaries_approved": 1
+}

@@ -1,0 +1,48 @@
+{
+  "schema": "postriff.analytics-capabilities.v1",
+  "status": "candidate",
+  "providers": [
+    {
+      "provider": "youtube",
+      "selectedByUser": true,
+      "implementationOrder": 1,
+      "identityVerified": false,
+      "insightsVerified": false,
+      "publishVerified": false,
+      "derivedQualified": false,
+      "crossOwnerAggregateQualified": false,
+      "billingBudgetAuthorizedMicros": 0,
+      "documentationState": "official_readable_live_qualification_pending",
+      "defaultRecipient": "explicit_authorizing_user_or_permitted_agent",
+      "defaultScope": "single_account"
+    },
+    {
+      "provider": "instagram",
+      "selectedByUser": true,
+      "implementationOrder": 2,
+      "identityVerified": false,
+      "insightsVerified": false,
+      "publishVerified": false,
+      "derivedQualified": false,
+      "crossOwnerAggregateQualified": false,
+      "billingBudgetAuthorizedMicros": 0,
+      "documentationState": "partial_source_unavailable",
+      "defaultRecipient": "explicit_authorizing_user_or_permitted_agent",
+      "defaultScope": "single_account"
+    },
+    {
+      "provider": "linkedin",
+      "selectedByUser": true,
+      "implementationOrder": 3,
+      "identityVerified": false,
+      "insightsVerified": false,
+      "publishVerified": false,
+      "derivedQualified": false,
+      "crossOwnerAggregateQualified": false,
+      "billingBudgetAuthorizedMicros": 0,
+      "documentationState": "official_readable_live_qualification_pending",
+      "defaultRecipient": "explicit_authorizing_user_or_permitted_agent",
+      "defaultScope": "single_account"
+    }
+  ]
+}

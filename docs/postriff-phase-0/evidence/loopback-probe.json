@@ -1,0 +1,15 @@
+{
+  "at": "2026-09-14T13:24:59.803701-04:00",
+  "url": "http://127.0.0.1:4310/",
+  "method": "GET",
+  "scope": "HTML only; no model or provider call",
+  "status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "title": [
+    "James Au Studio \u2014 local workspace"
+  ],
+  "script_assets": [
+    "/assets/index-BDli4RdJ.js"
+  ],
+  "body_bytes": 424
+}

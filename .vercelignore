@@ -1,0 +1,42 @@
+# Vercel uploads source before function-level excludeFiles runs.
+# Keep only the two service source trees and their deployment configuration.
+.env*
+.gitignore
+.vercelignore
+.vercel/
+.venv/
+.phase3-build-venv/
+.*-broker-*
+.upgrade-*
+broker.key
+*.command
+studio-install-manifest.json
+companion-ios/
+desktop/
+docs/
+migrations/
+scripts/
+skills/
+templates/
+tests/
+vendor/
+src/james_au_social/
+src/postriff_alpha/__pycache__/
+src/postriff_phase2/__pycache__/
+studio/README.md
+studio/Start Studio.command
+studio/agent/
+studio/bilibili/
+studio/broker/
+studio/requirements.lock.txt
+studio/requirements.txt
+studio/tiktok-runtime/
+studio/web/.gitignore
+studio/web/README.md
+studio/web/dist/
+studio/web/dist-alpha/
+studio/web/index.html
+studio/web/node_modules/
+studio/web/tests/
+studio/web/vite.config.ts
+studio/web/src/**/*.pre-channel-switch

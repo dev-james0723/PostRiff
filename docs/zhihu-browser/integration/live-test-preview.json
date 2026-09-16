@@ -1,0 +1,15 @@
+{
+  "state": "local_preview_not_approved",
+  "manifest": {
+    "version": "zhihu-browser/1",
+    "channel": "zhihu",
+    "nativeFormat": "zhihu.idea",
+    "profile": "https://www.zhihu.com/people/tie4gka",
+    "text": "这是一条发布流程测试，用来检查文字是否完整显示。",
+    "audience": "public",
+    "timing": "now",
+    "media": [],
+    "derivatives": []
+  },
+  "hash": "fa4f79da377cdf6c42a9752e7e478326ac80e7a3dace9467eaa5d69cf460f8ba"
+}

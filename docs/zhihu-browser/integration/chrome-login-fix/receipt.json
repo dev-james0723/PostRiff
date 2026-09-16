@@ -1,0 +1,16 @@
+{
+  "change": "Use installed Google Chrome stable with a separate chrome-profile; preserve previous profile unchanged.",
+  "cause": "User observed Zhihu error 10001; exact provider cause unconfirmed.",
+  "files": [
+    {
+      "path": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/src/james_au_social/zhihu_browser.py",
+      "before": "689bc388dd769e2f8ee296341b19f158bca8e2e589ee92607311ca92a4da0d53",
+      "after": "3ac4bef70425494e83c55552214221b6749dbd48f2f9b24869e88d2daa9817fe"
+    },
+    {
+      "path": "/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py",
+      "before": "689bc388dd769e2f8ee296341b19f158bca8e2e589ee92607311ca92a4da0d53",
+      "after": "3ac4bef70425494e83c55552214221b6749dbd48f2f9b24869e88d2daa9817fe"
+    }
+  ]
+}

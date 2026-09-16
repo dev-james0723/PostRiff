@@ -1,0 +1,185 @@
+{
+  "status": "passed",
+  "privateSkillsUnchanged": 57,
+  "legacySourcesUnchanged": 7,
+  "customerArtifactsScanned": [
+    "studio/web/dist-alpha/index.html",
+    "studio/web/dist-alpha/assets/index-8oULRqFb.css",
+    "studio/web/dist-alpha/assets/index-B7lvuvmb.js",
+    "docs/postriff-phase-1/released-templates/release.json",
+    "docs/postriff-phase-1/released-templates/social-agency-orchestrator/SKILL.md",
+    "docs/postriff-phase-1/released-templates/social-agency-orchestrator/configuration.schema.json",
+    "docs/postriff-phase-1/released-templates/content-craft/SKILL.md",
+    "docs/postriff-phase-1/released-templates/content-craft/configuration.schema.json",
+    "docs/postriff-phase-1/released-templates/content-pack/SKILL.md",
+    "docs/postriff-phase-1/released-templates/content-pack/configuration.schema.json"
+  ],
+  "builderPromptNeutral": true,
+  "packages": [
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-personal-drafts.zip",
+      "sha256": "acdf3bca5ffd71cf9d9e6ff348e483faac712f07516a317b431f98477e4467c9",
+      "files": [
+        "VOICE.md",
+        "BRAND.md",
+        "profile.json",
+        "SKILL.md",
+        "README.md",
+        "drafts/1-LinkedIn.md",
+        "drafts/2-Instagram.md",
+        "YOU.md",
+        "art/brief.json",
+        "art/local-watercolor.svg",
+        "PROFILE.md",
+        "WORKING_STYLE.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    },
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-personal-profile.zip",
+      "sha256": "cf617050276aa25beae013dca428c6fde5e449ef54427cf898692867c9efe411",
+      "files": [
+        "PROFILE.md",
+        "VOICE.md",
+        "WORKING_STYLE.md",
+        "BRAND.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "profile.json",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    },
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-niche-drafts.zip",
+      "sha256": "660c1978db650925e6699036f2f738591eb1a71b34815c57dff9faba2272b3a7",
+      "files": [
+        "VOICE.md",
+        "BRAND.md",
+        "profile.json",
+        "SKILL.md",
+        "README.md",
+        "drafts/1-LinkedIn.md",
+        "drafts/2-Instagram.md",
+        "YOU.md",
+        "art/brief.json",
+        "art/local-watercolor.svg",
+        "PROFILE.md",
+        "WORKING_STYLE.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    },
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-niche-profile.zip",
+      "sha256": "4fbeb17095c15c9acdef48f772b8fd899d692088c70181ccf1ff35ccabc86bd3",
+      "files": [
+        "PROFILE.md",
+        "VOICE.md",
+        "WORKING_STYLE.md",
+        "BRAND.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "profile.json",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    },
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-business-drafts.zip",
+      "sha256": "324b5bb6991b958a2363a5e251d26f3e0a8e1ae8e402c2d6cd204d70faea0e57",
+      "files": [
+        "VOICE.md",
+        "BRAND.md",
+        "profile.json",
+        "SKILL.md",
+        "README.md",
+        "drafts/1-LinkedIn.md",
+        "drafts/2-Instagram.md",
+        "YOU.md",
+        "art/brief.json",
+        "art/local-watercolor.svg",
+        "PROFILE.md",
+        "WORKING_STYLE.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    },
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-business-profile.zip",
+      "sha256": "54640689eaf79e00b8485fbb9979e60de3aabcd22f439b34ae5e81479ceec368",
+      "files": [
+        "PROFILE.md",
+        "VOICE.md",
+        "WORKING_STYLE.md",
+        "BRAND.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "profile.json",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    },
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-hybrid-drafts.zip",
+      "sha256": "fd7e121eb6e6adb14675347a19e4574d1c5b6142d41162a2a78d8a6610de96d9",
+      "files": [
+        "VOICE.md",
+        "BRAND.md",
+        "profile.json",
+        "SKILL.md",
+        "README.md",
+        "drafts/1-LinkedIn.md",
+        "drafts/2-Instagram.md",
+        "YOU.md",
+        "art/brief.json",
+        "art/local-watercolor.svg",
+        "PROFILE.md",
+        "WORKING_STYLE.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    },
+    {
+      "path": "docs/postriff-phase-1/evidence/fixtures/fictional-hybrid-profile.zip",
+      "sha256": "097dd61822f4fe32bc15b151f65fe62558c065a3630717c539a8f30508333ebb",
+      "files": [
+        "PROFILE.md",
+        "VOICE.md",
+        "WORKING_STYLE.md",
+        "BRAND.md",
+        "BOUNDARIES.md",
+        "sources/manifest.json",
+        "review.md",
+        "profile.json",
+        "skills/personal-voice/SKILL.md",
+        "manifest.json"
+      ],
+      "state": "synthetic-fixture-only"
+    }
+  ],
+  "scope": "These checks prove fixture isolation and packaging, not customer validation, production authentication or real-model qualification."
+}

@@ -1,0 +1,11 @@
+{
+  "status": "pass",
+  "checks": [
+    "base 36 month value",
+    "conservative 12 month value",
+    "scenario and month controls",
+    "mobile width",
+    "no page errors"
+  ],
+  "execution": "local-static-candidate-dashboard"
+}

@@ -1,0 +1,11 @@
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "unknown reconciliation cannot requeue submission",
+    "revoked approver blocked at durable claim",
+    "read-only approver blocked at durable claim",
+    "cancel and rate-limit completion race",
+    "incomplete publication evidence rejected"
+  ]
+}

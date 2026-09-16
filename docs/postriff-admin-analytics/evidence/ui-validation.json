@@ -1,0 +1,26 @@
+{
+  "status": "pass",
+  "execution": "local-interactive-mockup",
+  "checks": [
+    "admin overview renders",
+    "synthetic state always labelled",
+    "immature cohort cannot appear to pass ten-person report gate",
+    "business windows labelled without nonfunctional range filter",
+    "social account and period controls",
+    "chart dates, accessible table and period card agree",
+    "read-only sync preview has no submission",
+    "Instagram unqualified state rather than zero",
+    "LinkedIn scope missing state",
+    "customer view hides business nav, demo only",
+    "no-data mode not fake live analytics",
+    "390px no horizontal page overflow",
+    "post detail drawer and keyboard close",
+    "no JavaScript page errors"
+  ],
+  "test_count": 14,
+  "limitations": [
+    "No product runtime integration",
+    "UI role selector is a demonstration, not authorization",
+    "No live analytics or provider calls"
+  ]
+}

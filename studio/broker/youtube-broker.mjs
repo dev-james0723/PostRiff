@@ -1,0 +1,157 @@
+import http from 'node:http';
+import {randomBytes,timingSafeEqual,createHash} from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {privateStore} from './private-store.mjs';
+
+export const YOUTUBE_SCOPE='openid email https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.upload';
+const TTL=10*60*1000;
+const digest=value=>createHash('sha256').update(value).digest('hex');
+const eq=(a,b)=>typeof a==='string'&&typeof b==='string'&&Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
+const email=value=>typeof value==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)&&value.length<=254?value.toLowerCase():null;
+const channelId=value=>typeof value==='string'&&/^UC[A-Za-z0-9_-]{22}$/.test(value)?value:null;
+const safeJson=async response=>{
+  const chunks=[];let size=0;
+  for await(const chunk of response.body){size+=chunk.length;if(size>1024*1024)throw new Error('response_too_large');chunks.push(Buffer.from(chunk));}
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+};
+const validateToken=token=>{
+  const granted=new Set(String(token.scope||'').trim().split(/\s+/).map(s=>s==='https://www.googleapis.com/auth/userinfo.email'?'email':s));
+  if(granted.size!==4||YOUTUBE_SCOPE.split(' ').some(s=>!granted.has(s)))throw new Error('scope_mismatch');
+  if(typeof token.access_token!=='string'||!token.access_token||token.access_token.length>16384||/[\s\x00-\x1f]/.test(token.access_token)||
+     String(token.token_type).toLowerCase()!=='bearer'||!Number.isFinite(token.expires_in)||token.expires_in<=0||token.expires_in>86400)throw new Error('invalid_token');
+};
+
+export async function createYouTubeBroker({port,studioPort,root,capability,clientId,clientSecret,uploadRoot=root,fetchApi=fetch,now=Date.now}){
+  if(!Number.isInteger(studioPort)||studioPort<1024||studioPort>65535||studioPort===port||!Number.isInteger(port)||port<1024||port>65535||typeof capability!=='string'||capability.length<40)throw new Error('invalid_configuration');
+  const configured=typeof clientId==='string'&&clientId.endsWith('.apps.googleusercontent.com')&&typeof clientSecret==='string'&&clientSecret.length>=16;
+  uploadRoot=path.resolve(uploadRoot);
+  const store=await privateStore(root),control=store('youtube-control'),tokens=store('youtube-tokens'),uploads=store('youtube-uploads');
+  let pending=await control.get('pending'),record=await control.get('identity');
+  if(pending&&['preparing','verifying'].includes(pending.phase)){pending={...pending,phase:'interrupted'};await control.set('pending',pending);}
+  let verifiedThisRun=false,verificationInProgress=false;
+  const isCurrent=()=>configured&&verifiedThisRun&&!(pending?.replacementRequested&&pending.phase!=='complete')&&record&&Date.parse(record.expiresAt)>now();
+  const status=()=>({provider:'youtube',available:configured,state:record?(isCurrent()?'connected_identity':'verification_required'):(configured&&pending&&pending.expires>now()?pending.phase:(configured?'not_connected':'configuration_required')),
+    email:record?.email||pending?.email||null,channelId:record?.channelId||pending?.channelId||null,channelTitle:record?.channelTitle||null,handle:record?.handle||null,
+    scope:record?.scope||YOUTUBE_SCOPE,verifiedAt:record?.verifiedAt||null,expiresAt:record?.expiresAt||null,
+    identitySignals:isCurrent()?['google_oauth_subject','youtube_channels_mine','youtube_upload_scope']:[],publishReady:!!isCurrent(),publishing:false});
+  const headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'"};
+  const json=(res,code,body)=>{res.writeHead(code,{...headers,'Content-Type':'application/json'});res.end(JSON.stringify(body));};
+  const redirect=(res,url,cookie)=>{res.writeHead(303,{...headers,Location:url,...(cookie?{'Set-Cookie':cookie}:{})});res.end();};
+  const persist=async value=>{pending=value;await control.set('pending',value);};
+  const accessToken=async()=>{
+    const saved=await tokens.get('refresh');if(!saved?.accessToken)throw new Error('authorization_missing');
+    let token={access_token:saved.accessToken,token_type:'Bearer',scope:saved.scope||record?.scope,expires_in:(Date.parse(saved.expiresAt)-now())/1000};
+    if(token.expires_in<=60){
+      if(!saved.refreshToken)throw new Error('reauthorization_required');
+      const response=await fetchApi('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,refresh_token:saved.refreshToken,grant_type:'refresh_token'}),redirect:'error',signal:AbortSignal.timeout(30000)});
+      if(!response.ok)throw new Error('refresh_failed');token=await safeJson(response);if(token.scope===undefined)token.scope=saved.scope||record?.scope;validateToken(token);
+      const expiresAt=new Date(now()+token.expires_in*1000).toISOString();await tokens.set('refresh',{refreshToken:token.refresh_token||saved.refreshToken,accessToken:token.access_token,expiresAt,scope:YOUTUBE_SCOPE});
+    } else validateToken(token);
+    return token.access_token;
+  };
+  const verifyIdentity=async(token,expected)=>{
+    const auth={Authorization:`Bearer ${token.access_token}`};
+    const [userResponse,channelResponse]=await Promise.all([
+      fetchApi('https://openidconnect.googleapis.com/v1/userinfo',{headers:auth,redirect:'error',signal:AbortSignal.timeout(15000)}),
+      fetchApi('https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true',{headers:auth,redirect:'error',signal:AbortSignal.timeout(15000)})]);
+    if(!userResponse.ok||!channelResponse.ok)throw new Error('identity_unavailable');
+    const user=await safeJson(userResponse),channels=await safeJson(channelResponse);
+    const item=Array.isArray(channels.items)&&channels.items.length===1?channels.items[0]:null;
+    if(item?.id!==expected.channelId)throw new Error('channel_mismatch');
+    if(typeof user.sub!=='string'||!user.sub)throw new Error('subject_missing');
+    // Brand Account OAuth represents the channel as its own Google subject, so
+    // its OpenID email can differ from the controlling Gmail account. The exact
+    // channels.list(mine=true) match is the authority check for that route.
+    if(email(user.email)===expected.email&&user.email_verified!==true)throw new Error('email_unverified');
+    return {email:expected.email,channelId:item.id,channelTitle:typeof item.snippet?.title==='string'?item.snippet.title.slice(0,200):null,
+      handle:typeof item.snippet?.customUrl==='string'?item.snippet.customUrl.slice(0,200):null,scope:YOUTUBE_SCOPE,
+      verifiedAt:new Date(now()).toISOString(),expiresAt:new Date(now()+token.expires_in*1000).toISOString()};
+  };
+  const server=http.createServer(async(req,res)=>{try{
+    if(req.headers.host!==`127.0.0.1:${port}`){json(res,403,{error:'host_not_allowed'});return;}
+    const url=new URL(req.url,`http://127.0.0.1:${port}`);
+    if(url.pathname==='/callback'&&req.method==='GET'){
+      const cookie=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('studio_youtube_nonce='))?.slice(21);
+      if(!pending||pending.phase!=='private_handoff'||pending.expires<=now()||!cookie||!eq(digest(cookie),pending.browserHash)){json(res,400,{error:'callback_not_expected'});return;}
+      if([...url.searchParams.keys()].some(k=>!['code','state','error','error_description','scope','authuser','prompt','iss'].includes(k)||url.searchParams.getAll(k).length!==1)||url.search.length>16384||
+         (url.searchParams.has('iss')&&url.searchParams.get('iss')!=='https://accounts.google.com')){json(res,400,{error:'invalid_callback'});return;}
+      const selected=pending;await persist({...selected,phase:'verifying',browserHash:null});
+      try{
+        if(url.searchParams.get('error')||!eq(url.searchParams.get('state'),selected.flow))throw new Error('authorization_failed');
+        const tokenResponse=await fetchApi('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code:url.searchParams.get('code')||'',client_id:clientId,client_secret:clientSecret,redirect_uri:`http://127.0.0.1:${port}/callback`,grant_type:'authorization_code'}),redirect:'error',signal:AbortSignal.timeout(30000)});
+        if(!tokenResponse.ok)throw new Error('token_exchange_failed');const token=await safeJson(tokenResponse);
+        validateToken(token);
+        const next=await verifyIdentity(token,selected);
+        await tokens.set('refresh',{refreshToken:token.refresh_token||null,accessToken:token.access_token,expiresAt:next.expiresAt,scope:YOUTUBE_SCOPE});
+        await control.set('identity',next);record=next;verifiedThisRun=true;
+        await persist({...selected,phase:'complete',browserHash:null});
+      }catch(error){const safeReasons=['channel_mismatch','email_mismatch','email_unverified','subject_missing','identity_unavailable','scope_mismatch','invalid_token','token_exchange_failed','authorization_failed'];await persist({...selected,phase:'connection_failed',browserHash:null,failureReason:safeReasons.includes(error?.message)?error.message:'verification_failed'});}
+      redirect(res,`http://127.0.0.1:${studioPort}/connection-return`,'studio_youtube_nonce=; HttpOnly; SameSite=Lax; Path=/callback; Max-Age=0');return;
+    }
+    if(url.pathname.startsWith('/begin/')&&req.method==='GET'){
+      const ticket=url.pathname.slice(7);if(!pending||pending.phase!=='awaiting_private_signin'||pending.expires<=now()||!eq(digest(ticket),pending.ticketHash)){json(res,410,{error:'signin_expired'});return;}
+      const nonce=randomBytes(32).toString('hex');await persist({...pending,phase:'private_handoff',ticketHash:null,browserHash:digest(nonce)});
+      const auth=new URL('https://accounts.google.com/o/oauth2/v2/auth');for(const [k,v] of Object.entries({client_id:clientId,redirect_uri:`http://127.0.0.1:${port}/callback`,response_type:'code',scope:YOUTUBE_SCOPE,state:pending.flow,access_type:'offline',prompt:'consent select_account',login_hint:pending.email,include_granted_scopes:'false'}))auth.searchParams.set(k,v);
+      redirect(res,auth.toString(),`studio_youtube_nonce=${nonce}; HttpOnly; SameSite=Lax; Path=/callback; Max-Age=600`);return;
+    }
+    if(!eq(req.headers['x-studio-broker'],capability)){json(res,403,{error:'broker_access_denied'});return;}
+    if(url.pathname==='/status'&&req.method==='GET'){json(res,200,status());return;}
+    if(url.pathname==='/upload'&&req.method==='POST'){
+      if(!isCurrent()){json(res,409,{error:'publish_connection_required'});return;}
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>65536){json(res,413,{error:'request_too_large'});return;}}
+      let body;try{body=JSON.parse(raw);}catch{json(res,422,{error:'invalid_request'});return;}
+      const allowed=['categoryId','description','filePath','idempotencyKey','madeForKids','privacyStatus','publishAt','title'];
+      if(!body||Object.keys(body).sort().join(',')!==allowed.sort().join(',')||typeof body.idempotencyKey!=='string'||!/^[a-f0-9]{64}$/.test(body.idempotencyKey)||typeof body.title!=='string'||!body.title.trim()||body.title.length>100||typeof body.description!=='string'||body.description.length>5000||!['private','unlisted','public'].includes(body.privacyStatus)||typeof body.madeForKids!=='boolean'||!/^\d{1,3}$/.test(body.categoryId)){json(res,422,{error:'invalid_upload_manifest'});return;}
+      if(body.publishAt!==null&&(body.privacyStatus!=='private'||typeof body.publishAt!=='string'||!Number.isFinite(Date.parse(body.publishAt))||Date.parse(body.publishAt)<=now())){json(res,422,{error:'invalid_publish_time'});return;}
+      const filePath=path.resolve(body.filePath);if(!(filePath===uploadRoot||filePath.startsWith(uploadRoot+path.sep))){json(res,403,{error:'upload_path_not_allowed'});return;}
+      let handle;try{const link=await fs.lstat(filePath);if(link.isSymbolicLink())throw new Error();handle=await fs.open(filePath,'r');const stat=await handle.stat();if(!stat.isFile()||stat.size<1||stat.size>256*1024*1024)throw new Error();}catch{await handle?.close();json(res,422,{error:'invalid_video_file'});return;}
+      try{
+        const existing=await uploads.get(body.idempotencyKey);if(existing){json(res,200,{...existing,replayed:true});return;}
+        const bytes=await handle.readFile();const metadata={snippet:{title:body.title.trim(),description:body.description,categoryId:body.categoryId},status:{privacyStatus:body.privacyStatus,selfDeclaredMadeForKids:body.madeForKids,...(body.publishAt?{publishAt:body.publishAt}:{})}};
+        const boundary='studio_'+randomBytes(20).toString('hex');const prefix=Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: video/*\r\n\r\n`);const suffix=Buffer.from(`\r\n--${boundary}--\r\n`);
+        const token=await accessToken();const upload=await fetchApi('https://www.googleapis.com/upload/youtube/v3/videos?part=id,snippet,status&uploadType=multipart',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':`multipart/related; boundary=${boundary}`},body:Buffer.concat([prefix,bytes,suffix]),redirect:'error',signal:AbortSignal.timeout(120000)});
+        if(!upload.ok)throw new Error('youtube_upload_failed');const created=await safeJson(upload);if(typeof created.id!=='string'||!created.id)throw new Error('youtube_upload_unresolved');
+        const verify=await fetchApi(`https://www.googleapis.com/youtube/v3/videos?part=id,snippet,status,processingDetails&id=${encodeURIComponent(created.id)}`,{headers:{Authorization:`Bearer ${token}`},redirect:'error',signal:AbortSignal.timeout(30000)});if(!verify.ok)throw new Error('youtube_verification_failed');const checked=await safeJson(verify);const item=Array.isArray(checked.items)&&checked.items.length===1?checked.items[0]:null;
+        if(item?.id!==created.id||item.snippet?.channelId!==record.channelId||item.snippet?.title!==body.title.trim())throw new Error('youtube_verification_mismatch');
+        const result={videoId:item.id,url:`https://youtu.be/${item.id}`,channelId:item.snippet.channelId,title:item.snippet.title,privacyStatus:item.status?.privacyStatus||null,publishAt:item.status?.publishAt||null,uploadStatus:item.status?.uploadStatus||null,processingStatus:item.processingDetails?.processingStatus||null,verifiedAt:new Date(now()).toISOString(),replayed:false};await uploads.set(body.idempotencyKey,result);json(res,200,result);return;
+      }catch{json(res,502,{error:'youtube_upload_unresolved'});return;}finally{await handle?.close();}
+    }
+    if(url.pathname==='/verify'&&req.method==='POST'){
+      if(!configured){json(res,503,{error:'configuration_required'});return;}
+      if(!record){json(res,409,{error:'identity_not_connected'});return;}
+      if(verificationInProgress){json(res,409,{error:'verification_in_progress'});return;}
+      verificationInProgress=true;verifiedThisRun=false;
+      try{
+        const saved=await tokens.get('refresh');
+        if(!saved?.accessToken)throw new Error('authorization_missing');
+        let token={access_token:saved.accessToken,token_type:'Bearer',scope:saved.scope||record.scope,expires_in:(Date.parse(saved.expiresAt)-now())/1000};
+        if(token.expires_in<=60){
+          if(!saved.refreshToken)throw new Error('reauthorization_required');
+          const response=await fetchApi('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+            body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,refresh_token:saved.refreshToken,grant_type:'refresh_token'}),redirect:'error',signal:AbortSignal.timeout(30000)});
+          if(!response.ok)throw new Error('refresh_failed');
+          token=await safeJson(response);
+          // RFC 6749 permits scope omission when the refresh grant is unchanged.
+          if(token.scope===undefined)token.scope=saved.scope||record.scope;
+        }
+        validateToken(token);
+        const next=await verifyIdentity(token,record);
+        await tokens.set('refresh',{refreshToken:token.refresh_token||saved.refreshToken,accessToken:token.access_token,expiresAt:next.expiresAt,scope:YOUTUBE_SCOPE});
+        await control.set('identity',next);record=next;verifiedThisRun=true;
+      }catch{verifiedThisRun=false;}
+      finally{verificationInProgress=false;}
+      json(res,200,status());return;
+    }
+    if(url.pathname==='/prepare'&&req.method==='POST'){
+      if(!configured){json(res,503,{error:'configuration_required'});return;}let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>2048){json(res,413,{error:'request_too_large'});return;}}
+      let body;try{body=JSON.parse(raw);}catch{json(res,422,{error:'invalid_request'});return;}
+      if(!body||Object.keys(body).sort().join(',')!=='channelId,email,scope'||body.scope!==YOUTUBE_SCOPE){json(res,422,{error:'invalid_request'});return;}
+      const expectedEmail=email(body.email),expectedChannel=channelId(body.channelId);if(!expectedEmail||!expectedChannel){json(res,422,{error:'invalid_identity'});return;}
+      if(record&&record.scope===YOUTUBE_SCOPE&&record.email===expectedEmail&&record.channelId===expectedChannel){json(res,409,{error:'account_already_connected'});return;}if(pending&&pending.expires>now()&&!['connection_failed','interrupted','complete'].includes(pending.phase)){json(res,409,{error:'signin_already_pending'});return;}
+      const flow=randomBytes(32).toString('hex'),ticket=randomBytes(32).toString('hex');verifiedThisRun=false;await persist({replacementRequested:!!record,email:expectedEmail,channelId:expectedChannel,flow,expires:now()+TTL,phase:'awaiting_private_signin',ticketHash:digest(ticket)});json(res,200,{beginPath:`/begin/${ticket}`});return;
+    }
+    json(res,404,{error:'operation_unavailable'});
+  }catch{if(!res.headersSent)json(res,500,{error:'connection_operation_failed'});else res.end();}});
+  return {server,status};
+}

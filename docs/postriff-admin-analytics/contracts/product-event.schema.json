@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "workspaceId": {
+      "type": "string"
+    },
+    "operationId": {
+      "type": "string"
+    },
+    "aggregateId": {
+      "type": "string"
+    },
+    "aggregateRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "participantPseudonym": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "taskId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "source.accepted",
+        "generation.requested",
+        "generation.started",
+        "generation.completed",
+        "generation.failed",
+        "draft.saved",
+        "draft.usefulness_decided",
+        "memory.decided",
+        "memory.revoked",
+        "export.completed",
+        "connector.capability_changed",
+        "offer.selected",
+        "payment.succeeded",
+        "payment.refunded"
+      ]
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "receivedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assisted": {
+      "type": "string",
+      "enum": [
+        "self_serve",
+        "assisted",
+        "unknown"
+      ]
+    },
+    "execution": {
+      "type": "string",
+      "enum": [
+        "live",
+        "synthetic"
+      ]
+    },
+    "emitter": {
+      "type": "string",
+      "enum": [
+        "domain_server",
+        "billing_verified_handler"
+      ]
+    }
+  },
+  "required": [
+    "eventId",
+    "schemaVersion",
+    "workspaceId",
+    "operationId",
+    "aggregateId",
+    "aggregateRevision",
+    "participantPseudonym",
+    "taskId",
+    "kind",
+    "occurredAt",
+    "receivedAt",
+    "assisted",
+    "execution",
+    "emitter"
+  ],
+  "additionalProperties": false
+}

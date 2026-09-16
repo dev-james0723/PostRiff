@@ -1,0 +1,31 @@
+{
+  "state": "selected_not_connected",
+  "selected_profile": "https://www.zhihu.com/people/sing-sing-66",
+  "files": [
+    {
+      "path": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/src/james_au_social/zhihu_browser.py",
+      "sha256": "5ecd92a11571f55e7744b65d9d822024fde5742685ceec94b66eacdde94c3580"
+    },
+    {
+      "path": "/Users/ouxianxing/Documents/James-Au-Studio/src/james_au_social/zhihu_browser.py",
+      "sha256": "5ecd92a11571f55e7744b65d9d822024fde5742685ceec94b66eacdde94c3580"
+    },
+    {
+      "path": "/private/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/codex-file-preview-16jm6F/james-au-social-media-automation/skills/james-au-social-orchestrator/references/zhihu-browser.md",
+      "sha256": "86d4644e340cf8c251bee88ce852f6bfce368a0a5f45b1dad7745b89b44042ca"
+    },
+    {
+      "path": "/Users/ouxianxing/.codex/skills/james-au-social-orchestrator/references/zhihu-browser.md",
+      "sha256": "86d4644e340cf8c251bee88ce852f6bfce368a0a5f45b1dad7745b89b44042ca"
+    },
+    {
+      "path": "/Users/ouxianxing/Documents/James-Au-Studio/skills/james-au-social-orchestrator/references/zhihu-browser.md",
+      "sha256": "86d4644e340cf8c251bee88ce852f6bfce368a0a5f45b1dad7745b89b44042ca"
+    }
+  ],
+  "test_text": "这是一条发布流程测试，用来检查文字是否完整显示。",
+  "publication_instruction": "User requested switch to sing-sing-66 and retry the previously approved test.",
+  "native_browser_observed": "signed_out",
+  "python_browser_observed": "profile_locked_by_open_login_window",
+  "published": false
+}

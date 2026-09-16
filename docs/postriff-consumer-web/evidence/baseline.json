@@ -1,0 +1,269 @@
+{
+  "files": {
+    "docs/postriff-consumer-web/connector-audit.md": {
+      "existed": false,
+      "sha256": null
+    },
+    "docs/postriff-consumer-web/consumer-web-release-receipt.md": {
+      "existed": false,
+      "sha256": null
+    },
+    "docs/postriff-consumer-web/decisions.md": {
+      "existed": true,
+      "sha256": "17a8e5700a1c84018d65e7825bd09f46a2f3a01860b0b7d9104d049b0fd72247"
+    },
+    "docs/postriff-consumer-web/implementation-plan.md": {
+      "existed": true,
+      "sha256": "8e8298d3e1c77064d9449cff93ffdb94abb02b1d8a02b340029d7c7c1cde575d"
+    },
+    "docs/postriff-consumer-web/receipts/milestone-a.md": {
+      "existed": true,
+      "sha256": "b997ae97bc58dbcdba33c96ce2069d21dd6ee586d2ca59a64edead99e054317a"
+    },
+    "docs/postriff-consumer-web/receipts/milestone-b.md": {
+      "existed": false,
+      "sha256": null
+    },
+    "docs/postriff-consumer-web/receipts/milestone-c.md": {
+      "existed": false,
+      "sha256": null
+    },
+    "docs/postriff-consumer-web/receipts/milestone-d.md": {
+      "existed": false,
+      "sha256": null
+    },
+    "docs/postriff-consumer-web/receipts/milestone-e.md": {
+      "existed": false,
+      "sha256": null
+    },
+    "docs/postriff-consumer-web/requirements-ledger.md": {
+      "existed": true,
+      "sha256": "d2f4cfabd7e9c764f0854401159e892337532c20042a508699860c1f4dc3717a"
+    },
+    "migrations/postriff/004_consumer_web_tenancy.sql": {
+      "existed": false,
+      "sha256": null
+    },
+    "migrations/postriff/005_consumer_web_ideas.sql": {
+      "existed": false,
+      "sha256": null
+    },
+    "migrations/postriff/006_consumer_web_channels.sql": {
+      "existed": false,
+      "sha256": null
+    },
+    "migrations/postriff/007_consumer_web_billing.sql": {
+      "existed": false,
+      "sha256": null
+    },
+    "requirements.txt": {
+      "existed": true,
+      "sha256": "0ec0f2861f8bd09d4b0edbf63956e6ec1ff74237c2eecdf34dd8744356ec6a00"
+    },
+    "scripts/check_postriff_hosted_preflight.py": {
+      "existed": true,
+      "sha256": "7c0bad894dea1d10f3e7db5b4f2671f1492b37c0e932c15eefd224f061a60fa5"
+    },
+    "scripts/postriff_consumer_web_evidence.py": {
+      "existed": true,
+      "sha256": "d7b619f30482d3a853ff8fd8ab76c415b1ce5b28e999a8f423113bfd7ca8b380"
+    },
+    "scripts/postriff_dev_hosted.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "scripts/postriff_disposable_postgres.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/agent_runtime.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/audience.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/auth.py": {
+      "existed": true,
+      "sha256": "5a21cb55679b65b22d12b37380cd9044406d69e9af4e0a9087d9a3a537ebbb41"
+    },
+    "src/postriff_phase2/billing.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/channels.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/content_types.py": {
+      "existed": true,
+      "sha256": "8e194b9c0c18c3586e7a93f500bd61c84e7eb4668a22d579a9669e633fa2aff2"
+    },
+    "src/postriff_phase2/contracts.py": {
+      "existed": true,
+      "sha256": "910cdde36989fd16c957c2a7aac51b317d20c6bde76bf8e6c4ce6b746d56eb6e"
+    },
+    "src/postriff_phase2/hosted.py": {
+      "existed": true,
+      "sha256": "c27365f336738082a0c027e932e7a18ef770d597054fda63e7b4c86a0104842f"
+    },
+    "src/postriff_phase2/hosted_app.py": {
+      "existed": true,
+      "sha256": "62a4debbf59cee3301b81f7dc0f7f24a8f36d60694dddd42abf5384550103899"
+    },
+    "src/postriff_phase2/hosted_identity.py": {
+      "existed": true,
+      "sha256": "d5f1ce3d322119c3504cc12d9a55593de1f0acf8e0e1fea15bfd9699c1b5ca0c"
+    },
+    "src/postriff_phase2/hosted_social.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/hosted_worker.py": {
+      "existed": true,
+      "sha256": "1568d712dbb64ca65535e0acac6a842699b3e155263549423a6d26e30c2044d9"
+    },
+    "src/postriff_phase2/ideas.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/insights.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/oauth.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/permissions.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/privacy.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/providers.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/source_policy.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "src/postriff_phase2/store.py": {
+      "existed": true,
+      "sha256": "9bd5deb1c0c8754f1fd3807151da63ef11aefc6e6bfcf8c44fd51ccee67961e3"
+    },
+    "src/postriff_phase2/tools.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "studio/web/alpha/index.html": {
+      "existed": true,
+      "sha256": "1faf46e21fc9eab34d2a77bc588790e2ca50f25cc56d417d62e4627e89a7bc7c"
+    },
+    "studio/web/alpha/manifest.webmanifest": {
+      "existed": false,
+      "sha256": null
+    },
+    "studio/web/alpha/public/icon-maskable.svg": {
+      "existed": true,
+      "sha256": "9164e47997dde1fc70242f0dd2d2b01dbaefd2e49bb350eba9b6acea0d6a1a5c"
+    },
+    "studio/web/alpha/public/icon.svg": {
+      "existed": true,
+      "sha256": "5befed14ca18c85fded9ed9320b2f3eee4b3035b90c45920b157c9c17aea3866"
+    },
+    "studio/web/alpha/public/manifest.webmanifest": {
+      "existed": true,
+      "sha256": "8f3a9a462565dcf6bb998212421d67dc1fff5906dc8c49fcdb929415eedfd6bf"
+    },
+    "studio/web/alpha/public/sw.js": {
+      "existed": true,
+      "sha256": "e19ac10f2ac6b92377994cdb0a63318ae38e7ddaa2bba875e663a78a80b78ed5"
+    },
+    "studio/web/alpha/sw.js": {
+      "existed": false,
+      "sha256": null
+    },
+    "studio/web/src/founder/AuthEntry.tsx": {
+      "existed": true,
+      "sha256": "ba2999cf6cea7142ca2a5497d602fa99476b798a1d2edd51e92c10c0926b4252"
+    },
+    "studio/web/src/founder/Cloud.tsx": {
+      "existed": false,
+      "sha256": null
+    },
+    "studio/web/src/founder/FounderApp.tsx": {
+      "existed": true,
+      "sha256": "a779e7c4e1f42f04dc27e4d02e0bccf8f6844625d7daaa0e3984cffa03a5776c"
+    },
+    "studio/web/src/founder/api.ts": {
+      "existed": true,
+      "sha256": "caef6ce49db34ab1a9e72dd60fe16a5a7eec9f8493311ca166ead6a63ff220e1"
+    },
+    "studio/web/src/founder/cloud-api.ts": {
+      "existed": false,
+      "sha256": null
+    },
+    "studio/web/src/founder/cloud.css": {
+      "existed": false,
+      "sha256": null
+    },
+    "studio/web/src/founder/hosted-auth.ts": {
+      "existed": true,
+      "sha256": "ee2c38bd6776685ad8a2ca03920f85b0fec486c3901ec8edc1d2174772429233"
+    },
+    "studio/web/src/founder/types.ts": {
+      "existed": true,
+      "sha256": "30ac11738b85c143bf9bdf5b4f272248e98cb95699f046666a0c4a34f44ef9ae"
+    },
+    "studio/web/vite.alpha.config.ts": {
+      "existed": true,
+      "sha256": "8e8a584319497568ac993d85aad89198c184e25676f93e64c9655cbed9fdbf02"
+    },
+    "tests/phase2/postgres_billing.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "tests/phase2/postgres_channels.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "tests/phase2/postgres_ideas.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "tests/phase2/postgres_isolation.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "tests/phase2/rls.sql": {
+      "existed": true,
+      "sha256": "11905653aba524c7079eb55134ecc462d016698ee949e73e42ae02be731b9285"
+    },
+    "tests/test_postriff_billing.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "tests/test_postriff_channels.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "tests/test_postriff_consumer_web.py": {
+      "existed": false,
+      "sha256": null
+    },
+    "tests/test_postriff_phase2_hosted.py": {
+      "existed": true,
+      "sha256": "e2a09585aa8366bc29208a937965aa4a617b3e5c54f1ad3c918c6297b3d67158"
+    },
+    "tests/test_postriff_providers.py": {
+      "existed": false,
+      "sha256": null
+    }
+  },
+  "schema": "postriff.consumer-web.baseline.v1"
+}

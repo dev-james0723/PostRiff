@@ -1,0 +1,9 @@
+{
+  "command": "cd studio/web && npm test",
+  "date": "2026-09-14",
+  "exitCode": 0,
+  "tests": 70,
+  "passed": 70,
+  "failed": 0,
+  "scope": "Existing mocked/read-only frontend contract suite; observed tool output. No real social calls were made."
+}

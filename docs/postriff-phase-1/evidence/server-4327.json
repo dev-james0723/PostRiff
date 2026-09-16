@@ -1,0 +1,7 @@
+{
+  "pid": 56145,
+  "port": 4327,
+  "fixtureStore": true,
+  "scope": "loopback only",
+  "status": "stopped after browser validation"
+}

@@ -1,0 +1,25 @@
+{
+  "recordType": "ExactRouteTestApprovalReceipt",
+  "schemaVersion": 1,
+  "manifestId": "xhs-rednote-route-tests-20260914-v1",
+  "manifestHash": "sha256:67d329f7b409ee6c40444bb9128bf65bef72727b75051932fef678be4f87b65a",
+  "approvedBy": "user",
+  "approverSessionRef": "current-codex-task",
+  "approvalText": "yes",
+  "approvedAt": "2026-09-14T13:02:39Z",
+  "approvedJobs": [
+    "xhs-rednote-image-route-test-20260914-v1",
+    "xhs-rednote-video-route-test-20260914-v1",
+    "xhs-rednote-schedule-route-test-20260914-v1"
+  ],
+  "scope": {
+    "audience": "仅自己可见",
+    "immediateSubmissions": 2,
+    "scheduledSubmissions": 1,
+    "derivatives": [],
+    "deletionOrCancellation": false,
+    "publicVisibility": false,
+    "recurringAutomation": false
+  },
+  "receiptHash": "sha256:cf739bcbd81079a2ef47f2b75029bb12fec1f380ae8a7c86db32938687975a43"
+}

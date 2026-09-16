@@ -1,0 +1,105 @@
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE SCHEMA
+CREATE TABLE
+CREATE FUNCTION
+GRANT
+GRANT
+CREATE SCHEMA
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+GRANT
+GRANT
+GRANT
+BEGIN
+CREATE SCHEMA
+REVOKE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE FUNCTION
+GRANT
+GRANT
+REVOKE
+DO
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+REVOKE
+GRANT
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+INSERT 0 1
+CREATE POLICY
+COMMIT
+BEGIN
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+COMMIT
+INSERT 0 2
+             pr_bootstrap             
+--------------------------------------
+ 27c661ea-2411-43de-9518-a8b6c2f68b1d
+(1 row)
+
+DO
+INSERT 0 2
+DO
+              set_config              
+--------------------------------------
+ a96ca977-3519-4a33-9cfc-b4fb3965000f
+(1 row)
+
+SET
+              set_config              
+--------------------------------------
+ 00000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+              set_config              
+--------------------------------------
+ 00000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+SET
+DO
+RESET
+INSERT 0 1
+DO
+UPDATE 1
+SET
+DO
+RESET
+                                                                              result                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ PASS: two-user RLS, 9 object families, forged IDs, CRUD denials, private storage, revoked membership, service-only bootstrap, trial replay and deletion tombstone
+(1 row)
+

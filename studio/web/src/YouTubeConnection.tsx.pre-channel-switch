@@ -1,0 +1,38 @@
+import {useEffect,useState} from 'react';
+import {connectionsApi,type YouTubeConnection as State} from './connectionsApi';
+export default function YouTubeConnection(){
+ const [connection,setConnection]=useState<State|null>(null),[email,setEmail]=useState('jamesaucreates@gmail.com'),[channelId,setChannelId]=useState('UCzwNcXaG4EdjR27Tm9JH_zA');
+ const [consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [uploadResult,setUploadResult]=useState<{url:string;privacyStatus:string|null;publishAt:string|null;processingStatus:string|null}|null>(null);
+ async function refresh(){try{setConnection((await connectionsApi.status()).youtube);setError('');}catch(cause){setError(cause instanceof Error?cause.message:'Connection status unavailable.');}}
+ useEffect(()=>{void refresh();},[]);
+ async function verify(){setBusy(true);setError('');try{setConnection(await connectionsApi.verifyYouTube());}catch(cause){setError(cause instanceof Error?cause.message:'Connection verification unavailable.');}finally{setBusy(false);}}
+ async function connect(event:React.SubmitEvent<HTMLFormElement>){event.preventDefault();setBusy(true);setError('');try{window.location.assign(await connectionsApi.prepareYouTube(email,channelId));}catch(cause){setError(cause instanceof Error?cause.message:'YouTube sign-in could not start.');setBusy(false);}}
+ async function upload(event:React.SubmitEvent<HTMLFormElement>){event.preventDefault();setBusy(true);setError('');setUploadResult(null);try{const form=new FormData(event.currentTarget);const value=await connectionsApi.uploadYouTube(form);setUploadResult(value);await refresh();}catch(cause){setError(cause instanceof Error?cause.message:'YouTube upload is unresolved. Check YouTube Studio before retrying.');}finally{setBusy(false);}}
+ return <section className="setup-panel" aria-label="YouTube account connection"><h3>Connect your YouTube identity</h3>
+  <p>Google will ask for email identity, read-only channel verification and video-upload access. Studio never receives permission to edit, delete, comment or manage other channel settings.</p>
+  {error&&<p role="alert" className="error-banner">{error}</p>}
+  {connection?.verifiedAt&&connection.publishReady?<div className="callout"><strong>Video upload ready: {connection.channelTitle}</strong><p>{connection.email} · {connection.handle||connection.channelId}</p><p>Official API upload access is verified. Every video still requires the exact confirmation shown below.</p><small>Last verified {connection.verifiedAt} · Access expires {connection.expiresAt}</small></div>:<>
+   <p className="muted">{connection?.available?`Connection state: ${connection.state.replaceAll('_',' ')}`:connection?.state==='broker_unavailable'?'The private connection service is unavailable. Restart Studio and check again.':'Google OAuth configuration is required. Store this Studio’s OAuth client in Apple Keychain, then restart Studio.'}</p>
+   {connection?.state==='configuration_required'&&<p>Web OAuth client · Redirect URI: <code>http://127.0.0.1:4313/callback</code> · Keychain service: <code>James Au Studio YouTube OAuth</code>, accounts <code>client-id</code> and <code>client-secret</code>. Complete Google setup and secret entry privately; never paste credentials into chat.</p>}
+   <form onSubmit={connect}><fieldset className="setup-fields" disabled={busy||!connection?.available}>
+    <label className="field">Exact Google account<input required type="email" autoComplete="off" value={email} onChange={e=>{setEmail(e.target.value);setConsent(false);}}/></label>
+    <label className="field">Exact YouTube channel ID<input required pattern="UC[A-Za-z0-9_-]{22}" autoComplete="off" value={channelId} onChange={e=>{setChannelId(e.target.value);setConsent(false);}}/></label>
+    <label className="check-field"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> Connect this exact identity with channel verification and video-upload access. Keep OAuth tokens encrypted on this Mac.</label>
+    <button type="submit" className="button primary" disabled={!consent||!email.trim()||!channelId.trim()}>{busy?'Opening Google consent…':'Continue to Google'}</button>
+   </fieldset></form></>}
+  <button type="button" className="button" onClick={()=>void (connection?.verifiedAt?verify():refresh())} disabled={busy}>{busy?'Checking…':'Check connection'}</button>
+  {connection?.publishReady&&<form onSubmit={upload} className="setup-fields"><h3>Upload or schedule a video</h3><p className="hint">Scheduling uses YouTube native scheduling: the upload stays Private until the future publish time. New unaudited Google API projects may remain Private until Google approves an API audit.</p>
+   <label className="field">Video file (up to 256 MiB)<input name="file" type="file" accept="video/*" required/></label>
+   <label className="field">Title<input name="title" maxLength={100} required/></label>
+   <label className="field">Description<textarea name="description" maxLength={5000} rows={6}/></label>
+   <label className="field">Category<select name="categoryId" defaultValue="22"><option value="22">People & Blogs</option><option value="10">Music</option><option value="27">Education</option><option value="28">Science & Technology</option></select></label>
+   <label className="field">Visibility<select name="privacyStatus" defaultValue="private"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></label>
+   <label className="field">Publish at (optional, ISO 8601; visibility must be Private)<input name="publishAt" placeholder="2026-09-14T15:00:00Z"/></label>
+   <label className="field">Audience<select name="madeForKids" defaultValue="false"><option value="false">Not made for kids</option><option value="true">Made for kids</option></select></label>
+   <label className="check-field"><input name="publicationConsent" value="true" type="checkbox" required/> I approve uploading this exact file to {connection.channelTitle} ({connection.channelId}) with the title, visibility and schedule shown above.</label>
+   <button className="button primary" disabled={busy}>{busy?'Uploading and verifying…':'Upload to YouTube'}</button>
+  </form>}
+  {uploadResult&&<div className="callout"><strong>Verified YouTube upload</strong><p><a href={uploadResult.url} target="_blank" rel="noreferrer">{uploadResult.url}</a></p><p>{uploadResult.privacyStatus} · {uploadResult.publishAt||'no future schedule'} · processing {uploadResult.processingStatus||'pending'}</p></div>}
+ </section>;
+}

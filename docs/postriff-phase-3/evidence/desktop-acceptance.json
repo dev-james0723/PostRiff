@@ -1,0 +1,19 @@
+{
+  "status": "pass",
+  "execution": "packaged-macos-arm64-outside-development-cwd",
+  "security": {
+    "sandbox": true,
+    "contextIsolation": true,
+    "nodeIntegration": false
+  },
+  "nativePairing": "synthetic dialog acceptance injected only by test",
+  "restart": true,
+  "noOrphanSidecar": true,
+  "offlineEditRetained": true,
+  "deviceVaultPersisted": true,
+  "revocation": true,
+  "mobile": "390x844",
+  "errors": [],
+  "hostedAcceptance": false,
+  "dataDirectory": "/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/postriff-desktop-acceptance-tDj3yB"
+}
