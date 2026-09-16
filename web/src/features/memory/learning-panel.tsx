@@ -80,6 +80,19 @@ export function LearningPanel() {
     );
   }
 
+  function setTeamEdits(teamEdits: boolean) {
+    act.mutate(
+      { revision, action: 'learning_settings', payload: { teamEdits } },
+      {
+        onSuccess: () => {
+          invalidate('memory', 'memoryProposals');
+          toast.success(teamEdits ? 'Edits by every member now count as evidence.' : 'Only owners’ edits count as evidence now.');
+        },
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
+      }
+    );
+  }
+
   function reset() {
     act.mutate(
       { revision, action: 'learning_reset', payload: { confirmed: true } },
@@ -128,6 +141,19 @@ export function LearningPanel() {
             </p>
           </div>
           <Switch checked={learning.cloudExtraction} disabled={!isOwner || busy || !cloudAccess} onCheckedChange={setCloudExtraction} ariaLabel='Learn from my edits with a cloud model' label='Allow' />
+        </div>
+      )}
+
+      {learning && learning.enabled && (
+        <div className='bg-muted/40 flex flex-col gap-2 rounded-lg p-3 sm:flex-row sm:items-start sm:justify-between'>
+          <div className='flex min-w-0 flex-col gap-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <span className='text-xs font-semibold'>Learn from teammates’ edits</span>
+              <Badge variant={learning.teamEdits ? 'secondary' : 'outline'}>{learning.teamEdits ? 'On' : 'Owners only'}</Badge>
+            </div>
+            <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>Until this is on, only an owner’s edits and approvals count as evidence for a proposal. What anyone says to the agent is always proposed to you.</p>
+          </div>
+          <Switch checked={learning.teamEdits} disabled={!isOwner || busy} onCheckedChange={setTeamEdits} ariaLabel='Count teammates’ edits as evidence' label='Allow' />
         </div>
       )}
 
