@@ -655,9 +655,25 @@ James 拍板決定 A–D（同 §10 全部建議答案）之後即日落實，�
 | Tests | `test_postriff_learning_extract.py`（9：規則對應、反證、拒絕理由、門檻 / 篇數 / 衰減 / dismiss / accept 率、跨 platform → language、跨語言 → 全部、length 中位數、衝突 → update、反向 → retire）；`test_postriff_phase2_learning.py` +1（三個 channel 加 CTA → 一個 language-level proposal → remember → VOICE.md）；`tests/phase2/postgres_learning_extract.py`（4 checks：cron 抽取、每日上限、team edits gating、決定路徑） | 全過：unit 368；PG 11 套 |
 
 **同計劃嘅差異**
-- C2（細 model 抽取）下一個 commit 做：`HostedLearning(extractor=…)` 已預留位，同意條件（memory egress + `cloudExtraction` + source cloud consent）喺嗰度執行。
 - 門檻由 3 改做 2.5（見 §5.3 註）。
 - Fixture 嘅 Instagram draft 本身有 hashtag 同 emoji、有 facts 嘅 draft 有 "• " bullet，所以 test 用 CTA 同段落做訊號。
+
+### Phase C 實作記錄（2026-09-16）— C2 細 model
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| 抽取 | `src/postriff_phase2/learning_model.py` | `pairs_for()`：`draft.edited` event → 由 variant revision 記錄攞返前後原文，`redact()` 之後按 (platform, language) 分組；cloud 嘅話 draft 用過嘅 source 每個都要有 cloud consent（`source_policy.classify`），否則嗰對唔出去。`ModelExtractor.observe()`：每個 scope ≥ 2 對先送，最多 8 對、一次最多 3 個 scope，prompt 帶已學嘅 statement 叫佢唔好重複；`parse_candidates()`：ruleKey / polarity 要喺表內、`isContentChange` 即棄、statement 過 `lint`、只計佢引用到嘅 pair、confidence → weight（1.0 / 0.7 / 0.4）；輸出係同 C1 一樣嘅 observation（`source: model`），入同一個 consolidation |
+| Model 合約 | `SYSTEM_PROMPT` + `SCHEMA` | 只描述形式；改事實 / 數字 / 名 → `isContentChange`；一句 ≤ 160 字元；引用 pair id；唔重複 alreadyLearned |
+| Route | `GatewayCall`（AI Gateway，`anthropic/claude-haiku-4-5`，temperature 0.2，json_object）；`ClaudeCliCall`（`ClaudeCliRuntime.prompt()`：同 draft run 一樣嘅 flags、無 tool、無 session，`--json-schema` 換成抽取 schema） | `extractor_from_environment()`：API host 有 CLI 就用 CLI（PostRiff $0），否則有 `AI_GATEWAY_API_KEY` 就用 gateway，否則冇 |
+| Gating | `learning_service.HostedLearning.model_allowed()` | CLI：learning 開住就得；cloud：`memoryEgress.cloud` **同** `learning.cloudExtraction` 都要 true，再加每對 pair 嘅 source consent |
+| Consolidation | `learning_extract.py` | `other` 呢類冇 template 嘅 rule 用 model 嘅原句；其餘門檻 / 衰減 / 反證照舊 |
+| Tests | `test_postriff_learning_model.py`（8：redaction、source consent、candidate 解析同棄置、一對唔夠、scope 上限、model observation 同一門檻、gating、環境揀 route、fake claude 嘅 `prompt()`）；`postgres_learning_extract.py` +1（cloud extractor 冇兩個同意唔跑；有就跑，proposal `source: model`） | 全過：unit 376；PG 11 套 |
+
+**同計劃嘅差異**
+- Web UI 未有「Learn from my edits with a cloud model」switch（backend `learning_settings.cloudExtraction` 已有；Memory 頁 Phase D 一齊加）。
+- Model 抽取嘅成本上限：每 workspace 每次 cron 最多 3 個 call；未接 `pr_budgets` learning scope。
+
+### Phase D — 表現佐證、退休、推廣
 
 ### Phase D — 表現佐證、退休、推廣
 

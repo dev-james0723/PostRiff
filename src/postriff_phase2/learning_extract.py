@@ -157,11 +157,13 @@ def _levels(scope):
 
 
 def _group(rule, polarity, scope):
-    return {"support": 0.0, "drafts": set(), "evidence": [], "values": [], "first": None, "last": None, "rule": rule, "polarity": polarity, "scope": scope, "sources": set(), "platforms": set(), "languages": set()}
+    return {"support": 0.0, "drafts": set(), "evidence": [], "values": [], "first": None, "last": None, "rule": rule, "polarity": polarity, "scope": scope, "sources": set(), "platforms": set(), "languages": set(), "statement": None}
 
 
 def _add(group, observation, weight):
     group["support"] += weight
+    if observation.get("statement") and not group["statement"]:
+        group["statement"] = observation["statement"]  # a model's wording, used when no template names the rule
     if observation.get("variantId"):
         group["drafts"].add(observation["variantId"])
     if observation.get("eventId") or observation.get("variantId"):
@@ -230,7 +232,7 @@ def consolidate(support, counter, state, now, dismissed_keys=(), recent_decision
     for key, group in sorted(selected.items(), key=lambda item: -item[1]["support"]):
         if key in dismissed_keys:
             continue
-        statement = _statement(group["rule"], group["polarity"], group["scope"], group["values"])
+        statement = _statement(group["rule"], group["polarity"], group["scope"], group["values"]) or group.get("statement")
         if not statement:
             continue
         current = active.get(key)

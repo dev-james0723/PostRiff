@@ -311,16 +311,60 @@ class ClaudeCliRuntime(AgentRuntime):
         }
         return system, "INPUT\n" + json.dumps(payload, ensure_ascii=False, indent=1)
 
-    def argv(self, executable, alias, system_prompt):
+    def argv(self, executable, alias, system_prompt, schema=None):
         if not re.fullmatch(r"[a-z]+", alias) or alias not in MODEL_ALIASES:
             raise AlphaError("Choose a supported Claude Code model.", 400)
         args = [executable, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                 "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                 "--disable-slash-commands", "--no-session-persistence", "--permission-mode", "dontAsk",
-                "--max-budget-usd", f"{self.budget_usd:.2f}", "--system-prompt", system_prompt, "--json-schema", json.dumps(OUTPUT_SCHEMA, separators=(",", ":"))]
+                "--max-budget-usd", f"{self.budget_usd:.2f}", "--system-prompt", system_prompt, "--json-schema", json.dumps(schema or OUTPUT_SCHEMA, separators=(",", ":"))]
         if alias != "default":
             args += ["--model", alias]
         return args
+
+    def prompt(self, system_prompt, user_prompt, schema, alias="haiku"):
+        """One structured answer, no tools, no session: the same flags and environment as a draft run, for
+        side jobs such as preference extraction (design §5.2 C2). Raises AlphaError; never returns prose."""
+        executable = self.executable()
+        if not executable:
+            raise AlphaError("Claude Code is not installed on the machine that serves this workspace.", 503)
+        started = time.monotonic()
+        process = self.spawn(self.argv(executable, alias, system_prompt, schema), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=os.environ.get("TMPDIR", "/tmp"), env=self.env or restricted_environment(), start_new_session=True)
+        try:
+            process.stdin.write(user_prompt.encode("utf-8"))
+            process.stdin.close()
+        except (OSError, ValueError):
+            pass
+        size, result = 0, None
+        for line in self._read_lines(process, started):
+            size += len(line)
+            if size > MAX_OUTPUT_BYTES:
+                self._stop(process)
+                raise AlphaError("Claude Code produced more output than allowed; the answer was discarded.", 502)
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("type") == "result":
+                result = event
+                break
+        self._stop(process)
+        try:
+            process.stdout.close()
+        except (OSError, ValueError):
+            pass
+        if result is None:
+            raise AlphaError("Claude Code reached the time limit or exited early; no answer was kept.", 504)
+        if result.get("is_error") or result.get("subtype") != "success":
+            code, message = classify_failure(str(result.get("result", "")) + " " + str(result.get("subtype", "")))
+            if code == "auth":
+                self._note_auth_failure()
+            raise AlphaError(message, 401 if code == "auth" else 502)
+        output = result.get("structured_output")
+        if not isinstance(output, dict):
+            raise AlphaError("Claude Code returned no structured answer.", 502)
+        self._note_auth_ok()
+        return output
 
     # --- execution -----------------------------------------------------------------
     def dispatch(self, run_id, request, sink):

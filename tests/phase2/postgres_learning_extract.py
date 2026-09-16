@@ -132,4 +132,41 @@ state = service.get(wid, "fixture-one")["state"]
 assert state["learning"]["revision"] == 1 and learning.active_items(state)[0]["id"] == p["id"]
 checks.append("an extracted proposal is remembered like a chat one, with its evidence summary")
 
+
+# 5. A model extractor's observations go through the same consolidation; its proposal says so, and it runs only when allowed.
+class FakeExtractor:
+    def __init__(self, local):
+        self.local, self.runs = local, 0
+
+    def observe(self, state, events, now):
+        self.runs += 1
+        scope = {"platform": "LinkedIn", "language": "English", "contentTypeId": None}
+        key = learning.scope_key("writing_preference", "other", "do", scope)
+        # Strong enough to outrank the deterministic candidates still waiting for a daily slot.
+        return [{"ruleKey": "other", "polarity": "do", "scope": scope, "scopeKey": key, "weight": 2.0, "at": now, "eventId": e["id"], "variantId": f"v-{n}", "value": None, "source": "model", "statement": "Lead with the concrete thing that happened."} for n, e in enumerate(events[:3])]
+
+
+snapshot = service.get(wid, "fixture-one")
+v = variant("LinkedIn")
+act("variant_edit", {"variantId": v["id"], "variantRevision": v["revision"], "text": v["text"] + " Again."})
+clock[0] += 86400 + 1
+cloud = FakeExtractor(local=False)
+service.learning.extractor = cloud
+result = service.learning.sweep()["extraction"]
+assert cloud.runs == 0 and result["modelRuns"] == 0, "a cloud extractor waits for both consents"
+with connection() as db:
+    db.execute("update public.pr_learning_events set consumed_by=null where workspace_id=%s", (wid,))
+snapshot = service.get(wid, "fixture-one")
+act("learning_settings", {"cloudExtraction": True})
+act("memory_egress", {"cloud": True, "confirmed": True})
+clock[0] += 86400 + 1
+result = service.learning.sweep()["extraction"]
+assert cloud.runs == 1 and result["modelRuns"] == 1 and result["proposed"] == 1, result
+# The earlier sweep spent that day's slot on a leftover deterministic candidate; the model's proposal is the newer pending row.
+pending = service.learning.proposals(service.repository, wid, "fixture-one")["pending"]
+p = next(q for q in pending if q["source"] == "model")
+assert (p["ruleKey"], p["statement"], p["scopeLabel"]) == ("other", "Lead with the concrete thing that happened.", "LinkedIn · English"), p
+service.learning.extractor = None
+checks.append("a model extractor runs only with both consents and its candidates clear the same bar")
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))

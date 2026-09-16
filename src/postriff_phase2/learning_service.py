@@ -331,6 +331,15 @@ class HostedLearning:
         result["extraction"] = self.extract(max_seconds=max_seconds)
         return result
 
+    def model_allowed(self, state):
+        if self.extractor is None:
+            return False
+        if getattr(self.extractor, "local", False):
+            return True
+        from . import memory
+        settings = state.get("learning") if isinstance(state.get("learning"), dict) else {}
+        return bool(settings.get("cloudExtraction")) and memory.egress(state).get("cloud") is True
+
     def extract(self, max_seconds=15, max_workspaces=20):
         """Design §5.2–§5.3: for each workspace that is due, read the last 90 days of events, consolidate
         deterministic observations (and a model extractor's, when one is configured and allowed) into
@@ -361,7 +370,9 @@ class HostedLearning:
                     allowed_actors = None if settings.get("teamEdits") else owners(cur, workspace_id)
                     events = [e for e in events_window(cur, workspace_id, now, extract.WINDOW_DAYS) if allowed_actors is None or e["actor"] is None or e["actor"] in allowed_actors]
                     support, counter = extract.observations(events)
-                    if self.extractor is not None and settings.get("cloudExtraction") or (self.extractor is not None and getattr(self.extractor, "local", False)):
+                    if self.model_allowed(state):
+                        # Decision C: the person's own CLI needs no consent beyond learning being on; a cloud model needs
+                        # memory-egress consent plus the cloudExtraction switch (and per-source consent, checked per pair).
                         try:
                             support.extend(self.extractor.observe(state, events, now))
                             stats["modelRuns"] += 1
