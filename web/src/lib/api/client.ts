@@ -26,6 +26,7 @@ import type {
   OAuthStart,
   PrivacyNotice,
   ProviderView,
+  ResearchEgress,
   Run,
   SessionInfo,
   Snapshot,
@@ -113,7 +114,7 @@ export function createApi(getToken: TokenSource) {
     media: (w: string, assetId: string) => blob(`${ws(w)}/media/${encodeURIComponent(assetId)}`),
     exportDrafts: (w: string) => blob(`${ws(w)}/export`),
     exportProfile: (w: string) => blob(`${ws(w)}/profile-export`),
-    memory: (w: string) => get<{ files: MemoryFile[]; egress?: MemoryEgress }>(`${ws(w)}/memory`),
+    memory: (w: string) => get<{ files: MemoryFile[]; egress?: MemoryEgress; research?: ResearchEgress }>(`${ws(w)}/memory`),
     deleteAccount: (w: string, confirmation: string) =>
       send<{ deleted: boolean }>('DELETE', `${ws(w)}/account`, { confirmation }),
 

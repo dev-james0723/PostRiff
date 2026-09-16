@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
-import { useAct, useInvalidate, useMemory, useSnapshot } from '@/lib/api/hooks';
+import { useAct, useInvalidate, useMembers, useMemory, useSnapshot } from '@/lib/api/hooks';
 import { downloadBlob } from '@/lib/download';
 import { EASE_OUT } from '@/lib/ease';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -26,16 +26,52 @@ const infoContent = {
   ]
 };
 
+/** When an owner decision last changed and, for owners, whether they made it (a workspace can have several owners). */
+function useDecidedLine(decidedAt: number | null, decidedBy: string | null, isOwner: boolean) {
+  const members = useMembers();
+  if (!decidedAt) return null;
+  const when = new Date(decidedAt * 1000).toLocaleDateString();
+  if (!isOwner || !members.data) return `Last changed ${when}.`;
+  const byYou = members.data.members.some((m) => m.you && m.userId === decidedBy);
+  return byYou ? `Changed by you on ${when}.` : `Changed by another owner on ${when}.`;
+}
+
+function AccessStrip({ title, on, badge, description, note, switchLabel, ariaLabel, disabled, onChange }: {
+  title: string;
+  on: boolean;
+  badge: string;
+  description: string;
+  note: string;
+  switchLabel?: string;
+  ariaLabel: string;
+  disabled: boolean;
+  onChange?: (value: boolean) => void;
+}) {
+  return (
+    <div className='bg-card ring-foreground/10 flex flex-col gap-3 rounded-xl p-4 ring-1 sm:flex-row sm:items-start sm:justify-between'>
+      <div className='flex min-w-0 flex-col gap-1'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <span className='text-sm font-semibold'>{title}</span>
+          <Badge variant={on ? 'secondary' : 'outline'}>{badge}</Badge>
+        </div>
+        <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>{description}</p>
+        <p className='text-muted-foreground text-xs'>{note}</p>
+      </div>
+      {onChange && <Switch checked={on} disabled={disabled} onCheckedChange={onChange} ariaLabel={ariaLabel} label={switchLabel} />}
+    </div>
+  );
+}
+
 function CloudSharing() {
   const memory = useMemory();
   const snapshot = useSnapshot();
   const act = useAct();
   const invalidate = useInvalidate();
   const egress = memory.data?.egress;
-  if (!egress) return null;
   const isOwner = snapshot.data?.membership?.role === 'owner';
+  const decidedLine = useDecidedLine(egress?.decidedAt ?? null, egress?.decidedBy ?? null, isOwner);
+  if (!egress) return null;
   const withheld = egress.withheldBoundaries;
-  const decided = egress.decidedAt ? new Date(egress.decidedAt * 1000).toLocaleDateString() : null;
 
   function decide(cloud: boolean) {
     act.mutate(
@@ -51,30 +87,76 @@ function CloudSharing() {
   }
 
   return (
-    <div className='bg-card ring-foreground/10 flex flex-col gap-3 rounded-xl p-4 ring-1 sm:flex-row sm:items-start sm:justify-between'>
-      <div className='flex min-w-0 flex-col gap-1'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-sm font-semibold'>Cloud model access</span>
-          <Badge variant={egress.cloud ? 'secondary' : 'outline'}>{egress.cloud ? 'Shared' : 'Not shared'}</Badge>
-        </div>
-        <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>
-          {egress.cloud
-            ? 'PostRiff’s cloud model reads VOICE.md, IDENTITY.md and the boundaries marked public or workspace, so its drafts follow your voice and rules.'
-            : 'Drafts written by PostRiff’s cloud model don’t see your voice, identity or boundaries until you allow it. Writing routes on your own machine always read them.'}
-          {withheld > 0 && ` ${withheld} boundar${withheld === 1 ? 'y is' : 'ies are'} private or local-only and never leave, either way.`}
-        </p>
-        <p className='text-muted-foreground text-xs'>
-          {isOwner ? (decided ? `Last changed ${decided}.` : 'Nothing is shared until you turn this on.') : 'Only the workspace owner can change this.'}
-        </p>
-      </div>
-      <Switch
-        checked={egress.cloud}
-        disabled={!isOwner || act.isPending || snapshot.isLoading}
-        onCheckedChange={decide}
-        ariaLabel='Let the cloud model read your memory files'
-        label='Allow'
+    <AccessStrip
+      title='Cloud model access'
+      on={egress.cloud}
+      badge={egress.cloud ? 'Shared' : 'Not shared'}
+      description={
+        (egress.cloud
+          ? 'PostRiff’s cloud model reads VOICE.md, IDENTITY.md and the boundaries marked public or workspace, so its drafts follow your voice and rules.'
+          : 'Drafts written by PostRiff’s cloud model don’t see your voice, identity or boundaries until you allow it. Writing routes on your own machine always read them.') +
+        (withheld > 0 ? ` ${withheld} boundar${withheld === 1 ? 'y is' : 'ies are'} private or local-only and never leave, either way.` : '')
+      }
+      note={isOwner ? decidedLine ?? 'Nothing is shared until you turn this on.' : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
+      switchLabel='Allow'
+      ariaLabel='Let the cloud model read your memory files'
+      disabled={!isOwner || act.isPending || snapshot.isLoading}
+      onChange={decide}
+    />
+  );
+}
+
+function WebResearch() {
+  const memory = useMemory();
+  const snapshot = useSnapshot();
+  const act = useAct();
+  const invalidate = useInvalidate();
+  const research = memory.data?.research;
+  const isOwner = snapshot.data?.membership?.role === 'owner';
+  const decidedLine = useDecidedLine(research?.decidedAt ?? null, research?.decidedBy ?? null, isOwner);
+  if (!research) return null;
+  const onText = 'When a draft needs facts you haven’t supplied, PostRiff looks them up.';
+  const disclosure = 'A search query drawn from your message goes to Exa, and the pages it finds, or a link you paste, are read through Jina Reader. Neither receives your sources, memory files or drafts.';
+
+  if (!research.hosted) {
+    return (
+      <AccessStrip
+        title='Web research'
+        on
+        badge='On'
+        description={`${onText} ${disclosure}`}
+        note='Always on when drafting on your own machine.'
+        ariaLabel='Web research'
+        disabled
       />
-    </div>
+    );
+  }
+
+  function decide(web: boolean) {
+    act.mutate(
+      { revision: snapshot.data?.revision ?? 0, action: 'research_egress', payload: { web, confirmed: true } },
+      {
+        onSuccess: () => {
+          invalidate('memory');
+          toast.success(web ? 'Web research is on. PostRiff looks facts up when a draft needs them.' : 'Web research is off. Drafts use only what you supply.');
+        },
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The research choice could not be saved.')
+      }
+    );
+  }
+
+  return (
+    <AccessStrip
+      title='Web research'
+      on={research.web}
+      badge={research.web ? 'On' : 'Off'}
+      description={`${research.web ? onText : 'Drafts use only what you supply. Turn this on and PostRiff looks up the facts a draft needs.'} ${disclosure}`}
+      note={isOwner ? decidedLine ?? 'Nothing is sent until you turn this on.' : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
+      switchLabel='Allow'
+      ariaLabel='Let PostRiff look facts up on the web'
+      disabled={!isOwner || act.isPending || snapshot.isLoading}
+      onChange={decide}
+    />
   );
 }
 
@@ -105,7 +187,10 @@ export function MemoryView() {
         </Button>
       }
     >
-      <CloudSharing />
+      <div className='mb-4 flex flex-col gap-3 empty:hidden'>
+        <CloudSharing />
+        <WebResearch />
+      </div>
       <div className='grid gap-4 md:grid-cols-[18rem_1fr]'>
         <div className='bg-card ring-foreground/10 flex flex-col gap-0.5 rounded-xl p-2 ring-1'>
           <span className='text-muted-foreground px-2 py-1.5 text-xs'>Core files · read every turn</span>

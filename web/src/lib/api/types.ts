@@ -328,6 +328,16 @@ export interface MemoryEgress {
   withheldBoundaries: number;
 }
 
+/** Whether hosted drafts may look facts up on the web (owner decision). Always on when drafting on your own machine. */
+export interface ResearchEgress {
+  web: boolean;
+  decidedAt: number | null;
+  decidedBy: string | null;
+  processors: string[];
+  /** False when drafting on the person's own machine, where research is always on. */
+  hosted: boolean;
+}
+
 /* ---------- channels ---------- */
 
 export type CapabilityLevel = 'Direct' | 'Assisted' | 'Bridge' | 'Unsupported';
