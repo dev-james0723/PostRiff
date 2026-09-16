@@ -277,6 +277,7 @@ Route A 嘅 tool 由 PostRiff MCP stdio server（`integrations/postriff` 嘅 `po
 - Agent **唔可以直接寫**。佢出 `memoryProposals[]` → `pr_memory_proposals` → Inspector「Memory · 1」/ Memory 頁顯示 diff → user Accept / Edit / Dismiss。
   Accept 先 bump revision。（等於 OpenDesign 嘅 Keep gate，但係人手。）
 - `privacy: private / local_only` 嘅內容永遠唔入 public draft，唔入 export（除非 user 揀）。
+- **唔會阻止 user 出 content**（James，2026-09-16）：規則只可以做提示，唔可以擋住 draft。例如 how-to 冇講步驟，照樣起 draft，activity strip 會出一句 reminder 提佢補上自己教嘅步驟。
 - **Cloud route 要 consent 先讀 memory**（2026-09-16 實作）：本地 route（Claude Code / Codex）照舊讀齊 VOICE / IDENTITY / BOUNDARIES。
   Managed cloud route（`ServerModelRuntime`）預設**乜都唔讀**，要 workspace owner 喺 Memory 頁開 `memory_egress`（寫入 audit log）。
   開咗之後都只會送 `public` / `workspace_only` 嘅 boundary；`private`、`local_only`、`excluded` 同冇標 privacy 嘅一律留低，
@@ -377,7 +378,7 @@ Voice profile 薄嗰陣（新 user 答咗 5 條就 Skip，§6）：缺嘅 field 
 - **Route B/C**：淨係 compose 入 prompt（冇 filesystem）。`cli_runtime.compose()` 將 skills 放喺 policy 同 memory 檔之後，標明「method only, never identity」。
 - 每個 run 記 `skillBindings[{id, version, sha256, files}]`；UI 嘅 activity strip 顯示「Skills · content-engine, content-craft, adapter-contract, channel-instagram…」。
 - **只帶指令，唔帶 runtime**：原 `james-au-*` 每個 package 夾住一份 248 KB 嘅 `runtime/src/james_au_social/`（33 條 channel 各夾一份 ≈ 8 MB 重複 Python）。`postriff-*` 唔抄——hosted adapter 邏輯已經喺 `src/postriff_phase2/`。每個 package 尾嘅「PostRiff runtime binding」明寫：得指令、冇 Python、冇 credential、冇 transport。
-- **Voice contract 拆開咗**：`skills/postriff-content-engine/SKILL.md` 約 15.2k 字元（`MAX_FILE_CHARS` 20k 以下，唔會被截），其餘拆做 5 個 reference，按 §7.1 條件掛。`references/operations.md`（排程習慣、publish 鏈、analytics）係俾人睇嘅，永遠唔掛入 run。放喺 `skills/` 唔放 `docs/`，因為 `vercel.json` 嘅 API bundle 排除咗 `docs/**`。
+- **Voice contract 拆開咗**：`skills/postriff-content-engine/SKILL.md` 約 15.2k 字元（`MAX_FILE_CHARS` 20k 以下，唔會被截），其餘拆做 5 個 reference，按 §7.1 條件掛。`references/operations.md`（排程習慣、publish 鏈、analytics）係俾人睇嘅，永遠唔掛入 run。放喺 `skills/` 唔放 `docs/`，因為 hosted API bundle 排除咗 `docs/`。**更正**：`skills/` 本身之前都俾 `.vercelignore` 排除咗（我當時淨係睇咗 `vercel.json`），hosted run 會冇 skills；`fcd778e` 移除咗嗰條 rule，之後 hosted 先真係有 skill library。
 - **Adapter contract 抽出咗**：33 條 adapter 嘅 §5–§10 同 runtime 段原本逐字相同，每多一個 destination 就重複送約 3.2k 字元。而家集中喺 `postriff-adapter-contract`，每個 run 掛一次；每條 adapter 淨係留 §1–§4（purpose、語言、native formats、caption 規則）。淨係 `x`（§6/§7/§8/§10 + controlled-browser route）同 `reddit`（§7/§8）有真正嘅 override，照原文留喺 adapter。每條 adapter 平均由約 4.8k 跌到約 1.8k 字元；contract 本身約 4.6k。
 - **Memory 檔以實際送出嘅為準**：engine 原本話五個 memory 檔「loaded before this engine runs」，仲有一句「`BRAND.md` 冇宣告就喺 notes 講出嚟」。但 run 從來收唔到 `BRAND.md`，所以**每一個** variant 都會多一句假 note。已改成跟 `prompt_fragments()`，並加咗 test（用 mutation 驗證過：`memory.py` 一開始送 `BRAND.md`，test 就會 fail）。
 - **Skills 描述嘅係真 schema**：之前 bound skills 叫 model 出 `channelId`、`formatId`、`copy`、`fields`、`canonicalBrief`，全部係 strict schema 會拒絕嘅欄位（寫嘅時候跟咗 §4.1 嘅*提案* schema，唔係實作）。而家 title、description、slide text 呢類 native field 一律放 `notes` 並標明，缺嘅嘢放 `unknowns`。`tests/test_postriff_skills.py` 有兩個全庫 guard：bound skills 唔准出現 schema 會拒絕嘅欄位名；SKILL.md 唔准 link 一個 binder 永遠唔會送出去嘅檔（因為 `compose()` 同 model 講「every file a skill refers to is included inline」）。content-craft 嘅 `source-review.md` 係俾 maintainer 睇嘅，所以改成唔 link。
@@ -609,7 +610,7 @@ Phase 3：**skills 綁定 + Codex route**。原則照 §7：skills 帶方法、m
 真 `codex`（James 部 Mac）：`codex login status` = Logged in using ChatGPT，但 2026-09-16 已到 usage limit（「You've hit your usage limit」）→ UI 會顯示 usage-limit guidance；要等 limit reset 先有真 run。
 
 **未做 / 留待**
-- hosted（Vercel）`.vercelignore` 排除咗 `skills/`，所以 hosted run 會出「No skill library is installed on this host」warning、只用 editorial policy——要 hosted 有 skills 就要將 `skills/postriff-*` 入 bundle（另一 session 嘅檔案，由佢決定）。
+- ~~hosted（Vercel）`.vercelignore` 排除咗 `skills/`~~ → `fcd778e` 已經移除嗰條 rule，`skills/postriff-*` 跟 API source 一齊上 hosted（484 KB、85 個檔），hosted run 唔會再出「No skill library is installed on this host」。
 - Agentic research（agent-reach / URL fetch 做 sources）、onboarding chat、memory proposals、companion transport 未做。
 - Reasoning effort 未 map 去兩條 CLI。
 

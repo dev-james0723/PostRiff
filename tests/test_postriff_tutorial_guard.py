@@ -1,4 +1,4 @@
-"""A how-to with nothing approved to teach is asked for, not written; keyed on the type's own tested_steps rule."""
+"""A how-to that names no steps gets a reminder (never a block); keyed on the type's own tested_steps rule."""
 import sys
 import unittest
 from pathlib import Path

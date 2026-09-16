@@ -11,6 +11,8 @@ from .contracts import digest
 _STEP_LINE = re.compile(r"^\s*(?:\d{1,2}[.)、．]|[-*•·]|[①-⑳]|step\s*\d+|第[一二三四五六七八九十\d]+步)", re.I | re.M)
 _SEQUENCE = re.compile(r"\b(?:first|second|third|then|next|after that|finally|lastly)\b|首先|其次|然後|然后|接著|接着|之後|之后|最後|最后|第[一二三四五六七八九十\d]+步", re.I)
 TUTORIAL_NEEDS = "the steps you actually teach, in order (one per line in your message) or an approved source that describes the method"
+# Shown next to the draft, never instead of it: nothing stops a person from creating a post.
+TUTORIAL_REMINDER = "Reminder: a how-to is strongest with the steps you actually teach. Add them to your message, one per line, or attach a source, and draft again."
 
 
 def tutorial_steps_supplied(text):
@@ -30,8 +32,8 @@ def selected_rule_ids(state):
 
 
 def missing_tutorial_input(rule_ids, idea, context):
-    """What a how-to still needs before it can be written honestly; "" when nothing is missing. Applies to any
-    type that requires tested steps (the starter pack's tutorial, the core practical tip, workspace types)."""
+    """What would make a how-to stronger; "" when nothing is missing. A reminder only, never a block. Applies to
+    any type that requires tested steps (the starter pack's tutorial, the core practical tip, workspace types)."""
     if "tested_steps" not in (rule_ids or ()):
         return ""
     if any(source.get("facts") for source in (context or {}).get("sources", [])) or tutorial_steps_supplied(idea):

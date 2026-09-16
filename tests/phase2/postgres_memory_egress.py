@@ -1,7 +1,7 @@
 """Memory files on a cloud route, and the how-to guard, on disposable PostgreSQL:
 a cloud route reads no memory file until an owner allows it, the decision is audited and shown on
 the Memory page, private boundaries never leave even with consent, and a how-to with nothing
-approved to teach is recorded as a request for the steps without a model call.
+approved to teach still drafts, with a reminder to add the steps (never a block).
 
 Run through scripts/postriff_disposable_postgres.py (loads rls.sql with migrations 004+005).
 """
@@ -130,19 +130,18 @@ check("consent: a local-only boundary never leaves", "SECRET-HEALTH-DETAIL" not 
 check("consent: the turn names the withheld boundary", any("marked private or local-only was not shared" in e.get("message", "") for e in run["events"]))
 check("consent: the run completed", run["status"] == "completed", run["status"])
 
-# 4. A how-to with nothing approved to teach asks for the steps: failed run, clear message, no model call.
+# 4. A how-to with nothing approved to teach still drafts, and the run carries a reminder to add the steps.
 act("p2_content_install_pack", {"packId": "pack.creator", "version": "1.0.0"})
 act("p2_content_select", {"contentTypeId": "pack.creator:tutorial_how_to", "contentTypeVersion": "1.0.0", "formatId": "carousel"})
 calls = len(cloud.requests)
 run = ideas.turn(wid, "one", cid, {"text": "A carousel for first-timers on how to wedge clay.", "model": cloud.model, "timeZone": "Asia/Hong_Kong"})
-check("how-to guard: no model request", len(cloud.requests) == calls, len(cloud.requests))
-check("how-to guard: the run failed with what is needed", run["status"] == "failed" and any(e["type"] == "run.failed" and "It needs: the steps you actually teach" in e.get("message", "") for e in run["events"]), run)
-last = [m for m in ideas.messages(wid, "one", cid)["messages"] if m["role"] == "assistant"][-1]
-check("how-to guard: the conversation shows the request", last["body"].get("failed") is True and "It needs" in last["body"]["text"], last["body"])
+check("how-to reminder: the draft is written", run["status"] == "completed" and len(cloud.requests) == calls + 1, (run["status"], len(cloud.requests)))
+check("how-to reminder: the run reminds about the steps", any(e["type"] == "warning.created" and e.get("message", "").startswith("Reminder: a how-to is strongest") for e in run["events"]), [e.get("message") for e in run["events"] if e["type"] == "warning.created"])
+check("how-to reminder: nothing is marked failed", not any(e["type"] == "run.failed" for e in run["events"]))
 
 # 5. The same how-to with its steps in the message is drafted normally.
 run = ideas.turn(wid, "one", cid, {"text": "How I wedge:\n1. Cut the clay in half\n2. Slam the halves together\n3. Press and rotate", "model": cloud.model, "timeZone": "Asia/Hong_Kong"})
-check("how-to with supplied steps: drafted", run["status"] == "completed" and len(cloud.requests) == calls + 1, run["status"])
+check("how-to with supplied steps: drafted without a reminder", run["status"] == "completed" and len(cloud.requests) == calls + 2 and not any(e.get("message", "").startswith("Reminder: a how-to") for e in run["events"]), run["status"])
 
 # 6. Withdrawing consent stops sharing on the next turn.
 act("memory_egress", {"cloud": False, "confirmed": True})

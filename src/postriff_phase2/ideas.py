@@ -327,16 +327,8 @@ class IdeasService:
             idea = text or state.get("brief", {}).get("idea", "")
             selection = ((state.get("contentSystem") or {}).get("selection") or {})
             content_type_id = selection.get("contentTypeId")
-            # A how-to with nothing approved to teach is asked for, not written: no model request, no charge.
-            needs = content_types.missing_tutorial_input(content_types.selected_rule_ids(state), idea, context)
-            if needs:
-                message = f"PostRiff did not draft. It needs: {needs}. Nothing was applied."
-                cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'failed',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning if reasoning in ("quick", "standard", "deep") else "quick", digest(context), context["policyEpoch"], key))
-                run_id = cur.fetchone()[0]
-                self._insert_event(cur, workspace_id, run_id, safe_event("run.started", model=model_id, reasoning="quick", contextDigest=digest(context)))
-                self._insert_event(cur, workspace_id, run_id, safe_event("run.failed", message=message))
-                self._settle_message(cur, workspace_id, conversation_id, run_id, {"text": message, "runId": run_id, "failed": True, "intent": parsed["intent"], "destinations": destinations, "plan": None, "model": model_id})
-                return self._events_for(cur, workspace_id, run_id, 0)
+            # A how-to that names no steps still drafts; the person gets a reminder next to it, never a block.
+            reminders = [content_types.TUTORIAL_REMINDER] if content_types.missing_tutorial_input(content_types.selected_rule_ids(state), idea, context) else []
             # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
             # Memory files follow the route: a cloud route reads them only with the workspace's consent (memory.projection).
             shared = memory.projection(state, provider_class)
@@ -361,7 +353,7 @@ class IdeasService:
             # Context notes (unsupported channels, assumed times, the proposed plan) follow run.started
             # so the stream keeps its shape: run.started first, run.completed last.
             context_events = [safe_event("warning.created", message=f"{platform} is not available for drafting yet, so it was left out.") for platform in parsed["unsupported"]]
-            context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"] + self._memory_notes(shared)]
+            context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"] + self._memory_notes(shared) + reminders]
             if researched:
                 context_events.append(safe_event("progress.updated", stage="researched", percent=8, pages=len(researched["pages"]), query=researched["query"]))
                 context_events += [safe_event("warning.created", message=note) for note in researched.get("warnings", [])]
