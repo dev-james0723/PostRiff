@@ -103,6 +103,8 @@ export interface SnapshotVariant {
   blockedByRetraction: boolean;
   contentTypeId?: string;
   customized?: boolean;
+  /** Which Ideas run produced this variant (set by `apply`). */
+  provenance?: { runId?: string; contextDigest?: string; policyEpoch?: number; model?: string };
   /** A regenerated version (for example after a voice change) waiting to be accepted. */
   proposedUpdate?: {
     text: string;
@@ -111,6 +113,7 @@ export interface SnapshotVariant {
     baseVariantRevision: number;
     unknowns: string[];
     warnings: string[];
+    runId?: string;
   } | null;
 }
 
@@ -155,9 +158,19 @@ export interface Speaker {
 
 export type BrandMode = 'personal' | 'niche' | 'business' | 'hybrid';
 
+/** Workspace content-type system projection (`content_types.projection`). Only the parts pages read. */
+export interface ContentTypesView {
+  catalogVersion: string;
+  catalog: { id: string; version: string; label: string; description: string; recommendedFormatIds: string[]; preflightRuleIds: string[]; status: string }[];
+  selection: { contentTypeId: string; contentTypeVersion: string; formatId: string | null };
+  installedPacks: { id: string; version: string }[];
+  packs: { id: string; version: string; label: string; entryCount: number; installedByDefault: boolean }[];
+}
+
 export interface SnapshotState {
   workspace?: { id: string; name?: string; sample?: boolean };
   session?: { completed?: boolean; step?: number };
+  contentTypes?: ContentTypesView;
   speaker?: Speaker;
   brandHub?: { mode?: BrandMode | ''; purpose?: string; audience?: string; subject?: string; speaker?: string; layers?: string[] };
   phase2?: Phase2State;
@@ -193,6 +206,9 @@ export interface SafeEvent {
   stage?: string;
   percent?: number;
   variants?: number;
+  /** `action.proposed`: which proposal (for example `schedule_plan`) and its time zone. */
+  action?: string;
+  timeZone?: string;
 }
 
 export interface RunVariant {
@@ -205,12 +221,29 @@ export interface RunVariant {
   candidateOnly?: boolean;
 }
 
+/** Candidate schedule proposed by the agent from channels and times named in the message (design §4.4). */
+export interface SchedulePlanDestination {
+  platform: string;
+  language: string;
+  localTime: string | null;
+  assumed: boolean;
+}
+
+export interface SchedulePlan {
+  kind: 'schedule';
+  intent: string;
+  timeZone: string;
+  destinations: SchedulePlanDestination[];
+  unsupported: string[];
+  warnings: string[];
+}
+
 export interface Run {
   runId: string;
   conversationId: string;
   status: string;
   artifactHash: string | null;
-  artifact: { variants: RunVariant[] } | null;
+  artifact: { variants: RunVariant[]; plan?: SchedulePlan | null } | null;
   usage: Record<string, unknown>;
   model: string;
   reasoning: string;
@@ -235,9 +268,53 @@ export interface Message {
   at: number;
 }
 
+export interface ModelOption {
+  id: string;
+  label: string;
+  qualified: boolean;
+  detail: string;
+  /** Which runtime writes with it: undefined/`fixture` = PostRiff, `claude-code` = the local CLI. */
+  route?: string;
+  costClass?: 'none' | 'subscription' | 'paid' | string;
+}
+
+/** A CLI agent the API host can drive (agent chat design §4.2). Never carries the account's email. */
+export interface AgentInfo {
+  id: string;
+  name: string;
+  vendor?: string;
+  installed: boolean;
+  version: string | null;
+  authStatus: 'ok' | 'missing' | 'unknown' | string;
+  authMethod?: string | null;
+  models: string[];
+  modelsSource?: string;
+  guidance?: string | null;
+  host?: string;
+  execution?: {
+    budgetUsd: number;
+    timeoutSeconds: number;
+    tools: string;
+    mcp: string;
+    settingSources: string;
+    sessionPersistence: boolean;
+    environment: string[];
+  };
+}
+
 export interface ModelCatalog {
-  models: { id: string; label: string; qualified: boolean; detail: string }[];
+  models: ModelOption[];
   reasoning: { id: string; available: boolean; detail: string }[];
+  agents?: AgentInfo[];
+}
+
+/** One of the Markdown memory files rendered by the API (`GET /memory`). */
+export interface MemoryFile {
+  name: string;
+  purpose: string;
+  source: string;
+  body: string;
+  editHref: string | null;
 }
 
 /* ---------- channels ---------- */

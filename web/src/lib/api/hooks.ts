@@ -20,6 +20,7 @@ export const keys = {
   dataRequests: (w: string) => ['data-requests', w] as const,
   conversations: (w: string) => ['conversations', w] as const,
   messages: (w: string, id: string) => ['messages', w, id] as const,
+  memory: (w: string) => ['memory', w] as const,
   sessions: ['sessions'] as const,
   models: ['models'] as const,
   privacyNotice: ['privacy-notice'] as const
@@ -97,6 +98,12 @@ export function useSessions() {
 export function useModels() {
   const { api } = useWorkspace();
   return useQuery({ queryKey: keys.models, queryFn: () => api.models(), staleTime: 10 * 60_000 });
+}
+
+/** The Markdown memory files the agent reads before every draft, rendered by the API. */
+export function useMemory() {
+  const { api, w, enabled } = useScoped();
+  return useQuery({ queryKey: keys.memory(w), queryFn: () => api.memory(w), enabled });
 }
 
 export function usePrivacyNotice() {

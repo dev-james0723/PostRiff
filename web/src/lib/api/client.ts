@@ -18,6 +18,7 @@ import type {
   InvitationCreated,
   Member,
   Membership,
+  MemoryFile,
   Message,
   ModelCatalog,
   OAuthComplete,
@@ -111,6 +112,7 @@ export function createApi(getToken: TokenSource) {
     media: (w: string, assetId: string) => blob(`${ws(w)}/media/${encodeURIComponent(assetId)}`),
     exportDrafts: (w: string) => blob(`${ws(w)}/export`),
     exportProfile: (w: string) => blob(`${ws(w)}/profile-export`),
+    memory: (w: string) => get<{ files: MemoryFile[] }>(`${ws(w)}/memory`),
     deleteAccount: (w: string, confirmation: string) =>
       send<{ deleted: boolean }>('DELETE', `${ws(w)}/account`, { confirmation }),
 

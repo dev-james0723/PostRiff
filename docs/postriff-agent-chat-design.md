@@ -326,8 +326,10 @@ value 係 ordered skill ids。Content types 已經有 `skillRouteIds`（例如 `
   `--add-dir` 掛上；SKILL.md 全文 compose 入 system prompt（跟 `studio_codex.py` `BINDING_FILES` 做法），references 留喺 folder 俾 agentic run 自己讀。
 - **Route B/C**：淨係 compose 入 prompt（冇 filesystem）。
 - 每個 run 記 `skillBindings[{id, version, sha256}]`（`studio_agent.py` 已有呢個 field）；UI 嘅 activity strip 顯示「Skills · content-craft, channel-instagram…」。
-- Skills 來源：Phase 1 用 repo `skills/` + `~/.claude/skills/james-au-*` 嘅 portable packages（`runtime/` 隨包）；
-  Phase 3 先做 workspace-level skill upload / marketplace。
+- **只帶指令，唔帶 runtime**：原 `james-au-*` 每個 package 夾住一份 248 KB 嘅 `runtime/src/james_au_social/`（33 條 channel 各夾一份 ≈ 8 MB 重複 Python）。`postriff-*` 唔抄——`runtime/` 從來唔入 prompt，而 hosted adapter 邏輯已經喺 `src/postriff_phase2/`（`channels.py`、`contracts.py`、`store.py`、`tools.py`、`intent.py`、`source_policy.py`）。每個 package 尾嘅「PostRiff runtime binding」明寫：得指令、冇 Python、冇 credential、冇 transport，host 冇提供就報 `runtime_dependency_missing`。Copy 量由約 8 MB 跌到約 200 KB。
+- Skills 來源：Phase 1 用 repo `skills/postriff-*`；Phase 3 先做 workspace-level skill upload / marketplace。
+- **Voice contract 本身就係一個 skill**：`skills/postriff-content-engine/SKILL.md`（790 行）。放喺 `skills/` 而唔係 `docs/`，係因為 `vercel.json` 嘅 API function bundle 排除咗 `docs/**`——Phase 2 route B/C 要 server 端 compose 嗰陣，喺 `docs/` 就攞唔到。
+- **未接線**：`studio_codex.py` `BINDING_FILES`（第 34–46 行）仲係指住 `skills/james-au-*` 同 `docs/james-au-social-content-engine.md`。切過去會令 `skillBindings` 嘅 sha256 全部變，要同時決定舊 approval receipt 點處理（同 §5.2 `voiceRevision` 令舊 approval stale 係同一個道理）。
 
 ---
 
@@ -355,7 +357,27 @@ value 係 ordered skill ids。Content types 已經有 `skillRouteIds`（例如 `
 - Target chips 來自 `useChannels()`：連接咗嘅 channel 先顯示；每粒帶 capability dot（Direct 綠 / Assisted 琥珀 / Local 藍）。
 - Model pill = `/api/ideas/models` 合併結果；Local CLI 項目顯示 CLI 名 + 綠點（auth ok）。
 - Context bar：Voice（speaker revision）、Memory（files 數 + 最後更新）、Sources（已選 sources）。
-- Quick starts = `content_types.py` CREATOR_TYPES 揀 4 個；Recent = `useConversations()`。
+- Quick starts = 11 個 general-audience 模板（§8.1a），每個綁 `content_types.py` 一個 creator type；Recent = `useConversations()`。
+
+#### 8.1a Quick Starts 模板（普羅大眾版，`web/src/config/quick-starts.ts`）
+
+原則：文案要令設計師、老師、小店老闆、工程師都 relate 到；James 自己嘅 project / 品牌 / 練琴例子只可以留喺佢個 workspace 嘅 memory 同 voice 檔，唔可以做產品文案。每個模板 = 一個 content type（揀模板即 `p2_content_install_pack` + `p2_content_select`，preflight rules 跟住嚟）。
+
+| # | 模板 | Content type | Footnote（解釋） | Example prompt（用戶改括號） | 常見呈現 |
+|---|---|---|---|---|---|
+| 1 | Quick thought | `quick_thought_quote` | 一個觀察、矛盾或問題，用自己嘅話講一次。唔使鋪排、唔使列點、唔使結論。 | “One thing I keep noticing: the tasks I put off are never the hard ones, they are the ones with no obvious first step…” | Threads / X / Bluesky 純文字；IG / 小紅書 quote card |
+| 2 | Personal reflection | `personal_reflection` | 一個真實嘅片段同佢帶起嘅感覺。唔一定要有教訓，一個準確嘅觀察已經夠。 | “This morning I finally did the thing I had been avoiding for a month, and it took twenty minutes…” | 相片＋caption、純文字、日記式筆記、短片旁白 |
+| 3 | News + my view | `article_news_commentary` | 發生咗乜、對你嘅讀者有乜影響、你點睇或者仲未諗通乜。來源同觀點分開。 | “I read this today: [link or key points]. First say what happened in two lines. Then my take…” | quick take / thread、LinkedIn 長文、carousel、Facebook link post |
+| 4 | Deep point of view | `deep_point_of_view` | 一個守得住嘅立場：主張、理由同證據、最強嘅反對意見同你嘅回應。 | “My position: [one clear claim]. My reasons: … The best argument against it: … Write this as a longer piece.” | 長文 / article、newsletter、知乎 / note / Naver、video essay |
+| 5 | Building in public | `building_in_public` | 進度、決定、死胡同同代價。有數字就講數字，草稿唔好扮 launch。 | “This week on [what you are building]: what I tried, what broke, the decision I made and why, what comes next.” | screenshot＋說明、build log、carousel、demo clip |
+| 6 | How-to | `tutorial_how_to` | 一個你真係用過嘅方法，分步驟：開始前要乜、步驟、最易錯嘅一步。 | “Step by step, how I [do one specific task] using [a tool or method]…” | 小紅書步驟筆記、IG carousel、LinkedIn document、短教學片 |
+| 7 | Launch | `product_feature_launch` | 點解做、俾邊個、今日有乜（未有乜）、點試。一次 launch 拆成幾個唔同任務嘅 post。 | “We just released [product, feature, service or offer]. Why we built it, who it is for, what is included right now…” | 公告、demo clip、幕後決定、入門教學、回應 feedback |
+| 8 | Practice & performance | `music_performance_teaching` | 今日練習 / session / 課堂嘅一件事：練緊乜、乜嘢變咗、乜嘢仲難。任何 craft 都適用。 | “From today’s [practice, session, rehearsal or class]: what I was working on, the one thing that changed…” | performance / process clip、studio 相＋caption、短課、長片、隨筆 |
+| 9 | Video extension | `youtube_derivative` | 一條長片變幾個原生入口：核心問題、最好嘅一刻、幕後、後續討論。 | “My latest video is about [topic]. The core question it answers is … The best moment is …” | Community post、Short / Reel、conversation post、Facebook preview |
+| 10 | Answer a question | `community_q_and_a` | 答一個真實問題，或者就某件具體嘢徵求 feedback。講你會點做、邊度唔肯定、邀請更好嘅答案。 | “Someone asked me: [the question]. Answer it plainly, say what I would do and where I am unsure…” | Reddit / 知乎答案、forum reply、Discord / Telegram、poll |
+| 11 | Event or service update | `event_service_institutional_update` | 確定咗嘅日期、地點、offer 或合作，加埋行動所需嘅資料：俾邊個、發生乜、點參加、去邊問。 | “On [date] at [place] we are hosting [the event, class, opening or service]…” | FB / IG / LinkedIn post、Google Business update、社群 broadcast |
+
+Filter groups：Thoughts & moments（1–2）· News & opinion（3–4）· Work & launches（5–7）· Craft & video（8–9）· Community & events（10–11）。
 - Template 元素：`card`、`badge`、`capability-badge`、`textarea`、`dropdown-menu`、`command`（`@` skill mention 用 cmdk）。
 
 ### 8.2 Conversation（artboard 2）
@@ -446,6 +468,53 @@ ALTER pr_agent_runs ADD route, adapter, skill_bindings jsonb, budget_usd_micro
 | **4** | Steering（open stdin）、`<question-form>` 式結構化提問、skills marketplace、BYOK tab | — |
 
 ---
+
+## 11a. Phase 1 實作記錄（2026-09-16，拍板後同日）
+
+拍板後即日落實嘅 slice，全部 additive，未 commit：
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| Router | `src/postriff_phase2/intent.py` | Step ①：channel alias（中英）、時間（`4pm` / `16:00` / `4 點半` / `晏晝 下晝 朝早` / 今日 聽日 後日 / 星期X / 日期）、同一 clause 內配對、日子 carry-over、過咗鐘自動推去聽日並 warn、`publish_now / schedule / research / draft` intent、語言偵測 |
+| Runtime | `agent_runtime.py` | `supported_platforms()`（fixture = LinkedIn / Instagram / Threads） |
+| Turn | `ideas.py` `turn()` / `quick_start()` | message 入面講到嘅 channel 蓋過 composer 選擇；`plan` 掛喺 artifact 同 assistant message；`warning.created`（unsupported / assumed / passed）同 `action.proposed` 緊跟 `run.started` 之後，stream 形狀不變 |
+| Tests | `tests/test_postriff_intent.py`（14）、`tests/phase2/postgres_agent_plan.py`（6 checks） | 全部通過；原有 243 unit + `postgres_ideas.py` 8 checks 無回歸 |
+| Web | `web/src/features/agent/*`（composer、activity-strip、variant-card、plan-card、plan.ts、use-run、home-view、conversation-view） | `/app` = Home；`/app/agent/[id]` = conversation；plan card approve = `applyRun → accept_update? → p2_variant_review → p2_review ×N → p2_approve_many` |
+| Web | `features/memory/memory-view.tsx`、`/app/workspace/memory` | Phase 1 read-only：五個檔由 speaker / brandHub / profile 生成，export package；proposals 留 Phase 3 |
+| Nav | `nav-config.ts`、`use-breadcrumbs.tsx`、`/app/overview` | Home 行先，Overview 搬去 `/app/overview`，Workspace 加 Memory |
+
+**E2E（dev harness，disposable Postgres）**：一句「今日晏晝 4 點 post 去 Instagram、今日下晝 5 點 post 去 LinkedIn、聽日晏晝 3 點半 post 去 Facebook」→ 偵測 schedule、2 destinations、Facebook 剔出並解釋 → plan card 顯示每行 blocker（未接 account / 未設 voice / IG 要圖）→ 裝 voice + 接 LinkedIn 後，一撳「Review & approve all 1」→ Queue 出現 `scheduled` LinkedIn job（Sep 16 5:00 PM）。全程冇任何 publish 路徑。
+
+**同 §11 Phase 1 嘅差異**
+- Onboarding chat 未做：voice setup 已由 Brand 頁（`voice-setup.tsx`，另一 session 同日完成）承擔，Home 同 plan card 都指向佢。Chat-first interview 留待 Phase 2 前。
+- Memory 係 read-only render（無 migration 009、無 proposals），因為 fixture runtime 冇嘢可以 propose。
+- Intent chips 只切換 placeholder / 預設 channel，fixture runtime 唔會因 chip 改變輸出。
+- Ideas 頁保留（另一 session 仍在改），未併入 Home。
+- 已知限制：fixture 嘅 fact extraction 對中文 source 抽唔到 facts（`no_approved_facts`），所以中文 quick start 只出 outline；真 model route 先解決。
+
+## 11b. Phase 2 實作記錄（2026-09-16，同日）
+
+Phase 2 嘅第一個 slice：**Claude Code 變成一條真正嘅寫稿 route**——先喺「serve API 嗰部機」上直接 spawn（本地 harness / James 自己部 Mac），adapter 同 completion 合約已經係將來 desktop companion 用嘅同一套；companion transport（pairing、claim、device events）留 Phase 2b。
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| Runtime | `src/postriff_phase2/cli_runtime.py` | `ClaudeCliRuntime`：`detect()`（`--version`、`claude auth status --json`，唔存 email）、model aliases（`claude-code:default/fable/opus/sonnet/haiku`）、content-only argv（`-p --output-format stream-json --include-partial-messages --tools "" --setting-sources "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --no-session-persistence --permission-mode dontAsk --max-budget-usd --json-schema --system-prompt`）、restricted env（`HOME PATH LANG USER TMPDIR` 而已，冇 API key、冇 nested-session marker）、stream 解析（`system/api_retry` → warning、`stream_event` text delta → `message.delta` 合併、`result.structured_output` → artifact）、`normalize_output` fail-closed（缺 destination 即失敗、超字數只 warn 唔 truncate、sourceIds 過濾）、timeout 用 reader thread、cancel 即 terminate、401 → 「run `claude auth login`」guidance |
+| Runtime 合約 | `agent_runtime.py` | `provider / cost_class / asynchronous / owns() / describe() / dispatch()` |
+| Ideas | `ideas.py` | runtime registry + `model_catalog()`（models + agents）；`turn()` 揀 route；async route：即刻回 `running`、寫 pending assistant message、`RunSink` 用獨立 transaction 完成 / 失敗 / 取消；`_finish` 統一 settle（subscription route PostRiff $0，CLI 報嘅 cost 記喺 usage）；event 寫入用 workspace `FOR KEY SHARE` + per-run advisory lock 嘅固定次序（sink 同 cancel 唔會 deadlock）；`project_context` 用 runtime 嘅 `provider_class`（另一 session 嘅 cloud runtime 要） |
+| Memory | `memory.py` + `GET /api/workspaces/{w}/memory` | server-side render AGENT / IDENTITY / VOICE / BOUNDARIES / BRAND；Memory 頁同 CLI prompt 用同一份 |
+| API | `hosted_app.py` | `/api/ideas/models` 出 `models + reasoning + agents`；memory route |
+| Web | `features/agent/{use-model,model-picker}.tsx`、composer、home / conversation | model picker（PostRiff / Local CLI 分組，localStorage 記住）；quick start 同 turn 傳 `model`；conversation 見 pending run 即 poll，顯示「Claude Code is writing…」+ streaming text + Cancel；完成後 invalidate messages / snapshot |
+| Web | `features/account/models-view.tsx`、`/app/account/models` | Models & providers：agent card（version、Signed in / Sign-in required、aliases、execution settings、env）、PostRiff routes、billing 說明、current default |
+| Tests | `tests/test_postriff_cli_runtime.py`（13，用 fake `claude`）、`tests/phase2/postgres_cli_route.py`（10 checks） | 全過；unit 256、PG 三套無回歸 |
+
+**E2E（dev harness）**
+- Fake `claude`（`POSTRIFF_CLAUDE_BIN`）：Home 揀 `Claude Code · sonnet` → 送出 → conversation 顯示 streaming → 5 秒完成 → variant 帶「Written by Claude Code」warning → plan card → Models 頁見 agent card。
+- 真 `claude`（James 部 Mac）：`claude auth status` 話 loggedIn，但 `-p` run 回 401「OAuth access token has expired」→ UI 顯示「Claude Code is not signed in… Run `claude auth login`」。**要 James 喺 Terminal 跑一次 `claude auth login` 先有真 run。**
+
+**同 §11 Phase 2 嘅差異**
+- Companion transport（CLI probe 上報、claim、device events、memory sync 到 `~/PostRiff/<ws>/memory/`）未做——而家 CLI 喺 API process 內 spawn；hosted（Vercel）冇 CLI 所以自動唔列出呢條 route。
+- Reasoning effort 未 map 到 CLI；skills 未 mount（Phase 3）。
+- Codex route 未做（adapter 合約已經支援，加多一個 def 即可）。
 
 ## 12. 要你答嘅問題
 

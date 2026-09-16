@@ -93,9 +93,9 @@ class ResolveAndPlanTest(unittest.TestCase):
         parsed = intent.parse_request("Facebook tomorrow 3pm", at("2026-09-16T10:00"), HK, SUPPORTED)
         rows = intent.resolve_destinations(parsed, [{"platform": "Threads", "language": "English"}], "English", self.default)
         self.assertEqual(rows, [{"platform": "Threads", "language": "English"}])
-        plan = intent.build_plan(parsed, rows)
-        self.assertEqual(plan["destinations"], [{"platform": "Threads", "language": "English", "localTime": None, "assumed": False}] if False else plan["destinations"])
-        self.assertEqual(plan["unsupported"], ["Facebook"])
+        # The time belonged to Facebook, so it does not silently move to Threads: no plan, one warning surface.
+        self.assertIsNone(intent.build_plan(parsed, rows))
+        self.assertEqual(parsed["unsupported"], ["Facebook"])
 
     def test_unattached_time_applies_to_every_destination(self):
         parsed = intent.parse_request("Post this at 16:00 today.", at("2026-09-16T10:00"), HK, SUPPORTED)

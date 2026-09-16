@@ -41,6 +41,9 @@ def translate(native):
 
 class AgentRuntime:
     """Stable interface. Concrete runtimes must not expose prompts, keys, or paths."""
+    provider = "fixture"          # ledger provider label
+    cost_class = "none"           # none | subscription | paid — what PostRiff itself pays
+    asynchronous = False          # True: `dispatch(run_id, request, sink)` finishes the run later
     def start_conversation(self, workspace_id, actor): raise NotImplementedError
     def resume_conversation(self, conversation): raise NotImplementedError
     def start_turn(self, request, emit): raise NotImplementedError
@@ -48,6 +51,10 @@ class AgentRuntime:
     def stream_safe_events(self, events, cursor): return [e for e in events if e["seq"] > cursor]
     def list_supported_models(self): raise NotImplementedError
     def list_supported_reasoning(self): raise NotImplementedError
+    def supported_platforms(self): return ()  # platforms this runtime can draft for; () = unknown, no filtering
+    def owns(self, model_id): return any(m["id"] == model_id and m.get("qualified") for m in self.list_supported_models())
+    def describe(self): return None           # CLI/device runtimes describe the agent they drive
+    def dispatch(self, run_id, request, sink): raise NotImplementedError
 
 
 class FixtureAgentRuntime(AgentRuntime):
@@ -75,6 +82,9 @@ class FixtureAgentRuntime(AgentRuntime):
 
     def cancel_run(self, run):
         return {"status": "completed" if run.get("status") == "completed" else "cancelled"}
+
+    def supported_platforms(self):
+        return tuple(dict.fromkeys(platform for platform, _ in DESTINATIONS))
 
     def start_turn(self, request, emit):
         context = request["context"]

@@ -12,8 +12,15 @@ export const navGroups: NavGroup[] = [
     label: 'Create',
     items: [
       {
-        title: 'Overview',
+        title: 'Home',
         url: '/app',
+        icon: 'sparkles',
+        shortcut: ['h', 'h'],
+        items: []
+      },
+      {
+        title: 'Overview',
+        url: '/app/overview',
         icon: 'dashboard',
         shortcut: ['o', 'o'],
         items: []
@@ -119,6 +126,13 @@ export const navGroups: NavGroup[] = [
         icon: 'palette',
         items: [],
         access: { permission: 'edit' }
+      },
+      {
+        title: 'Memory',
+        url: '/app/workspace/memory',
+        icon: 'page',
+        items: [],
+        access: { permission: 'edit' }
       }
     ]
   },
@@ -150,6 +164,13 @@ export const navGroups: NavGroup[] = [
         url: '/app/account/privacy',
         icon: 'shieldCheck',
         items: []
+      },
+      {
+        title: 'Models & providers',
+        url: '/app/account/models',
+        icon: 'adjustments',
+        items: [],
+        access: { permission: 'edit' }
       },
       {
         title: 'API & integrations',

@@ -9,7 +9,11 @@ type BreadcrumbItem = {
 };
 
 const TITLES: Record<string, string> = {
-  app: 'Overview',
+  app: 'Home',
+  overview: 'Overview',
+  agent: 'Chat',
+  memory: 'Memory',
+  models: 'Models & providers',
   ideas: 'Ideas',
   calendar: 'Calendar',
   pipeline: 'Pipeline',
@@ -45,10 +49,9 @@ export function useBreadcrumbs() {
     const segments = pathname.split('/').filter(Boolean);
     return segments.map((segment, index) => {
       const path = `/${segments.slice(0, index + 1).join('/')}`;
-      return {
-        title: TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1),
-        link: GROUP_LANDING[path] ?? path
-      };
+      // Record identifiers (e.g. /app/agent/<conversationId>) read as their kind, never as the raw id.
+      const title = segments[index - 1] === 'agent' ? 'Conversation' : (TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1));
+      return { title, link: GROUP_LANDING[path] ?? path };
     });
   }, [pathname]);
 }

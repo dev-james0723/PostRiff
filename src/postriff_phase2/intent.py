@@ -63,7 +63,7 @@ _TIME = re.compile(
 )
 _PERIOD_PM = re.compile(r"晏晝|晏昼|下晝|下昼|下午|午後|午后|夜晚|晚上|傍晚|夜|tonight|evening|afternoon|night", re.I)
 _PERIOD_AM = re.compile(r"朝早|上晝|上昼|早上|早晨|上午|凌晨|morning", re.I)
-_PUBLISH_NOW = re.compile(r"(?:post|publish|send|出|發|发)[^。\n]{0,12}(?:right now|\bnow\b|即刻|而家|立即|馬上|马上)|(?:right now|\bnow\b|即刻|而家|立即|馬上|马上)[^。\n]{0,12}(?:post|publish|send|出|發|发)", re.I)
+_PUBLISH_NOW = re.compile(r"(?:post|publish|send|出|發|发)[^。\n]{0,24}(?:right now|\bnow\b|即刻|而家|立即|馬上|马上)|(?:right now|\bnow\b|即刻|而家|立即|馬上|马上)[^。\n]{0,24}(?:post|publish|send|出|發|发)", re.I)
 _RESEARCH = re.compile(r"\bresearch\b|調研|调研|搵(?:下|吓|一下)?(?:資料|资料|素材|例子)|查(?:下|吓|一下)|look up|find sources|搜(?:集|索)|素材", re.I)
 _ZH_WEEKDAYS = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
 _EN_WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
