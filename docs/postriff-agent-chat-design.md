@@ -569,6 +569,7 @@ Phase 2 嘅第一個 slice：**Claude Code 變成一條真正嘅寫稿 route**�
 **E2E（dev harness）**
 - Fake `claude`（`POSTRIFF_CLAUDE_BIN`）：Home 揀 `Claude Code · sonnet` → 送出 → conversation 顯示 streaming → 5 秒完成 → variant 帶「Written by Claude Code」warning → plan card → Models 頁見 agent card。
 - 真 `claude`（James 部 Mac）：`claude auth status` 話 loggedIn，但 `-p` run 回 401「OAuth access token has expired」→ UI 顯示「Claude Code is not signed in… Run `claude auth login`」。**要 James 喺 Terminal 跑一次 `claude auth login` 先有真 run。**
+- `claude auth status` 有存過 credentials 就話 loggedIn，過期 token 都係咁講；所以（Phase 3 後補）run 一次被拒 401 之後，runtime 會將 probe 標成 `expired`，picker 同 Models 頁即刻轉「Sign-in required」，直至 rescan 或者下一次成功 run。Codex route 同一機制（`codex login`）。
 
 **同 §11 Phase 2 嘅差異**
 - Companion transport（CLI probe 上報、claim、device events、memory sync 到 `~/PostRiff/<ws>/memory/`）未做——而家 CLI 喺 API process 內 spawn；hosted（Vercel）冇 CLI 所以自動唔列出呢條 route。

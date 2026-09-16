@@ -31,6 +31,9 @@ prompt = sys.stdin.read()
 def out(obj): print(json.dumps(obj), flush=True)
 out({"type": "thread.started", "thread_id": "t1"})
 out({"type": "turn.started"})
+if mode == "auth":
+    out({"type": "error", "message": "Unauthorized: not logged in. Run codex login."})
+    out({"type": "turn.failed", "error": {"message": "unauthorized"}}); raise SystemExit(1)
 if mode == "usage":
     out({"type": "item.completed", "item": {"id": "item_0", "type": "error", "message": "You've hit your usage limit."}})
     out({"type": "error", "message": "You've hit your usage limit."})
@@ -131,6 +134,16 @@ class CodexCliRuntimeTest(unittest.TestCase):
         self.assertIn("usage limit", sink.failed)
         self.assertEqual(classify_failure("Not logged in")[0], "auth")
         self.assertEqual(classify_failure("boom")[0], "failed")
+
+    def test_a_refused_run_flips_readiness_until_a_rescan(self):
+        runtime = self.runtime(mode="auth")
+        self.assertEqual(runtime.detect()["authStatus"], "ok")
+        sink = self.run_to_end(runtime)
+        self.assertIn("codex login", sink.failed)
+        self.assertEqual(runtime.detect()["authStatus"], "expired")
+        self.assertIn("codex login", runtime.detect()["guidance"])
+        self.assertFalse(runtime.list_supported_models()[0]["qualified"])
+        self.assertEqual(runtime.detect(force=True)["authStatus"], "ok")
 
     def test_prose_instead_of_schema_fails_closed(self):
         self.assertIn("no structured candidate", self.run_to_end(self.runtime(mode="prose")).failed)

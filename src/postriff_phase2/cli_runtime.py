@@ -136,6 +136,9 @@ class ClaudeCliRuntime(AgentRuntime):
         self.env = env
         self._probe = None
         self._probe_at = 0.0
+        # `claude auth status` reports loggedIn whenever credentials are stored, even an expired OAuth
+        # token; only a run reveals the 401. The first refused run flips readiness until a rescan.
+        self._auth_failed = False
 
     @classmethod
     def available(cls):
@@ -169,8 +172,29 @@ class ClaudeCliRuntime(AgentRuntime):
                 info["guidance"] = "Run `claude auth login` in Terminal on this machine, then rescan."
         else:
             info["guidance"] = "Install Claude Code on the machine that serves the API, sign in with `claude auth login`, then rescan."
+        self._apply_auth_state(info, force)
         self._probe, self._probe_at = info, self.clock()
         return info
+
+    LOGIN_COMMAND = "claude auth login"
+
+    def _apply_auth_state(self, info, force):
+        """A stored sign-in the CLI itself refused counts as expired until someone rescans."""
+        if force:
+            self._auth_failed = False
+        if self._auth_failed and info["authStatus"] == "ok":
+            info["authStatus"] = "expired"
+            info["guidance"] = f"{info['name']}'s saved sign-in was refused on the last run (401). Run `{self.LOGIN_COMMAND}` in Terminal on this machine, then rescan."
+
+    def _note_auth_failure(self):
+        self._auth_failed = True
+        if self._probe:
+            self._apply_auth_state(self._probe, False)
+
+    def _note_auth_ok(self):
+        if self._auth_failed:
+            self._auth_failed = False
+            self._probe = None
 
     def execution_settings(self):
         return {"budgetUsd": self.budget_usd, "timeoutSeconds": self.timeout_seconds, "tools": "none", "mcp": "none", "settingSources": "none", "sessionPersistence": False, "environment": list(SAFE_ENV_KEYS)}
@@ -251,9 +275,13 @@ class ClaudeCliRuntime(AgentRuntime):
         try:
             self._execute(run_id, request, sink)
         except AlphaError as error:
+            if error.status == 401:
+                self._note_auth_failure()
             sink.fail(str(error))
         except Exception:  # noqa: BLE001 - the sink must always learn the run ended; details stay off the wire
             sink.fail("Claude Code did not complete the request. No draft was changed and nothing was retried.")
+        else:
+            self._note_auth_ok()
 
     def _execute(self, run_id, request, sink):
         executable = self.executable()

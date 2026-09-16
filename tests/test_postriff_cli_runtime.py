@@ -181,6 +181,21 @@ class ClaudeCliRuntimeTest(unittest.TestCase):
     def test_auth_failure_is_classified_with_guidance(self):
         sink = self.run_to_end(self.runtime(mode="auth"))
         self.assertIn("claude auth login", sink.failed)
+
+    def test_a_refused_run_flips_readiness_until_a_rescan_or_a_good_run(self):
+        runtime = self.runtime(mode="auth")
+        self.assertEqual(runtime.detect()["authStatus"], "ok", "auth status alone cannot see an expired token")
+        self.run_to_end(runtime)
+        probe = runtime.detect()
+        self.assertEqual(probe["authStatus"], "expired")
+        self.assertIn("claude auth login", probe["guidance"])
+        self.assertFalse(runtime.list_supported_models()[0]["qualified"])
+        self.assertEqual(runtime.detect(force=True)["authStatus"], "ok", "a rescan gives the stored sign-in another chance")
+        self.run_to_end(runtime)
+        self.assertEqual(runtime.detect()["authStatus"], "expired")
+        runtime.env["FAKE_MODE"] = "ok"
+        self.run_to_end(runtime)
+        self.assertEqual(runtime.detect()["authStatus"], "ok", "a completed run clears the flag")
         self.assertEqual(classify_failure("budget exceeded")[0], "budget")
         self.assertEqual(classify_failure("something else")[0], "failed")
 
