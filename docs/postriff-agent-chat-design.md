@@ -585,7 +585,10 @@ Phase 2 嘅第一個 slice：**Claude Code 變成一條真正嘅寫稿 route**�
 - 唔搵嘅情況：第一身 idea（I / my / 我…）、已有 approved facts、quick start 用自己文字、turn 帶 `research: false`、揀咗要 `tested_steps` 嘅 how-to 類型（承諾係自己試過嘅方法，網上 general steps 唔算；貼 URL 或者明講 research 先會搵）。
 - CLI routes 而家都會 emit `source.added`（之前只有 fixture / cloud route 有，所以 activity strip 見「0 approved sources」）。
 - Prompt：sources 可以係 PostRiff 為呢個 turn 抓嘅網頁，引用 source id；facts 只覆蓋一部分都要寫（寫到嘅寫，其餘入 unknowns），淨係完全冇料先拒絕。
-- 未做：agent-reach 嘅其他平台（小紅書 / Twitter / B 站 / YouTube 字幕）、hosted 嘅 egress consent UI（而家 hosted 預設開，`POSTRIFF_RESEARCH=0` 可關）、research 搬入 run pipeline 做 background（而家同步，最多 30 秒）。
+- Consent（同日後補，`3adf0e2`）：hosted（`VERCEL=1` 或 `POSTRIFF_HOSTED=1`）預設**關**，workspace owner 喺 Memory → Web research 開咗（action `research_egress {web, confirmed}`，owner-only，audit `research.egress_decided`）先會搵；關住嗰陣 draft 照出，加一句 reminder。自己部機（local API）永遠開。`GET /memory` 多咗 `research` summary 畀個掣用；/privacy 已列 Exa 同 Jina Reader 做 subprocessor。`POSTRIFF_RESEARCH=0` 係全域 kill switch。
+- Retry：Exa 試 3 次、讀頁試 2 次（30 秒預算內）；search 完全失敗都唔會令 turn 死，model 會用 James 嘅立場同問題寫（冇具體 claim，全部入 unknowns），唔會拒絕。
+- **開發環境注意**：用 desktop app 嘅 Run 掣（launch.json）起 API，process 係喺 app 嘅 sandbox helper 下面跑，對外連線會被拒（research 一定失敗，只見「Web search was unavailable」）。喺 Terminal 直接跑 `scripts/postriff_dev_hosted.py --port 4331` 就正常（Suno v6 實測 118 秒出兩篇）。
+- 未做：agent-reach 嘅其他平台（小紅書 / Twitter / B 站 / YouTube 字幕）、research 搬入 run pipeline 做 background（而家同步，最多 30 秒）、dev harness 每次重啟都會清 DB（要 re-seed）。
 
 **同 §11 Phase 2 嘅差異**
 - Companion transport（CLI probe 上報、claim、device events、memory sync 到 `~/PostRiff/<ws>/memory/`）未做——而家 CLI 喺 API process 內 spawn；hosted（Vercel）冇 CLI 所以自動唔列出呢條 route。
