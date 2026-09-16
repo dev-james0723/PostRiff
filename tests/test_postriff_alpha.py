@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, Store, FAILURES
 from postriff_alpha.generation import FixtureAdapter, SAMPLE_FACTS
 from postriff_alpha.server import make_server
@@ -61,7 +62,19 @@ class Journey:
     def edit(self, index=0, text="A shorter opening.\n\nA useful question to explore."):
         v = self.state["variants"][index]
         self.act("variant_edit", variantId=v["id"], variantRevision=v["revision"], text=text)
-        return self.state["preferences"][-1]
+        return self.state["variants"][index]
+
+    def propose(self, platform="LinkedIn", language="English", **overrides):
+        """Server code proposes a preference (a chat instruction, later extraction from edits); the client only decides."""
+        proposal = {"type": "writing_preference", "ruleKey": "opening.style", "polarity": "do", "scope": {"platform": platform, "language": language},
+                    "statement": "Use shorter openings.", "params": {"shortOpenings": True}, "source": "chat", "variantId": self.state["variants"][0]["id"], **overrides}
+        with self.store.connect() as db:
+            row = db.execute("SELECT revision, state FROM workspaces WHERE id=?", (self.id,)).fetchone()
+            state = json.loads(row["state"])
+            record = learning.propose(state, proposal)
+            db.execute("UPDATE workspaces SET state=?, revision=? WHERE id=?", (json.dumps(state), row["revision"] + 1, self.id))
+        self.snapshot = self.store.get(self.id, self.token)
+        return record
 
 
 class DomainAcceptance(unittest.TestCase):
@@ -182,45 +195,52 @@ class DomainAcceptance(unittest.TestCase):
         self.assertIn("來源原文：“A PRIVATE approved source quotation.”", v["text"])
         self.assertIn("translation needs review", " ".join(v["warnings"]))
 
-    def test_variant_edits_do_not_overwrite_siblings_or_generate_repeated_proposals(self):
+    def test_variant_edits_do_not_overwrite_siblings_or_propose_anything(self):
         j = Journey(self.store).setup().two()
         sibling = copy.deepcopy(j.state["variants"][1])
         j.edit()
         j.edit(text="Another refinement.")
         self.assertEqual(j.state["variants"][1], sibling)
-        self.assertEqual(len(j.state["preferences"]), 1)
-        self.assertEqual(j.state["preferences"][0]["status"], "proposed")
-        with self.assertRaises(AlphaError):
-            j.act("save")
+        self.assertEqual(j.state["preferences"], [], "nothing is proposed from a single edit")
+        self.assertEqual([r["origin"] for r in j.state["variants"][0]["revisions"]], ["fixture", "author-edit", "author-edit"])
+        j.act("save")
+        self.assertTrue(j.state["savedAt"])
 
-    def test_preference_remember_is_scoped_and_undo_and_delete_work(self):
+    def test_preference_remember_is_a_style_revision_and_undo_and_delete_work(self):
         j = Journey(self.store).setup().two()
-        p = j.edit()
+        p = j.propose()
         j.act("preference", preferenceId=p["id"], decision="remember")
-        self.assertEqual(j.state["speaker"]["activeRevision"], 2)
+        self.assertEqual(j.state["speaker"]["activeRevision"], 1, "a learned preference never moves the voice revision")
+        self.assertEqual(j.state["learning"]["revision"], 1)
+        self.assertFalse(any(v["needsReview"] for v in j.state["variants"]))
         j.act("preview_update", variantId=j.state["variants"][0]["id"])
         self.assertTrue(j.state["variants"][0]["proposedUpdate"]["text"].startswith("A small start."))
+        self.assertEqual(j.state["variants"][0]["proposedUpdate"]["styleRevision"], 1)
         j.act("generate", platform="Threads", language="English")
         self.assertFalse(j.state["variants"][-1]["text"].startswith("A small start."))
+        self.assertEqual(j.state["variants"][-1]["styleRevision"], 1)
         j.act("preference", preferenceId=p["id"], decision="undo")
-        self.assertEqual(j.state["speaker"]["revisions"][-1]["profile"]["preferences"], [])
+        self.assertEqual((j.state["learning"]["revision"], learning.active_items(j.state)), (2, []))
+        self.assertEqual(j.state["learning"]["retired"][0]["retiredReason"], "undo")
         j.act("preference", preferenceId=p["id"], decision="delete")
         self.assertEqual(j.state["preferences"][0]["status"], "deleted")
+        self.assertEqual(j.state["speaker"]["activeRevision"], 1)
 
-    def test_post_only_and_rejection_do_not_change_voice(self):
+    def test_post_only_and_rejection_do_not_change_voice_or_learning(self):
         for decision in ("post-only", "reject"):
             with self.subTest(decision=decision):
                 j = Journey(self.store).setup().two()
-                p = j.edit()
+                p = j.propose()
                 j.act("preference", preferenceId=p["id"], decision=decision)
                 self.assertEqual(j.state["speaker"]["activeRevision"], 1)
-                self.assertEqual(j.state["speaker"]["revisions"][0]["profile"]["preferences"], [])
+                self.assertEqual((j.state["learning"]["revision"], learning.active_items(j.state)), (0, []))
                 self.assertEqual(bool(j.state["variants"][0].get("localPreferences")), decision == "post-only")
                 j.act("save")
 
     def test_shared_updates_are_reviewable_candidates_and_stale_candidate_rejected(self):
         j = Journey(self.store).setup().two()
-        p = j.edit(text="An important custom opening.")
+        j.edit(text="An important custom opening.")
+        p = j.propose()
         j.act("preference", preferenceId=p["id"], decision="reject")
         original = j.state["variants"][0]["text"]
         j.act("idea", idea="A different approach to community learning")

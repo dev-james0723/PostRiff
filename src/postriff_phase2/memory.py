@@ -12,10 +12,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError
 
 FILE_ORDER = ("AGENT.md", "IDENTITY.md", "VOICE.md", "BOUNDARIES.md", "BRAND.md")
-PROMPT_FILES = ("VOICE.md", "IDENTITY.md", "BOUNDARIES.md")
+# In this order on purpose: a cloud route caps the joined files at MAX_MEMORY_BYTES from the tail
+# (model_runtime), so a long VOICE.md loses its own tail, never the boundaries.
+PROMPT_FILES = ("BOUNDARIES.md", "IDENTITY.md", "VOICE.md")
 EGRESS_ACTION = "memory_egress"
 # Boundary privacy states (postriff_alpha.profiles.PRIVACY) that may reach a cloud model once the
 # workspace allows it. private, local_only, excluded and unlabelled boundaries never leave.
@@ -53,8 +56,21 @@ def active_profile(state):
 
 
 def boundary_fields(state):
-    fields = [f for f in (((state or {}).get("profile") or {}).get("fields") or []) if isinstance(f, dict)]
-    return [f for f in fields if any(word in f"{f.get('section', '')} {f.get('key', '')} {f.get('id', '')}".lower() for word in ("boundar", "privacy"))]
+    """Boundary answers live on the active voice revision (profiles.profile_finish keeps the approved fields
+    there). A top-level `profile` is read as well, so a state that carries one is not silently ignored."""
+    state = state or {}
+    candidates = (((active_profile(state) or {}).get("profile") or {}).get("fields") or []) + ((state.get("profile") or {}).get("fields") or [])
+    fields, seen = [], set()
+    for f in candidates:
+        if not isinstance(f, dict):
+            continue
+        identity = f.get("id") or f.get("key") or id(f)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if any(word in f"{f.get('section', '')} {f.get('key', '')} {f.get('id', '')}".lower() for word in ("boundar", "privacy")):
+            fields.append(f)
+    return fields
 
 
 def render_files(state, shareable=None):
@@ -78,14 +94,13 @@ def render_files(state, shareable=None):
     ])
 
     if revision:
-        preferences = profile.get("preferences") or []
         voice = "\n".join([
             "# Voice", "",
             f"Revision {revision.get('revision')} · approved {_when(revision.get('approvedAt'))} · {revision.get('reason', '')}".rstrip(" ·"), "",
             f"Tone: {profile.get('tone') or '(not set)'}", "",
             "## Observations", "How to handle what you supply. A trait is never a reason to add a detail, habit or admission you did not supply.",
             *([f"- {item}" for item in profile.get("observations") or []] or ["- (none recorded)"]), "",
-            "## Preferences", *([f"- {p.get('platform')} · {p.get('language')} · {p.get('key')}: {p.get('value')}" for p in preferences] or ["- (none yet; edits kept in the Queue become preferences)"]), "",
+            *learning.render_lines(state), "",
             "## Writing example", ("> " + str(profile.get("writingExample")).replace("\n", "\n> ")) if profile.get("writingExample") else "(none supplied)", "",
             "## Unknowns kept explicit", *([f"- {item}" for item in profile.get("unknowns") or []] or ["- (none)"]),
         ])

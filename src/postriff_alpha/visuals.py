@@ -101,12 +101,7 @@ def apply(store, s, action, p):
             raise ValueError("Choose an existing approved voice revision.")
         store._voice(s, revision["profile"], "Explicit restore of voice revision " + str(revision["revision"]))
         s["profileSetup"]["candidate"] = copy.deepcopy(revision["profile"].get("fields", []))
-        restored_ids = {v["id"] for v in revision["profile"].get("preferences", [])}
-        for preference in s["preferences"]:
-            if preference["id"] in restored_ids:
-                preference["status"] = "remembered"
-            elif preference["status"] == "remembered":
-                preference["status"] = "undone"
+        # Learned preferences keep their own style revision; restoring a voice revision leaves them alone.
         values = {f["key"]: f["value"] for f in revision["profile"].get("fields", [])}
         for key in ("purpose", "audience", "subject", "speaker"):
             if key in values:

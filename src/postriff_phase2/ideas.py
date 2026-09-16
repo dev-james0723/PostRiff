@@ -7,6 +7,7 @@ AgentRuntime against a policy projection only; artifacts are candidates until an
 import copy
 import hashlib
 import json
+from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, clean, uid
 from .contracts import digest
 from .permissions import require
@@ -473,7 +474,7 @@ class IdeasService:
             for candidate in artifact["variants"]:
                 drafts = [v for v in state["variants"] if v["platform"] == candidate["platform"] and v["language"] == candidate["language"] and v["id"] not in committed]
                 old = drafts[-1] if drafts else None
-                values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "briefRevision": state["brief"]["revision"], "runId": run_id}
+                values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if old:
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .generation import FixtureAdapter, SAMPLE_TEXT, SAMPLE_FACTS, PLATFORMS, LANGUAGES, routes
 from .templates import catalog, instances, validate_overrides
-from . import profiles, visuals
+from . import learning, profiles, visuals
 
 SCHEMA_VERSION = 1
 MODES = ("personal", "niche", "business", "hybrid")
@@ -55,6 +55,7 @@ def initial_state(workspace_id, sample=False):
         "skillInstances": instances(), "savedAt": None, "importProposal": None,
         "research": {"phase0": "incomplete", "customerValidation": False, "pendingParticipants": ["P02", "P03", "P04", "P05"]},
         "profileSetup": profiles.defaults(),
+        "learning": learning.initial(migrated_at=now()),
     }
 
 
@@ -188,6 +189,7 @@ class Store:
     def _apply(self, s, action, p):
         if not isinstance(action, str):
             raise AlphaError("Choose a supported local action.")
+        learning.ensure(s, now())
         if action.startswith("you_"):
             try:
                 visuals.apply(self, s, action, p)
@@ -358,6 +360,7 @@ class Store:
             revision = v["revision"] + 1
             v.update({k: candidate[k] for k in ("text", "openings", "sourceIds", "warnings", "unknowns", "voiceRevision", "briefRevision", "runId")})
             v.update({"revision": revision, "customized": False, "needsReview": False, "blockedByRetraction": False, "proposedUpdate": None, "selectedOpening": 0})
+            v.pop("rejected", None)
             v["revisions"].append({"revision": revision, "text": v["text"], "origin": "accepted-fixture-replacement", "at": now()})
             # Hosted Ideas candidates carry a pr_agent_runs id that is not in the local runs list.
             local_run = next((run for run in s["runs"] if run["id"] == v["runId"]), None)
@@ -375,9 +378,9 @@ class Store:
             v["revision"] += 1
             v["customized"] = True
             v["revisions"].append({"revision": v["revision"], "text": text, "origin": "author-edit", "at": now()})
-            if not v.get("preferenceAsked"):
-                v["preferenceAsked"] = True
-                s["preferences"].append({"id": uid(), "variantId": v["id"], "platform": v["platform"], "language": v["language"], "key": "shortOpenings", "value": True, "label": f"Use shorter openings for {v['language']} {v['platform']} posts?", "status": "proposed", "createdAt": now()})
+            # An edit keeps the draft, so it clears "don't use this" feedback. What the edit changed is a
+            # learning signal for a later phase; nothing is proposed from a single edit any more.
+            v.pop("rejected", None)
             s["savedAt"] = None
         elif action == "opening":
             v = self._variant(s, p.get("variantId"))
@@ -397,21 +400,26 @@ class Store:
                 raise AlphaError("Choose a valid preference decision.")
             if decision in ("remember", "post-only", "reject") and preference["status"] != "proposed":
                 raise AlphaError("This preference already has a decision. Undo or delete it first.")
-            profile = copy.deepcopy(self._profile(s))
-            if not profile:
-                raise AlphaError("Approve a voice profile first.")
-            profile["preferences"] = [x for x in profile["preferences"] if x["id"] != preference["id"]]
+            # Decision A1: a remembered preference is a style revision, never a voice revision, so the exact
+            # text and voice bound into existing approvals stay valid (build_manifest, current()).
             if decision == "remember":
-                profile["preferences"].append({k: preference[k] for k in ("id", "platform", "language", "key", "value")})
-            if decision in ("remember", "undo", "delete"):
-                self._voice(s, profile, "Preference " + decision)
-                s["savedAt"] = None
+                try:
+                    learning.remember(s, preference, now=now())
+                except ValueError as e:
+                    raise AlphaError(str(e)) from e
+            elif decision in ("undo", "delete"):
+                learning.retire(s, preference["id"], now(), decision)
             preference["status"] = {"remember": "remembered", "post-only": "post-only", "reject": "rejected", "undo": "undone", "delete": "deleted"}[decision]
             preference["decidedAt"] = now()
+            variant = next((x for x in s["variants"] if x["id"] == preference.get("variantId")), None)
             if decision == "post-only":
-                self._variant(s, preference["variantId"])["localPreferences"] = {preference["key"]: preference["value"]}
-            if decision in ("undo", "delete"):
-                self._variant(s, preference["variantId"])["localPreferences"] = {}
+                if variant is None:
+                    raise AlphaError("This suggestion is not tied to a draft. Remember it for future drafts, or dismiss it.")
+                variant["localPreferences"] = dict(learning.normalize_proposal(preference)["params"])
+            if decision in ("undo", "delete") and variant is not None:
+                variant["localPreferences"] = {}
+            if decision in ("remember", "undo", "delete"):
+                s["savedAt"] = None
         elif action == "template_config":
             template_id = p.get("templateId")
             try:
@@ -467,7 +475,7 @@ class Store:
             raise AlphaError("Unsupported fixture failure.")
         if not failure and not updating and any(x["platform"] == platform and x["language"] == language for x in s["variants"]):
             raise AlphaError("That version already exists. Edit it or review its proposed update.")
-        run = {"id": uid(), "adapter": FixtureAdapter.id, "adapterVersion": FixtureAdapter.version, "voiceRevision": s["speaker"]["activeRevision"], "briefRevision": s["brief"]["revision"], "speakerId": s["speaker"]["id"], "status": "failed" if failure else "completed", "events": [{"type": "started", "at": now()}], "artifacts": [], "createdAt": now()}
+        run = {"id": uid(), "adapter": FixtureAdapter.id, "adapterVersion": FixtureAdapter.version, "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "briefRevision": s["brief"]["revision"], "speakerId": s["speaker"]["id"], "status": "failed" if failure else "completed", "events": [{"type": "started", "at": now()}], "artifacts": [], "createdAt": now()}
         if failure:
             run.update({"failure": failure, "message": f"Simulated {failure}. Your source, profile and existing drafts are safe. Retry the local preview or keep editing."})
             run["events"].append({"type": "cancelled" if failure == "cancelled" else "failed", "at": now()})
@@ -478,7 +486,7 @@ class Store:
             raise AlphaError("Approve a current business source fact before generating.")
         profile = self._profile(s)
         config = next(x["overrides"] for x in s["skillInstances"] if x["templateId"] == "content-craft")
-        shortened = config.get("shortOpenings", False) or any(x["platform"] == platform and x["language"] == language and x["key"] == "shortOpenings" and x["value"] for x in profile["preferences"])
+        shortened = config.get("shortOpenings", False) or learning.flag(s, "shortOpenings", platform, language)
         if v:
             shortened = shortened or v.get("localPreferences", {}).get("shortOpenings", False)
         request = {"platform": platform, "language": language, "facts": facts, "idea": s["brief"]["idea"], "sample": bool(facts) and all(f.get("fixture") for f in facts), "shortOpenings": shortened, "tone": config.get("tone", profile["tone"])}
@@ -488,9 +496,9 @@ class Store:
         variant_id = v["id"] if v else uid()
         revision = v["revision"] + 1 if v else 1
         record = {"revision": revision, "text": artifact["text"], "origin": "fixture", "at": now()}
-        values = {"id": variant_id, "platform": platform, "language": language, **artifact, "revision": revision, "voiceRevision": run["voiceRevision"], "speakerId": run["speakerId"], "briefRevision": run["briefRevision"], "runId": run["id"], "customized": False, "needsReview": False, "blockedByRetraction": False, "selectedOpening": 0}
+        values = {"id": variant_id, "platform": platform, "language": language, **artifact, "revision": revision, "voiceRevision": run["voiceRevision"], "styleRevision": run["styleRevision"], "speakerId": run["speakerId"], "briefRevision": run["briefRevision"], "runId": run["id"], "customized": False, "needsReview": False, "blockedByRetraction": False, "selectedOpening": 0}
         if v:
-            v["proposedUpdate"] = {**artifact, "voiceRevision": run["voiceRevision"], "briefRevision": run["briefRevision"], "baseVariantRevision": v["revision"], "runId": run["id"]}
+            v["proposedUpdate"] = {**artifact, "voiceRevision": run["voiceRevision"], "styleRevision": run["styleRevision"], "briefRevision": run["briefRevision"], "baseVariantRevision": v["revision"], "runId": run["id"]}
             run["status"] = "preview"
         else:
             values.update({"revisions": [record], "localPreferences": {}})

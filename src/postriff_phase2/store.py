@@ -7,7 +7,7 @@ import json
 import time
 import zipfile
 from postriff_alpha.domain import Store, AlphaError, uid, clean
-from postriff_alpha import visuals
+from postriff_alpha import learning, visuals
 from .auth import Phase2Auth
 from .contracts import PLANS, LIMITS, SCENARIOS, FixtureImages, FixtureSocial, digest, resolve_time
 from .media import decode_upload
@@ -19,6 +19,8 @@ TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("submitting", "provider_accepted", "published", "uncertain")
 # Official per-account publish limits per 24 h (connector-audit.md); enforced at approval time.
 DAILY_LIMITS = {"Instagram": 100, "Threads": 250, "LinkedIn": 150}
+# Why a person does not want a draft (variant_feedback). General vocabulary; the note is the person's own words.
+FEEDBACK_REASONS = ("wrong_facts", "not_my_voice", "too_long", "too_short", "wrong_angle", "wrong_language", "other")
 
 
 def find(items, key):
@@ -115,6 +117,7 @@ class Phase2Store(Store):
 
     def apply_phase2(self, db, s, action, p, device):
         data, now = s["phase2"], self.clock()
+        learning.ensure(s, now)
         if apply_content_action(s, action, p, device["user_id"], now):
             return
         if action == "plan":
@@ -252,6 +255,19 @@ class Phase2Store(Store):
                 return
             job["cancelRequested"] = True
             self.event(job, "uncertain" if job["state"] in IN_FLIGHT else "canceled", "Cancellation cannot recall an accepted submission; reconcile" if job["state"] in IN_FLIGHT else "Canceled before submission")
+        elif action == "variant_feedback":
+            # "Don't use this draft": kept on the draft as a learning signal for a later phase, and it blocks
+            # scheduling until the person edits the draft or accepts a new candidate for it.
+            v = self._variant(s, p.get("variantId"))
+            if p.get("variantRevision") != v["revision"]:
+                raise AlphaError("This draft changed. Reload before giving feedback on it.", 409)
+            reasons = p.get("reasons")
+            if not isinstance(reasons, list) or not reasons or len(set(reasons)) != len(reasons) or any(r not in FEEDBACK_REASONS for r in reasons):
+                raise AlphaError("Choose at least one reason from the list.")
+            if any(j["state"] not in ("canceled", "failed") and j["manifest"]["variantId"] == v["id"] for j in data["jobs"]):
+                raise AlphaError("This draft is already scheduled or published. Cancel the job first, or give feedback on a newer draft.", 409)
+            v.setdefault("feedback", []).append({"id": uid(), "reasons": reasons, "note": clean(p.get("note", ""), 200), "actor": device["user_id"], "at": now, "revision": v["revision"]})
+            v["rejected"] = True
         elif action == "refresh":
             pass
         else:
@@ -269,6 +285,8 @@ class Phase2Store(Store):
             raise AlphaError("Trial expired. Export remains available; scheduling is held.")
         if self.channel_state(c) != "Ready for posting":
             raise AlphaError("Verify this exact fixture account and its capability first.")
+        if v.get("rejected"):
+            raise AlphaError("You marked this draft as one you don't want to use. Edit it or draft again before scheduling it.")
         if v["needsReview"] or v["blockedByRetraction"] or v.get("policyBlocked") or v["unknowns"] or v.get("briefRevision") != s["brief"]["revision"] or any(not self._source(s, i)["active"] for i in v["sourceIds"]):
             raise AlphaError("Resolve draft review, retracted sources and unknown facts before scheduling.")
         policy_blockers = source_policy.publication_issues(s, v["sourceIds"])
@@ -295,7 +313,7 @@ class Phase2Store(Store):
         timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
-        manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
+        manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
         manifest["briefRevision"] = s["brief"]["revision"]
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
@@ -321,7 +339,9 @@ class Phase2Store(Store):
                 return False
             media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"])
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s), "skillRouteIds": v.get("contentSkillRouteIds", [])}
-            return bool(media_ok and content_type_ok and not v["needsReview"] and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["language"] == v["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and all(self._source(s, i)["active"] for i in v["sourceIds"]))
+            # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
+            # next draft and leaves approved text alone (design decision A1).
+            return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["language"] == v["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and all(self._source(s, i)["active"] for i in v["sourceIds"]))
         except (AlphaError, KeyError, TypeError, ValueError):
             return False
 

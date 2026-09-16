@@ -32,6 +32,8 @@ ACTION_CLASSES = {
     # Whether memory files may reach a cloud model is a workspace privacy decision.
     "memory_egress": "owner",
     "research_egress": "owner",
+    # Accepting or undoing a learned preference changes how every member's drafts read (design decision D).
+    "preference": "owner",
     "refresh": "read", "p2_refresh": "read",
 }
 

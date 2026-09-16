@@ -120,14 +120,18 @@ class SafetyRegressions(unittest.TestCase):
 
     def test_one_draft_edit_memory_export_without_social_connection(self):
         self.j.setup().act('generate', platform='LinkedIn', language='English')
-        pref = self.j.edit()
+        self.j.edit()
+        self.assertEqual(self.j.state['preferences'], [], 'an edit alone proposes nothing')
+        pref = self.j.propose()
         self.j.act('preference', preferenceId=pref['id'], decision='remember')
         self.j.act('preference', preferenceId=pref['id'], decision='undo')
         self.assertEqual(self.j.state['phase2']['channels'], [])
+        self.assertEqual(self.j.state['speaker']['activeRevision'], 1)
         with zipfile.ZipFile(io.BytesIO(self.store.export(self.j.id, self.j.token))) as archive:
             state = json.loads(archive.read('phase2/workspace.json'))
         self.assertEqual(len(state['variants']), 1)
         self.assertEqual(state['preferences'][0]['status'], 'undone')
+        self.assertEqual((state['learning']['revision'], state['learning']['retired'][0]['id']), (2, pref['id']))
         self.assertEqual(state['phase2']['jobs'], [])
 
 

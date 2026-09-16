@@ -125,7 +125,8 @@ check("memory page shows sharing on and what stays back", egress["cloud"] is Tru
 # 3. With consent: voice, identity and shareable boundaries go; the local-only boundary never does.
 run = ideas.turn(wid, "one", cid, {"text": "Write about trimming for LinkedIn.", "model": cloud.model, "timeZone": "Asia/Hong_Kong"})
 sent = cloud.requests[-1]["memory"]
-check("consent: the three prompt files are sent", [f["name"] for f in sent] == ["VOICE.md", "IDENTITY.md", "BOUNDARIES.md"], [f["name"] for f in sent])
+# Boundaries first: the cloud route caps the joined files from the tail, so a long VOICE.md loses its own tail, never a boundary.
+check("consent: the three prompt files are sent, boundaries first", [f["name"] for f in sent] == ["BOUNDARIES.md", "IDENTITY.md", "VOICE.md"], [f["name"] for f in sent])
 check("consent: a local-only boundary never leaves", "SECRET-HEALTH-DETAIL" not in json.dumps(sent) and "Never name a student" in json.dumps(sent))
 check("consent: the turn names the withheld boundary", any("marked private or local-only was not shared" in e.get("message", "") for e in run["events"]))
 check("consent: the run completed", run["status"] == "completed", run["status"])
