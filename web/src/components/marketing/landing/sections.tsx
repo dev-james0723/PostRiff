@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Icons } from '@/components/icons';
+import { ChannelIcon } from '@/components/channel-icon';
 import { CAPABILITY_LEVELS, CapabilityBadge } from '@/components/marketing/capability-badge';
 import { Section } from '@/components/marketing/section';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -20,7 +21,8 @@ export function ChannelMatrix() {
           </p>
           <div className='flex flex-wrap gap-2'>
             {hostedChannels.map((channel) => (
-              <Link key={channel.slug} href={`/channels/${channel.slug}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <Link key={channel.slug} href={`/channels/${channel.slug}`} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}>
+                <ChannelIcon slug={channel.slug} name={channel.name} size='xs' />
                 {channel.name}
               </Link>
             ))}
@@ -34,6 +36,7 @@ export function ChannelMatrix() {
           <div className='flex flex-wrap gap-2'>
             {localChannels.map((channel) => (
               <Link key={channel.slug} href={`/channels/${channel.slug}`} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}>
+                <ChannelIcon slug={channel.slug} name={channel.name} size='xs' />
                 {channel.name}
                 {channel.nameZh && <span className='text-muted-foreground'>{channel.nameZh}</span>}
               </Link>

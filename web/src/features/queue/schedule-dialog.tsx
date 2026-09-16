@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { ChannelIcon } from '@/components/channel-icon';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -137,7 +138,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
                 {drafts.length === 0 && <SelectItem value='__none' disabled>No drafts yet — add candidates from Ideas</SelectItem>}
                 {drafts.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
-                    {d.platform} · {d.language === '繁體中文' ? '繁中' : 'EN'} — {d.text.slice(0, 48)}…
+                    <span className='flex items-center gap-2'>
+                      <ChannelIcon platform={d.platform} name={d.platform} size='xs' />
+                      {d.platform} · {d.language === '繁體中文' ? '繁中' : 'EN'} — {d.text.slice(0, 48)}…
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -167,7 +171,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
                 {channelsForVariant.length === 0 && <SelectItem value='__none' disabled>No {variant?.platform ?? ''} account connected</SelectItem>}
                 {channelsForVariant.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.platform} · {c.account}{c.displayState ? ` · ${c.displayState}` : ''}
+                    <span className='flex items-center gap-2'>
+                      <ChannelIcon platform={c.platform} name={c.platform} size='xs' />
+                      {c.platform} · {c.account}{c.displayState ? ` · ${c.displayState}` : ''}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

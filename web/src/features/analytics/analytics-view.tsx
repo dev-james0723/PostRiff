@@ -2,6 +2,7 @@
 
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import { ChannelIcon } from '@/components/channel-icon';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
@@ -62,7 +63,10 @@ export function AnalyticsView() {
               {data.posts.map((post) => (
                 <Card key={`${post.provider}-${post.providerPostId}`}>
                   <CardHeader>
-                    <CardTitle className='text-base'>{post.platform || post.provider}</CardTitle>
+                    <CardTitle className='flex items-center gap-2 text-base'>
+                      <ChannelIcon platform={post.platform || post.provider} name={post.platform || post.provider} />
+                      {post.platform || post.provider}
+                    </CardTitle>
                     <CardDescription>
                       {post.language || '—'} · {post.contentOrigin.replace(/_/g, ' ')} · {post.publishedState}
                     </CardDescription>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import { ChannelIcon } from '@/components/channel-icon';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 interface CardItem {
   id: string;
   schedulable?: boolean;
+  platform?: string;
   title: string;
   subtitle?: string;
   body: string;
@@ -68,7 +70,7 @@ export function PipelineView() {
       cta: 'Draft more',
       items: (state?.variants ?? [])
         .filter((v) => !reviewedVariantIds.has(v.id) && !v.blockedByRetraction)
-        .map((v) => ({ id: v.id, schedulable: true, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.proposedUpdate ? 'update proposed' : v.needsReview ? 'needs review' : undefined, body: v.proposedUpdate?.text ?? v.text, tag: v.warnings[0] }))
+        .map((v) => ({ id: v.id, schedulable: true, platform: v.platform, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.proposedUpdate ? 'update proposed' : v.needsReview ? 'needs review' : undefined, body: v.proposedUpdate?.text ?? v.text, tag: v.warnings[0] }))
     },
     {
       key: 'review',
@@ -76,7 +78,7 @@ export function PipelineView() {
       hint: 'Exact text, media, account and time',
       href: '/app/queue',
       cta: 'Review now',
-      items: (phase2?.reviews ?? []).filter((r) => r.status === 'needs_review').map((r) => ({ id: r.id, title: `${r.manifest.platform} · ${r.manifest.account}`, subtitle: r.manifest.timing.local, body: r.manifest.payload.text, tone: 'default' as const }))
+      items: (phase2?.reviews ?? []).filter((r) => r.status === 'needs_review').map((r) => ({ id: r.id, platform: r.manifest.platform, title: `${r.manifest.platform} · ${r.manifest.account}`, subtitle: r.manifest.timing.local, body: r.manifest.payload.text, tone: 'default' as const }))
     },
     {
       key: 'scheduled',
@@ -84,7 +86,7 @@ export function PipelineView() {
       hint: 'Approved; the worker publishes at the time',
       href: '/app/calendar',
       cta: 'See calendar',
-      items: (phase2?.jobs ?? []).filter((j) => WAITING.has(j.state)).map((j) => ({ id: j.id, title: `${j.manifest.platform} · ${j.manifest.account}`, subtitle: j.state.replace(/_/g, ' '), body: j.manifest.payload.text, tone: 'secondary' as const }))
+      items: (phase2?.jobs ?? []).filter((j) => WAITING.has(j.state)).map((j) => ({ id: j.id, platform: j.manifest.platform, title: `${j.manifest.platform} · ${j.manifest.account}`, subtitle: j.state.replace(/_/g, ' '), body: j.manifest.payload.text, tone: 'secondary' as const }))
     },
     {
       key: 'published',
@@ -92,7 +94,7 @@ export function PipelineView() {
       hint: 'Confirmed by the provider',
       href: '/app/analytics',
       cta: 'See analytics',
-      items: (phase2?.jobs ?? []).filter((j) => j.state === 'verified').map((j) => ({ id: j.id, title: `${j.manifest.platform} · ${j.manifest.account}`, subtitle: j.providerReference, body: j.manifest.payload.text, tone: 'outline' as const }))
+      items: (phase2?.jobs ?? []).filter((j) => j.state === 'verified').map((j) => ({ id: j.id, platform: j.manifest.platform, title: `${j.manifest.platform} · ${j.manifest.account}`, subtitle: j.providerReference, body: j.manifest.payload.text, tone: 'outline' as const }))
     }
   ];
 
@@ -121,7 +123,10 @@ export function PipelineView() {
                     column.items.slice(0, 30).map((item) => (
                       <article key={item.id} className='bg-card flex flex-col gap-1 rounded-lg border p-3 text-sm shadow-xs'>
                         <div className='flex items-center justify-between gap-2'>
-                          <span className='truncate font-medium'>{item.title}</span>
+                          <span className='flex min-w-0 items-center gap-1.5 font-medium'>
+                            {item.platform && <ChannelIcon platform={item.platform} name={item.platform} size='xs' />}
+                            <span className='truncate'>{item.title}</span>
+                          </span>
                           {item.subtitle && (
                             <Badge variant={item.tone ?? 'outline'} className='shrink-0 truncate'>
                               {item.subtitle}

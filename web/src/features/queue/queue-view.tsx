@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import { ChannelIcon } from '@/components/channel-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,6 +64,7 @@ function ReviewCard({ review, revision, canApprove }: { review: Review; revision
     <Card>
       <CardHeader>
         <CardTitle className='flex flex-wrap items-center gap-2 text-base'>
+          <ChannelIcon platform={manifest.platform} name={manifest.platform} />
           {manifest.platform} · {manifest.account}
           <Badge variant={review.status === 'needs_review' ? 'default' : 'outline'}>{review.status.replace(/_/g, ' ')}</Badge>
           {expired && <Badge variant='destructive'>expired</Badge>}
@@ -209,8 +211,11 @@ export function QueueView() {
                           <Badge variant={stateTone(job.state)}>{job.state.replace(/_/g, ' ')}</Badge>
                         </TableCell>
                         <TableCell>
-                          {job.manifest.platform}
-                          <span className='text-muted-foreground'> · {job.manifest.account}</span>
+                          <span className='flex items-center gap-2'>
+                            <ChannelIcon platform={job.manifest.platform} name={job.manifest.platform} size='xs' />
+                            {job.manifest.platform}
+                            <span className='text-muted-foreground'>· {job.manifest.account}</span>
+                          </span>
                         </TableCell>
                         <TableCell className='whitespace-nowrap'>{formatDateTime(epochOf(job.manifest.timing.utc))}</TableCell>
                         <TableCell>{job.attempts.length}</TableCell>

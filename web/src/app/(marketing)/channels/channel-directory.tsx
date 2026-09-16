@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { ChannelIcon } from '@/components/channel-icon';
 import { CapabilityBadge } from '@/components/marketing/capability-badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Channel } from '@/config/channels';
@@ -25,7 +26,8 @@ export function ChannelDirectory({ channels }: { channels: Channel[] }) {
           <li key={channel.slug}>
             <Link href={`/channels/${channel.slug}`} className='bg-card hover:border-primary/60 flex h-full flex-col gap-2 rounded-xl border p-4 transition-colors'>
               <div className='flex items-center justify-between gap-2'>
-                <span className='font-medium'>
+                <span className='flex items-center gap-2 font-medium'>
+                  <ChannelIcon slug={channel.slug} name={channel.name} />
                   {channel.name}
                   {channel.nameZh && <span className='text-muted-foreground ml-1.5 text-sm'>{channel.nameZh}</span>}
                 </span>

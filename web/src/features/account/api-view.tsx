@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
+import { ChannelIcon } from '@/components/channel-icon';
 import { CapabilityBadge } from '@/components/marketing/capability-badge';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -30,7 +31,8 @@ export function ApiView() {
             ) : (
               connected.map((channel) => (
                 <div key={channel.id} className='flex items-center justify-between gap-3 rounded-lg border p-3'>
-                  <span>
+                  <span className='flex items-center gap-2'>
+                    <ChannelIcon platform={channel.platform} name={channel.platform} size='xs' />
                     {channel.platform} · <span className='text-muted-foreground'>{channel.account}</span>
                   </span>
                   <Badge variant='outline'>{channel.scopes.length} scope{channel.scopes.length === 1 ? '' : 's'}</Badge>
@@ -77,7 +79,8 @@ export function ApiView() {
               </p>
               <ul className='text-muted-foreground flex flex-col gap-1 text-sm'>
                 {hostedChannels.map((channel) => (
-                  <li key={channel.slug}>
+                  <li key={channel.slug} className='flex items-center gap-2'>
+                    <ChannelIcon slug={channel.slug} name={channel.name} size='xs' />
                     {channel.name} — {channel.reviewStatus}
                   </li>
                 ))}

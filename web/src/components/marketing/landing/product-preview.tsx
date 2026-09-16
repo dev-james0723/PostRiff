@@ -1,3 +1,4 @@
+import { ChannelIcon } from '@/components/channel-icon';
 import { CapabilityBadge } from '@/components/marketing/capability-badge';
 import { Section } from '@/components/marketing/section';
 import { cn } from '@/lib/utils';
@@ -63,14 +64,17 @@ export function ProductPreview() {
             <div className='flex flex-col gap-2 rounded-lg border p-3'>
               <p className='text-xs font-medium'>Channels</p>
               {[
-                ['LinkedIn', 'assisted'],
-                ['Threads', 'assisted'],
-                ['Instagram', 'assisted'],
-                ['小紅書', 'local'],
-                ['Bilibili', 'local']
-              ].map(([name, level]) => (
+                ['LinkedIn', 'assisted', 'linkedin'],
+                ['Threads', 'assisted', 'threads'],
+                ['Instagram', 'assisted', 'instagram'],
+                ['小紅書', 'local', 'xiaohongshu'],
+                ['Bilibili', 'local', 'bilibili']
+              ].map(([name, level, slug]) => (
                 <div key={name} className='flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs'>
-                  <span>{name}</span>
+                  <span className='flex items-center gap-1.5'>
+                    <ChannelIcon slug={slug} name={name} size='xs' />
+                    {name}
+                  </span>
                   <CapabilityBadge level={level as 'assisted' | 'local'} />
                 </div>
               ))}

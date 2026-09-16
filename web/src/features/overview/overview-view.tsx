@@ -5,6 +5,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { StatCard } from '@/components/app/stat-card';
 import { LevelBadge } from '@/components/app/level-badge';
+import { ChannelIcon } from '@/components/channel-icon';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -252,9 +253,12 @@ export function OverviewView() {
               ) : (
                 connected.map((channel) => (
                   <div key={channel.id} className='flex items-center justify-between gap-3 rounded-lg border p-3'>
-                    <div className='min-w-0'>
+                    <div className='flex min-w-0 items-center gap-2'>
+                      <ChannelIcon platform={channel.platform} name={channel.platform} />
+                      <div className='min-w-0'>
                       <p className='truncate text-sm font-medium'>{channel.platform}</p>
                       <p className='text-muted-foreground truncate text-xs'>{channel.account}</p>
+                      </div>
                     </div>
                     <div className='flex shrink-0 items-center gap-1.5'>
                       <span className='text-muted-foreground text-xs'>publish</span>

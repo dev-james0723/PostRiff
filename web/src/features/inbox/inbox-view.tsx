@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import { ChannelIcon } from '@/components/channel-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -89,6 +90,7 @@ function ThreadCard({ thread, canReply }: { thread: Thread; canReply: boolean })
     <Card>
       <CardHeader>
         <CardTitle className='flex flex-wrap items-center gap-2 text-base'>
+          <ChannelIcon platform={thread.provider} name={thread.provider} />
           @{thread.author || 'someone'}
           <Badge variant='outline'>{thread.provider}</Badge>
           {thread.tombstoned && <Badge variant='secondary'>removed by provider</Badge>}

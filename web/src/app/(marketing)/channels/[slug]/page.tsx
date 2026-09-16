@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ChannelIcon } from '@/components/channel-icon';
 import { CapabilityBadge, type CapabilityLevel } from '@/components/marketing/capability-badge';
 import { CtaBand } from '@/components/marketing/cta-band';
 import { Faq } from '@/components/marketing/landing/sections';
@@ -64,10 +65,13 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
       <PageHero
         eyebrow={channel.group === 'hosted' ? 'Hosted connector' : 'Desktop companion'}
         title={
-          <>
-            {channel.name}
-            {channel.nameZh && <span className='text-muted-foreground ml-3 text-2xl font-normal'>{channel.nameZh}</span>}
-          </>
+          <span className='flex items-center gap-3'>
+            <ChannelIcon slug={channel.slug} name={channel.name} size='lg' />
+            <span>
+              {channel.name}
+              {channel.nameZh && <span className='text-muted-foreground ml-3 text-2xl font-normal'>{channel.nameZh}</span>}
+            </span>
+          </span>
         }
         description={channel.description}
       >

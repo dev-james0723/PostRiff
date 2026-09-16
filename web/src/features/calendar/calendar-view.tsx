@@ -16,6 +16,7 @@ import {
 } from 'date-fns';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import { ChannelIcon } from '@/components/channel-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -116,7 +117,8 @@ export function CalendarView() {
                 <li key={item.id} className='flex items-start gap-3 py-3 text-sm'>
                   <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', KIND_META[item.kind].dot)} aria-hidden />
                   <div className='min-w-0 flex-1'>
-                    <p className='font-medium'>
+                    <p className='flex items-center gap-2 font-medium'>
+                      <ChannelIcon platform={item.platform} name={item.platform} size='xs' />
                       {item.platform} · <span className='text-muted-foreground'>{item.account}</span>
                     </p>
                     <p className='text-muted-foreground line-clamp-2 text-xs'>{item.text}</p>
@@ -201,7 +203,10 @@ export function CalendarView() {
               {selectedItems.map((item) => (
                 <div key={item.id} className='rounded-lg border p-3 text-sm'>
                   <div className='flex items-center justify-between gap-2'>
-                    <span className='font-medium'>{item.platform}</span>
+                    <span className='flex items-center gap-2 font-medium'>
+                      <ChannelIcon platform={item.platform} name={item.platform} size='xs' />
+                      {item.platform}
+                    </span>
                     <Badge variant='outline'>{KIND_META[item.kind].label}</Badge>
                   </div>
                   <p className='text-muted-foreground text-xs'>

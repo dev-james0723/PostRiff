@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { LevelBadge } from '@/components/app/level-badge';
+import { ChannelIcon } from '@/components/channel-icon';
 import { CapabilityBadge } from '@/components/marketing/capability-badge';
 import {
   AlertDialog,
@@ -121,6 +122,7 @@ function ConnectedCard({ channel, canManage }: { channel: ChannelView; canManage
         <div className='flex flex-wrap items-start justify-between gap-2'>
           <div>
             <CardTitle className='flex items-center gap-2'>
+              <ChannelIcon platform={channel.platform} name={channel.platform} />
               {channel.platform}
               <Badge variant={stateTone(channel.connectionState)}>{channel.connectionState.replace(/_/g, ' ')}</Badge>
             </CardTitle>
@@ -236,6 +238,7 @@ function ProviderRow({ provider, canManage }: { provider: ProviderView; canManag
     <div className='flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between'>
       <div className='min-w-0'>
         <p className='flex items-center gap-2 font-medium'>
+          <ChannelIcon platform={provider.platform} name={provider.platform} />
           {provider.platform}
           <CapabilityBadge
             level={provider.productionReviewed ? 'direct' : 'assisted'}
@@ -376,6 +379,7 @@ export function ChannelsView() {
                 href={`/channels/${channel.slug}`}
                 className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
               >
+                <ChannelIcon slug={channel.slug} name={channel.name} size='xs' />
                 {channel.name}
                 {channel.nameZh && <span className='text-muted-foreground'>{channel.nameZh}</span>}
               </Link>
