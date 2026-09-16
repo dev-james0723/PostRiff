@@ -12,7 +12,7 @@
       "functions": {
         "api/index.py": {
           "maxDuration": 60,
-          "excludeFiles": "{.venv/**,.phase3-build-venv/**,.vercel/**,.env*,broker.key,*.command,studio-install-manifest.json,tests/**,docs/**,studio/**,desktop/**,vendor/**,companion-ios/**,skills/**,templates/**,scripts/**,migrations/**,src/james_au_social/**,**/__pycache__/**,web/**}"
+          "excludeFiles": "{.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
         }
       }
     }
