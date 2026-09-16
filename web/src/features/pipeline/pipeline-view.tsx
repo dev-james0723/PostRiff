@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
@@ -8,10 +9,13 @@ import { buttonVariants } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSnapshot } from '@/lib/api/hooks';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { ScheduleDialog } from '@/features/queue/schedule-dialog';
 import { cn } from '@/lib/utils';
 
 interface CardItem {
   id: string;
+  schedulable?: boolean;
   title: string;
   subtitle?: string;
   body: string;
@@ -40,6 +44,9 @@ const WAITING = new Set(['scheduled', 'approved', 'claimed', 'submitting', 'prov
 
 export function PipelineView() {
   const snapshot = useSnapshot();
+  const access = useWorkspaceAccess();
+  const canSchedule = checkAccess(access, { permission: 'edit' });
+  const [scheduling, setScheduling] = useState<string | null>(null);
   const state = snapshot.data?.state;
   const phase2 = state?.phase2;
   const reviewedVariantIds = new Set([...(phase2?.reviews ?? []).map((r) => r.manifest.variantId), ...(phase2?.jobs ?? []).map((j) => j.manifest.variantId)]);
@@ -61,7 +68,7 @@ export function PipelineView() {
       cta: 'Draft more',
       items: (state?.variants ?? [])
         .filter((v) => !reviewedVariantIds.has(v.id) && !v.blockedByRetraction)
-        .map((v) => ({ id: v.id, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.needsReview ? 'needs review' : undefined, body: v.text, tag: v.warnings[0] }))
+        .map((v) => ({ id: v.id, schedulable: true, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.needsReview ? 'needs review' : undefined, body: v.text, tag: v.warnings[0] }))
     },
     {
       key: 'review',
@@ -91,6 +98,7 @@ export function PipelineView() {
 
   return (
     <PageContainer pageTitle='Pipeline' pageDescription='Where every idea is, from source to confirmed publication.' infoContent={infoContent}>
+      {scheduling && <ScheduleDialog key={scheduling} open onOpenChange={(open) => !open && setScheduling(null)} variantId={scheduling} />}
       {snapshot.isLoading ? (
         <Skeleton className='h-[32rem] w-full' />
       ) : (
@@ -122,6 +130,11 @@ export function PipelineView() {
                         </div>
                         <p className='text-muted-foreground line-clamp-3 text-xs whitespace-pre-wrap'>{item.body}</p>
                         {item.tag && <span className='text-xs text-amber-600 dark:text-amber-400'>{item.tag}</span>}
+                        {item.schedulable && canSchedule && (
+                          <button type='button' className='text-primary mt-1 w-fit text-xs underline-offset-2 hover:underline' onClick={() => setScheduling(item.id)}>
+                            Schedule…
+                          </button>
+                        )}
                       </article>
                     ))
                   )}

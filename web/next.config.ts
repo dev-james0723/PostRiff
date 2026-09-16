@@ -28,6 +28,11 @@ const baseConfig: NextConfig = {
       {
         source: '/api/:path*',
         destination: `${apiOrigin ?? 'http://127.0.0.1:4331'}/api/:path*`
+      },
+      {
+        // Dev harness only: the synthetic provider consent page.
+        source: '/dev/:path*',
+        destination: `${apiOrigin ?? 'http://127.0.0.1:4331'}/dev/:path*`
       }
     ];
   }

@@ -282,7 +282,8 @@ class HostedApplication:
                 from .oauth import OAuthService
                 query = {k: v[0] for k, v in parse_qs(environ.get("QUERY_STRING", "")).items()}
                 proto = environ.get("HTTP_X_FORWARDED_PROTO", environ.get("wsgi.url_scheme", "https")).split(",")[0].strip()
-                location = OAuthService.callback_redirect(f"{proto}://{environ.get('HTTP_HOST', '')}", oauth_parts[2], query)
+                host = (environ.get("HTTP_X_FORWARDED_HOST") or environ.get("HTTP_HOST", "")).split(",")[0].strip()
+                location = OAuthService.callback_redirect(f"{proto}://{host}", oauth_parts[2], query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Content-Length", "0")])
                 return [b""]
             if path == "/api/cron/worker" and method == "GET":

@@ -158,7 +158,8 @@ def main():
     import psycopg
     dsn, data = start_postgres()
     connection = lambda: psycopg.connect(dsn, client_encoding="utf8", autocommit=False)
-    base = f"http://127.0.0.1:{args.port}"
+    # POSTRIFF_DEV_WEB_ORIGIN lets the Next.js dev server (which proxies /api and /dev here) own the consent + callback flow.
+    base = os.environ.get("POSTRIFF_DEV_WEB_ORIGIN", "").rstrip("/") or f"http://127.0.0.1:{args.port}"
     transport = DevTransport()
     providers = {"linkedin": DevProvider("linkedin", "LinkedIn", base), "threads": DevProvider("threads", "Threads", base)}
     verifier = DevVerifier(connection)

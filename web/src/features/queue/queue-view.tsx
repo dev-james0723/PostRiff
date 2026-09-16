@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/api/client';
 import type { Job, Review } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatDateTime, relativeTime } from '@/lib/time';
+import { ScheduleDialog } from './schedule-dialog';
 
 const WAITING = new Set(['scheduled', 'approved', 'claimed']);
 const IN_FLIGHT = new Set(['submitting', 'provider_accepted', 'published', 'uncertain']);
@@ -105,6 +106,7 @@ export function QueueView() {
   const access = useWorkspaceAccess();
   const canApprove = checkAccess(access, { permission: 'approve' });
   const [filter, setFilter] = useState<Filter>('all');
+  const [scheduling, setScheduling] = useState(false);
 
   const reviews = (snapshot.data?.state.phase2?.reviews ?? []).filter((r) => r.status === 'needs_review');
   const jobs = (snapshot.data?.state.phase2?.jobs ?? []).toSorted((a, b) => (epochOf(b.manifest.timing.utc) ?? 0) - (epochOf(a.manifest.timing.utc) ?? 0));
@@ -128,7 +130,17 @@ export function QueueView() {
   }
 
   return (
-    <PageContainer pageTitle='Queue' pageDescription='Approvals waiting on you, then everything the worker is handling.' infoContent={infoContent}>
+    <PageContainer
+      pageTitle='Queue'
+      pageDescription='Approvals waiting on you, then everything the worker is handling.'
+      infoContent={infoContent}
+      pageHeaderAction={
+        canApprove || checkAccess(access, { permission: 'edit' }) ? (
+          <Button onClick={() => setScheduling(true)}>Schedule a draft</Button>
+        ) : undefined
+      }
+    >
+      <ScheduleDialog open={scheduling} onOpenChange={setScheduling} />
       <div className='flex flex-col gap-8'>
         <section className='flex flex-col gap-3' aria-labelledby='approvals-heading'>
           <h3 id='approvals-heading' className='text-lg font-semibold'>
@@ -137,7 +149,7 @@ export function QueueView() {
           {snapshot.isLoading ? (
             <Skeleton className='h-32 w-full' />
           ) : reviews.length === 0 ? (
-            <p className='text-muted-foreground text-sm'>Nothing to approve. Prepare a draft for a channel from Ideas or the Pipeline.</p>
+            <p className='text-muted-foreground text-sm'>Nothing to approve. Use “Schedule a draft” to prepare one for a channel and time.</p>
           ) : (
             <div className='grid gap-4 xl:grid-cols-2'>
               {reviews.map((review) => (

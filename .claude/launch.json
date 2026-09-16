@@ -6,7 +6,7 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": [
         "-c",
-        "cd /Users/ouxianxing/Documents/James-Au-Studio && LC_ALL=C .venv/bin/python scripts/postriff_dev_hosted.py --port 4331"
+        "cd /Users/ouxianxing/Documents/James-Au-Studio && LC_ALL=C POSTRIFF_DEV_WEB_ORIGIN=http://localhost:3100 .venv/bin/python scripts/postriff_dev_hosted.py --port 4331"
       ],
       "port": 4331
     },
