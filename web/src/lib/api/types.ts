@@ -317,6 +317,17 @@ export interface MemoryFile {
   editHref: string | null;
 }
 
+/** Whether the managed cloud model may read the memory files (owner decision, audited). */
+export interface MemoryEgress {
+  cloud: boolean;
+  decidedAt: number | null;
+  decidedBy: string | null;
+  sharedFiles: string[];
+  shareablePrivacy: string[];
+  /** Boundaries marked private, local-only or unlabelled: never sent, even with sharing on. */
+  withheldBoundaries: number;
+}
+
 /* ---------- channels ---------- */
 
 export type CapabilityLevel = 'Direct' | 'Assisted' | 'Bridge' | 'Unsupported';
