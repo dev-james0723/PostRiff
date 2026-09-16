@@ -37,6 +37,9 @@ for piece in ("Hello ", "from ", "the fake ", "model."):
 if mode == "auth":
     out({"type": "result", "subtype": "success", "is_error": True, "structured_output": None, "result": "Failed to authenticate. API Error: 401 OAuth access token has expired.", "total_cost_usd": 0, "duration_ms": 5})
     raise SystemExit(1)
+if mode == "refuse":
+    out({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": " I cannot draft this: **no approved facts** about the topic were supplied."}}})
+    out({"type": "result", "subtype": "success", "is_error": False, "structured_output": {"variants": [], "warnings": ["Approved facts about the Suno model", "James's own angle on it"]}, "total_cost_usd": 0.01, "duration_ms": 5}); raise SystemExit(0)
 if mode == "noschema":
     out({"type": "result", "subtype": "success", "is_error": False, "structured_output": None, "result": "prose", "total_cost_usd": 0.01, "duration_ms": 5}); raise SystemExit(0)
 schema_index = args.index("--json-schema") + 1
@@ -193,6 +196,21 @@ class ClaudeCliRuntimeTest(unittest.TestCase):
         system, _ = self.runtime().compose(request())
         self.assertIn("never a\n  licence to supply it", system)
         self.assertIn("id of each approved source you used", system)
+
+    def test_a_declined_draft_reports_what_the_model_needs(self):
+        sink = self.run_to_end(self.runtime(mode="refuse"))
+        self.assertIn("did not draft. It needs: Approved facts about the Suno model; James's own angle on it", sink.failed)
+        self.assertIn("Nothing was applied", sink.failed)
+
+    def test_a_declined_draft_without_schema_warnings_falls_back_to_the_prose(self):
+        req = request()
+        structured = {"variants": [], "warnings": []}
+        with self.assertRaises(AlphaError) as caught:
+            normalize_output(structured, req, prose="I cannot draft this.\n\n**Why:** no facts about the model were supplied.")
+        self.assertIn("It needs: I cannot draft this. Why: no facts about the model were supplied.", str(caught.exception))
+        with self.assertRaises(AlphaError) as caught:
+            normalize_output(None, req, prose="Here is prose instead.")
+        self.assertIn("no structured candidate; it said: Here is prose instead.", str(caught.exception))
 
     def test_auth_failure_is_classified_with_guidance(self):
         sink = self.run_to_end(self.runtime(mode="auth"))

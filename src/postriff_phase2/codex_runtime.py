@@ -194,7 +194,7 @@ class CodexCliRuntime(ClaudeCliRuntime):
             structured = json.loads(final_text) if final_text else None
         except ValueError:
             structured = None
-        artifact = normalize_output(structured, request, author="Codex")
+        artifact = normalize_output(structured, request, author="Codex", prose=final_text)
         sink.emit(safe_event("message.completed"))
         sink.complete(artifact, {"provenance": "reported_by_cli", "billing": "subscription", "modelRequests": 1, "costUsd": 0, "cliCostUsd": None,
                                  "tokens": usage, "model": request.get("model"), "inputHash": digest({"prompt": prompt}), "limits": PLATFORM_LIMITS})

@@ -68,6 +68,9 @@ facts and the idea they supplied. Rules that never bend:
   platform instead of translating one text mechanically.
 - Follow VOICE.md and BOUNDARIES.md. No hashtags, emojis, exclamation marks or rhetorical questions
   added only to look active. No motivational filler.
+- If you cannot draft a destination honestly from what was supplied, still return the JSON: leave
+  that destination out of `variants` and say in `warnings` exactly what you need, one item each
+  (the facts, the angle, the experience). Never put a refusal or a placeholder in a post's `text`.
 - You have no tools and no way to publish. Return only JSON matching the schema; `notes` explains
   one adaptation choice or missing media in a sentence; `warnings` lists anything the person must
   review (missing evidence, a claim you softened, a limit you could not meet)."""
@@ -96,19 +99,37 @@ def classify_failure(text):
     return "failed", "Claude Code did not complete the request. No draft was changed and nothing was retried."
 
 
-def normalize_output(structured, request, author="Claude Code"):
-    """Model JSON → artifact. Fails closed on a missing destination; never truncates text silently."""
+def prose_reason(text, limit=600):
+    """A model's own words, flattened for a failure message: no markdown furniture, one paragraph."""
+    if not isinstance(text, str):
+        return ""
+    flat = re.sub(r"[*_`#>]+", "", text)
+    flat = re.sub(r"\s+", " ", flat).strip()
+    if len(flat) > limit:
+        flat = flat[:limit].rsplit(" ", 1)[0] + "…"
+    return flat
+
+
+def normalize_output(structured, request, author="Claude Code", prose=None):
+    """Model JSON → artifact. Fails closed on a missing destination; never truncates text silently.
+    When the model declined, its reason (schema `warnings` or its prose) becomes the failure message
+    so the person learns what was missing instead of a bare "no candidate"."""
     if not isinstance(structured, dict) or not isinstance(structured.get("variants"), list):
-        raise AlphaError("Claude Code returned no structured candidate.", 502)
+        said = prose_reason(prose)
+        raise AlphaError(f"{author} returned no structured candidate; it said: {said} Nothing was applied." if said else f"{author} returned no structured candidate.", 502)
     allowed = {source["id"] for source in request["context"]["sources"]}
     # Models cite the fact ids they were shown as often as the source ids; both resolve to the source.
     fact_sources = {fact["id"]: source["id"] for source in request["context"]["sources"] for fact in source.get("facts", []) if isinstance(fact, dict) and fact.get("id")}
     warnings_all = [str(w)[:300] for w in structured.get("warnings", []) if isinstance(w, str)][:10]
+    declined = "; ".join(warnings_all) or prose_reason(prose)
+    if not structured["variants"]:
+        raise AlphaError(f"{author} did not draft. It needs: {declined} Nothing was applied." if declined else f"{author} returned no candidate and gave no reason. Nothing was applied.", 422)
     variants = []
     for destination in request["destinations"]:
         match = next((v for v in structured["variants"] if isinstance(v, dict) and v.get("platform") == destination["platform"] and v.get("language") == destination["language"]), None)
         if not match or not isinstance(match.get("text"), str) or not match["text"].strip():
-            raise AlphaError(f"Claude Code returned no {destination['platform']} · {destination['language']} candidate. Nothing was applied.", 502)
+            because = f" It said: {declined}" if declined else ""
+            raise AlphaError(f"{author} returned no {destination['platform']} · {destination['language']} candidate.{because} Nothing was applied.", 502)
         text = match["text"].strip()[:12000]
         warnings = [f"Written by {author} on this machine; review every claim before scheduling."]
         limit = PLATFORM_LIMITS.get(destination["platform"])
@@ -315,7 +336,7 @@ class ClaudeCliRuntime(AgentRuntime):
         except (OSError, ValueError):
             pass
         sink.emit(safe_event("progress.updated", stage="writing", percent=10))
-        size, result, streamed, pending = 0, None, 0, []
+        size, result, streamed, pending, transcript = 0, None, 0, [], []
 
         def flush():
             if pending:
@@ -345,6 +366,8 @@ class ClaudeCliRuntime(AgentRuntime):
                 delta = inner.get("delta") or {}
                 if inner.get("type") == "content_block_delta" and delta.get("type") == "text_delta" and isinstance(delta.get("text"), str) and delta["text"]:
                     streamed += len(delta["text"])
+                    if streamed <= 4000:
+                        transcript.append(delta["text"])
                     if streamed <= 20000:
                         pending.append(delta["text"])
                         if sum(len(p) for p in pending) >= 160:
@@ -363,7 +386,7 @@ class ClaudeCliRuntime(AgentRuntime):
         if result.get("is_error") or result.get("subtype") != "success":
             code, message = classify_failure(str(result.get("result", "")) + " " + str(result.get("subtype", "")))
             raise AlphaError(message, 401 if code == "auth" else 502)
-        artifact = normalize_output(result.get("structured_output"), request)
+        artifact = normalize_output(result.get("structured_output"), request, prose="".join(transcript) or result.get("result"))
         sink.emit(safe_event("message.completed"))
         usage = {"provenance": "reported_by_cli", "billing": "subscription", "modelRequests": 1, "costUsd": 0,
                  "cliCostUsd": result.get("total_cost_usd"), "durationMs": result.get("duration_ms"), "numTurns": result.get("num_turns"),
