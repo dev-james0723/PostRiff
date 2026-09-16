@@ -29,5 +29,8 @@ web/node_modules/
 web/.next/
 !web/.env.example
 
+# --- desktop build output (packaged Electron app, exceeds GitHub file size limits)
+desktop/artifacts/
+
 # .env.example is documentation, not a secret (the earlier .env* line re-ignored it)
 !.env.example
