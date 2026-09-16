@@ -306,7 +306,7 @@ skills/postriff-channel-<x>/ × 33                   SKILL.md（淨係 §1–§4
 | Voice contract 拆開 | 原本 35.8k 字元，超過 `MAX_FILE_CHARS` 20k，bind 落去會截走 44%，而且截走嘅正正係 risk tiers、publishing safety、output contract、preflight、不可談判原則。而家 SKILL.md 約 15.2k + 5 個有條件掛嘅 reference；`operations.md` 永遠唔掛 | test：engine 喺 cap 之內 |
 | Adapter contract | 33 條 adapter 嘅 §5–§10 同 runtime 段逐字相同，每多一個 destination 就重複送約 3.2k。抽出做 `postriff-adapter-contract`，每個 run 掛一次；淨係 `x`、`reddit` 有 override | test：adapter 唔准重複 contract 嘅 section |
 | 13 條冇 mapping 嘅 channel | `CHANNEL_SKILLS` 由 20 條加到 33 條；冇 mapping 嘅 platform 而家會出 warning，唔會靜靜雞冇 adapter | test：每條 adapter 都 bind 得到 |
-| 預算 | 以前超出 60k 就喺尾度硬截，可以斬開 approval 規則，hash 仲記住 model 冇收過嘅文字。而家按 `DROP_ORDER` 成個檔咁省略可省嘅 reference，每省一個出 warning，hash 只記真係送出去嘅嘢 | test：超出預算嘅 turn |
+| 預算 | 以前超出 60k 就喺尾度硬截，可以斬開 approval 規則，hash 仲記住 model 冇收過嘅文字。而家按 `DROP_ORDER` 成個檔咁省略可省嘅 reference（記入 `omitted`，唔出 warning），再按 `FALLBACK_ORDER` 省規則（出 warning），adapters 永遠最後；預算按 route（paid 60k、subscription CLI 120k）；hash 只記真係送出去嘅嘢 | test：超出預算嘅 turn |
 | Claim 規則 | `postriff-research-and-source-log` 喺 research 或者要 citation 嘅 content type 先掛 | test |
 | 寫作時嘅 discoverability | content-craft `algorithm-practice.md` 而家有掛。之前 SKILL.md 有 link 佢，但 binder 從來冇送，而 `compose()` 就同 model 講「every file a skill refers to is included inline」 | test：唔准 link 一個唔會送嘅檔 |
 | Schema 錯配（我自己整出嚟嘅 bug） | Bound skills 叫 model 出 `channelId`、`formatId`、`copy`、`fields`、`canonicalBrief`，全部係 strict `OUTPUT_SCHEMA` 會拒絕嘅欄位。原因係我寫 §9 嗰陣跟咗設計文件 §4.1 嘅*提案* schema，唔係實作。已改：title、description、slide text 放 `notes`，缺嘅嘢放 `unknowns` | test：唔准出現被拒絕嘅欄位名 |
@@ -319,7 +319,7 @@ skills/postriff-channel-<x>/ × 33                   SKILL.md（淨係 §1–§4
 
 ### 5.2 仲開住
 
-1. **預算上限要你決定**：`MAX_TEXT_CHARS` = 60k 係另一個 session 定嘅，我冇郁。2–3 個 channel 嘅普通 turn 已經用到 94–97%，要省略 workflows。如果想常見 turn 唔使省略，就要升到約 70–75k。
+1. **預算上限（已決定 2026-09-16）**：`MAX_TEXT_CHARS` = 60k 只留畀 paid cloud route；Claude Code / Codex 呢類 subscription route 用 `SUBSCRIPTION_TEXT_CHARS` = 120k（`skills.budget_for`），常見 turn 唔使省略。
 2. **未 commit**：我嘅改動疊喺 `35497ad` 上面（`skills.py`、`ideas.py`、兩個 test 檔、`studio_codex.py` 註釋、新 test 檔），而 HEAD 追蹤嘅 `skills/postriff-*` package 係 **0 個**。即係 clean checkout 會出「No skill library」warning，乜都 bind 唔到，直到 45 個 package commit 咗為止。
 3. **起草詞彙得 20 個 platform**：`intent.py` 同原本嘅 `CHANNEL_SKILLS` 一樣係 20 個，CLI route 嘅 `PLATFORM_LIMITS` 更加淨係得 3 個。新加嘅 13 條 adapter mapping 係預先放好，要等詞彙擴展先會用到，呢個係產品決定。
 4. **`content_types.py` 嘅 `skillRouteIds` 冇人讀**：`bind()` 靠 content type id 本身做 routing。

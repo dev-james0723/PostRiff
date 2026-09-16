@@ -37,16 +37,29 @@ ENGINE_TEMPLATES = "references/platform-and-templates.md"
 # mapping, verification) lives once here instead of once per destination. An adapter overrides a
 # section by repeating its heading.
 ADAPTER_CONTRACT = "postriff-adapter-contract"
-# When a turn would exceed MAX_TEXT_CHARS, these optional references are left out whole, in this
-# order, until it fits. Everything else a turn selected is mandatory for it: the voice contract,
-# the adapter contract and adapters, and the editorial core, localization and research rules.
-# Leaving a whole file out keeps every recorded hash true to what the model actually received.
+# When a turn would exceed its budget, these optional references are left out whole, in this
+# order, until it fits. The omission is recorded on the binding (`omitted`) and in the run's usage,
+# not raised as a run warning: nothing the draft depends on is lost, and a warning on every
+# multi-channel turn would only teach people to ignore warnings. Leaving a whole file out keeps
+# every recorded hash true to what the model actually received.
 DROP_ORDER = (
     (ENGINE_SKILL, ENGINE_WORKFLOWS),
     (ENGINE_SKILL, ENGINE_TEMPLATES),
     (CORE_SKILL, DISCOVERY_REFERENCE),
     (CORE_SKILL, VISUAL_REFERENCE),
     (CORE_SKILL, "references/platform-playbooks.md"),
+)
+# Still over budget: rules the turn selected for a reason go next, each one a run warning, whole
+# skills last. What never drops: the editorial core, the human-voice pass, the adapter contract
+# and the channel adapters. Only when those alone exceed the budget is the text hard-cut, and
+# that warning says a channel adapter may be incomplete.
+FALLBACK_ORDER = (
+    (CORE_SKILL, "references/editorial-workflow.md"),
+    (ENGINE_SKILL, ENGINE_LOCALIZATION),
+    (ENGINE_SKILL, ENGINE_RESEARCH),
+    (RESEARCH_SKILL, "references/provenance-ledger.md"),
+    (RESEARCH_SKILL, None),
+    (ENGINE_SKILL, None),
 )
 RESEARCH_INTENTS = {"research"}
 CITED_CONTENT_TYPES = {"article_news_commentary", "deep_point_of_view", "product_feature_launch"}
@@ -66,11 +79,20 @@ CHANNEL_SKILLS = {
     "Pixelfed": "postriff-channel-pixelfed", "ShareChat": "postriff-channel-sharechat",
     "Tencent QQ": "postriff-channel-tencent-qq", "WhatsApp Channels": "postriff-channel-whatsapp-channels",
 }
+# Budget per route. The paid cloud route keeps 60k characters (about 15k prompt tokens a draft);
+# the routes a person's own subscription pays for get room for every file a turn selects.
 MAX_TEXT_CHARS = 60_000
+SUBSCRIPTION_TEXT_CHARS = 120_000
 MAX_FILE_CHARS = 20_000
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 _VERSION = re.compile(r"^\s*version:\s*([\w.+-]+)\s*$", re.M)
 _SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,80}$")
+
+
+def budget_for(cost_class):
+    """Characters of skill text a route may carry: `subscription` routes (Claude Code, Codex on the
+    person's own plan) get the larger budget; paid and fixture routes keep MAX_TEXT_CHARS."""
+    return SUBSCRIPTION_TEXT_CHARS if cost_class == "subscription" else MAX_TEXT_CHARS
 
 
 def cites_sources(intent, content_type):
@@ -149,13 +171,15 @@ class SkillLibrary:
             references.append(ENGINE_TEMPLATES)
         return tuple(references)
 
-    def bind(self, destinations, format_id=None, intent=None, content_type=None):
+    def bind(self, destinations, format_id=None, intent=None, content_type=None, max_chars=None):
         """Skills for a turn: the voice contract, the editorial core with write-time discovery, a visual
         handoff for visual formats, the claim rules when the turn cites sources, and the adapter
-        contract plus one adapter per destination platform. Returns bindings (metadata only),
-        composed text, and warnings."""
+        contract plus one adapter per destination platform. `max_chars` is the route's budget
+        (see `budget_for`). Returns bindings (metadata only), composed text, warnings, the files
+        left out to fit (`omitted`) and the budget applied."""
+        budget = int(max_chars) if max_chars else MAX_TEXT_CHARS
         if not self.available():
-            return {"bindings": [], "text": "", "warnings": ["No skill library is installed on this host, so the run received the editorial policy only."]}
+            return {"bindings": [], "text": "", "warnings": ["No skill library is installed on this host, so the run received the editorial policy only."], "omitted": [], "budget": budget}
         wanted = [(ENGINE_SKILL, self._engine_references(destinations, format_id, intent, content_type)),
                   (CORE_SKILL, CORE_REFERENCES + ((VISUAL_REFERENCE,) if format_id in VISUAL_FORMATS else ()) + (DISCOVERY_REFERENCE,))]
         if cites_sources(intent, content_type):
@@ -185,14 +209,35 @@ class SkillLibrary:
         def composed():
             return "\n\n".join(self._section(entry[2]) for entry in selected)
 
-        for skill_id, reference in DROP_ORDER:
-            if len(composed()) <= MAX_TEXT_CHARS:
-                break
+        omitted = []
+
+        def drop(skill_id, reference):
+            """Leave one reference (or, with None, the whole skill) out and record it. True when something was removed."""
             for entry in selected:
-                if entry[0] == skill_id and reference in entry[1]:
+                if entry[0] != skill_id:
+                    continue
+                if reference is None:
+                    selected.remove(entry)
+                    omitted.append({"skill": skill_id, "path": "SKILL.md", "chars": len(self._section(entry[2]))})
+                    return True
+                if reference in entry[1]:
+                    chars = next((r["chars"] for r in entry[2]["files"] if r["path"] == reference), 0)
                     entry[1].remove(reference)
                     entry[2] = self.load(skill_id, tuple(entry[1]))
-                    warnings.append(f"Left out {skill_id}/{reference} to keep the skills within {MAX_TEXT_CHARS} characters.")
+                    omitted.append({"skill": skill_id, "path": reference, "chars": chars})
+                    return True
+            return False
+
+        for skill_id, reference in DROP_ORDER:
+            if len(composed()) <= budget:
+                break
+            drop(skill_id, reference)
+        for skill_id, reference in FALLBACK_ORDER:
+            if len(composed()) <= budget:
+                break
+            if drop(skill_id, reference):
+                what = f"{skill_id}/{reference}" if reference else f"the whole {skill_id} skill"
+                warnings.append(f"Left out {what}: the skills this turn selected exceed {budget} characters on this route. Review the draft against those rules.")
 
         bindings = []
         for _, _, loaded in selected:
@@ -203,11 +248,12 @@ class SkillLibrary:
                 if len(reference["text"]) > MAX_FILE_CHARS:
                     warnings.append(f"Skill {loaded['id']}: {reference['path']} was cut at {MAX_FILE_CHARS} characters.")
         text = composed()
-        if len(text) > MAX_TEXT_CHARS:
-            # Mandatory skills alone exceed the budget: the last resort, never reached by a normal turn.
-            text = text[:MAX_TEXT_CHARS]
-            warnings.append(f"Skill text was cut at {MAX_TEXT_CHARS} characters; later sections were left out.")
-        return {"bindings": bindings, "text": text, "warnings": warnings}
+        if len(text) > budget:
+            # The editorial core, voice pass, adapter contract and adapters alone exceed the budget:
+            # the last resort, never reached by a normal turn. The cut lands on the last adapters.
+            text = text[:budget]
+            warnings.append(f"Skill text was cut at {budget} characters, so a channel adapter may be incomplete. Review the draft against the platform rules before scheduling.")
+        return {"bindings": bindings, "text": text, "warnings": warnings, "omitted": omitted, "budget": budget}
 
     @staticmethod
     def _section(loaded):

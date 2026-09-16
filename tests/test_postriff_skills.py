@@ -116,15 +116,47 @@ class SkillLibraryTest(unittest.TestCase):
         write(self.root, "postriff-channel-linkedin", {"SKILL.md": "# linkedin adapter\n" + "l" * (skills.MAX_FILE_CHARS - 100)})
         before = library.bind([{"platform": "LinkedIn", "language": "English"}], "short_text")
         self.assertLessEqual(len(before["text"]), skills.MAX_TEXT_CHARS)
-        # The workflows file went first and whole; nothing mandatory was cut mid-text.
-        self.assertTrue(any("Left out postriff-content-engine/references/content-pillars-and-workflows.md" in w for w in before["warnings"]))
-        self.assertFalse(any("later sections were left out" in w for w in before["warnings"]))
+        # The workflows file went first and whole, recorded as an omission rather than raised as a
+        # run warning; nothing mandatory was cut mid-text.
+        self.assertEqual([o["path"] for o in before["omitted"]], ["references/content-pillars-and-workflows.md"])
+        self.assertEqual(before["warnings"], [])
+        self.assertEqual(before["budget"], skills.MAX_TEXT_CHARS)
+        # On a subscription route the same turn keeps every file it selected.
+        roomy = library.bind([{"platform": "LinkedIn", "language": "English"}], "short_text", max_chars=skills.SUBSCRIPTION_TEXT_CHARS)
+        self.assertEqual(roomy["omitted"], [])
+        self.assertIn("references/content-pillars-and-workflows.md", [f["path"] for f in roomy["bindings"][0]["files"]])
         self.assertTrue(before["text"].rstrip().endswith("l" * 50), "the adapter, composed last, arrived whole")
         engine = before["bindings"][0]
         self.assertEqual([f["path"] for f in engine["files"]], ["SKILL.md"], "a left-out file is not recorded")
         self.assertEqual(engine["sha256"], library.load("postriff-content-engine")["sha256"], "the hash describes what was sent")
         # Playbooks stay, because leaving out the first file was enough.
         self.assertIn("references/platform-playbooks.md", [f["path"] for f in before["bindings"][1]["files"]])
+
+    def test_budget_follows_the_route(self):
+        self.assertEqual(skills.budget_for("paid"), skills.MAX_TEXT_CHARS)
+        self.assertEqual(skills.budget_for("none"), skills.MAX_TEXT_CHARS)
+        self.assertGreater(skills.budget_for("subscription"), skills.MAX_TEXT_CHARS)
+
+    def test_mandatory_rules_drop_with_a_warning_before_any_adapter_is_cut(self):
+        library = SkillLibrary(self.root)
+        write(self.root, "postriff-content-craft", {"references/editorial-workflow.md": "e" * 400})
+        write(self.root, "postriff-channel-linkedin", {"SKILL.md": "# linkedin adapter\n" + "l" * 300})
+        bound = library.bind([{"platform": "LinkedIn", "language": "English"}], "short_text", max_chars=900)
+        # Optional references went quietly, then the editorial workflow with a warning; the adapter arrived whole.
+        self.assertTrue(any("Left out postriff-content-craft/references/editorial-workflow.md" in w for w in bound["warnings"]), bound["warnings"])
+        self.assertIn("references/editorial-workflow.md", [o["path"] for o in bound["omitted"]])
+        self.assertTrue(bound["text"].rstrip().endswith("l" * 50))
+        ids = [b["id"] for b in bound["bindings"]]
+        self.assertIn("postriff-channel-linkedin", ids)
+        self.assertIn("postriff-adapter-contract", ids)
+        core = next(b for b in bound["bindings"] if b["id"] == "postriff-content-craft")
+        self.assertIn("references/human-voice-pass.md", [f["path"] for f in core["files"]], "the voice pass survives every drop tier")
+        # Only when the core, the voice pass, the contract and the adapters alone exceed the budget is the
+        # text hard-cut, and that warning names the adapter risk.
+        cut = library.bind([{"platform": "LinkedIn", "language": "English"}], "short_text", max_chars=200)
+        self.assertEqual(len(cut["text"]), 200)
+        self.assertTrue(any("channel adapter may be incomplete" in w for w in cut["warnings"]), cut["warnings"])
+        self.assertNotIn("postriff-content-engine", [b["id"] for b in cut["bindings"]], "the whole voice contract went before any adapter was cut")
 
     def test_claim_rules_bind_only_when_a_turn_cites_sources(self):
         library = SkillLibrary(self.root)

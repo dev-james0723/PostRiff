@@ -13,7 +13,7 @@ from .source_policy import project_context, stamp
 from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
 from .codex_runtime import CodexCliRuntime
-from .skills import SkillLibrary
+from .skills import SkillLibrary, budget_for
 from . import intent, memory
 
 MAX_TEXT = 6000
@@ -213,7 +213,7 @@ class IdeasService:
         if outcome["plan"]:
             artifact["plan"] = outcome["plan"]  # a proposal; approval still runs the review → approve chain
         artifact_hash = digest(artifact)
-        usage = {**usage, "skillBindings": outcome.get("skillBindings", [])}
+        usage = {**usage, "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", [])}
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
         context = outcome["context"]
         summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources.", "runId": run_id, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])]}
@@ -264,7 +264,8 @@ class IdeasService:
             selection = ((state.get("contentSystem") or {}).get("selection") or {})
             content_type_id = selection.get("contentTypeId")
             bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
-                                     content_type_id if content_type_id != "unclassified" else None)
+                                     content_type_id if content_type_id != "unclassified" else None,
+                                     max_chars=budget_for(runtime.cost_class))
             request["skills"] = bound
             skill_ids = [b["id"] for b in bound["bindings"]]
             cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning if reasoning in ("quick", "standard", "deep") else "quick", digest(context), context["policyEpoch"], key))
@@ -272,7 +273,7 @@ class IdeasService:
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", 500_000 if paid else 0, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"]}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", [])}
 
             def emit(event):
                 self._insert_event(cur, workspace_id, run_id, event)
@@ -289,7 +290,7 @@ class IdeasService:
                 for pending in context_events:
                     emit(pending)
                 emit(safe_event("progress.updated", stage="queued", percent=5))
-                cur.execute("UPDATE public.pr_agent_runs SET usage=%s::jsonb WHERE id::text=%s", (json.dumps({"provenance": "pending", "reservationId": reservation["reservationId"], "skillBindings": bound["bindings"]}), run_id))
+                cur.execute("UPDATE public.pr_agent_runs SET usage=%s::jsonb WHERE id::text=%s", (json.dumps({"provenance": "pending", "reservationId": reservation["reservationId"], "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", [])}), run_id))
                 # The assistant turn exists from the start so the conversation can follow the run; the sink fills it in.
                 self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": "", "pending": True, "runId": run_id, "intent": parsed["intent"], "destinations": destinations, "plan": plan, "model": model_id, "skills": skill_ids}, run_id)
                 dispatch = (runtime, run_id, request, RunSink(self, workspace_id, conversation_id, run_id, outcome))
