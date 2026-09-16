@@ -1,6 +1,6 @@
 # Worldwide post languages: Stage 1 proposal
 
-Status: **proposal, awaiting approval** · 2026-09-16
+Status: **proposal** · 2026-09-16 · decisions 1, 4, 6, 8 and 9 made; 2, 3, 5, 7 and 10 still open (§10)
 
 Companion material:
 - Research: [`postriff-language-registers.md`](postriff-language-registers.md). Regional style guides for 55 locales, with sources, confidence levels and native-check lists.
@@ -23,17 +23,19 @@ Nothing here has been built. Stage 2 starts after the decisions in §10.
 
 ## 1. What changes for the person using PostRiff
 
-1. **Every selected channel shows its own language beside its name, with a flag.** Example:
-   `LinkedIn · 🇬🇧 English (UK)`, `Xiaohongshu · 🇨🇳 中文（中国大陆）`, `Instagram · 🇭🇰 中文（香港）`,
-   `Threads · 🇺🇸 English (US)`. One brief becomes four posts, each written natively in its channel's
-   language.
+1. **Every selected channel shows its icon, its name, and its language with a flag.** Example:
+   `[in] LinkedIn · 🇬🇧 English (UK)`, `[小红书] Xiaohongshu · 🇨🇳 简体中文（中国）`,
+   `[IG] Instagram · 🇭🇰 繁體中文（香港）`, `[@] Threads · 🇺🇸 English (US)`. One brief becomes four
+   posts, each written natively in its channel's language.
+   - A **+** on each chip adds another language to the same channel. For example, Instagram in
+     both 🇭🇰 繁體中文（香港） and 🇬🇧 English (UK) makes two Instagram drafts.
 2. **Clicking a channel's language opens a list with search on top.**
    - Search matches native names, English names, regions, scripts (繁 / 简 / Traditional /
      Simplified) and nicknames (Canto, Singlish, Aussie, Québécois).
    - It ignores accents, letter case, and full-width vs half-width characters.
    - One button copies the choice to every selected channel.
-3. **Each channel remembers its last language.** A channel used for the first time suggests its
-   usual language (Xiaohongshu → mainland Chinese). Otherwise it falls back to the workspace
+3. **Each channel remembers its last languages.** A channel used for the first time suggests its
+   usual language (Xiaohongshu → 简体中文（中国）). Otherwise it falls back to the workspace
    default.
 4. **The chosen language decides the post's language.** An English brief can produce a Taiwanese
    Traditional Chinese post.
@@ -108,19 +110,32 @@ One source of truth: `src/postriff_phase2/locales/catalogue.json`, generated at 
 - `glyphs` picks the regional CJK font stack; `lang` is still set to the full tag.
 - `gendered` says the language's grammar shows the writer's gender (§5.5).
 
+**Display names (decided 2026-09-16).** Script first, then a short place name. Each language is
+written in its own script, and no label says "Mainland", "SAR" or "PRC"; those stay search aliases.
+
+| Tag | Name in the language | English |
+|---|---|---|
+| `zh-Hant-HK` | 繁體中文（香港） | Chinese — Traditional (Hong Kong) |
+| `yue-Hant-HK` | 廣東話（香港） | Cantonese (Hong Kong) |
+| `zh-Hant-TW` | 繁體中文（台灣） | Chinese — Traditional (Taiwan) |
+| `zh-Hans-CN` | 简体中文（中国） | Chinese — Simplified (China) |
+| `zh-Hans-SG` | 简体中文（新加坡） | Chinese — Simplified (Singapore) |
+
 **Tiers:**
 - **Tuned:** the 55 locales researched in the companion document, with a guide under
-  `skills/postriff-content-engine/references/locales/`. §10 decision 6 sets the first wave.
+  `skills/postriff-content-engine/references/locales/`. The first wave (§10 decision 6) is
+  `en-GB`, `zh-Hans-CN`, `zh-Hant-HK`, `en-US`, `yue-Hant-HK`, `zh-Hant-TW`, `zh-Hans-SG`,
+  `ja-JP`, `ko-KR`, `es-MX`, `pt-BR` and `fr-FR`.
 - **Available:** every other language CLDR can name. Drafts with `_generic.md` plus the family
   guide, and shows "isn't tuned yet".
 
 ## 4. Languages per channel
 
 ### 4.1 Behaviour
-- **Every selected channel chip carries its own language button.** The composer-wide `EN / 繁中`
-  control goes away.
+- **Every selected channel chip carries a language button for each of its languages, then a +.**
+  The composer-wide `EN / 繁中` control goes away.
 - **Default when a channel is turned on:**
-  1. The last language used on that channel in this workspace.
+  1. The languages last used on that channel in this workspace (one or more).
   2. The channel's usual language, from the "Planning language" in its channel skill, resolved
      to a region:
      - Xiaohongshu, Weibo, Douyin, Bilibili, Zhihu, WeChat Channels, Kuaishou, Tencent QQ,
@@ -130,12 +145,17 @@ One source of truth: `src/postriff_phase2/locales/catalogue.json`, generated at 
      - Naver Blog, KakaoTalk Channel → `ko-KR`
      - Moj, ShareChat → `hi-IN`
   3. The workspace default.
-- **Picking from a channel's list stores that channel's language.** The list is titled
-  "Language for Xiaohongshu", suggests last-used and usual first, and has
-  "Use 中文（中国大陆） on all 4 channels".
+- **Picking from a channel's list stores that channel's languages.**
+  - The list is titled "Language for Xiaohongshu" and suggests last-used and usual first.
+  - Its footer has "Use 🇨🇳 简体中文（中国） on all 4 channels".
+  - When the channel has more than one language, the footer also has "Remove from Instagram".
+  - The **+** opens "Add a language for Instagram". Languages already on the channel show a check
+    and aren't added twice.
 - **A language named in the message:**
   - Paired within a clause with channels ("Threads in British English", "小紅書用台灣中文寫"):
     applies to those channels.
+  - Joined languages ("Instagram in Hong Kong Chinese and British English",
+    "Instagram 用繁體中文同英文"): that channel gets one draft per language.
   - In a clause with no channel ("write it in Japanese"): applies to every selected channel.
   - A family name ("Chinese", "中文") keeps a channel's pick when that pick is already in the
     family.
@@ -156,18 +176,53 @@ Instagram and Threads (`agent_runtime.py:12`). Supporting your four-channel case
 Publishing to Xiaohongshu is a separate track and out of scope here.
 
 ### 4.3 Where the per-channel memory lives
-`workspace.settings.channelLocales = { "LinkedIn": "en-GB", "Xiaohongshu": "zh-Hans-CN", … }` on
-the server, written by a small command when the person picks. It is keyed by platform for now;
-per connected account can come later if one person runs two accounts on the same platform in
-different languages.
+`workspace.settings.channelLocales = { "LinkedIn": ["en-GB"], "Instagram": ["zh-Hant-HK", "en-GB"], … }`
+stays on the server. A small command writes it when the person picks, adds or removes a
+language. It is keyed by platform for now; keying by connected account can come later, for
+someone who runs two accounts on one platform.
+
+### 4.4 One channel in several languages (decided 2026-09-16: build it)
+A destination is a (platform, locale) pair, so Instagram in 繁體中文（香港） and English (UK)
+is two destinations and two drafts. Most of the pipeline already keys on the pair:
+- **Already pair-keyed:**
+  - apply/refresh (`ideas.py:514`)
+  - the duplicate check (`src/postriff_alpha/domain.py:485`)
+  - output matching (`model_runtime.py:287-293`, `cli_runtime.py:139-142`)
+  - the plan's variant lookup (`plan.ts:33-34`)
+  - learning scope (platform + language)
+  - plan-card rows, keyed by index (`plan-card.tsx:261, 282`)
+- **Changes needed:**
+  - `resolve_destinations` expands each channel's languages into pairs and de-duplicates on
+    (platform, canonical tag).
+  - `parse_request` de-duplicates destinations by platform only (`intent.py:243`); language
+    pairing happens after that, so the de-duplication stays.
+  - `build_plan` matches a time slot by platform (`intent.py:309`), so both drafts share the
+    channel's time. The plan row's time picker can move one of them.
+  - Composer state becomes `{platform, languages: LocaleTag[]}[]`. Conversation restore rebuilds
+    it from all stored destinations (today it reads only `destinations[0].language`,
+    `conversation-view.tsx:126-132`).
+  - Scheduling: with the language gate removed (§6), both drafts can be scheduled on the same
+    connected account. The schedule dialog labels each by its language badge.
+  - The prompt payload may list the same platform twice. Rule 3 already says one variant per
+    destination; its example output gains a same-platform pair so models don't merge them.
+
+### 4.5 Channel icons
+Each chip, plan row, draft card header and schedule row shows the channel's brand mark to the
+left of its name. It uses the existing `ChannelIcon` (`web/src/components/channel-icon.tsx`,
+size `xs`), from simple-icons plus the hand-drawn LinkedIn mark.
+- The connection dot that sits before the name today (`composer.tsx:108`) becomes a small badge
+  on the icon's corner: green ready, amber needs attention, grey not connected.
+- **Dark-mode fix:** `ChannelIcon` tints black marks (Threads, X) with `#000000` on a
+  `#0000001f` background, which disappears on a dark background. Brands whose colour is black
+  use `currentColor` instead.
 
 ## 5. Drafting pipeline
 
 ### 5.1 Which language each destination gets
 `src/postriff_phase2/intent.py`:
 - **`parse_request` pairs languages with channels inside a clause,** as it already pairs channels
-  with times. It returns `languages: [{tag, said, platforms: [...]}]`, where an empty `platforms`
-  means all channels.
+  with times. It returns `languages: [{tags: [...], said, platforms: [...]}]`. `tags` holds
+  joined languages ("… and British English", "同英文"); an empty `platforms` means all channels.
 - **`resolve_destinations(parsed, requested, default)`** gives each destination its language in
   this order:
   1. A language paired with that channel in the message.
@@ -220,7 +275,7 @@ Replace the hard-coded lists with `locales.is_valid(tag)`:
 - **VOICE.md** splits observations in two:
   - traits that carry across languages: length, structure, humour, emoji habits, sign-offs;
   - traits that apply to one tag only: particles, English mixing, spelling, formality.
-- **No samples in a channel's locale:** the draft runs with "No past posts in 中文（中国大陆）
+- **No samples in a channel's locale:** the draft runs with "No past posts in 简体中文（中国）
   yet. Adding a few makes drafts sound more like you."
 - **Gendered grammar.** Hindi, Urdu, Marathi, Polish, Russian, Ukrainian, Arabic and Hebrew
   verbs, Romance-language adjectives, Thai particles, and Japanese and Vietnamese self-reference
@@ -257,8 +312,10 @@ at `:500`).
 - **Analytics** cohorts (`insights.py:74-91`) compare canonical tags.
 - **Channels.** Scheduling requires `variant.language == channel.language` (`store.py:353`,
   re-checked at `:402`), and every OAuth channel is created with `"language": "English"`
-  (`oauth.py:146`). A Chinese draft can't be scheduled on a real connected account today, and
-  per-channel languages make this bite on every non-English channel. See §10 decision 1.
+  (`oauth.py:146`). A Chinese draft can't be scheduled on a real connected account today.
+  **Decided:** language comes out of the scheduling match, in `store.py:353` and the re-check at
+  `:402`. The channel remembers its last languages instead (§4.3), and the hard-coded
+  `"language": "English"` on new OAuth channels goes away.
 
 ## 7. Web
 
@@ -346,7 +403,7 @@ The web has no test runner. Node 25 runs TypeScript directly, so `search.ts`, `l
 |---|---|---|
 | Language with no region | "LinkedIn: English has no region. Pick one so spelling and wording match your readers." | Composer hint, plan row |
 | Available, not tuned | "Instagram: Kiswahili isn't tuned yet. PostRiff still writes it; check the wording before you post." | Composer hint, draft warning |
-| No samples in locale | "Xiaohongshu: 中文（中国大陆） has no past posts yet. Adding a few makes drafts sound more like you." | Composer hint, plan row |
+| No samples in locale | "Xiaohongshu: 简体中文（中国） has no past posts yet. Adding a few makes drafts sound more like you." | Composer hint, plan row |
 | Named in message | "Threads: named in your message, so this draft uses English (UK)." | Composer hint, chip marker |
 | Legacy 繁體中文 data | "Older drafts are marked 繁體中文 with no region. Pick one so new drafts use the right wording." | One-time banner |
 | Wrong script | Simplified characters in a `zh-Hant-*` draft | Draft warning |
@@ -369,18 +426,26 @@ Each slice ships on its own and keeps every existing workspace working.
 
 1. **Catalogue and canonicalisation.** `locales` module (Python + web), aliases, parents, legacy
    mapping, sync script, tests. No behaviour change.
-2. **Per-destination languages in the backend.** Clause pairing and resolution order (§5.1),
-   validation (§5.2), prompt (§5.3), `channelLocales`, learning scope fallback + migration 011
-   (§6), channel gate decision (§10.1).
+2. **Per-destination languages in the backend.**
+   - Clause pairing, joined languages and resolution order (§5.1)
+   - Several languages per channel (§4.4)
+   - Validation (§5.2) and prompt (§5.3)
+   - `channelLocales`
+   - Learning scope fallback + migration 011 (§6)
+   - Removing the scheduling language gate (§6)
 3. **Xiaohongshu drafting.** Limit, supported platform, composer platform list (§4.2).
 4. **Locale guides, first wave.** Reference files, binding, drop order, `localization.md` rewrite.
-5. **Composer chips, picker and badges.** §7.1–7.3, one-time legacy banner.
+5. **Composer chips, picker and badges.**
+   - Channel icons (§4.5), the + per channel, and "Remove from …"
+   - §7.1–7.3
+   - One-time legacy banner
 6. **Reminders, counts and lint.** §7.4 and §8.
 7. **Remaining guides,** in batches after native review.
 
 **Acceptance (Stage 3):**
 - Your four-channel case, run through a real route and saved to `docs/` for review: LinkedIn
-  `en-GB`, Xiaohongshu `zh-Hans-CN`, Instagram `zh-Hant-HK`, Threads `en-US`.
+  `en-GB`, Xiaohongshu `zh-Hans-CN`, Instagram `zh-Hant-HK`, Threads `en-US`. Then the same case
+  with Instagram also in `en-GB`, giving five drafts. Both Instagram drafts must schedule.
 - The six-locale Chopin brief, also saved to `docs/`: `zh-Hant-HK`, `yue-Hant-HK`, `zh-Hant-TW`,
   `zh-Hans-CN`, `en-US`, `en-GB`.
 - Search: `canto`, `廣東`, `hk`, `繁`, `brasil`, `scot`, `espanol`.
@@ -394,44 +459,36 @@ touch: `intent.py`, `model_runtime.py`, `cli_runtime.py`, `ideas.py`, `memory.py
 `lib/api/types.ts` and `queue-view.tsx`. Stage 2 starts after those land, stages only its own
 paths, and never commits the whole tree.
 
-## 10. Decisions needed
+## 10. Decisions
 
-1. **Channel language gate** (`store.py:353`).
-   - *Recommended:* drop language from the scheduling match. The channel's remembered language
-     (§4.3) pre-selects the chip.
-   - *Alternative:* keep the gate and require each connected account to carry a locale.
+**Made 2026-09-16**
+
+1. **Channel language gate:** removed. Channels remember their last languages (§4.3, §6).
+4. **Chinese display names:** script first, short place name, no "Mainland": 繁體中文（香港）,
+   廣東話（香港）, 繁體中文（台灣）, 简体中文（中国）, 简体中文（新加坡）. Each is written in its own
+   script (§3).
+6. **First wave of tuned guides:** `en-GB`, `zh-Hans-CN`, `zh-Hant-HK`, `en-US`, `yue-Hant-HK`,
+   `zh-Hant-TW`, `zh-Hans-SG`, `ja-JP`, `ko-KR`, `es-MX`, `pt-BR`, `fr-FR`.
+8. **A language named for one channel in the message** sets only that channel's language; the
+   other selected channels stay.
+9. **One channel in several languages:** in scope now (§4.4).
+- **Also decided:** a flag emoji beside every language (§7.1a) and a channel icon beside every
+  channel name (§4.5).
+
+**Still open**
+
 2. **Where defaults live.**
    - *Recommended:* the workspace default and `channelLocales`, both on the server.
    - *Alternative:* per browser.
 3. **Script entries.**
    - *Recommended, per the research:* `hi-Latn-IN` (Hinglish) as its own entry, with Roman Urdu
-     as a later candidate. Arabizi is **not** an entry; instead add an optional "Latin letters"
-     setting on `ar-LB`, `ar-EG` and `ar-MA` later.
-4. **Display names for Chinese.**
-   - *Standards research:* script first, then a short place name:
-     - Traditional Chinese interface: 繁體中文（香港）, 繁體中文（台灣）, 簡體中文（中國）,
-       廣東話（香港）
-     - English interface: "Chinese — Simplified (China)"
-   - It advises against "Mainland", "SAR" and "PRC" in visible labels and keeps them as search
-     aliases. The mockup currently shows 中文（中国大陆）. Choose which reads right to your
-     audience.
+     as a later candidate. Arabizi is **not** an entry; add an optional "Latin letters" setting on
+     `ar-LB`, `ar-EG` and `ar-MA` later.
 5. **Do Chinese-wide learned rules cover Cantonese?**
    - *Recommended:* yes. "No hashtags on my Chinese posts" applies to `yue-Hant-HK` too.
-6. **First wave of tuned guides.**
-   - *Recommended:* your four-channel locales (`en-GB`, `zh-Hans-CN`, `zh-Hant-HK`, `en-US`),
-     plus `yue-Hant-HK`, `zh-Hant-TW`, `zh-Hans-SG`, `ja-JP`, `ko-KR`, `es-MX`, `pt-BR` and
-     `fr-FR`. The rest follow in batches.
 7. **When a guide earns "Tuned".**
    - *Recommended:* a guide loads as soon as it's written, but the badge appears only after a
-     native speaker clears its "Native check" list. For Hong Kong Chinese and Cantonese, no
-     vendor style guide exists to lean on.
-8. **Naming a language for one channel in the message.**
-   - *Recommended:* "Threads in British English" sets Threads' language and leaves the other
-     selected channels in place.
-   - *Alternative:* follow today's rule that named channels replace the selection.
-9. **One channel in two languages** (e.g. Instagram in 中文（香港） and English).
-   - *Recommended:* later. Drafts are already keyed by (platform, language), so an
-     "Add another language" on a chip is a small follow-up.
+     native speaker clears its "Native check" list.
 10. **Gendered self-reference.**
     - *Recommended:* an optional IDENTITY field, answered by the person and never inferred.
     - *Alternative:* neutral constructions plus reminders only.
