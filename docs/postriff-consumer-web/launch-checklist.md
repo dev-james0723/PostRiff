@@ -24,13 +24,18 @@
 ### Verified end to end (dev harness)
 Connect → voice → draft → schedule → approve → worker publish → verified → analytics, in the new app; see `receipts/consumer-saas-e2e.md` (two backend defects found and fixed on the way).
 
+### Deployment status (2026-09-16)
+- **Preview deployed** from commit `dfedbae`+: https://postriff-phase2-private-ibjrdxss2-jamesau0723-6572s-projects.vercel.app (Vercel deployment protection applies to anonymous requests). Verified through the protection bypass: `/api/health` → `configured: true`; `/api/catalog` → `authMode: supabase`; `/api/ideas/models` → only `deterministic-preview` qualified; public routes and `robots.txt` serve.
+- **Vercel env set**: `POSTRIFF_CREDENTIAL_KEY` (production + preview, sensitive), `POSTRIFF_PUBLIC_BASE_URL` and `NEXT_PUBLIC_APP_URL` (production, `https://postriff-phase2-private.vercel.app`), `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (production + preview).
+- **Not yet applied: migrations 004 → 008.** `POSTRIFF_DATABASE_URL` is a sensitive Vercel secret and cannot be pulled by the CLI, and the Supabase CLI is not linked, so the database is only reachable with the connection string you hold. Either put it in `.env.local` as `POSTRIFF_DATABASE_URL` (gitignored) and say so, or run `migrations/postriff/hosted-precheck.sql` then `migrations/postriff/hosted-004-008.sql` in the Supabase SQL editor. Production promotion (`vercel deploy --prod`) follows immediately after.
+
 ## Founder-only gates (🔑), in order
 
 | # | Gate | Where | Done when |
 |---|---|---|---|
-| 1 | Apply migrations 004 → 008 to the hosted Supabase project | `migrations/postriff/*.sql`, see `gate-1-action-preview.md` | `scripts/check_postriff_hosted_preflight.py` passes against the live DB |
-| 2 | Vercel env for the API: `POSTRIFF_CREDENTIAL_KEY`, `POSTRIFF_PUBLIC_BASE_URL`, `CRON_SECRET` (existing Supabase vars stay) | Vercel → postriff_api | `/api/health` → `configured: true` |
-| 3 | Vercel env for the web app: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_APP_URL` (optional Sentry vars) | Vercel → postriff_web (`web/.env.example`) | sign-up works on the preview URL |
+| 1 | Apply migrations 004 → 008 to the hosted Supabase project (**blocked on the connection string — see Deployment status**) | `migrations/postriff/hosted-004-008.sql` | `scripts/check_postriff_hosted_preflight.py` passes against the live DB |
+| 2 | ✅ Vercel env for the API: `POSTRIFF_CREDENTIAL_KEY`, `POSTRIFF_PUBLIC_BASE_URL`, `CRON_SECRET` | Vercel → postriff_api | `/api/health` → `configured: true` (verified on preview) |
+| 3 | ✅ Vercel env for the web app: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_APP_URL` (optional Sentry vars) | Vercel → postriff_web | sign-in page renders in Supabase mode on the preview URL |
 | 4 | Custom domain + TLS; set `POSTRIFF_PUBLIC_BASE_URL` / `NEXT_PUBLIC_APP_URL` to it | Vercel | providers get the final HTTPS callback |
 | 5 | Supabase Auth: enable Google provider, email OTP template, MFA/passkey | Supabase dashboard | non-founder signs up from a phone |
 | 6 | Stripe: products + prices, customer portal, webhook, env vars; flip plan terms to `active` with `provider_price_id` | `docs/postriff-consumer-web/billing-and-email.md` | test-mode checkout completes and `Usage & plan` shows the live plan |
