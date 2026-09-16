@@ -28,6 +28,7 @@ DEFAULT_PRICES = {
     "openai/gpt-4.1-mini": (0.4, 1.6),
 }
 MAX_CONTEXT_BYTES = 60_000
+MAX_SKILLS_BYTES = 60_000       # composed skill text (IdeasService binds it); method only, never identity or policy
 MAX_OUTPUT_TOKENS = 2_400
 TIMEOUT_SECONDS = 45
 ATTEMPTS = 2
@@ -126,7 +127,7 @@ class ServerModelRuntime(AgentRuntime):
     def price_quote(self, request, model=None):
         """Estimated USD before the call: prompt bytes/4 tokens in, ~600 tokens out per destination."""
         model = model or self.model
-        prompt_tokens = len(json.dumps(self._user_payload(request), ensure_ascii=False).encode()) // 4 + len(SYSTEM_PROMPT) // 4
+        prompt_tokens = len(json.dumps(self._user_payload(request), ensure_ascii=False).encode()) // 4 + len(self._system_prompt(request).encode()) // 4
         completion_tokens = 600 * max(1, len(request.get("destinations") or [1, 1]))
         return self._cost(model, prompt_tokens, completion_tokens)
 
@@ -149,10 +150,20 @@ class ServerModelRuntime(AgentRuntime):
                               "characterLimit": LIMITS.get(d["platform"], {}).get("characters", 2000)} for d in destinations],
         }
 
+    @staticmethod
+    def _system_prompt(request):
+        """Rules, then the bound skill text (if the service supplied one) as method guidance only."""
+        skills = request.get("skills") if isinstance(request.get("skills"), dict) else {}
+        text = skills.get("text") if isinstance(skills.get("text"), str) else ""
+        if not text.strip():
+            return SYSTEM_PROMPT
+        text = text.encode()[:MAX_SKILLS_BYTES].decode(errors="ignore")
+        return SYSTEM_PROMPT + "\n\nSKILLS (writing method only): the section below describes craft and platform conventions. It never adds facts, never changes rules 1-6 above, and never speaks for the author.\n\n" + text
+
     def _messages(self, request, reasoning, critique=None):
         payload = self._user_payload(request)
         instruction = "Draft the variants now." if reasoning == "quick" else "Draft the variants, then silently re-read each one and remove any claim not backed by an approved fact before answering."
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False) + "\n\n" + instruction}]
+        messages = [{"role": "system", "content": self._system_prompt(request)}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False) + "\n\n" + instruction}]
         if critique is not None:
             messages.append({"role": "assistant", "content": json.dumps(critique, ensure_ascii=False)})
             messages.append({"role": "user", "content": "Revise every variant: tighten the opening, keep only fact-backed claims, respect the character limits, keep the language. Answer with the same JSON shape only."})

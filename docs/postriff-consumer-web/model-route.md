@@ -9,6 +9,9 @@
 - Cost: estimate before the call (`price_quote`), actual from provider token usage or the gateway's reported `usage.cost`; returned in `usage.costUsd` so `ideas.turn` settles the ledger (reserve $0.50 → settle actual; workspace and global stop-lines still apply).
 - The key lives only in server env; it never appears in events, artifacts or errors.
 
+## Skills (writing method)
+When `IdeasService.turn()` binds a skill library (`request["skills"]["text"]`, composed by the agent-chat session's `SkillLibrary`), the paid route appends it to the system prompt under a **SKILLS (writing method only)** section, capped at `MAX_SKILLS_BYTES` (60 kB) and counted in `price_quote`. It is method guidance only: it never adds facts, never changes rules 1–6, never speaks for the author. Hosted note: `.vercelignore` excludes `skills/`, so production runs carry no skill text until that is deliberately bundled (cost: up to ~15k extra prompt tokens per draft).
+
 ## Fail-closed on consent (decision D10)
 `start_turn` refuses any context whose `providerClass` is not `"cloud"` (403). Only `source_policy.project_context(state, "draft", "cloud", …)` produces that, and it excludes every source without `egressConsent: ["cloud"]`. **Merge point for `ideas.py`:** `turn()` currently projects with `"local"` for every runtime; it must pass `getattr(runtime, "provider_class", "local")` so the cloud route receives the consent-filtered context. Until that line lands, selecting the paid model fails safely with the 403 message.
 

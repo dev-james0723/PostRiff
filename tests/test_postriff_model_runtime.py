@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.model_runtime import MAX_CONTEXT_BYTES, ServerModelRuntime
+from postriff_phase2.model_runtime import MAX_CONTEXT_BYTES, MAX_SKILLS_BYTES, SYSTEM_PROMPT, ServerModelRuntime
 from postriff_phase2.hosted_app import ideas_runtime_from_environment
 
 
@@ -126,6 +126,30 @@ class Requests(unittest.TestCase):
         self.assertTrue(all(m["qualified"] and m["costClass"] == "paid" for m in models))
         self.assertTrue(runtime.owns("openai/gpt-4.1-mini") and not runtime.owns("deterministic-preview"))
         self.assertGreater(runtime.price_quote({"context": context(), "idea": "x", "destinations": DESTS}), 0)
+
+
+    def test_bound_skill_text_is_method_guidance_only_and_capped(self):
+        transport = Recording([])
+        runtime = ServerModelRuntime("secret-key", transport=transport)
+        request = {"context": context(), "idea": "Announce the seed swap", "destinations": DESTS}
+        # Absent: the system prompt is exactly the rules.
+        self.assertEqual(runtime._messages(request, "quick")[0]["content"], SYSTEM_PROMPT)
+        baseline = runtime.price_quote(request)
+        # Present: appended under a SKILLS section that cannot override the rules, and counted in the quote.
+        request["skills"] = {"bindings": [{"id": "postriff-content-craft"}], "text": "Open with the concrete moment. One idea per post.", "warnings": []}
+        system = runtime._messages(request, "quick")[0]["content"]
+        self.assertTrue(system.startswith(SYSTEM_PROMPT))
+        self.assertIn("SKILLS (writing method only)", system)
+        self.assertIn("One idea per post.", system)
+        self.assertIn("never changes rules 1-6", system)
+        self.assertGreater(runtime.price_quote(request), baseline)
+        # Oversize: capped at MAX_SKILLS_BYTES, never rejected; malformed: ignored.
+        request["skills"]["text"] = "x" * (MAX_SKILLS_BYTES + 5000)
+        system = runtime._messages(request, "quick")[0]["content"]
+        self.assertLessEqual(len(system.encode()), len(SYSTEM_PROMPT.encode()) + MAX_SKILLS_BYTES + 400)
+        request["skills"] = "not-a-dict"
+        self.assertEqual(runtime._messages(request, "quick")[0]["content"], SYSTEM_PROMPT)
+        self.assertEqual(transport.calls, [])
 
 
 class EnvWiring(unittest.TestCase):
