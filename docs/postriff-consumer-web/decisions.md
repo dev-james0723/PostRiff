@@ -54,3 +54,8 @@ A (tenant/auth/roles/isolation proof) → B (conversation + AgentRuntime + sourc
 
 ## D17 — Git is the change record from here on (2026-09-16)
 Git was initialised on 2026-09-16 on branch `consumer-saas` (baseline commit "Baseline before consumer SaaS rebuild"). It supersedes D1's hashed-backup convention for this rebuild: diffs, rollback and receipts cite commits, not `evidence/before/*` copies. Earlier evidence files remain as the record of the pre-Git rounds and are not rewritten.
+
+## D18 — Next.js consumer frontend replaces the Vite founder alpha as the deployed web service (2026-09-16)
+**Finding:** the founder alpha (`studio/web`, Vite SPA) drops visitors straight into the interface, cannot server-render a marketing site, and has no legal pages — all three block platform app reviews. The spec in `docs/postriff-consumer-saas-redesign.md` adopts `next-shadcn-dashboard-starter` as the design base.
+**Decision:** `web/` (Next.js 16 + shadcn base-nova) is the deployed `postriff_web` service in `vercel.json`; `studio/web` stays in the repo for the local Studio and is excluded from uploads. The Python API is unchanged and keeps `/api/*`. Identity is Supabase (Clerk was removed from the template); the local dev harness is supported through the catalog's `authMode: 'dev'`. The API's origin guard now honours `X-Forwarded-Host` so it works behind the Next.js proxy and Vercel.
+**Validation:** `npm run build` in `web/` (82 routes), `tsc` and `oxlint` clean; browser-verified against the dev harness at desktop and 375 px.

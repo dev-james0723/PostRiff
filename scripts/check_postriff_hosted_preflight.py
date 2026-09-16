@@ -46,6 +46,7 @@ def validate_structure(root=ROOT):
         "migrations/postriff/006_consumer_web_channels.sql",
         "migrations/postriff/007_consumer_web_billing.sql",
         "migrations/postriff/008_billing_provider_notifications.sql",
+        "web/package.json", "web/next.config.ts", "web/src/proxy.ts",
     ]
     missing = [name for name in required if not (root / name).is_file()]
     checks.append(_result("deployment-files", "pass" if not missing else "fail", "complete" if not missing else "missing: " + ", ".join(missing)))
@@ -60,18 +61,18 @@ def validate_structure(root=ROOT):
     valid_services = (
         api.get("runtime") == "python"
         and api.get("entrypoint") == "api.index:app"
-        and web.get("root") == "studio/web/"
-        and web.get("outputDirectory") == "dist-alpha"
+        and web.get("root") == "web/"
+        and web.get("framework") == "nextjs"
         and len(routes) >= 2
         and routes[0].get("source") == "/api/(.*)"
         and routes[0].get("destination", {}).get("service") == "postriff_api"
     )
-    checks.append(_result("vercel-services-routing", "pass" if valid_services else "fail", "API route precedes SPA route and preserves the original request path"))
+    checks.append(_result("vercel-services-routing", "pass" if valid_services else "fail", "API route precedes the Next.js web service and preserves the original request path"))
     exclusions = api.get("functions", {}).get("api/index.py", {}).get("excludeFiles", "")
-    private_exclusions = all(marker in exclusions for marker in (".env*", "broker.key", "*.command", "src/james_au_social/**", ".venv/**", ".phase3-build-venv/**", "desktop/**", "vendor/**"))
+    private_exclusions = all(marker in exclusions for marker in (".env*", "broker.key", "*.command", "src/james_au_social/**", ".venv/**", ".phase3-build-venv/**", "desktop/**", "vendor/**", "web/**"))
     checks.append(_result("function-bundle-boundary", "pass" if private_exclusions else "fail", "local credentials, launchers, private social modules, tests and evidence are excluded"))
     upload_rules = (root / ".vercelignore").read_text().splitlines()
-    upload_boundary = all(rule in upload_rules for rule in (".env*", ".*-broker-*", ".upgrade-*", "broker.key", ".phase3-build-venv/", "desktop/", "vendor/", "src/james_au_social/", "studio/broker/", "studio/web/node_modules/", "docs/", "tests/")) and not any(rule.startswith("!") for rule in upload_rules)
+    upload_boundary = all(rule in upload_rules for rule in (".env*", ".*-broker-*", ".upgrade-*", "broker.key", ".phase3-build-venv/", "desktop/", "vendor/", "src/james_au_social/", "studio/broker/", "studio/web/", "web/node_modules/", "web/.next/", "docs/", "tests/")) and not any(rule.startswith("!") for rule in upload_rules)
     checks.append(_result("source-upload-boundary", "pass" if upload_boundary else "fail", "explicit blocklist excludes credentials, hidden broker state, caches, private modules, tests and evidence from source upload"))
 
     dependencies = set((root / "requirements.txt").read_text().splitlines())

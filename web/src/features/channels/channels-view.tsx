@@ -252,7 +252,7 @@ function ProviderRow({ provider, canManage }: { provider: ProviderView; canManag
         <div className='flex items-center gap-2'>
           <Select value={capability} onValueChange={(value) => setCapability(String(value))}>
             <SelectTrigger className='w-40' aria-label='Capability to request'>
-              <SelectValue />
+              <SelectValue>{CAPS.find((c) => c.key === capability)?.label ?? capability}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {options.map((key) => (

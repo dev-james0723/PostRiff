@@ -31,12 +31,7 @@ studio/broker/
 studio/requirements.lock.txt
 studio/requirements.txt
 studio/tiktok-runtime/
-studio/web/.gitignore
-studio/web/README.md
-studio/web/dist/
-studio/web/dist-alpha/
-studio/web/index.html
-studio/web/node_modules/
-studio/web/tests/
-studio/web/vite.config.ts
-studio/web/src/**/*.pre-channel-switch
+studio/web/
+web/node_modules/
+web/.next/
+web/.env*.local

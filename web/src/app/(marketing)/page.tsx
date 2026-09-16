@@ -1,24 +1,34 @@
 import type { Metadata } from 'next';
-import { Section } from '@/components/marketing/section';
+import { CtaBand } from '@/components/marketing/cta-band';
+import { JsonLd } from '@/components/marketing/json-ld';
+import { Hero } from '@/components/marketing/landing/hero';
+import { ProductPreview } from '@/components/marketing/landing/product-preview';
+import { ChannelMatrix, DesignPartners, Faq, Honesty, HowItWorks, PricingSummary } from '@/components/marketing/landing/sections';
 import { siteConfig } from '@/config/site';
 
+const TITLE = 'PostRiff — Your ideas, on every platform, in your voice';
+const DESCRIPTION = 'One idea, 30+ platforms including 小紅書 and B站. PostRiff rewrites it per platform in your voice, and nothing publishes until you approve.';
+
 export const metadata: Metadata = {
-  title: {
-    absolute: `${siteConfig.name} · One idea, every platform, in your voice`
-  },
-  description: siteConfig.description,
-  openGraph: {
-    title: `${siteConfig.name} · One idea, every platform, in your voice`,
-    description: siteConfig.description,
-    url: '/'
-  }
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  openGraph: { title: TITLE, description: DESCRIPTION, url: '/', siteName: siteConfig.name },
+  twitter: { card: 'summary_large_image', title: TITLE, description: DESCRIPTION }
 };
 
-// Placeholder: the landing page content is written separately.
 export default function HomePage() {
   return (
-    <Section>
-      <h1 className='text-4xl font-semibold tracking-tight'>{siteConfig.name}</h1>
-    </Section>
+    <>
+      <JsonLd />
+      <Hero />
+      <ProductPreview />
+      <ChannelMatrix />
+      <HowItWorks />
+      <Honesty />
+      <DesignPartners />
+      <PricingSummary />
+      <Faq />
+      <CtaBand />
+    </>
   );
 }

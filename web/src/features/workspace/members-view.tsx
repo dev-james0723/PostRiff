@@ -95,7 +95,7 @@ function InviteForm({ onCreated }: { onCreated: (result: InvitationCreated, emai
           <Label htmlFor='invite-role'>Role</Label>
           <Select value={role} onValueChange={(value) => setRole(value as WorkspaceRole)}>
             <SelectTrigger id='invite-role'>
-              <SelectValue />
+              <SelectValue>{ROLE_LABELS[role]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {INVITE_ROLES.map((r) => (
@@ -183,7 +183,7 @@ function MemberRow({ member, canManage }: { member: Member; canManage: boolean }
         {editable ? (
           <Select value={member.role} onValueChange={(value) => void change(value as WorkspaceRole)}>
             <SelectTrigger className='h-8 w-32' aria-label='Role' disabled={busy}>
-              <SelectValue />
+              <SelectValue>{ROLE_LABELS[member.role]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {INVITE_ROLES.map((r) => (
