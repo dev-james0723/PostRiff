@@ -67,6 +67,9 @@ export default function PrivacyPage() {
       <p>
         Drafts are produced only from sources you select and approve. Today the drafting runtime is a deterministic preview that makes no external model request. When a model provider is contracted, sending a source to it will require your explicit per-source consent, will be metered to your workspace, and will be listed under Subprocessors. We do not use your content to train models, and our contracts with providers will prohibit training on it.
       </p>
+      <p>
+        Web research is off for every hosted workspace until its owner turns it on. When it is on and a draft needs facts you have not supplied, we send a search query derived from your message to Exa and fetch the public pages it finds through Jina Reader; a link you paste is fetched the same way. Your sources, memory files and drafts are never sent, facts found this way are marked in the draft for you to check, and turning research off stops it immediately. Both services are listed under Subprocessors.
+      </p>
 
       <h2 id='platforms'>5. Connected platforms</h2>
       <p>

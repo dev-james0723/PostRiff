@@ -21,7 +21,9 @@ export const SUBPROCESSORS = [
   { name: 'Stripe', purpose: 'Subscription billing and invoices (card details never touch PostRiff)', region: 'Global', status: 'When you subscribe' },
   { name: 'Resend', purpose: 'Transactional email (invitations, trial and billing notices)', region: 'US/EU', status: 'In use' },
   { name: 'Social providers (LinkedIn, Threads, Instagram)', purpose: 'Publishing and metrics for accounts you connect', region: 'Provider’s own', status: 'Only through your own OAuth grant' },
-  { name: 'AI model provider', purpose: 'Drafting', region: 'To be announced', status: 'Not yet contracted; only the deterministic preview runs today' }
+  { name: 'AI model provider', purpose: 'Drafting', region: 'To be announced', status: 'Not yet contracted; only the deterministic preview runs today' },
+  { name: 'Exa (exa.ai)', purpose: 'Web search for facts when you ask for research: receives a search query derived from your message, never your sources, memory files or drafts', region: 'US', status: 'Only after the workspace owner turns web research on' },
+  { name: 'Jina Reader (r.jina.ai)', purpose: 'Fetches the public pages found by that search, or a page whose link you paste, as plain text', region: 'US/EU', status: 'Only after the workspace owner turns web research on' }
 ];
 
 export const RIGHTS = [
