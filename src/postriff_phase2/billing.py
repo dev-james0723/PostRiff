@@ -154,6 +154,16 @@ class FixturePaymentProvider:
         return event
 
 
+class DisabledPaymentProvider:
+    """Mounted when no live provider is configured. Every webhook is refused; nothing is purchasable.
+    The fixture provider is never the production default: its secret is public."""
+    id = "disabled"
+
+    def parse_webhook(self, signature, body):
+        raise AlphaError("Billing is not configured for this deployment.", 503)
+
+
+
 class Billing:
     TRANSITIONS = {
         "subscription.activated": "active", "subscription.updated": "active", "invoice.payment_failed": "past_due",
@@ -180,6 +190,8 @@ class Billing:
         kind = event["type"]
         status = self.TRANSITIONS.get(kind)
         outcome = "ignored" if status is None else "applied"
+        if status is not None and not event.get("workspaceId"):
+            outcome, status = "ignored", None  # no PostRiff workspace on the event: recorded, never applied
         if status is not None:
             cur.execute("SELECT extract(epoch from last_event_at) FROM public.pr_subscriptions WHERE workspace_id=%s FOR UPDATE", (event["workspaceId"],))
             row = cur.fetchone()
@@ -203,7 +215,7 @@ class Billing:
                 self.on_applied(event, status)
             except Exception:  # noqa: BLE001 — a notification failure must never fail the webhook
                 pass
-        return {"eventId": event["id"], "outcome": outcome, "status": status}
+        return {"eventId": event["id"], "outcome": outcome, "status": status, "type": kind, "workspaceId": event.get("workspaceId") or None}
 
     def availability(self, cur, workspace_id):
         """'billing' block for the usage view: mounted provider and whether checkout/portal can be offered.

@@ -28,3 +28,6 @@ studio/broker/node_modules/
 web/node_modules/
 web/.next/
 !web/.env.example
+
+# .env.example is documentation, not a secret (the earlier .env* line re-ignored it)
+!.env.example

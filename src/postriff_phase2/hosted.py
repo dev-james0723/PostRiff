@@ -15,7 +15,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_alpha.domain import Store
 from postriff_alpha import profiles
 from .auth import initial_phase2_state
-from .contracts import FixtureImages, FixtureSocial, PLANS
+from .contracts import FixtureImages, FixtureSocial, PLANS, digest
 from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
@@ -217,8 +217,9 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None):
         self.connection_factory = connection_factory
+        self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
         self.assets = assets
         self.commands = HostedPhase2Commands(clock)
@@ -233,7 +234,11 @@ class HostedWorkspaceService:
         self.oauth = OAuthService(self.repository, self.commands, vault or CredentialVault(None), providers or {}, public_base_url, clock)
         self.ledger = Ledger()
         self.ideas.ledger = self.ledger
-        self.billing = Billing(ledger=self.ledger, clock=clock)
+        self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock)
+        from .email import Mailer, NullTransport, Reminders
+        # Unconfigured deployments get a recording NullTransport: business actions never depend on email.
+        self.mailer = mailer or Mailer(NullTransport(), "PostRiff <no-reply@postriff.invalid>", self.public_base_url or "https://postriff.invalid")
+        self.reminders = Reminders(self.mailer, self._email_for, clock=clock)
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport)
 
@@ -242,13 +247,123 @@ class HostedWorkspaceService:
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             view = self.ledger.usage_view(cur, workspace_id)
             view["lifecycle"] = self.billing.lifecycle(cur, workspace_id, self.clock())
+            view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
             return view
 
     def billing_webhook(self, signature, body):
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                return self.billing.process_webhook(cur, signature, body)
+                result = self.billing.process_webhook(cur, signature, body)
+                if result.get("outcome") == "applied":
+                    notice = self._billing_notice(cur, result)
+                    if notice:
+                        result["notification"] = notice
+                return result
+
+    # --- live billing (Stripe) and transactional email ------------------------------------
+    def _email_for(self, user_id):
+        """Owner/inviter address from Supabase Auth for a single send (D16); None when unavailable."""
+        lookup = getattr(self.identity, "email_for", None)
+        if lookup is None:
+            return None
+        try:
+            return lookup(user_id)
+        except AlphaError:
+            return None
+
+    def _app_url(self, path, default):
+        """Absolute URL on this deployment. Clients may only supply a relative path; never a host."""
+        if not self.public_base_url:
+            raise AlphaError("The public base URL is not configured.", 503)
+        path = default if path in (None, "") else path
+        if not isinstance(path, str) or not path.startswith("/") or path.startswith("//") or "://" in path or "\\" in path or len(path) > 512 or any(ord(c) < 32 for c in path):
+            raise AlphaError("Return paths must be relative to this app.", 400)
+        return self.public_base_url + path
+
+    def _live_provider(self):
+        provider = self.billing.provider
+        if getattr(provider, "id", "") != "stripe":
+            raise AlphaError("Billing is not configured for this deployment.", 503)
+        return provider
+
+    def billing_checkout(self, workspace_id, token, plan_terms_id, success_path=None, cancel_path=None):
+        """Owner-only. Only 'active' plan terms bound to a provider price are purchasable (D3).
+        Nothing is written until the provider's webhook confirms the subscription."""
+        provider = self._live_provider()
+        if not isinstance(plan_terms_id, str) or not 1 <= len(plan_terms_id) <= 64:
+            raise AlphaError("Choose a plan.")
+        success = self._app_url(success_path, "/app/account/billing?checkout=success")
+        cancel = self._app_url(cancel_path, "/app/account/billing?checkout=cancelled")
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_membership(row), "owner")
+            throttle(cur, f"checkout:{workspace_id}", 5, 60)
+            cur.execute("SELECT status,provider_price_id FROM public.pr_plan_terms WHERE id=%s", (plan_terms_id,))
+            terms = cur.fetchone()
+            if not terms or terms[0] != "active" or not terms[1]:
+                raise AlphaError("This plan is not yet available for purchase.", 409)
+            cur.execute("SELECT provider_customer_id,status FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
+            existing = cur.fetchone()
+            if existing and existing[1] in ("active", "past_due", "grace"):
+                raise AlphaError("This workspace already has a subscription. Change it from the billing portal.", 409)
+            customer_id = existing[0] if existing else None
+            audit(cur, workspace_id, principal, "billing.checkout_started", plan_terms_id)
+        customer_email = None if customer_id else self._email_for(principal)
+        if not customer_id and not customer_email:
+            raise AlphaError("Your account email could not be resolved for checkout.", 502)
+        key = digest({"checkout": workspace_id, "plan": plan_terms_id, "hour": int(self.clock() // 3600)})
+        return provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=terms[1], success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
+
+    def billing_portal(self, workspace_id, token, return_path=None):
+        """Owner-only. The provider-hosted portal handles payment method, plan change, cancellation and invoices."""
+        provider = self._live_provider()
+        return_url = self._app_url(return_path, "/app/account/billing")
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_membership(row), "owner")
+            throttle(cur, f"portal:{workspace_id}", 5, 60)
+            cur.execute("SELECT provider_customer_id FROM public.pr_subscriptions WHERE workspace_id=%s AND provider=%s", (workspace_id, provider.id))
+            existing = cur.fetchone()
+            if not existing or not existing[0]:
+                raise AlphaError("No billing account yet. Start a subscription first.", 409)
+            audit(cur, workspace_id, principal, "billing.portal_opened")
+            customer_id = existing[0]
+        return provider.create_portal_session(customer_id=customer_id, return_url=return_url)
+
+    def run_reminders(self):
+        """Cron entry: trial reminder sweep (deduped in pr_notifications)."""
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                return self.reminders.run(cur)
+
+    def _billing_notice(self, cur, result):
+        """One owner email per applied billing event, deduped in pr_notifications; never changes the webhook outcome."""
+        kind = {"subscription.activated": "subscription_activated", "invoice.payment_failed": "payment_failed"}.get(result.get("type"))
+        workspace_id = result.get("workspaceId")
+        if not kind or not workspace_id or not self.public_base_url:
+            return None
+        cur.execute("SELECT m.user_id::text FROM public.pr_memberships m WHERE m.workspace_id=%s AND m.role='owner' AND m.status='active' ORDER BY m.updated_at LIMIT 1", (workspace_id,))
+        owner = cur.fetchone()
+        if not owner:
+            return None
+        cur.execute("INSERT INTO public.pr_notifications(workspace_id,user_id,kind,dedupe_key) VALUES(%s,%s,%s,%s) ON CONFLICT (dedupe_key) DO NOTHING RETURNING id::text", (workspace_id, owner[0], kind, f"{kind}:{result['eventId']}"))
+        inserted = cur.fetchone()
+        if not inserted:
+            return {"kind": kind, "sent": False, "reason": "duplicate"}
+        address = self._email_for(owner[0])
+        if not address:
+            return {"kind": kind, "sent": False, "reason": "no address"}
+        billing_url = f"{self.public_base_url}/app/account/billing"
+        if kind == "subscription_activated":
+            cur.execute("SELECT p.label FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
+            label = cur.fetchone()
+            outcome = self.mailer.subscription_activated(address, label[0] if label else "PostRiff", billing_url)
+        else:
+            cur.execute("SELECT extract(epoch from grace_until) FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
+            grace = cur.fetchone()
+            outcome = self.mailer.payment_failed(address, float(grace[0]) if grace and grace[0] else self.clock() + 7 * 86400, billing_url)
+        if outcome.get("sent"):
+            cur.execute("UPDATE public.pr_notifications SET sent=true WHERE id=%s", (inserted[0],))
+        return {"kind": kind, "sent": bool(outcome.get("sent"))}
 
     def data_request(self, workspace_id, token, kind, payload):
         from . import privacy
@@ -309,6 +424,7 @@ class HostedWorkspaceService:
                 with db.cursor() as cur:
                     throttle(cur, f"verify:{client}", 30, 60)
         principal = self.verify_session(token)
+        created = False
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 throttle(cur, f"verify-user:{principal}", 60, 60)
@@ -323,7 +439,12 @@ class HostedWorkspaceService:
                     cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
                     revision += 1
                     audit(cur, workspace_id, principal, "workspace.created", "", {"plan": saved_plan})
+                    created = True
                 self._touch_session(cur, principal, self._session_id(token, principal), client_label)
+        if created and self.public_base_url:
+            address = self._email_for(principal)
+            if address:
+                self.mailer.welcome(address, f"{self.public_base_url}/app")
         shown = self.commands.present(state, revision)
         return {"workspaceId": workspace_id, **shown, "membership": Membership.from_row(*member).summary(), "auth": {"productionAccount": True}}
 
@@ -398,7 +519,16 @@ class HostedWorkspaceService:
             invitation_id, expires = cur.fetchone()
             audit(cur, workspace_id, principal, "invitation.created", invitation_id, {"role": role, **granted})
             # The raw token is returned exactly once; only its hash is stored.
-            return {"invitationId": invitation_id, "token": raw, "role": role, **granted, "expiresAt": float(expires)}
+            result = {"invitationId": invitation_id, "token": raw, "role": role, **granted, "expiresAt": float(expires)}
+        # After commit the invitee receives the accept link; a failed send never undoes the invitation.
+        result["emailSent"] = self._send_invitation(email, role, raw, float(expires), principal)
+        return result
+
+    def _send_invitation(self, email, role, raw, expires_at, inviter):
+        if not self.public_base_url:
+            return False
+        inviter_label = self._email_for(inviter) or "A workspace owner"
+        return bool(self.mailer.invitation(email, inviter_label, role, f"{self.public_base_url}/invite/{raw}", expires_at).get("sent"))
 
     def invitations(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):

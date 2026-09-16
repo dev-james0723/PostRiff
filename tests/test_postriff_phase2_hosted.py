@@ -58,6 +58,19 @@ class FakeService:
     def audit_events(self, workspace_id, token):
         return {"events": []}
 
+    def run_reminders(self):
+        return {"sent": 0, "skipped": 0}
+
+    def billing_checkout(self, workspace_id, token, plan_terms_id, success_path=None, cancel_path=None):
+        if plan_terms_id == "studio-v1":
+            raise AlphaError("This plan is not yet available for purchase.", 409)
+        return {"url": "https://checkout.stripe.test/s", "sessionId": "cs_test", "plan": plan_terms_id, "success": success_path, "cancel": cancel_path}
+
+    def billing_portal(self, workspace_id, token, return_path=None):
+        if return_path == "/nowhere":
+            raise AlphaError("No billing account yet. Start a subscription first.", 409)
+        return {"url": "https://billing.stripe.test/p", "return": return_path}
+
     def get(self, workspace_id, token):
         return {"workspace": workspace_id, "tokenSeen": bool(token)}
 

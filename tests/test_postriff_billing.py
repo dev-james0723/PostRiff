@@ -95,5 +95,55 @@ class Routes(unittest.TestCase):
         self.assertEqual((status, hook["outcome"]), (200, "applied"))
 
 
+
+class LiveBillingRoutes(unittest.TestCase):
+    """Checkout/portal routes are owner mutations behind the application guard; the webhook prefers Stripe's header;
+    the cron tick now carries the reminder sweep. The service is faked; the real gate logic lives in the PG script."""
+
+    def setUp(self):
+        self.service = FakeService()
+        self.app = HostedApplication(self.service, FakeWorker(), {"provider": "supabase", "flow": "pkce"}, "c" * 24)
+        self.auth = {"Authorization": "Bearer " + "t" * 32, "X-PostRiff-Request": "founder-alpha"}
+
+    def test_checkout_and_portal_routes(self):
+        status, _, session = invoke(self.app, "POST", "/api/workspaces/w/billing/checkout", {"planTermsId": "assist-v1", "successPath": "/app/account/billing?ok=1"}, self.auth)
+        self.assertEqual((status, session["url"], session["plan"], session["success"]), (201, "https://checkout.stripe.test/s", "assist-v1", "/app/account/billing?ok=1"))
+        status, _, refused = invoke(self.app, "POST", "/api/workspaces/w/billing/checkout", {"planTermsId": "studio-v1"}, self.auth)
+        self.assertEqual((status, "not yet available" in refused["error"]), (409, True))
+        status, _, portal = invoke(self.app, "POST", "/api/workspaces/w/billing/portal", {"returnPath": "/app/account/billing"}, self.auth)
+        self.assertEqual((status, portal["url"]), (200, "https://billing.stripe.test/p"))
+        status, _, none = invoke(self.app, "POST", "/api/workspaces/w/billing/portal", {"returnPath": "/nowhere"}, self.auth)
+        self.assertEqual((status, "No billing account" in none["error"]), (409, True))
+        status, _, _ = invoke(self.app, "POST", "/api/workspaces/w/billing/checkout", {"planTermsId": "assist-v1"}, {"Authorization": "Bearer " + "t" * 32})
+        self.assertEqual(status, 403)  # application guard on mutations
+        status, _, _ = invoke(self.app, "POST", "/api/workspaces/w/billing/unknown", {}, self.auth)
+        self.assertEqual(status, 404)
+
+    def test_webhook_prefers_stripe_signature_header(self):
+        seen = {}
+        self.service.billing_webhook = lambda sig, raw: seen.setdefault("sig", sig) or {"outcome": "ignored"}
+        status, _, _ = invoke(self.app, "POST", "/api/billing/webhook", {"id": "evt_1", "type": "charge.refunded"}, {"Stripe-Signature": "t=1,v1=abc", "X-PostRiff-Billing-Signature": "legacy"})
+        self.assertEqual((status, seen["sig"]), (200, "t=1,v1=abc"))
+
+    def test_cron_tick_includes_reminder_sweep(self):
+        status, _, result = invoke(self.app, "GET", "/api/cron/worker", headers={"Authorization": "Bearer " + "c" * 24})
+        self.assertEqual((status, result["reminders"], result["processed"]), (200, {"sent": 0, "skipped": 0}, 0))
+
+
+class DisabledProvider(unittest.TestCase):
+    def test_disabled_provider_refuses_every_webhook_and_is_the_default_without_stripe(self):
+        from postriff_phase2.billing import DisabledPaymentProvider
+        from postriff_phase2.hosted_app import billing_from_environment
+        with self.assertRaises(AlphaError) as refused:
+            DisabledPaymentProvider().parse_webhook("t=1,v1=x", b"{}")
+        self.assertEqual(refused.exception.status, 503)
+        provider, mailer = billing_from_environment({})
+        self.assertEqual((provider.id, type(mailer.transport).__name__), ("disabled", "NullTransport"))
+        provider, mailer = billing_from_environment({"STRIPE_SECRET_KEY": "sk", "STRIPE_WEBHOOK_SECRET": "wh", "RESEND_API_KEY": "re", "EMAIL_FROM": "PostRiff <hello@postriff.test>", "POSTRIFF_PUBLIC_BASE_URL": "https://app.postriff.test/"})
+        self.assertEqual((provider.id, type(mailer.transport).__name__, mailer.public_base_url), ("stripe", "ResendTransport", "https://app.postriff.test"))
+        with self.assertRaises(ValueError):
+            billing_from_environment({"RESEND_API_KEY": "re"})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -83,6 +83,23 @@ def client_label(environ):
     return label or "unknown"
 
 
+def billing_from_environment(values):
+    """Stripe mounts only with both secrets; otherwise billing is disabled (never the public-secret fixture).
+    Email mounts with Resend when RESEND_API_KEY is set, which then requires EMAIL_FROM and the public base URL."""
+    from .billing import DisabledPaymentProvider
+    from .billing_stripe import StripePaymentProvider
+    from .email import Mailer, NullTransport, ResendTransport
+    stripe_key, stripe_secret = values.get("STRIPE_SECRET_KEY"), values.get("STRIPE_WEBHOOK_SECRET")
+    provider = StripePaymentProvider(stripe_key, stripe_secret) if stripe_key and stripe_secret else DisabledPaymentProvider()
+    resend_key = values.get("RESEND_API_KEY")
+    base_url = values.get("POSTRIFF_PUBLIC_BASE_URL")
+    if resend_key:
+        if not values.get("EMAIL_FROM") or not base_url:
+            raise ValueError("EMAIL_FROM and POSTRIFF_PUBLIC_BASE_URL are required when RESEND_API_KEY is set.")
+        return provider, Mailer(ResendTransport(resend_key), values["EMAIL_FROM"], base_url)
+    return provider, Mailer(NullTransport(), "PostRiff <no-reply@postriff.invalid>", base_url or "https://postriff.invalid")
+
+
 def runtime_from_environment(environ=None):
     values = environ or os.environ
     database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"))
@@ -98,7 +115,8 @@ def runtime_from_environment(environ=None):
     # Adapters mount only with client credentials; live execution only when a provider is
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"))
+    billing_provider, mailer = billing_from_environment(values)
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer)
     social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
     worker = PostgresWorker(database, social=social)
     return service, worker, {"projectUrl": project_url, "publishableKey": publishable, "provider": "supabase", "flow": "pkce"}
@@ -243,7 +261,8 @@ class HostedApplication:
                 if not 0 < length <= 65536:
                     raise AlphaError("Webhook body size invalid.", 413)
                 raw = environ["wsgi.input"].read(length)
-                return self._json(start_response, 200, service.billing_webhook(environ.get("HTTP_X_POSTRIFF_BILLING_SIGNATURE", ""), raw))
+                signature = environ.get("HTTP_STRIPE_SIGNATURE") or environ.get("HTTP_X_POSTRIFF_BILLING_SIGNATURE", "")
+                return self._json(start_response, 200, service.billing_webhook(signature, raw))
             if method == "GET" and path in ("/api/content-types", "/api/content-formats", "/api/content-type-packs"):
                 response = {"/api/content-types": public_catalog, "/api/content-formats": formats, "/api/content-type-packs": public_packs}[path]()
                 return self._json(start_response, 200, response)
@@ -266,12 +285,14 @@ class HostedApplication:
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Content-Length", "0")])
                 return [b""]
             if path == "/api/cron/worker" and method == "GET":
-                self._runtime()
+                service = self._runtime()
                 expected = self.cron_secret or ""
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
-                return self._json(start_response, 200, self.worker.tick())
+                result = self.worker.tick()
+                result["reminders"] = service.run_reminders()
+                return self._json(start_response, 200, result)
             self._origin(environ, mutation)
             service = self._runtime()
             token = self._token(environ)
@@ -297,6 +318,12 @@ class HostedApplication:
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "ideas":
                 return self._ideas(environ, start_response, service, token, method, parts)
+            if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":
+                body = self._body(environ)
+                if parts[4] == "checkout":
+                    return self._json(start_response, 201, service.billing_checkout(parts[2], token, body.get("planTermsId"), body.get("successPath"), body.get("cancelPath")))
+                if parts[4] == "portal":
+                    return self._json(start_response, 200, service.billing_portal(parts[2], token, body.get("returnPath")))
             if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] in ("usage", "subscription") and method == "GET":
                 return self._json(start_response, 200, service.usage(parts[2], token))
             if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "data-requests":
