@@ -150,9 +150,26 @@ class ResearcherTest(unittest.TestCase):
     def test_search_outage_is_a_warning_and_the_time_budget_stops_reading(self):
         def boom(query, limit):
             raise ConnectionError("down")
-        out = research.Researcher(search=boom, read=lambda url: {"title": "", "text": ""}, clock=lambda: 0.0).run("Suno v6")
+        naps = []
+        out = research.Researcher(search=boom, read=lambda url: {"title": "", "text": ""}, clock=lambda: 0.0, sleep=naps.append).run("Suno v6")
         self.assertEqual(out["pages"], [])
-        self.assertTrue(any("Web search was unavailable (ConnectionError)" in w for w in out["warnings"]))
+        self.assertTrue(any("Web search was unavailable after 3 attempts (ConnectionError)" in w for w in out["warnings"]))
+        self.assertEqual(len(naps), 2, "two pauses between three attempts")
+
+    def test_a_transient_search_failure_is_retried(self):
+        attempts = []
+
+        def flaky(query, limit):
+            attempts.append(query)
+            if len(attempts) == 1:
+                raise ConnectionRefusedError("refused")
+            return research.parse_search_text(EXA_TEXT)
+        researcher = self.researcher()
+        researcher.search, researcher.sleep = flaky, lambda seconds: None
+        out = researcher.run("Suno v6")
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual([p["host"] for p in out["pages"]], ["suno.com", "example-news.com"])
+        self.assertEqual(out["warnings"], [])
         ticks = iter([0.0, 0.0, 40.0, 40.0, 40.0])
         slow = self.researcher(budget=30, clock=lambda: next(ticks)).run("Suno v6")
         self.assertEqual(len(slow["pages"]), 1)

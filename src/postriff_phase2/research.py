@@ -29,6 +29,9 @@ USER_AGENT = "PostRiff research/0.1"
 SEARCH_TIMEOUT = 12
 READ_TIMEOUT = 15
 TOTAL_BUDGET_SECONDS = 30
+SEARCH_ATTEMPTS = 3            # a refused connection or a timeout is retried before giving up
+READ_ATTEMPTS = 2
+RETRY_DELAY_SECONDS = 1.5
 MAX_RESULTS = 6
 MAX_PAGES = 2
 MAX_FACTS = 12
@@ -214,12 +217,27 @@ class Researcher:
     """Search, read up to MAX_PAGES pages, keep their paragraphs. Every step is time-boxed and every
     failure becomes a warning, never an exception: a draft with fewer facts beats no draft."""
 
-    def __init__(self, search=None, read=None, clock=time.monotonic, budget=TOTAL_BUDGET_SECONDS, max_pages=MAX_PAGES):
+    def __init__(self, search=None, read=None, clock=time.monotonic, budget=TOTAL_BUDGET_SECONDS, max_pages=MAX_PAGES, sleep=time.sleep):
         self.search = search or ExaSearch()
         self.read = read or JinaReader()
         self.clock = clock
         self.budget = budget
         self.max_pages = max_pages
+        self.sleep = sleep
+
+    def _attempt(self, call, attempts, started):
+        """Run `call` up to `attempts` times inside the budget; returns (value, last error)."""
+        error = None
+        for attempt in range(attempts):
+            if attempt and self.clock() - started > self.budget:
+                break
+            try:
+                return call(), None
+            except Exception as caught:  # noqa: BLE001 - every backend failure becomes a warning, never an exception
+                error = caught
+                if attempt + 1 < attempts:
+                    self.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+        return None, error
 
     def run(self, text, intent="draft"):
         started = self.clock()
@@ -227,10 +245,10 @@ class Researcher:
         pages, warnings, searched, results = [], [], [], []
         candidates = urls_in(text)
         if not candidates:
-            try:
-                results = self.search(query, MAX_RESULTS)
-            except Exception as error:  # noqa: BLE001 - a search outage must not fail the turn
-                warnings.append(f"Web search was unavailable ({type(error).__name__}); the draft used only what the workspace holds.")
+            results, error = self._attempt(lambda: self.search(query, MAX_RESULTS), SEARCH_ATTEMPTS, started)
+            if error is not None:
+                results = []
+                warnings.append(f"Web search was unavailable after {SEARCH_ATTEMPTS} attempts ({type(error).__name__}); the draft used only what the workspace holds.")
             hosts = set()
             for result in results:
                 host = host_of(result["url"])
@@ -245,9 +263,8 @@ class Researcher:
                 warnings.append("Research stopped at its time limit; later pages were not read.")
                 break
             searched.append(url)
-            try:
-                page = self.read(url)
-            except Exception as error:  # noqa: BLE001
+            page, error = self._attempt(lambda: self.read(url), READ_ATTEMPTS, started)
+            if error is not None:
                 warnings.append(f"Could not read {host_of(url) or url} ({type(error).__name__}).")
                 continue
             facts = paragraphs(page.get("text", ""))

@@ -60,8 +60,11 @@ facts and the idea they supplied. Rules that never bend:
   source id. Never invent first-person experience, results, credentials, numbers, names or quotes.
   Put anything you needed but did not have into `unknowns` and keep it out of the text.
 - When the facts cover the topic only partly, still write: say what they support, in the person's
-  voice and with their view, and list the rest in `unknowns`. Decline only when there is nothing
-  usable at all.
+  voice and with their view, and list the rest in `unknowns`. When there are no facts at all about
+  a topic the person asked for, still write: build the post on their stance and questions, framed
+  as theirs ("I have not tried it yet", "what I want to know is…"), make no specific claim about the
+  thing itself, and put every fact worth verifying in `unknowns`. Never decline a topic the person
+  asked for; a short honest post beats no post.
 - In `sourceIds`, list the id of each approved source you used (the source's own id, not the ids
   of its facts); list nothing you did not use.
 - A voice trait in VOICE.md describes how to handle material the person supplied; it is never a
