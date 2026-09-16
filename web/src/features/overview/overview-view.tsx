@@ -76,6 +76,15 @@ export function OverviewView() {
   const trialDays = subscription?.status === 'trial' ? daysUntil(entitlement?.resetsAt) : null;
 
   const attention: Attention[] = [];
+  if (!snapshot.isLoading && snapshot.data && !snapshot.data.state.speaker?.activeRevision) {
+    attention.push({
+      tone: 'info',
+      title: 'Set up your voice',
+      description: 'Two minutes: what you are building, who it is for, and a tone. Drafts can only be scheduled against an active voice profile.',
+      href: '/app/workspace/brand',
+      action: 'Set up'
+    });
+  }
   if (lifecycle?.status === 'past_due') {
     attention.push({
       tone: 'warning',

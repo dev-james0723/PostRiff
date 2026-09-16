@@ -1,0 +1,197 @@
+'use client';
+
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
+import { useAct, useSnapshot } from '@/lib/api/hooks';
+import { ApiError } from '@/lib/api/client';
+import type { BrandMode } from '@/lib/api/types';
+
+const MODES: { id: BrandMode; label: string; note: string }[] = [
+  { id: 'personal', label: 'My personal brand', note: 'Share my experience, expertise and point of view.' },
+  { id: 'niche', label: 'A niche or expertise', note: 'Build a focused channel around a subject.' },
+  { id: 'business', label: 'A business', note: 'Speak for a company, studio or practice.' },
+  { id: 'hybrid', label: 'A mix', note: 'Personal voice plus a subject or a business.' }
+];
+
+const TONES: { id: 'warm' | 'direct' | 'reflective'; label: string; note: string }[] = [
+  { id: 'warm', label: 'Warm', note: 'Friendly, encouraging, first person.' },
+  { id: 'direct', label: 'Direct', note: 'Short sentences, clear claims, no hedging.' },
+  { id: 'reflective', label: 'Reflective', note: 'Thoughtful, slower, asks questions.' }
+];
+
+/**
+ * Three short steps that create the active voice profile the scheduler
+ * requires: starting point → purpose & audience → tone & sample → approve.
+ * Every step is an explicit workspace action; nothing is inferred by a model.
+ */
+export function VoiceSetup({ onDone }: { onDone?: () => void }) {
+  const snapshot = useSnapshot();
+  const act = useAct();
+  const state = snapshot.data?.state;
+  const revision = snapshot.data?.revision ?? 0;
+  const provisional = state?.speaker?.provisional ?? null;
+
+  const [mode, setMode] = useState<BrandMode>((state?.brandHub?.mode as BrandMode) || 'personal');
+  const [purpose, setPurpose] = useState(state?.brandHub?.purpose ?? '');
+  const [audience, setAudience] = useState(state?.brandHub?.audience ?? '');
+  const [subject, setSubject] = useState(state?.brandHub?.subject ?? '');
+  const [speaker, setSpeaker] = useState(state?.brandHub?.speaker ?? '');
+  const [tone, setTone] = useState<'warm' | 'direct' | 'reflective'>('warm');
+  const [writing, setWriting] = useState('');
+  const [note, setNote] = useState('');
+
+  const needsSubject = mode !== 'personal';
+  const canPropose = purpose.trim() && audience.trim() && (!needsSubject || subject.trim()) && (mode !== 'hybrid' || speaker.trim());
+
+  async function propose() {
+    try {
+      let current = revision;
+      const modeResult = await act.mutateAsync({ revision: current, action: 'mode', payload: { mode } });
+      current = modeResult.revision;
+      const layers = mode === 'hybrid' ? ['voice', subject.trim() ? 'niche' : 'business'] : undefined;
+      const contextResult = await act.mutateAsync({
+        revision: current,
+        action: 'context',
+        payload: { purpose: purpose.trim(), audience: audience.trim(), subject: subject.trim(), speaker: speaker.trim(), ...(layers ? { layers } : {}) }
+      });
+      current = contextResult.revision;
+      await act.mutateAsync({ revision: current, action: 'profile_propose', payload: { writing: writing.trim(), tone } });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'The voice profile could not be proposed.');
+    }
+  }
+
+  async function decide(decision: 'approve' | 'reject') {
+    try {
+      await act.mutateAsync({ revision, action: 'profile_decide', payload: { decision, note: decision === 'approve' ? note.trim() : '' } });
+      if (decision === 'approve') {
+        toast.success('Voice profile active. New drafts will be written and scheduled against it.');
+        onDone?.();
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'The decision could not be saved.');
+    }
+  }
+
+  if (provisional) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Review your provisional voice</CardTitle>
+          <CardDescription>This is what drafts will be checked against. Approve it or start again — nothing here was analysed by a model.</CardDescription>
+        </CardHeader>
+        <CardContent className='flex flex-col gap-3 text-sm'>
+          <p>
+            Tone: <Badge variant='outline'>{provisional.tone}</Badge>
+          </p>
+          <ul className='list-disc pl-5'>
+            {provisional.observations.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          {provisional.writingExample && <blockquote className='border-l-2 pl-3 whitespace-pre-wrap'>{provisional.writingExample}</blockquote>}
+          <p className='text-muted-foreground text-xs'>Unknowns kept explicit: {provisional.unknowns.join(' ')}</p>
+          <div className='flex flex-col gap-1.5'>
+            <Label htmlFor='voice-note'>Optional: one line in your words</Label>
+            <Input id='voice-note' value={note} onChange={(e) => setNote(e.target.value)} maxLength={1500} placeholder='e.g. Plain, specific, never salesy.' />
+          </div>
+        </CardContent>
+        <CardFooter className='flex flex-wrap gap-2'>
+          <Button disabled={act.isPending} onClick={() => void decide('approve')}>
+            Use this voice
+          </Button>
+          <Button variant='outline' disabled={act.isPending} onClick={() => void decide('reject')}>
+            Start again
+          </Button>
+        </CardFooter>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Set up your voice</CardTitle>
+        <CardDescription>Two minutes. Drafts can only be scheduled once a voice profile is active, so PostRiff knows whose words it is writing.</CardDescription>
+      </CardHeader>
+      <CardContent className='flex flex-col gap-6'>
+        <fieldset className='flex flex-col gap-2'>
+          <legend className='mb-1 text-sm font-medium'>1. What are you building?</legend>
+          <RadioGroup value={mode} onValueChange={(value) => setMode(value as BrandMode)} className='grid gap-2 sm:grid-cols-2'>
+            {MODES.map((option) => (
+              <Label key={option.id} htmlFor={`mode-${option.id}`} className='hover:bg-accent flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal has-data-checked:border-primary'>
+                <RadioGroupItem id={`mode-${option.id}`} value={option.id} className='mt-0.5' />
+                <span className='flex flex-col'>
+                  <span className='text-sm font-medium'>{option.label}</span>
+                  <span className='text-muted-foreground text-xs'>{option.note}</span>
+                </span>
+              </Label>
+            ))}
+          </RadioGroup>
+        </fieldset>
+
+        <fieldset className='flex flex-col gap-3'>
+          <legend className='mb-1 text-sm font-medium'>2. Purpose and people</legend>
+          <div className='flex flex-col gap-1.5'>
+            <Label htmlFor='voice-purpose'>What do you want your posts to do?</Label>
+            <Input id='voice-purpose' value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={1500} placeholder='e.g. Help adult learners practise piano without a teacher.' />
+          </div>
+          <div className='flex flex-col gap-1.5'>
+            <Label htmlFor='voice-audience'>Who are they for?</Label>
+            <Input id='voice-audience' value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={1500} placeholder='e.g. Adults returning to the piano after years away.' />
+          </div>
+          {needsSubject && (
+            <div className='flex flex-col gap-1.5'>
+              <Label htmlFor='voice-subject'>{mode === 'business' ? 'The business' : 'The subject'}</Label>
+              <Input id='voice-subject' value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={1500} />
+            </div>
+          )}
+          {mode === 'hybrid' && (
+            <div className='flex flex-col gap-1.5'>
+              <Label htmlFor='voice-speaker'>Who speaks in the first post?</Label>
+              <Input id='voice-speaker' value={speaker} onChange={(e) => setSpeaker(e.target.value)} maxLength={1500} placeholder='e.g. Me, as the founder' />
+            </div>
+          )}
+        </fieldset>
+
+        <fieldset className='flex flex-col gap-3'>
+          <legend className='mb-1 text-sm font-medium'>3. Tone and a sample</legend>
+          <RadioGroup value={tone} onValueChange={(value) => setTone(value as 'warm' | 'direct' | 'reflective')} className='grid gap-2 sm:grid-cols-3'>
+            {TONES.map((option) => (
+              <Label key={option.id} htmlFor={`tone-${option.id}`} className='hover:bg-accent flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal has-data-checked:border-primary'>
+                <RadioGroupItem id={`tone-${option.id}`} value={option.id} className='mt-0.5' />
+                <span className='flex flex-col'>
+                  <span className='text-sm font-medium'>{option.label}</span>
+                  <span className='text-muted-foreground text-xs'>{option.note}</span>
+                </span>
+              </Label>
+            ))}
+          </RadioGroup>
+          <div className='flex flex-col gap-1.5'>
+            <Label htmlFor='voice-writing'>Paste something you wrote (optional)</Label>
+            <Textarea id='voice-writing' rows={4} value={writing} onChange={(e) => setWriting(e.target.value)} maxLength={6000} placeholder='A paragraph is enough. It is kept for your reference and never quoted publicly.' />
+          </div>
+        </fieldset>
+      </CardContent>
+      <CardFooter>
+        <Button disabled={!canPropose || act.isPending} onClick={() => void propose()}>
+          {act.isPending ? 'Saving…' : 'Propose my voice'}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+/** Small reusable notice for pages that need an active voice. */
+export function useVoiceStatus() {
+  const snapshot = useSnapshot();
+  const speaker = snapshot.data?.state.speaker;
+  return { loading: snapshot.isLoading, active: Boolean(speaker?.activeRevision), provisional: Boolean(speaker?.provisional) };
+}

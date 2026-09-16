@@ -6,8 +6,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
+import Link from 'next/link';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
@@ -97,6 +99,7 @@ export function IdeasView() {
 
   const destinations = platforms.map((platform) => ({ platform, language }));
   const revision = snapshot.data?.revision ?? 0;
+  const voiceActive = Boolean(snapshot.data?.state.speaker?.activeRevision);
   const variants: RunVariant[] = run?.artifact?.variants ?? [];
   const qualified = models.data?.models.find((m) => m.qualified);
 
@@ -165,6 +168,18 @@ export function IdeasView() {
         </Badge>
       }
     >
+      {!snapshot.isLoading && !voiceActive && (
+        <Alert className='mb-4'>
+          <Icons.info className='size-4' />
+          <AlertTitle>Set up your voice first</AlertTitle>
+          <AlertDescription className='flex flex-col gap-2'>
+            <span>Previews work now, but drafts can only be scheduled once a voice profile is active. It takes two minutes.</span>
+            <Link href='/app/workspace/brand' className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-fit')}>
+              Set up your voice
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
       <div className='grid gap-4 lg:grid-cols-[14rem_1fr] xl:grid-cols-[14rem_1fr_24rem]'>
         {/* Conversations */}
         <Card className='hidden lg:flex lg:flex-col'>

@@ -95,6 +95,7 @@ export interface SnapshotVariant {
   language: string;
   text: string;
   revision: number;
+  voiceRevision: number | null;
   sourceIds: string[];
   warnings: string[];
   unknowns: string[];
@@ -122,9 +123,28 @@ export interface Phase2State {
   jobs: Job[];
 }
 
+export interface VoiceProfile {
+  tone: 'warm' | 'direct' | 'reflective';
+  writingExample: string;
+  observations: string[];
+  unknowns: string[];
+}
+
+export interface Speaker {
+  id: string;
+  label: string;
+  revisions: { revision: number; profile: VoiceProfile; approvedAt: string; reason: string }[];
+  activeRevision: number | null;
+  provisional: VoiceProfile | null;
+}
+
+export type BrandMode = 'personal' | 'niche' | 'business' | 'hybrid';
+
 export interface SnapshotState {
   workspace?: { id: string; name?: string; sample?: boolean };
-  session?: { completed?: boolean };
+  session?: { completed?: boolean; step?: number };
+  speaker?: Speaker;
+  brandHub?: { mode?: BrandMode | ''; purpose?: string; audience?: string; subject?: string; speaker?: string; layers?: string[] };
   phase2?: Phase2State;
   variants?: SnapshotVariant[];
   sources?: SnapshotSource[];

@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -39,9 +40,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
   const state = snapshot.data?.state;
   const revision = snapshot.data?.revision ?? 0;
 
-  const drafts = useMemo(() => (state?.variants ?? []).filter((v) => !v.blockedByRetraction), [state?.variants]);
+  const drafts = useMemo(() => (state?.variants ?? []).filter((v) => !v.blockedByRetraction && v.voiceRevision === state?.speaker?.activeRevision), [state?.variants, state?.speaker?.activeRevision]);
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const assets = useMemo(() => (state?.phase2?.assets ?? []).filter((a) => !a.deleted), [state?.phase2?.assets]);
+  const voiceActive = Boolean(state?.speaker?.activeRevision);
+  const staleDrafts = (state?.variants ?? []).filter((v) => !v.blockedByRetraction && v.voiceRevision !== state?.speaker?.activeRevision).length;
 
   const [variantId, setVariantId] = useState<string>(preselected ?? '');
   const [channelId, setChannelId] = useState<string>('');
@@ -100,7 +103,18 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
           <DialogTitle>Schedule a draft</DialogTitle>
           <DialogDescription>Choose the draft, the account and the exact time. This prepares a review; nothing publishes until you approve it.</DialogDescription>
         </DialogHeader>
+        {!voiceActive ? (
+          <div className='flex flex-col gap-3 text-sm'>
+            <p>Scheduling needs an active voice profile, so every publication is checked against whose words it carries.</p>
+            <Link href='/app/workspace/brand' className={buttonVariants()} onClick={() => onOpenChange(false)}>
+              Set up your voice (2 minutes)
+            </Link>
+          </div>
+        ) : (
         <div className='flex flex-col gap-4'>
+          {staleDrafts > 0 && (
+            <p className='text-muted-foreground text-xs'>{staleDrafts} draft{staleDrafts === 1 ? '' : 's'} were written before your current voice profile and cannot be scheduled; draft them again from Ideas.</p>
+          )}
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='schedule-draft'>Draft</Label>
             <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); }}>
@@ -185,6 +199,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected }: S
             </Label>
           )}
         </div>
+        )}
         <DialogFooter>
           <Button variant='outline' onClick={() => onOpenChange(false)}>
             Cancel

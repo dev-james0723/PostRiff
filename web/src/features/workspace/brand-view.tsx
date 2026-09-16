@@ -9,6 +9,7 @@ import { useSnapshot } from '@/lib/api/hooks';
 import { downloadBlob } from '@/lib/download';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { toast } from 'sonner';
+import { VoiceSetup } from './voice-setup';
 
 interface ProfileLike {
   tone?: string;
@@ -22,7 +23,9 @@ export function BrandView() {
   const { api, workspaceId } = useWorkspaceApi();
   const state = snapshot.data?.state;
   const you = state?.you as { identitySentence?: string } | undefined;
-  const profile = state?.profile as ProfileLike | undefined;
+  const active = state?.speaker?.activeRevision ?? null;
+  const activeProfile = state?.speaker?.revisions.find((r) => r.revision === active)?.profile ?? null;
+  const profile = (activeProfile as ProfileLike | null) ?? (state?.profile as ProfileLike | undefined);
   const sources = state?.sources ?? [];
 
   async function exportProfile() {
@@ -45,6 +48,10 @@ export function BrandView() {
     >
       {snapshot.isLoading ? (
         <Skeleton className='h-64 w-full' />
+      ) : !active ? (
+        <div className='max-w-3xl'>
+          <VoiceSetup />
+        </div>
       ) : (
         <div className='grid gap-4 lg:grid-cols-2'>
           <Card>
@@ -53,7 +60,8 @@ export function BrandView() {
               <CardDescription>The one-line summary drafts are checked against.</CardDescription>
             </CardHeader>
             <CardContent className='text-sm'>
-              {you?.identitySentence ? <p>{you.identitySentence}</p> : <p className='text-muted-foreground'>Not set yet.</p>}
+              {you?.identitySentence ? <p>{you.identitySentence}</p> : <p className='text-muted-foreground'>{state?.brandHub?.purpose ? `${state.brandHub.purpose} — for ${state.brandHub.audience ?? 'your readers'}.` : 'Not set yet.'}</p>}
+              <p className='text-muted-foreground mt-2 text-xs'>Voice profile revision {active} · {state?.speaker?.label}</p>
               {profile?.tone && (
                 <p className='text-muted-foreground mt-2 text-xs'>
                   Tone: <span className='text-foreground'>{profile.tone}</span>
