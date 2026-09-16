@@ -42,6 +42,12 @@ SKIP_DOMAINS = {"x.com", "twitter.com", "instagram.com", "facebook.com", "tiktok
 _URL = re.compile(r"https?://[^\s<>\"'）)\]]+")
 # Follow-up edits ("shorter", "another angle", 改短啲) never trigger a search.
 _REVISION = re.compile(r"^\s*(?:please\s+)?(?:make (?:it|this|that|them)|shorter|longer|tighter|rewrite|redo|revise|try|again|another|different|change|swap|use|add|remove|drop|cut|keep|fix|translate|more|less|less formal|more casual|same|再|改|短啲|長啲|換|另一|一樣|重寫|翻譯)\b", re.I)
+# Words that mean the message is about something in the world, whoever the sentence is about:
+# products, releases, news, versions ("v6", "2026", "GPT-5"). A first-person sentence with one of
+# these is still researched; "my left hand rushed the Chopin coda" has none and stays personal.
+_TOPIC = re.compile(r"\b(new|newest|latest|advanced|releases?|released|launch(?:es|ed)?|announce\w*|updates?|updated|versions?|models?|news|report|study|reviews?|trends?|features?|tools?|apps?|platforms?|company|startup|AI|LLM|pricing|price|policy|law|election|market|album|concert|festival|competition|programs?|announcement)\b|\b[A-Za-z]*\d+[A-Za-z.]*\b", re.I)
+# "I want to express my excitement about X", "I'm curious about X": the topic is X.
+_FIRST_PERSON_LEAD = re.compile(r"^\s*(?:i\b[^.?!\n]{0,80}?\b(?:about|on|regarding|re)\s+)", re.I)
 _FIRST_PERSON = re.compile(r"(?<![A-Za-z])(I|I'm|I’m|I've|I’ve|I'd|I’d|my|me|we|we're|we’re|our)(?![A-Za-z])|我|我哋|我們|我们|自己|本人")
 _LEAD = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+|help me\s+)?(?:write|draft|create|make|compose|do|prepare|give me|generate)(?:\s+me)?(?:\s+(?:a|an|the|one|some))?(?:\s+(?:short|quick|long|new|linkedin|instagram|threads|facebook|x|twitter))*\s+(?:post|posts|thread|threads|article|caption|piece|update|carousel|story|script|blog)?\s*(?:about|on|regarding|re|covering|introducing)?\s*", re.I)
 _CHANNEL_TAIL = re.compile(r"\b(?:for|to|on)\s+(?:linkedin|instagram|threads|facebook|x|twitter|tiktok|youtube|bluesky|mastodon|xiaohongshu|小紅書)\b.*$", re.I)
@@ -76,16 +82,22 @@ def needs_research(text, intent="draft", has_facts=False):
         return True
     if intent == "research":
         return True
-    if has_facts or len(text) < 8 or _REVISION.match(text) or _FIRST_PERSON.search(text):
+    if has_facts or len(text) < 8 or _REVISION.match(text):
         return False
+    if _FIRST_PERSON.search(text) and not _TOPIC.search(text):
+        return False  # the person's own experience, nothing in the world to look up
     return len(query_for(text).split()) >= 2 or len(query_for(text)) >= 6
 
 
 def query_for(text):
     """The topic, without the instruction around it: "write me a post about X for LinkedIn" → "X"."""
     query = _URL.sub(" ", text or "")
+    query = _FIRST_PERSON_LEAD.sub("", query, count=1)
     query = _LEAD.sub("", query, count=1)
     query = _CHANNEL_TAIL.sub("", query)
+    first = re.split(r"(?<=[.!?。！？])\s+", query.strip(), maxsplit=1)[0]
+    if len(first.split()) >= 3:
+        query = first
     query = re.sub(r"\s+", " ", query).strip(" .,:;-–—\"'“”")
     return query[:200] or (text or "").strip()[:200]
 

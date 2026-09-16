@@ -64,6 +64,10 @@ class ResearchRulesTest(unittest.TestCase):
         self.assertFalse(research.needs_research("今日我練琴練到好攰"))
         self.assertFalse(research.needs_research("write a post about the newest Suno model", has_facts=True), "the person supplied material for this turn")
         self.assertFalse(research.needs_research("hi"))
+        # A first-person sentence about something in the world is still a topic.
+        self.assertTrue(research.needs_research("I want to express my excitement about the most advanced models that were just announced in Suno AI."))
+        self.assertTrue(research.needs_research("I tried Suno v6 yesterday and it surprised me."))
+        self.assertTrue(research.needs_research("I keep thinking about the new Claude release."))
         self.assertTrue(research.needs_research("write a post about the newest Suno model"), "other facts in the workspace say nothing about this topic")
         for edit in ("make it shorter", "Shorter, please", "another angle", "改短啲", "translate to Cantonese", "use the second one"):
             self.assertFalse(research.needs_research(edit), edit)
@@ -73,6 +77,8 @@ class ResearchRulesTest(unittest.TestCase):
         self.assertEqual(research.query_for("Write a LinkedIn post on Suno v6"), "Suno v6")
         self.assertEqual(research.query_for("climate change"), "climate change")
         self.assertEqual(research.query_for("Thoughts on https://suno.com/blog/introducing-v6 please"), "Thoughts on please")
+        self.assertEqual(research.query_for("I want to express my excitement about the most advanced models that were just announced in Suno AI. Make it warm."), "the most advanced models that were just announced in Suno AI")
+        self.assertEqual(research.query_for("I'm curious about Suno v6 for Instagram"), "Suno v6")
 
     def test_paragraphs_keep_prose_and_drop_navigation_headings_and_duplicates(self):
         facts = research.paragraphs(READER_TEXT)
