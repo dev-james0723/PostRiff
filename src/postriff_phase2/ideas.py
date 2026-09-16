@@ -12,6 +12,8 @@ from .permissions import require
 from .source_policy import project_context, stamp
 from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
+from .codex_runtime import CodexCliRuntime
+from .skills import SkillLibrary
 from . import intent, memory
 
 MAX_TEXT = 6000
@@ -73,7 +75,7 @@ class RunSink:
 
 
 class IdeasService:
-    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None):
+    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None, skill_library=None):
         from .billing import Ledger
         self.repository = repository
         self.commands = commands
@@ -81,9 +83,13 @@ class IdeasService:
         self.clock = clock or __import__("time").time
         self.ledger = ledger or Ledger()
         if runtimes is None:
-            # The local CLI route exists only where the CLI is installed and enabled (never on a hosted function).
-            runtimes = [self.runtime] + ([ClaudeCliRuntime(clock=self.clock)] if ClaudeCliRuntime.available() else [])
+            # Local CLI routes exist only where the CLI is installed and enabled (never on a hosted function).
+            runtimes = [self.runtime]
+            for cli in (ClaudeCliRuntime, CodexCliRuntime):
+                if cli.available():
+                    runtimes.append(cli(clock=self.clock))
         self.runtimes = list(runtimes)
+        self.skills = skill_library or SkillLibrary()
 
     # --- routes and models ---------------------------------------------------------
     def model_catalog(self):
@@ -207,9 +213,10 @@ class IdeasService:
         if outcome["plan"]:
             artifact["plan"] = outcome["plan"]  # a proposal; approval still runs the review → approve chain
         artifact_hash = digest(artifact)
+        usage = {**usage, "skillBindings": outcome.get("skillBindings", [])}
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
         context = outcome["context"]
-        summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources.", "runId": run_id, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"]}
+        summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources.", "runId": run_id, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])]}
         self._settle_message(cur, workspace_id, conversation_id, run_id, summary)
         return artifact_hash
 
@@ -252,12 +259,17 @@ class IdeasService:
             idea = text or state.get("brief", {}).get("idea", "")
             # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
             request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": memory.prompt_fragments(state)}
+            # Step ③: skills are bound by destination and format and recorded by id/version/sha256 (design §7).
+            format_id = ((state.get("contentSystem") or {}).get("selection") or {}).get("formatId")
+            bound = self.skills.bind(destinations, format_id)
+            request["skills"] = bound
+            skill_ids = [b["id"] for b in bound["bindings"]]
             cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning if reasoning in ("quick", "standard", "deep") else "quick", digest(context), context["policyEpoch"], key))
             run_id = cur.fetchone()[0]
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", 500_000 if paid else 0, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"]}
 
             def emit(event):
                 self._insert_event(cur, workspace_id, run_id, event)
@@ -265,7 +277,7 @@ class IdeasService:
             # Context notes (unsupported channels, assumed times, the proposed plan) follow run.started
             # so the stream keeps its shape: run.started first, run.completed last.
             context_events = [safe_event("warning.created", message=f"{platform} is not available for drafting yet, so it was left out.") for platform in parsed["unsupported"]]
-            context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"]]
+            context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"]]
             if plan:
                 context_events.append(safe_event("action.proposed", action="schedule_plan", destinations=len(plan["destinations"]), timeZone=plan["timeZone"]))
 
@@ -274,9 +286,9 @@ class IdeasService:
                 for pending in context_events:
                     emit(pending)
                 emit(safe_event("progress.updated", stage="queued", percent=5))
-                cur.execute("UPDATE public.pr_agent_runs SET usage=%s::jsonb WHERE id::text=%s", (json.dumps({"provenance": "pending", "reservationId": reservation["reservationId"]}), run_id))
+                cur.execute("UPDATE public.pr_agent_runs SET usage=%s::jsonb WHERE id::text=%s", (json.dumps({"provenance": "pending", "reservationId": reservation["reservationId"], "skillBindings": bound["bindings"]}), run_id))
                 # The assistant turn exists from the start so the conversation can follow the run; the sink fills it in.
-                self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": "", "pending": True, "runId": run_id, "intent": parsed["intent"], "destinations": destinations, "plan": plan, "model": model_id}, run_id)
+                self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": "", "pending": True, "runId": run_id, "intent": parsed["intent"], "destinations": destinations, "plan": plan, "model": model_id, "skills": skill_ids}, run_id)
                 dispatch = (runtime, run_id, request, RunSink(self, workspace_id, conversation_id, run_id, outcome))
                 response = self._events_for(cur, workspace_id, run_id, 0)
             else:

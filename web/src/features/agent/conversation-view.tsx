@@ -37,6 +37,8 @@ interface AssistantBody {
   destinations?: { platform: string; language: string }[];
   plan?: SchedulePlan | null;
   excluded?: { id: string; reason: string }[];
+  /** Skill packages bound to the run, by id (design §7). */
+  skills?: string[];
 }
 
 function bodyOf(message: Message): AssistantBody & { text: string } {
@@ -196,7 +198,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
                     <Icons.sparkles className='size-3.5' />
                   </span>
                   <div className='flex min-w-0 flex-1 flex-col gap-3'>
-                    {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} />}
+                    {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} />}
                     {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
                     {body.excluded && body.excluded.length > 0 && (
                       <ul className='text-muted-foreground text-xs'>

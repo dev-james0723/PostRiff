@@ -63,6 +63,8 @@ class FakeCliRuntime(AgentRuntime):
         return {}
 
     def dispatch(self, run_id, request, sink):
+        self.last_request = request
+
         def work():
             sink.emit(safe_event("progress.updated", stage="writing", percent=10))
             self.release.wait(10)
@@ -120,6 +122,15 @@ assistants = [m for m in ideas.messages(wid, "one", cid)["messages"] if m["role"
 assert len(assistants) == 1, "the pending turn is filled in, not duplicated"
 assistant = assistants[-1]
 assert assistant["runId"] == run["runId"] and assistant["body"]["model"] == "claude-code:default" and not assistant["body"].get("pending") and assistant["body"]["text"].startswith("Drafted 2")
+# Skills were bound by destination (design §7): the editorial core plus one adapter per platform, hashed and recorded.
+bound = fake.last_request["skills"]
+if ideas.skills.available():
+    assert [b["id"] for b in bound["bindings"]] == ["postriff-content-craft", "postriff-channel-linkedin", "postriff-channel-threads"], bound["bindings"]
+    assert all(len(b["sha256"]) == 64 for b in bound["bindings"]) and "## Skill: postriff-content-craft" in bound["text"]
+    assert assistant["body"]["skills"] == [b["id"] for b in bound["bindings"]]
+    assert [b["id"] for b in done["usage"]["skillBindings"]] == assistant["body"]["skills"]
+else:
+    assert bound["bindings"] == [] and any("No skill library" in w for w in bound["warnings"])
 with connection() as db:
     ledger = db.execute("SELECT cost_state, actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND run_id::text=%s", (wid, run["runId"])).fetchall()
 assert ("actual", 0) in ledger and not any(row[1] for row in ledger), ledger  # settled at $0: the subscription paid, PostRiff did not

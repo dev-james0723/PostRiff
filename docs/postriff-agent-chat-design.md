@@ -516,6 +516,28 @@ Phase 2 嘅第一個 slice：**Claude Code 變成一條真正嘅寫稿 route**�
 - Reasoning effort 未 map 到 CLI；skills 未 mount（Phase 3）。
 - Codex route 未做（adapter 合約已經支援，加多一個 def 即可）。
 
+## 11c. Phase 3 實作記錄（2026-09-16，同日）
+
+Phase 3：**skills 綁定 + Codex route**。原則照 §7：skills 帶方法、memory files 帶個人；每次 run 記低用咗邊個 skill、邊個版本、邊個 sha256，事後可以追。
+
+| 層 | 檔案 | 內容 |
+|---|---|---|
+| Skills | `src/postriff_phase2/skills.py` | `SkillLibrary`：root = `POSTRIFF_SKILLS_DIR` 或 repo `skills/`（要有 `postriff-content-craft/SKILL.md` 先算 available）；`load()` 讀 SKILL.md（去 frontmatter，取 `metadata.version`，冇就 `unversioned`）＋指定 reference files，每個 file 記 sha256 同字數，路徑鎖死喺該 skill 目錄內（`../` 出唔到去）；`bind(destinations, formatId)`：core `postriff-content-craft`（＋ editorial-workflow / human-voice-pass / platform-playbooks，visual formats 加 visual-handoff）＋每個 destination 一個 `postriff-channel-*`；每 file 上限 20k 字、總文 60k 字，剪咗會出 warning；缺 skill / 冇 library 係 warning 唔係 fail |
+| Ideas | `ideas.py` | `turn()` 步驟③：`request["skills"] = library.bind(...)`；bind warnings 變 `warning.created` context events；`skillBindings`（id / version / sha256 / files）寫入 run usage（pending 同 completed 都有）；assistant message body 帶 `skills` ids；`IdeasService(skill_library=…)` 可注入 |
+| Claude Code | `cli_runtime.py` | `compose()` 喺 system prompt 尾加 SKILLS 段（「method only, never identity；引用檔已 inline；永遠唔 override 上面規則」） |
+| Codex | `src/postriff_phase2/codex_runtime.py` | `CodexCliRuntime(ClaudeCliRuntime)`：`codex exec --json --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check --sandbox read-only --output-schema <tmp>/schema.json -C <tmp> [-m model] -`，prompt 由 stdin 入（system ＋ INPUT）；temp workdir 0700，run 完即刪；detect 用 `codex --version` ＋ `codex login status`（restricted env，Codex 要 `TMPDIR` 先肯答）；events：`item.completed/agent_message` → 最後一段當 JSON candidate、`turn.completed.usage` → tokens、`error` / `turn.failed` → classify（usage limit → 指去 usage 頁；not logged in → `codex login`）；models：`codex:default` ＋ `POSTRIFF_CODEX_MODELS` 白名單先可以 `-m`；`POSTRIFF_CODEX_BIN` override；同 Claude Code 一樣 subscription route，PostRiff 記 $0 |
+| Registry | `ideas.py` | `IdeasService` 自動加 Claude Code / Codex route（各自 `available()`：CLI 喺 PATH 而且 `POSTRIFF_LOCAL_CLI != 0`）；hosted 冇 CLI 就自然唔列 |
+| Web | `features/agent/{use-model,model-picker,activity-strip,conversation-view}.tsx` | picker 按 route 分組（`ROUTE_LABELS`：Claude Code / Codex CLI）；pill「Codex · default」；activity strip 加「Skills · content-craft, channel-linkedin」一行（由 message body `skills` 嚟，冇就唔顯示） |
+| Tests | `tests/test_postriff_skills.py`（7）、`tests/test_postriff_codex_runtime.py`（6，fake `codex`）、`postgres_cli_route.py` 加 skills 斷言 | 全過；agent 四個 unit module 40 個、PG 三套無回歸；web typecheck ＋ lint 過 |
+
+**E2E（dev harness，fake `codex` 經 `POSTRIFF_CODEX_BIN`）**：picker 見「Local CLI · Codex CLI」組 → 揀 `Codex CLI · your default model` → 送出 → run 完成，activity strip 顯示 Skills 行 ＋「Codex · default」；Models 頁見 codex agent card。
+真 `codex`（James 部 Mac）：`codex login status` = Logged in using ChatGPT，但 2026-09-16 已到 usage limit（「You've hit your usage limit」）→ UI 會顯示 usage-limit guidance；要等 limit reset 先有真 run。
+
+**未做 / 留待**
+- hosted（Vercel）`.vercelignore` 排除咗 `skills/`，所以 hosted run 會出「No skill library is installed on this host」warning、只用 editorial policy——要 hosted 有 skills 就要將 `skills/postriff-*` 入 bundle（另一 session 嘅檔案，由佢決定）。
+- Agentic research（agent-reach / URL fetch 做 sources）、onboarding chat、memory proposals、companion transport 未做。
+- Reasoning effort 未 map 去兩條 CLI。
+
 ## 12. 要你答嘅問題
 
 1. Home 取代 Overview（決定 2）— OK？定係保留 `/app` Overview，Home 放 `/app/agent`？

@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
  * What the run actually did, from its safe events only: detected intent, sources it was
  * allowed to read, warnings, cost. Lines with no data are omitted rather than faked.
  */
-export function ActivityStrip({ run, plan, intent, destinations }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string }[] }) {
+export function ActivityStrip({ run, plan, intent, destinations, skills }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string }[]; skills?: string[] }) {
   const [open, setOpen] = useState(false);
   const events = run.events;
   const sources = events.filter((e) => e.type === 'source.added').length;
@@ -53,6 +53,17 @@ export function ActivityStrip({ run, plan, intent, destinations }: { run: Run; p
             </>
           )}
           {plan && <> · times read in <b>{plan.timeZone}</b></>}
+        </Row>
+      )}
+      {skills && skills.length > 0 && (
+        <Row>
+          Skills ·{' '}
+          {skills.map((id, index) => (
+            <span key={id}>
+              {index > 0 && ', '}
+              <b>{id.replace(/^postriff-/, '')}</b>
+            </span>
+          ))}
         </Row>
       )}
       <Row>

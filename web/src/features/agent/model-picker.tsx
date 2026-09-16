@@ -14,15 +14,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { ModelOption } from '@/lib/api/types';
 import { cn } from '@/lib/utils';
-import { shortLabel } from './use-model';
+import { ROUTE_LABELS, shortLabel } from './use-model';
 
 /** The composer's model pill: PostRiff routes first, then each local CLI, like a settings picker in miniature. */
 export function ModelPicker({ options, model, onChoose, disabled }: { options: ModelOption[]; model: string; onChoose: (id: string) => void; disabled?: boolean }) {
   const current = options.find((m) => m.id === model);
   const ready = current?.qualified ?? model === 'deterministic-preview';
+  const cliRoutes = Array.from(new Set(options.map((m) => m.route).filter((r): r is string => Boolean(r) && r !== 'fixture' && r !== 'managed')));
   const groups: { title: string; items: ModelOption[] }[] = [
     { title: 'PostRiff', items: options.filter((m) => !m.route || m.route === 'fixture' || m.route === 'managed') },
-    { title: 'Local CLI · Claude Code', items: options.filter((m) => m.route === 'claude-code') }
+    ...cliRoutes.map((route) => ({ title: `Local CLI · ${ROUTE_LABELS[route] ?? route}`, items: options.filter((m) => m.route === route) }))
   ].filter((group) => group.items.length > 0);
 
   return (
