@@ -80,6 +80,8 @@ class ResearchRulesTest(unittest.TestCase):
         self.assertTrue(facts[0].startswith("Today we’re taking our biggest step"))
         self.assertTrue(any(f.startswith("v6 is our flagship model") for f in facts))
         self.assertFalse(any("Image 1" in f or f.startswith("#") or "Contact Us" in f for f in facts))
+        junk = research.paragraphs("We use cookies and similar technologies to personalise content and analyse our traffic; manage your preferences below.\n\nSign up to our newsletter for the latest music business news delivered every morning to your inbox.\n\nA real paragraph about the v6 models with enough words to be kept as a fact about the launch.")
+        self.assertEqual(len(junk), 1, junk)
         long = research.paragraphs("A" * 40 + ". " + "word " * 200)
         self.assertLessEqual(len(long[0]), research.MAX_FACT_CHARS)
 

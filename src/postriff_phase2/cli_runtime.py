@@ -128,12 +128,13 @@ def normalize_output(structured, request, author="Claude Code", prose=None):
     declined = "; ".join(warnings_all) or prose_reason(prose)
     if not structured["variants"]:
         raise AlphaError(f"{author} did not draft. It needs: {declined} Nothing was applied." if declined else f"{author} returned no candidate and gave no reason. Nothing was applied.", 422)
-    variants = []
+    variants, missing = [], []
     for destination in request["destinations"]:
         match = next((v for v in structured["variants"] if isinstance(v, dict) and v.get("platform") == destination["platform"] and v.get("language") == destination["language"]), None)
         if not match or not isinstance(match.get("text"), str) or not match["text"].strip():
-            because = f" It said: {declined}" if declined else ""
-            raise AlphaError(f"{author} returned no {destination['platform']} · {destination['language']} candidate.{because} Nothing was applied.", 502)
+            # Never stop the person over one destination: keep what was written and say what is missing.
+            missing.append(f"{destination['platform']} · {destination['language']}")
+            continue
         text = match["text"].strip()[:12000]
         warnings = [f"Written by {author} on this machine; review every claim before scheduling."]
         limit = PLATFORM_LIMITS.get(destination["platform"])
@@ -160,6 +161,13 @@ def normalize_output(structured, request, author="Claude Code", prose=None):
             "unknowns": [str(u)[:300] for u in match.get("unknowns", []) if isinstance(u, str) and u.strip()][:10],
             "warnings": warnings, "candidateOnly": bool(request["context"].get("candidateOnly")),
         })
+    if not variants:
+        raise AlphaError(f"{author} did not draft. It needs: {declined} Nothing was applied." if declined else f"{author} returned no candidate and gave no reason. Nothing was applied.", 422)
+    if missing:
+        because = f" It said: {declined}" if declined else ""
+        note = f"No {', '.join(missing)} candidate this time.{because} Add what is missing or ask again."
+        for variant in variants:
+            variant["warnings"].append(note[:600])
     return {"variants": variants}
 
 

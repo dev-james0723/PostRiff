@@ -177,8 +177,12 @@ class ClaudeCliRuntimeTest(unittest.TestCase):
         self.assertGreater(len(threads["text"]), 500)
         self.assertTrue(any("exceeds the Threads limit of 500" in w for w in threads["warnings"]))
 
-    def test_missing_destination_and_missing_schema_fail_closed(self):
-        self.assertIn("no Threads · English candidate", self.run_to_end(self.runtime(mode="missing")).failed)
+    def test_a_missing_destination_keeps_the_rest_and_missing_schema_fails_closed(self):
+        sink = self.run_to_end(self.runtime(mode="missing"))
+        self.assertIsNone(sink.failed, "one skipped destination never stops the person")
+        artifact, _ = sink.completed
+        self.assertEqual([v["platform"] for v in artifact["variants"]], ["LinkedIn"])
+        self.assertTrue(any(w.startswith("No Threads · English candidate this time.") for w in artifact["variants"][0]["warnings"]), artifact["variants"][0]["warnings"])
         self.assertIn("no structured candidate", self.run_to_end(self.runtime(mode="noschema")).failed)
 
     def test_fact_ids_cited_by_the_model_resolve_to_their_source(self):

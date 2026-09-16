@@ -48,6 +48,8 @@ _CHANNEL_TAIL = re.compile(r"\b(?:for|to|on)\s+(?:linkedin|instagram|threads|fac
 _MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 _MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MARKUP = re.compile(r"[*_`>#]+")
+# Consent banners, cookie tables, newsletter and account prompts read as paragraphs but carry no facts.
+_BOILERPLATE = re.compile(r"\b(cookie|cookies|consent|gdpr|privacy policy|terms of (use|service)|all rights reserved|subscribe|newsletter|sign (in|up)|log ?in|create an account|advertis(ing|ement)|analytics|tracking|opt[- ]out|manage (your )?preferences|accept all|reject all)\b", re.I)
 
 
 def enabled():
@@ -112,7 +114,7 @@ def paragraphs(text, limit=MAX_FACTS):
         line = _MARKDOWN_LINK.sub(r"\1", line)
         line = _MARKUP.sub("", line).strip(" -•")
         words = line.split()
-        if len(line) < MIN_FACT_CHARS or len(words) < 8 or links > max(2, len(words) // 6):
+        if len(line) < MIN_FACT_CHARS or len(words) < 8 or links > max(2, len(words) // 6) or _BOILERPLATE.search(line):
             continue
         if len(line) > MAX_FACT_CHARS:
             cut = line[:MAX_FACT_CHARS]
