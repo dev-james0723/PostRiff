@@ -218,7 +218,8 @@ class HostedPhase2Commands:
 
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
-        if set(channel) != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
+        if set(channel) - {"language"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         saved = copy.deepcopy(channel)
         # identityVerified comes from the provider identity endpoint; capabilityVerified only when

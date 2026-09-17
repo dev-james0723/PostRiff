@@ -48,7 +48,7 @@ assert quick["status"] == "completed"
 plan = quick["artifact"]["plan"]
 assert plan["kind"] == "schedule" and plan["timeZone"] == "Asia/Hong_Kong" and plan["intent"] == "schedule"
 assert [(d["platform"], d["language"], d["localTime"]) for d in plan["destinations"]] == [
-    ("Instagram", "繁體中文", "2026-09-16T16:00"), ("LinkedIn", "繁體中文", "2026-09-16T17:00")], plan["destinations"]
+    ("Instagram", "zh-Hant", "2026-09-16T16:00"), ("LinkedIn", "zh-Hant", "2026-09-16T17:00")], plan["destinations"]
 assert plan["unsupported"] == ["Facebook"]
 # Named channels replaced the composer selection (Threads) and each got its own variant.
 assert sorted(v["platform"] for v in quick["artifact"]["variants"]) == ["Instagram", "LinkedIn"]
@@ -65,7 +65,7 @@ assert any(e["type"] == "warning.created" and e["message"].startswith("Facebook 
 thread = ideas.messages(wid, "one", quick["conversationId"])
 assistant = [m for m in thread["messages"] if m["role"] == "assistant"][-1]
 assert assistant["body"]["plan"] == plan and assistant["body"]["intent"] == "schedule"
-assert assistant["body"]["destinations"] == [{"platform": "Instagram", "language": "繁體中文"}, {"platform": "LinkedIn", "language": "繁體中文"}]
+assert assistant["body"]["destinations"] == [{"platform": "Instagram", "language": "zh-Hant"}, {"platform": "LinkedIn", "language": "zh-Hant"}]
 
 # 4. A follow-up turn without channels keeps the composer's selection and yields no plan.
 follow = ideas.turn(wid, "one", quick["conversationId"], {"text": "Shorter please.", "destinations": [{"platform": "Threads", "language": "English"}], "timeZone": "Asia/Hong_Kong"})

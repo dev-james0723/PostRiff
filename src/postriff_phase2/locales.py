@@ -348,8 +348,9 @@ def settings(state):
     }
 
 
-def languages_for(platform, state=None):
-    """A channel's starting languages: last used there, its usual language, the workspace default, English."""
+def languages_for(platform, state=None, suggestion=None):
+    """A channel's starting languages: last used there, its usual language, the workspace default, a suggestion
+    from the message's script (`suggest_from_text`), then English."""
     current = settings(state)
     remembered = current["channels"].get(platform)
     if remembered:
@@ -357,7 +358,7 @@ def languages_for(platform, state=None):
     usual = usual_for(platform)
     if usual:
         return [usual]
-    return [current["default"] or catalogue()["defaultLocale"]]
+    return [current["default"] or canonical(suggestion) or catalogue()["defaultLocale"]]
 
 
 def apply_language_action(state, action, payload, actor, now=None):

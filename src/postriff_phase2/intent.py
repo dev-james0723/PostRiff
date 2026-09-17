@@ -316,7 +316,7 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
             return [fallback]
         if "state" not in remembered:
             remembered["state"] = settings() if callable(settings) else settings
-        return locales.languages_for(platform, remembered["state"])
+        return locales.languages_for(platform, remembered["state"], parsed.get("language"))
 
     chosen = {}
     for item in requested if isinstance(requested, list) else []:
