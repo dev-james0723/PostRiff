@@ -16,7 +16,7 @@ from postriff_alpha.profiles import metadata
 from postriff_alpha.templates import catalog
 from .hosted import HostedWorkspaceService
 from .hosted_storage import PrivateAssetService, SupabaseStorage
-from .hosted_identity import SupabaseIdentityAdmin, verified_auth_time, verified_session_id
+from .hosted_identity import SupabaseIdentityAdmin, verified_aal, verified_auth_time, verified_session_id
 from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .content_types import formats, public_catalog, public_packs
@@ -36,11 +36,12 @@ def postgres_factory(dsn):
     return lambda: psycopg.connect(dsn, client_encoding="utf8", prepare_threshold=None, connect_timeout=8)
 
 
-def supabase_verifier(project_url, publishable_key, connection_factory=None):
+def supabase_verifier(project_url, publishable_key, connection_factory=None, get_user=None):
+    """`get_user` is the server transport to Supabase getUser; tests inject one, production uses HTTPS."""
     if not isinstance(publishable_key, str) or len(publishable_key) < 20:
         raise ValueError("POSTRIFF_SUPABASE_PUBLISHABLE_KEY is required.")
 
-    def get_user(url, token):
+    def https_get_user(url, token):
         request = Request(url, headers={"Authorization": "Bearer " + token, "apikey": publishable_key, "Accept": "application/json"})
         try:
             with urlopen(request, timeout=12, context=ssl.create_default_context()) as response:
@@ -51,7 +52,7 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None):
         except (URLError, TimeoutError, OSError) as error:
             raise AlphaError("The identity service is temporarily unavailable.", 503) from error
 
-    candidate = SupabaseSessionCandidate(project_url, get_user)
+    candidate = SupabaseSessionCandidate(project_url, get_user or https_get_user)
 
     def verify(access_token):
         principal = candidate.verify(access_token)
@@ -59,14 +60,19 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None):
         if connection_factory is not None:
             with connection_factory() as db:
                 with db.cursor() as cur:
-                    cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s)", (principal, principal, session_id))
-                    deleted, revoked = cur.fetchone()
+                    cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s), EXISTS(SELECT 1 FROM public.pr_mfa_enforcement WHERE user_id=%s)", (principal, principal, session_id, principal))
+                    deleted, revoked, mfa_required = cur.fetchone()
             if deleted or revoked:
                 raise AlphaError("This session expired or was revoked. Sign in again.", 401)
+            # Someone who turned on two-factor authentication must present it on every session:
+            # the UI hides nothing the API would not also refuse.
+            if mfa_required and verified_aal(access_token, principal) != "aal2":
+                raise AlphaError("Two-factor verification required.", 403)
         return principal
 
     verify.session_id = lambda access_token, principal: verified_session_id(access_token, principal)
     verify.auth_time = lambda access_token, principal: verified_auth_time(access_token, principal)
+    verify.aal = lambda access_token, principal: verified_aal(access_token, principal)
     return verify
 
 
@@ -342,13 +348,33 @@ class HostedApplication:
                 self._body(environ)
                 return self._json(start_response, 200, service.logout(token))
             if path == "/api/auth/sessions" and method == "GET":
-                return self._json(start_response, 200, service.sessions(token))
+                return self._json(start_response, 200, service.sessions(token, client_label=client_label(environ)))
+            if path == "/api/auth/sessions/revoke-others" and method == "POST":
+                self._body(environ)
+                return self._json(start_response, 200, service.revoke_other_sessions(token))
+            if path == "/api/auth/mfa" and method in ("POST", "DELETE"):
+                self._body(environ)
+                return self._json(start_response, 200, service.enable_mfa(token) if method == "POST" else service.disable_mfa(token))
+            if path == "/api/me" and method == "GET":
+                return self._json(start_response, 200, service.me(token, client_label=client_label(environ)))
+            if path == "/api/me" and method == "PATCH":
+                return self._json(start_response, 200, service.update_profile(token, self._body(environ)))
+            if path == "/api/me/channels" and method == "GET":
+                return self._json(start_response, 200, service.my_channels(token))
+            if path == "/api/me/security-events" and method == "GET":
+                return self._json(start_response, 200, service.security_events(token))
+            if path == "/api/me/invitations" and method == "GET":
+                return self._json(start_response, 200, service.my_invitations(token))
             if path == "/api/workspaces" and method == "GET":
                 return self._json(start_response, 200, service.workspaces(token))
             if path == "/api/invitations/accept" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, service.accept_invitation(token, body.get("token"), client=client_address(environ)))
             parts = path.strip("/").split("/")
+            if len(parts) == 5 and parts[:3] == ["api", "me", "invitations"] and parts[4] in ("accept", "decline") and method == "POST":
+                self._body(environ)
+                settle = service.accept_my_invitation if parts[4] == "accept" else service.decline_my_invitation
+                return self._json(start_response, 200, settle(token, parts[3]))
             if len(parts) == 4 and parts[:2] == ["api", "tools"] and parts[3] == "invoke" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
@@ -440,6 +466,12 @@ class HostedApplication:
                 if len(parts) == 4 and parts[3] == "invitations" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 201, service.invite(workspace_id, token, body.get("email"), body.get("role"), body.get("permissions", {})))
+                if len(parts) == 4 and parts[3] == "leave" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, service.leave_workspace(workspace_id, token))
+                if len(parts) == 4 and parts[3] == "transfer-ownership" and method == "POST":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, service.transfer_ownership(workspace_id, token, body.get("newOwnerId")))
                 if len(parts) == 4 and parts[3] == "actions" and method == "POST":
                     body = self._body(environ)
                     action, payload, revision = body.get("action"), body.get("payload", {}), body.get("expectedRevision")

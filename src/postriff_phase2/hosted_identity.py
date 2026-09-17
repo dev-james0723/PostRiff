@@ -44,6 +44,13 @@ def verified_auth_time(access_token, principal):
     return float(value)
 
 
+def verified_aal(access_token, principal):
+    """Authenticator assurance level Supabase stamped on this session: "aal2" only after a second
+    factor was verified. Anything missing or unexpected counts as "aal1"."""
+    value = _verified_payload(access_token, principal).get("aal")
+    return "aal2" if value == "aal2" else "aal1"
+
+
 class SupabaseIdentityAdmin:
     def __init__(self, project_url, publishable_key, service_key, send=None, fetch=None):
         self.project_url = project_url.rstrip("/")
@@ -101,6 +108,25 @@ class SupabaseIdentityAdmin:
             return None
         return email.strip().lower()
 
+    def verified_factors(self, principal):
+        """Second factors the user has finished enrolling (Admin GET user → `factors`, status
+        'verified'). Content-free: ids, type and friendly name only; never secrets."""
+        if not isinstance(principal, str) or not USER_ID.fullmatch(principal):
+            raise AlphaError("Verified user required.", 400)
+        status, body = self.fetch("GET", self.project_url + "/auth/v1/admin/users/" + quote(principal), self._admin_headers())
+        if status == 404:
+            return []
+        if status != 200:
+            raise AlphaError("The identity service could not resolve this account.", 502)
+        factors = body.get("factors")
+        if not isinstance(factors, list):
+            return []
+        return [
+            {"id": str(item.get("id", "")), "type": str(item.get("factor_type", "")), "name": str(item.get("friendly_name") or "")[:80]}
+            for item in factors
+            if isinstance(item, dict) and item.get("status") == "verified"
+        ]
+
     def logout(self, access_token):
         status = self.send(
             "POST",
@@ -110,6 +136,18 @@ class SupabaseIdentityAdmin:
         )
         if status not in (200, 204, 401):
             raise AlphaError("The hosted session could not be closed remotely.", 502)
+        return status != 401
+
+    def logout_others(self, access_token):
+        """Revoke every refresh token of this user except the one behind `access_token`."""
+        status = self.send(
+            "POST",
+            self.project_url + "/auth/v1/logout?scope=others",
+            {"apikey": self.publishable_key, "Authorization": "Bearer " + access_token, "Content-Type": "application/json"},
+            b"{}",
+        )
+        if status not in (200, 204, 401):
+            raise AlphaError("Other sessions could not be signed out remotely.", 502)
         return status != 401
 
     def delete_user(self, principal):

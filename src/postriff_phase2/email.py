@@ -77,7 +77,7 @@ class ResendTransport:
 
 class Mailer:
     """Builds text+HTML for each notice kind and hands it to the transport. Returns {'sent', 'kind'}; never raises."""
-    KINDS = ("invitation", "welcome", "trial_ending", "trial_ended", "payment_failed", "subscription_activated")
+    KINDS = ("invitation", "welcome", "trial_ending", "trial_ended", "payment_failed", "subscription_activated", "new_device")
 
     def __init__(self, transport, from_address, public_base_url, brand="PostRiff"):
         if not valid_address(from_address):
@@ -122,6 +122,12 @@ class Mailer:
                     [f"Thanks. Your {plan} plan on {b} is now active.",
                      "You can review invoices, change the plan, or cancel any time from billing."],
                     "Manage billing", ctx.get("billing_url"))
+        if kind == "new_device":
+            device = _clean(ctx.get("device_label"), 60) or "an unrecognised device"
+            return (f"New sign-in to your {b} account",
+                    [f"Someone signed in to your {b} account from {device} on {_date(ctx.get('at'))}.",
+                     "If this was you, there is nothing to do. If it wasn’t, open your profile, sign out every other session and turn on two-factor authentication."],
+                    "Review where you are signed in", ctx.get("profile_url"))
         raise AlphaError("Unknown email kind.", 500)
 
     def render(self, kind, **ctx):
@@ -180,6 +186,10 @@ class Mailer:
 
     def subscription_activated(self, to, plan_label, billing_url):
         return self._deliver("subscription_activated", to, plan_label=plan_label, billing_url=billing_url)
+
+    def new_device(self, to, device_label, at, profile_url):
+        """Opt-in alert the first time a session is seen (hosted `_alert_new_device`)."""
+        return self._deliver("new_device", to, device_label=device_label, at=at, profile_url=profile_url)
 
 
 class Reminders:

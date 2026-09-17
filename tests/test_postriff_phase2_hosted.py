@@ -49,7 +49,7 @@ class FakeService:
             raise AlphaError("Too many attempts. Wait a minute and try again.", 429)
         return {"workspaceId": "w", "role": "editor"}
 
-    def sessions(self, token):
+    def sessions(self, token, client_label=""):
         return {"sessions": [{"sessionId": "s" * 20, "current": True}]}
 
     def revoke_session(self, token, session_id):

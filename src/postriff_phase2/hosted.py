@@ -8,9 +8,11 @@ import copy
 import hashlib
 import io
 import json
+import re
 import secrets
 import time
 import zipfile
+import zoneinfo
 from postriff_alpha.domain import AlphaError
 from postriff_alpha.domain import Store
 from postriff_alpha import profiles
@@ -18,17 +20,54 @@ from .auth import initial_phase2_state
 from .contracts import FixtureImages, FixtureSocial, PLANS, digest
 from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
-from .permissions import Membership, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
+from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
+from .channels import connection_state
 from . import memory, research, source_policy
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
+# What the profile page shows about each workspace: its name, plan, owner and how the members split
+# by role. Every value is derived from rows the member may already see; nothing here is per-member.
+WORKSPACE_SUMMARY_COLUMNS = (
+    "coalesce(w.state->'workspace'->>'name',''),"
+    "(SELECT pt.plan FROM public.pr_subscriptions s JOIN public.pr_plan_terms pt ON pt.id=s.plan_terms_id WHERE s.workspace_id=w.id AND s.status IN ('active','past_due','grace')),"
+    "(SELECT t.plan FROM public.pr_trials t WHERE t.workspace_id=w.id ORDER BY t.started_at LIMIT 1),"
+    "(SELECT o.user_id::text FROM public.pr_memberships o WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
+    "(SELECT coalesce(op.display_name,'') FROM public.pr_memberships o JOIN public.pr_profiles op ON op.user_id=o.user_id WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
+    "(SELECT coalesce(jsonb_object_agg(c.role,c.n),'{}'::jsonb) FROM (SELECT role,count(*) AS n FROM public.pr_memberships WHERE workspace_id=w.id AND status='active' GROUP BY role) c)"
+)
 INVITATION_TTL = 7 * 86400
 MAX_PENDING_INVITATIONS = 25
+PROFILE_NAME_MAX = 80
+# Person-level preferences (migration 011). A BCP-47-shaped language tag, and an IANA zone the
+# server itself can resolve, so a stored zone never breaks scheduling later.
+LOCALE_TAG = re.compile(r"^[a-z]{2,3}(?:-[A-Za-z]{2,4})?(?:-[A-Z]{2})?$")
+ZONE_NAME = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+\-]+){0,2}$")
+
+
+def known_zone(name):
+    try:
+        zoneinfo.ZoneInfo(name)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
 
 
 def _membership(row):
     return Membership.from_row(*row[2:7])
+
+
+def workspace_summary(name, subscription_plan, trial_plan, owner_id, owner_name, counts):
+    """Shape the WORKSPACE_SUMMARY_COLUMNS tail of a row. A workspace is on a paid plan only while a
+    subscription is live; otherwise it is a trial of `trialPlan`."""
+    counts = counts if isinstance(counts, dict) else {}
+    return {
+        "name": name or "My workspace",
+        "plan": subscription_plan if subscription_plan in ("studio", "assist") else "trial",
+        "trialPlan": trial_plan if trial_plan in ("studio", "assist") else None,
+        "owner": {"userId": owner_id, "displayName": owner_name or ""} if owner_id else None,
+        "memberCounts": {role: int(counts.get(role, 0) or 0) for role in ROLES},
+    }
 
 
 def bucket(scope):
@@ -234,7 +273,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, email_lookup=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -243,6 +282,8 @@ class HostedWorkspaceService:
         self.repository = PostgresWorkspaceRepository(connection_factory, verify_session, self.commands, clock)
         self.clock = clock
         self.identity = identity
+        # principal -> verified email, or None. Defaults to the identity admin; the dev harness supplies its own.
+        self.email_lookup = email_lookup
         self.ideas = IdeasService(self.repository, self.commands, clock=clock)
         if ideas_runtime is not None:
             # A paid server-side route sits next to the deterministic preview when the service knows
@@ -293,7 +334,7 @@ class HostedWorkspaceService:
     # --- live billing (Stripe) and transactional email ------------------------------------
     def _email_for(self, user_id):
         """Owner/inviter address from Supabase Auth for a single send (D16); None when unavailable."""
-        lookup = getattr(self.identity, "email_for", None)
+        lookup = self.email_lookup or getattr(self.identity, "email_for", None)
         if lookup is None:
             return None
         try:
@@ -437,8 +478,28 @@ class HostedWorkspaceService:
         return session_id(token, principal) if session_id else None
 
     def _touch_session(self, cur, principal, session_id, client_label=""):
-        if session_id:
-            cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END", (principal, session_id, (client_label or "")[:40]))
+        """Record the session; True when this is its first sighting (a sign-in on a device we had not seen)."""
+        if not session_id:
+            return False
+        # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
+        cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
+        row = cur.fetchone()
+        return bool(row and row[0])
+
+    def _alert_new_device(self, principal, session_id, client_label):
+        """After a session's first sighting: one email, only if the person turned the alert on. The
+        audit line records the attempt either way, so the account history shows it."""
+        if not self.public_base_url:
+            return
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT alert_new_device FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
+                row = cur.fetchone()
+                if not row or not row[0]:
+                    return
+                address = self._email_for(principal)
+                outcome = self.mailer.new_device(address, client_label or "an unrecognised device", self.clock(), f"{self.public_base_url}/app/account/profile") if address else {"sent": False}
+                audit(cur, None, principal, "session.alerted", session_id or "", {"sent": bool(outcome.get("sent"))})
 
     def _present(self, saved):
         shown = self.commands.present(saved["state"], saved["revision"])
@@ -489,14 +550,168 @@ class HostedWorkspaceService:
         principal = self.verify_session(token)
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute(f"SELECT m.workspace_id::text,{MEMBER_COLUMNS},extract(epoch from w.created_at) FROM public.pr_memberships m JOIN public.pr_workspaces w ON w.id=m.workspace_id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.created_at", (principal,))
+                cur.execute(f"SELECT m.workspace_id::text,{MEMBER_COLUMNS},extract(epoch from w.created_at),{WORKSPACE_SUMMARY_COLUMNS} FROM public.pr_memberships m JOIN public.pr_workspaces w ON w.id=m.workspace_id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.created_at", (principal,))
                 rows = cur.fetchall()
-        return {"workspaces": [{"workspaceId": row[0], "membership": Membership.from_row(*row[1:6]).summary(), "createdAt": float(row[6])} for row in rows]}
+        return {"workspaces": [{"workspaceId": row[0], "membership": Membership.from_row(*row[1:6]).summary(), "createdAt": float(row[6]), **workspace_summary(*row[7:13])} for row in rows]}
+
+    def leave_workspace(self, workspace_id, token):
+        """A member removes their own access. The owner cannot leave: ownership moves first."""
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            if _membership(row).role == "owner":
+                raise AlphaError("Transfer ownership before leaving this workspace.", 409)
+            cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s AND status='active'", (workspace_id, principal))
+            if cur.rowcount != 1:
+                raise AlphaError("Workspace unavailable.", 403)
+            audit(cur, workspace_id, principal, "member.left")
+        return {"workspaceId": workspace_id, "status": "left"}
+
+    # --- the signed-in person: identity, second factor, channels across workspaces ---------
+
+    def me(self, token, client_label=""):
+        principal = self.verify_session(token)
+        aal = getattr(self.verify_session, "aal", None)
+        session_id = self._session_id(token, principal)
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                fresh = self._touch_session(cur, principal, session_id, client_label)
+                cur.execute("SELECT coalesce(p.display_name,''),extract(epoch from e.enforced_at),coalesce(p.time_zone,''),coalesce(p.locale,''),coalesce(p.alert_new_device,false) FROM public.pr_profiles p LEFT JOIN public.pr_mfa_enforcement e ON e.user_id=p.user_id WHERE p.user_id=%s AND p.deleted_at IS NULL", (principal,))
+                row = cur.fetchone()
+        if fresh:
+            self._alert_new_device(principal, session_id, client_label)
+        display_name, enforced_at, time_zone, locale, alert_new_device = row if row else ("", None, "", "", False)
+        return {
+            "userId": principal,
+            "displayName": display_name,
+            "sessionId": session_id,
+            # `available` is false for identities without assurance levels (the dev harness).
+            "mfa": {"available": aal is not None, "enforced": enforced_at is not None, "enforcedAt": float(enforced_at) if enforced_at else None, "aal": aal(token, principal) if aal else None},
+            # Empty strings mean "follow the device"; the browser fills them in.
+            "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device)},
+        }
+
+    def update_profile(self, token, changes):
+        """PATCH /api/me: the display name and person-level preferences. Only the keys present change."""
+        if not isinstance(changes, dict):
+            raise AlphaError("Nothing to update.")
+        columns = {}
+        if "displayName" in changes:
+            name = changes["displayName"]
+            if not isinstance(name, str) or len(name) > PROFILE_NAME_MAX or any(ord(c) < 32 for c in name):
+                raise AlphaError(f"Enter a display name of up to {PROFILE_NAME_MAX} characters.")
+            columns["display_name"] = " ".join(name.split())
+        if "timeZone" in changes:
+            zone = changes["timeZone"]
+            if not isinstance(zone, str) or len(zone) > 64 or (zone and not (ZONE_NAME.match(zone) and known_zone(zone))):
+                raise AlphaError("Choose a time zone from the list.")
+            columns["time_zone"] = zone
+        if "locale" in changes:
+            locale = changes["locale"]
+            if not isinstance(locale, str) or len(locale) > 16 or (locale and not LOCALE_TAG.match(locale)):
+                raise AlphaError("Choose a language from the list.")
+            columns["locale"] = locale
+        if "alertNewDevice" in changes:
+            if type(changes["alertNewDevice"]) is not bool:
+                raise AlphaError("The new-device alert is either on or off.")
+            columns["alert_new_device"] = changes["alertNewDevice"]
+        if not columns:
+            raise AlphaError("Nothing to update.")
+        principal = self.verify_session(token)
+        names = list(columns)  # fixed identifiers from the mapping above, never client strings
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute(f"INSERT INTO public.pr_profiles(user_id,{','.join(names)}) VALUES(%s,{','.join('%s' for _ in names)}) ON CONFLICT (user_id) DO UPDATE SET {','.join(f'{n}=excluded.{n}' for n in names)} WHERE public.pr_profiles.deleted_at IS NULL RETURNING display_name,coalesce(time_zone,''),coalesce(locale,''),coalesce(alert_new_device,false)", (principal, *columns.values()))
+                row = cur.fetchone()
+        if not row:
+            raise AlphaError("Workspace unavailable.", 403)
+        return {"displayName": row[0], "preferences": {"timeZone": row[1], "locale": row[2], "alertNewDevice": bool(row[3])}}
+
+    def my_channels(self, token):
+        """Every connected channel in every workspace the user belongs to, with whether they may
+        manage it there. Read-only: connecting and disconnecting stay on the workspace routes."""
+        principal = self.verify_session(token)
+        now = self.clock()
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute(f"SELECT m.workspace_id::text,{MEMBER_COLUMNS},coalesce(w.state->'workspace'->>'name',''),coalesce(w.state->'phase2'->'channels','[]'::jsonb) FROM public.pr_memberships m JOIN public.pr_workspaces w ON w.id=m.workspace_id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.created_at", (principal,))
+                rows = cur.fetchall()
+                # Who connected each channel: the newest channel.connected audit event names the actor.
+                cur.execute("SELECT DISTINCT ON (e.subject) e.subject,e.actor::text,coalesce(p.display_name,''),extract(epoch from e.at) FROM public.pr_audit_events e LEFT JOIN public.pr_profiles p ON p.user_id=e.actor WHERE e.kind='channel.connected' AND e.workspace_id=ANY(%s::uuid[]) ORDER BY e.subject,e.at DESC", ([row[0] for row in rows],))
+                connected = {item[0]: {"userId": item[1], "displayName": item[2], "at": float(item[3])} for item in cur.fetchall()}
+        channels = []
+        for row in rows:
+            membership = Membership.from_row(*row[1:6])
+            items = row[7] if isinstance(row[7], list) else json.loads(row[7]) if isinstance(row[7], str) else []
+            for channel in items:
+                if not isinstance(channel, dict) or not channel.get("configured"):
+                    continue
+                channels.append({
+                    "workspaceId": row[0], "workspaceName": row[6] or "My workspace",
+                    "id": channel.get("id"), "platform": channel.get("platform"), "account": channel.get("account"), "accountType": channel.get("accountType"),
+                    "connectionState": connection_state(channel, now), "expiresAt": channel.get("expiresAt"), "verifiedAt": channel.get("verifiedAt"),
+                    "evidenceSource": channel.get("evidenceSource", "synthetic"), "canManage": membership.allows("manage_connections"),
+                    "connectedBy": connected.get(channel.get("id")),
+                })
+        return {"channels": channels}
+
+    # The account history a person may see about themselves: what they did to the account, and what
+    # others did to their memberships. Workspace content activity stays in the workspace audit log.
+    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics")
+    ABOUT_ME_KINDS = ("member.updated", "member.removed")
+
+    def security_events(self, token, limit=50):
+        principal = self.verify_session(token)
+        limit = max(1, min(int(limit), 100))
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT e.id::text,e.kind,e.subject,extract(epoch from e.at),e.meta,e.workspace_id::text,coalesce(w.state->'workspace'->>'name','') FROM public.pr_audit_events e LEFT JOIN public.pr_workspaces w ON w.id=e.workspace_id WHERE (e.actor=%s AND e.kind=ANY(%s)) OR (e.subject=%s AND e.kind=ANY(%s)) ORDER BY e.at DESC LIMIT %s", (principal, list(self.SECURITY_KINDS), principal, list(self.ABOUT_ME_KINDS), limit))
+                events = [{"id": item[0], "kind": item[1], "subject": item[2], "at": float(item[3]), "meta": item[4] if isinstance(item[4], dict) else {}, "workspaceId": item[5], "workspaceName": item[6]} for item in cur.fetchall()]
+                # A session's first sighting is the sign-in on that device; nothing else records it.
+                cur.execute("SELECT session_id,client_label,extract(epoch from first_seen) FROM public.pr_sessions WHERE user_id=%s ORDER BY first_seen DESC LIMIT %s", (principal, limit))
+                events.extend({"id": "session:" + item[0], "kind": "session.started", "subject": item[0], "at": float(item[2]), "meta": {"client": item[1]}, "workspaceId": None, "workspaceName": ""} for item in cur.fetchall())
+        events.sort(key=lambda event: event["at"], reverse=True)
+        return {"events": events[:limit]}
+
+    def _aal(self, token, principal):
+        aal = getattr(self.verify_session, "aal", None)
+        if aal is None:
+            raise AlphaError("Two-factor authentication is not available for this identity.", 503)
+        return aal(token, principal)
+
+    def enable_mfa(self, token):
+        """Record that this user must present a second factor. The session proves enrolment (AAL2),
+        and the identity service confirms a verified factor exists, before anything is written."""
+        principal = self.verify_session(token)
+        if self._aal(token, principal) != "aal2":
+            raise AlphaError("Verify a code from your authenticator app first.", 403)
+        factors = getattr(self.identity, "verified_factors", None)
+        if factors is not None and not factors(principal):
+            raise AlphaError("No verified authenticator is enrolled on this account.", 409)
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("INSERT INTO public.pr_mfa_enforcement(user_id) VALUES(%s) ON CONFLICT (user_id) DO NOTHING", (principal,))
+                if cur.rowcount:
+                    audit(cur, None, principal, "mfa.enabled")
+                cur.execute("SELECT extract(epoch from enforced_at) FROM public.pr_mfa_enforcement WHERE user_id=%s", (principal,))
+                enforced_at = cur.fetchone()[0]
+        return {"enforced": True, "enforcedAt": float(enforced_at)}
+
+    def disable_mfa(self, token):
+        """Step-up: a fresh AAL2 session (a code entered moments ago), never a long-lived one."""
+        principal = self.verify_session(token)
+        if self._aal(token, principal) != "aal2":
+            raise AlphaError("Verify a code from your authenticator app first.", 403)
+        self.repository.assert_fresh(token, principal)
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("DELETE FROM public.pr_mfa_enforcement WHERE user_id=%s", (principal,))
+                if cur.rowcount:
+                    audit(cur, None, principal, "mfa.disabled")
+        return {"enforced": False, "enforcedAt": None}
 
     def members(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
-            cur.execute(f"SELECT m.user_id::text,m.status,{MEMBER_COLUMNS},extract(epoch from m.updated_at) FROM public.pr_memberships m WHERE m.workspace_id=%s ORDER BY m.role,m.user_id", (workspace_id,))
-            members = [{"userId": item[0], "status": item[1], "you": item[0] == principal, **Membership.from_row(*item[2:7]).summary(), "updatedAt": float(item[7])} for item in cur.fetchall()]
+            cur.execute(f"SELECT m.user_id::text,m.status,{MEMBER_COLUMNS},extract(epoch from m.updated_at),coalesce(p.display_name,'') FROM public.pr_memberships m LEFT JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s ORDER BY m.role,m.user_id", (workspace_id,))
+            members = [{"userId": item[0], "status": item[1], "you": item[0] == principal, **Membership.from_row(*item[2:7]).summary(), "updatedAt": float(item[7]), "displayName": item[8]} for item in cur.fetchall()]
             return {"members": members, "membership": _membership(row).summary()}
 
     def update_member(self, workspace_id, token, user_id, role, flags):
@@ -516,6 +731,28 @@ class HostedWorkspaceService:
             cur.execute("UPDATE public.pr_memberships SET role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (role, granted["can_publish"], granted["can_reply"], granted["can_moderate"], granted["can_manage_connections"], workspace_id, user_id))
             audit(cur, workspace_id, principal, "member.updated", user_id, {"role": role, **granted})
             return {"userId": user_id, "role": role, **granted}
+
+    def transfer_ownership(self, workspace_id, token, new_owner_id):
+        """Step-up: the owner hands the role to an active admin. Both memberships change in one
+        transaction, so the workspace is never briefly ownerless or double-owned."""
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_membership(row), "owner")
+            self.repository.assert_fresh(token, principal)
+            if not isinstance(new_owner_id, str) or not new_owner_id:
+                raise AlphaError("Choose the member who becomes the new owner.")
+            if new_owner_id == principal:
+                raise AlphaError("Choose someone else to become the owner.", 409)
+            cur.execute("SELECT role FROM public.pr_memberships WHERE workspace_id=%s AND user_id=%s AND status='active' FOR UPDATE", (workspace_id, new_owner_id))
+            current = cur.fetchone()
+            if not current:
+                raise AlphaError("Member unavailable.", 404)
+            if current[0] != "admin":
+                raise AlphaError("Choose an active admin to become the new owner.", 409)
+            cur.execute("UPDATE public.pr_memberships SET role='owner',can_publish=true,can_reply=true,can_moderate=true,can_manage_connections=true,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (workspace_id, new_owner_id))
+            # The outgoing owner becomes an admin with every grant, so stepping down never quietly drops a right they already had.
+            cur.execute("UPDATE public.pr_memberships SET role='admin',can_publish=true,can_reply=true,can_moderate=true,can_manage_connections=true,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (workspace_id, principal))
+            audit(cur, workspace_id, principal, "ownership.transferred", new_owner_id)
+            return {"ownerId": new_owner_id, "previousOwnerId": principal}
 
     def remove_member(self, workspace_id, token, user_id):
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -589,34 +826,95 @@ class HostedWorkspaceService:
         token_hash = hashlib.sha256(raw.encode()).hexdigest()
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT id::text,workspace_id::text,role,permissions FROM public.pr_invitations WHERE token_hash=%s AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now() FOR UPDATE", (token_hash,))
+                cur.execute(f"SELECT {self.INVITATION_COLUMNS} FROM public.pr_invitations WHERE token_hash=%s AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now() FOR UPDATE", (token_hash,))
                 invitation = cur.fetchone()
                 if not invitation:
                     raise AlphaError("Invitation unavailable.", 404)
-                invitation_id, workspace_id, role, granted = invitation
-                cur.execute("INSERT INTO public.pr_profiles(user_id) VALUES(%s) ON CONFLICT DO NOTHING", (principal,))
-                cur.execute("SELECT role,status FROM public.pr_memberships WHERE workspace_id=%s AND user_id=%s FOR UPDATE", (workspace_id, principal))
-                existing = cur.fetchone()
-                if existing and existing[1] == "active":
-                    raise AlphaError("You are already a member of this workspace.", 409)
-                values = (role, granted.get("can_publish", False), granted.get("can_reply", False), granted.get("can_moderate", False), granted.get("can_manage_connections", False))
-                if existing:
-                    cur.execute("UPDATE public.pr_memberships SET status='active',role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (*values, workspace_id, principal))
-                else:
-                    cur.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status,can_publish,can_reply,can_moderate,can_manage_connections) VALUES(%s,%s,%s,'active',%s,%s,%s,%s)", (workspace_id, principal, values[0], *values[1:]))
-                cur.execute("UPDATE public.pr_invitations SET accepted_by=%s,accepted_at=now() WHERE id::text=%s", (principal, invitation_id))
-                audit(cur, workspace_id, principal, "invitation.accepted", invitation_id, {"role": role})
-                self._touch_session(cur, principal, self._session_id(token, principal))
+                return self._join(cur, token, principal, invitation)
+
+    INVITATION_COLUMNS = "id::text,workspace_id::text,role,permissions"
+
+    def _join(self, cur, token, principal, invitation):
+        """Turn a locked pending invitation row (INVITATION_COLUMNS) into an active membership."""
+        invitation_id, workspace_id, role, granted = invitation
+        cur.execute("INSERT INTO public.pr_profiles(user_id) VALUES(%s) ON CONFLICT DO NOTHING", (principal,))
+        cur.execute("SELECT role,status FROM public.pr_memberships WHERE workspace_id=%s AND user_id=%s FOR UPDATE", (workspace_id, principal))
+        existing = cur.fetchone()
+        if existing and existing[1] == "active":
+            raise AlphaError("You are already a member of this workspace.", 409)
+        values = (role, granted.get("can_publish", False), granted.get("can_reply", False), granted.get("can_moderate", False), granted.get("can_manage_connections", False))
+        if existing:
+            cur.execute("UPDATE public.pr_memberships SET status='active',role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (*values, workspace_id, principal))
+        else:
+            cur.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status,can_publish,can_reply,can_moderate,can_manage_connections) VALUES(%s,%s,%s,'active',%s,%s,%s,%s)", (workspace_id, principal, values[0], *values[1:]))
+        cur.execute("UPDATE public.pr_invitations SET accepted_by=%s,accepted_at=now() WHERE id::text=%s", (principal, invitation_id))
+        audit(cur, workspace_id, principal, "invitation.accepted", invitation_id, {"role": role})
+        self._touch_session(cur, principal, self._session_id(token, principal))
         return {"workspaceId": workspace_id, "role": role, **{key: granted.get(key, False) for key in ("can_publish", "can_reply", "can_moderate", "can_manage_connections")}}
 
-    def sessions(self, token):
+    # --- invitations addressed to the signed-in person's verified email -----------------------
+    # The emailed link works for anyone holding it; these routes instead match the invitation's
+    # address to the identity service's confirmed email, so the profile can show and settle them.
+
+    PENDING_INVITATION = "i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>now()"
+
+    def my_invitations(self, token):
+        principal = self.verify_session(token)
+        email = self._email_for(principal)
+        if not email:
+            return {"invitations": [], "available": False}
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute(f"SELECT i.id::text,i.workspace_id::text,coalesce(w.state->'workspace'->>'name',''),i.role,i.permissions,i.created_by::text,coalesce(p.display_name,''),extract(epoch from i.created_at),extract(epoch from i.expires_at) FROM public.pr_invitations i JOIN public.pr_workspaces w ON w.id=i.workspace_id LEFT JOIN public.pr_profiles p ON p.user_id=i.created_by WHERE i.email=%s AND {self.PENDING_INVITATION} AND NOT EXISTS (SELECT 1 FROM public.pr_memberships m WHERE m.workspace_id=i.workspace_id AND m.user_id=%s AND m.status='active') ORDER BY i.created_at DESC LIMIT 20", (email, principal))
+                rows = cur.fetchall()
+        return {"available": True, "invitations": [{"invitationId": row[0], "workspaceId": row[1], "workspaceName": row[2] or "My workspace", "role": row[3], "permissions": row[4] if isinstance(row[4], dict) else {}, "invitedBy": {"userId": row[5], "displayName": row[6]}, "createdAt": float(row[7]), "expiresAt": float(row[8])} for row in rows]}
+
+    def _invitation_email(self, principal):
+        email = self._email_for(principal)
+        if not email:
+            raise AlphaError("Your sign-in email could not be confirmed, so this invitation cannot be matched to you.", 409)
+        return email
+
+    def accept_my_invitation(self, token, invitation_id):
+        if not isinstance(invitation_id, str) or not 1 <= len(invitation_id) <= 64:
+            raise AlphaError("Invitation unavailable.", 404)
+        principal = self.verify_session(token)
+        email = self._invitation_email(principal)
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                throttle(cur, f"invite-accept:{principal}", 10, 60)
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute(f"SELECT {self.INVITATION_COLUMNS} FROM public.pr_invitations i WHERE i.id::text=%s AND i.email=%s AND {self.PENDING_INVITATION} FOR UPDATE", (invitation_id, email))
+                invitation = cur.fetchone()
+                if not invitation:
+                    raise AlphaError("Invitation unavailable.", 404)
+                return self._join(cur, token, principal, invitation)
+
+    def decline_my_invitation(self, token, invitation_id):
+        if not isinstance(invitation_id, str) or not 1 <= len(invitation_id) <= 64:
+            raise AlphaError("Invitation unavailable.", 404)
+        principal = self.verify_session(token)
+        email = self._invitation_email(principal)
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute(f"UPDATE public.pr_invitations i SET revoked_at=now() WHERE i.id::text=%s AND i.email=%s AND {self.PENDING_INVITATION} RETURNING i.workspace_id::text", (invitation_id, email))
+                row = cur.fetchone()
+                if not row:
+                    raise AlphaError("Invitation unavailable.", 404)
+                audit(cur, row[0], principal, "invitation.declined", invitation_id)
+        return {"invitationId": invitation_id, "state": "declined"}
+
+    def sessions(self, token, client_label=""):
         principal = self.verify_session(token)
         current = self._session_id(token, principal)
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                self._touch_session(cur, principal, current)
+                fresh = self._touch_session(cur, principal, current, client_label)
                 cur.execute("SELECT s.session_id,extract(epoch from s.first_seen),extract(epoch from s.last_seen),s.client_label,(r.session_id IS NOT NULL) FROM public.pr_sessions s LEFT JOIN public.pr_session_revocations r ON r.user_id=s.user_id AND r.session_id=s.session_id WHERE s.user_id=%s ORDER BY s.last_seen DESC LIMIT 50", (principal,))
                 rows = cur.fetchall()
+        if fresh:
+            self._alert_new_device(principal, current, client_label)
         return {"sessions": [{"sessionId": item[0], "firstSeen": float(item[1]), "lastSeen": float(item[2]), "client": item[3], "revoked": bool(item[4]), "current": item[0] == current} for item in rows]}
 
     def revoke_session(self, token, session_id):
@@ -632,6 +930,23 @@ class HostedWorkspaceService:
                 cur.execute("INSERT INTO public.pr_session_revocations(user_id,session_id) VALUES(%s,%s) ON CONFLICT DO NOTHING", (principal, session_id))
                 audit(cur, None, principal, "session.revoked", "")
         return {"sessionId": session_id, "revoked": True, "current": session_id == self._session_id(token, principal)}
+
+    def revoke_other_sessions(self, token):
+        """Deny every session this API has seen except the current one, and ask the identity service
+        to revoke the other refresh tokens so sessions that never reached us end too."""
+        principal = self.verify_session(token)
+        self.repository.assert_fresh(token, principal)
+        current = self._session_id(token, principal)
+        if not current:
+            raise AlphaError("Hosted session revocation is not configured.", 503)
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("INSERT INTO public.pr_session_revocations(user_id,session_id) SELECT s.user_id,s.session_id FROM public.pr_sessions s WHERE s.user_id=%s AND s.session_id<>%s ON CONFLICT DO NOTHING", (principal, current))
+                revoked = cur.rowcount
+                audit(cur, None, principal, "session.revoked_others", "", {"count": revoked})
+        logout_others = getattr(self.identity, "logout_others", None)
+        remote = bool(logout_others(token)) if logout_others else False
+        return {"revoked": revoked, "refreshRevoked": remote, "current": current}
 
     def audit_events(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
