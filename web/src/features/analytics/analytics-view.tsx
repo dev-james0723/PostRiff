@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalytics } from '@/lib/api/hooks';
 import type { Metric } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
+import { languageLabel } from '@/lib/locales';
 import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
@@ -115,7 +116,7 @@ export function AnalyticsView() {
                         {post.platform || post.provider}
                       </CardTitle>
                       <CardDescription>
-                        {post.language || '—'} · {post.contentOrigin.replace(/_/g, ' ')} · {post.publishedState}
+                        {post.language ? languageLabel(post.language) : '—'} · {post.contentOrigin.replace(/_/g, ' ')} · {post.publishedState}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>

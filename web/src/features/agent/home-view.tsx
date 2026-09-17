@@ -22,7 +22,8 @@ import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from '@/lib/ease';
 import { relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
-import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform, type Language } from './composer';
+import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
+import { useChannelLanguages } from './use-channel-languages';
 import { useModelChoice } from './use-model';
 
 const CREATOR_PACK = { packId: 'pack.creator', version: '1.0.0' };
@@ -83,9 +84,8 @@ export function HomeView() {
 
   const [mode, setMode] = useState<ModeId>('post');
   const [text, setText] = useState('');
-  const [selected, setSelected] = useState<DraftPlatform[]>(['LinkedIn', 'Instagram']);
-  const [language, setLanguageState] = useState<Language>('English');
-  const [languageTouched, setLanguageTouched] = useState(false);
+  // Each selected channel carries its own languages, remembered per channel (languages plan §4).
+  const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [own, setOwn] = useState(true);
   const [use, setUse] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -125,32 +125,18 @@ export function HomeView() {
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
-  // Until the writer picks a language, follow the message: CJK text drafts in 繁體中文 (the server detects the same way).
-  useEffect(() => {
-    if (!languageTouched) setLanguageState(/[一-鿿]/.test(text) ? '繁體中文' : 'English');
-  }, [text, languageTouched]);
-
-  function setLanguage(next: Language) {
-    setLanguageTouched(true);
-    setLanguageState(next);
-  }
-
   function pickMode(next: ModeId) {
     setMode(next);
     const meta = MODES.find((m) => m.id === next);
-    if (meta) setSelected(meta.platforms);
+    if (meta) languages.setPlatforms(meta.platforms);
   }
 
   function pickTemplate(item: QuickStart) {
     setTemplate(item);
     setMode(item.mode);
-    setSelected(item.platforms);
+    languages.setPlatforms(item.platforms);
     setText(item.example);
     composer.current?.focus();
-  }
-
-  function toggle(platform: DraftPlatform) {
-    setSelected((current) => (current.includes(platform) ? current.filter((p) => p !== platform) : [...current, platform]));
   }
 
   /** A template is a workspace content type: install the starter pack once, then select the type and format. */
@@ -168,7 +154,7 @@ export function HomeView() {
 
   async function start() {
     const body = text.trim();
-    if (!body || !use || selected.length === 0 || busy) return;
+    if (!body || !use || languages.selection.length === 0 || busy) return;
     setBusy(true);
     try {
       const current = template ? await selectContentType(template, revision) : revision;
@@ -176,8 +162,7 @@ export function HomeView() {
         text: body,
         ownContent: own,
         confirmUse: true,
-        destinations: selected.map((platform) => ({ platform, language })),
-        ...(languageTouched ? { language } : {}),
+        destinations: languages.destinations,
         model: choice.model,
         timeZone
       });
@@ -235,10 +220,7 @@ export function HomeView() {
             busy={busy}
             placeholder={current.placeholder}
             chips={chips}
-            selected={selected}
-            onToggle={toggle}
-            language={language}
-            onLanguage={setLanguage}
+            languages={languages}
             models={choice.options}
             model={choice.model}
             onModel={choice.choose}

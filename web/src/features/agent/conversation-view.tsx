@@ -28,11 +28,13 @@ import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { ActivityStrip } from './activity-strip';
-import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform, type Language } from './composer';
+import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
+import { useChannelLanguages } from './use-channel-languages';
 import { PlanCard } from './plan-card';
 import { ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
 import { useRun } from './use-run';
-import { VariantCard, destinationLabel } from './variant-card';
+import { Destination, VariantCard } from './variant-card';
+import { textAttributes } from '@/lib/locales';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
 const STAGE_LABELS: Record<string, string> = {
@@ -109,8 +111,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const run = useRun(lastRunId, seed);
 
   const [text, setText] = useState('');
-  const [selected, setSelected] = useState<DraftPlatform[]>(['LinkedIn', 'Instagram']);
-  const [language, setLanguage] = useState<Language>('English');
+  const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [busy, setBusy] = useState(false);
   const [variantIndex, setVariantIndex] = useState(0);
   const [inspectorTab, setInspectorTab] = useState('preview');
@@ -122,13 +123,12 @@ export function ConversationView({ conversationId }: { conversationId: string })
   }
   const arrived = (messageId: string) => loadedIds.current !== null && !loadedIds.current.ids.has(messageId);
 
-  // The composer follows the last turn's destinations so "draft again" keeps the same targets.
+  // The composer follows the last turn's destinations so "draft again" keeps every channel and each of its languages.
+  const restore = languages.restore;
   useEffect(() => {
     const last = lastAssistant ? bodyOf(lastAssistant).destinations : undefined;
-    if (last && last.length > 0) {
-      setSelected(last.map((d) => d.platform).filter((p): p is DraftPlatform => (DRAFT_PLATFORMS as readonly string[]).includes(p)));
-      setLanguage((last[0].language as Language) ?? 'English');
-    }
+    if (last && last.length > 0) restore(last, DRAFT_PLATFORMS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per assistant turn, not on every snapshot change
   }, [lastAssistant]);
 
   const state = snapshot.data?.state;
@@ -163,13 +163,12 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   async function sendTurn() {
     const body = text.trim();
-    if (!body || selected.length === 0 || busy) return;
+    if (!body || languages.selection.length === 0 || busy) return;
     setBusy(true);
     try {
       const result = await api.turn(workspaceId, conversationId, {
         text: body,
-        destinations: selected.map((platform) => ({ platform, language })),
-        language,
+        destinations: languages.destinations,
         model: choice.model,
         timeZone
       });
@@ -351,10 +350,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
               compact
               placeholder='Ask for another angle, a shorter version, or a different time…'
               chips={chips}
-              selected={selected}
-              onToggle={(platform) => setSelected((current) => (current.includes(platform) ? current.filter((p) => p !== platform) : [...current, platform]))}
-              language={language}
-              onLanguage={setLanguage}
+              languages={languages}
               models={choice.options}
               model={choice.model}
               onModel={choice.choose}
@@ -383,7 +379,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
                     <span className='bg-muted size-7 rounded-full' />
                     <span className='flex flex-col leading-tight'>
                       <span className='text-xs font-semibold'>{channels.find((c) => c.platform === variants[variantIndex].platform)?.account ?? state?.speaker?.label ?? 'You'}</span>
-                      <span className='text-muted-foreground text-[11px]'>{destinationLabel(variants[variantIndex])}</span>
+                      <span className='text-muted-foreground text-[11px]'>
+                        <Destination platform={variants[variantIndex].platform} language={variants[variantIndex].language} />
+                      </span>
                     </span>
                   </div>
                   {variants[variantIndex].platform === 'Instagram' && (
@@ -392,7 +390,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
                       Image required for Instagram
                     </div>
                   )}
-                  <p className='px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap'>{variants[variantIndex].text}</p>
+                  <p {...textAttributes(variants[variantIndex].language)} className='px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap'>
+                    {variants[variantIndex].text}
+                  </p>
                 </div>
               ) : (
                 <p className='text-muted-foreground text-xs'>The selected draft renders here as it would look on the channel.</p>

@@ -27,6 +27,7 @@ import { EASE_OUT } from '@/lib/ease';
 import { useHoverCapable } from '@/lib/hooks/use-hover-capable';
 import { ScheduleDialog } from '@/features/queue/schedule-dialog';
 import { EditDraftDialog } from './edit-draft-dialog';
+import { languageLabel } from '@/lib/locales';
 import { cn } from '@/lib/utils';
 
 interface CardItem {
@@ -101,7 +102,7 @@ export function PipelineView() {
       cta: 'Draft more',
       items: (state?.variants ?? [])
         .filter((v) => (!reviewedKeys.has(`${v.id}:${v.revision}`) || Boolean(v.proposedUpdate)) && !v.blockedByRetraction)
-        .map((v) => ({ id: v.id, schedulable: true, edited: v.customized, platform: v.platform, title: `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`, subtitle: v.proposedUpdate ? 'update proposed' : v.needsReview ? 'needs review' : undefined, body: v.proposedUpdate?.text ?? v.text, tag: v.warnings[0] }))
+        .map((v) => ({ id: v.id, schedulable: true, edited: v.customized, platform: v.platform, title: `${v.platform} · ${languageLabel(v.language)}`, subtitle: v.proposedUpdate ? 'update proposed' : v.needsReview ? 'needs review' : undefined, body: v.proposedUpdate?.text ?? v.text, tag: v.warnings[0] }))
     },
     {
       key: 'review',

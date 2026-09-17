@@ -27,6 +27,7 @@ import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { ScheduleDialog } from './schedule-dialog';
 import { useFlash } from '@/hooks/use-flash';
+import { languageLabel } from '@/lib/locales';
 
 const WAITING = new Set(['scheduled', 'approved', 'claimed']);
 const IN_FLIGHT = new Set(['submitting', 'provider_accepted', 'published', 'uncertain']);
@@ -118,7 +119,7 @@ function ReviewCard({ review, revision, canApprove }: { review: Review; revision
               )}
             </CardTitle>
             <CardDescription>
-              {manifest.timing.local} ({manifest.timing.timeZone}) · {manifest.payload.language} · {manifest.media.length} media ·{' '}
+              {manifest.timing.local} ({manifest.timing.timeZone}) · {languageLabel(manifest.payload.language)} · {manifest.media.length} media ·{' '}
               <span className='font-mono'>{review.digest.slice(0, 12)}…</span>
             </CardDescription>
           </CardHeader>

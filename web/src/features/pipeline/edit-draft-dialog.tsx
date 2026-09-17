@@ -8,9 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { ChannelIcon } from '@/components/channel-icon';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
+import { languageLabel, textAttributes, textLength } from '@/lib/locales';
 
 /** Per-platform text limits mirrored from `contracts.py` LIMITS; the API is the authority. */
-const LIMITS: Record<string, number> = { LinkedIn: 3000, Instagram: 2200, Threads: 500 };
+const LIMITS: Record<string, number> = { LinkedIn: 3000, Instagram: 2200, Threads: 500, Xiaohongshu: 1000 };
 
 /**
  * Edit a draft's text in place (`variant_edit`). The edit bumps the variant revision, so any
@@ -22,7 +23,7 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
   const variant = snapshot.data?.state.variants?.find((v) => v.id === variantId);
   const [text, setText] = useState(variant?.proposedUpdate?.text ?? variant?.text ?? '');
   const limit = variant ? LIMITS[variant.platform] : undefined;
-  const over = limit !== undefined && text.length > limit;
+  const over = limit !== undefined && textLength(text) > limit;
   const dirty = variant !== undefined && text !== variant.text;
 
   async function save() {
@@ -50,15 +51,15 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
-            Edit draft{variant ? ` · ${variant.platform} · ${variant.language === '繁體中文' ? '繁中' : 'EN'}` : ''}
+            Edit draft{variant ? ` · ${variant.platform} · ${languageLabel(variant.language)}` : ''}
           </DialogTitle>
           <DialogDescription>Your words, your call. Edits stay in the draft history; PostRiff learns from how you edit only through preferences you accept on the Memory page.</DialogDescription>
         </DialogHeader>
         {variant ? (
           <>
-            <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={12} className='min-h-48 text-sm' aria-label='Draft text' autoFocus />
+            <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => setText(e.target.value)} rows={12} className='min-h-48 text-sm [unicode-bidi:plaintext]' aria-label='Draft text' autoFocus />
             <p className={over ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>
-              {text.length}
+              {textLength(text)}
               {limit !== undefined ? ` / ${limit} characters for ${variant.platform}` : ' characters'}
               {variant.customized && ' · previously edited'}
             </p>

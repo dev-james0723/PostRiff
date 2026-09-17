@@ -10,13 +10,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
 import { useAct, useInvalidate, useMemory, useMemoryProposals, useSnapshot } from '@/lib/api/hooks';
 import type { LearnedItem } from '@/lib/api/types';
+import { languageLabel } from '@/lib/locales';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { ProposalCard } from './proposal-card';
 
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 
 function scopeLabel(scope: LearnedItem['scope']) {
-  const { platform, language, contentTypeId } = scope;
+  const { platform, contentTypeId } = scope;
+  const language = scope.language ? languageLabel(scope.language) : null;
   const base = platform && language ? `${platform} · ${language}` : platform ? `${platform} · all languages` : language ? `All channels · ${language}` : 'All channels';
   return contentTypeId ? `${base} · ${contentTypeId}` : base;
 }

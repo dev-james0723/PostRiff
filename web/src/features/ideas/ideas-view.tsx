@@ -24,6 +24,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SourcesPanel } from './sources-panel';
+import { ChannelLanguageChip } from '@/components/application/language-picker/channel-language-chip';
+import { useChannelLanguages } from '@/features/agent/use-channel-languages';
+import { Destination } from '@/features/agent/variant-card';
+import { locales } from '@/lib/locales';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
@@ -34,11 +38,10 @@ import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 
-type Platform = 'LinkedIn' | 'Instagram' | 'Threads';
-type Language = 'English' | '繁體中文';
+type Platform = 'LinkedIn' | 'Instagram' | 'Threads' | 'Xiaohongshu';
 /** Which request is in flight, so only the button that started it shows a spinner. */
 type Pending = 'draft' | 'apply';
-const PLATFORMS: Platform[] = ['LinkedIn', 'Instagram', 'Threads'];
+const PLATFORMS: Platform[] = ['LinkedIn', 'Instagram', 'Threads', 'Xiaohongshu'];
 
 const infoContent = {
   title: 'How drafting works',
@@ -58,7 +61,6 @@ const infoContent = {
   ]
 };
 
-const destinationLabel = (v: { platform: string; language: string }) => `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`;
 
 function messageText(message: Message) {
   const body = message.body as { text?: string; pending?: boolean; excluded?: { id: string; reason: string }[] };
@@ -81,8 +83,8 @@ export function IdeasView() {
   const [text, setText] = useState('');
   const [own, setOwn] = useState(true);
   const [confirm, setConfirm] = useState(false);
-  const [platforms, setPlatforms] = useState<Platform[]>(['LinkedIn', 'Instagram']);
-  const [language, setLanguage] = useState<Language>('English');
+  // Each destination channel carries its own languages, remembered per channel (languages plan §4).
+  const languages = useChannelLanguages<Platform>(['LinkedIn', 'Instagram']);
   const [selected, setSelected] = useState(0);
   const [pending, setPending] = useState<Pending | null>(null);
   const working = pending !== null;
@@ -114,7 +116,7 @@ export function IdeasView() {
     }
   }, [api, lastRunId, run?.runId, workspaceId]);
 
-  const destinations = platforms.map((platform) => ({ platform, language }));
+  const destinations = languages.destinations;
   const revision = snapshot.data?.revision ?? 0;
   const voiceActive = Boolean(snapshot.data?.state.speaker?.activeRevision);
   const variants: RunVariant[] = run?.artifact?.variants ?? [];
@@ -129,9 +131,10 @@ export function IdeasView() {
   useEffect(() => {
     // Default the destinations to the connected accounts once, so a first draft can be scheduled.
     if (!defaultedPlatforms && connectedPlatforms.length > 0) {
-      setPlatforms([...new Set(connectedPlatforms)]);
+      languages.setPlatforms([...new Set(connectedPlatforms)]);
       setDefaultedPlatforms(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when connected accounts first arrive
   }, [connectedPlatforms, defaultedPlatforms]);
   const qualified = activeModel;
 
@@ -310,27 +313,33 @@ export function IdeasView() {
                   }
                 />
                 <div className='flex flex-wrap items-center gap-3'>
-                  <ToggleGroup
-                    multiple
-                    value={platforms}
-                    onValueChange={(value) => setPlatforms((value as Platform[]).filter((p) => PLATFORMS.includes(p)))}
-                    aria-label='Destinations'
-                  >
-                    {PLATFORMS.map((platform) => (
-                      <ToggleGroupItem key={platform} value={platform} className='text-xs'>
-                        {platform}
-                        {connectedPlatforms.includes(platform) && <span className='ml-1 size-1.5 rounded-full bg-emerald-500' aria-label='connected' />}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                  <ToggleGroup value={[language]} onValueChange={(value) => value[0] && setLanguage(value[0] as Language)} aria-label='Language'>
-                    <ToggleGroupItem value='English' className='text-xs'>
-                      EN
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value='繁體中文' className='text-xs'>
-                      繁中
-                    </ToggleGroupItem>
-                  </ToggleGroup>
+                  {PLATFORMS.map((platform) => {
+                    const selection = languages.selection.find((item) => item.platform === platform);
+                    const current = languages.languagesOf(selection ?? { platform, languages: null });
+                    const account = (snapshot.data?.state.phase2?.channels ?? []).find((c) => c.platform === platform);
+                    const remembered = languages.settings.channels[platform] ?? [];
+                    const usual = locales.usualFor(platform);
+                    const suggestions = [...remembered.map((tag) => ({ tag, reason: 'Last used here' })), ...(usual ? [{ tag: usual, reason: `Usual for ${platform}` }] : []), ...languages.suggestions].filter(
+                      (item, i, all) => all.findIndex((other) => other.tag === item.tag) === i
+                    );
+                    return (
+                      <ChannelLanguageChip
+                        key={platform}
+                        platform={platform}
+                        account={account?.account}
+                        state={account?.displayState}
+                        on={Boolean(selection)}
+                        languages={current.map((tag, index) => ({ tag, fromMessage: false, index }))}
+                        channelCount={languages.selection.length}
+                        suggestions={suggestions}
+                        onToggle={() => languages.toggle(platform)}
+                        onChange={(index, tag) => (index === null ? languages.add(platform, tag) : languages.change(platform, index, tag))}
+                        onAdd={(tag) => languages.add(platform, tag)}
+                        onRemove={(index) => languages.remove(platform, index)}
+                        onUseEverywhere={(tag) => languages.useEverywhere(tag)}
+                      />
+                    );
+                  })}
                   {qualifiedModels.length > 0 && (
                     <Select value={activeModel?.id ?? ''} onValueChange={(value) => setModel(String(value))}>
                       <SelectTrigger className='h-8 w-56' aria-label='Writing model'>
@@ -462,7 +471,7 @@ export function IdeasView() {
                 <TabsList className='flex w-full flex-wrap' aria-label='Candidates'>
                   {variants.map((variant, index) => (
                     <TabsTrigger key={index} value={String(index)}>
-                      {destinationLabel(variant)}
+                      <Destination platform={variant.platform} language={variant.language} />
                     </TabsTrigger>
                   ))}
                 </TabsList>

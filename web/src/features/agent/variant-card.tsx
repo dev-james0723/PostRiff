@@ -1,15 +1,29 @@
 'use client';
 
 import { useLayoutEffect, useState } from 'react';
+import { LanguageName } from '@/components/application/language-picker/language-badge';
+import { ChannelIcon } from '@/components/channel-icon';
 import { DigitSwap } from '@/components/motion/digit-swap';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { Badge } from '@/components/ui/badge';
 import type { RunVariant } from '@/lib/api/types';
+import { languageLabel, textAttributes, textLength } from '@/lib/locales';
 
 /** Local conservative text limits (`postriff_phase2.contracts.LIMITS`; Threads is the platform's own). */
-const LIMITS: Record<string, number> = { LinkedIn: 3000, Instagram: 2200, Threads: 500 };
+const LIMITS: Record<string, number> = { LinkedIn: 3000, Instagram: 2200, Threads: 500, Xiaohongshu: 1000 };
 
-export const destinationLabel = (v: { platform: string; language: string }) => `${v.platform} · ${v.language === '繁體中文' ? '繁中' : 'EN'}`;
+export const destinationLabel = (v: { platform: string; language: string }) => `${v.platform} · ${languageLabel(v.language)}`;
+
+/** A channel mark, its name and the draft's language: a channel can carry the same platform in several languages. */
+export function Destination({ platform, language }: { platform: string; language: string }) {
+  return (
+    <span className='inline-flex min-w-0 items-center gap-1.5'>
+      <ChannelIcon platform={platform} size='xs' />
+      <span>{platform}</span>
+      <LanguageName language={language} className='text-muted-foreground font-normal' />
+    </span>
+  );
+}
 
 export function VariantCard({ variants, selected, onSelect }: { variants: RunVariant[]; selected: number; onSelect: (index: number) => void }) {
   const active = Math.min(selected, variants.length - 1);
@@ -27,18 +41,20 @@ export function VariantCard({ variants, selected, onSelect }: { variants: RunVar
           <TabsList className='bg-muted max-w-full flex-wrap'>
             {variants.map((variant, index) => (
               <TabsTrigger key={index} value={String(index)} className='px-3 py-1'>
-                {destinationLabel(variant)}
+                <Destination platform={variant.platform} language={variant.language} />
               </TabsTrigger>
             ))}
           </TabsList>
         </div>
         {variants.map((variant, index) => {
           const limit = LIMITS[variant.platform];
-          const over = limit ? variant.text.length > limit : false;
-          const shownLength = index === active ? (variants[countFrom] ?? variant).text.length : variant.text.length;
+          const over = limit ? textLength(variant.text) > limit : false;
+          const shownLength = index === active ? textLength((variants[countFrom] ?? variant).text) : textLength(variant.text);
           return (
             <TabsContent key={index} value={String(index)} className='mt-0 flex flex-col'>
-              <article className='px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap'>{variant.text}</article>
+              <article {...textAttributes(variant.language)} className='px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap'>
+                {variant.text}
+              </article>
               <div className='bg-background/60 flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2'>
                 <div className='flex flex-wrap items-center gap-1.5'>
                   {variant.warnings?.map((warning, i) => (
