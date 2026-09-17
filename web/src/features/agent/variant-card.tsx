@@ -20,7 +20,7 @@ export function Destination({ platform, language }: { platform: string; language
     <span className='inline-flex min-w-0 items-center gap-1.5'>
       <ChannelIcon platform={platform} size='xs' />
       <span>{platform}</span>
-      <LanguageName language={language} className='text-muted-foreground font-normal' />
+      <LanguageName language={language} className='font-normal opacity-80' />
     </span>
   );
 }
