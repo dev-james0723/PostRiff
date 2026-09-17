@@ -6,6 +6,7 @@ import { InfoSidebar } from '@/components/layout/info-sidebar';
 import { InfobarProvider } from '@/components/ui/infobar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { AuthProvider } from '@/lib/auth/session';
+import { PreferencesProvider } from '@/lib/preferences';
 import { WorkspaceProvider } from '@/lib/workspace/provider';
 import { AppGate } from './app-gate';
 import AppSidebar from './app-sidebar';
@@ -22,6 +23,7 @@ export function AppShell({ defaultOpen, children }: { defaultOpen: boolean; chil
       <WorkspaceProvider>
         <Suspense fallback={null}>
           <AppGate>
+            <PreferencesProvider>
             <KBar>
               <SidebarProvider defaultOpen={defaultOpen}>
                 <a
@@ -40,6 +42,7 @@ export function AppShell({ defaultOpen, children }: { defaultOpen: boolean; chil
                 </SidebarInset>
               </SidebarProvider>
             </KBar>
+            </PreferencesProvider>
           </AppGate>
         </Suspense>
       </WorkspaceProvider>

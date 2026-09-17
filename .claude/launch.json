@@ -18,6 +18,24 @@
         "cd /Users/ouxianxing/Documents/James-Au-Studio/web && npm run dev -- -p 3100"
       ],
       "port": 3100
+    },
+    {
+      "name": "postriff-api-2",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio && LC_ALL=C POSTRIFF_DEV_WEB_ORIGIN=http://localhost:3101 .venv/bin/python scripts/postriff_dev_hosted.py --port 4332 --pg-port 55442"
+      ],
+      "port": 4332
+    },
+    {
+      "name": "postriff-web-2",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio/web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4332 POSTRIFF_DIST_DIR=.next-alt npm run dev -- -p 3101"
+      ],
+      "port": 3101
     }
   ]
 }

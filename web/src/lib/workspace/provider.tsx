@@ -59,7 +59,8 @@ export interface WorkspaceContextValue {
   plan: WorkspacePlan;
   api: PostRiffApi;
   switchTo: (workspaceId: string) => void;
-  refresh: () => Promise<void>;
+  /** Reload the list; `select` makes that workspace active once it appears (after joining one). */
+  refresh: (select?: string) => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -76,30 +77,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceListItem[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (select?: string) => {
     setStatus('loading');
     setError(null);
     try {
       let list = (await api.workspaces()).workspaces;
       if (list.length === 0) {
-        // First sign-in: create the trial workspace with the plan chosen at sign-up.
-        const created = await api.bootstrap(selectedPlan());
-        list = [
-          {
-            workspaceId: created.workspaceId,
-            membership: created.membership ?? {
-              role: 'owner',
-              can_publish: true,
-              can_reply: true,
-              can_moderate: true,
-              can_manage_connections: true
-            },
-            createdAt: Date.now() / 1000
-          }
-        ];
+        // First sign-in: create the trial workspace with the plan chosen at sign-up, then read the
+        // list back so its summary (name, plan, member counts) comes from the one place that owns it.
+        await api.bootstrap(selectedPlan());
+        list = (await api.workspaces()).workspaces;
       }
+      if (list.length === 0) throw new ApiError('Your workspace could not be created.', 500);
       setWorkspaces(list);
-      const remembered = readSelection();
+      const remembered = select ?? readSelection();
       const active = list.find((w) => w.workspaceId === remembered)?.workspaceId ?? list[0].workspaceId;
       setSelected(active);
       try {

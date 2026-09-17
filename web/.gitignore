@@ -26,3 +26,6 @@ next-env.d.ts
 
 # Sentry
 .env.sentry-build-plugin
+
+# second local dev server (POSTRIFF_DIST_DIR)
+.next-alt/

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'motion/react';
@@ -140,7 +141,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const choice = useModelChoice(models.data);
   const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
   const runModelLabel = run ? shortLabel(runOption, run.model) : choice.label;
-  const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const timeZone = useTimeZone();
   const running = run?.status === 'running';
   const streamed = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'message.delta').map((e) => e.text ?? '').join(''), [run?.events]);
   const stage = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'progress.updated').at(-1)?.stage ?? null, [run?.events]);
