@@ -16,11 +16,11 @@ from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import content_types, intent, memory, research
+from . import content_types, intent, locales, memory, research
 
 MAX_TEXT = 6000
 MAX_EVENTS = 2000
-DEFAULT_DESTINATIONS = ({"platform": "LinkedIn", "language": "English"}, {"platform": "Instagram", "language": "繁體中文"})
+DEFAULT_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
 
 
 class RunSink:
@@ -343,8 +343,9 @@ class IdeasService:
         # destinations and a candidate plan. Parsed text never gains any authority of its own.
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text or clean(payload.get("intentText", ""), MAX_TEXT), self.clock(), zone, runtime.supported_platforms() or None)
-        language = payload.get("language") if payload.get("language") in intent.LANGUAGES else parsed["language"]
-        destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, DEFAULT_DESTINATIONS)
+        # Each (channel, language) pair is one destination; the workspace's remembered languages fill any channel the request left open.
+        destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS,
+                                                   settings=lambda: self.repository.get(workspace_id, token)["state"])
         plan = intent.build_plan(parsed, destinations)
         if parsed["intent"] == "memory" and text:
             return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id)
@@ -511,7 +512,7 @@ class IdeasService:
             # is still unscheduled in the same platform/language slot is refreshed in place.
             committed = {job["manifest"]["variantId"] for job in state.get("phase2", {}).get("jobs", []) if job.get("state") not in ("canceled", "failed")}
             for candidate in artifact["variants"]:
-                drafts = [v for v in state["variants"] if v["platform"] == candidate["platform"] and v["language"] == candidate["language"] and v["id"] not in committed]
+                drafts = [v for v in state["variants"] if v["platform"] == candidate["platform"] and locales.same(v["language"], candidate["language"]) and v["id"] not in committed]
                 old = drafts[-1] if drafts else None
                 values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if old:
@@ -539,8 +540,9 @@ class IdeasService:
         runtime = self._select_runtime(payload.get("model"))  # refuse an unknown model before any source is stored
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
-        language = payload.get("language") if payload.get("language") in intent.LANGUAGES else parsed["language"]
-        destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, [{"platform": "LinkedIn", "language": language}])
+        language = locales.canonical(payload.get("language"))
+        destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
+                                                   settings=lambda: self.repository.get(workspace_id, token)["state"])
 
         def command(state, actor):
             kind = "idea" if (own and text and len(text) <= 500 and "\n" not in text) else ("text" if text else "link")

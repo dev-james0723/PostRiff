@@ -19,7 +19,7 @@ from .contracts import FixtureImages, FixtureSocial, PLANS, digest
 from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
-from . import memory, research, source_policy
+from . import locales, memory, research, source_policy
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
@@ -155,6 +155,8 @@ class HostedPhase2Commands:
             return state
         if memory.apply_memory_action(state, action, payload, principal, self.clock()):
             return state
+        if locales.apply_language_action(state, action, payload, principal, self.clock()):
+            return state
         if research.apply_research_action(state, action, payload, principal, self.clock()):
             return state
         if action.startswith("p2_"):
@@ -215,7 +217,7 @@ class HostedPhase2Commands:
     SERVER_VERIFIED_PLATFORMS = ("LinkedIn", "Instagram", "Threads", "Facebook", "X", "YouTube", "TikTok", "Pinterest", "Bluesky", "Mastodon")
 
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
-        required = {"id", "platform", "account", "accountType", "language", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
+        required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         if set(channel) != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         saved = copy.deepcopy(channel)

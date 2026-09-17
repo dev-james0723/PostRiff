@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import re
 
-from . import intent
+from . import intent, locales
 
 NEGATION = re.compile(r"\b(?:no|not|don'?t|do not|never|stop|without|avoid|skip|drop|fewer|less)\b|唔好|不要|唔要|唔使|不用|唔加|不加|唔用|別|冇|無|去掉|刪走|删掉|少啲|少一點", re.I)
-LANGUAGE_WORDS = (("繁體中文", re.compile(r"繁體|繁体|中文|廣東話|粤語|粵語|traditional chinese|\bchinese\b|cantonese", re.I)), ("English", re.compile(r"英文|\benglish\b", re.I)))
+LANGUAGE_WORDS = (("yue-Hant-HK", re.compile(r"廣東話|粤語|粵語|\bcantonese\b", re.I)), ("zh", re.compile(r"\bchinese\b|中文", re.I)), ("zh-Hant", re.compile(r"繁體|繁体|traditional chinese", re.I)), ("en", re.compile(r"英文|\benglish\b", re.I)))
 RULES = (
     ("hashtags.use", re.compile(r"hashtags?|標籤|标签|#", re.I), {"avoid": "No hashtags.", "do": "Use hashtags."}),
     ("emoji.use", re.compile(r"emojis?|表情|emoticons?", re.I), {"avoid": "No emoji.", "do": "Use emoji."}),
@@ -41,9 +41,15 @@ def platform_mentioned(text):
 
 
 def language_mentioned(text):
+    """The locale a standing instruction is scoped to: "Cantonese posts" → yue-Hant-HK, "英文" → en.
+    "Chinese" / 中文 is Chinese-wide (`zh`), which also covers Cantonese drafts."""
     for language, pattern in LANGUAGE_WORDS:
         if pattern.search(text):
             return language
+    folded = locales.fold(text)
+    for said, tag in sorted(((s, t) for s, t in locales._index()["named"].items()), key=lambda item: -len(item[0])):
+        if (said.isascii() and re.search(rf"(?<![a-z]){re.escape(said)}(?![a-z])", folded)) or (not said.isascii() and said in folded):
+            return tag
     return None
 
 

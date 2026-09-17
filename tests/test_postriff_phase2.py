@@ -326,7 +326,7 @@ class Phase2Acceptance(unittest.TestCase):
 
     def test_changed_approval_bindings_and_cross_workspace_objects(self):
         job=self.enqueue();m=job['manifest'];s=self.j.state
-        mutations=[lambda s:s['speaker'].update(id='changed'),lambda s:s['brandHub'].update(speaker='different'),lambda s:s['phase2']['channels'][0].update(account='different'),lambda s:s['phase2']['channels'][0].update(language='繁體中文'),lambda s:s['variants'][0].update(platform='Instagram'),lambda s:s['sources'][0].update(active=False)]
+        mutations=[lambda s:s['speaker'].update(id='changed'),lambda s:s['brandHub'].update(speaker='different'),lambda s:s['phase2']['channels'][0].update(account='different'),lambda s:s['variants'][0].update(platform='Instagram'),lambda s:s['sources'][0].update(active=False)]
         for mutate in mutations:
             candidate=copy.deepcopy(s);mutate(candidate);self.assertFalse(self.store.current(candidate,m))
         other=P2Journey(self.store)

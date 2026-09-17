@@ -44,7 +44,7 @@ class Observations(unittest.TestCase):
                          {("hashtags.use", "avoid"), ("emoji.use", "avoid"), ("exclamation.use", "avoid"), ("closing.cta", "avoid"), ("lists.use", "avoid"), ("opening.style", "avoid"), ("opening.style", "do"), ("length.target", "avoid")})
         self.assertEqual(next(o["value"] for o in support if o["ruleKey"] == "length.target"), 70)
         self.assertEqual(counter, [])
-        self.assertTrue(all(o["scopeKey"].endswith("|LinkedIn|English|*") for o in support))
+        self.assertTrue(all(o["scopeKey"].endswith("|LinkedIn|en|*") for o in support))
 
     def test_an_unedited_approval_counts_against_rules_that_would_have_changed_it(self):
         support, counter = extract.observations([approved("v1", features(hashtags=2, closingCta=True), edit_count=0), approved("v2", features(hashtags=2), edit_count=1)])
@@ -71,7 +71,7 @@ class Consolidation(unittest.TestCase):
         proposals = extract.consolidate(*extract.observations(self.removed_hashtags(["v1", "v2", "v3"])), state(), NOW)
         self.assertEqual(len(proposals), 1)
         p = proposals[0]
-        self.assertEqual((p["ruleKey"], p["polarity"], p["statement"], p["scope"], p["source"], p["replaces"]), ("hashtags.use", "avoid", "No hashtags.", {"platform": "LinkedIn", "language": "English", "contentTypeId": None}, "deterministic", None))
+        self.assertEqual((p["ruleKey"], p["polarity"], p["statement"], p["scope"], p["source"], p["replaces"]), ("hashtags.use", "avoid", "No hashtags.", {"platform": "LinkedIn", "language": "en", "contentTypeId": None}, "deterministic", None))
         self.assertEqual(len(p["evidence"]), 3)
         self.assertIn("3 of your drafts on LinkedIn · English", p["why"])
         self.assertEqual(learning.lint(p["statement"], p["ruleKey"]), p["statement"])
@@ -92,7 +92,7 @@ class Consolidation(unittest.TestCase):
     def test_same_rule_on_two_platforms_is_one_language_level_proposal(self):
         events = self.removed_hashtags(["v1", "v2", "v3"], "LinkedIn") + self.removed_hashtags(["v4", "v5", "v6"], "Threads")
         proposals = extract.consolidate(*extract.observations(events), state(), NOW)
-        self.assertEqual([(p["scope"], p["statement"]) for p in proposals], [({"platform": None, "language": "English", "contentTypeId": None}, "No hashtags.")])
+        self.assertEqual([(p["scope"], p["statement"]) for p in proposals], [({"platform": None, "language": "en", "contentTypeId": None}, "No hashtags.")])
         events += self.removed_hashtags(["v7", "v8", "v9"], "Instagram", "繁體中文") + self.removed_hashtags(["v10", "v11", "v12"], "Threads", "繁體中文")
         proposals = extract.consolidate(*extract.observations(events), state(), NOW)
         self.assertEqual([p["scope"] for p in proposals], [{"platform": None, "language": None, "contentTypeId": None}])

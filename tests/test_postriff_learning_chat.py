@@ -29,7 +29,7 @@ class Instructions(unittest.TestCase):
     def test_known_rules_get_templates_scope_and_polarity(self):
         cases = {
             "以後 LinkedIn 唔好用 emoji": ("emoji.use", "avoid", "LinkedIn", None, "No emoji."),
-            "Remember: no hashtags on Instagram for Chinese posts.": ("hashtags.use", "avoid", "Instagram", "繁體中文", "No hashtags."),
+            "Remember: no hashtags on Instagram for Chinese posts.": ("hashtags.use", "avoid", "Instagram", "zh", "No hashtags."),
             "From now on, don't end my posts with a call to action.": ("closing.cta", "avoid", None, None, "Don't end with a call to action."),
             "Always put the point in the first sentence.": ("opening.style", "do", None, None, "Put the point in the first sentence."),
             "Never use bullet lists on Threads": ("lists.use", "avoid", "Threads", None, "No bullet lists."),

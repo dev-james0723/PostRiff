@@ -6,6 +6,7 @@ from fractions import Fraction
 from urllib.parse import quote, urlencode
 from postriff_alpha.domain import AlphaError
 from .providers import GRAPH_VERSION
+from . import locales
 
 DEFINITION_VERSION = "2026-09"
 FAMILIES = {
@@ -71,7 +72,8 @@ def summary(cur, workspace_id, jobs, now):
         post["publishedState"] = job.get("state", "unknown")
         post["contentOrigin"] = "postriff_published" if job else "unknown"
         post["platform"] = manifest.get("platform")
-        post["language"] = manifest.get("payload", {}).get("language")
+        language = manifest.get("payload", {}).get("language")
+        post["language"] = locales.canonical(language) or language  # English and en are one cohort
         post["contentTypeId"] = manifest.get("contentType", {}).get("id")
         post["cohort"] = {"provider": post["provider"], "language": post["language"], "contentTypeId": post["contentTypeId"], "definitionVersion": post["definitionVersion"]}
         engagement = post["metrics"].get("likes", {}).get("value")

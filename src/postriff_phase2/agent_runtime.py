@@ -7,10 +7,23 @@ never interprets it as an instruction and never emits `action.proposed` on its o
 from postriff_alpha.domain import AlphaError, clean
 from postriff_alpha.generation import FixtureAdapter
 from .contracts import digest
+from . import locale_lint, locales
 
 SAFE_EVENTS = ("run.started", "progress.updated", "source.added", "artifact.created", "message.delta", "message.completed", "warning.created", "action.proposed", "run.completed", "run.failed", "run.cancelled")
 REASONING = ("quick", "standard", "deep")
-DESTINATIONS = (("LinkedIn", "English"), ("Instagram", "繁體中文"), ("Threads", "English"), ("LinkedIn", "繁體中文"), ("Instagram", "English"), ("Threads", "繁體中文"))
+# Platforms every drafting route can write for. Any language PostRiff knows (locales.is_valid) goes with any of them,
+# and a platform may appear several times in one request, once per language.
+PLATFORMS = ("LinkedIn", "Instagram", "Threads", "Xiaohongshu")
+DEFAULT_REQUEST_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
+
+
+def check_destinations(destinations):
+    seen = set()
+    for d in destinations:
+        platform, tag = d.get("platform"), locales.canonical(d.get("language"))
+        if platform not in PLATFORMS or tag is None or (platform, tag) in seen:
+            raise AlphaError("Choose supported destinations.", 400)
+        seen.add((platform, tag))
 
 # Phase-3 adapter kinds → safe families. Never forwarded raw.
 TRANSLATION = {"waiting": "progress.updated", "running": "progress.updated", "text": "message.delta", "completed": "run.completed", "interrupted": "run.cancelled", "expired": "run.failed", "revoked": "run.failed", "failed": "run.failed", "permission_denied": "warning.created", "uncertain": "warning.created", "applied": "artifact.created"}
@@ -84,14 +97,12 @@ class FixtureAgentRuntime(AgentRuntime):
         return {"status": "completed" if run.get("status") == "completed" else "cancelled"}
 
     def supported_platforms(self):
-        return tuple(dict.fromkeys(platform for platform, _ in DESTINATIONS))
+        return PLATFORMS
 
     def start_turn(self, request, emit):
         context = request["context"]
-        destinations = request.get("destinations") or [{"platform": "LinkedIn", "language": "English"}, {"platform": "Instagram", "language": "繁體中文"}]
-        for d in destinations:
-            if (d.get("platform"), d.get("language")) not in DESTINATIONS:
-                raise AlphaError("Choose supported destinations.", 400)
+        destinations = request.get("destinations") or [dict(d) for d in DEFAULT_REQUEST_DESTINATIONS]
+        check_destinations(destinations)
         if request.get("reasoning", "quick") not in REASONING:
             raise AlphaError("Choose a reasoning level.", 400)
         if request.get("reasoning", "quick") != "quick":
@@ -111,7 +122,8 @@ class FixtureAgentRuntime(AgentRuntime):
             for start in range(0, len(text), 400):
                 emit(safe_event("message.delta", destination=index, text=text[start:start + 400]))
             emit(safe_event("message.completed", destination=index))
-            variants.append({**d, "text": text, "sourceIds": result["sourceIds"], "unknowns": result["unknowns"], "warnings": result["warnings"], "candidateOnly": context["candidateOnly"]})
+            warnings = result["warnings"] + locale_lint.reminders(text, d["language"], d["platform"])
+            variants.append({**d, "text": text, "sourceIds": result["sourceIds"], "unknowns": result["unknowns"], "warnings": warnings, "candidateOnly": context["candidateOnly"]})
             emit(safe_event("progress.updated", stage="drafting", percent=25 + int(70 * (index + 1) / len(destinations))))
         artifact = {"variants": variants}
         emit(safe_event("artifact.created", artifactHash=digest(artifact), variants=len(variants)))
