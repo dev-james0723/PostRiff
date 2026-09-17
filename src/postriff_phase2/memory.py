@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError
+from . import locales
+
+# How the person refers to themselves where a language's grammar shows the writer's gender (languages plan §5.5).
+SELF_REFERENCE_LINES = {"feminine": "use feminine forms", "masculine": "use masculine forms", "neutral": "use neutral wording wherever the grammar allows"}
 
 FILE_ORDER = ("AGENT.md", "IDENTITY.md", "VOICE.md", "BOUNDARIES.md", "BRAND.md")
 # In this order on purpose: a cloud route caps the joined files at MAX_MEMORY_BYTES from the tail
@@ -91,6 +95,7 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
         "# Identity", "",
         _line("Speaker", speaker.get("label")), _line("Mode", hub.get("mode")), _line("Purpose", hub.get("purpose")),
         _line("Audience", hub.get("audience")), _line("Subject", hub.get("subject")), _line("Identity sentence", you.get("identitySentence")),
+        *([f"Referring to yourself in languages that mark gender: {SELF_REFERENCE_LINES[reference]}"] if (reference := locales.settings(state)["selfReference"]) else []),
         "", "> Public-facing facts only. Anything private stays in BOUNDARIES.md.",
     ])
 

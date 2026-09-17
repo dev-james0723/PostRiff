@@ -79,11 +79,13 @@ class FixtureAdapter:
             "LinkedIn": "What is one practical question you would ask before taking the next step?",
             "Instagram": "Keep this as a starting point. What would you like to explore?\n\n#Community #Learning",
             "Threads": "What is missing here? Add your perspective.",
+            "Xiaohongshu": "Save this for later. What would you try first?",
         }
         zh_closing = {
             "LinkedIn": "在採取下一步之前，你會先問哪一個實際問題？",
             "Instagram": "先收藏這個起點。你最想探索哪一部分？\n\n#社區 #一起學習",
             "Threads": "還缺少甚麼？想聽聽你的看法。",
+            "Xiaohongshu": "先收藏起來。你會先試哪一個？",
         }
         idea = request["idea"].strip()
         if request.get("sample") and idea == "Share the seed swap as a learning opportunity":
