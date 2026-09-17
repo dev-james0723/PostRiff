@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -123,7 +124,7 @@ export function HomeView() {
   }
   const choice = useModelChoice(models.data);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const timeZone = useTimeZone();
 
   function pickMode(next: ModeId) {
     setMode(next);

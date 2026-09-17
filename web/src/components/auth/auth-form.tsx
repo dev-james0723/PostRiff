@@ -13,6 +13,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { plans } from '@/config/plans';
 import { siteConfig } from '@/config/site';
+import { passkeysSupported } from '@/lib/auth/mfa';
+import { passkeySignInEnabled, signInWithPasskey } from '@/lib/auth/passkeys';
 import { devSignIn, useAuth } from '@/lib/auth/session';
 import { rememberPlan, selectedPlan, type TrialPlan } from '@/lib/workspace/provider';
 
@@ -69,6 +71,15 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
     });
     if (oauthError) throw oauthError;
   }
+
+  async function passkey() {
+    const { createClient } = await import('@/lib/supabase/client');
+    await signInWithPasskey(createClient());
+    router.replace(next);
+  }
+
+  // Existing accounts only: a passkey is registered from the profile after the first sign-in.
+  const offerPasskey = intent === 'sign-in' && passkeySignInEnabled() && passkeysSupported();
 
   async function sendCode() {
     rememberPlan(plan);
@@ -202,6 +213,12 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
 
       {!sent ? (
         <div className='flex flex-col gap-3'>
+          {offerPasskey && (
+            <Button disabled={busy} onClick={() => void run(passkey)}>
+              <Icons.key className='size-4' aria-hidden />
+              Sign in with a passkey
+            </Button>
+          )}
           <Button variant='outline' disabled={busy} onClick={() => void run(google)}>
             <Icons.logo className='size-4' aria-hidden />
             Continue with Google

@@ -140,12 +140,12 @@ class DevAssets:
     storage = DevStorage()
 
 
-def start_postgres():
+def start_postgres(port=PORT_PG):
     tmp = tempfile.mkdtemp(prefix="postriff-dev-pg-")
     data, log = Path(tmp) / "data", Path(tmp) / "postgres.log"
     subprocess.run([str(PG / "initdb"), "-D", str(data), "-A", "trust", "--no-locale", "-E", "UTF8"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {PORT_PG}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
-    dsn = f"host=127.0.0.1 port={PORT_PG} dbname=postgres"
+    subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+    dsn = f"host=127.0.0.1 port={port} dbname=postgres"
     subprocess.run([str(PG / "psql"), dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
     return dsn, data
 
@@ -153,10 +153,11 @@ def start_postgres():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=4331)
+    parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
     import psycopg
-    dsn, data = start_postgres()
+    dsn, data = start_postgres(args.pg_port)
     connection = lambda: psycopg.connect(dsn, client_encoding="utf8", autocommit=False)
     # POSTRIFF_DEV_WEB_ORIGIN lets the Next.js dev server (which proxies /api and /dev here) own the consent + callback flow.
     base = os.environ.get("POSTRIFF_DEV_WEB_ORIGIN", "").rstrip("/") or f"http://127.0.0.1:{args.port}"
@@ -165,7 +166,9 @@ def main():
     verifier = DevVerifier(connection)
     # OAuth rows must carry an https PostRiff callback (production guard); the dev consent page
     # redirects to the loopback callback itself, so the placeholder host is never contacted.
-    service = HostedWorkspaceService(connection, verifier, DevAssets(), vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport)
+    # The web app labels a dev identity `dev-<first 8 of the uuid>@postriff.invalid`; the same address
+    # here lets invitations addressed to it show up on the profile. Nothing is ever sent (NullTransport).
+    service = HostedWorkspaceService(connection, verifier, DevAssets(), vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid")
     social = HostedSocial(service.oauth, providers, DevAssets(), transport=transport)
 
     def on_verified(cur, workspace_id, job):

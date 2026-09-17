@@ -23,6 +23,10 @@ export const keys = {
   memory: (w: string) => ['memory', w] as const,
   memoryProposals: (w: string) => ['memory-proposals', w] as const,
   sessions: ['sessions'] as const,
+  me: ['me'] as const,
+  myChannels: ['me', 'channels'] as const,
+  securityEvents: ['me', 'security-events'] as const,
+  myInvitations: ['me', 'invitations'] as const,
   models: ['models'] as const,
   privacyNotice: ['privacy-notice'] as const
 };
@@ -94,6 +98,30 @@ export function useMessages(conversationId: string | null) {
 export function useSessions() {
   const { api } = useWorkspace();
   return useQuery({ queryKey: keys.sessions, queryFn: () => api.sessions() });
+}
+
+/** The signed-in person: display name, current session, second-factor state. Not per workspace. */
+export function useMe() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.me, queryFn: () => api.me() });
+}
+
+/** Every connected channel across the user's workspaces. */
+export function useMyChannels() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.myChannels, queryFn: () => api.myChannels() });
+}
+
+/** The person's account history: sign-ins, second-factor changes, revoked sessions, membership changes. */
+export function useSecurityEvents() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.securityEvents, queryFn: () => api.securityEvents() });
+}
+
+/** Invitations waiting for the person's verified email. */
+export function useMyInvitations() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.myInvitations, queryFn: () => api.myInvitations() });
 }
 
 export function useModels() {

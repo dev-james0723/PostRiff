@@ -15,6 +15,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, createApi, type PostRiffApi } from '@/lib/api/client';
 import type { AuthMode } from '@/lib/api/types';
+import { assurance } from '@/lib/auth/mfa';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
 
 export interface AuthUser {
@@ -22,9 +23,17 @@ export interface AuthUser {
   email?: string;
   name?: string;
   imageUrl?: string;
+  emailVerified?: boolean;
+  /** A new address awaiting confirmation (`updateUser({ email })` was called). */
+  pendingEmail?: string;
+  /** Sign-in provider id from the auth service (`google`, `email`…). */
+  provider?: string;
+  /** ISO timestamp of account creation. */
+  createdAt?: string;
 }
 
-export type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'unavailable';
+/** `mfa-required`: signed in, but a second factor is enrolled and this session has not shown it. */
+export type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'mfa-required' | 'unavailable';
 
 export interface AuthContextValue {
   mode: AuthMode | null;
@@ -34,6 +43,10 @@ export interface AuthContextValue {
   error: string | null;
   getToken: () => Promise<string | null>;
   signOut: () => Promise<void>;
+  /** Re-check the assurance level after a code was verified (leaves `mfa-required`). */
+  completeMfa: () => Promise<void>;
+  /** The browser Supabase client, for MFA and profile updates; null in dev mode. */
+  supabase: SupabaseClient | null;
   /** Unauthenticated client for public routes; authenticated once signed in. */
   api: PostRiffApi;
 }
@@ -73,14 +86,27 @@ function userFromSupabase(user: {
   id: string;
   email?: string;
   user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+  email_confirmed_at?: string;
+  new_email?: string;
+  created_at?: string;
 }): AuthUser {
   const meta = user.user_metadata ?? {};
   return {
     id: user.id,
     email: user.email,
     name: (meta.full_name as string) || (meta.name as string) || undefined,
-    imageUrl: (meta.avatar_url as string) || (meta.picture as string) || undefined
+    imageUrl: (meta.avatar_url as string) || (meta.picture as string) || undefined,
+    emailVerified: Boolean(user.email_confirmed_at),
+    pendingEmail: user.new_email || undefined,
+    provider: (user.app_metadata?.provider as string) || undefined,
+    createdAt: user.created_at
   };
+}
+
+/** Signed in, or still owing a second factor for this session. */
+async function statusFor(client: SupabaseClient): Promise<AuthStatus> {
+  return (await assurance(client)) === 'pending' ? 'mfa-required' : 'signed-in';
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -90,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const supabaseRef = useRef<SupabaseClient | null>(null);
 
   const getToken = useCallback(async (): Promise<string | null> => {
@@ -147,18 +174,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { createClient } = await import('@/lib/supabase/client');
       const client = createClient();
       supabaseRef.current = client;
+      setSupabase(client);
       const { data } = await client.auth.getSession();
       if (cancelled) return;
       if (data.session?.user) {
         setUser(userFromSupabase(data.session.user));
-        setStatus('signed-in');
+        const next = await statusFor(client);
+        if (cancelled) return;
+        setStatus(next);
       } else {
         setStatus('signed-out');
       }
       const { data: sub } = client.auth.onAuthStateChange((_event, session) => {
         if (session?.user) {
           setUser(userFromSupabase(session.user));
-          setStatus('signed-in');
+          // Supabase asks that no auth call runs inside this callback, so the assurance check is deferred.
+          setTimeout(() => {
+            void statusFor(client).then((next) => {
+              if (!cancelled) setStatus(next);
+            });
+          }, 0);
         } else {
           setUser(null);
           setStatus('signed-out');
@@ -189,9 +224,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signed-out');
   }, [api, mode]);
 
+  const completeMfa = useCallback(async () => {
+    const client = supabaseRef.current;
+    if (client) setStatus(await statusFor(client));
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ mode, status, user, error, getToken, signOut, api }),
-    [mode, status, user, error, getToken, signOut, api]
+    () => ({ mode, status, user, error, getToken, signOut, completeMfa, supabase, api }),
+    [mode, status, user, error, getToken, signOut, completeMfa, supabase, api]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

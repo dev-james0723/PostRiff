@@ -172,7 +172,7 @@ function MemberRow({ member, canManage }: { member: Member; canManage: boolean }
   return (
     <TableRow>
       <TableCell>
-        <span className='font-mono text-xs'>{member.userId.slice(0, 8)}…</span>
+        {member.displayName ? <span>{member.displayName}</span> : <span className='font-mono text-xs'>{member.userId.slice(0, 8)}…</span>}
         {member.you && (
           <Badge variant='outline' className='ml-2'>
             you
@@ -234,6 +234,87 @@ function MemberRow({ member, canManage }: { member: Member; canManage: boolean }
   );
 }
 
+/** Owner-only: hand the role to an active admin. Both memberships swap in one step-up transaction. */
+function TransferOwnershipCard({ members }: { members: Member[] }) {
+  const { api, workspaceId } = useWorkspaceApi();
+  const client = useQueryClient();
+  const [newOwnerId, setNewOwnerId] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const admins = members.filter((m) => m.role === 'admin' && m.status === 'active');
+  const target = admins.find((m) => m.userId === newOwnerId) ?? null;
+  const targetLabel = (member: Member) => member.displayName || `${member.userId.slice(0, 8)}…`;
+
+  async function transfer() {
+    if (!target) return;
+    setBusy(true);
+    try {
+      await api.transferOwnership(workspaceId, target.userId);
+      toast.success(`${targetLabel(target)} is now the owner.`);
+      setNewOwnerId('');
+      await client.invalidateQueries({ queryKey: keys.members(workspaceId) });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Ownership could not be transferred.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Transfer ownership</CardTitle>
+        <CardDescription>Make an active admin the owner. You become an admin with every grant. This needs a recent sign-in.</CardDescription>
+      </CardHeader>
+      <CardContent className='flex flex-wrap items-center gap-2'>
+        {admins.length === 0 ? (
+          <p className='text-muted-foreground text-sm'>Make someone an admin first — ownership can only move to an active admin.</p>
+        ) : (
+          <>
+            <Select value={newOwnerId} onValueChange={(value) => setNewOwnerId(value ?? '')}>
+              <SelectTrigger className='w-64'>
+                <SelectValue placeholder='Choose the new owner' />
+              </SelectTrigger>
+              <SelectContent>
+                {admins.map((admin) => (
+                  <SelectItem key={admin.userId} value={admin.userId}>
+                    {targetLabel(admin)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant='outline' disabled={!target || busy} onClick={() => setConfirming(true)}>
+              Transfer ownership
+            </Button>
+          </>
+        )}
+        <AlertDialog open={confirming} onOpenChange={setConfirming}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Make {target ? targetLabel(target) : 'this admin'} the owner?</AlertDialogTitle>
+              <AlertDialogDescription>
+                They get billing, deletion and full member control. You become an admin with every grant instead.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep ownership</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirming(false);
+                  void transfer();
+                }}
+              >
+                Transfer ownership
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function MembersView() {
   const access = useWorkspaceAccess();
   const canManage = checkAccess(access, { permission: 'manage_members' });
@@ -254,6 +335,7 @@ export function MembersView() {
   }
 
   const acceptLink = created ? `${window.location.origin}/invite/${created.result.token}` : '';
+  const me = (members.data?.members ?? []).find((m) => m.you) ?? null;
 
   return (
     <PageContainer
@@ -335,6 +417,8 @@ export function MembersView() {
             </div>
           )}
         </section>
+
+        {me?.role === 'owner' && <TransferOwnershipCard members={members.data?.members ?? []} />}
 
         <section className='flex flex-col gap-3' aria-labelledby='invites-heading'>
           <h3 id='invites-heading' className='text-lg font-semibold'>

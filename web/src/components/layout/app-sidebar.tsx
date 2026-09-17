@@ -19,7 +19,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -28,19 +27,71 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail
+  SidebarRail,
+  useSidebar
 } from '@/components/ui/sidebar';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { navGroups } from '@/config/nav-config';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
+import { useNavGroups } from '@/hooks/use-nav-groups';
 import { useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useAuth } from '@/lib/auth/session';
+import type { NavGroup } from '@/types';
 import { WorkspaceSwitcher } from './workspace-switcher';
 
 function isActivePath(pathname: string, url: string) {
   if (url === '/app') return pathname === '/app';
   return pathname === url || pathname.startsWith(url + '/');
+}
+
+/** The group whose item (or sub-item) matches the current route; it must never be folded shut. */
+function activeGroupLabel(groups: NavGroup[], pathname: string) {
+  const match = groups.find((group) =>
+    group.items.some(
+      (item) => isActivePath(pathname, item.url) || (item.items ?? []).some((sub) => isActivePath(pathname, sub.url))
+    )
+  );
+  return match?.label ?? null;
+}
+
+/**
+ * One sidebar section (Create, Distribute, …). The header is a tinted band with borders so the
+ * sections read as blocks, and a button that folds the section; the choice is remembered per
+ * browser. In icon mode the header hides and the section stays open so its icons stay reachable.
+ */
+function NavGroupSection({
+  label,
+  open,
+  onOpenChange,
+  iconMode,
+  children
+}: {
+  label: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  iconMode: boolean;
+  children: React.ReactNode;
+}) {
+  if (!label) return <SidebarGroup className='py-0'>{children}</SidebarGroup>;
+  return (
+    <Collapsible open={iconMode || open} onOpenChange={onOpenChange} render={<SidebarGroup className='p-0' />}>
+      <CollapsibleTrigger
+        className='group/navgroup border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring data-panel-open:border-b-sidebar-border flex h-8 w-full shrink-0 items-center justify-between border-y border-b-transparent px-4 text-[11px] font-semibold tracking-[0.08em] uppercase outline-hidden transition-[margin,opacity,background-color] duration-200 ease-linear focus-visible:ring-2 group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0'
+        tabIndex={iconMode ? -1 : 0}
+        aria-hidden={iconMode || undefined}
+      >
+        <span>{label}</span>
+        <Icons.chevronDown
+          aria-hidden
+          className='size-3.5 -rotate-90 transition-transform duration-(--duration-fast) ease-(--ease-smooth-out) group-data-panel-open/navgroup:rotate-0 motion-reduce:transition-none'
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className='t-nav-panel'>
+        <div className='p-2'>{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 /**
@@ -69,6 +120,10 @@ export default function AppSidebar() {
   const access = useWorkspaceAccess();
   const groups = useFilteredNavGroups(navGroups);
   const snapshot = useSnapshot();
+  const { state: sidebarState, isMobile } = useSidebar();
+  // Icon rail: headers hide and every section stays open, otherwise the icons would vanish with it.
+  const iconMode = sidebarState === 'collapsed' && !isMobile;
+  const { isOpen, setOpen } = useNavGroups(activeGroupLabel(groups, pathname));
   // Approvals waiting on someone: the only count the sidebar shows, read from the workspace ledger.
   const counts: Record<string, number> = {
     '/app/queue': (snapshot.data?.state.phase2?.reviews ?? []).filter((r) => r.status === 'needs_review').length
@@ -81,8 +136,13 @@ export default function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className='overflow-x-hidden'>
         {groups.map((group) => (
-          <SidebarGroup key={group.label || 'ungrouped'} className='py-0'>
-            {group.label && <SidebarGroupLabel>{group.label}</SidebarGroupLabel>}
+          <NavGroupSection
+            key={group.label || 'ungrouped'}
+            label={group.label}
+            open={isOpen(group.label)}
+            onOpenChange={(open) => setOpen(group.label, open)}
+            iconMode={iconMode}
+          >
             <SidebarMenu>
               {group.items.map((item) => {
                 const Icon = item.icon ? Icons[item.icon] : Icons.logo;
@@ -126,7 +186,7 @@ export default function AppSidebar() {
                 );
               })}
             </SidebarMenu>
-          </SidebarGroup>
+          </NavGroupSection>
         ))}
       </SidebarContent>
       <SidebarFooter>

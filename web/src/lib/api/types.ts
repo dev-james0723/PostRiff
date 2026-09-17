@@ -3,7 +3,7 @@
  * Ported from the founder alpha client (`studio/web/src/founder/cloud-api.ts`)
  * and kept in one place so every page reads the same shapes.
  */
-import type { WorkspaceRole } from '@/types';
+import type { WorkspacePlan, WorkspaceRole } from '@/types';
 
 export type AuthMode = 'supabase' | 'dev';
 
@@ -28,6 +28,13 @@ export interface WorkspaceListItem {
   workspaceId: string;
   membership: Membership;
   createdAt: number;
+  /** Summary for the profile page and switcher (`hosted.workspace_summary`). */
+  name: string;
+  /** `trial` until a subscription is live; then the paid plan. */
+  plan: WorkspacePlan;
+  trialPlan: 'studio' | 'assist' | null;
+  owner: { userId: string; displayName: string } | null;
+  memberCounts: Record<WorkspaceRole, number>;
 }
 
 /* ---------- workspace snapshot (single mutation channel: POST /actions) ---------- */
@@ -618,6 +625,7 @@ export interface Member extends Membership {
   status: string;
   you: boolean;
   updatedAt: number;
+  displayName: string;
 }
 
 export interface Invitation {
@@ -647,6 +655,76 @@ export interface SessionInfo {
   client: string;
   revoked: boolean;
   current: boolean;
+}
+
+/** The signed-in person (`GET /api/me`). Name, email and avatar come from the auth provider. */
+export interface Me {
+  userId: string;
+  displayName: string;
+  sessionId: string | null;
+  mfa: {
+    /** False for identities without assurance levels (the dev harness). */
+    available: boolean;
+    /** Once true the API refuses this user's sessions until a second factor is presented. */
+    enforced: boolean;
+    enforcedAt: number | null;
+    aal: 'aal1' | 'aal2' | null;
+  };
+  /** Person-level preferences; empty strings mean "follow this device". */
+  preferences: { timeZone: string; locale: string; alertNewDevice: boolean };
+}
+
+/** Body of `PATCH /api/me`; only the keys present change. */
+export interface ProfileChanges {
+  displayName?: string;
+  timeZone?: string;
+  locale?: string;
+  alertNewDevice?: boolean;
+}
+
+/** One connected channel in one of the user's workspaces (`GET /api/me/channels`). Read-only. */
+export interface MyChannel {
+  workspaceId: string;
+  workspaceName: string;
+  id: string;
+  platform: string;
+  account: string;
+  accountType?: string | null;
+  connectionState: string;
+  expiresAt?: number | null;
+  verifiedAt?: number | null;
+  evidenceSource: string;
+  /** Whether the user holds `manage_connections` in that workspace. */
+  canManage: boolean;
+  /** Who connected it, from the audit trail; null for channels with no recorded connection event. */
+  connectedBy: { userId: string; displayName: string; at: number } | null;
+}
+
+/**
+ * One line of the person's account history (`GET /api/me/security-events`): their own security
+ * actions, first sign-ins per device (`session.started`), and changes others made to their
+ * memberships. Newest first.
+ */
+export interface SecurityEvent {
+  id: string;
+  kind: string;
+  subject: string;
+  at: number;
+  meta: Record<string, unknown>;
+  workspaceId: string | null;
+  workspaceName: string;
+}
+
+/** An invitation addressed to the person's verified email (`GET /api/me/invitations`). */
+export interface PendingInvitation {
+  invitationId: string;
+  workspaceId: string;
+  workspaceName: string;
+  role: string;
+  permissions: Record<string, boolean>;
+  invitedBy: { userId: string; displayName: string };
+  createdAt: number;
+  expiresAt: number;
 }
 
 export interface AuditEvent {

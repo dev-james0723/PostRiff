@@ -82,7 +82,7 @@ export function WorkspaceSwitcher() {
                       <Icons.workspace className='size-3.5 shrink-0' />
                     </div>
                     <span className='flex-1 truncate'>
-                      {active ? name : `Workspace ${shortId(item.workspaceId)}`}
+                      {active ? name : item.name || `Workspace ${shortId(item.workspaceId)}`}
                     </span>
                     <span className='text-muted-foreground text-xs'>{ROLE_LABELS[item.membership.role]}</span>
                     {active && <Icons.check className='ml-1 size-4' />}

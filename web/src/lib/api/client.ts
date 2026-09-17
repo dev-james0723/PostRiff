@@ -17,6 +17,7 @@ import type {
   Invitation,
   InvitationCreated,
   LearningSummary,
+  Me,
   Member,
   Membership,
   MemoryEgress,
@@ -24,12 +25,16 @@ import type {
   MemoryProposals,
   Message,
   ModelCatalog,
+  MyChannel,
   OAuthComplete,
   OAuthStart,
+  PendingInvitation,
   PrivacyNotice,
+  ProfileChanges,
   ProviderView,
   ResearchEgress,
   Run,
+  SecurityEvent,
   SessionInfo,
   Snapshot,
   Usage,
@@ -108,6 +113,24 @@ export function createApi(getToken: TokenSource) {
       send<{ sessionId: string; revoked: boolean }>('DELETE', `/api/auth/sessions/${encodeURIComponent(sessionId)}`),
     acceptInvitation: (token: string) =>
       send<{ workspaceId: string; role: string }>('POST', '/api/invitations/accept', { token }),
+    leaveWorkspace: (w: string) => send<{ workspaceId: string; status: string }>('POST', `${ws(w)}/leave`),
+
+    /* the signed-in person */
+    me: () => get<Me>('/api/me'),
+    updateProfile: (changes: ProfileChanges) =>
+      send<{ displayName: string; preferences: Me['preferences'] }>('PATCH', '/api/me', changes),
+    myChannels: () => get<{ channels: MyChannel[] }>('/api/me/channels'),
+    securityEvents: () => get<{ events: SecurityEvent[] }>('/api/me/security-events'),
+    /* `available` is false when the deployment cannot confirm the person's email (the dev harness without a lookup) */
+    myInvitations: () => get<{ invitations: PendingInvitation[]; available: boolean }>('/api/me/invitations'),
+    acceptMyInvitation: (id: string) =>
+      send<{ workspaceId: string; role: string }>('POST', `/api/me/invitations/${encodeURIComponent(id)}/accept`),
+    declineMyInvitation: (id: string) =>
+      send<{ invitationId: string; state: string }>('POST', `/api/me/invitations/${encodeURIComponent(id)}/decline`),
+    enableMfa: () => send<{ enforced: boolean; enforcedAt: number | null }>('POST', '/api/auth/mfa'),
+    disableMfa: () => send<{ enforced: boolean; enforcedAt: number | null }>('DELETE', '/api/auth/mfa'),
+    revokeOtherSessions: () =>
+      send<{ revoked: number; refreshRevoked: boolean; current: string }>('POST', '/api/auth/sessions/revoke-others'),
 
     /* snapshot + single mutation channel */
     snapshot: (w: string) => get<Snapshot>(ws(w)),
@@ -211,6 +234,8 @@ export function createApi(getToken: TokenSource) {
       send<Record<string, unknown>>('PATCH', `${ws(w)}/members/${encodeURIComponent(userId)}`, { role, permissions }),
     removeMember: (w: string, userId: string) =>
       send<{ userId: string; status: string }>('DELETE', `${ws(w)}/members/${encodeURIComponent(userId)}`),
+    transferOwnership: (w: string, newOwnerId: string) =>
+      send<{ ownerId: string; previousOwnerId: string }>('POST', `${ws(w)}/transfer-ownership`, { newOwnerId }),
     invitations: (w: string) => get<{ invitations: Invitation[] }>(`${ws(w)}/invitations`),
     invite: (w: string, email: string, role: string, permissions: Record<string, boolean> = {}) =>
       send<InvitationCreated>('POST', `${ws(w)}/invitations`, { email, role, permissions }),
