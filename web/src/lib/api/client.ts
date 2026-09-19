@@ -237,7 +237,7 @@ export function createApi(getToken: TokenSource) {
     updateMember: (w: string, userId: string, role: string, permissions: Record<string, boolean>) =>
       send<Record<string, unknown>>('PATCH', `${ws(w)}/members/${encodeURIComponent(userId)}`, { role, permissions }),
     removeMember: (w: string, userId: string) =>
-      send<{ userId: string; status: string }>('DELETE', `${ws(w)}/members/${encodeURIComponent(userId)}`),
+      send<{ userId: string; status: string; note?: string }>('DELETE', `${ws(w)}/members/${encodeURIComponent(userId)}`),
     transferOwnership: (w: string, newOwnerId: string) =>
       send<{ ownerId: string; previousOwnerId: string }>('POST', `${ws(w)}/transfer-ownership`, { newOwnerId }),
     invitations: (w: string) => get<{ invitations: Invitation[] }>(`${ws(w)}/invitations`),

@@ -289,7 +289,7 @@ function CalendarHeader({
       </div>
 
       <div className='flex flex-wrap items-center gap-2 md:gap-3'>
-        <ButtonGroup aria-label='Change period'>
+        <ButtonGroup data-tour='calendar-period-nav' aria-label='Change period'>
           <Button variant='outline' size='icon' aria-label={`Previous ${unit}`} onClick={onPrevious}>
             <Icons.chevronLeft />
           </Button>
@@ -301,7 +301,7 @@ function CalendarHeader({
           </Button>
         </ButtonGroup>
         <Select value={view} onValueChange={(value) => onViewChange(value as CalendarView)}>
-          <SelectTrigger aria-label='Calendar view' className='w-32'>
+          <SelectTrigger data-tour='calendar-view-select' aria-label='Calendar view' className='w-32'>
             <SelectValue>{CALENDAR_VIEWS.find((option) => option.value === view)?.label}</SelectValue>
           </SelectTrigger>
           <SelectContent>

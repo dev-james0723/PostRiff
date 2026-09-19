@@ -25,6 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { SuccessCheck } from '@/components/ui/success-check';
 import { useFlash } from '@/hooks/use-flash';
 import { keys } from '@/lib/api/hooks';
+import { useChangeError } from '@/lib/auth/use-sign-in-again';
 import { ApiError } from '@/lib/api/client';
 import type { ChannelView, ProviderView } from '@/lib/api/types';
 import {
@@ -176,6 +177,8 @@ export const ChannelCard = forwardRef<HTMLDivElement, ChannelCardProps>(function
     }
   }
 
+  const reportChangeError = useChangeError();
+
   async function disconnect() {
     setBusy(true);
     try {
@@ -183,7 +186,7 @@ export const ChannelCard = forwardRef<HTMLDivElement, ChannelCardProps>(function
       toast.success('Disconnected. Stored tokens were wiped.');
       await refresh();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not disconnect.');
+      reportChangeError(err, 'Could not disconnect.');
     } finally {
       setBusy(false);
     }

@@ -1,4 +1,3 @@
-import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import type { Membership, MyChannel, SecurityEvent, WorkspaceListItem } from '@/lib/api/types';
 import { ROLE_LABELS } from '@/lib/auth/permissions';
 import type { WorkspaceRole } from '@/types';
@@ -56,28 +55,7 @@ export function extraGrants(membership: Membership): string[] {
   );
 }
 
-const RECONNECT_STATES = new Set(['token_expired', 'reauthorization_required', 'scope_missing']);
-
-/** Badge for one channel row. Expiry within a week is called out before it turns into a failure. */
-export function channelBadge(
-  channel: Pick<MyChannel, 'connectionState' | 'expiresAt'>,
-  now = Date.now() / 1000
-): { label: string; status: AnimatedBadgeStatus } {
-  const state = channel.connectionState;
-  if (state === 'publish_verified' || state === 'read_verified') {
-    if (channel.expiresAt && channel.expiresAt - now < 7 * 86400) return { label: 'Expiring soon', status: 'warning' };
-    return { label: state === 'publish_verified' ? 'Connected' : 'Connected · read only', status: 'success' };
-  }
-  if (state === 'token_expired' || state === 'reauthorization_required') return { label: 'Needs reconnect', status: 'warning' };
-  if (state === 'scope_missing') return { label: 'Missing permissions', status: 'warning' };
-  if (state === 'identity_known') return { label: 'Identity only', status: 'neutral' };
-  return { label: 'Disconnected', status: 'neutral' };
-}
-
-/** Reconnect is offered only where the user holds manage_connections and the channel needs it. */
-export function needsReconnect(channel: Pick<MyChannel, 'connectionState' | 'canManage'>) {
-  return channel.canManage && RECONNECT_STATES.has(channel.connectionState);
-}
+export { channelBadge, needsReconnect } from '@/lib/channels/state';
 
 function roleLabel(value: unknown) {
   return typeof value === 'string' ? (ROLE_LABELS[value as WorkspaceRole] ?? value) : '';

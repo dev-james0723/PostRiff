@@ -389,7 +389,7 @@ export function LiveIsland({ className }: { className?: string }) {
               ) : null}
               {next ? (
                 <li>
-                  <Link href='/app/calendar' onClick={close} className={ROW_ACTION}>
+                  <Link href={`/app/queue?job=${encodeURIComponent(next.jobId)}`} onClick={close} className={ROW_ACTION}>
                     <Glyph tone='next' />
                     <span className='flex min-w-0 flex-1 flex-col'>
                       <span className='truncate'>

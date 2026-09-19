@@ -62,7 +62,11 @@ export interface Manifest {
   contentRevision: number;
   payload: { text: string; language: string };
   media: (Asset & { alt: string })[];
-  timing: { local: string; timeZone: string; utc: string };
+  timing: { local: string; timeZone: string; utc: string; timestamp?: number; fold?: number };
+  voiceRevision?: number | null;
+  styleRevision?: number;
+  payloadDigest?: string;
+  providerAccountId?: string;
   expiresAt: number;
   idempotencyKey: string;
   execution: string;
@@ -72,7 +76,14 @@ export interface Job {
   id: string;
   manifest: Manifest;
   state: string;
-  events: { at: number; state: string; message: string }[];
+  approvedBy?: string;
+  approvedAt?: number;
+  approvalDigest?: string;
+  nextAt?: number;
+  checks?: number;
+  scheduleId?: string | null;
+  url?: string;
+  events: { at: number; state: string; message: string; execution?: string }[];
   attempts: { number: number; startedAt: number; endedAt?: number }[];
   providerReference?: string;
   providerConfirmed?: string;
@@ -82,6 +93,8 @@ export interface Job {
 }
 
 export interface Review {
+  createdAt?: number;
+  jobId?: string;
   id: string;
   manifest: Manifest;
   digest: string;
@@ -98,7 +111,30 @@ export interface Trial {
   status: string;
 }
 
+export interface VariantRevision {
+  revision: number;
+  text: string;
+  /** `ideas-candidate`, `fixture`, `author-edit`, `chosen-opening`, `accepted-fixture-replacement`. */
+  origin: string;
+  /** ISO string from `domain.py` `now()`; absent on Ideas candidates. */
+  at?: string | number | null;
+}
+
+export interface VariantFeedback {
+  id: string;
+  reasons: string[];
+  note: string;
+  actor: string;
+  /** Epoch seconds (`store.py`). */
+  at: number;
+  revision: number;
+}
+
 export interface SnapshotVariant {
+  revisions?: VariantRevision[];
+  rejected?: boolean;
+  feedback?: VariantFeedback[];
+  runId?: string;
   id: string;
   platform: string;
   language: string;
@@ -128,6 +164,29 @@ export interface SnapshotVariant {
 
 export type SourcePolicy = 'public_quote' | 'rewrite_approval' | 'internal_reference' | 'prohibited';
 
+export interface SourceFact {
+  id: string;
+  text: string;
+  approved: boolean;
+  locator?: string;
+}
+
+/** Where a web-research page came from (`ideas._research`). */
+export interface SourceOrigin {
+  kind: string;
+  url?: string;
+  host?: string;
+  query?: string;
+  published?: string;
+  fetchedAt?: string;
+}
+
+export interface SourceUseApproval {
+  actor?: string;
+  at?: number | string;
+  factsDigest?: string;
+}
+
 export interface SnapshotSource {
   id: string;
   kind: string;
@@ -138,7 +197,12 @@ export interface SnapshotSource {
   reviewedAt?: string;
   sourcePolicy?: SourcePolicy | null;
   egressConsent?: ('local' | 'cloud')[];
-  facts?: { id: string; text: string; approved: boolean }[];
+  facts?: SourceFact[];
+  createdAt?: string | number;
+  withdrawnAt?: string | number;
+  unknowns?: string[];
+  origin?: SourceOrigin | null;
+  useApprovals?: SourceUseApproval[];
 }
 
 export interface Phase2State {
@@ -452,6 +516,8 @@ export interface ChannelView {
   evidenceSource: string;
   scopes: string[];
   expiresAt?: number;
+  /** SHA-256 of the account's stored profile picture; null when the provider gave none. */
+  pictureDigest?: string | null;
 }
 
 export interface ProviderView {
@@ -473,6 +539,7 @@ export interface OAuthStart {
 }
 
 export interface OAuthComplete {
+  connectionId?: string;
   connected: boolean;
   reason?: string;
   account?: string;
@@ -566,6 +633,8 @@ export interface Metric {
 }
 
 export interface AnalyticsPost {
+  connectionId?: string | null;
+  contentTypeId?: string | null;
   provider: string;
   providerPostId: string;
   jobId: string | null;
@@ -580,6 +649,7 @@ export interface AnalyticsPost {
 }
 
 export interface Analytics {
+  families?: Record<string, string[]>;
   state: string;
   posts: AnalyticsPost[];
   rules: Record<string, string>;

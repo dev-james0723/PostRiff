@@ -217,7 +217,7 @@ export function PostSheet({
             </div>
             <SheetFooter className='border-t'>
               <Link
-                href='/app/queue'
+                href={post.jobId ? `/app/queue?job=${encodeURIComponent(post.jobId)}` : '/app/queue'}
                 className='t-learn text-primary inline-flex items-center gap-0.5 text-sm hover:underline'
               >
                 Open in Queue

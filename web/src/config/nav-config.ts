@@ -28,7 +28,7 @@ export const navGroups: NavGroup[] = [
       {
         title: 'Ideas',
         url: '/app/ideas',
-        icon: 'sparkles',
+        icon: 'post',
         shortcut: ['i', 'i'],
         items: [],
         access: { permission: 'edit' }
@@ -63,7 +63,7 @@ export const navGroups: NavGroup[] = [
         title: 'Channels',
         url: '/app/channels',
         icon: 'broadcast',
-        shortcut: ['h', 'h'],
+        shortcut: ['b', 'b'],
         items: []
       },
       {
@@ -110,8 +110,7 @@ export const navGroups: NavGroup[] = [
         title: 'Roles',
         url: '/app/workspace/roles',
         icon: 'lock',
-        items: [],
-        access: { permission: 'manage_members' }
+        items: []
       },
       {
         title: 'Audit log',

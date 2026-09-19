@@ -152,7 +152,7 @@ function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<
   // The approving zone's clock, only when it reads differently from this one (another name for the same offset adds nothing).
   const approvedTime = post.approvedZone && post.approvedZone !== timeZone ? zoneTime(post.at, post.approvedZone) : null;
   const approvedElsewhere = approvedTime && approvedTime !== zoneTime(post.at, timeZone) ? approvedTime : null;
-  const next = NEEDS_NEW_REVIEW.has(post.kind) ? { href: '/app/pipeline', label: 'Open the pipeline' } : { href: '/app/queue', label: 'Open the queue' };
+  const next = NEEDS_NEW_REVIEW.has(post.kind) ? { href: '/app/pipeline', label: 'Open the pipeline' } : { href: post.job ? `/app/queue?job=${encodeURIComponent(post.job.id)}` : '/app/queue', label: 'Open the queue' };
 
   const details = (
     <div className={cn('flex min-w-0 flex-col gap-2', context === 'popover' && 'w-72 max-w-full shrink-0')}>

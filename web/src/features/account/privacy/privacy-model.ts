@@ -265,7 +265,4 @@ export function groupHex(hex: string, size = 8) {
   return hex.match(new RegExp(`.{1,${size}}`, 'g'))?.join(' ') ?? hex;
 }
 
-/** Step-up and "not the owner" both answer 403; only the message tells them apart (`hosted.py` assert_fresh). */
-export function needsFreshSignIn(error: { status?: number; message: string }) {
-  return error.status === 403 && /sign in again/i.test(error.message);
-}
+export { needsFreshSignIn } from '@/lib/auth/step-up';

@@ -70,7 +70,7 @@ export function EventButton<T>({
 
   return (
     <Popover>
-      <PopoverTrigger aria-label={label} tabIndex={tabIndex} className={classes} style={style}>
+      <PopoverTrigger data-tour='calendar-event' aria-label={label} tabIndex={tabIndex} className={classes} style={style}>
         {body}
       </PopoverTrigger>
       <PopoverContent align='start' className='w-auto max-w-[calc(100vw-1rem)]'>

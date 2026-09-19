@@ -40,6 +40,7 @@ import {
   type FactorKind,
   type SecondFactor
 } from '@/lib/auth/mfa';
+import { useChangeError } from '@/lib/auth/use-sign-in-again';
 import { useAuth } from '@/lib/auth/session';
 import { formatDate, formatDateTime, relativeTime } from '@/lib/time';
 import { useWorkspace } from '@/lib/workspace/provider';
@@ -630,6 +631,8 @@ function Sessions() {
   const list = sessions.data?.sessions ?? [];
   const others = list.filter((session) => !session.current && !session.revoked).length;
 
+  const reportChangeError = useChangeError();
+
   async function revoke(sessionId: string) {
     setBusy(sessionId);
     try {
@@ -637,7 +640,7 @@ function Sessions() {
       toast.success('Session revoked.');
       await client.invalidateQueries({ queryKey: keys.sessions });
     } catch (err) {
-      toast.error(message(err, 'The session could not be revoked.'));
+      reportChangeError(err, 'The session could not be revoked.');
     } finally {
       setBusy(null);
     }
@@ -650,7 +653,7 @@ function Sessions() {
       toast.success(result.revoked === 1 ? '1 other session signed out.' : `${result.revoked} other sessions signed out.`);
       await client.invalidateQueries({ queryKey: keys.sessions });
     } catch (err) {
-      toast.error(message(err, 'Other sessions could not be signed out.'));
+      reportChangeError(err, 'Other sessions could not be signed out.');
     } finally {
       setBusy(null);
     }

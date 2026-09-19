@@ -67,7 +67,7 @@ export function TimeGrid<T>({
   return (
     <div className={cn('flex min-w-0 flex-col [--gutter:3.5rem] md:[--gutter:4.5rem]', className)}>
       <div className='grid border-b' style={columns}>
-        <div className='text-muted-foreground flex items-end justify-end px-2 pb-2 text-[10px] font-medium'>{zone}</div>
+        <div data-tour='calendar-zone' className='text-muted-foreground flex items-end justify-end px-2 pb-2 text-[10px] font-medium'>{zone}</div>
         {days.map((day) => {
           const today = isToday(day, timeZone);
           const selected = compact && day.compare(focusedDate) === 0;

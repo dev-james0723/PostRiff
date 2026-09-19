@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useSignInAgain } from '@/lib/auth/use-sign-in-again';
 import { ApiError } from '@/lib/api/client';
 import type { Snapshot } from '@/lib/api/types';
 import { useAuth } from '@/lib/auth/session';
@@ -31,7 +32,6 @@ import type { BusyProps } from './export-cards';
 import { jobCounts, needsFreshSignIn, plural } from './privacy-model';
 import { RetryButton, type Refetchable } from './section';
 
-const PAGE = '/app/account/privacy';
 const linkClass = 't-learn text-foreground inline-flex items-center gap-0.5 font-medium hover:underline';
 
 function Check({ label, badge, children }: { label: string; badge: { text: string; status: AnimatedBadgeStatus }; children?: ReactNode }) {
@@ -62,6 +62,7 @@ export function DeleteCard({
 }) {
   const { api, workspaceId } = useWorkspaceApi();
   const auth = useAuth();
+  const reauthenticate = useSignInAgain();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState('');
@@ -91,14 +92,10 @@ export function DeleteCard({
     }
   }
 
-  /** A signed-in visit to the sign-in page redirects straight back, so a fresh sign-in has to start signed out. */
   async function signInAgain() {
     setSigningOut(true);
-    try {
-      await auth.signOut();
-    } finally {
-      router.replace(`/auth/sign-in?next=${encodeURIComponent(PAGE)}`);
-    }
+    await reauthenticate();
+    setSigningOut(false);
   }
 
   return (

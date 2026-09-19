@@ -5,17 +5,9 @@
  * estimated; every count is a length of a real list.
  */
 import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
-import type { AnalyticsPost, ChannelView, Job, ProviderView } from '@/lib/api/types';
+import type { Analytics, AnalyticsPost, ChannelView, Job, ProviderView } from '@/lib/api/types';
 
-/**
- * Fields the hosted API returns today that `web/src/lib/api/types.ts` does not declare yet
- * (`insights.summary()` writes `connectionId` and `contentTypeId`). Read through this narrow
- * type until the shared types gain them.
- */
-export type AnalyticsPostRow = AnalyticsPost & {
-  connectionId?: string | null;
-  contentTypeId?: string | null;
-};
+export type AnalyticsPostRow = AnalyticsPost;
 
 export type JobRow = Job;
 
@@ -244,9 +236,9 @@ export function orderMetricKeys(keys: string[], families: Record<string, string[
   return keys.toSorted((a, b) => rank(a) - rank(b));
 }
 
-/** The `families` block the summary returns but the shared `Analytics` type does not declare yet. */
-export function analyticsFamilies(data: unknown): Record<string, string[]> {
-  return (data as { families?: Record<string, string[]> } | undefined)?.families ?? {};
+/** Native metric families order columns without summing providers. */
+export function analyticsFamilies(data: Analytics | undefined): Record<string, string[]> {
+  return data?.families ?? {};
 }
 
 /** A provider's display name for table groups: the post's platform when the API sent one, else the raw provider id. */

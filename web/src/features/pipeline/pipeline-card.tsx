@@ -41,7 +41,7 @@ export type ScheduleGate = { allowed: true } | { allowed: false; reason: string;
  */
 export function scheduleGate(card: BoardCard, permissions: CardPermissions): ScheduleGate {
   const variant = card.variant;
-  const needsEditStep = Boolean(variant?.proposedUpdate) || Boolean(variant?.needsReview);
+  const needsEditStep = Boolean(variant?.needsReview) || Boolean(variant?.unknowns.length) || Boolean(card.draft?.voiceStale || card.draft?.updateRequired);
   if (!permissions.canApprove) {
     return { allowed: false, reason: 'Needs an approver to schedule', title: 'Scheduling prepares an exact review, which needs the approve permission.' };
   }
@@ -49,7 +49,7 @@ export function scheduleGate(card: BoardCard, permissions: CardPermissions): Sch
     return {
       allowed: false,
       reason: 'Needs an editor to prepare',
-      title: variant?.proposedUpdate ? 'The proposed update must be accepted first, which needs the edit permission.' : 'The unknown details must be confirmed first, which needs the edit permission.'
+      title: (card.draft?.voiceStale || card.draft?.updateRequired) ? 'A current voice revision must be prepared first, which needs the edit permission.' : 'The unknown details must be confirmed first, which needs the edit permission.'
     };
   }
   return { allowed: true };

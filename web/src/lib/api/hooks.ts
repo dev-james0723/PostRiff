@@ -36,9 +36,9 @@ function useScoped() {
   return { api, w: workspaceId as string, enabled: Boolean(workspaceId) };
 }
 
-export function useSnapshot() {
+export function useSnapshot(options: { refetchInterval?: number | false } = {}) {
   const { api, w, enabled } = useScoped();
-  return useQuery({ queryKey: keys.snapshot(w), queryFn: () => api.snapshot(w), enabled });
+  return useQuery({ queryKey: keys.snapshot(w), queryFn: () => api.snapshot(w), enabled, refetchInterval: options.refetchInterval, refetchIntervalInBackground: false });
 }
 
 export function useUsage() {
@@ -66,9 +66,9 @@ export function useMembers() {
   return useQuery({ queryKey: keys.members(w), queryFn: () => api.members(w), enabled });
 }
 
-export function useInvitations() {
+export function useInvitations(options: { enabled?: boolean } = {}) {
   const { api, w, enabled } = useScoped();
-  return useQuery({ queryKey: keys.invitations(w), queryFn: () => api.invitations(w), enabled });
+  return useQuery({ queryKey: keys.invitations(w), queryFn: () => api.invitations(w), enabled: enabled && options.enabled !== false });
 }
 
 export function useAudit() {

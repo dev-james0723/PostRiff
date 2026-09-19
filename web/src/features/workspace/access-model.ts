@@ -3,7 +3,6 @@
  * derived from `@/lib/auth/permissions` (the UI mirror of `permissions.py`) or mirrors
  * a named line of the backend; the API still enforces every change.
  */
-import { ApiError } from '@/lib/api/client';
 import type { Membership } from '@/lib/api/types';
 import { ALL_PERMISSIONS } from '@/lib/auth/access';
 import { allows } from '@/lib/auth/permissions';
@@ -168,10 +167,4 @@ export function losesApprove(before: Membership, after: Membership) {
   return allows(before, 'approve') && !allows(after, 'approve');
 }
 
-/**
- * `assert_fresh` answers 403 "Sign in again to confirm this sensitive action." The API has no
- * machine-readable code yet, so this matches the message; replace it once errors carry a code.
- */
-export function needsFreshSignIn(error: unknown) {
-  return error instanceof ApiError && error.status === 403 && /sign in again/i.test(error.message);
-}
+export { needsFreshSignIn } from '@/lib/auth/step-up';

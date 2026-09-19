@@ -47,19 +47,8 @@ export const FILTERS: { value: Filter; label: string; empty: string }[] = [
 ];
 
 /** Fields present on every job the API sends (`store.py` approve, `hosted_worker.py`) but not in the shared type. */
-export type QueueJob = Omit<Job, 'events'> & {
-  approvedBy?: string;
-  approvedAt?: number;
-  approvalDigest?: string;
-  nextAt?: number;
-  checks?: number;
-  scheduleId?: string | null;
-  /** A permalink, once the worker records one. Not written today; shown only when present. */
-  url?: string;
-  events: (Job['events'][number] & { execution?: string })[];
-};
-
-export type QueueReview = Review & { createdAt?: number };
+export type QueueJob = Job;
+export type QueueReview = Review;
 
 /** A state in plain words, with the British spelling the rest of the page uses. */
 export const stateWords = (value: string) => (value === 'canceled' ? 'cancelled' : value.replace(/_/g, ' '));
@@ -244,6 +233,7 @@ const DAY = 86_400_000;
 export const TICK_MS = 30_000;
 
 export interface NextPost {
+  jobId: string;
   platform: string;
   account: string;
   channelId?: string;
@@ -277,7 +267,7 @@ export function readStatus(phase2: Phase2State | undefined, now: number): QueueS
       // A job without a readable timing is skipped rather than trusted.
       const at = scheduledAt(job);
       if (at > now && (next === null || at < next.at)) {
-        next = { platform: job.manifest.platform, account: job.manifest.account, channelId: job.manifest.channelId, at };
+        next = { jobId: job.id, platform: job.manifest.platform, account: job.manifest.account, channelId: job.manifest.channelId, at };
       }
     }
   }

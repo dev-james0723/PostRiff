@@ -186,8 +186,7 @@ function MemberRow({
     setBusy(true);
     try {
       const result = await api.removeMember(workspaceId, member.userId);
-      // The client type omits `note`; the API sends it with every removal.
-      const note = (result as { note?: string }).note;
+      const note = result.note;
       toast.success('Member removed.', note && holdsApprovals ? { description: APPROVAL_HOLD_NOTE } : undefined);
       await Promise.all([
         client.invalidateQueries({ queryKey: keys.members(workspaceId) }),

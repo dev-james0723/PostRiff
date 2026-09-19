@@ -16,40 +16,11 @@ import { FAILED, jobGroup, jobNote, LIVE_JOB, type JobGroup } from './job-state'
 
 /* ---------- fields the snapshot carries beyond the shared types ---------- */
 
-export interface VariantRevision {
-  revision: number;
-  text: string;
-  /** `ideas-candidate`, `fixture`, `author-edit`, `chosen-opening`, `accepted-fixture-replacement`. */
-  origin: string;
-  /** ISO string from `domain.py` `now()`; absent on Ideas candidates. */
-  at?: string | number | null;
-}
-
-export interface VariantFeedback {
-  id: string;
-  reasons: string[];
-  note: string;
-  actor: string;
-  /** Epoch seconds (`store.py`). */
-  at: number;
-  revision: number;
-}
-
-export type PipelineVariant = SnapshotVariant & {
-  revisions?: VariantRevision[];
-  /** Set by `p2_variant_feedback`; cleared by an edit or an accepted update. */
-  rejected?: boolean;
-  feedback?: VariantFeedback[];
-  runId?: string;
-};
-
-/** `createdAt` is an ISO string (`domain.py`). */
-export type PipelineSource = SnapshotSource & { createdAt?: string | number };
-
-/** `createdAt` is epoch seconds (`store.py`). */
-export type PipelineReview = Review & { createdAt?: number };
-
-export type PipelineJob = Job & { approvedAt?: number; nextAt?: number; scheduleId?: string | null; approvedBy?: string };
+export type { VariantRevision, VariantFeedback } from '@/lib/api/types';
+export type PipelineVariant = SnapshotVariant;
+export type PipelineSource = SnapshotSource;
+export type PipelineReview = Review;
+export type PipelineJob = Job;
 
 /* ---------- time ---------- */
 
@@ -93,6 +64,7 @@ export interface DraftSituation {
   updateProposed: boolean;
   /** Written for an earlier voice profile with no current update: Schedule… cannot offer it. */
   voiceStale: boolean;
+  updateRequired: boolean;
   outcome?: DraftOutcome;
   /** The cancelled or failed job the outcome came from. */
   outcomeJobId?: string;
@@ -443,6 +415,7 @@ export function deriveBoard(state: SnapshotState | undefined, filterPlatform: st
       needsReview: Boolean(variant.needsReview),
       updateProposed: Boolean(variant.proposedUpdate),
       voiceStale,
+      updateRequired: variant.voiceRevision !== activeVoice && variant.proposedUpdate?.voiceRevision === activeVoice,
       outcome: attempt?.outcome,
       outcomeJobId: attempt?.jobId,
       outcomeReviewId: attempt?.reviewId,

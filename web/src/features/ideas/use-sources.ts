@@ -5,51 +5,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { keys } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { SnapshotSource, SnapshotState, SnapshotVariant, SourcePolicy } from '@/lib/api/types';
+import type { SourceFact, SnapshotSource, SnapshotState, SnapshotVariant, SourcePolicy } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
-/*
- * Narrow local types over the workspace snapshot. The presenter sends each source row whole
- * (`domain._present` deep-copies state), so these fields reach the browser even though the
- * shared `SnapshotSource` type does not declare them yet.
- */
-
-export interface SourceFact {
-  id: string;
-  text: string;
-  approved: boolean;
-  locator?: string;
-}
-
-/** Where a web-research page came from (`ideas._research`). */
-export interface SourceOrigin {
-  kind: string;
-  url?: string;
-  host?: string;
-  query?: string;
-  published?: string;
-  fetchedAt?: string;
-}
-
-export interface UseApproval {
-  actor?: string;
-  at?: number | string;
-  factsDigest?: string;
-}
+/** Shared source metadata, with a normalized facts list for rendering. */
+export type { SourceFact, SourceOrigin, SourceUseApproval as UseApproval } from '@/lib/api/types';
 
 export interface IdeaSource extends Omit<SnapshotSource, 'facts'> {
   facts: SourceFact[];
-  createdAt?: string | number;
-  withdrawnAt?: string | number;
-  unknowns?: string[];
-  origin?: SourceOrigin | null;
-  useApprovals?: UseApproval[];
 }
 
 export function ideaSources(state: SnapshotState | undefined): IdeaSource[] {
   return (state?.sources ?? []).map((source) => {
-    const row = source as IdeaSource;
-    return { ...row, facts: Array.isArray(row.facts) ? row.facts : [] };
+    return { ...source, facts: Array.isArray(source.facts) ? source.facts : [] };
   });
 }
 

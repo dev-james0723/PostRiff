@@ -3,9 +3,8 @@
 /**
  * Workspace access context.
  *
- * Phase A ships a stub: every caller sees an owner on a trial workspace with
- * every permission. Phase B replaces `STUB_ACCESS` with data from the session
- * and `/api/workspaces/{id}` without changing this module's public surface.
+ * The workspace provider supplies the signed-in member's live role and grants.
+ * This context controls presentation; the hosted API enforces every action.
  */
 
 import { createContext, useContext, type ReactNode } from 'react';

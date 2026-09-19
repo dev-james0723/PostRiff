@@ -26,6 +26,7 @@ export interface TourCtx {
   jobCount: number | null;
   needsReview: number | null;
   canEdit: boolean;
+  canApprove: boolean;
   canManageConnections: boolean;
   canReply: boolean;
 }
@@ -328,6 +329,13 @@ export const PAGE_TOURS: Tour[] = [
         title: 'Open the receipt',
         body: 'Open a job for its full receipt: every event, every attempt and what the provider said.',
         placement: 'top'
+      },
+      {
+        id: 'cancel', route: '/app/queue', stop: 'Queue',
+        target: ['[data-tour="queue-cancel"]', '[data-tour="queue-job-row"]'],
+        title: 'Cancel before submission',
+        body: 'Hold Cancel to stop a waiting or held job. Once a post reaches the provider, cancellation cannot recall it.',
+        when: (ctx) => ctx.canApprove && (ctx.jobCount ?? 0) > 0
       }
     ]
   },
