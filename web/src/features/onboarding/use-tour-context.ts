@@ -33,6 +33,7 @@ export function useTourContext(): { ctx: TourCtx; ready: boolean } {
       draftCount: snapshotReady ? (state?.variants ?? []).length : null,
       jobCount: snapshotReady && state?.phase2 ? (state.phase2.jobs ?? []).length : null,
       needsReview: snapshotReady && state?.phase2 ? (state.phase2.reviews ?? []).filter((r) => r.status === 'needs_review').length : null,
+      assetCount: snapshotReady && state?.phase2 ? (state.phase2.assets ?? []).filter((a) => !a.deleted).length : null,
       canApprove: checkAccess(access, { permission: 'approve' }),
       canEdit: checkAccess(access, { permission: 'edit' }),
       canManageConnections: checkAccess(access, { permission: 'manage_connections' }),

@@ -2,11 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import { useTimeZone } from '@/lib/preferences';
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { now as zonedNow, parseDateTime, toCalendarDateTime, toZoned } from '@internationalized/date';
-import { useQueries } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -21,13 +19,14 @@ import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Asset, SnapshotVariant } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
-import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { AssetPicker } from '@/components/application/asset-picker';
 
 interface ScheduleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Preselect a draft (from the Pipeline card). */
   variantId?: string | null;
+  assetId?: string | null;
   /**
    * Called once the review exists, instead of the default of opening the Queue (where it waits for approval).
    * Lets a page that shows reviews itself, such as the Calendar, keep the person where they are.
@@ -80,26 +79,6 @@ function offsetLabel(at: number, timeZone: string) {
   }
 }
 
-/** 40px thumbnails for the image picker, from the same private-media cache the Library and previews use. */
-function useThumbnails(assets: Asset[], enabled: boolean) {
-  const { api, workspaceId } = useWorkspaceApi();
-  const images = assets.filter((asset) => asset.mime.startsWith('image/'));
-  const loaded = useQueries({
-    queries: images.map((asset) => ({
-      queryKey: ['media', workspaceId, asset.id],
-      queryFn: async () => URL.createObjectURL(await api.media(workspaceId, asset.id)),
-      staleTime: Infinity,
-      enabled
-    }))
-  });
-  return new Map(images.map((asset, index) => [asset.id, loaded[index]?.data]));
-}
-
-function Thumb({ url }: { url: string | undefined }) {
-  if (!url) return <span aria-hidden className='bg-muted size-10 shrink-0 rounded' />;
-  return <Image src={url} alt='' width={40} height={40} unoptimized className='size-10 shrink-0 rounded object-cover' />;
-}
-
 interface EditSteps {
   /** A version written with the current voice profile is waiting to become the draft text. */
   updateWaiting: boolean;
@@ -148,7 +127,7 @@ function editSteps(variant: SnapshotVariant | undefined, activeVoice: number | n
  * Prepares an exact review (`p2_review`): draft + channel + time (+ optional image).
  * The result is a review waiting in the Queue; approving it is a separate, explicit step.
  */
-export function ScheduleDialog({ open, onOpenChange, variantId: preselected, onPrepared }: ScheduleDialogProps) {
+export function ScheduleDialog({ open, onOpenChange, variantId: preselected, assetId: preselectedAsset, onPrepared }: ScheduleDialogProps) {
   const snapshot = useSnapshot();
   const access = useWorkspaceAccess();
   // Preparing a review is in the server's approve class (`permissions.py`); say so before anyone fills the form in.
@@ -172,7 +151,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, onP
 
   const [variantId, setVariantId] = useState<string>(preselected ?? '');
   const [channelId, setChannelId] = useState<string>('');
-  const [assetId, setAssetId] = useState<string>('');
+  const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
   const [rights, setRights] = useState(false);
   const [acknowledge, setAcknowledge] = useState(false);
@@ -186,7 +165,6 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, onP
   const askFold = wallTime.kind === 'ambiguous' || serverAsksFold;
   const chosenAt = wallTime.kind === 'exact' ? wallTime.at : wallTime.kind === 'ambiguous' ? (fold === 0 ? wallTime.first : wallTime.second) : null;
   const timePassed = chosenAt !== null && chosenAt <= Date.now();
-  const thumbnails = useThumbnails(assets, open);
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
   const channelsForVariant = channels.filter((c) => !variant || c.platform === variant.platform);
@@ -397,33 +375,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, onP
             </div>
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-asset'>Image (optional)</Label>
-              <Select value={assetId} onValueChange={(value) => setAssetId(String(value) === '__none' ? '' : String(value))}>
-                <SelectTrigger id='schedule-asset'>
-                  <SelectValue>
-                    {asset ? (
-                      <span className='flex min-w-0 items-center gap-2'>
-                        <Thumb url={thumbnails.get(asset.id)} />
-                        <span className='truncate'>
-                          {asset.mime} · {asset.hash.slice(0, 8)}…
-                        </span>
-                      </span>
-                    ) : (
-                      'No image'
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='__none'>No image</SelectItem>
-                  {assets.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      <span className='flex items-center gap-2'>
-                        {a.mime.startsWith('image/') && <Thumb url={thumbnails.get(a.id)} />}
-                        {a.mime} · {a.hash.slice(0, 8)}…
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} />
             </div>
           </div>
 

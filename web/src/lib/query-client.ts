@@ -1,7 +1,8 @@
 import { QueryClient, defaultShouldDehydrateQuery, isServer } from '@tanstack/react-query';
+import { releaseCachedMedia } from './api/media';
 
 function makeQueryClient() {
-  return new QueryClient({
+  const client = new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 60 * 1000
@@ -12,6 +13,8 @@ function makeQueryClient() {
       }
     }
   });
+  if (!isServer) releaseCachedMedia(client.getQueryCache());
+  return client;
 }
 
 let browserQueryClient: QueryClient | undefined = undefined;

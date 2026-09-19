@@ -222,8 +222,15 @@ class HostedPhase2Commands:
         self.engine.invalidate(state)
         return state
 
+    @staticmethod
+    def _require_mutable_media(state):
+        # Live edit permission is enforced by repository.command, not the bootstrap creator.
+        if state.get("workspace", {}).get("sample"):
+            raise AlphaError("Hosted sample workspaces are read-only.", 403, code="sample_read_only")
+
     def add_asset(self, state, principal, asset):
-        if state["membership"]["userId"] != principal or asset.get("data"):
+        self._require_mutable_media(state)
+        if asset.get("data"):
             raise AlphaError("Invalid hosted asset metadata.", 403)
         if any(item["id"] == asset["id"] for item in state["phase2"]["assets"]):
             raise AlphaError("This asset already exists.", 409)
@@ -231,8 +238,7 @@ class HostedPhase2Commands:
         return state
 
     def prepare_asset_delete(self, state, principal, asset_id):
-        if state["membership"]["userId"] != principal:
-            raise AlphaError("Workspace unavailable.", 403)
+        self._require_mutable_media(state)
         asset = find(state["phase2"]["assets"], asset_id)
         if any(job["state"] in IN_FLIGHT and any(media["id"] == asset_id for media in job["manifest"]["media"]) for job in state["phase2"]["jobs"]):
             raise AlphaError("Reconcile this asset's in-flight jobs before deleting its bytes.")
@@ -241,8 +247,7 @@ class HostedPhase2Commands:
         return state
 
     def finish_asset_delete(self, state, principal, asset_id):
-        if state["membership"]["userId"] != principal:
-            raise AlphaError("Workspace unavailable.", 403)
+        self._require_mutable_media(state)
         asset = find(state["phase2"]["assets"], asset_id)
         if not asset.get("deletionPending"):
             raise AlphaError("This asset is not pending deletion.", 409)
@@ -955,10 +960,11 @@ class HostedWorkspaceService:
 
     def upload_media(self, workspace_id, token, revision, payload):
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503)
+            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
         principal = self.verify_session(token)
         saved = self.repository.get(workspace_id, token)
         require(Membership(saved["membership"]["role"], saved["membership"]), "edit")
+        self.commands._require_mutable_media(saved["state"])
         asset = self.assets.stage_upload(workspace_id, payload)
         try:
             saved = self.repository.command(workspace_id, token, revision, lambda state, actor: self.commands.add_asset(state, actor, asset))
@@ -969,7 +975,7 @@ class HostedWorkspaceService:
 
     def delete_media(self, workspace_id, token, revision, asset_id):
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503)
+            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
         prepared = self.repository.command(workspace_id, token, revision, lambda state, actor: self.commands.prepare_asset_delete(state, actor, asset_id))
         asset = find(prepared["state"]["phase2"]["assets"], asset_id)
         self.assets.remove(workspace_id, asset)
@@ -978,7 +984,7 @@ class HostedWorkspaceService:
 
     def media(self, workspace_id, token, asset_id):
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503)
+            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
         snapshot = self.repository.get(workspace_id, token)
         asset = find(snapshot["state"]["phase2"]["assets"], asset_id)
         if asset.get("deleted") or not asset.get("objectName"):

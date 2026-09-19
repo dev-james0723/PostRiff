@@ -263,14 +263,14 @@ function DetailActions({
     <>
       {canApprove ? (
         <p className='text-muted-foreground text-xs'>
-          Choose this image under “Schedule a draft” in the Queue. Its hash starts with <code className='font-mono'>{asset.hash.slice(0, 8)}</code>.
+          Use in a post opens scheduling with this image selected. Its hash starts with <code className='font-mono'>{asset.hash.slice(0, 8)}</code>.
         </p>
       ) : canEdit ? (
         <p className='text-muted-foreground text-xs'>Preparing a post needs approve access. Keep drafting in Ideas; someone who approves posts attaches the image.</p>
       ) : null}
       <div className='flex flex-wrap gap-2'>
         {canApprove ? (
-          <Link href='/app/queue' className={cn(buttonVariants({ variant: 'default' }), 'flex-1 sm:flex-none')}>
+          <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'default' }), 'flex-1 sm:flex-none')}>
             <Icons.send aria-hidden />
             Use in a post
           </Link>

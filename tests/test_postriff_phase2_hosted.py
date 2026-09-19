@@ -3,13 +3,15 @@ import json
 import base64
 import sys
 import unittest
+from contextlib import contextmanager
+from unittest.mock import Mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from postriff_alpha.domain import AlphaError, initial_state
 from postriff_phase2.auth import initial_phase2_state
-from postriff_phase2.hosted import HostedPhase2Commands
+from postriff_phase2.hosted import HostedPhase2Commands, PostgresWorkspaceRepository
 from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.hosted_storage import SupabaseStorage
 from postriff_phase2.hosted_identity import SupabaseIdentityAdmin, verified_auth_time, verified_session_id
@@ -117,6 +119,42 @@ class HostedPhase2Acceptance(unittest.TestCase):
         for action in ("p2_media_upload", "p2_channel_verify", "p2_delete_account", "p2_art_generate"):
             with self.subTest(action=action), self.assertRaises(AlphaError):
                 commands(changed, changed["account"]["userId"], action, {})
+
+    def test_media_edits_use_live_membership_and_samples_stay_read_only(self):
+        commands = HostedPhase2Commands(clock=lambda: 1_800_000_000)
+        creator = "00000000-0000-0000-0000-000000000001"
+        editor = "00000000-0000-0000-0000-000000000002"
+        workspace = "00000000-0000-0000-0000-000000000010"
+        asset = {"id": "asset", "objectName": "image", "deleted": False}
+        for role in ("owner", "admin", "editor", "viewer"):
+            with self.subTest(role=role):
+                state = initial_phase2_state(workspace, creator, "Member", "studio", 1_800_000_000, execution="synthetic")
+                repository = PostgresWorkspaceRepository(None, lambda token: editor)
+                @contextmanager
+                def transaction(token, workspace_id):
+                    yield Mock(), [1, state, role, False, False, False, False], editor
+                repository.transaction = transaction
+                operations = (
+                    lambda current, actor: commands.add_asset(current, actor, asset),
+                    lambda current, actor: commands.prepare_asset_delete(current, actor, "asset"),
+                    lambda current, actor: commands.finish_asset_delete(current, actor, "asset"),
+                )
+                if role == "viewer":
+                    state["phase2"]["assets"] = [dict(asset)]
+                    for operation in operations:
+                        with self.assertRaises(AlphaError) as denied:
+                            repository.command(workspace, "synthetic", 1, operation)
+                        self.assertEqual(denied.exception.status, 403)
+                    continue
+                for operation in operations:
+                    state = repository.command(workspace, "synthetic", 1, operation)["state"]
+                self.assertTrue(state["phase2"]["assets"][0]["deleted"])
+                self.assertNotIn("objectName", state["phase2"]["assets"][0])
+                state["workspace"]["sample"] = True
+                for operation in operations:
+                    with self.assertRaises(AlphaError) as denied:
+                        repository.command(workspace, "synthetic", 1, operation)
+                    self.assertEqual(denied.exception.code, "sample_read_only")
 
     def test_storage_descriptors_are_private_immutable_and_bounded(self):
         calls = []

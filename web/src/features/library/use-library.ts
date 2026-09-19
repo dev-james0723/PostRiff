@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { useSnapshot } from '@/lib/api/hooks';
+import { IN_FLIGHT } from '@/lib/jobs';
 import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
 
 /**
@@ -9,28 +10,11 @@ import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
  * which prepared posts used each one, and whether a post using it is publishing right now.
  */
 
-/**
- * An asset as the hosted decoder writes it (`src/postriff_phase2/media.py` `decode_upload`). `sourceHash`,
- * `decoder` and `processing` are present on every hosted upload but missing from `Asset` in `types.ts`.
- * `createdAt` and `uploadedBy` are read only if a later backend records them; nothing writes them today.
- */
-export type LibraryAsset = Asset & {
-  sourceHash?: string;
-  decoder?: string;
-  processing?: string;
-  createdAt?: number;
-  uploadedBy?: string;
-};
+export type LibraryAsset = Asset;
 
 /** The server's limits (`media.py` `_source` and `_decode_pillow`). The client checks type and size only. */
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const ACCEPTED_TYPES = { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] };
-
-/**
- * Mirrors `IN_FLIGHT` in `src/postriff_phase2/store.py`. While a job in one of these states uses an image,
- * the server refuses to delete it (`hosted.py` `prepare_asset_delete`).
- */
-const IN_FLIGHT = new Set(['submitting', 'provider_accepted', 'published', 'uncertain']);
 
 export interface AssetUse {
   kind: 'review' | 'job';
@@ -68,7 +52,7 @@ function buildUsage(reviews: Review[], jobs: Job[]) {
   };
   const jobKeys = new Set<string>();
   for (const job of jobs) {
-    const approvalDigest = (job as { approvalDigest?: string }).approvalDigest;
+    const approvalDigest = job.approvalDigest;
     if (approvalDigest) jobKeys.add(approvalDigest);
     if (job.manifest.idempotencyKey) jobKeys.add(job.manifest.idempotencyKey);
     for (const id of mediaIds(job.manifest)) {
@@ -119,7 +103,7 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
   const phase2 = snapshot.data?.state.phase2;
 
   const derived = useMemo(() => {
-    const live = ((phase2?.assets ?? []) as LibraryAsset[]).filter((asset) => !asset.deleted);
+    const live = (phase2?.assets ?? []).filter((asset) => !asset.deleted);
     const usage = buildUsage(phase2?.reviews ?? [], phase2?.jobs ?? []);
     const hasTimestamps = live.some((asset) => typeof asset.createdAt === 'number');
     const used = live.filter((asset) => usage.has(asset.id)).length;
@@ -167,8 +151,6 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
   return {
     snapshot,
     revision: snapshot.data?.revision ?? null,
-    /** The workspace creator recorded in state; the hosted asset guard compares the caller against it. */
-    stateOwnerId: (snapshot.data?.state as { membership?: { userId?: string } } | undefined)?.membership?.userId ?? null,
     assets: derived.live,
     visible,
     counts: derived.counts,

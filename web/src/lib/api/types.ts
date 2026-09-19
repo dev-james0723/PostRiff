@@ -40,6 +40,11 @@ export interface WorkspaceListItem {
 /* ---------- workspace snapshot (single mutation channel: POST /actions) ---------- */
 
 export interface Asset {
+  sourceHash?: string;
+  decoder?: string;
+  processing?: string;
+  createdAt?: number;
+  uploadedBy?: string;
   id: string;
   hash: string;
   mime: string;

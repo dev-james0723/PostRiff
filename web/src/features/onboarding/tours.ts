@@ -27,6 +27,7 @@ export interface TourCtx {
   needsReview: number | null;
   canEdit: boolean;
   canApprove: boolean;
+  assetCount: number | null;
   canManageConnections: boolean;
   canReply: boolean;
 }
@@ -563,7 +564,8 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Library',
         target: ['[data-tour="library-upload"]', '[data-tour="library-empty"]', ...heading('library')],
         title: 'Add images',
-        body: 'Add JPEG or PNG images. Pick several at once, or drop them anywhere on this page.'
+        body: 'Add JPEG or PNG images. Pick several at once, or drop them anywhere on this page.',
+        when: (ctx) => ctx.canEdit
       },
       {
         id: 'filter',
@@ -571,7 +573,8 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Library',
         target: ['[data-tour="library-filter"]', '[data-tour="library-empty"]'],
         title: 'Used and unused',
-        body: 'Switch between all images, the ones no post uses yet, and the ones already in a post. The numbers are live counts.'
+        body: 'Switch between all images, the ones no post uses yet, and the ones already in a post. The numbers are live counts.',
+        when: (ctx) => (ctx.assetCount ?? 0) > 0
       },
       {
         id: 'card',
@@ -580,6 +583,7 @@ export const PAGE_TOURS: Tour[] = [
         target: ['[data-tour="library-card"]', '[data-tour="library-empty"]'],
         title: 'Open an image',
         body: 'See its size, its fingerprint and which posts use it. Right-click or long-press for quick actions.',
+        when: (ctx) => (ctx.assetCount ?? 0) > 0,
         placement: 'top'
       }
     ]

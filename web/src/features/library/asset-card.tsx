@@ -32,8 +32,8 @@ import type { AssetUse, LibraryAsset } from './use-library';
  */
 const STORAGE_NOT_CONFIGURED = /media storage is not configured/i;
 
-export function saysStorageNotConfigured(failure: { status: number; message: string } | null | undefined) {
-  return failure?.status === 503 && STORAGE_NOT_CONFIGURED.test(failure.message);
+export function saysStorageNotConfigured(failure: { status: number; message: string; code?: string } | null | undefined) {
+  return failure?.status === 503 && (failure.code === 'media_storage_not_configured' || (!failure.code && STORAGE_NOT_CONFIGURED.test(failure.message)));
 }
 
 /**
@@ -215,7 +215,7 @@ export function AssetCard({
           Open
         </ContextMenuItem>
         {canApprove ? (
-          <ContextMenuItem onSelect={() => router.push('/app/queue')}>
+          <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
             <Icons.send className='text-muted-foreground size-4' aria-hidden />
             Use in a post
           </ContextMenuItem>

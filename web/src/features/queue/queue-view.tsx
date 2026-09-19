@@ -484,12 +484,23 @@ function Queue() {
     {
       filter: parseAsStringLiteral(FILTER_VALUES).withDefault('all'),
       job: parseAsString,
+      asset: parseAsString,
       channel: parseAsString
     },
     { history: 'replace', scroll: false }
   );
   // A new key per opening, so "Prepare again" preselects its draft in a fresh dialog.
-  const [scheduling, setScheduling] = useState<{ open: boolean; variantId: string | null; key: number }>({ open: false, variantId: null, key: 0 });
+  const [scheduling, setScheduling] = useState<{ open: boolean; variantId: string | null; assetId?: string; key: number }>({ open: false, variantId: null, key: 0 });
+  useEffect(() => {
+    if (!params.asset || !snapshot.data || !access.hasWorkspace) return;
+    const assetId = params.asset;
+    if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && !asset.deleted)) {
+      setScheduling((previous) => ({ open: true, variantId: null, assetId, key: previous.key + 1 }));
+    } else {
+      toast.error(canSchedule ? 'This image is no longer available.' : 'Preparing a post requires approval permission.');
+    }
+    void setParams({ asset: null });
+  }, [params.asset, snapshot.data, access.hasWorkspace, canSchedule, setParams]);
   // The batch is frozen when the dialog opens: the confirmation lists exactly what will be sent.
   const [batch, setBatch] = useState<{ open: boolean; reviews: QueueReview[] }>({ open: false, reviews: [] });
   // A hold button goes disabled mid-press while its cancel is pending, so its release can go unheard. After a failed
@@ -609,6 +620,7 @@ function Queue() {
         open={scheduling.open}
         onOpenChange={(open) => setScheduling((s) => ({ ...s, open }))}
         variantId={scheduling.variantId}
+        assetId={scheduling.assetId}
       />
       <ApproveManyDialog
         open={batch.open}

@@ -31,8 +31,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
 import { keys, useAct, useUsage } from '@/lib/api/hooks';
-import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useAuth } from '@/lib/auth/session';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -162,7 +162,6 @@ export function LibraryView() {
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const canApprove = checkAccess(access, { permission: 'approve' });
-  const auth = useAuth();
   const reduce = useReducedMotion();
   const client = useQueryClient();
   const { workspaceId } = useWorkspaceApi();
@@ -173,6 +172,7 @@ export function LibraryView() {
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [sort, setSort] = useState<LibrarySort>('newest');
   const [query, setQuery] = useState('');
+  const auth = useAuth();
   const library = useLibrary({ filter, sort, query });
   const { snapshot, assets, visible, counts, totals } = library;
 
@@ -216,7 +216,6 @@ export function LibraryView() {
   const storageMb = usage.data?.entitlement?.storageMb;
   const uploadStorageMissing = saysStorageNotConfigured(upload.blocker);
   const storageMissing = mediaStorageMissing || uploadStorageMissing;
-  const creatorOnly = canEdit && Boolean(auth.user?.id) && Boolean(library.stateOwnerId) && auth.user?.id !== library.stateOwnerId;
 
   function openDetail(asset: LibraryAsset) {
     setDetail(asset);
@@ -442,17 +441,6 @@ export function LibraryView() {
     >
       <div {...getRootProps({ className: 'relative flex min-w-0 flex-1 flex-col gap-4' })}>
         <input {...getInputProps({ 'aria-label': 'Choose JPEG or PNG images to upload' })} />
-
-        {creatorOnly && (
-          <Alert>
-            <Icons.info aria-hidden />
-            <AlertTitle>Uploads and deletes work only for the workspace creator right now</AlertTitle>
-            <AlertDescription>
-              The server checks whether you created this workspace instead of checking your edit permission, so it refuses image uploads and
-              deletes from other members until that is fixed.
-            </AlertDescription>
-          </Alert>
-        )}
 
         {storageMissing ? (
           <Alert variant='destructive'>
