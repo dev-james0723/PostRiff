@@ -11,22 +11,22 @@ import {
   InfobarHeader,
   InfobarRail,
   InfobarTrigger,
-  useInfobar
+  useInfobar,
+  type InfobarContent as InfobarData
 } from '@/components/ui/infobar';
 
 // Default/fallback data when no content is set
-const defaultData = {
-  title: 'Documentation',
+// Shown only on a page that publishes no help of its own. It points at the real help surfaces.
+const defaultData: InfobarData = {
+  title: 'Help',
   sections: [
     {
-      title: 'Getting Started',
-      description: 'Learn how to get started with this application.',
-      links: [
-        {
-          title: 'Installation Guide',
-          url: '#'
-        }
-      ]
+      title: 'Take the tour',
+      description: 'The help menu (the question mark in the header) replays the two-minute tour and opens tips for the page you are on.'
+    },
+    {
+      title: 'Jump anywhere',
+      description: 'Press ⌘K (Ctrl+K on Windows) and type the name of any page or action.'
     }
   ]
 };

@@ -1,6 +1,23 @@
+'use client';
+
 import React from 'react';
 import { Heading } from '../ui/heading';
-import type { InfobarContent } from '@/components/ui/infobar';
+import { useInfobar, type InfobarContent } from '@/components/ui/infobar';
+
+/**
+ * Publishes a page's help content to the right-hand info sidebar. Pages with a title do this through
+ * the heading's info button; a page without a header (Home) would otherwise never publish, and the
+ * sidebar would show its generic fallback.
+ */
+function PublishInfo({ content }: { content: InfobarContent }) {
+  const { setContent } = useInfobar();
+  const ref = React.useRef(content);
+  ref.current = content;
+  React.useEffect(() => {
+    setContent(ref.current);
+  }, [setContent]);
+  return null;
+}
 
 function PageSkeleton() {
   return (
@@ -58,6 +75,7 @@ export default function PageContainer({
 
   return (
     <div className='flex min-w-0 flex-1 flex-col px-4 pt-2 pb-4 md:px-6 md:pt-4'>
+      {!hasHeader && infoContent && <PublishInfo content={infoContent} />}
       {hasHeader && (
         <div className='mb-4 flex items-start justify-between gap-4'>
           <Heading

@@ -21,3 +21,13 @@ export default function SearchInput() {
     </div>
   );
 }
+
+/** Icon-only entry to the same palette, for widths where the search field does not fit. */
+export function SearchIconButton() {
+  const { query } = useKBar();
+  return (
+    <Button variant='ghost' size='icon' className='lg:hidden' onClick={query.toggle} aria-label='Search pages and actions'>
+      <Icons.search className='size-[1.2rem]' />
+    </Button>
+  );
+}
