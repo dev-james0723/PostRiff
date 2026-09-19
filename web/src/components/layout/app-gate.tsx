@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
-import { MfaChallenge } from '@/components/auth/mfa-challenge';
+import { verifyHref } from '@/lib/auth/navigation';
 import { devSignIn, useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { siteConfig } from '@/config/site';
@@ -78,13 +78,15 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (auth.status === 'signed-out' && auth.mode === 'supabase') {
       router.replace(signInHref);
+    } else if (auth.status === 'mfa-required') {
+      router.replace(verifyHref(`${pathname}${search.size ? `?${search.toString()}` : ''}`));
     }
-  }, [auth.status, auth.mode, router, signInHref]);
+  }, [auth.status, auth.mode, router, signInHref, pathname, search]);
 
   if (auth.status === 'loading') return <ShellSkeleton />;
 
   // A second factor is enrolled and this session has not shown it: the API would refuse every call.
-  if (auth.status === 'mfa-required') return <MfaChallenge />;
+  if (auth.status === 'mfa-required') return <ShellSkeleton />;
 
   if (auth.status === 'unavailable') {
     return (

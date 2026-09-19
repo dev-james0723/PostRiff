@@ -9,6 +9,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { siteConfig } from '@/config/site';
+import { invitationLanding, verifyHref } from '@/lib/auth/navigation';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/session';
 
@@ -32,7 +33,7 @@ export function AcceptInvitation({ token }: { token: string }) {
       } catch {
         /* ignore */
       }
-      router.replace('/app');
+      router.replace(invitationLanding(result));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'This invitation could not be accepted.');
     } finally {
@@ -64,9 +65,10 @@ export function AcceptInvitation({ token }: { token: string }) {
             <AlertDescription>{auth.error ?? 'PostRiff is unavailable right now.'}</AlertDescription>
           </Alert>
         )}
+        {auth.status === 'mfa-required' && <Link href={verifyHref(here)} className={buttonVariants()}>Confirm two-factor to accept</Link>}
         {auth.status === 'signed-out' && (
           <div className='flex flex-col gap-2'>
-            <p className='text-muted-foreground text-sm'>Sign in or create an account with the invited email first.</p>
+            <p className='text-muted-foreground text-sm'>Sign in or create an account to accept this invitation. Anyone signed in with this link can accept; the workspace records who joined.</p>
             <Link href={`${siteConfig.links.signIn}?next=${encodeURIComponent(here)}`} className={buttonVariants()}>
               Sign in to accept
             </Link>

@@ -1,9 +1,6 @@
+import { safeNext, verifyHref } from '@/lib/auth/navigation';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-function safeNext(value: string | null) {
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/app';
-}
 
 /** PKCE callback: exchange the code for a session cookie, then continue to `next`. */
 export async function GET(request: Request) {
@@ -13,7 +10,7 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(`${origin}${next}`);
+    if (!error) return NextResponse.redirect(`${origin}${verifyHref(next)}`);
   }
   return NextResponse.redirect(`${origin}/auth/sign-in?error=callback&next=${encodeURIComponent(next)}`);
 }

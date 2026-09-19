@@ -11,6 +11,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
+import { safeNext, verifyHref } from '@/lib/auth/navigation';
 import { plans } from '@/config/plans';
 import { siteConfig } from '@/config/site';
 import { passkeysSupported } from '@/lib/auth/mfa';
@@ -23,10 +24,6 @@ const TRIAL_PLANS: { id: TrialPlan; label: string; note: string }[] = [
   { id: 'assist', label: 'Studio Assist', note: 'Adds AI writing batches' }
 ];
 
-function safeNext(value: string | null) {
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/app';
-}
-
 export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   const auth = useAuth();
   const router = useRouter();
@@ -35,7 +32,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   const callbackError = params.get('error');
 
   const [plan, setPlan] = useState<TrialPlan>('studio');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(params.get('email') ?? '');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,6 +45,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
 
   useEffect(() => {
     if (auth.status === 'signed-in') router.replace(next);
+    if (auth.status === 'mfa-required') router.replace(verifyHref(next));
   }, [auth.status, next, router]);
 
   async function run(task: () => Promise<void>) {
@@ -75,7 +73,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   async function passkey() {
     const { createClient } = await import('@/lib/supabase/client');
     await signInWithPasskey(createClient());
-    router.replace(next);
+    router.replace(verifyHref(next));
   }
 
   // Existing accounts only: a passkey is registered from the profile after the first sign-in.
@@ -86,7 +84,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
     const { createClient } = await import('@/lib/supabase/client');
     const { error: otpError } = await createClient().auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: true }
+      options: { shouldCreateUser: intent === 'sign-up' }
     });
     if (otpError) throw otpError;
     setSent(true);
@@ -101,7 +99,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
     });
     if (verifyError) throw verifyError;
     if (!data.session) throw new Error('The code did not create a session. Request a new one.');
-    router.replace(next);
+    router.replace(verifyHref(next));
   }
 
   const title = intent === 'sign-up' ? 'Create your PostRiff workspace' : 'Sign in to PostRiff';
@@ -130,7 +128,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
     );
   }
 
-  const PlanChooser = intent === 'sign-up' && (
+  const PlanChooser = intent === 'sign-up' && !next.startsWith('/invite/') && (
     <fieldset className='flex flex-col gap-2'>
       <legend className='text-sm font-medium'>Trial plan</legend>
       <RadioGroup value={plan} onValueChange={(value) => setPlan(value === 'assist' ? 'assist' : 'studio')}>
@@ -228,7 +226,8 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
             or use your email
             <span className='bg-border h-px flex-1' />
           </div>
-          <form
+          <Link href={`/auth/reset?next=${encodeURIComponent(next)}`} className='text-muted-foreground text-sm underline'>Need help signing in?</Link>
+      <form
             className='flex flex-col gap-3'
             onSubmit={(event) => {
               event.preventDefault();

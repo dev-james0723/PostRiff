@@ -119,7 +119,7 @@ export function createApi(getToken: TokenSource) {
     revokeSession: (sessionId: string) =>
       send<{ sessionId: string; revoked: boolean }>('DELETE', `/api/auth/sessions/${encodeURIComponent(sessionId)}`),
     acceptInvitation: (token: string) =>
-      send<{ workspaceId: string; role: string }>('POST', '/api/invitations/accept', { token }),
+      send<{ workspaceId: string } & Membership>('POST', '/api/invitations/accept', { token }),
     leaveWorkspace: (w: string) => send<{ workspaceId: string; status: string }>('POST', `${ws(w)}/leave`),
 
     /* the signed-in person */

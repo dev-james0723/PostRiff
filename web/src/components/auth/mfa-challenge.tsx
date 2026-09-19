@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Icons } from '@/components/icons';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -61,7 +62,7 @@ export function MfaChallenge() {
   const client = auth.supabase;
 
   return (
-    <div className='flex min-h-svh items-center justify-center p-6'>
+    <div className='flex w-full items-center justify-center'>
       <div className='flex w-full max-w-sm flex-col gap-6'>
         <header className='flex flex-col gap-3'>
           <div className='bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg'>
@@ -83,6 +84,8 @@ export function MfaChallenge() {
 
         {factors === null ? (
           <Skeleton className='h-10 w-full' />
+        ) : factors.length === 0 ? (
+          <p role='alert' className='text-sm'>Your account expects a second factor, but none could be listed. Sign out and try again, or use the sign-in help below.</p>
         ) : showCode ? (
           <form
             className='flex flex-col gap-4'
@@ -129,6 +132,7 @@ export function MfaChallenge() {
           </div>
         )}
 
+        <Link href='/auth/reset' className='text-muted-foreground text-sm underline'>Lost access to your authenticator?</Link>
         <Button variant='ghost' className='w-fit' disabled={busy} onClick={() => void auth.signOut()}>
           Sign out
         </Button>
