@@ -2,101 +2,87 @@
 
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
-import { ChannelIcon } from '@/components/channel-icon';
-import { CapabilityBadge } from '@/components/marketing/capability-badge';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { hostedChannels, localChannels } from '@/config/channels';
-import { siteConfig } from '@/config/site';
 import { useChannels } from '@/lib/api/hooks';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { AccountsCard } from './api/accounts-card';
+import { NotYetCard } from './api/not-yet-card';
+import { StatusStrip } from './api/status-strip';
+import { useToolRegistry } from './api/tool-registry';
+import { ToolsCard } from './api/tools-card';
+
+const infoContent = {
+  title: 'Outside the browser',
+  sections: [
+    {
+      title: 'What this page shows today',
+      description:
+        'The accounts connected to this workspace with their verified level for each capability, the providers this deployment offers and their review status, and the tool registry. Nothing on this page changes anything.'
+    },
+    {
+      title: 'What is planned',
+      description:
+        'Personal access tokens, signed webhooks and an MCP server for AI agents. They will read, draft and propose schedules. Approving, publishing, replying and connecting accounts will always stay in the app, with a person.'
+    },
+    {
+      title: 'Where to look',
+      description: 'Channels connects, reconnects and disconnects accounts. Models & providers decides where drafts are written.',
+      links: [
+        { title: 'Channels', url: '/app/channels' },
+        { title: 'Models & providers', url: '/app/account/models' }
+      ]
+    }
+  ]
+};
+
+function AccessFallback() {
+  return (
+    <div className='flex max-w-md flex-col items-center gap-3 text-center'>
+      <p className='text-muted-foreground text-sm'>
+        This page is for people who manage connections in this workspace: owners, admins and members given that permission. Ask one of them, or open Channels to see what is connected.
+      </p>
+      <Link href='/app/channels' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        Open Channels
+      </Link>
+    </div>
+  );
+}
+
+/** Mounted only behind the access gate, so people without the permission never send these requests. */
+function ApiContent() {
+  const channels = useChannels();
+  const tools = useToolRegistry();
+  return (
+    <div className='@container'>
+      <div className='grid grid-cols-1 gap-4 @4xl:grid-cols-3'>
+        <div className='min-w-0 @4xl:col-span-3'>
+          <StatusStrip channels={channels} tools={tools} />
+        </div>
+        <div className='min-w-0 @4xl:col-span-2'>
+          <AccountsCard channels={channels} />
+        </div>
+        <div className='min-w-0'>
+          <ToolsCard tools={tools} />
+        </div>
+        <div className='min-w-0 @4xl:col-span-3'>
+          <NotYetCard />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ApiView() {
-  const channels = useChannels();
-  const connected = channels.data?.channels ?? [];
+  const canManage = checkAccess(useWorkspaceAccess(), { permission: 'manage_connections' });
   return (
     <PageContainer
       pageTitle='API & integrations'
-      pageDescription='What is connected today, and how developer access works.'
+      pageDescription='What each connected account allows, the tool registry, and the ways in from outside the browser that are not available yet.'
+      infoContent={infoContent}
+      access={canManage}
+      accessFallback={<AccessFallback />}
     >
-      <div className='grid gap-4 lg:grid-cols-2'>
-        <Card>
-          <CardHeader>
-            <CardTitle>Connected providers</CardTitle>
-            <CardDescription>OAuth grants you have made to PostRiff. Manage them on the Channels page.</CardDescription>
-          </CardHeader>
-          <CardContent className='flex flex-col gap-2 text-sm'>
-            {connected.length === 0 ? (
-              <p className='text-muted-foreground'>No providers connected yet.</p>
-            ) : (
-              connected.map((channel) => (
-                <div key={channel.id} className='flex items-center justify-between gap-3 rounded-lg border p-3'>
-                  <span className='flex items-center gap-2'>
-                    <ChannelIcon platform={channel.platform} name={channel.platform} size='xs' />
-                    {channel.platform} · <span className='text-muted-foreground'>{channel.account}</span>
-                  </span>
-                  <Badge variant='outline'>{channel.scopes.length} scope{channel.scopes.length === 1 ? '' : 's'}</Badge>
-                </div>
-              ))
-            )}
-          </CardContent>
-          <CardFooter>
-            <Link href='/app/channels' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-              Open Channels
-            </Link>
-          </CardFooter>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Developer access</CardTitle>
-            <CardDescription>Honest status: the hosted API is session-authenticated today.</CardDescription>
-          </CardHeader>
-          <CardContent className='flex flex-col gap-3 text-sm'>
-            <p>
-              Every request the app makes goes to <code className='bg-muted rounded px-1'>/api/*</code> with your session token. There is no separate API key yet, and no rate plan for automated clients.
-            </p>
-            <p className='text-muted-foreground'>
-              A public API, an MCP server and an n8n node are on the roadmap. If you would build on them, tell us what you need — early access is arranged case by case.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Link href={`${siteConfig.links.contact}?topic=api`} className={buttonVariants({ size: 'sm' })}>
-              Request early access
-            </Link>
-          </CardFooter>
-        </Card>
-
-        <Card className='lg:col-span-2'>
-          <CardHeader>
-            <CardTitle>Integration surface</CardTitle>
-            <CardDescription>Where PostRiff can publish, and how.</CardDescription>
-          </CardHeader>
-          <CardContent className='grid gap-4 md:grid-cols-2'>
-            <div>
-              <p className='mb-2 flex items-center gap-2 text-sm font-medium'>
-                Hosted connectors <CapabilityBadge level='assisted' label='review pending' />
-              </p>
-              <ul className='text-muted-foreground flex flex-col gap-1 text-sm'>
-                {hostedChannels.map((channel) => (
-                  <li key={channel.slug} className='flex items-center gap-2'>
-                    <ChannelIcon slug={channel.slug} name={channel.name} size='xs' />
-                    {channel.name} — {channel.reviewStatus}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <p className='mb-2 flex items-center gap-2 text-sm font-medium'>
-                Desktop companion <CapabilityBadge level='local' />
-              </p>
-              <p className='text-muted-foreground text-sm'>
-                {localChannels.length} platforms publish through the companion on your own machine, including {localChannels.filter((c) => c.region === 'cn').length} Chinese platforms.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <ApiContent />
     </PageContainer>
   );
 }
