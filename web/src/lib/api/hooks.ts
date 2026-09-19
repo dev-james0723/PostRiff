@@ -5,6 +5,7 @@
  * these; mutations invalidate the narrowest keys they affect.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
 import type { Snapshot } from './types';
 
@@ -79,7 +80,8 @@ export function useInvitations(options: { enabled?: boolean } = {}) {
 
 export function useAudit() {
   const { api, w, enabled } = useScoped();
-  return useQuery({ queryKey: keys.audit(w), queryFn: () => api.audit(w), enabled });
+  const access = useWorkspaceAccess();
+  return useQuery({ queryKey: keys.audit(w), queryFn: () => api.audit(w), enabled: enabled && checkAccess(access, { role: 'admin' }) });
 }
 
 export function useDataRequests() {
@@ -169,6 +171,7 @@ export function useAct() {
       client.setQueryData(keys.snapshot(w), snapshot);
       void client.invalidateQueries({ queryKey: keys.usage(w) });
       void client.invalidateQueries({ queryKey: keys.channels(w) });
+      void client.invalidateQueries({ queryKey: keys.audit(w) });
     }
   });
 }

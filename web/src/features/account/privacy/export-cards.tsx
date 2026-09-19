@@ -64,6 +64,7 @@ export function ExportCard({ busy, setBusy }: BusyProps) {
     } finally {
       setBusy(null);
       void client.invalidateQueries({ queryKey: keys.dataRequests(workspaceId) });
+      void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
     }
   }
 

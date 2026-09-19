@@ -142,7 +142,9 @@ export function RecentActivity({ className }: { className?: string }) {
         <CardDescription>Content-free audit trail of what happened in this workspace.</CardDescription>
       </CardHeader>
       <CardContent>
-        {audit.isError ? (
+        {!canOpenLog ? (
+          <p className='text-muted-foreground text-sm'>Workspace activity is visible to admins and owners.</p>
+        ) : audit.isError ? (
           <SectionUnavailable message='Activity is unavailable right now.' query={audit} />
         ) : !audit.data ? (
           <Skeleton className='h-32 w-full' />

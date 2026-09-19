@@ -277,6 +277,7 @@ function InvitationRow({ invitation }: { invitation: Invitation }) {
       await api.revokeInvitation(workspaceId, invitation.invitationId);
       toast.success('Invitation revoked.');
       await client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
+      void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) void client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
       reportError(err, 'The invitation could not be revoked.');
@@ -445,6 +446,7 @@ function MembersContent() {
               onCreated={(result, email) => {
                 setCreated({ result, email, workspaceId });
                 void client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
+                void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
               }}
             />
             {shown && (

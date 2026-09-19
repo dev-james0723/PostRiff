@@ -44,6 +44,7 @@ export function ConnectReturn() {
         // The API returns `connectionId` (oauth.py: complete); the TS type does not list it yet.
         const connectionId = (value as { connectionId?: string }).connectionId;
         await client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
+        void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
         await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         if (value.connected && connectionId) {
           if (value.missingScopes?.length) {

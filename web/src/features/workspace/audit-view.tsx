@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
 import { Icons } from '@/components/icons';
 import PageContainer from '@/components/layout/page-container';
@@ -9,10 +8,9 @@ import { ActionSwapIcon } from '@/components/motion/action-swap';
 import { Button } from '@/components/ui/button';
 import { InfoButton } from '@/components/ui/info-button';
 import type { InfobarContent } from '@/components/ui/infobar';
-import { keys, useAudit, useChannels, useMe, useMembers } from '@/lib/api/hooks';
+import { useAudit, useChannels, useMe, useMembers, useInvitations } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatNumber } from '@/lib/time';
-import { useWorkspace } from '@/lib/workspace/provider';
 import { AuditDetailSheet } from './audit/audit-detail-sheet';
 import { AuditFilters, type ActorOption } from './audit/audit-filters';
 import {
@@ -66,19 +64,12 @@ const infoContent: InfobarContent = {
 
 export function AuditView() {
   const access = useWorkspaceAccess();
-  const { api, workspaceId } = useWorkspace();
-  const w = workspaceId as string;
   const audit = useAudit();
   const members = useMembers();
   const channels = useChannels();
   const me = useMe();
   const canManageMembers = checkAccess(access, { permission: 'manage_members' });
-  // Only people who may manage members can list invitations; for everyone else the API would refuse.
-  const invitations = useQuery({
-    queryKey: keys.invitations(w),
-    queryFn: () => api.invitations(w),
-    enabled: Boolean(workspaceId) && canManageMembers
-  });
+  const invitations = useInvitations({ enabled: canManageMembers });
 
   const [params, setParams] = useQueryStates({
     cat: parseAsStringLiteral(FAMILIES).withDefault('all'),
@@ -215,7 +206,7 @@ export function AuditView() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer access={canManageMembers}>
       <div className='mb-4 flex items-start justify-between gap-4'>
         <div className='min-w-0' data-tour='audit-title'>
           <div className='flex items-center gap-2'>

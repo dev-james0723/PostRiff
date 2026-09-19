@@ -45,6 +45,7 @@ export function DiagnosticsCard({ busy, setBusy }: BusyProps) {
       setCreating(false);
       setBusy(null);
       void client.invalidateQueries({ queryKey: keys.dataRequests(workspaceId) });
+      void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
     }
   }
 

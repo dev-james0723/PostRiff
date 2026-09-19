@@ -971,7 +971,9 @@ class HostedWorkspaceService:
         return {"revoked": revoked, "refreshRevoked": remote, "current": current}
 
     def audit_events(self, workspace_id, token):
-        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            if row[2] not in ("admin", "owner"):
+                raise AlphaError("Only workspace admins and owners can read the audit log.", 403, code="audit_access_required")
             cur.execute("SELECT id::text,actor::text,kind,subject,extract(epoch from at),meta FROM public.pr_audit_events WHERE workspace_id=%s ORDER BY at DESC LIMIT 200", (workspace_id,))
             return {"events": [{"id": item[0], "actor": item[1], "kind": item[2], "subject": item[3], "at": float(item[4]), "meta": item[5]} for item in cur.fetchall()]}
 
