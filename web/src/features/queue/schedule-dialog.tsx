@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { now as zonedNow, parseDateTime, toCalendarDateTime, toZoned } from '@internationalized/date';
 import { toast } from 'sonner';
 import { ChannelIcon } from '@/components/channel-icon';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -259,15 +259,9 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               <Skeleton className='h-9 w-2/3' />
             </div>
           )
-        ) : !voiceActive ? (
-          <div className='flex flex-col gap-3 text-sm'>
-            <p>Scheduling needs an active voice profile, so every publication is checked against whose words it carries.</p>
-            <Link href='/app/workspace/brand' className={buttonVariants()} onClick={() => onOpenChange(false)}>
-              Set up your voice (2 minutes)
-            </Link>
-          </div>
         ) : (
         <div className='flex flex-col gap-4'>
+          {!voiceActive && <p className='text-sm text-amber-700 dark:text-amber-300'>No voice profile is active. You can continue; review the wording carefully. <Link href='/app/workspace/brand' onClick={() => onOpenChange(false)} className='underline'>Set up your voice</Link> to guide future drafts.</p>}
           {!canPrepare && (
             <p className='text-xs text-amber-700 dark:text-amber-300'>
               Preparing a review is for the owner, approvers and members who can approve publications. Ask one of them to schedule this draft.

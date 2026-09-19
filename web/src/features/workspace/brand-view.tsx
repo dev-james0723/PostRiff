@@ -40,7 +40,7 @@ const infoContent: InfobarContent = {
     },
     {
       title: 'Before a voice is approved',
-      description: 'Drafts and previews work. Scheduling waits for an approved voice. Anyone who can edit may propose one; only an owner approves it.'
+      description: 'Drafts can be reviewed and scheduled without a voice profile. Review their wording carefully. Anyone who can edit may propose a voice; only an owner approves it.'
     },
     {
       title: 'When the voice changes',

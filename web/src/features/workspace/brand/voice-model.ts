@@ -56,7 +56,7 @@ export function activeProfile(state: SnapshotState | undefined): VoiceProfile | 
  * (`packageSchema`, hosted.export_profile). A voice from the setup on this page never carries one.
  */
 export function canExportPackage(profile: VoiceProfile | null) {
-  return Boolean(profile && (profile as { packageSchema?: unknown }).packageSchema);
+  return Boolean(profile && profile.packageSchema);
 }
 
 export interface VoiceCounts {
@@ -144,8 +144,8 @@ export function describeChanges(previous: VoiceProfile | null | undefined, next:
     if (added || removed) changes.push(`Unknowns: ${countPhrase(added, removed)}`);
   }
 
-  const beforeFields = (previous as { fields?: unknown }).fields;
-  const afterFields = (next as { fields?: unknown }).fields;
+  const beforeFields = previous.fields;
+  const afterFields = next.fields;
   if ((beforeFields !== undefined || afterFields !== undefined) && JSON.stringify(beforeFields ?? null) !== JSON.stringify(afterFields ?? null)) {
     changes.push('Profile answers changed');
   }

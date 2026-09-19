@@ -209,6 +209,7 @@ function ManifestDetails({ card, board, onShow }: { card: BoardCard; board: Boar
       <Separator />
       <Section title={`Exact text · revision ${manifest.contentRevision}`}>
         <TextBlock text={manifest.payload.text} />
+        {manifest.voiceRevision === null && <p className='text-xs text-amber-700 dark:text-amber-300'>This draft has no approved voice profile. Review its wording carefully before approving.</p>}
         {draft && (
           <Button variant='link' size='sm' className='h-auto self-start p-0' onClick={() => onShow(draft)}>
             Open the draft it came from

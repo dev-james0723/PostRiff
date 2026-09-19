@@ -220,6 +220,8 @@ export interface Phase2State {
 }
 
 export interface VoiceProfile {
+  packageSchema?: string;
+  fields?: Record<string, unknown>[];
   tone: 'warm' | 'direct' | 'reflective';
   writingExample: string;
   observations: string[];
@@ -250,6 +252,7 @@ export interface SnapshotState {
   session?: { completed?: boolean; step?: number };
   contentTypes?: ContentTypesView;
   speaker?: Speaker;
+  you?: { identitySentence?: string; [key: string]: unknown };
   brandHub?: { mode?: BrandMode | ''; purpose?: string; audience?: string; subject?: string; speaker?: string; layers?: string[] };
   phase2?: Phase2State;
   variants?: SnapshotVariant[];

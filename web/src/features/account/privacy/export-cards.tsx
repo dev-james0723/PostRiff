@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { StatefulButton, type ButtonState } from '@/components/motion/button';
@@ -103,7 +102,6 @@ export function ExportCard({ busy, setBusy }: BusyProps) {
 
 export function VoiceProfileCard({ busy, setBusy }: BusyProps) {
   const { api, workspaceId } = useWorkspaceApi();
-  const router = useRouter();
   const button = useButtonState();
   const [file, setFile] = useState<FileFingerprint | null>(null);
 
@@ -119,9 +117,7 @@ export function VoiceProfileCard({ busy, setBusy }: BusyProps) {
     } catch (err) {
       button.settle('error');
       if (err instanceof ApiError) {
-        // The server refuses until a voice package is approved field by field; voice setup lives on Brand & voice.
-        const approval = /approve/i.test(err.message);
-        toast.error(err.message, approval ? { action: { label: 'Open Brand & voice', onClick: () => router.push('/app/workspace/brand') } } : undefined);
+        toast.error(err.message);
       } else {
         toast.error('The voice profile could not be downloaded.');
       }

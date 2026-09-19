@@ -15,7 +15,7 @@ function Text({ value }: { value: string | undefined | null }) {
 export function IdentityCard({ state, query }: { state: SnapshotState | undefined; query: Refetchable }) {
   const hub = state?.brandHub;
   const speaker = state?.speaker;
-  const you = state?.you as { identitySentence?: unknown } | undefined;
+  const you = state?.you;
   const mode = hub?.mode ? (hub.mode as BrandMode) : null;
   const sentence = typeof you?.identitySentence === 'string' ? you.identitySentence : '';
   const layers = Array.isArray(hub?.layers) ? hub.layers.filter((layer) => typeof layer === 'string' && layer !== mode) : [];

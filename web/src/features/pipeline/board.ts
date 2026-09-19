@@ -407,7 +407,7 @@ export function deriveBoard(state: SnapshotState | undefined, filterPlatform: st
     const setAside = Boolean(variant.rejected);
     const retracted = Boolean(variant.blockedByRetraction);
     // Mirrors the Schedule dialog's own list: an update written for the current voice keeps the draft usable.
-    const voiceStale = activeVoice !== null && variant.voiceRevision !== activeVoice && variant.proposedUpdate?.voiceRevision !== activeVoice;
+    const voiceStale = variant.voiceRevision !== activeVoice && variant.proposedUpdate?.voiceRevision !== activeVoice;
     const outcomeJob = attempt?.jobId ? jobsById.get(attempt.jobId) : undefined;
     const situation: DraftSituation = {
       setAside,

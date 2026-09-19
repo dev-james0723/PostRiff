@@ -114,6 +114,38 @@ class Phase2Acceptance(unittest.TestCase):
         self.assertTrue(self.store.current(state, original_job['manifest']))
         self.assertFalse(self.store.current(state, dependent_job['manifest']))
 
+    def test_approve_without_voice_then_new_voice_holds_the_job(self):
+        self.draft()
+        channel = self.channel()
+        with self.store.connect() as db:
+            row = db.execute('SELECT state FROM workspaces WHERE id=?', (self.j.id,)).fetchone()
+            state = json.loads(row['state'])
+            state['speaker']['activeRevision'] = None
+            state['variants'][0]['voiceRevision'] = None
+            db.execute('UPDATE workspaces SET state=? WHERE id=?', (json.dumps(state), self.j.id))
+        self.j.refresh()
+        review = self.review(channel)
+        self.assertIsNone(review['manifest']['voiceRevision'])
+        self.j.act('p2_approve', reviewId=review['id'], digest=review['digest'], confirmed=True)
+        self.assertEqual(self.j.state['phase2']['jobs'][-1]['state'], 'scheduled')
+        self.j.act('profile_propose', tone='warm', writing='A synthetic writing sample.')
+        self.j.act('profile_decide', decision='approve')
+        self.assertEqual(self.j.state['phase2']['jobs'][-1]['state'], 'held')
+
+    def test_hosted_approval_uses_external_entitlement_gate_not_old_trial_timestamp(self):
+        self.draft()
+        channel = self.channel()
+        self.store.hosted_entitlements = True
+        with self.store.connect() as db:
+            row = db.execute('SELECT state FROM workspaces WHERE id=?', (self.j.id,)).fetchone()
+            state = json.loads(row['state'])
+            state['phase2']['trial']['expiresAt'] = self.now - 1
+            db.execute('UPDATE workspaces SET state=? WHERE id=?', (json.dumps(state), self.j.id))
+        self.j.refresh()
+        review = self.review(channel)
+        self.j.act('p2_approve', reviewId=review['id'], digest=review['digest'], confirmed=True)
+        self.assertEqual(self.j.state['phase2']['jobs'][-1]['state'], 'scheduled')
+
     def test_auth_replay_expiry_pkce_cancel_and_no_duplicate_trial(self):
         trial=copy.deepcopy(self.j.state['phase2']['trial'])
         replay=self.store.auth.sign_in(self.j.request)

@@ -7,8 +7,7 @@ import { daysUntil, relativeTime } from '@/lib/time';
  * A source that could not be read adds nothing: an unread workspace is not "no voice", and an
  * unread channel list is not "no channels". The caller shows `unavailable` as its own warning.
  *
- * Written for the Overview; Home (`features/agent/home-view.tsx`) still derives its own list from
- * the snapshot's `displayState` and can adopt this once its owner is ready.
+ * Shared by Home, Overview and the sidebar badge.
  */
 
 export interface AttentionItem {
@@ -58,12 +57,14 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
   if (channels.isError) unavailable.push('channels');
   if (usage.isError) unavailable.push('plan');
 
-  if (state && !state.speaker?.activeRevision) {
+  if (state?.speaker?.provisional && snapshot.data?.membership?.role === 'owner') {
+    items.push({ id: 'voice-proposal', tone: 'info', title: 'Review your proposed voice', description: 'A proposed voice is waiting for your decision. Approving it sends existing drafts back for review.', href: '/app/workspace/brand', action: 'Review' });
+  } else if (state && !state.speaker?.activeRevision) {
     items.push({
       id: 'voice',
       tone: 'info',
       title: 'Set up your voice',
-      description: 'Two minutes: what you are building, who it is for, and a tone. Drafts can only be scheduled against an active voice profile.',
+      description: 'Two minutes: what you are building, who it is for, and a tone. You can review and schedule drafts now; a voice profile guides future drafts.',
       href: '/app/workspace/brand',
       action: 'Set up'
     });

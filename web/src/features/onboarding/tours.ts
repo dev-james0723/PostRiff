@@ -435,6 +435,16 @@ export const PAGE_TOURS: Tour[] = [
         body: 'Describe it once. You can draft and preview before an owner approves it.'
       },
       {
+        id: 'proposal', route: '/app/workspace/brand', stop: 'Brand',
+        target: ['[data-tour="brand-proposal"]', '[data-tour="voice-setup"]'],
+        title: 'Review before changing the voice', body: 'Only an owner approves a voice. The review explains what happens to existing drafts and waiting posts.'
+      },
+      {
+        id: 'files', route: '/app/workspace/brand', stop: 'Brand',
+        target: ['[data-tour="brand-drafts-read"]'],
+        title: 'What writing routes read', body: 'Read the current memory files, including the writing sample, and see which routes receive them.'
+      },
+      {
         id: 'history',
         route: '/app/workspace/brand',
         stop: 'Brand',

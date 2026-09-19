@@ -111,7 +111,7 @@ export function HomeView() {
   });
   const activeSources = (state?.sources ?? []).filter((s) => s.active).length;
   const attention = deriveAttention({ snapshot, channels: channelQuery, usage, now: Date.now() / 1000 });
-  const needsYou: NeedsYou[] = attention.items.map((item) => ({ ...item, icon: item.id === 'voice' ? 'user' : item.id === 'approvals' ? 'clock' : 'broadcast' }));
+  const needsYou: NeedsYou[] = attention.items.map((item) => ({ ...item, icon: item.id.startsWith('voice') ? 'user' : item.id === 'approvals' ? 'clock' : 'broadcast' }));
   const choice = useModelChoice(models.data);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
   const timeZone = useTimeZone();

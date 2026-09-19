@@ -177,6 +177,7 @@ function ReviewCard({
           </CardHeader>
           <CardContent>
             <p className='line-clamp-[12] text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
+            {manifest.voiceRevision === null && <p className='mt-2 text-xs text-amber-700 dark:text-amber-300'>This draft has no approved voice profile. Review its wording carefully before approving.</p>}
           </CardContent>
         </div>
         <div

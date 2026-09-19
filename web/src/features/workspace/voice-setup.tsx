@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { StatefulButton } from '@/components/motion/button';
 import { RadioGroup, RadioGroupItem } from '@/components/motion/radio';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,8 +30,7 @@ const TONES: { id: 'warm' | 'direct' | 'reflective'; label: string; note: string
 ];
 
 /**
- * Three short steps that create the active voice profile the scheduler
- * requires: starting point → purpose & audience → tone & sample → approve.
+ * Three short steps that create a voice profile for future drafts: starting point → purpose & audience → tone & sample → approve.
  * Every step is an explicit workspace action; nothing is inferred by a model.
  */
 export function VoiceSetup({ onDone }: { onDone?: () => void }) {
@@ -50,6 +50,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   const [tone, setTone] = useState<'warm' | 'direct' | 'reflective'>('warm');
   const [writing, setWriting] = useState('');
   const [note, setNote] = useState('');
+  const [confirmRestart, setConfirmRestart] = useState(false);
   const [deciding, setDeciding] = useState<'approve' | 'reject' | null>(null);
   const reduce = useReducedMotion();
   const fieldTransition = reduce ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT };
@@ -118,10 +119,22 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
           <StatefulButton state={deciding === 'approve' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner} onClick={() => void decide('approve')}>
             Use this voice
           </StatefulButton>
-          <StatefulButton variant='outline' state={deciding === 'reject' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner} onClick={() => void decide('reject')}>
+          <StatefulButton variant='outline' state={deciding === 'reject' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner} onClick={() => setConfirmRestart(true)}>
             Start again
           </StatefulButton>
         </CardFooter>
+        <AlertDialog open={confirmRestart} onOpenChange={setConfirmRestart}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Start the voice setup again?</AlertDialogTitle>
+              <AlertDialogDescription>This discards the proposal and clears the active voice. Existing drafts need review, and waiting posts are held until approved again.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep this proposal</AlertDialogCancel>
+              <AlertDialogAction disabled={act.isPending} onClick={() => void decide('reject')}>Start again</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </Card>
     );
   }
@@ -130,7 +143,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
     <Card>
       <CardHeader>
         <CardTitle>Set up your voice</CardTitle>
-        <CardDescription>Two minutes. Drafts can only be scheduled once a voice profile is active, so PostRiff knows whose words it is writing.</CardDescription>
+        <CardDescription>Two minutes to guide how future drafts sound. You can review and schedule drafts before setting this up.</CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-6'>
         <fieldset className='flex flex-col gap-2'>
@@ -153,11 +166,11 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
           <legend className='mb-1 text-sm font-medium'>2. Purpose and people</legend>
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='voice-purpose'>What do you want your posts to do?</Label>
-            <Input id='voice-purpose' value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={1500} placeholder='e.g. Help adult learners practise piano without a teacher.' />
+            <Input id='voice-purpose' value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={1500} placeholder='e.g. Help beginners build a useful daily habit.' />
           </div>
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='voice-audience'>Who are they for?</Label>
-            <Input id='voice-audience' value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={1500} placeholder='e.g. Adults returning to the piano after years away.' />
+            <Input id='voice-audience' value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={1500} placeholder='e.g. Curious people getting started.' />
           </div>
           <AnimatePresence initial={false}>
             {needsSubject && (
@@ -191,7 +204,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
           </RadioGroup>
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='voice-writing'>Paste something you wrote (optional)</Label>
-            <Textarea id='voice-writing' rows={4} value={writing} onChange={(e) => setWriting(e.target.value)} maxLength={6000} placeholder='A paragraph is enough. It is kept for your reference and never quoted publicly.' />
+            <Textarea id='voice-writing' rows={4} value={writing} onChange={(e) => setWriting(e.target.value)} maxLength={6000} placeholder='A paragraph is enough. Writing routes receive it in VOICE.md as an example of how you write.' />
           </div>
         </fieldset>
       </CardContent>

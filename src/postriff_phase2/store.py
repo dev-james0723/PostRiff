@@ -289,7 +289,7 @@ class Phase2Store(Store):
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
-            if not self.current(s, manifest) or manifest["expiresAt"] <= now or data["trial"]["expiresAt"] <= now or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
+            if not self.current(s, manifest) or manifest["expiresAt"] <= now or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= now) or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
             if existing:
@@ -361,7 +361,7 @@ class Phase2Store(Store):
         policy_blockers = source_policy.publication_issues(s, v["sourceIds"])
         if policy_blockers:
             raise AlphaError(policy_blockers[0]["message"], 409)
-        if not s["speaker"]["activeRevision"] or v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"] or v["language"] != c["language"]:
+        if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"] or v["language"] != c["language"]:
             raise AlphaError("The variant, language and current speaker must match this destination.")
         text = v["text"]
         if not text.strip() or len(text) > LIMITS[c["platform"]]["characters"]:

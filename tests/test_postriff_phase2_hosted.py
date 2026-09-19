@@ -156,6 +156,13 @@ class HostedPhase2Acceptance(unittest.TestCase):
                         repository.command(workspace, "synthetic", 1, operation)
                     self.assertEqual(denied.exception.code, "sample_read_only")
 
+    def test_restoring_voice_requires_owner(self):
+        self.assertEqual(classify('you_restore_voice'), 'owner')
+        for role in ('admin', 'editor', 'approver', 'viewer'):
+            with self.subTest(role=role), self.assertRaises(AlphaError):
+                require_action(Membership(role, {}), 'you_restore_voice')
+        require_action(Membership('owner', {}), 'you_restore_voice')
+
     def test_storage_descriptors_are_private_immutable_and_bounded(self):
         calls = []
 

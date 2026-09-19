@@ -46,12 +46,12 @@ function reminder(status: VoiceStatus, earlier: number | null, isOwner: boolean)
     }
     case 'waiting':
       return isOwner
-        ? 'A proposed voice is waiting for your approval below. Drafts and previews work meanwhile; scheduling waits for an approved voice.'
-        : 'A proposed voice is waiting for an owner. Keep drafting and previewing meanwhile; scheduling waits for the approval.';
+        ? 'A proposed voice is waiting for your approval below. You can review and schedule drafts meanwhile; check their wording carefully.'
+        : 'A proposed voice is waiting for an owner. You can review and schedule drafts meanwhile; check their wording carefully.';
     case 'none':
       return status.earlier > 0
-        ? 'No voice is active right now. Drafts and previews still work; scheduling waits for an approved voice. Earlier revisions stay listed under Revisions.'
-        : 'Drafts and previews work now. Scheduling waits for an approved voice.';
+        ? 'No voice is active right now. You can review and schedule drafts; check their wording carefully. Earlier revisions stay listed under Revisions.'
+        : 'You can review and schedule drafts now. A voice profile helps future drafts sound consistent.';
     default:
       return 'The voice status could not be read from this workspace.';
   }

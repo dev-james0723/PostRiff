@@ -34,7 +34,7 @@ ACTION_CLASSES = {
     "research_egress": "owner",
     # Accepting or undoing a learned preference changes how every member's drafts read (design decision D);
     # approving the voice profile itself changes them just as much, so it is an owner decision too.
-    "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner",
+    "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner", "you_restore_voice": "owner",
     "refresh": "read", "p2_refresh": "read",
 }
 

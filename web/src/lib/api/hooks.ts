@@ -172,6 +172,7 @@ export function useAct() {
       void client.invalidateQueries({ queryKey: keys.usage(w) });
       void client.invalidateQueries({ queryKey: keys.channels(w) });
       void client.invalidateQueries({ queryKey: keys.audit(w) });
+      void client.invalidateQueries({ queryKey: keys.memory(w) });
     }
   });
 }

@@ -338,7 +338,7 @@ class Store:
                 raise AlphaError("Choose a supported starting tone.")
             observations = ["A " + tone + " starting tone (chosen by you).", "Use concrete language; preserve source attribution."]
             if sample:
-                observations.append("A writing example is available for your own reference. No model has analyzed it.")
+                observations.append("Your writing example is included in VOICE.md for writing routes to read. It was not analyzed to set this starting tone.")
             s["speaker"]["provisional"] = {"tone": tone, "writingExample": sample, "observations": observations, "unknowns": ["Personal history, qualifications and results are unknown.", "Voice fit has not been tested with a model."], "preferences": []}
             self._answer(s, "writing", sample)
         elif action == "profile_decide":

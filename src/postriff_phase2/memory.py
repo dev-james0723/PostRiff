@@ -106,7 +106,7 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
             "## Unknowns kept explicit", *([f"- {item}" for item in profile.get("unknowns") or []] or ["- (none)"]),
         ])
     else:
-        voice = "# Voice\n\nNo active voice profile yet. Drafts can be previewed, but nothing can be scheduled until one is approved.\n\nSet it up in Brand → Voice (about two minutes)."
+        voice = "# Voice\n\nNo active voice profile yet. Drafts can be reviewed and scheduled without a voice profile. Review their wording carefully; an approved voice helps future drafts sound consistent.\n\nSet it up in Brand → Voice (about two minutes)."
 
     if boundaries:
         body = "\n".join(["# Boundaries", ""] + [f"- {f.get('label') or f.get('key') or f.get('id')}: {f.get('value', '')}" + (f" _({f['privacy']})_" if f.get("privacy") else "") for f in boundaries])
