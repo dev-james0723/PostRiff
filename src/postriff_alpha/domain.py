@@ -350,6 +350,10 @@ class Store:
                 self._mark_stale(s)
             elif decision == "approve" and profile:
                 profile = copy.deepcopy(profile)
+                if profile.get("brandContext"):
+                    context = profile.pop("brandContext")
+                    self._apply(s, "mode", {"mode": context["mode"]})
+                    self._apply(s, "context", context)
                 note = clean(p.get("note", ""), 1500)
                 if note:
                     profile["observations"] = [note]

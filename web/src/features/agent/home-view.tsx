@@ -1,5 +1,7 @@
 'use client';
 
+import { StartVoiceInterview } from './onboarding-chat';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
@@ -218,6 +220,7 @@ export function HomeView() {
           </TabsList>
         </Tabs>
 
+        {canEdit && <div className='flex justify-center'><StartVoiceInterview key={workspaceId} /></div>}
         {canEdit ? (
           <Composer
             ref={composer}

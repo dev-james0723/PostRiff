@@ -1,0 +1,23 @@
+{
+  "modes": [
+    {"id":"personal","label":"My personal brand","note":"Share my experience, expertise and point of view."},
+    {"id":"niche","label":"A niche or expertise","note":"Build a focused channel around a subject."},
+    {"id":"business","label":"A business","note":"Speak for a company, studio or practice."},
+    {"id":"hybrid","label":"A mix","note":"Personal voice plus a subject or a business."}
+  ],
+  "tones": [
+    {"id":"warm","label":"Warm","note":"Friendly, encouraging, first person."},
+    {"id":"direct","label":"Direct","note":"Short sentences, clear claims, no hedging."},
+    {"id":"reflective","label":"Reflective","note":"Thoughtful, slower, asks questions."}
+  ],
+  "questions": [
+    {"key":"mode","question":"What are you building?","options":"modes"},
+    {"key":"purpose","question":"What do you want your posts to do?","limit":1500},
+    {"key":"audience","question":"Who are they for?","limit":1500},
+    {"key":"subject","question":"What subject or business should the posts draw from?","limit":1500,"modes":["niche","business","hybrid"]},
+    {"key":"speaker","question":"Who speaks in the first post?","limit":1500,"modes":["hybrid"]},
+    {"key":"tone","question":"How should the writing sound?","options":"tones"},
+    {"key":"writing","question":"Paste something you wrote (optional)","limit":6000,"optional":true,"hint":"Writing routes receive it in VOICE.md as an example of how you write. Use writing you own."},
+    {"key":"confirm","question":"Save these answers as a proposed voice for owner review?","options":[{"id":"propose","label":"Propose my voice"}]}
+  ]
+}

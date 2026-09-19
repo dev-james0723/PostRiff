@@ -16,18 +16,10 @@ import { ApiError } from '@/lib/api/client';
 import type { BrandMode } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
 
-const MODES: { id: BrandMode; label: string; note: string }[] = [
-  { id: 'personal', label: 'My personal brand', note: 'Share my experience, expertise and point of view.' },
-  { id: 'niche', label: 'A niche or expertise', note: 'Build a focused channel around a subject.' },
-  { id: 'business', label: 'A business', note: 'Speak for a company, studio or practice.' },
-  { id: 'hybrid', label: 'A mix', note: 'Personal voice plus a subject or a business.' }
-];
-
-const TONES: { id: 'warm' | 'direct' | 'reflective'; label: string; note: string }[] = [
-  { id: 'warm', label: 'Warm', note: 'Friendly, encouraging, first person.' },
-  { id: 'direct', label: 'Direct', note: 'Short sentences, clear claims, no hedging.' },
-  { id: 'reflective', label: 'Reflective', note: 'Thoughtful, slower, asks questions.' }
-];
+// Generated copy of src/postriff_alpha/voice_interview.json; parity is checked by the Python contract test.
+import interview from './voice-interview.generated.json';
+const MODES = interview.modes;
+const TONES = interview.tones;
 
 /**
  * Three short steps that create a voice profile for future drafts: starting point → purpose & audience → tone & sample → approve.
@@ -165,11 +157,11 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
         <fieldset className='flex flex-col gap-3'>
           <legend className='mb-1 text-sm font-medium'>2. Purpose and people</legend>
           <div className='flex flex-col gap-1.5'>
-            <Label htmlFor='voice-purpose'>What do you want your posts to do?</Label>
+            <Label htmlFor='voice-purpose'>{interview.questions.find((q) => q.key === 'purpose')?.question}</Label>
             <Input id='voice-purpose' value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={1500} placeholder='e.g. Help beginners build a useful daily habit.' />
           </div>
           <div className='flex flex-col gap-1.5'>
-            <Label htmlFor='voice-audience'>Who are they for?</Label>
+            <Label htmlFor='voice-audience'>{interview.questions.find((q) => q.key === 'audience')?.question}</Label>
             <Input id='voice-audience' value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={1500} placeholder='e.g. Curious people getting started.' />
           </div>
           <AnimatePresence initial={false}>

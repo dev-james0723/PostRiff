@@ -197,6 +197,8 @@ export function createApi(getToken: TokenSource) {
     conversations: (w: string) => get<{ conversations: Conversation[] }>(`${ws(w)}/ideas/conversations`),
     createConversation: (w: string, title: string) =>
       send<Conversation>('POST', `${ws(w)}/ideas/conversations`, { title }),
+    onboarding: (w: string, id: string, expectedSeq: number, answer?: string) =>
+      send<Message>('POST', `${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/onboarding`, { expectedSeq, ...(answer === undefined ? {} : { answer }) }),
     messages: (w: string, id: string) =>
       get<Conversation & { messages: Message[] }>(`${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/messages`),
     turn: (w: string, id: string, body: Record<string, unknown>) =>

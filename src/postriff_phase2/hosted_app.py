@@ -241,6 +241,9 @@ class HostedApplication:
             if len(parts) == 5 and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 201, ideas.create_conversation(workspace_id, token, body.get("title", "")))
+            if len(parts) == 7 and parts[6] == "onboarding" and method == "POST":
+                from .onboarding_chat import respond
+                return self._json(start_response, 201, respond(ideas, workspace_id, token, parts[5], self._body(environ)))
             if len(parts) == 7 and parts[6] == "turns" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 201, ideas.turn(workspace_id, token, parts[5], body))

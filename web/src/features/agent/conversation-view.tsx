@@ -1,5 +1,7 @@
 'use client';
 
+import { OnboardingAnswer } from './onboarding-chat';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
@@ -343,7 +345,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
             })}
           </ol>
 
-          {canEdit ? (
+          {messages.at(-1)?.body.intent === 'onboarding' ? (
+            <OnboardingAnswer key={messages.at(-1)!.messageId} message={messages.at(-1)!} conversationId={conversationId} canEdit={canEdit} />
+          ) : canEdit ? (
             <Composer
               ref={composer}
               value={text}
