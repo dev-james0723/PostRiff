@@ -7,7 +7,7 @@ import { Icons } from '@/components/icons';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMemory, useModels } from '@/lib/api/hooks';
+import { useMemory, useModels, useRescanModels } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useModelChoice } from '@/features/agent/use-model';
 import { routeKind } from './models/catalog';
@@ -16,7 +16,7 @@ import { CliEmpty } from './models/cli-empty';
 import { CliRouteCard } from './models/cli-route-card';
 import { PostriffRoutes } from './models/postriff-routes';
 import { BillingCard, ConsentCard } from './models/side-cards';
-import { useNowSeconds, useSavedChoice } from './models/use-saved-choice';
+import { useNowSeconds } from './models/use-saved-choice';
 import { WritingNow } from './models/writing-now';
 
 const PAGE_TITLE = 'Models & providers';
@@ -36,7 +36,7 @@ const infoContent = {
     },
     {
       title: 'Checking again',
-      description: 'Check again asks the server for the list. The server may reuse a CLI check from the last minute, and a CLI installed after the server started appears only after a restart.'
+      description: 'Check again refreshes CLI installation and sign-in checks on the machine that serves PostRiff, including CLIs installed since startup.'
     },
     {
       title: 'Hosted service',
@@ -66,23 +66,22 @@ function ModelsBody() {
   const models = useModels();
   const memory = useMemory();
   const choice = useModelChoice(models.data);
-  const [saved, setSaved] = useSavedChoice();
+  const rescan = useRescanModels();
   const [picked, setPicked] = useState(false);
   const now = useNowSeconds();
 
   const options = choice.options;
   const agents = models.data?.agents ?? [];
   const loading = models.isLoading;
-  const checking = models.isFetching && !models.isLoading;
+  const checking = rescan.isPending || (models.isFetching && !models.isLoading);
   const { choose } = choice;
 
   const onChoose = useCallback(
     (id: string) => {
       setPicked(true);
-      setSaved(id);
       choose(id);
     },
-    [choose, setSaved]
+    [choose]
   );
 
   const unlisted = options.filter((option) => routeKind(option, agents) === 'cli' && !agents.some((agent) => agent.id === option.route));
@@ -93,7 +92,7 @@ function ModelsBody() {
       pageTitle={PAGE_TITLE}
       pageDescription={PAGE_DESCRIPTION}
       infoContent={infoContent}
-      pageHeaderAction={<CheckAgainButton refetch={models.refetch} checking={checking} disabled={loading} />}
+      pageHeaderAction={<CheckAgainButton rescan={rescan.mutateAsync} checking={checking} disabled={loading} />}
     >
       {models.data ? (
         <div className='-mt-2 mb-4'>
@@ -127,7 +126,7 @@ function ModelsBody() {
             agents={agents}
             model={choice.model}
             option={choice.option}
-            saved={models.data ? saved : null}
+            saved={models.data ? choice.saved : null}
             picked={picked}
           />
 

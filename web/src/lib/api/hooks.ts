@@ -135,6 +135,12 @@ export function useModels() {
   return useQuery({ queryKey: keys.models, queryFn: () => api.models(), staleTime: 10 * 60_000 });
 }
 
+export function useRescanModels() {
+  const { api, w } = useScoped();
+  const client = useQueryClient();
+  return useMutation({ mutationFn: () => api.rescanModels(w), onSuccess: (data) => client.setQueryData(keys.models, data) });
+}
+
 /** The Markdown memory files the agent reads before every draft, rendered by the API. */
 export function useMemory() {
   const { api, w, enabled } = useScoped();

@@ -356,6 +356,8 @@ export interface ModelOption {
   /** Which runtime writes with it: undefined/`fixture` = PostRiff, `claude-code` = the local CLI. */
   route?: string;
   costClass?: 'none' | 'subscription' | 'paid' | string;
+  provider?: string;
+  reasoning?: { id: string; available: boolean; detail: string }[];
 }
 
 /** A CLI agent the API host can drive (agent chat design §4.2). Never carries the account's email. */
@@ -369,10 +371,12 @@ export interface AgentInfo {
   authMethod?: string | null;
   models: string[];
   modelsSource?: string;
+  probedAt?: number;
+  reasoning?: { id: string; available: boolean; detail: string }[];
   guidance?: string | null;
   host?: string;
   execution?: {
-    budgetUsd: number;
+    budgetUsd: number | null;
     timeoutSeconds: number;
     tools: string;
     mcp: string;
@@ -435,6 +439,7 @@ export interface LearningSummary {
   resetAt: string | null;
   items: LearnedItem[];
   pendingProposals?: number;
+  extractor?: { kind: 'rules' | 'local' | 'cloud'; model: string | null; allowed: boolean };
 }
 
 /** A suggested change to the learned preferences. Only an owner decides it (`POST /memory/proposals/{id}/decide`). */

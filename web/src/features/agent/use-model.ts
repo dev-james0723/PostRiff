@@ -51,5 +51,5 @@ export function useModelChoice(catalog: ModelCatalog | undefined) {
   }, []);
 
   const option = options.find((m) => m.id === model);
-  return { model, option, options, choose, label: shortLabel(option, model) };
+  return { model, option, options, choose, saved: stored, label: shortLabel(option, model) };
 }

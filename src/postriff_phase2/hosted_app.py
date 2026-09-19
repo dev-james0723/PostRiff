@@ -338,6 +338,9 @@ class HostedApplication:
             self._origin(environ, mutation)
             service = self._runtime()
             token = self._token(environ)
+            if path == "/api/ideas/models/rescan" and method == "POST":
+                body = self._body(environ)
+                return self._json(start_response, 200, service.ideas.rescan_models(body.get("workspaceId"), token))
             if path == "/api/auth/verify" and method == "POST":
                 body = self._body(environ)
                 created = service.bootstrap(token, body.get("plan", "studio"), client=client_address(environ), client_label=client_label(environ))

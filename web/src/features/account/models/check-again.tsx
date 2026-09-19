@@ -9,24 +9,26 @@ import { relativeTime } from '@/lib/time';
 import { authState } from './catalog';
 
 export interface CheckAgainProps {
-  /** `refetch` from `useModels()`: the only way this page can ask the server again. */
-  refetch: () => Promise<{ data?: ModelCatalog; error: Error | null; isError: boolean }>;
+  /** Performs an authenticated fresh scan, including newly installed CLI routes. */
+  rescan: () => Promise<ModelCatalog>;
   checking: boolean;
   disabled: boolean;
 }
 
 /** Asks the API for the writer list again. The button shows the real request state, nothing simulated. */
-export function CheckAgainButton({ refetch, checking, disabled }: CheckAgainProps) {
+export function CheckAgainButton({ rescan, checking, disabled }: CheckAgainProps) {
   const [outcome, flash] = useFlash<'success' | 'error'>();
 
   async function check() {
-    const result = await refetch();
-    if (result.isError) {
-      toast.error(result.error?.message ? `The writer list could not be checked: ${result.error.message}` : 'The writer list could not be checked.');
+    let catalog: ModelCatalog;
+    try {
+      catalog = await rescan();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The writer list could not be checked.');
       flash('error');
       return;
     }
-    const agents = result.data?.agents ?? [];
+    const agents = catalog.agents ?? [];
     if (agents.length > 0) {
       toast.success(agents.map((agent) => `${agent.name}${agent.version ? ` ${agent.version}` : ''}: ${authState(agent).label}`).join(' · '));
     } else {
@@ -64,7 +66,7 @@ export function CheckedLine({ receivedAt, now }: { receivedAt: number; now: numb
           <time dateTime={new Date(receivedAt * 1000).toISOString()}>{relativeTime(receivedAt, Math.max(now, receivedAt))}</time>.{' '}
         </>
       ) : null}
-      The server may answer with a CLI check it made up to a minute earlier.
+      Check again refreshes the installation and sign-in checks.
     </p>
   );
 }

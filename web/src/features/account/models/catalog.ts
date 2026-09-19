@@ -46,17 +46,16 @@ export function authState(agent: AgentInfo): { status: AnimatedBadgeStatus; labe
 }
 
 /**
- * A per-run spending cap the API reports. Codex has no budget flag and sends `0.0` today,
- * which is not a cap, so only a positive number counts.
+ * A per-run spending cap the API reports. Null (or a legacy zero) means no cap.
  */
 export function budgetCap(agent: AgentInfo): number | null {
-  const value = (agent.execution as { budgetUsd?: unknown } | undefined)?.budgetUsd;
+  const value = agent.execution?.budgetUsd;
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 /** When the server last probed this CLI, in epoch seconds, if the API sends it. */
 export function probedAt(agent: AgentInfo): number | null {
-  const value = (agent as { probedAt?: unknown }).probedAt;
+  const value = agent.probedAt;
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
   return value > 1e12 ? value / 1000 : value;
 }
@@ -72,7 +71,7 @@ export interface ReasoningLevel {
  * top-level `reasoning` describes the deterministic preview alone, so it is never used for a route.
  */
 export function routeReasoning(source: AgentInfo | ModelOption): ReasoningLevel[] | null {
-  const value = (source as { reasoning?: unknown }).reasoning;
+  const value = source.reasoning;
   if (!Array.isArray(value)) return null;
   const levels = value.filter(
     (item): item is ReasoningLevel =>
@@ -83,7 +82,7 @@ export function routeReasoning(source: AgentInfo | ModelOption): ReasoningLevel[
 
 /** The gateway or provider a managed option names, if the API sends one. */
 export function optionProvider(option: ModelOption): string | null {
-  const value = (option as { provider?: unknown }).provider;
+  const value = option.provider;
   return typeof value === 'string' && value ? value : null;
 }
 

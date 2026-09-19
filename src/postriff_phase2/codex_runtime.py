@@ -92,13 +92,14 @@ class CodexCliRuntime(ClaudeCliRuntime):
         else:
             info["guidance"] = "Install the Codex CLI on the machine that serves the API, sign in with `codex login`, then rescan."
         self._apply_auth_state(info, force)
-        self._probe, self._probe_at = info, self.clock()
+        info["probedAt"] = self.clock()
+        self._probe, self._probe_at = info, info["probedAt"]
         return info
 
     LOGIN_COMMAND = "codex login"
 
     def execution_settings(self):
-        return {"budgetUsd": 0.0, "timeoutSeconds": self.timeout_seconds, "tools": "none (read-only sandbox)", "mcp": "none", "settingSources": "none (--ignore-user-config --ignore-rules)", "sessionPersistence": False, "environment": list(SAFE_ENV_KEYS)}
+        return {"budgetUsd": None, "timeoutSeconds": self.timeout_seconds, "tools": "none (read-only sandbox)", "mcp": "none", "settingSources": "none (--ignore-user-config --ignore-rules)", "sessionPersistence": False, "environment": list(SAFE_ENV_KEYS)}
 
     def list_supported_models(self):
         probe = self.detect()

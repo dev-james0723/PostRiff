@@ -26,7 +26,6 @@ function PageLink({ href, children }: { href: string; children: ReactNode }) {
 export function BillingCard({ options, owner }: { options: ModelOption[]; owner: boolean }) {
   const classes = distinctCostClasses(options);
   if (classes.length === 0) return null;
-  const metered = classes.includes('paid');
 
   return (
     <Card data-tour='models-billing'>
@@ -46,13 +45,8 @@ export function BillingCard({ options, owner }: { options: ModelOption[]; owner:
         })}
       </CardContent>
       <CardFooter className='flex flex-col items-start gap-1'>
-        {owner ? (
-          <PageLink href='/app/account/billing'>Usage &amp; plan</PageLink>
-        ) : (
-          <span className='text-muted-foreground text-xs'>
-            {metered ? 'Writing batches left and spending are on Usage & plan, which the workspace owner can open.' : 'Usage & plan is open to the workspace owner.'}
-          </span>
-        )}
+        <PageLink href='/app/account/billing'>Usage &amp; plan</PageLink>
+        {!owner && <span className='text-muted-foreground text-xs'>Costs and billing controls are visible to the workspace owner.</span>}
       </CardFooter>
     </Card>
   );
@@ -70,14 +64,8 @@ function ConsentRow({ title, state, children }: { title: string; state: string; 
   );
 }
 
-/**
- * Learning from edits, described only as far as the API reports it. The server skips a workspace
- * whose learning is off. When learning is on, counting rules always run; the cloud switch (plus
- * memory sharing) only permits a cloud extractor. Which extractor exists is decided when the API
- * starts (Claude Code installed on that machine first, counted as local and not bound by the
- * switch), and the web cannot see that, so the copy says so instead of guessing.
- */
-function LearningRow({ learning, egress }: { learning: LearningSummary; egress: MemoryEgress | undefined }) {
+/** Describes the extractor configured on the API server and its current consent gate. */
+function LearningRow({ learning }: { learning: LearningSummary; egress: MemoryEgress | undefined }) {
   if (learning.enabled === false) {
     return (
       <ConsentRow title='Learning from your edits' state='Off'>
@@ -85,22 +73,11 @@ function LearningRow({ learning, egress }: { learning: LearningSummary; egress: 
       </ConsentRow>
     );
   }
-  const shared = egress?.cloud;
-  const allowed = learning.cloudExtraction && shared === true;
-  const state = !learning.cloudExtraction ? 'Cloud switch off' : allowed ? 'Cloud switch on' : shared === false ? 'Cloud switch on · sharing off' : 'Unavailable';
-  const cloud = !learning.cloudExtraction
-    ? 'No cloud model is allowed to read them.'
-    : allowed
-      ? 'A cloud model, if this deployment has one for learning, may also read before/after pairs, with links, handles and numbers removed.'
-      : shared === false
-        ? 'The cloud switch is on, but no cloud model reads them until memory sharing is on too.'
-        : 'Whether a cloud model may read them depends on memory sharing, which could not be loaded.';
-  return (
-    <ConsentRow title='Learning from your edits' state={state}>
-      Counting rules read your edits. {cloud} If Claude Code is installed on the machine that serves the API, it does this reading instead, as a local
-      writer, whatever the cloud switch says.
-    </ConsentRow>
-  );
+  const extractor = learning.extractor;
+  if (extractor?.kind === 'rules') return <ConsentRow title='Learning from your edits' state='Counting rules'>Counting rules read your edits. No model extractor is configured.</ConsentRow>;
+  if (extractor?.kind === 'local') return <ConsentRow title='Learning from your edits' state='Local model'>Counting rules and the configured local model ({extractor.model ?? 'model name unavailable'}) may read edit pairs. The cloud switch does not govern this local route.</ConsentRow>;
+  if (extractor?.kind === 'cloud') return <ConsentRow title='Learning from your edits' state={extractor.allowed ? 'Cloud model allowed' : 'Counting rules only'}>Counting rules read your edits. {extractor.allowed ? `The configured cloud model (${extractor.model ?? 'model name unavailable'}) may read redacted edit pairs.` : 'The configured cloud model cannot read edit pairs until both cloud extraction and memory sharing are enabled.'}</ConsentRow>;
+  return <ConsentRow title='Learning from your edits' state='Extractor unavailable'>Counting rules read your edits. This server did not report whether a model extractor is configured.</ConsentRow>;
 }
 
 export interface ConsentCardProps {

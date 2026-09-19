@@ -230,7 +230,8 @@ class ClaudeCliRuntime(AgentRuntime):
         else:
             info["guidance"] = "Install Claude Code on the machine that serves the API, sign in with `claude auth login`, then rescan."
         self._apply_auth_state(info, force)
-        self._probe, self._probe_at = info, self.clock()
+        info["probedAt"] = self.clock()
+        self._probe, self._probe_at = info, info["probedAt"]
         return info
 
     LOGIN_COMMAND = "claude auth login"

@@ -103,6 +103,29 @@ class ClaudeCliRuntimeTest(unittest.TestCase):
         self.assertTrue(sink.done.wait(25), "run did not finish")
         return sink
 
+    def test_model_rescan_refreshes_auth_and_requires_edit_access(self):
+        from contextlib import contextmanager
+        from postriff_phase2.ideas import IdeasService
+        runtime = self.runtime()
+        role = ['editor']
+        @contextmanager
+        def transaction(token, workspace_id):
+            self.assertEqual((token, workspace_id), ('session', 'workspace'))
+            yield None, (1, {}, role[0], False, False, False, False), None
+        repository = type('Repository', (), {'transaction': staticmethod(transaction)})()
+        service = IdeasService(repository, None, runtimes=[runtime], researcher=False)
+        runtime.detect()
+        runtime._note_auth_failure()
+        self.assertEqual(runtime.describe()['authStatus'], 'expired')
+        result = service.rescan_models('workspace', 'session')
+        self.assertEqual(result['agents'][0]['authStatus'], 'ok')
+        self.assertIsInstance(result['agents'][0]['probedAt'], (int, float))
+        runtime._note_auth_failure()
+        role[0] = 'viewer'
+        with self.assertRaises(AlphaError):
+            service.rescan_models('workspace', 'session')
+        self.assertEqual(runtime.describe()['authStatus'], 'expired')
+
     def test_environment_never_carries_keys_or_nested_session_markers(self):
         os.environ["ANTHROPIC_API_KEY"] = "sk-test"
         os.environ["CLAUDECODE"] = "1"

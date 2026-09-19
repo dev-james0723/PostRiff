@@ -189,6 +189,19 @@ class HostedPhase2Acceptance(unittest.TestCase):
         self.assertEqual(AlphaError("Old caller", 403).code, "permission_denied")
         self.assertEqual(AlphaError("Unrelated conflict", 409).code, "conflict")
 
+    def test_model_rescan_is_an_authenticated_mutation(self):
+        service = FakeService()
+        service.ideas = Mock()
+        service.ideas.rescan_models.return_value = {'models': [], 'agents': [], 'reasoning': []}
+        app = HostedApplication(service, FakeWorker(), {}, 'c' * 24)
+        auth = {'Authorization': 'Bearer ' + 't' * 32, 'X-PostRiff-Request': 'founder-alpha'}
+        status, _, _ = invoke(app, 'POST', '/api/ideas/models/rescan', {'workspaceId': 'w'}, {'Authorization': auth['Authorization']})
+        self.assertEqual(status, 403)
+        service.ideas.rescan_models.assert_not_called()
+        status, _, result = invoke(app, 'POST', '/api/ideas/models/rescan', {'workspaceId': 'w'}, auth)
+        self.assertEqual((status, result['models']), (200, []))
+        service.ideas.rescan_models.assert_called_once_with('w', 't' * 32)
+
     def test_wsgi_auth_origin_and_cron_boundaries(self):
         app = HostedApplication(FakeService(), FakeWorker(), {"projectUrl": "https://project.supabase.co", "publishableKey": "public", "flow": "pkce"}, "c" * 24)
         status, _, health = invoke(app, "GET", "/api/health")
@@ -338,3 +351,24 @@ class AcceptUpdateFromIdeas(unittest.TestCase):
         variant = saved["variants"][0]
         self.assertEqual((variant["text"], variant["voiceRevision"], variant["revision"], variant["needsReview"], variant["proposedUpdate"]), ("new", 1, 2, False, None))
 
+
+
+class LearningExtractorDisclosureTest(unittest.TestCase):
+    def test_configured_extractor_and_effective_consent(self):
+        from postriff_phase2.learning_service import HostedLearning
+        from postriff_alpha import learning
+        state = initial_state("synthetic-workspace")
+        learning.ensure(state)
+        state['learning']['enabled'] = True
+        service = HostedLearning(None, lambda: 0)
+        self.assertEqual(service.summary(state)['extractor'], {'kind': 'rules', 'model': None, 'allowed': False})
+        service.extractor = type('Extractor', (), {'local': True, 'model': 'synthetic-local'})()
+        self.assertTrue(service.summary(state)['extractor']['allowed'])
+        self.assertEqual(service.summary(state)['extractor']['kind'], 'local')
+        service.extractor.local = False
+        state['learning']['cloudExtraction'] = False
+        self.assertEqual(service.summary(state)['extractor']['kind'], 'cloud')
+        self.assertFalse(service.summary(state)['extractor']['allowed'])
+        state['learning']['enabled'] = False
+        service.extractor.local = True
+        self.assertFalse(service.summary(state)['extractor']['allowed'])

@@ -109,6 +109,7 @@ export function createApi(getToken: TokenSource) {
     health: () => get<Health>('/api/health', false),
     privacyNotice: () => get<PrivacyNotice>('/api/privacy/notice', false),
     models: () => get<ModelCatalog>('/api/ideas/models', false),
+    rescanModels: (w: string) => send<ModelCatalog>('POST', '/api/ideas/models/rescan', { workspaceId: w }),
 
     /* account & workspaces */
     bootstrap: (plan: string) => send<Bootstrap>('POST', '/api/auth/verify', { plan }),

@@ -227,6 +227,13 @@ class HostedLearning:
         # A model extractor (design §5.2 C2) adds observations from the drafts' text; None keeps extraction deterministic.
         self.extractor = extractor
 
+    def summary(self, state):
+        result = learning.summary(state)
+        kind = "rules" if self.extractor is None else ("local" if getattr(self.extractor, "local", False) else "cloud")
+        result["extractor"] = {"kind": kind, "model": getattr(self.extractor, "model", None),
+                               "allowed": bool(result["enabled"] and self.model_allowed(state))}
+        return result
+
     def capture(self, cur, workspace_id, before, after, principal):
         """Repository effect (hosted.PostgresWorkspaceRepository.command): the events one command implies.
         A reset (learning.resetAt changed) also clears this workspace's learning tables."""
@@ -242,7 +249,7 @@ class HostedLearning:
         with repository.transaction(token, workspace_id) as (cur, row, _):
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             return {"pending": [proposal_view(r) for r in pending_proposals(cur, workspace_id)], "recent": [proposal_view(r) for r in recent_proposals(cur, workspace_id)],
-                    "versions": versions(cur, workspace_id), "learning": learning.summary(state),
+                    "versions": versions(cur, workspace_id), "learning": self.summary(state),
                     "stats": extract.revision_stats(events_window(cur, workspace_id, self.clock(), extract.WINDOW_DAYS))}
 
     def propose_from_chat(self, cur, workspace_id, state, proposal, principal, now):
@@ -308,7 +315,7 @@ class HostedLearning:
             guarded_insert(cur, workspace_id, [event], self.failures)
 
         saved = repository.command(workspace_id, token, revision, apply, requirement="owner", after=after)
-        return {"revision": saved["revision"], "proposalId": proposal["id"], "status": DECISIONS[decision], "item": result.get("item"), "versionId": result.get("versionId"), "learning": learning.summary(saved["state"])}
+        return {"revision": saved["revision"], "proposalId": proposal["id"], "status": DECISIONS[decision], "item": result.get("item"), "versionId": result.get("versionId"), "learning": self.summary(saved["state"])}
 
     def update_version(self, repository, workspace_id, token, revision, item_id, status):
         """Owner: pause, resume or retire one learned item; the version row follows the state."""
@@ -329,7 +336,7 @@ class HostedLearning:
                 cur.execute("UPDATE public.pr_memory_versions SET status=%s WHERE workspace_id=%s AND proposal_id::text=%s AND valid_to IS NULL", (status, workspace_id, item_id))
 
         saved = repository.command(workspace_id, token, revision, apply, requirement="owner", after=after)
-        return {"revision": saved["revision"], "itemId": item_id, "status": status, "learning": learning.summary(saved["state"])}
+        return {"revision": saved["revision"], "itemId": item_id, "status": status, "learning": self.summary(saved["state"])}
 
     def published(self, cur, workspace_id, job):
         return record_published(cur, workspace_id, job, self.clock(), self.failures)

@@ -84,6 +84,8 @@ class IdeasService:
         self.runtime = runtime or FixtureAgentRuntime()
         self.clock = clock or __import__("time").time
         self.ledger = ledger or Ledger()
+        self._discover_cli = runtimes is None
+        self._catalog_lock = __import__("threading").Lock()
         if runtimes is None:
             # Local CLI routes exist only where the CLI is installed and enabled (never on a hosted function).
             runtimes = [self.runtime]
@@ -108,6 +110,20 @@ class IdeasService:
                 agents.append(info)
         return {"models": models, "reasoning": self.runtime.list_supported_reasoning(), "agents": agents}
 
+    def rescan_models(self, workspace_id, token):
+        """An editor may refresh installation and sign-in probes; no model generation runs."""
+        with self.repository.transaction(token, workspace_id) as (_, row, _):
+            require(self._member(row), "edit")
+        with self._catalog_lock:
+            if self._discover_cli:
+                for cli in (ClaudeCliRuntime, CodexCliRuntime):
+                    if not any(type(runtime) is cli for runtime in self.runtimes) and cli.available():
+                        self.runtimes.append(cli(clock=self.clock))
+            for runtime in self.runtimes:
+                if isinstance(runtime, ClaudeCliRuntime):
+                    runtime.detect(force=True)
+            return self.model_catalog()
+
     def _select_runtime(self, model_id):
         if not model_id:
             return self.runtime
@@ -123,7 +139,7 @@ class IdeasService:
         from .learning_service import pending_proposals
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             state = self._state(row)
-            learned = {**learning.summary(state), "pendingProposals": len(pending_proposals(cur, workspace_id))}
+            learned = {**(self.learning.summary(state) if self.learning else learning.summary(state)), "pendingProposals": len(pending_proposals(cur, workspace_id))}
             return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned}
 
     def _memory_turn(self, workspace_id, token, conversation_id, text, parsed, destinations, model_id):
