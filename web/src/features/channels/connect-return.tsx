@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -12,11 +13,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { keys } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { OAuthComplete } from '@/lib/api/types';
+import { takeExpectedReconnect } from '@/lib/channels/connect-expect';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 /** Handles the provider's return (`/channels/connect?provider&state&code`) with the authenticated exchange. */
 export function ConnectReturn() {
   const params = useSearchParams();
+  const router = useRouter();
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const handled = useRef(false);
@@ -36,12 +39,27 @@ export function ConnectReturn() {
     api
       .oauthComplete(workspaceId, provider, state, params.get('code') ?? undefined, params.get('error') ?? undefined)
       .then(async (value) => {
-        setResult(value);
+        // A reconnect parked the account it was meant for; read it once whatever the outcome.
+        const expected = takeExpectedReconnect();
+        // The API returns `connectionId` (oauth.py: complete); the TS type does not list it yet.
+        const connectionId = (value as { connectionId?: string }).connectionId;
         await client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
         await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+        if (value.connected && connectionId) {
+          if (value.missingScopes?.length) {
+            toast.warning(`Missing scopes: ${value.missingScopes.join(', ')} — publishing stays Assisted.`);
+          }
+          if (expected && expected.channelId !== connectionId) {
+            toast.warning(`You connected a different account; ${expected.account} still needs reconnecting.`);
+          }
+          // Straight back to Channels: the page scrolls to the new card and plays its check once.
+          router.replace(`/app/channels?connected=${encodeURIComponent(connectionId)}`);
+          return;
+        }
+        setResult(value);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'The connection could not be completed.'));
-  }, [api, client, params, provider, state, workspaceId]);
+  }, [api, client, params, provider, router, state, workspaceId]);
 
   return (
     <PageContainer pageTitle='Finishing connection' pageDescription='Confirming the account the provider returned.'>
