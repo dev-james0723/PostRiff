@@ -142,6 +142,30 @@ class Phase2Acceptance(unittest.TestCase):
         self.assertEqual(self.j.state['phase2']['jobs'][0]['state'],'held')
         self.assertEqual(self.j.state['phase2']['jobs'][0]['manifest'],job['manifest'])
 
+    def test_duplicate_review_resolves_to_existing_job(self):
+        job = self.enqueue()
+        review = self.review(self.j.state['phase2']['channels'][0], self.j.state['variants'][0])
+        self.j.act('p2_approve', reviewId=review['id'], digest=review['digest'], confirmed=True)
+        self.assertEqual(len(self.j.state['phase2']['jobs']), 1)
+        self.assertEqual(self.j.state['phase2']['reviews'][-1]['status'], 'approved')
+        self.assertEqual(self.j.state['phase2']['reviews'][-1]['jobId'], job['id'])
+
+    def test_fresh_review_after_cancel_uses_new_idempotency_key(self):
+        first = self.enqueue()
+        old = self.review(self.j.state['phase2']['channels'][0], self.j.state['variants'][0])
+        self.j.act('p2_cancel', jobId=first['id'])
+        with self.assertRaises(AlphaError) as raised:
+            self.j.act('p2_approve', reviewId=old['id'], digest=old['digest'], confirmed=True)
+        self.assertEqual(raised.exception.code, 'review_consumed')
+        for expected in (2, 3):
+            review = self.review(self.j.state['phase2']['channels'][0], self.j.state['variants'][0])
+            self.assertNotEqual(review['manifest']['idempotencyKey'], first['manifest']['idempotencyKey'])
+            self.j.act('p2_approve', reviewId=review['id'], digest=review['digest'], confirmed=True)
+            self.j.act('p2_approve', reviewId=review['id'], digest=review['digest'], confirmed=True)
+            self.assertEqual(len(self.j.state['phase2']['jobs']), expected)
+            self.j.act('p2_cancel', jobId=self.j.state['phase2']['jobs'][-1]['id'])
+        self.assertEqual(self.j.state['phase2']['jobs'][0]['manifest'], first['manifest'])
+
     def test_no_callback_can_bypass_capability_preflight(self):
         v=self.draft()
         self.j.act('p2_channel_add',platform='LinkedIn')

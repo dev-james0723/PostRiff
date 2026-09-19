@@ -291,7 +291,11 @@ class Phase2Store(Store):
             manifest = review["manifest"]
             if not self.current(s, manifest) or manifest["expiresAt"] <= now or data["trial"]["expiresAt"] <= now or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
-            if any(j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"] for j in data["jobs"]):
+            existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
+            if existing:
+                if existing["state"] in ("failed", "canceled") and review["status"] != "approved":
+                    raise AlphaError("This review belongs to an ended job. Prepare a new review to try again.", 409, code="review_consumed")
+                review.update({"status": "approved", "jobId": existing["id"]})
                 return
             channel = find(data["channels"], manifest["channelId"])
             limit = DAILY_LIMITS.get(channel["platform"])
@@ -303,6 +307,7 @@ class Phase2Store(Store):
             self.event(job, "approved", "Exact local fixture approval recorded")
             self.event(job, "scheduled", "Waiting for the local durable worker")
             data["jobs"].append(job)
+            review["jobId"] = job["id"]
         elif action == "approve_many":
             reviews = p.get("reviews")
             if p.get("confirmed") is not True or not isinstance(reviews, list) or not 1 <= len(reviews) <= 10:
@@ -381,6 +386,13 @@ class Phase2Store(Store):
         manifest["briefRevision"] = s["brief"]["revision"]
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
+        root_key = digest(manifest)
+        # A fresh review may retry a definitively ended job. Keep old manifests immutable and
+        # key all duplicate reviews for this retry to the same preceding job, never a random nonce.
+        ended = [j for j in data["jobs"] if j["state"] in ("failed", "canceled")
+                 and j["manifest"].get("retryRoot", j["manifest"]["idempotencyKey"]) == root_key]
+        if ended:
+            manifest.update({"retryRoot": root_key, "retryOf": ended[-1]["id"]})
         manifest["idempotencyKey"] = digest(manifest)
         return manifest
 

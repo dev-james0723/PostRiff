@@ -251,6 +251,7 @@ class DomainAcceptance(unittest.TestCase):
         self.assertTrue(j.state["variants"][0]["proposedUpdate"]["text"])
         self.assertEqual(j.state["variants"][0]["text"], original)
         j.edit(text="A later author edit")
+        self.assertIsNone(j.state["variants"][0]["proposedUpdate"])
         with self.assertRaises(AlphaError) as caught:
             j.act("accept_update", variantId=j.state["variants"][0]["id"])
         self.assertEqual(caught.exception.status, 409)

@@ -368,7 +368,7 @@ class Store:
             v = self._variant(s, p.get("variantId"))
             candidate = v.get("proposedUpdate")
             if not candidate:
-                raise AlphaError("Create and review a proposed replacement first.")
+                raise AlphaError("Create and review a proposed replacement first.", 409, code="draft_update_unavailable")
             if candidate["briefRevision"] != s["brief"]["revision"] or candidate["voiceRevision"] != s["speaker"]["activeRevision"] or candidate["baseVariantRevision"] != v["revision"]:
                 raise AlphaError("This replacement is stale. Create a new preview against your current draft and profile.", 409)
             revision = v["revision"] + 1
@@ -391,6 +391,8 @@ class Store:
             v["text"] = text
             v["revision"] += 1
             v["customized"] = True
+            # A replacement was based on the previous revision; it must never overwrite this edit.
+            v["proposedUpdate"] = None
             v["revisions"].append({"revision": v["revision"], "text": text, "origin": "author-edit", "at": now()})
             # An edit keeps the draft, so it clears "don't use this" feedback. What the edit changed is a
             # learning signal for a later phase; nothing is proposed from a single edit any more.
