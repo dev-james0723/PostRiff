@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
@@ -17,68 +18,91 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SuccessCheck } from '@/components/ui/success-check';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useFlash } from '@/hooks/use-flash';
 import { keys, useInvitations, useMembers } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { InvitationCreated, Member } from '@/lib/api/types';
+import type { Invitation, InvitationCreated, Member, Membership } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
-import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/auth/permissions';
+import { allows, ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/auth/permissions';
 import { formatDate, relativeTime } from '@/lib/time';
-import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { cn } from '@/lib/utils';
+import { useWorkspace, useWorkspaceApi } from '@/lib/workspace/provider';
 import type { WorkspaceRole } from '@/types';
-
-const INVITE_ROLES: WorkspaceRole[] = ['admin', 'editor', 'approver', 'viewer'];
-const FLAGS: { key: 'can_publish' | 'can_reply' | 'can_moderate' | 'can_manage_connections'; label: string }[] = [
-  { key: 'can_publish', label: 'Can approve publications' },
-  { key: 'can_reply', label: 'Can reply to comments' },
-  { key: 'can_moderate', label: 'Can moderate' },
-  { key: 'can_manage_connections', label: 'Can manage connections' }
-];
+import { APPROVAL_HOLD_NOTE, ASSIGNABLE_ROLES, canAssignRole, FLAGS, grantRules, NO_FLAGS, type Flags } from './access-model';
+import { MemberAccessSheet } from './member-access-sheet';
+import { useChangeError } from './use-change-error';
 
 const infoContent = {
-  title: 'Roles and step-up',
+  title: 'Members and invitations',
   sections: [
     {
-      title: 'Five roles, four extra grants',
+      title: 'Roles set the baseline',
       description:
-        'Owner, admin, editor, approver and viewer. Flags add a single right (approve, reply, moderate, manage connections) to a non-viewer without changing the role.'
+        'Owner, admin, editor, approver and viewer. A grant adds one right (approve, reply, moderate, manage connections) to anyone but a viewer.',
+      links: [{ title: 'Roles', url: '/app/workspace/roles' }]
     },
     {
-      title: 'Recent sign-in required',
+      title: 'Some changes need a recent sign-in',
       description:
-        'Inviting, changing or removing members needs a sign-in from the last 10 minutes. If it is older, sign in again and retry.'
+        'Inviting, changing someone’s access and removing a member only work shortly after a fresh sign-in. If yours is too old, sign out, sign in again and retry. Revoking an invitation does not need it.'
     },
     {
       title: 'Invitations',
-      description: 'Links expire after 7 days and can be used once. The invitee gets an email; you can also copy the link.'
+      description:
+        'Links work once and expire after 7 days. When email is set up the invitee gets the link by email; you can always copy it after sending.'
     }
   ]
 };
 
-function InviteForm({ onCreated }: { onCreated: (result: InvitationCreated, email: string) => void }) {
+function LoadError({ title, error, onRetry, retrying }: { title: string; error: unknown; onRetry: () => void; retrying: boolean }) {
+  return (
+    <Alert variant='destructive'>
+      <Icons.alertCircle className='size-4' />
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription className='flex flex-wrap items-center gap-2'>
+        <span>{error instanceof ApiError ? error.message : 'The server did not answer.'}</span>
+        <Button size='sm' variant='outline' onClick={onRetry} disabled={retrying}>
+          Retry
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function InviteForm({ actor, onCreated }: { actor: Membership | null; onCreated: (result: InvitationCreated, email: string) => void }) {
   const { api, workspaceId } = useWorkspaceApi();
+  const reportError = useChangeError();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<WorkspaceRole>('editor');
-  const [flags, setFlags] = useState<Record<string, boolean>>({});
+  const [flags, setFlags] = useState<Flags>(NO_FLAGS);
   const [busy, setBusy] = useState(false);
+
+  // A viewer cannot carry grants, and `validate_grant` refuses any grant the inviter does not hold.
+  const payload = role === 'viewer' ? NO_FLAGS : flags;
+  const rules = grantRules(actor, payload);
+  const unheld = FLAGS.some((flag) => rules[flag.key].cannotAdd);
+  const roles = ASSIGNABLE_ROLES.filter((r) => canAssignRole(actor, r));
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await api.invite(workspaceId, email.trim(), role, flags);
+      const result = await api.invite(workspaceId, email.trim(), role, payload);
       onCreated(result, email.trim());
       setEmail('');
-      setFlags({});
+      setFlags(NO_FLAGS);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The invitation could not be created.');
+      reportError(err, 'The invitation could not be created.');
     } finally {
       setBusy(false);
     }
@@ -98,7 +122,7 @@ function InviteForm({ onCreated }: { onCreated: (result: InvitationCreated, emai
               <SelectValue>{ROLE_LABELS[role]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {INVITE_ROLES.map((r) => (
+              {roles.map((r) => (
                 <SelectItem key={r} value={r}>
                   {ROLE_LABELS[r]}
                 </SelectItem>
@@ -109,17 +133,26 @@ function InviteForm({ onCreated }: { onCreated: (result: InvitationCreated, emai
       </div>
       <p className='text-muted-foreground text-xs'>{ROLE_DESCRIPTIONS[role]}</p>
       {role !== 'viewer' && (
-        <fieldset className='grid gap-2 sm:grid-cols-2'>
+        <fieldset className='flex flex-col gap-2'>
           <legend className='mb-1 text-sm font-medium'>Extra grants</legend>
-          {FLAGS.map((flag) => (
-            <Label key={flag.key} className='flex items-center gap-2 text-sm font-normal'>
-              <Checkbox
-                checked={Boolean(flags[flag.key])}
-                onCheckedChange={(checked) => setFlags({ ...flags, [flag.key]: checked === true })}
-              />
-              {flag.label}
-            </Label>
-          ))}
+          <div className='grid gap-2 sm:grid-cols-2'>
+            {FLAGS.map((flag) => {
+              const disabled = busy || rules[flag.key].cannotAdd;
+              return (
+                <Label key={flag.key} className='flex items-center gap-2 text-sm font-normal'>
+                  <Checkbox
+                    checked={payload[flag.key]}
+                    disabled={disabled}
+                    onCheckedChange={(checked) => setFlags({ ...flags, [flag.key]: checked === true })}
+                  />
+                  <span className={disabled ? 'text-muted-foreground' : undefined}>{flag.label}</span>
+                </Label>
+              );
+            })}
+          </div>
+          {unheld && (
+            <p className='text-muted-foreground text-xs'>Greyed-out grants are ones you do not hold, so you cannot hand them out.</p>
+          )}
         </fieldset>
       )}
       <Button type='submit' disabled={busy || !email.includes('@')} className='w-fit'>
@@ -129,45 +162,49 @@ function InviteForm({ onCreated }: { onCreated: (result: InvitationCreated, emai
   );
 }
 
-function MemberRow({ member, canManage }: { member: Member; canManage: boolean }) {
+function MemberRow({
+  member,
+  canManage,
+  justSaved,
+  onEdit
+}: {
+  member: Member;
+  canManage: boolean;
+  justSaved: boolean;
+  onEdit: (member: Member) => void;
+}) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
+  const reportError = useChangeError();
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  async function change(role: WorkspaceRole) {
-    setBusy(true);
-    try {
-      await api.updateMember(workspaceId, member.userId, role, {
-        can_publish: member.can_publish,
-        can_reply: member.can_reply,
-        can_moderate: member.can_moderate,
-        can_manage_connections: member.can_manage_connections
-      });
-      toast.success('Role updated.');
-      await client.invalidateQueries({ queryKey: keys.members(workspaceId) });
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The role could not be changed.');
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Removing someone who can approve holds what they already approved (hosted.py `remove_member` note).
+  const holdsApprovals = allows(member, 'approve');
 
   async function remove() {
     setBusy(true);
     try {
-      await api.removeMember(workspaceId, member.userId);
-      toast.success('Member removed.');
-      await client.invalidateQueries({ queryKey: keys.members(workspaceId) });
+      const result = await api.removeMember(workspaceId, member.userId);
+      // The client type omits `note`; the API sends it with every removal.
+      const note = (result as { note?: string }).note;
+      toast.success('Member removed.', note && holdsApprovals ? { description: APPROVAL_HOLD_NOTE } : undefined);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: keys.members(workspaceId) }),
+        client.invalidateQueries({ queryKey: keys.audit(workspaceId) })
+      ]);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The member could not be removed.');
+      reportError(err, 'The member could not be removed.');
     } finally {
       setBusy(false);
     }
   }
 
   const flags = FLAGS.filter((f) => member[f.key]).map((f) => f.label.replace('Can ', ''));
-  const editable = canManage && !member.you && member.role !== 'owner';
+  // An owner already holds every right, and a viewer's grants never apply (`Membership.allows`).
+  const grants =
+    member.role === 'owner' ? 'Not needed' : flags.length === 0 ? '—' : `${flags.join(', ')}${member.role === 'viewer' ? ' (inactive for a viewer)' : ''}`;
+  const editable = canManage && !member.you && member.role !== 'owner' && member.status === 'active';
 
   return (
     <TableRow>
@@ -180,24 +217,12 @@ function MemberRow({ member, canManage }: { member: Member; canManage: boolean }
         )}
       </TableCell>
       <TableCell>
-        {editable ? (
-          <Select value={member.role} onValueChange={(value) => void change(value as WorkspaceRole)}>
-            <SelectTrigger className='h-8 w-32' aria-label='Role' disabled={busy}>
-              <SelectValue>{ROLE_LABELS[member.role]}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {INVITE_ROLES.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {ROLE_LABELS[r]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          ROLE_LABELS[member.role]
-        )}
+        <span className='inline-flex items-center gap-1.5'>
+          {ROLE_LABELS[member.role]}
+          {justSaved && <SuccessCheck className='size-4 text-emerald-500' />}
+        </span>
       </TableCell>
-      <TableCell className='text-muted-foreground text-xs'>{flags.length ? flags.join(', ') : '—'}</TableCell>
+      <TableCell className='text-muted-foreground text-xs'>{grants}</TableCell>
       <TableCell>
         <Badge variant={member.status === 'active' ? 'outline' : 'secondary'}>{member.status}</Badge>
       </TableCell>
@@ -205,6 +230,9 @@ function MemberRow({ member, canManage }: { member: Member; canManage: boolean }
       <TableCell className='text-right'>
         {editable && (
           <>
+            <Button variant='ghost' size='sm' disabled={busy} onClick={() => onEdit(member)}>
+              Change access
+            </Button>
             <Button variant='ghost' size='sm' className='text-destructive' disabled={busy} onClick={() => setConfirmRemove(true)}>
               Remove
             </Button>
@@ -212,7 +240,10 @@ function MemberRow({ member, canManage }: { member: Member; canManage: boolean }
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Remove this member?</AlertDialogTitle>
-                  <AlertDialogDescription>They lose access immediately. Drafts they wrote stay in the workspace.</AlertDialogDescription>
+                  <AlertDialogDescription>
+                    They lose access immediately. Drafts they wrote stay in the workspace.
+                    {holdsApprovals && ` ${APPROVAL_HOLD_NOTE}`}
+                  </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Keep</AlertDialogCancel>
@@ -234,10 +265,74 @@ function MemberRow({ member, canManage }: { member: Member; canManage: boolean }
   );
 }
 
+function InvitationRow({ invitation }: { invitation: Invitation }) {
+  const { api, workspaceId } = useWorkspaceApi();
+  const client = useQueryClient();
+  const reportError = useChangeError();
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  async function revoke() {
+    setBusy(true);
+    try {
+      await api.revokeInvitation(workspaceId, invitation.invitationId);
+      toast.success('Invitation revoked.');
+      await client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) void client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
+      reportError(err, 'The invitation could not be revoked.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <TableRow>
+      <TableCell>{invitation.email}</TableCell>
+      <TableCell>{ROLE_LABELS[invitation.role as WorkspaceRole] ?? invitation.role}</TableCell>
+      <TableCell>
+        <Badge variant={invitation.state === 'pending' ? 'default' : 'outline'}>{invitation.state}</Badge>
+      </TableCell>
+      <TableCell className='text-muted-foreground text-xs'>{formatDate(invitation.expiresAt)}</TableCell>
+      <TableCell className='text-right'>
+        {invitation.state === 'pending' && (
+          <>
+            <Button variant='ghost' size='sm' disabled={busy} onClick={() => setConfirming(true)}>
+              {busy ? 'Revoking…' : 'Revoke'}
+            </Button>
+            <AlertDialog open={confirming} onOpenChange={setConfirming}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Revoke the invitation for {invitation.email}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The link stops working immediately. You can invite the same address again later.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      setConfirming(false);
+                      void revoke();
+                    }}
+                  >
+                    Revoke invitation
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
 /** Owner-only: hand the role to an active admin. Both memberships swap in one step-up transaction. */
 function TransferOwnershipCard({ members }: { members: Member[] }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
+  const reportError = useChangeError();
   const [newOwnerId, setNewOwnerId] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -253,16 +348,19 @@ function TransferOwnershipCard({ members }: { members: Member[] }) {
       await api.transferOwnership(workspaceId, target.userId);
       toast.success(`${targetLabel(target)} is now the owner.`);
       setNewOwnerId('');
-      await client.invalidateQueries({ queryKey: keys.members(workspaceId) });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: keys.members(workspaceId) }),
+        client.invalidateQueries({ queryKey: keys.audit(workspaceId) })
+      ]);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Ownership could not be transferred.');
+      reportError(err, 'Ownership could not be transferred.');
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Card>
+    <Card data-tour='members-transfer-ownership'>
       <CardHeader>
         <CardTitle>Transfer ownership</CardTitle>
         <CardDescription>Make an active admin the owner. You become an admin with every grant. This needs a recent sign-in.</CardDescription>
@@ -315,61 +413,53 @@ function TransferOwnershipCard({ members }: { members: Member[] }) {
   );
 }
 
-export function MembersView() {
-  const access = useWorkspaceAccess();
-  const canManage = checkAccess(access, { permission: 'manage_members' });
+/** Mounted only for owners and admins, so the member and invitation queries never fire for anyone else. */
+function MembersContent() {
   const members = useMembers();
   const invitations = useInvitations();
-  const { api, workspaceId } = useWorkspaceApi();
+  const { workspaceId } = useWorkspaceApi();
+  const { membership } = useWorkspace();
   const client = useQueryClient();
-  const [created, setCreated] = useState<{ result: InvitationCreated; email: string } | null>(null);
+  // The one-time link belongs to the workspace it was created in; switching workspaces hides it.
+  const [created, setCreated] = useState<{ result: InvitationCreated; email: string; workspaceId: string } | null>(null);
+  const [editing, setEditing] = useState<Member | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [justSaved, flashSaved] = useFlash<string>();
 
-  async function revoke(id: string) {
-    try {
-      await api.revokeInvitation(workspaceId, id);
-      toast.success('Invitation revoked.');
-      await client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not revoke.');
-    }
-  }
-
-  const acceptLink = created ? `${window.location.origin}/invite/${created.result.token}` : '';
-  const me = (members.data?.members ?? []).find((m) => m.you) ?? null;
+  const actor = members.data?.membership ?? membership;
+  // Sections key off `isPending`: a query paused between retries (offline, hidden tab) has no data and must not look empty.
+  const shown = created && created.workspaceId === workspaceId ? created : null;
+  const acceptLink = shown ? `${window.location.origin}/invite/${shown.result.token}` : '';
+  const invitationList = invitations.data?.invitations ?? [];
 
   return (
-    <PageContainer
-      pageTitle='Members'
-      pageDescription='Who can do what in this workspace.'
-      infoContent={infoContent}
-      access={canManage}
-      accessFallback={<p className='text-muted-foreground text-sm'>Only owners and admins manage members.</p>}
-    >
+    <>
       <div className='flex flex-col gap-6'>
-        <Card>
+        <Card data-tour='members-invite'>
           <CardHeader>
             <CardTitle>Invite someone</CardTitle>
-            <CardDescription>They receive an email with a one-time link. You can also copy it below after sending.</CardDescription>
+            <CardDescription>They get a one-time link. You can copy it below after sending.</CardDescription>
           </CardHeader>
           <CardContent className='flex flex-col gap-4'>
             <InviteForm
+              actor={actor}
               onCreated={(result, email) => {
-                setCreated({ result, email });
+                setCreated({ result, email, workspaceId });
                 void client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
               }}
             />
-            {created && (
+            {shown && (
               <Alert>
                 <Icons.checks className='size-4' />
                 <AlertTitle>
-                  Invitation for {created.email} {created.result.emailSent ? 'sent' : 'created'}
+                  Invitation for {shown.email} {shown.result.emailSent ? 'sent' : 'created'}
                 </AlertTitle>
                 <AlertDescription className='flex flex-col gap-2'>
                   <span>
-                    {created.result.emailSent
+                    {shown.result.emailSent
                       ? 'An email is on its way. The link below works once and expires '
                       : 'Email delivery is not configured on this deployment, so share the link directly. It works once and expires '}
-                    {formatDate(created.result.expiresAt)}.
+                    {formatDate(shown.result.expiresAt)}.
                   </span>
                   <div className='flex flex-wrap items-center gap-2'>
                     <code className='bg-muted max-w-full truncate rounded px-2 py-1 text-xs'>{acceptLink}</code>
@@ -377,7 +467,10 @@ export function MembersView() {
                       size='sm'
                       variant='outline'
                       onClick={() => {
-                        void navigator.clipboard.writeText(acceptLink).then(() => toast.success('Link copied.'));
+                        navigator.clipboard.writeText(acceptLink).then(
+                          () => toast.success('Link copied.'),
+                          () => toast.error('Copy failed. Select the link and copy it manually.')
+                        );
                       }}
                     >
                       Copy link
@@ -389,12 +482,19 @@ export function MembersView() {
           </CardContent>
         </Card>
 
-        <section className='flex flex-col gap-3' aria-labelledby='members-heading'>
-          <h3 id='members-heading' className='text-lg font-semibold'>
-            Members
-          </h3>
-          {members.isLoading ? (
+        <section className='flex flex-col gap-3' aria-labelledby='members-heading' data-tour='members-table'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <h3 id='members-heading' className='text-lg font-semibold'>
+              Members
+            </h3>
+            <Link href='/app/workspace/roles' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), '-mr-2')}>
+              What each role can do <LearnMoreChevron />
+            </Link>
+          </div>
+          {members.isPending ? (
             <Skeleton className='h-32 w-full' />
+          ) : members.error ? (
+            <LoadError title='Members could not be loaded.' error={members.error} onRetry={() => void members.refetch()} retrying={members.isFetching} />
           ) : (
             <div className='overflow-x-auto rounded-lg border'>
               <Table>
@@ -405,12 +505,23 @@ export function MembersView() {
                     <TableHead>Extra grants</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Updated</TableHead>
-                    <TableHead />
+                    <TableHead>
+                      <span className='sr-only'>Actions</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(members.data?.members ?? []).map((member) => (
-                    <MemberRow key={member.userId} member={member} canManage={canManage} />
+                    <MemberRow
+                      key={member.userId}
+                      member={member}
+                      canManage
+                      justSaved={justSaved === member.userId}
+                      onEdit={(target) => {
+                        setEditing(target);
+                        setSheetOpen(true);
+                      }}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -418,15 +529,22 @@ export function MembersView() {
           )}
         </section>
 
-        {me?.role === 'owner' && <TransferOwnershipCard members={members.data?.members ?? []} />}
+        {actor?.role === 'owner' && <TransferOwnershipCard members={members.data?.members ?? []} />}
 
-        <section className='flex flex-col gap-3' aria-labelledby='invites-heading'>
+        <section className='flex flex-col gap-3' aria-labelledby='invites-heading' data-tour='members-invitations'>
           <h3 id='invites-heading' className='text-lg font-semibold'>
             Invitations
           </h3>
-          {invitations.isLoading ? (
+          {invitations.isPending ? (
             <Skeleton className='h-24 w-full' />
-          ) : (invitations.data?.invitations ?? []).length === 0 ? (
+          ) : invitations.error ? (
+            <LoadError
+              title='Invitations could not be loaded.'
+              error={invitations.error}
+              onRetry={() => void invitations.refetch()}
+              retrying={invitations.isFetching}
+            />
+          ) : invitationList.length === 0 ? (
             <p className='text-muted-foreground text-sm'>No invitations yet.</p>
           ) : (
             <div className='overflow-x-auto rounded-lg border'>
@@ -437,26 +555,14 @@ export function MembersView() {
                     <TableHead>Role</TableHead>
                     <TableHead>State</TableHead>
                     <TableHead>Expires</TableHead>
-                    <TableHead />
+                    <TableHead>
+                      <span className='sr-only'>Actions</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(invitations.data?.invitations ?? []).map((inv) => (
-                    <TableRow key={inv.invitationId}>
-                      <TableCell>{inv.email}</TableCell>
-                      <TableCell>{ROLE_LABELS[inv.role as WorkspaceRole] ?? inv.role}</TableCell>
-                      <TableCell>
-                        <Badge variant={inv.state === 'pending' ? 'default' : 'outline'}>{inv.state}</Badge>
-                      </TableCell>
-                      <TableCell className='text-muted-foreground text-xs'>{formatDate(inv.expiresAt)}</TableCell>
-                      <TableCell className='text-right'>
-                        {inv.state === 'pending' && (
-                          <Button variant='ghost' size='sm' onClick={() => void revoke(inv.invitationId)}>
-                            Revoke
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
+                  {invitationList.map((invitation) => (
+                    <InvitationRow key={invitation.invitationId} invitation={invitation} />
                   ))}
                 </TableBody>
               </Table>
@@ -464,6 +570,37 @@ export function MembersView() {
           )}
         </section>
       </div>
+      <MemberAccessSheet member={editing} actor={actor} open={sheetOpen} onOpenChange={setSheetOpen} onSaved={flashSaved} />
+    </>
+  );
+}
+
+export function MembersView() {
+  const access = useWorkspaceAccess();
+  const canManage = checkAccess(access, { permission: 'manage_members' });
+  const { membership } = useWorkspace();
+
+  return (
+    <PageContainer
+      pageTitle='Members'
+      pageDescription='Who can do what in this workspace.'
+      infoContent={infoContent}
+      access={canManage}
+      accessFallback={
+        <div className='flex max-w-md flex-col items-center gap-2 text-center'>
+          <p className='font-medium'>Only owners and admins manage members.</p>
+          {membership && (
+            <p className='text-muted-foreground text-sm'>
+              Your role here is {ROLE_LABELS[membership.role]}. Ask the owner or an admin to invite people or change access.
+            </p>
+          )}
+          <Link href='/app/workspace/roles' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }))}>
+            See what each role can do <LearnMoreChevron />
+          </Link>
+        </div>
+      }
+    >
+      <MembersContent />
     </PageContainer>
   );
 }
