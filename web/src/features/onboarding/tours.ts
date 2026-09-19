@@ -28,6 +28,8 @@ export interface TourCtx {
   canEdit: boolean;
   canApprove: boolean;
   assetCount: number | null;
+  isOwner: boolean;
+  portalAvailable: boolean | null;
   canManageConnections: boolean;
   canReply: boolean;
 }
@@ -657,7 +659,20 @@ export const PAGE_TOURS: Tour[] = [
         target: ['[data-tour="billing-plans"]'],
         title: 'Changing plan',
         body: 'Checkout happens with the payment provider. A subscription shows as confirmed only after the provider tells PostRiff.',
+        when: (ctx) => ctx.isOwner,
         placement: 'top'
+      },
+      {
+        id: 'manage', route: '/app/account/billing', stop: 'Usage & plan',
+        target: ['[data-tour="billing-manage"]'], title: 'Manage billing',
+        body: 'The owner opens the billing provider to update payment details or a subscription.',
+        when: (ctx) => ctx.isOwner && ctx.portalAvailable === true
+      },
+      {
+        id: 'ledger', route: '/app/account/billing', stop: 'Usage & plan',
+        target: ['[data-tour="billing-ledger"]', '[data-tour="billing-ledger-empty"]'], title: 'Recorded usage',
+        body: 'Reservations, actual costs and allowance changes are recorded separately. Unknown costs stay unknown.',
+        when: (ctx) => ctx.isOwner
       }
     ]
   },

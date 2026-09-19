@@ -1,4 +1,4 @@
-import { NavGroup } from '@/types';
+import type { NavGroup } from '@/types';
 
 /**
  * App navigation (sidebar + Cmd+K), grouped per spec §5.
@@ -63,7 +63,7 @@ export const navGroups: NavGroup[] = [
         title: 'Channels',
         url: '/app/channels',
         icon: 'broadcast',
-        shortcut: ['b', 'b'],
+        shortcut: ['g', 'c'],
         items: []
       },
       {
@@ -154,8 +154,7 @@ export const navGroups: NavGroup[] = [
         url: '/app/account/billing',
         icon: 'billing',
         shortcut: ['b', 'b'],
-        items: [],
-        access: { permission: 'owner' }
+        items: []
       },
       {
         title: 'Privacy & data',

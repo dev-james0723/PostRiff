@@ -134,7 +134,7 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
     });
   }
 
-  const trialDays = usageData?.subscription?.status === 'trial' ? daysUntil(usageData.entitlement?.resetsAt, now) : null;
+  const trialDays = (usageData?.lifecycle?.status === 'trial' || (usageData?.entitlement?.source === 'trial' && usageData?.lifecycle?.status === 'expired')) ? daysUntil(usageData.entitlement?.resetsAt, now) : null;
   if (trialDays !== null && trialDays <= 5) {
     items.push({
       id: 'trial',

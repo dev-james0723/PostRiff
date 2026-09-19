@@ -135,6 +135,8 @@ class OAuthService:
             granted = sorted(set(grant.get("scopes") or scopes))
             missing = sorted(set(scopes) - set(granted))
             connection_id = hashlib.sha256(f"{provider_id}:{identity['providerAccountId']}".encode()).hexdigest()[:32]
+            from .billing import require_plan_capacity
+            require_plan_capacity(cur, workspace_id, "connected_accounts", connection_id)
             access_ct, key_id = self.vault.encrypt(grant["accessToken"])
             refresh_ct = self.vault.encrypt(grant["refreshToken"])[0] if grant.get("refreshToken") else None
             expires = self.clock() + float(grant.get("expiresIn") or 0) if grant.get("expiresIn") else None

@@ -157,7 +157,11 @@ class PostgresWorkspaceRepository:
         audit_event = (lambda state: ("memory.egress_decided", "cloud", {"cloud": memory.egress(state).get("cloud") is True})) if action == memory.EGRESS_ACTION else None
         if action == research.CONSENT_ACTION:
             audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
-        return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event)
+        after = None
+        if action in ("p2_review", "p2_approve", "p2_approve_many"):
+            from .billing import require_publishing
+            after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
+        return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
 
 
 class _NoDatabase:
@@ -176,6 +180,8 @@ class HostedPhase2Commands:
         self.clock = clock
         self.engine = Phase2Store.__new__(Phase2Store)
         self.engine.clock = clock
+        # Hosted entitlement checks use live SQL, including paid plans after the original trial ends.
+        self.engine.hosted_entitlements = True
         self.engine.social = FixtureSocial()
         self.engine.images = FixtureImages()
 
@@ -324,6 +330,13 @@ class HostedWorkspaceService:
             view["lifecycle"] = self.billing.lifecycle(cur, workspace_id, self.clock())
             view["billing"] = self.billing.availability(cur, workspace_id)
             view["membership"] = _membership(row).summary()
+            if not _membership(row).allows("owner"):
+                view["budget"] = None
+                for entry in view["ledger"]:
+                    entry.pop("estimatedUsdMicro", None)
+                    entry.pop("actualUsdMicro", None)
+                view["billing"]["checkoutAvailable"] = False
+                view["billing"]["portalAvailable"] = False
             return view
 
     def billing_webhook(self, signature, body):
@@ -782,6 +795,8 @@ class HostedWorkspaceService:
             require(actor, "manage_members")
             self.repository.assert_fresh(token, principal)
             granted = validate_grant(role, flags, actor)
+            from .billing import require_plan_capacity
+            require_plan_capacity(cur, workspace_id, "members")
             cur.execute("SELECT count(*) FROM public.pr_invitations WHERE workspace_id=%s AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now()", (workspace_id,))
             if cur.fetchone()[0] >= MAX_PENDING_INVITATIONS:
                 raise AlphaError("Revoke or wait for pending invitations before adding more.", 409)
@@ -847,6 +862,8 @@ class HostedWorkspaceService:
         existing = cur.fetchone()
         if existing and existing[1] == "active":
             raise AlphaError("You are already a member of this workspace.", 409)
+        from .billing import require_plan_capacity
+        require_plan_capacity(cur, workspace_id, "members")
         values = (role, granted.get("can_publish", False), granted.get("can_reply", False), granted.get("can_moderate", False), granted.get("can_manage_connections", False))
         if existing:
             cur.execute("UPDATE public.pr_memberships SET status='active',role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (*values, workspace_id, principal))

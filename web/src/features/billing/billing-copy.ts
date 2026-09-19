@@ -116,7 +116,7 @@ export function alertCopy(alert: LifecycleAlert): { title: string; description: 
     case 'trial_ended':
       return {
         title: `Trial ended on ${formatDate(alert.at)}`,
-        description: 'Whatever is left of the trial allowance still works; choose a plan for a monthly allowance.'
+        description: 'Publishing is paused. Drafts remain readable and exportable; choose a plan to resume publishing.'
       };
     case 'ending':
       return {

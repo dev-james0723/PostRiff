@@ -350,7 +350,7 @@ class Phase2Store(Store):
             raise AlphaError(blockers[0]["message"], 409)
         v = self._variant(s, p.get("variantId"))
         c = find(data["channels"], p.get("channelId"))
-        if data["trial"]["expiresAt"] <= self.clock():
+        if not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock():
             raise AlphaError("Trial expired. Export remains available; scheduling is held.")
         if self.channel_state(c) != "Ready for posting":
             raise AlphaError("Verify this exact fixture account and its capability first.")
@@ -434,7 +434,7 @@ class Phase2Store(Store):
             if j["state"] not in ("scheduled", "approved", "claimed"):
                 continue
             c = find(data["channels"], j["manifest"]["channelId"])
-            if not self.current(s, j["manifest"]) or self.channel_state(c) != "Ready for posting" or data["trial"]["expiresAt"] <= self.clock() or j["manifest"]["expiresAt"] < self.clock():
+            if not self.current(s, j["manifest"]) or self.channel_state(c) != "Ready for posting" or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock()) or j["manifest"]["expiresAt"] < self.clock():
                 self.event(j, "held", "Approval, capability or entitlement changed. Review timing and approve a new job; reconnection does not release this one.")
 
     def export(self, wid, token):

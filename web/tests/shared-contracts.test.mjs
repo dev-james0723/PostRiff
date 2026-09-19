@@ -32,3 +32,7 @@ try {
   }
 } finally { globalThis.fetch = originalFetch; }
 console.log('API error compatibility assertions passed');
+
+const { navGroups } = await import('../src/config/nav-config.ts');
+const shortcuts = navGroups.flatMap(group => group.items.flatMap(item => item.shortcut ? [item.shortcut.join(' ')] : []));
+assert.equal(new Set(shortcuts).size, shortcuts.length, 'navigation shortcuts must be unique');

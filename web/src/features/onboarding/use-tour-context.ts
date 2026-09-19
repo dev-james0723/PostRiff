@@ -1,5 +1,9 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
+import { useWorkspace } from '@/lib/workspace/provider';
+import type { Usage } from '@/lib/api/types';
+import { keys } from '@/lib/api/hooks';
 import { useMemo } from 'react';
 import { useChannels, useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -12,6 +16,9 @@ import type { TourCtx } from './tours';
  * `settled` turns true once every query has answered, successfully or not; tours wait for it.
  */
 export function useTourContext(): { ctx: TourCtx; ready: boolean } {
+  const { workspaceId, api } = useWorkspace();
+  // Observe an existing usage result; tours must not cause a billing write transaction on every page.
+  const usage = useQuery<Usage>({ queryKey: keys.usage(workspaceId ?? ''), queryFn: () => api.usage(workspaceId as string), enabled: false });
   const snapshot = useSnapshot();
   const channels = useChannels();
   const access = useWorkspaceAccess();
@@ -27,6 +34,8 @@ export function useTourContext(): { ctx: TourCtx; ready: boolean } {
         : null;
     return {
       settled,
+      isOwner: checkAccess(access, { permission: 'owner' }),
+      portalAvailable: usage.data?.billing?.portalAvailable ?? null,
       hasVoice: snapshotReady ? Boolean(state?.speaker?.activeRevision) : null,
       voiceRevision: state?.speaker?.activeRevision ?? null,
       channelCount,
@@ -39,7 +48,7 @@ export function useTourContext(): { ctx: TourCtx; ready: boolean } {
       canManageConnections: checkAccess(access, { permission: 'manage_connections' }),
       canReply: checkAccess(access, { permission: 'reply' })
     };
-  }, [settled, snapshotReady, state, channels.data, access]);
+  }, [settled, snapshotReady, state, channels.data, access, usage.data]);
 
   return { ctx, ready: settled };
 }

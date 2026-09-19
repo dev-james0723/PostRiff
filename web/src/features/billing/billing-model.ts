@@ -44,8 +44,8 @@ export function hasOpenSubscription(status: string | null | undefined): boolean 
   return typeof status === 'string' && OPEN_SUBSCRIPTION_STATUSES.includes(status);
 }
 
-export function isTrial(usage: Pick<Usage, 'lifecycle'>): boolean {
-  return usage.lifecycle?.status === 'trial';
+export function isTrial(usage: Pick<Usage, 'lifecycle' | 'entitlement'>): boolean {
+  return usage.lifecycle?.status === 'trial' || (usage.lifecycle?.status === 'expired' && usage.entitlement?.source === 'trial');
 }
 
 /** The next date that changes something for this workspace, as data; the copy module words it. */
@@ -61,7 +61,7 @@ export type PlanTimeline =
 export function planTimeline(usage: Pick<Usage, 'lifecycle' | 'entitlement' | 'subscription'>, now = Date.now() / 1000): PlanTimeline {
   const status = usage.lifecycle?.status;
   const sub = usage.subscription;
-  if (status === 'trial') {
+  if (isTrial(usage)) {
     // A trial's `resetsAt` is `pr_trials.expires_at` (billing.py ensure_entitlement): the end, not a reset.
     const endsAt = usage.entitlement?.resetsAt ?? null;
     const days = daysUntil(endsAt, now);
@@ -217,7 +217,7 @@ export function activeMemberCount(members: readonly Pick<Member, 'status'>[]): n
 }
 
 /** The workspace cost ceiling as a used-mode reading; amber from the API's own warning line. */
-export function costGuardState(budget: Usage['budget']) {
+export function costGuardState(budget: NonNullable<Usage['budget']>) {
   const committed = budget.spentUsdMicro + budget.reservedUsdMicro;
   const fill = budget.stopUsdMicro > 0 ? Math.min(1, Math.max(0, committed / budget.stopUsdMicro)) : 0;
   return { committed, fill, warn: committed >= budget.warnUsdMicro, stopped: committed >= budget.stopUsdMicro };
@@ -297,8 +297,8 @@ export function isZeroCostRun(entry: Pick<LedgerEntry, 'estimatedUsdMicro' | 'ac
  * What a row did to the allowance. Reads `chargeBatch` only when the API sends it (it does not yet:
  * `usage_view` omits the column); without it the answer is null rather than a guess.
  */
-export function allowanceNote(entry: Pick<LedgerEntry, 'kind' | 'dimension' | 'costState'>): string | null {
-  const charge = (entry as { chargeBatch?: unknown }).chargeBatch;
+export function allowanceNote(entry: Pick<LedgerEntry, 'kind' | 'dimension' | 'costState' | 'chargeBatch'>): string | null {
+  const charge = entry.chargeBatch;
   if (typeof charge !== 'boolean') return null;
   if (!charge) return 'No allowance used';
   const unit = entry.dimension === 'image_generation' ? 'media credit' : 'writing batch';
@@ -330,8 +330,8 @@ export function ledgerCsv(entries: readonly LedgerEntry[]): string {
       csvCell(stepLabel(entry.kind)),
       csvCell(entry.provider || null),
       csvCell(entry.model || null),
-      csvCell(dollars(entry.estimatedUsdMicro), false),
-      csvCell(dollars(entry.actualUsdMicro), false),
+      csvCell(dollars(entry.estimatedUsdMicro ?? null), false),
+      csvCell(dollars(entry.actualUsdMicro ?? null), false),
       csvCell(costStateOf(entry.costState).label),
       csvCell(allowanceNote(entry) ?? (isZeroCostRun(entry) ? '$0 run' : null))
     ].join(',')

@@ -156,6 +156,9 @@ assert view["subscription"]["plan"] == "assist" and view["entitlement"]["writing
 checks.append("price-only subscription.updated resolves plan terms by provider_price_id and reconciles entitlement")
 
 # 7. Invitations email the accept link carrying the one-time raw token.
+# The fixture grants an extra seat explicitly; production plan terms stay unchanged.
+with connection() as db:
+    db.execute("UPDATE public.pr_entitlements SET members=(SELECT count(*)+1 FROM public.pr_memberships WHERE workspace_id=%s AND status='active') WHERE workspace_id=%s", (wid, wid))
 inv = service.invite(wid, "one", "Friend@Example.com", "editor", {})
 assert inv["emailSent"] is True, inv
 msg = [m for m in mail.sent if m["to"] == "friend@example.com"][-1]

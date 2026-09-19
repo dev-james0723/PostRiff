@@ -136,7 +136,7 @@ function Meter({
   );
 }
 
-function CostGuard({ budget }: { budget: Usage['budget'] }) {
+function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
   const guard = costGuardState(budget);
   return (
     <div className='flex flex-col gap-2 rounded-lg border p-3 text-sm' data-tour='billing-cost-guard'>
@@ -203,7 +203,7 @@ export function Allowances({
       onRetry: () => void channels.refetch(),
       over: (
         <p className='text-xs text-amber-700 dark:text-amber-300'>
-          Above this plan&apos;s {ent.connectedAccounts}. Connecting more is not blocked.{' '}
+          Above this plan&apos;s {ent.connectedAccounts}. Remove an account or change plan before connecting another.{' '}
           <Link href='/app/channels' className='underline underline-offset-2'>
             Channels
           </Link>
@@ -221,7 +221,7 @@ export function Allowances({
         error: members.isError && !members.data
       }),
       onRetry: () => void members.refetch(),
-      over: <p className='text-xs text-amber-700 dark:text-amber-300'>Above this plan&apos;s {ent.members}. Nobody has been removed.</p>
+      over: <p className='text-xs text-amber-700 dark:text-amber-300'>Above this plan&apos;s {ent.members}. Existing members stay; new joins require an available seat.</p>
     }
   ];
 
@@ -240,7 +240,7 @@ export function Allowances({
           <span>Storage</span>
           <span className='text-muted-foreground'>{ent.storageMb.toLocaleString()} MB included · usage is not measured yet</span>
         </div>
-        {isOwner && <CostGuard budget={usage.budget} />}
+        {isOwner && usage.budget && <CostGuard budget={usage.budget} />}
       </CardContent>
       {usage.overage === 'stop' && (
         <CardFooter>

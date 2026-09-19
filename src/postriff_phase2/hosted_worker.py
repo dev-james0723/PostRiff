@@ -59,6 +59,12 @@ class PostgresWorker:
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT
                         if not reconciliation:
+                            from .billing import require_publishing
+                            try:
+                                require_publishing(cur, workspace_id, now)
+                            except AlphaError as error:
+                                self._event(job, "held", str(error))
+                                continue
                             cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
                             member = cur.fetchone()
                             # Re-authorize at claim time: the approver must still hold approve authority.

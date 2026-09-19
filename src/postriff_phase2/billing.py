@@ -115,8 +115,8 @@ class Ledger:
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
         cur.execute("SELECT s.plan_terms_id,s.provider,s.status,extract(epoch from s.current_period_end),s.cancel_at_period_end,extract(epoch from s.grace_until),p.plan,p.label,p.price_cents,p.currency,p.status,p.version FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
         sub = cur.fetchone()
-        cur.execute("SELECT kind,dimension,cost_state,estimated_usd_micro,actual_usd_micro,extract(epoch from at),provider,model FROM public.pr_usage_ledger WHERE workspace_id=%s ORDER BY at DESC LIMIT 100", (workspace_id,))
-        ledger = [{"kind": r[0], "dimension": r[1], "costState": r[2], "estimatedUsdMicro": r[3], "actualUsdMicro": r[4], "at": float(r[5]), "provider": r[6], "model": r[7]} for r in cur.fetchall()]
+        cur.execute("SELECT kind,dimension,cost_state,estimated_usd_micro,actual_usd_micro,extract(epoch from at),provider,model,charge_batch,reservation_id::text,run_id::text,job_id::text FROM public.pr_usage_ledger WHERE workspace_id=%s ORDER BY at DESC LIMIT 100", (workspace_id,))
+        ledger = [{"kind": r[0], "dimension": r[1], "costState": r[2], "estimatedUsdMicro": r[3], "actualUsdMicro": r[4], "at": float(r[5]), "provider": r[6], "model": r[7], "chargeBatch": r[8], "reservationId": r[9], "runId": r[10], "jobId": r[11]} for r in cur.fetchall()]
         ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
         cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements FROM public.pr_plan_terms ORDER BY plan,version")
         terms = [{"id": r[0], "plan": r[1], "version": r[2], "label": r[3], "priceCents": r[4], "currency": r[5], "status": r[6], "entitlements": r[7], "priceLabel": "proposed" if r[6] != "active" else "active"} for r in cur.fetchall()]
@@ -193,6 +193,7 @@ class Billing:
         if status is not None and not event.get("workspaceId"):
             outcome, status = "ignored", None  # no PostRiff workspace on the event: recorded, never applied
         if status is not None:
+            cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (event["workspaceId"],))
             cur.execute("SELECT extract(epoch from last_event_at) FROM public.pr_subscriptions WHERE workspace_id=%s FOR UPDATE", (event["workspaceId"],))
             row = cur.fetchone()
             if row and row[0] and float(row[0]) > float(event["createdAt"]):
@@ -229,18 +230,46 @@ class Billing:
 
     @staticmethod
     def _reconcile_entitlement(cur, workspace_id, terms_id, ent, period_end):
-        cur.execute("INSERT INTO public.pr_entitlements(workspace_id,plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,resets_at,source) VALUES(%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),'subscription') ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=excluded.plan_terms_id,writing_batches_remaining=excluded.writing_batches_remaining,media_credits_remaining=excluded.media_credits_remaining,connected_accounts=excluded.connected_accounts,members=excluded.members,storage_mb=excluded.storage_mb,resets_at=excluded.resets_at,source='subscription',version=public.pr_entitlements.version+1,updated_at=now()", (workspace_id, terms_id, ent["writingBatches"], ent["mediaCredits"], ent["connectedAccounts"], ent["members"], ent["storageMb"], period_end))
+        cur.execute("INSERT INTO public.pr_entitlements(workspace_id,plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,resets_at,source) VALUES(%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),'subscription') ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=excluded.plan_terms_id,writing_batches_remaining=CASE WHEN public.pr_entitlements.source<>'subscription' OR (public.pr_entitlements.resets_at IS NOT NULL AND excluded.resets_at>public.pr_entitlements.resets_at) THEN excluded.writing_batches_remaining ELSE least(public.pr_entitlements.writing_batches_remaining,excluded.writing_batches_remaining) END,media_credits_remaining=CASE WHEN public.pr_entitlements.source<>'subscription' OR (public.pr_entitlements.resets_at IS NOT NULL AND excluded.resets_at>public.pr_entitlements.resets_at) THEN excluded.media_credits_remaining ELSE least(public.pr_entitlements.media_credits_remaining,excluded.media_credits_remaining) END,connected_accounts=excluded.connected_accounts,members=excluded.members,storage_mb=excluded.storage_mb,resets_at=greatest(excluded.resets_at,public.pr_entitlements.resets_at),source='subscription',version=public.pr_entitlements.version+1,updated_at=now()", (workspace_id, terms_id, ent["writingBatches"], ent["mediaCredits"], ent["connectedAccounts"], ent["members"], ent["storageMb"], period_end))
 
     def lifecycle(self, cur, workspace_id, now):
         """Consistent state derivation: grace expiry → cancelled; cancelled keeps export; deletion is separate."""
         cur.execute("SELECT status,extract(epoch from grace_until),cancel_at_period_end,extract(epoch from current_period_end) FROM public.pr_subscriptions WHERE workspace_id=%s FOR UPDATE", (workspace_id,))
         row = cur.fetchone()
         if not row:
-            return {"status": "trial"}
+            cur.execute("SELECT extract(epoch from expires_at) FROM public.pr_trials WHERE workspace_id=%s", (workspace_id,))
+            trial = cur.fetchone()
+            active = bool(trial and trial[0] is not None and now < float(trial[0]))
+            return {"status": "trial" if active else "expired", "exportAvailable": True, "draftsRetained": True, "canPublish": active}
         status, grace_until, cancel_at_end, period_end = row
-        if status == "past_due" and grace_until and now > float(grace_until):
+        if status == "trial" and (period_end is None or now >= float(period_end)):
+            status = "expired"
+        elif status in ("past_due", "grace") and grace_until and now >= float(grace_until):
             status = "cancelled"
-        elif status == "active" and cancel_at_end and period_end and now > float(period_end):
+        elif status == "active" and cancel_at_end and period_end and now >= float(period_end):
             status = "cancelled"
         cur.execute("UPDATE public.pr_subscriptions SET status=%s,updated_at=now() WHERE workspace_id=%s", (status, workspace_id))
         return {"status": status, "exportAvailable": True, "draftsRetained": True, "canPublish": status in ("trial", "active", "grace", "past_due")}
+
+
+def require_plan_capacity(cur, workspace_id, dimension, connection_id=None):
+    cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+    entitlement = Ledger().ensure_entitlement(cur, workspace_id, None)
+    if dimension == "members":
+        cur.execute("SELECT count(*) FROM public.pr_memberships WHERE workspace_id=%s AND status='active'", (workspace_id,))
+        count, limit = cur.fetchone()[0], entitlement["members"]
+    elif dimension == "connected_accounts":
+        cur.execute("SELECT connection_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND revoked_at IS NULL", (workspace_id,))
+        existing = {row[0] for row in cur.fetchall()}
+        if connection_id in existing:
+            return  # Reauthorizing an existing account consumes no new slot.
+        count, limit = len(existing), entitlement["connectedAccounts"]
+    else:
+        raise ValueError("Unknown plan dimension")
+    if count >= limit:
+        raise AlphaError("This plan has no remaining member seats." if dimension == "members" else "This plan has no remaining connected-account slots.", 402, code="plan_limit_reached")
+
+
+def require_publishing(cur, workspace_id, now):
+    if not Billing().lifecycle(cur, workspace_id, now).get("canPublish", False):
+        raise AlphaError("Publishing is paused because this trial or subscription has ended. Drafts and exports remain available.", 402, code="publishing_plan_inactive")

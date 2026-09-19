@@ -37,7 +37,6 @@ import { navGroups } from '@/config/nav-config';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import { useNavGroups } from '@/hooks/use-nav-groups';
 import { useSnapshot } from '@/lib/api/hooks';
-import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useAuth } from '@/lib/auth/session';
 import type { NavGroup } from '@/types';
 import { WorkspaceSwitcher } from './workspace-switcher';
@@ -119,7 +118,6 @@ export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const access = useWorkspaceAccess();
   const groups = useFilteredNavGroups(navGroups);
   const snapshot = useSnapshot();
   const { state: sidebarState, isMobile } = useSidebar();
@@ -220,12 +218,10 @@ export default function AppSidebar() {
                     <Icons.account className='mr-2 h-4 w-4' />
                     Profile
                   </DropdownMenuItem>
-                  {checkAccess(access, { permission: 'owner' }) && (
                     <DropdownMenuItem onClick={() => router.push('/app/account/billing')}>
                       <Icons.creditCard className='mr-2 h-4 w-4' />
                       Usage & plan
                     </DropdownMenuItem>
-                  )}
                   <DropdownMenuItem onClick={() => router.push('/app/account/privacy')}>
                     <Icons.shieldCheck className='mr-2 h-4 w-4' />
                     Privacy & data

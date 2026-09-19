@@ -598,11 +598,15 @@ export interface PlanTerms {
 }
 
 export interface LedgerEntry {
+  chargeBatch?: boolean;
+  reservationId?: string | null;
+  runId?: string | null;
+  jobId?: string | null;
   kind: string;
   dimension: string;
   costState: string;
-  estimatedUsdMicro: number;
-  actualUsdMicro: number | null;
+  estimatedUsdMicro?: number;
+  actualUsdMicro?: number | null;
   at: number;
   provider: string;
   model: string;
@@ -618,7 +622,7 @@ export interface Usage {
     warnUsdMicro: number;
     stopUsdMicro: number;
     status: string;
-  };
+  } | null;
   overage: string;
   ledger: LedgerEntry[];
   planTerms: PlanTerms[];
