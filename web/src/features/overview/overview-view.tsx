@@ -6,28 +6,30 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { StatCard } from '@/components/app/stat-card';
-import { LevelBadge } from '@/components/app/level-badge';
 import { GettingStarted } from './getting-started';
-import { ChannelIcon } from '@/components/channel-icon';
 import { HeatCalendar } from '@/components/charts/heat-calendar';
 import { addDays, GAP, mondayOf, PITCH, startOfDay } from '@/components/charts/heat-calendar/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { useAudit, useChannels, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useChannels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import type { Job } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
-import { daysUntil, relativeTime } from '@/lib/time';
+import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { deriveAttention, type AttentionSource } from './attention';
+import { ChannelsCard, publishCounts } from './channels-card';
+import { NextUp } from './next-up';
+import { RecentActivity } from './recent-activity';
+import { RetryButton, type Refetchable } from './retry';
 
 const PRE_FLIGHT = new Set(['scheduled', 'approved', 'claimed']);
 const IN_FLIGHT = new Set(['submitting', 'provider_accepted', 'uncertain']);
 const DONE = new Set(['published', 'verified']);
-const NEEDS_RECONNECT = new Set(['token_expired', 'reauthorization_required', 'scope_missing']);
 
 const infoContent = {
   title: 'How the overview counts',
@@ -45,18 +47,24 @@ const infoContent = {
     {
       title: 'Nothing publishes without you',
       description: 'Scheduled items only leave the queue after an exact approval of the text, media and time.'
+    },
+    {
+      title: 'What Next up counts',
+      description:
+        'Only approved jobs with a time the worker can read appear there, in your time zone. Drafts waiting for approval are listed under attention instead.'
     }
   ]
 };
 
-interface Attention {
-  /** Stable across count changes, so an entry updates in place instead of leaving and re-entering. */
-  id: string;
-  tone: 'warning' | 'info';
-  title: string;
-  description: string;
-  href: string;
-  action: string;
+const SOURCE_NAMES: Record<AttentionSource, string> = {
+  workspace: 'the workspace',
+  channels: 'channels',
+  plan: 'your plan'
+};
+
+/** "a", "a and b", "a, b and c". */
+function listOf(names: string[]) {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
 const DAY_MS = 86_400_000;
@@ -68,7 +76,7 @@ const MAX_WEEKS = 26;
  * and bucketed against the calendar's own grid start. As many weeks as fit the card at full cell
  * size, up to half a year. `jobs` is null when the snapshot could not be read.
  */
-function PublishingActivity({ jobs, pending }: { jobs: Job[] | null; pending: boolean }) {
+function PublishingActivity({ jobs, pending, className }: { jobs: Job[] | null; pending: boolean; className?: string }) {
   const measureRef = useRef<HTMLDivElement>(null);
   const [weeks, setWeeks] = useState<number | null>(null);
   // Read after mount, like the calendar's own "today", so the server and client render the same markup.
@@ -108,7 +116,7 @@ function PublishingActivity({ jobs, pending }: { jobs: Job[] | null; pending: bo
   const unavailable = !pending && jobs === null;
 
   return (
-    <Card className='lg:col-span-7'>
+    <Card className={className}>
       <CardHeader>
         <CardTitle>Publishing activity</CardTitle>
         <CardDescription>
@@ -141,175 +149,143 @@ function PublishingActivity({ jobs, pending }: { jobs: Job[] | null; pending: bo
   );
 }
 
+/** A stat whose query failed: the word, never a zero, and a Retry where the footer would be. */
+function unavailableStat(message: string, query: Refetchable) {
+  return {
+    value: 'Unavailable',
+    hint: <span className='text-muted-foreground font-normal'>{message}</span>,
+    footer: <RetryButton queries={[query]} />
+  };
+}
+
 export function OverviewView() {
   const snapshot = useSnapshot();
   const usage = useUsage();
   const channels = useChannels();
-  const audit = useAudit();
   const access = useWorkspaceAccess();
   const reduce = useReducedMotion();
   const now = Date.now() / 1000;
 
   const jobs = snapshot.data?.state.phase2?.jobs ?? [];
-  const reviews = snapshot.data?.state.phase2?.reviews ?? [];
-  const scheduled = jobs.filter((j) => PRE_FLIGHT.has(j.state) || IN_FLIGHT.has(j.state)).length;
-  const publishedRecently = jobs.filter((j) => {
-    if (!DONE.has(j.state)) return false;
-    const at = j.verification?.at ?? j.events[j.events.length - 1]?.at ?? 0;
-    return at > now - 30 * 86400;
-  }).length;
-  const needsReview = reviews.filter((r) => r.status === 'needs_review').length;
+  const waiting = jobs.filter((j) => PRE_FLIGHT.has(j.state)).length;
+  const sending = jobs.filter((j) => IN_FLIGHT.has(j.state)).length;
+  const scheduled = waiting + sending;
+  let verified = 0;
+  let awaitingReceipt = 0;
+  for (const job of jobs) {
+    if (!DONE.has(job.state)) continue;
+    const at = job.verification?.at ?? job.events[job.events.length - 1]?.at ?? 0;
+    if (at <= now - 30 * 86400) continue;
+    if (job.state === 'verified') verified += 1;
+    else awaitingReceipt += 1;
+  }
+  const publishedRecently = verified + awaitingReceipt;
 
-  const connected = channels.data?.channels ?? [];
-  const providers = channels.data?.providers ?? [];
-  const directPublish = connected.filter((c) => c.capabilities.publish?.level === 'Direct').length;
+  const counts = publishCounts(channels.data?.channels ?? []);
 
   const entitlement = usage.data?.entitlement;
   const subscription = usage.data?.subscription;
-  const lifecycle = usage.data?.lifecycle;
-  const trialDays = subscription?.status === 'trial' ? daysUntil(entitlement?.resetsAt) : null;
 
-  const attention: Attention[] = [];
-  if (!snapshot.isLoading && snapshot.data && !snapshot.data.state.speaker?.activeRevision) {
-    attention.push({
-      id: 'voice',
-      tone: 'info',
-      title: 'Set up your voice',
-      description: 'Two minutes: what you are building, who it is for, and a tone. Drafts can only be scheduled against an active voice profile.',
-      href: '/app/workspace/brand',
-      action: 'Set up'
-    });
-  }
-  if (lifecycle?.status === 'past_due') {
-    attention.push({
-      id: 'past-due',
-      tone: 'warning',
-      title: 'Payment failed',
-      description: 'Publishing stays on during the grace period. Update your payment method to keep it that way.',
-      href: '/app/account/billing',
-      action: 'Fix billing'
-    });
-  }
-  for (const channel of connected) {
-    if (NEEDS_RECONNECT.has(channel.connectionState)) {
-      attention.push({
-        id: `reconnect-${channel.id}`,
-        tone: 'warning',
-        title: `Reconnect ${channel.platform}`,
-        description: `${channel.account}: ${channel.connectionState.replace(/_/g, ' ')}. Scheduled posts for this account will wait.`,
-        href: '/app/channels',
-        action: 'Open channels'
-      });
-    }
-  }
-  if (needsReview > 0) {
-    attention.push({
-      id: 'approvals',
-      tone: 'info',
-      title: `${needsReview} draft${needsReview === 1 ? '' : 's'} waiting for approval`,
-      description: 'Nothing publishes until you approve the exact text, media and time.',
-      href: '/app/queue',
-      action: 'Review now'
-    });
-  }
-  if (trialDays !== null && trialDays <= 5) {
-    attention.push({
-      id: 'trial',
-      tone: 'info',
-      title: trialDays > 0 ? `Trial ends in ${trialDays} day${trialDays === 1 ? '' : 's'}` : 'Trial has ended',
-      description: 'Your drafts stay readable and exportable either way. Choose a plan to keep publishing.',
-      href: '/app/account/billing',
-      action: 'See plans'
-    });
-  }
-  const unreviewed = providers.filter((p) => !p.productionReviewed && connected.some((c) => c.platform === p.platform));
-  if (unreviewed.length) {
-    attention.push({
-      id: 'export-only',
-      tone: 'info',
-      title: `${unreviewed.map((p) => p.platform).join(', ')}: publish is export-only for now`,
-      description: 'Provider review is in progress. Until it passes, PostRiff prepares each post and you complete the final step.',
-      href: '/app/channels',
-      action: 'Details'
-    });
-  }
-  if (!channels.isLoading && connected.length === 0) {
-    attention.push({
-      id: 'first-channel',
-      tone: 'info',
-      title: 'Connect your first channel',
-      description: 'Drafts can be written and exported now; connecting an account lets you schedule and publish.',
-      href: '/app/channels',
-      action: 'Connect'
-    });
-  }
+  const attention = deriveAttention({ snapshot, channels, usage, now });
+  const failedQueries = [
+    snapshot.isError ? snapshot : null,
+    channels.isError ? channels : null,
+    usage.isError ? usage : null
+  ].filter((query): query is NonNullable<typeof query> => query !== null);
 
-  const events = audit.data?.events ?? [];
   const canEdit = checkAccess(access, { permission: 'edit' });
+  // Sample workspaces refuse every change on the API (`hosted.py`), so creation says so up front.
+  const sample = snapshot.data?.state.workspace?.sample === true;
+
+  const scheduledStat = snapshot.isError
+    ? unavailableStat('Could not read the workspace', snapshot)
+    : {
+        value: scheduled,
+        hint: scheduled ? `${waiting} waiting · ${sending} sending now` : 'Nothing in the queue',
+        footer: 'Approved posts the worker will publish'
+      };
+  const publishedStat = snapshot.isError
+    ? unavailableStat('Could not read the workspace', snapshot)
+    : {
+        value: publishedRecently,
+        hint: !publishedRecently
+          ? 'No publications yet'
+          : awaitingReceipt
+            ? `${verified} verified · ${awaitingReceipt} awaiting receipt`
+            : `${verified} verified`,
+        footer: 'Accepted by the provider; verified once the receipt is read back'
+      };
+  const batchesStat = usage.isError
+    ? unavailableStat('Could not read your plan', usage)
+    : {
+        value: entitlement ? entitlement.writingBatchesRemaining : '—',
+        hint: entitlement?.resetsAt ? `Resets ${relativeTime(entitlement.resetsAt, now)}` : 'Stops at the limit, never overcharges',
+        footer: usage.data?.overage === 'stop' ? 'Overage: stop — nothing is charged silently' : undefined
+      };
+  const channelsStat = channels.isError
+    ? unavailableStat('Could not read channels', channels)
+    : {
+        value: counts.connected,
+        hint: counts.connected
+          ? `${counts.direct} Direct · ${counts.assisted} Assisted · ${counts.local} Local`
+          : 'Connect an account to schedule',
+        footer: entitlement ? `Plan allows ${entitlement.connectedAccounts}` : undefined
+      };
+
+  const newIdea = !canEdit ? undefined : sample ? (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button focusableWhenDisabled disabled className='aria-disabled:opacity-50'>
+            <Icons.sparkles className='size-4' /> New idea
+          </Button>
+        }
+      />
+      <TooltipContent>Sample workspace is read-only</TooltipContent>
+    </Tooltip>
+  ) : (
+    <Link href='/app/ideas?new=1' data-tour='overview-new-idea' className={buttonVariants()}>
+      <Icons.sparkles className='size-4' /> New idea
+    </Link>
+  );
+
+  const attentionPending = snapshot.isPending || channels.isPending;
+  const allClear = attention.items.length === 0 && attention.unavailable.length === 0;
+  const enter = reduce ? false : { opacity: 0, y: 8 };
+  const exit = reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -4, transition: { duration: 0.16, ease: EASE_OUT } };
+  const move = reduce ? { duration: 0 } : { opacity: { duration: 0.2, ease: EASE_OUT }, y: SPRING_LAYOUT, layout: SPRING_LAYOUT };
 
   return (
     <PageContainer
       pageTitle='Overview'
       pageDescription='What is scheduled, what needs you, and how much of your plan is left.'
       infoContent={infoContent}
-      pageHeaderAction={
-        canEdit ? (
-          <Link href='/app/ideas?new=1' className={buttonVariants()}>
-            <Icons.sparkles className='size-4' /> New idea
-          </Link>
-        ) : undefined
-      }
+      pageHeaderAction={newIdea}
     >
       <div className='flex flex-1 flex-col gap-4'>
         <GettingStarted />
-        <div className='*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4'>
-          <StatCard
-            label='Scheduled'
-            value={scheduled}
-            loading={snapshot.isLoading}
-            hint={scheduled ? 'Waiting for the approved time' : 'Nothing in the queue'}
-            footer='Approved posts the worker will publish'
-          />
-          <StatCard
-            label='Published · 30 days'
-            value={publishedRecently}
-            loading={snapshot.isLoading}
-            hint={publishedRecently ? 'Confirmed by the provider' : 'No publications yet'}
-            footer='Only receipts the provider confirmed count'
-          />
+        <div data-tour='overview-stats' className='*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4'>
+          <StatCard label='Scheduled' loading={snapshot.isPending} {...scheduledStat} />
+          <StatCard label='Published · 30 days' loading={snapshot.isPending} {...publishedStat} />
           <StatCard
             label='Writing batches left'
-            value={entitlement ? entitlement.writingBatchesRemaining : '—'}
-            loading={usage.isLoading}
-            badge={subscription ? subscription.label : undefined}
-            hint={
-              entitlement?.resetsAt
-                ? `Resets ${relativeTime(entitlement.resetsAt, now)}`
-                : 'Stops at the limit, never overcharges'
-            }
-            footer={usage.data?.overage === 'stop' ? 'Overage: stop — nothing is charged silently' : undefined}
+            loading={usage.isPending}
+            badge={!usage.isError && subscription ? subscription.label : undefined}
+            {...batchesStat}
           />
-          <StatCard
-            label='Connected channels'
-            value={connected.length}
-            loading={channels.isLoading}
-            hint={
-              connected.length
-                ? `${directPublish} direct · ${connected.length - directPublish} assisted`
-                : 'Connect an account to schedule'
-            }
-            footer={entitlement ? `Plan allows ${entitlement.connectedAccounts}` : undefined}
-          />
+          <StatCard label='Connected channels' loading={channels.isPending} {...channelsStat} />
         </div>
 
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
-          <Card className='lg:col-span-4'>
+          <NextUp className='lg:col-span-4' />
+
+          <Card data-tour='overview-attention' className='lg:col-span-3'>
             <CardHeader>
               <CardTitle>Needs your attention</CardTitle>
               <CardDescription>Things only you can decide. Empty is good.</CardDescription>
             </CardHeader>
             <CardContent className='relative flex flex-col gap-3'>
-              {snapshot.isLoading || channels.isLoading ? (
+              {attentionPending ? (
                 <>
                   <Skeleton className='h-16 w-full' />
                   <Skeleton className='h-16 w-full' />
@@ -317,7 +293,7 @@ export function OverviewView() {
               ) : (
                 // Entries arriving or resolved while the page is open slide in and out; the rest glide into place.
                 <AnimatePresence initial={false} mode='popLayout'>
-                  {attention.length === 0 ? (
+                  {allClear ? (
                     <motion.div
                       key='all-clear'
                       initial={reduce ? false : { opacity: 0 }}
@@ -336,93 +312,49 @@ export function OverviewView() {
                       </Empty>
                     </motion.div>
                   ) : (
-                    attention.map((item) => (
-                      <motion.div
-                        key={item.id}
-                        layout={reduce ? false : 'position'}
-                        initial={reduce ? false : { opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -4, transition: { duration: 0.16, ease: EASE_OUT } }}
-                        transition={reduce ? { duration: 0 } : { opacity: { duration: 0.2, ease: EASE_OUT }, y: SPRING_LAYOUT, layout: SPRING_LAYOUT }}
-                      >
-                        <Alert variant={item.tone === 'warning' ? 'destructive' : 'default'}>
-                          {item.tone === 'warning' ? <Icons.warning className='size-4' /> : <Icons.info className='size-4' />}
-                          <AlertTitle>{item.title}</AlertTitle>
-                          <AlertDescription className='flex flex-col gap-2'>
-                            <span>{item.description}</span>
-                            <Link href={item.href} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-fit')}>
-                              {item.action}
-                            </Link>
-                          </AlertDescription>
-                        </Alert>
-                      </motion.div>
-                    ))
+                    [
+                      attention.unavailable.length > 0 && (
+                        <motion.div key='unavailable' layout={reduce ? false : 'position'} initial={enter} animate={{ opacity: 1, y: 0 }} exit={exit} transition={move}>
+                          <Alert variant='destructive' data-attention-id='unavailable'>
+                            <Icons.warning className='size-4' />
+                            <AlertTitle>Could not read part of the workspace</AlertTitle>
+                            <AlertDescription className='flex flex-col gap-2'>
+                              <span>Some reminders may be missing: {listOf(attention.unavailable.map((source) => SOURCE_NAMES[source]))} could not be read.</span>
+                              <RetryButton queries={failedQueries} />
+                            </AlertDescription>
+                          </Alert>
+                        </motion.div>
+                      ),
+                      ...attention.items.map((item) => (
+                        <motion.div key={item.id} layout={reduce ? false : 'position'} initial={enter} animate={{ opacity: 1, y: 0 }} exit={exit} transition={move}>
+                          <Alert variant={item.tone === 'warning' ? 'destructive' : 'default'} data-attention-id={item.id}>
+                            {item.tone === 'warning' ? <Icons.warning className='size-4' /> : <Icons.info className='size-4' />}
+                            <AlertTitle>{item.title}</AlertTitle>
+                            <AlertDescription className='flex flex-col gap-2'>
+                              <span>{item.description}</span>
+                              <Link href={item.href} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-fit')}>
+                                {item.action}
+                              </Link>
+                            </AlertDescription>
+                          </Alert>
+                        </motion.div>
+                      ))
+                    ]
                   )}
                 </AnimatePresence>
               )}
             </CardContent>
           </Card>
 
-          <Card className='lg:col-span-3'>
-            <CardHeader>
-              <CardTitle>Channels</CardTitle>
-              <CardDescription>What each connection can really do today.</CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-3'>
-              {channels.isLoading ? (
-                <Skeleton className='h-24 w-full' />
-              ) : connected.length === 0 ? (
-                <p className='text-muted-foreground text-sm'>No channels connected yet.</p>
-              ) : (
-                connected.map((channel) => (
-                  <div key={channel.id} className='flex items-center justify-between gap-3 rounded-lg border p-3'>
-                    <div className='flex min-w-0 items-center gap-2'>
-                      <ChannelIcon platform={channel.platform} name={channel.platform} />
-                      <div className='min-w-0'>
-                      <p className='truncate text-sm font-medium'>{channel.platform}</p>
-                      <p className='text-muted-foreground truncate text-xs'>{channel.account}</p>
-                      </div>
-                    </div>
-                    <div className='flex shrink-0 items-center gap-1.5'>
-                      <span className='text-muted-foreground text-xs'>publish</span>
-                      <LevelBadge level={channel.capabilities.publish?.level} />
-                    </div>
-                  </div>
-                ))
-              )}
-              <Link href='/app/channels' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), 'w-fit')}>
-                Manage channels <LearnMoreChevron />
-              </Link>
-            </CardContent>
-          </Card>
+          <PublishingActivity
+            className='lg:col-span-4'
+            jobs={snapshot.data && !snapshot.isError ? jobs : null}
+            pending={snapshot.isPending}
+          />
 
-          <PublishingActivity jobs={snapshot.data ? jobs : null} pending={snapshot.isPending} />
+          <ChannelsCard className='lg:col-span-3' />
 
-          <Card className='lg:col-span-7'>
-            <CardHeader>
-              <CardTitle>Recent activity</CardTitle>
-              <CardDescription>Content-free audit trail of what happened in this workspace.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {audit.isLoading ? (
-                <Skeleton className='h-32 w-full' />
-              ) : events.length === 0 ? (
-                <p className='text-muted-foreground text-sm'>No activity recorded yet.</p>
-              ) : (
-                <ul className='divide-y'>
-                  {events.slice(0, 8).map((event, index) => (
-                    <li key={`${event.kind}-${event.at}-${index}`} className='flex items-center justify-between gap-3 py-2 text-sm'>
-                      <span className='font-medium'>{event.kind.replace(/[._]/g, ' ')}</span>
-                      <span className='text-muted-foreground text-xs'>{relativeTime(event.at, now)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Link href='/app/workspace/audit' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), 'mt-2 w-fit')}>
-                Full audit log <LearnMoreChevron />
-              </Link>
-            </CardContent>
-          </Card>
+          <RecentActivity className='lg:col-span-7' />
         </div>
       </div>
     </PageContainer>

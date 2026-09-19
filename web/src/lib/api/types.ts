@@ -53,6 +53,8 @@ export interface Asset {
 export interface Manifest {
   workspaceId: string;
   actor: string;
+  /** The connection this post goes out through (a `ChannelView.id`). */
+  channelId?: string;
   account: string;
   platform: string;
   operation: string;

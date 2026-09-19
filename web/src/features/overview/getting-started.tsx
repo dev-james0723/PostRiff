@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { TodoList, type TodoItem } from '@/components/agents/todo-list';
+import { DigitSwap } from '@/components/motion/digit-swap';
+import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useChannels, useSnapshot } from '@/lib/api/hooks';
@@ -23,11 +25,13 @@ interface Step {
 export function GettingStarted() {
   const snapshot = useSnapshot();
   const channels = useChannels();
-  if (snapshot.isLoading || !snapshot.data || channels.isLoading) return null;
+  // An unread workspace or channel list is not "not done yet", so the card waits for both rather than guessing.
+  if (!snapshot.data || snapshot.isError || !channels.data || channels.isError) return null;
   const state = snapshot.data.state;
+  const sample = state.workspace?.sample === true;
   const steps: Step[] = [
     { id: 'voice', title: 'Set your voice', detail: 'What you are building, who it is for, and a tone.', action: 'Set up', href: '/app/workspace/brand', done: Boolean(state.speaker?.activeRevision) },
-    { id: 'channel', title: 'Connect a channel', detail: 'LinkedIn, Instagram or Threads — your account, your consent.', action: 'Connect', href: '/app/channels', done: (channels.data?.channels.length ?? 0) > 0 },
+    { id: 'channel', title: 'Connect a channel', detail: 'Any account you own; each shows how it can publish.', action: 'Connect', href: '/app/channels', done: channels.data.channels.length > 0 },
     { id: 'draft', title: 'Draft your first post', detail: 'Start from a sentence or a link in Ideas.', action: 'Draft', href: '/app/ideas', done: (state.variants ?? []).length > 0 },
     { id: 'approve', title: 'Approve and schedule it', detail: 'Pick the account and time, then approve the exact text.', action: 'Approve', href: '/app/pipeline', done: (state.phase2?.jobs.length ?? 0) > 0 }
   ];
@@ -63,12 +67,15 @@ export function GettingStarted() {
   });
 
   return (
-    <Card data-testid='getting-started'>
+    <Card data-testid='getting-started' data-tour='getting-started'>
       <CardHeader>
         <CardTitle className='flex items-center justify-between gap-3 text-base'>
-          <span>Get set up</span>
-          <span className='text-muted-foreground text-xs font-normal'>
-            {done} of {steps.length} done
+          <span className='flex items-center gap-2'>
+            Get set up
+            {sample && <Badge variant='outline'>Sample · read-only</Badge>}
+          </span>
+          <span className='text-muted-foreground inline-flex items-center gap-1 text-xs font-normal tabular-nums'>
+            <DigitSwap value={done} /> of {steps.length} done
           </span>
         </CardTitle>
         <CardDescription>Four steps from a blank workspace to your first scheduled post.</CardDescription>
