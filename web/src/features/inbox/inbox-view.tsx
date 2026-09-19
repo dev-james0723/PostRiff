@@ -24,7 +24,7 @@ import { CoverageStrip } from './coverage-strip';
 import { InboxLevelBadge } from './level-badge';
 import {
   apiCounts,
-  COMMENT_READ_NAMES,
+  commentReadNames,
   commentsReadFor,
   evidenceSentence,
   INBOX_FILTERS,
@@ -55,7 +55,7 @@ const infoContent = {
     {
       title: 'Which accounts feed this inbox',
       description:
-        `Comments appear only for ${COMMENT_READ_NAMES} accounts whose comments capability is Direct; comments from other providers are not read in this release. Each capability shows its own level and evidence here and on the Channels page.`
+        'Comments appear for accounts whose provider supports comment ingestion and whose comments capability is Direct. Each capability shows its own level and evidence here and on the Channels page.'
     }
   ]
 };
@@ -240,7 +240,7 @@ function InboxPage() {
   return (
     <PageContainer
       pageTitle='Inbox'
-      pageDescription={`Comments on posts PostRiff published, from ${COMMENT_READ_NAMES} accounts whose comments capability is Direct. Each reply is approved on its own.`}
+      pageDescription={`Comments on posts PostRiff published, from ${commentReadNames(providers)} accounts whose comments capability is Direct. Each reply is approved on its own.`}
       infoContent={infoContent}
     >
       <div className='flex min-w-0 flex-col gap-4'>
@@ -349,7 +349,7 @@ function InboxEmpty({
             sentence = `Comments show up here after PostRiff publishes and verifies a post on ${channel.account}.`;
           } else {
             // A Direct level is not enough: the server reads comments for only some providers.
-            sentence = `Comments are Direct for ${channel.account}, but PostRiff reads only ${COMMENT_READ_NAMES} comments in this release, so none from ${channel.platform} appear here.`;
+            sentence = `Comments are Direct for ${channel.account}, but PostRiff reads only ${commentReadNames(providers)} comments in this release, so none from ${channel.platform} appear here.`;
           }
           return (
             <li key={channel.id} className='bg-muted/40 flex flex-col gap-1.5 rounded-lg border p-3'>
@@ -384,8 +384,8 @@ function InboxEmpty({
         <EmptyTitle>No comments yet</EmptyTitle>
         <EmptyDescription>
           {channels && channels.length === 0
-            ? `Connect a ${COMMENT_READ_NAMES} account with Direct comments to read the comments on posts PostRiff publishes there.`
-            : `Comments appear for ${COMMENT_READ_NAMES} accounts whose comments capability is Direct, after PostRiff publishes and verifies a post there. Comments from other providers are not read in this release.`}
+            ? `Connect a ${commentReadNames(providers)} account with Direct comments to read the comments on posts PostRiff publishes there.`
+            : `Comments appear for ${commentReadNames(providers)} accounts whose comments capability is Direct, after PostRiff publishes and verifies a post there. Comments from other providers are not read in this release.`}
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className='max-w-xl'>

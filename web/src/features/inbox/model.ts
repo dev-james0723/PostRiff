@@ -12,15 +12,8 @@ import { LEVEL_MEANING } from '@/lib/channels/capabilities';
 export type InboxFilter = 'all' | 'unanswered' | 'replied';
 export const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unanswered', 'replied'];
 
-/** One reply to a comment: saved by a person or recorded when it was approved in this visit. */
-export interface ReplyRecord {
-  draftId: string;
-  status: string;
-  text: string;
-  origin?: string;
-  label?: string;
-  updatedAt?: number | null;
-}
+import type { ReplyRecord } from '@/lib/api/types';
+export type { ReplyRecord } from '@/lib/api/types';
 
 /** A saved reply draft as `POST …/reply-drafts` returned it. */
 export interface SavedDraft {
@@ -52,25 +45,7 @@ function asString(value: unknown): string | null {
 
 /** Reply history from the API, or null when the server did not report it for this thread. */
 export function apiReplies(thread: Thread): ReplyRecord[] | null {
-  const raw = (thread as { replies?: unknown }).replies;
-  if (!Array.isArray(raw)) return null;
-  return raw.flatMap((item) => {
-    if (!item || typeof item !== 'object') return [];
-    const record = item as Record<string, unknown>;
-    const draftId = asString(record.draftId);
-    const status = asString(record.status);
-    if (!draftId || !status) return [];
-    return [
-      {
-        draftId,
-        status,
-        text: asString(record.text) ?? '',
-        origin: asString(record.origin) ?? undefined,
-        label: asString(record.label) ?? undefined,
-        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : null
-      }
-    ];
-  });
+  return Array.isArray(thread.replies) ? thread.replies : null;
 }
 
 /** True once the server reports reply history for the threads it returns. */
@@ -87,7 +62,7 @@ export function mergedReplies(thread: Thread, session: ReplyRecord[] | undefined
 
 /** A link to the comment on the provider, only when the server sent a web address. */
 export function threadPermalink(thread: Thread): string | null {
-  const value = asString((thread as { permalink?: unknown }).permalink);
+  const value = asString(thread.permalink);
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -99,13 +74,13 @@ export function threadPermalink(thread: Thread): string | null {
 
 /** The provider's own comment time when the server sends it; otherwise when PostRiff first saw it. */
 export function threadTime(thread: Thread): { at: number; firstSeen: boolean } {
-  const provider = (thread as { createdAtProvider?: unknown }).createdAtProvider;
+  const provider = thread.createdAtProvider;
   return typeof provider === 'number' ? { at: provider, firstSeen: false } : { at: thread.ingestedAt, firstSeen: true };
 }
 
 /** Counts the server computed over every comment, when it sends them. */
 export function apiCounts(data: Audience): Partial<Record<InboxFilter, number>> | null {
-  const raw = (data as { counts?: unknown }).counts;
+  const raw = data.counts;
   if (!raw || typeof raw !== 'object') return null;
   const counts = raw as Record<string, unknown>;
   const pick = (key: string) => (typeof counts[key] === 'number' ? (counts[key] as number) : undefined);
@@ -130,7 +105,7 @@ export function replyStatusView(status: string): { label: string; badge: Animate
     case 'draft':
       return { label: 'Draft', badge: 'neutral' };
     case 'approved':
-      return { label: 'Approved · sending is not switched on yet', badge: 'info' };
+      return { label: 'Approved · reconfirm when sending is enabled', badge: 'info' };
     case 'submitting':
       return { label: 'Sending', badge: 'loading' };
     case 'submitted':
@@ -186,19 +161,12 @@ export function providerFor(platform: string, providers: ProviderView[] | undefi
   return providers?.find((provider) => provider.platform === platform) ?? null;
 }
 
-/**
- * The providers whose comments the server actually reads. `audience.py` ingest_replies returns
- * not_supported for every other provider, even when an account's comments level is Direct (an
- * Instagram account can be, through instagram_business_manage_comments). The API has no field for
- * this yet, so it is mirrored here; drop it once the providers list says so.
- */
-const COMMENT_READ_PROVIDERS: readonly { id: string; name: string }[] = [{ id: 'threads', name: 'Threads' }];
-
-/** "Threads" today: the provider names whose comments reach this inbox, for copy. */
-export const COMMENT_READ_NAMES = COMMENT_READ_PROVIDERS.map((provider) => provider.name).join(' and ');
-
-/** True when the server reads comments for this account's provider in this release. */
+/** Capability evidence and implementation support are separate checks. */
 export function commentsReadFor(platform: string, providers: ProviderView[] | undefined) {
-  const id = providerFor(platform, providers)?.id ?? platform.toLowerCase();
-  return COMMENT_READ_PROVIDERS.some((provider) => provider.id === id);
+  return providerFor(platform, providers)?.commentsReadImplemented === true;
+}
+
+export function commentReadNames(providers: ProviderView[] | undefined) {
+  const names = providers?.filter((provider) => provider.commentsReadImplemented).map((provider) => provider.platform);
+  return names?.length ? names.join(' and ') : 'supported';
 }

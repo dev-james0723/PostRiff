@@ -526,6 +526,7 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  commentsReadImplemented?: boolean;
   id: string;
   platform: string;
   productionReviewed: boolean;
@@ -662,7 +663,20 @@ export interface Analytics {
   freshnessNow: number;
 }
 
+export interface ReplyRecord {
+  draftId: string;
+  status: string;
+  text: string;
+  origin?: string;
+  label?: string;
+  updatedAt?: number | null;
+  requiresReconfirmation?: boolean;
+}
+
 export interface Thread {
+  replies?: ReplyRecord[];
+  permalink?: string | null;
+  createdAtProvider?: number | null;
   threadId: string;
   connectionId: string;
   provider: string;
@@ -677,6 +691,8 @@ export interface Thread {
 }
 
 export interface Audience {
+  counts?: { all?: number; replied?: number; unanswered?: number };
+  replySendingEnabled?: boolean;
   threads: Thread[];
   capabilities: { connectionId: string; commentsRead: string }[];
   limits: string;

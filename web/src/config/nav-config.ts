@@ -90,8 +90,7 @@ export const navGroups: NavGroup[] = [
         url: '/app/inbox',
         icon: 'inbox',
         shortcut: ['n', 'n'],
-        items: [],
-        access: { permission: 'reply' }
+        items: []
       }
     ]
   },

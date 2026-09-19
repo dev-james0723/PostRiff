@@ -9,7 +9,7 @@ import json
 import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler
 from postriff_alpha.domain import AlphaError
 
 GRAPH_VERSION = "v24.0"  # current Graph API version read in the 2026-09-15 audit; re-verify at review time
@@ -32,7 +32,7 @@ def http_transport(method, url, headers=None, form=None, body=None):
         request_headers["Content-Type"] = "application/json"
     request = Request(url, data=data, headers=request_headers, method=method)
     try:
-        with build_opener(_NoRedirect()).open(request, timeout=20, context=ssl.create_default_context()) as response:
+        with build_opener(_NoRedirect(), HTTPSHandler(context=ssl.create_default_context())).open(request, timeout=20) as response:
             raw = response.read(262145)
             status, response_headers = response.status, dict(response.headers)
     except HTTPError as error:

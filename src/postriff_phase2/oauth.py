@@ -12,6 +12,7 @@ import secrets
 import time
 from urllib.parse import urlencode, urlparse
 from postriff_alpha.domain import AlphaError, clean
+from .audience import COMMENT_READ_PROVIDERS
 from .permissions import require
 from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix
 
@@ -175,7 +176,7 @@ class OAuthService:
         for connection_id, capability, level, evidence, version, verified in rows:
             matrices.setdefault(connection_id, unsupported_matrix())[capability] = {"level": level, "evidence": evidence, "capabilityVersion": version, "verifiedAt": float(verified) if verified else None}
         now = self.clock()
-        return {"channels": [customer_view(c, matrices.get(c["id"], assisted_matrix()), now) for c in snapshot["state"].get("phase2", {}).get("channels", [])], "providers": [{"id": pid, "platform": a.platform, "productionReviewed": a.production_reviewed, "capabilities": {cap: bool(a.capability_scopes(cap)) for cap in ("publish", "analytics", "comments_read", "reply")}} for pid, a in self.providers.items()]}
+        return {"channels": [customer_view(c, matrices.get(c["id"], assisted_matrix()), now) for c in snapshot["state"].get("phase2", {}).get("channels", [])], "providers": [{"id": pid, "platform": a.platform, "productionReviewed": a.production_reviewed, "commentsReadImplemented": pid in COMMENT_READ_PROVIDERS, "capabilities": {cap: bool(a.capability_scopes(cap)) for cap in ("publish", "analytics", "comments_read", "reply")}} for pid, a in self.providers.items()]}
 
     def token_for_worker(self, workspace_id, connection_id):
         """Server-side only. Decrypts for the connector worker; refreshes when supported and expired."""

@@ -494,7 +494,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Inbox',
         target: ['[data-tour="inbox-coverage"]', ...heading('inbox')],
         title: 'Which accounts can show comments',
-        body: 'Each account shows whether PostRiff can read its comments and reply to them, with the evidence behind each level.'
+        body: 'Each account shows capability evidence and whether its provider supports comment ingestion in this release.'
       },
       {
         id: 'threads',
@@ -508,9 +508,10 @@ export const PAGE_TOURS: Tour[] = [
         id: 'reply',
         route: '/app/inbox',
         stop: 'Inbox',
-        target: ['[data-tour="inbox-threads"]', '[data-tour="inbox-empty"]'],
-        title: 'Replies you approve one at a time',
-        body: 'Write a reply, save it, then review the exact account, comment and text before you approve it. Nothing is sent without that step.'
+        target: ['[data-tour="inbox-composer"]', '[data-tour="inbox-threads"]', '[data-tour="inbox-empty"]'],
+        title: 'Record an exact reply approval',
+        body: 'Write and save a reply, then review its exact account, comment and text. Sending is not enabled; each recorded approval needs reconfirmation before a real send.',
+        when: (ctx) => ctx.canEdit || ctx.canReply
       }
     ]
   },
