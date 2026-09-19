@@ -631,12 +631,15 @@ export const PAGE_TOURS: Tour[] = [
         body: 'The tools an agent could be offered, and whether they run in isolation on this deployment.'
       },
       {
+        id: 'tokens', route: '/app/account/api', stop: 'API & integrations', target: ['[data-tour="api-create-token"]', '[data-tour="api-tokens"]'], title: 'An expiring token for your own scripts', body: 'Choose read-only or read, draft and propose. Copy the secret once; revoke it here any time. Drafts use the same writing allowance as the app.'
+      },
+      {
         id: 'roadmap',
         route: '/app/account/api',
         stop: 'API & integrations',
         target: ['[data-tour="api-roadmap"]'],
         title: 'Not switched on yet',
-        body: 'Access tokens, webhooks and a server for AI agents are planned. Tokens will read and draft, and will never approve, publish, reply or connect an account.',
+        body: 'Webhooks and an AI-agent server remain planned. Personal tokens above can read, draft and propose; approval and publishing stay in the app.',
         placement: 'top'
       }
     ]

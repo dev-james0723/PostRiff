@@ -12,17 +12,11 @@ interface PlannedItem {
 }
 
 /**
- * Nothing in this list exists yet: there are no tokens, endpoints or pairing codes behind it, so
+ * Nothing in this list exists yet: there are no integration endpoints or pairing codes behind it, so
  * each item is plain copy with a Not available yet badge and no control that looks like it works.
  * When one ships, its item must switch to reading the API.
  */
 const PLANNED: readonly PlannedItem[] = [
-  {
-    title: 'Personal access tokens',
-    icon: Icons.key,
-    tour: 'api-tokens',
-    body: 'A token for your own scripts that will read the workspace, write drafts and propose schedules, and will never approve, publish, reply or connect an account.'
-  },
   {
     title: 'Webhooks',
     icon: Icons.bolt,
@@ -36,7 +30,7 @@ const PLANNED: readonly PlannedItem[] = [
   {
     title: 'Automation apps',
     icon: Icons.link,
-    body: 'There is no official app for automation tools. Once tokens and webhooks exist, they are the planned way to connect one.'
+    body: 'There is no official app for automation tools. Tokens can be used by your own scripts; a supported automation app is still planned.'
   },
   {
     title: 'Desktop companion',

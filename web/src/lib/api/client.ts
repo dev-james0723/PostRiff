@@ -6,6 +6,7 @@
  */
 import type {
   ToolRegistry,
+  WorkspaceApiToken, ApiTokenCreated, TokenScope,
   Analytics,
   Audience,
   AuditEvent,
@@ -110,6 +111,10 @@ export function createApi(getToken: TokenSource) {
     privacyNotice: () => get<PrivacyNotice>('/api/privacy/notice', false),
     models: () => get<ModelCatalog>('/api/ideas/models', false),
     rescanModels: (w: string) => send<ModelCatalog>('POST', '/api/ideas/models/rescan', { workspaceId: w }),
+
+    tokens: (w: string) => get<{ tokens: WorkspaceApiToken[] }>(`${ws(w)}/tokens`),
+    createToken: (w: string, input: { name: string; scopes: TokenScope[]; expiresDays: number }) => send<ApiTokenCreated>('POST', `${ws(w)}/tokens`, input),
+    revokeToken: (w: string, id: string) => send<{ tokenId: string; revoked: boolean }>('DELETE', `${ws(w)}/tokens/${encodeURIComponent(id)}`),
 
     /* account & workspaces */
     bootstrap: (plan: string) => send<Bootstrap>('POST', '/api/auth/verify', { plan }),

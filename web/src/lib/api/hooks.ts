@@ -30,6 +30,7 @@ export const keys = {
   myInvitations: ['me', 'invitations'] as const,
   tools: ['tools'] as const,
   models: ['models'] as const,
+  tokens: (w: string) => ['tokens', w] as const,
   privacyNotice: ['privacy-notice'] as const
 };
 
@@ -186,4 +187,10 @@ export function useInvalidate() {
       void client.invalidateQueries({ queryKey: typeof key === 'function' ? key(w, '') .slice(0, 2) : key });
     }
   };
+}
+
+export function useTokens() {
+  const { api, w, enabled } = useScoped();
+  const access = useWorkspaceAccess();
+  return useQuery({ queryKey: keys.tokens(w), queryFn: () => api.tokens(w), enabled: enabled && checkAccess(access, { permission: 'manage_connections' }) });
 }

@@ -888,3 +888,11 @@ export interface ToolRegistry {
   tools: ToolDefinition[];
   isolation: ToolIsolation;
 }
+
+export type TokenScope = 'read' | 'draft';
+export interface WorkspaceApiToken {
+  tokenId: string; name: string; prefix: string; scopes: TokenScope[];
+  createdAt: number; expiresAt: number; lastUsedAt: number | null; lastUsedClient: string | null;
+  revokedAt: number | null; createdBy: string;
+}
+export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }

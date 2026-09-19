@@ -277,6 +277,10 @@ class HostedApplication:
         path = environ.get("PATH_INFO", "/")
         mutation = method in ("POST", "PUT", "PATCH", "DELETE")
         try:
+            bearer = environ.get("HTTP_AUTHORIZATION", "")
+            api_bearer = bearer.startswith("Bearer prt_")
+            if api_bearer:
+                self._runtime().repository.api_tokens.authorize(self._token(environ), method, path.strip("/").split("/"), client_label(environ))
             if path == "/api/health" and method == "GET":
                 configured = self.service is not None or all(os.environ.get(key) for key in ("POSTRIFF_DATABASE_URL", "POSTRIFF_SUPABASE_URL", "POSTRIFF_SUPABASE_PUBLISHABLE_KEY", "POSTRIFF_SUPABASE_SECRET_KEY"))
                 return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False})
@@ -335,7 +339,8 @@ class HostedApplication:
                 if learning is not None:
                     result["learning"] = learning.sweep()
                 return self._json(start_response, 200, result)
-            self._origin(environ, mutation)
+            if not api_bearer:
+                self._origin(environ, mutation)
             service = self._runtime()
             token = self._token(environ)
             if path == "/api/ideas/models/rescan" and method == "POST":
@@ -374,6 +379,14 @@ class HostedApplication:
                 body = self._body(environ)
                 return self._json(start_response, 200, service.accept_invitation(token, body.get("token"), client=client_address(environ)))
             parts = path.strip("/").split("/")
+            if len(parts) in (4, 5) and parts[:2] == ["api", "workspaces"] and parts[3] == "tokens":
+                tokens = service.repository.api_tokens
+                if len(parts) == 4 and method == "GET":
+                    return self._json(start_response, 200, tokens.list(parts[2], token))
+                if len(parts) == 4 and method == "POST":
+                    return self._json(start_response, 201, tokens.create(parts[2], token, self._body(environ)))
+                if len(parts) == 5 and method == "DELETE":
+                    return self._json(start_response, 200, tokens.revoke(parts[2], token, parts[4]))
             if len(parts) == 5 and parts[:3] == ["api", "me", "invitations"] and parts[4] in ("accept", "decline") and method == "POST":
                 self._body(environ)
                 settle = service.accept_my_invitation if parts[4] == "accept" else service.decline_my_invitation

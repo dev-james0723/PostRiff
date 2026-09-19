@@ -101,10 +101,14 @@ class PostgresWorkspaceRepository:
         self.clock = clock
         # (cur, workspace_id, before, after, principal) hooks run inside command(), after the state is saved.
         self.effects = []
+        from .api_tokens import ApiTokens
+        self.api_tokens = ApiTokens(self)
 
     @contextmanager
     def transaction(self, token, workspace_id):
-        principal = self.verify_session(token)  # Exact verified auth.users.id, never metadata.
+        from .api_tokens import is_api_token
+        api_grant = self.api_tokens.resolve(token, workspace_id) if is_api_token(token) else None
+        principal = api_grant["createdBy"] if api_grant else self.verify_session(token)  # Verified identity only.
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute(f"SELECT w.revision,w.state,{MEMBER_COLUMNS} FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE w.id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR UPDATE OF w", (workspace_id, principal))
@@ -112,10 +116,15 @@ class PostgresWorkspaceRepository:
                 if not row:
                     # Same status and message whether the workspace is foreign or nonexistent.
                     raise AlphaError("Workspace unavailable.", 403)
+                if api_grant:
+                    self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
                 yield cur, row, principal
 
     def assert_fresh(self, token, principal):
         """Step-up: the session must have been verified by sign-in within the window."""
+        from .api_tokens import is_api_token
+        if is_api_token(token):
+            raise AlphaError("An interactive sign-in is required.", 403, code="step_up_required")
         auth_time = getattr(self.verify_session, "auth_time", None)
         verified_at = auth_time(token, principal) if auth_time else 0
         if self.clock() - float(verified_at or 0) > STEP_UP_WINDOW:

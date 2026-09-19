@@ -225,6 +225,9 @@ export function describeAuditEvent(event: AuditEvent, lookup: AuditLookup): Audi
   const meta = event.meta ?? {};
   const role = roleName(meta.role);
   switch (event.kind) {
+    case 'api_token.created': return { headline: 'Created an API token', detail: 'Read/draft access with a mandatory expiry.', tone: 'neutral' };
+    case 'api_token.revoked': return { headline: 'Revoked an API token', detail: 'The token can no longer access this workspace.', tone: 'neutral' };
+    case 'api_token.draft_requested': return { headline: 'Requested a draft through an API token', detail: 'Uses the same source and writing allowance checks as the app.', tone: 'neutral' };
     case 'workspace.created': {
       const plan = text(meta.plan);
       // `pr_bootstrap` starts every workspace on a trial of the plan chosen at sign-up.

@@ -5,6 +5,7 @@ import PageContainer from '@/components/layout/page-container';
 import { buttonVariants } from '@/components/ui/button';
 import { useChannels } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { TokensCard } from './api/tokens-card';
 import { AccountsCard } from './api/accounts-card';
 import { NotYetCard } from './api/not-yet-card';
 import { StatusStrip } from './api/status-strip';
@@ -17,7 +18,7 @@ const infoContent = {
     {
       title: 'What this page shows today',
       description:
-        'The accounts connected to this workspace with their verified level for each capability, the providers this deployment offers and their review status, and the tool registry. Nothing on this page changes anything.'
+        'The accounts connected to this workspace with their verified level for each capability, the providers this deployment offers and their review status, and the tool registry. Personal tokens let your own scripts read, draft and propose within your current permissions.'
     },
     {
       title: 'What is planned',
@@ -58,6 +59,7 @@ function ApiContent() {
         <div className='min-w-0 @4xl:col-span-3'>
           <StatusStrip channels={channels} tools={tools} />
         </div>
+        <div className='min-w-0 @4xl:col-span-3'><TokensCard /></div>
         <div className='min-w-0 @4xl:col-span-2'>
           <AccountsCard channels={channels} />
         </div>
@@ -77,7 +79,7 @@ export function ApiView() {
   return (
     <PageContainer
       pageTitle='API & integrations'
-      pageDescription='What each connected account allows, the tool registry, and the ways in from outside the browser that are not available yet.'
+      pageDescription='What each connected account allows, the tool registry, and expiring tokens for your own scripts and agents.'
       infoContent={infoContent}
       access={canManage}
       accessFallback={<AccessFallback />}
