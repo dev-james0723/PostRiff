@@ -15,7 +15,6 @@ import type { MemoryFile } from '@/lib/api/types';
 import { downloadBlob } from '@/lib/download';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AccessCard } from './access-card';
-import { LearningHistory } from './learning-history';
 import { LearningPanel } from './learning-panel';
 import { DRAFT_GROUP_LABEL, groupMemoryFiles } from './memory-files';
 import { Unavailable } from './memory-states';
@@ -143,7 +142,6 @@ export function MemoryView() {
         </div>
         <div className='flex min-w-0 flex-col gap-3' data-tour='memory-learning'>
           <LearningPanel />
-          <LearningHistory />
         </div>
       </div>
     </PageContainer>

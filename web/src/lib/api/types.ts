@@ -479,6 +479,7 @@ export interface PerformanceNote {
 export interface MemoryProposals {
   pending: MemoryProposal[];
   recent: MemoryProposal[];
+  recentTotal?: number;
   versions: { id: string; scopeKey: string; body: LearnedItem; status: string; proposalId: string | null; validFrom: number; validTo: number | null }[];
   learning: LearningSummary;
   /** Per style revision: how much editing approved drafts needed (design §8.1). */

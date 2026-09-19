@@ -172,4 +172,12 @@ for table in ("pr_memory_versions", "pr_memory_proposals", "pr_learning_events")
     assert count(f"select count(*) from public.{table} where workspace_id=%s", wid) == 0, table
 checks.append("reset is owner-only and clears versions, proposals and events with the state")
 
+# The Recent total counts all decisions even when the returned window is capped at twenty.
+with connection() as db:
+    db.execute("INSERT INTO public.pr_memory_proposals(workspace_id,scope_key,op,source,body,status) SELECT %s,'synthetic-'||n,'add','chat','{}'::jsonb,'dismissed' FROM generate_series(1,25) n", (wid,))
+    db.execute("INSERT INTO public.pr_memory_proposals(workspace_id,scope_key,op,source,body,status) VALUES(%s,'synthetic-pending','add','chat','{}'::jsonb,'pending')", (wid,))
+view = service.learning.proposals(service.repository, wid, 'fixture-one')
+assert len(view['recent']) == 20 and view['recentTotal'] == 25 and len(view['pending']) == 1
+checks.append('Recent total includes all decisions and excludes pending proposals')
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))

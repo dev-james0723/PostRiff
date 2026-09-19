@@ -143,7 +143,7 @@ export function useRescanModels() {
   return useMutation({ mutationFn: () => api.rescanModels(w), onSuccess: (data) => client.setQueryData(keys.models, data) });
 }
 
-/** The Markdown memory files the agent reads before every draft, rendered by the API. */
+/** Rendered memory files: the API identifies which go to writing routes and which are reference only. */
 export function useMemory() {
   const { api, w, enabled } = useScoped();
   return useQuery({ queryKey: keys.memory(w), queryFn: () => api.memory(w), enabled });

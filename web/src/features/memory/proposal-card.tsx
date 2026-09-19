@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api/client';
 import { keys, useMemoryProposals, useSnapshot } from '@/lib/api/hooks';
 import type { MemoryProposal } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { expiryLabel } from './proposal-expiry';
 import { cn } from '@/lib/utils';
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -58,6 +59,7 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
   });
 
   const pending = status === 'pending';
+  const expiry = pending ? expiryLabel(live?.expiresAt ?? proposal.expiresAt) : null;
   const busy = decide.isPending || snapshot.isLoading;
   const evidence = proposal.evidence?.length ?? 0;
   const why = proposal.why || (proposal.source === 'chat' ? 'You said so in chat.' : evidence > 0 ? `Seen in ${evidence} of your edits.` : undefined);
@@ -79,6 +81,7 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
       ) : (
         <p className='text-base leading-snug font-semibold'>{live?.statement ?? proposal.statement}</p>
       )}
+      {expiry && <p className='text-muted-foreground text-xs'>{expiry}</p>}
       {why && <p className='text-muted-foreground text-xs'>{why}</p>}
       {proposal.performance && (
         <p className='text-muted-foreground text-xs'>

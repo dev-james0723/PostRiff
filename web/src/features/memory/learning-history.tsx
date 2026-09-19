@@ -5,12 +5,10 @@ import { motion, useReducedMotion } from 'motion/react';
 import { DigitSwap } from '@/components/motion/digit-swap';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { Badge } from '@/components/ui/badge';
-import { useMemoryProposals } from '@/lib/api/hooks';
 import type { LearnedItem, MemoryProposal, MemoryProposals } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
 import { formatDate } from '@/lib/time';
-import { StaleNotice, Unavailable } from './memory-states';
-import { expiryLabel } from './proposal-expiry';
+import { ProposalCard } from './proposal-card';
 
 const DECISION_LABEL: Record<string, string> = {
   remembered: 'Remembered',
@@ -94,6 +92,8 @@ function Row({ index, statement, meta, badge }: { index: number; statement: stri
 function HistoryTabs({ data }: { data: MemoryProposals }) {
   const pending = data.pending ?? [];
   const decided = decidedRows(data);
+  const retiredCount = (data.learning?.items ?? []).filter((item) => item.status === 'retired').length;
+  const total = data.recentTotal === undefined ? null : data.recentTotal + retiredCount;
   const [tab, setTab] = useState(pending.length > 0 ? 'waiting' : 'decided');
 
   return (
@@ -102,20 +102,17 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
         <TabsTrigger value='waiting' wrapperClassName='min-w-0' className='w-full gap-1.5 px-3 py-1 text-xs'>
           Waiting <DigitSwap value={pending.length} />
         </TabsTrigger>
-        {/* No count here: the API returns only the latest decisions, so a number would pass for a total it isn't. */}
         <TabsTrigger value='decided' wrapperClassName='min-w-0' className='w-full gap-1.5 px-3 py-1 text-xs'>
-          Recent
+          Recent {total !== null && <DigitSwap value={total} />}
         </TabsTrigger>
       </TabsList>
       <TabsContent value='waiting' className='mt-3'>
         {pending.length === 0 ? (
           <p className='text-muted-foreground text-xs'>Nothing is waiting for a decision.</p>
         ) : (
-          <ul className='flex flex-col divide-y'>
-            {pending.map((proposal, index) => (
-              <Row key={proposal.id} index={index} statement={proposal.statement} meta={[proposal.scopeLabel, expiryLabel(proposal.expiresAt) ?? 'No expiry date recorded'].join(' · ')} />
-            ))}
-          </ul>
+          <div className='flex flex-col gap-2'>
+            {pending.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} />)}
+          </div>
         )}
       </TabsContent>
       <TabsContent value='decided' className='mt-3'>
@@ -128,7 +125,7 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
                 <Row key={row.key} index={index} statement={row.statement} badge={row.label} meta={[row.scope, row.when].filter(Boolean).join(' · ')} />
               ))}
             </ul>
-            <p className='text-muted-foreground border-t pt-2 text-xs'>Newest first. This shows the latest decisions and retired preferences, not the full history.</p>
+            <p className='text-muted-foreground border-t pt-2 text-xs'>Newest first. {total !== null ? `Showing ${decided.length} of ${total} decisions and retired preferences.` : 'Showing the latest decisions and retired preferences. The total is unavailable.'}</p>
           </div>
         )}
       </TabsContent>
@@ -140,28 +137,11 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
  * When each waiting suggestion expires and what was decided before: the proposals' `expiresAt`, the recent
  * decisions with `decidedAt`, and the retired preferences. If the proposals cannot be read, it says so.
  */
-export function LearningHistory() {
-  const proposals = useMemoryProposals();
-
-  // The learned-preferences panel above shows the loading skeleton for this same query.
-  if (!proposals.data && proposals.isLoading) return null;
-
+export function LearningHistory({ data }: { data: MemoryProposals }) {
   return (
-    <section aria-labelledby='learning-history-title' className='bg-card ring-foreground/10 flex flex-col gap-3 rounded-xl p-4 ring-1'>
-      <div className='flex flex-col gap-1'>
-        <h2 id='learning-history-title' className='text-sm font-semibold'>
-          Suggestions and decisions
-        </h2>
-        <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>When each waiting suggestion expires, what an owner decided recently, and which preferences were retired.</p>
-      </div>
-      {proposals.data ? (
-        <>
-          <HistoryTabs data={proposals.data} />
-          {proposals.isRefetchError && <StaleNotice query={proposals} />}
-        </>
-      ) : (
-        <Unavailable message='Learned preferences are unavailable right now.' query={proposals} />
-      )}
+    <section aria-labelledby='learning-history-title' className='flex flex-col gap-3 border-t pt-3'>
+      <h2 id='learning-history-title' className='text-sm font-semibold'>Suggestions and decisions</h2>
+      <HistoryTabs data={data} />
     </section>
   );
 }

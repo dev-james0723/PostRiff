@@ -14,7 +14,8 @@ import { downloadBlob } from '@/lib/download';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { SectionUnavailable } from './brand/brand-parts';
 import { BrandLoadError, BrandSkeleton, BrandStaleNotice } from './brand/brand-states';
-import { DraftsReadCard, MEMORY_HREF } from './brand/drafts-read-card';
+import { WhatDraftsRead } from '@/features/memory/what-drafts-read';
+const MEMORY_HREF = '/app/workspace/memory';
 import { IdentityCard } from './brand/identity-card';
 import { ProposalReviewCard } from './brand/proposal-review-card';
 import { RevisionHistory } from './brand/revision-history';
@@ -101,7 +102,7 @@ export function BrandView() {
 
   const side = (
     <div className='flex min-w-0 flex-col gap-4'>
-      <DraftsReadCard memory={memory} />
+      <WhatDraftsRead showMemoryLink data-tour='brand-drafts-read' />
       <RevisionHistory state={state} query={snapshot} />
     </div>
   );

@@ -26,6 +26,13 @@ def workspace():
 
 
 class Projection(unittest.TestCase):
+    def test_voice_file_reports_when_no_profile_exists(self):
+        state = workspace()
+        state['speaker']['activeRevision'] = None
+        voice = next(file for file in memory.render_files(state) if file['name'] == 'VOICE.md')
+        self.assertEqual(voice['source'], 'No active voice profile yet')
+        self.assertIn('No active voice profile yet', voice['body'])
+
     def test_local_routes_read_every_prompt_file_unchanged(self):
         state = workspace()
         shared = memory.projection(state, "local")

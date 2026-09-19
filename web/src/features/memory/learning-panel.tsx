@@ -11,7 +11,9 @@ import { ApiError } from '@/lib/api/client';
 import { useAct, useInvalidate, useMemory, useMemoryProposals, useSnapshot } from '@/lib/api/hooks';
 import type { LearnedItem } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { ProposalCard } from './proposal-card';
+import { LearningHistory } from './learning-history';
+import { StaleNotice, Unavailable } from './memory-states';
+import { HoldActionButton } from '@/components/motion/hold-action-button';
 
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 
@@ -33,6 +35,7 @@ export function LearningPanel() {
   const act = useAct();
   const invalidate = useInvalidate();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [resetEpoch, setResetEpoch] = useState(0);
   const learning = proposals.data?.learning;
   const cloudAccess = memory.data?.egress?.cloud === true;
   const isOwner = snapshot.data?.membership?.role === 'owner';
@@ -73,7 +76,7 @@ export function LearningPanel() {
       {
         onSuccess: () => {
           invalidate('memory', 'memoryProposals');
-          toast.success(cloudExtraction ? 'A cloud model may now read redacted before/after pairs of your edits.' : 'Only the rules that need no model read your edits now.');
+          toast.success(cloudExtraction ? 'Cloud extraction permission is on. The configured extractor and memory sharing determine whether a model reads edit pairs.' : 'Cloud extraction permission is off. Counting rules and any configured local extractor can still run.');
         },
         onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
       }
@@ -102,12 +105,13 @@ export function LearningPanel() {
           invalidate('memory', 'memoryProposals');
           toast.success('Forgotten. Learned preferences, proposals and the edit history are gone.');
         },
+        onSettled: () => setResetEpoch((value) => value + 1),
         onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The reset could not be saved.')
       }
     );
   }
 
-  const busy = act.isPending || update.isPending || snapshot.isLoading;
+  const busy = act.isPending || update.isPending || snapshot.isLoading || proposals.isError;
 
   return (
     <section className='bg-card ring-foreground/10 flex flex-col gap-4 rounded-xl p-4 ring-1' aria-labelledby='learned-preferences'>
@@ -136,7 +140,7 @@ export function LearningPanel() {
               <Badge variant={learning.cloudExtraction && cloudAccess ? 'secondary' : 'outline'}>{learning.cloudExtraction && cloudAccess ? 'On' : 'Off'}</Badge>
             </div>
             <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>
-              Without this, only counting rules read your edits (hashtags, emoji, openings, closings, length). With it, a small cloud model reads before/after pairs of your edits with links, handles and numbers removed, and only for drafts whose sources you allowed on the cloud.
+              Counting rules read your edits. This permits a configured cloud extractor to read redacted before/after pairs, only for drafts whose sources allow cloud use. A configured local extractor can run regardless of this switch.
               {!cloudAccess ? ' It needs “Cloud model access” above to be on.' : ''}
             </p>
           </div>
@@ -158,6 +162,8 @@ export function LearningPanel() {
       )}
 
       {proposals.isLoading && <Skeleton className='h-16 w-full' />}
+      {!proposals.data && proposals.isError && <Unavailable message='Learned preferences are unavailable right now.' query={proposals} />}
+      {proposals.data && proposals.isRefetchError && <StaleNotice query={proposals} />}
 
       {latest && (
         <p className='text-muted-foreground text-xs'>
@@ -166,15 +172,6 @@ export function LearningPanel() {
           {previous ? ` (rev ${previous.styleRevision}: ${pct(previous.meanEditDistance)} changed, ${pct(previous.uneditedShare)} untouched)` : ''}
           {latest.approvals < 5 ? ' · small sample' : ''}.
         </p>
-      )}
-
-      {pending.length > 0 && (
-        <div className='flex flex-col gap-2'>
-          <span className='text-muted-foreground text-xs font-medium'>Waiting for your decision · {pending.length}</span>
-          {pending.map((proposal) => (
-            <ProposalCard key={proposal.id} proposal={proposal} />
-          ))}
-        </div>
       )}
 
       {learning && listed.length === 0 && pending.length === 0 && !proposals.isLoading && (
@@ -208,16 +205,18 @@ export function LearningPanel() {
         </ul>
       )}
 
-      {(retired.length > 0 || listed.length > 0) && isOwner && (
+      {proposals.data && <LearningHistory data={proposals.data} />}
+
+      {learning && isOwner && (
         <div className='flex flex-wrap items-center gap-2 border-t pt-3'>
           {retired.length > 0 && <span className='text-muted-foreground text-xs'>{retired.length} retired</span>}
           <span className='grow' />
           {confirmReset ? (
             <>
               <span className='text-xs'>Forget every learned preference and the edit history?</span>
-              <Button size='sm' variant='destructive' disabled={busy} onClick={reset}>
-                Forget everything
-              </Button>
+              <HoldActionButton key={resetEpoch} type='horizontal' holdDuration={900} disabled={busy} onHoldComplete={reset} holdingLabel='Keep holding…' completeLabel='Forgetting…' aria-label='Hold to forget learned preferences' className='h-8 bg-destructive px-3 text-destructive-foreground'>
+                Hold to forget everything
+              </HoldActionButton>
               <Button size='sm' variant='outline' disabled={busy} onClick={() => setConfirmReset(false)}>
                 Keep
               </Button>

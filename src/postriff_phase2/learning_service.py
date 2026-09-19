@@ -248,7 +248,9 @@ class HostedLearning:
         from . import learning_extract as extract
         with repository.transaction(token, workspace_id) as (cur, row, _):
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-            return {"pending": [proposal_view(r) for r in pending_proposals(cur, workspace_id)], "recent": [proposal_view(r) for r in recent_proposals(cur, workspace_id)],
+            cur.execute("SELECT count(*) FROM public.pr_memory_proposals WHERE workspace_id=%s AND status<>'pending'", (workspace_id,))
+            recent_total = cur.fetchone()[0]
+            return {"recentTotal": recent_total, "pending": [proposal_view(r) for r in pending_proposals(cur, workspace_id)], "recent": [proposal_view(r) for r in recent_proposals(cur, workspace_id)],
                     "versions": versions(cur, workspace_id), "learning": self.summary(state),
                     "stats": extract.revision_stats(events_window(cur, workspace_id, self.clock(), extract.WINDOW_DAYS))}
 
