@@ -6,7 +6,7 @@ import { ManifestPreview } from '@/components/application/post-preview/manifest-
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { HoldActionButton } from '@/components/motion/hold-action-button';
+import { JobCancelHold } from '@/components/jobs/job-cancel-hold';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { TableCell, TableRow } from '@/components/ui/table';
@@ -17,9 +17,6 @@ import {
   canCancel,
   countdown,
   epochOf,
-  HOLD_CANCEL_CLASS,
-  HOLD_CANCEL_FILL,
-  HOLD_CANCEL_WAVE,
   isSynthetic,
   jobBadge,
   MAX_ATTEMPTS,
@@ -131,24 +128,7 @@ function Actions({ job, canApprove, cancelPending, holdEpoch, tourCancel, onCanc
       {canApprove && (
         <span className='flex w-[7rem] justify-end'>
           {canCancel(job) && (
-            <HoldActionButton
-              key={holdEpoch}
-              type='horizontal'
-              holdDuration={900}
-              holdingLabel='Keep holding…'
-              completeLabel='Cancelling…'
-              disabled={cancelPending}
-              onHoldComplete={() => onCancel(job)}
-              aria-label={`Hold to cancel ${job.manifest.platform} post`}
-              title='Press and hold (or hold Space) to cancel this post before it reaches the provider.'
-              className={HOLD_CANCEL_CLASS}
-              fillClassName={HOLD_CANCEL_FILL}
-              waveClassName={HOLD_CANCEL_WAVE}
-              labelClassName='text-xs'
-              data-tour={tourCancel ? 'queue-cancel' : undefined}
-            >
-              Hold to cancel
-            </HoldActionButton>
+            <JobCancelHold key={`cancel-${job.id}`} job={job} allowed={canApprove} pending={cancelPending} epoch={holdEpoch} onCancel={onCancel} tour={tourCancel ? 'queue-cancel' : undefined} />
           )}
         </span>
       )}

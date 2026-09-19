@@ -9,12 +9,12 @@ import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/motion/context-menu';
-import { HoldActionButton } from '@/components/motion/hold-action-button';
+import { JobCancelHold } from '@/components/jobs/job-cancel-hold';
 import { EASE_OUT } from '@/lib/ease';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { COLUMN_META, reviewExpired, toEpoch, type BoardCard, type CardChip, type ChipTone, type PipelineJob } from './board';
-import { HOLD_CANCEL_CLASS, HOLD_CANCEL_FILL, HOLD_CANCEL_WAVE, isCancellable, jobBadge, stateWords, type JobBadge } from './job-state';
+import { isCancellable, jobBadge, stateWords, type JobBadge } from './job-state';
 
 export interface CardPermissions {
   canEdit: boolean;
@@ -215,23 +215,7 @@ function CardActionsRow({
     const job = card.job;
     if (isCancellable(job)) {
       items.push(
-        <HoldActionButton
-          key={`cancel-${holdEpoch}`}
-          type='horizontal'
-          holdDuration={900}
-          holdingLabel='Keep holding…'
-          completeLabel='Cancelling…'
-          disabled={cancelPending}
-          onHoldComplete={() => actions.cancel(job)}
-          aria-label={`Hold to cancel the ${job.manifest.platform} post`}
-          title='Press and hold (or hold Space) to cancel this post before it is submitted.'
-          className={HOLD_CANCEL_CLASS}
-          fillClassName={HOLD_CANCEL_FILL}
-          waveClassName={HOLD_CANCEL_WAVE}
-          labelClassName='text-xs'
-        >
-          Hold to cancel
-        </HoldActionButton>
+        <JobCancelHold key={`cancel-${job.id}`} job={job} allowed={canApprove} pending={cancelPending} epoch={holdEpoch} onCancel={actions.cancel} />
       );
       if (card.jobGroup === 'held') items.push(<span key='then' className='text-muted-foreground'>then schedule the draft again</span>);
     }

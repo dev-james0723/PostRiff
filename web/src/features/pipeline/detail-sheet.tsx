@@ -1,13 +1,17 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { JobDetailSheet } from '@/components/jobs/job-detail-sheet';
+import { ReviewApproveButton } from '@/components/jobs/review-approve-button';
+import { useSnapshot } from '@/lib/api/hooks';
 import Link from 'next/link';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { ManifestPreview } from '@/components/application/post-preview/manifest-preview';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { HoldActionButton } from '@/components/motion/hold-action-button';
+import { JobCancelHold } from '@/components/jobs/job-cancel-hold';
 import { Button } from '@/components/ui/button';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Separator } from '@/components/ui/separator';
@@ -17,7 +21,7 @@ import type { SnapshotState } from '@/lib/api/types';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { COLUMN_META, findCard, findSuccessor, FOOTER_WORDS, toEpoch, type Board, type BoardCard, type PipelineSource } from './board';
-import { HOLD_CANCEL_CLASS, HOLD_CANCEL_FILL, HOLD_CANCEL_WAVE, isCancellable, jobNote, stateWords } from './job-state';
+import { isCancellable } from './job-state';
 import { canSetAside, cardBadge, copyText, REVISION_ORIGIN, scheduleGate, type CardActions, type CardPermissions } from './pipeline-card';
 import { reasonLabel } from './set-aside-dialog';
 
@@ -221,6 +225,8 @@ function ManifestDetails({ card, board, onShow }: { card: BoardCard; board: Boar
 }
 
 function ReviewDetails({ card, permissions }: { card: BoardCard; permissions: CardPermissions }) {
+  const snapshot = useSnapshot();
+  const router = useRouter();
   const review = card.review;
   if (!review) return null;
   const { manifest } = review;
@@ -256,92 +262,16 @@ function ReviewDetails({ card, permissions }: { card: BoardCard; permissions: Ca
           : expired
             ? 'The approval deadline passed, so this review can no longer be approved. Schedule… the draft again to prepare a new one.'
             : permissions.canApprove
-              ? 'Approval happens in the Queue, so every approval has one receipt.'
+              ? 'Approve exactly this text, media, account and time.'
               : 'An approver approves this exact review in the Queue.'}
       </p>
+      {snapshot.data && <ReviewApproveButton review={review} revision={snapshot.data.revision} allowed={!permissions.readOnly && permissions.canApprove} nowSeconds={Date.now() / 1000} onReload={() => void snapshot.refetch()} onOpenJob={(id) => router.push(`/app/queue?job=${encodeURIComponent(id)}`)} />}
       {!permissions.readOnly && !expired && (
         <Link href='/app/queue' className={linkClass}>
-          {permissions.canApprove ? 'Open in Queue to approve' : 'Open in Queue'} <LearnMoreChevron />
+          Open in Queue <LearnMoreChevron />
         </Link>
       )}
     </Section>
-  );
-}
-
-function JobDetails({ card }: { card: BoardCard }) {
-  const job = card.job;
-  if (!job) return null;
-  const { manifest } = job;
-  const events = job.events.toReversed();
-  const note = jobNote(job);
-  return (
-    <>
-      <Section title='Receipt'>
-        <dl className='divide-y'>
-          <Row label='Account'>
-            {manifest.platform} · {manifest.account}
-          </Row>
-          <Row label='Scheduled for'>
-            <When at={toEpoch(manifest.timing.utc)} />
-          </Row>
-          <Row label='Approved'>
-            <When at={toEpoch(job.approvedAt)} />
-          </Row>
-          <Row label='Execution'>
-            {manifest.execution === 'synthetic' ? (
-              <span>
-                Fixture <span className='text-muted-foreground'>· a synthetic provider, not a real post</span>
-              </span>
-            ) : (
-              manifest.execution.replace(/[-_]/g, ' ')
-            )}
-          </Row>
-          <Row label='Attempts'>{job.attempts.length}</Row>
-          <Row label='Provider reference' mono>
-            {job.providerReference || <span className='text-muted-foreground font-sans text-sm'>None yet</span>}
-          </Row>
-          <Row label='Provider said'>{job.providerConfirmed || <span className='text-muted-foreground'>Nothing yet</span>}</Row>
-          <Row label='Verified'>
-            {job.verification ? (
-              <span>
-                {job.verification.method.replace(/_/g, ' ')} · <When at={toEpoch(job.verification.at)} />
-              </span>
-            ) : (
-              <span className='text-muted-foreground'>Not verified</span>
-            )}
-          </Row>
-          {job.cancelRequested && <Row label='Cancel'>Requested</Row>}
-        </dl>
-        {note && (
-          <p className='rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300'>
-            <span className='font-medium'>{card.jobGroup === 'held' ? 'Held because: ' : 'Next: '}</span>
-            {note}
-          </p>
-        )}
-        {job.nextAction && job.nextAction !== note && (
-          <p className='text-muted-foreground text-xs'>
-            The worker’s last instruction: {job.nextAction}
-          </p>
-        )}
-      </Section>
-      <Section title='Events'>
-        {events.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>No events recorded.</p>
-        ) : (
-          <ol className='flex flex-col gap-2'>
-            {events.map((event, index) => (
-              <li key={`${event.at}-${event.state}-${index}`} className='border-l-2 pl-3'>
-                <p className='text-sm'>
-                  <span className='font-medium'>{stateWords(event.state)}</span>
-                  <span className='text-muted-foreground'> · {formatDateTime(toEpoch(event.at))}</span>
-                </p>
-                {event.message && <p className='text-muted-foreground text-xs'>{event.message}</p>}
-              </li>
-            ))}
-          </ol>
-        )}
-      </Section>
-    </>
   );
 }
 
@@ -438,23 +368,7 @@ function SheetActions({ card, permissions, actions, cancelPending, holdEpoch }: 
     const job = card.job;
     if (isCancellable(job)) {
       buttons.push(
-        <HoldActionButton
-          key={`cancel-${holdEpoch}`}
-          type='horizontal'
-          holdDuration={900}
-          holdingLabel='Keep holding…'
-          completeLabel='Cancelling…'
-          disabled={cancelPending}
-          onHoldComplete={() => actions.cancel(job)}
-          aria-label={`Hold to cancel the ${job.manifest.platform} post`}
-          title='Press and hold (or hold Space) to cancel this post before it is submitted.'
-          className={HOLD_CANCEL_CLASS}
-          fillClassName={HOLD_CANCEL_FILL}
-          waveClassName={HOLD_CANCEL_WAVE}
-          labelClassName='text-xs'
-        >
-          Hold to cancel
-        </HoldActionButton>
+        <JobCancelHold key={`cancel-${job.id}`} job={job} allowed={canApprove} pending={cancelPending} epoch={holdEpoch} onCancel={actions.cancel} />
       );
     }
   }
@@ -504,6 +418,14 @@ export function DetailSheet({
   const card = current ?? opened;
   const badge = current ? cardBadge(current, now) : null;
   const column = card ? COLUMN_META[card.column] : null;
+  if (opened?.kind === 'job') {
+    return <JobDetailSheet jobId={opened.job?.id ?? null} jobs={state?.phase2?.jobs ?? []} ready={Boolean(state)}
+      nowSeconds={now} canApprove={!permissions.readOnly && permissions.canApprove}
+      canSchedule={!permissions.readOnly && permissions.canApprove} cancelPending={cancelPending} holdEpoch={holdEpoch}
+      onClose={onClose} onCancel={actions.cancel} onPrepareAgain={actions.schedule}
+      draftAvailable={(id) => Boolean(state?.variants?.some((v) => v.id === id && !v.blockedByRetraction))} />;
+  }
+
 
   return (
     <Sheet open={opened !== null} onOpenChange={(open) => !open && onClose()}>
@@ -558,7 +480,6 @@ export function DetailSheet({
                   {current.kind === 'draft' && <DraftDetails card={current} board={board} state={state} onShow={onShow} />}
                   {(current.kind === 'review' || current.kind === 'job') && <ManifestDetails card={current} board={board} onShow={onShow} />}
                   {current.kind === 'review' && <ReviewDetails card={current} permissions={permissions} />}
-                  {current.kind === 'job' && <JobDetails card={current} />}
                   {current.kind === 'source' && <SourceDetails card={current} />}
                 </>
               )}

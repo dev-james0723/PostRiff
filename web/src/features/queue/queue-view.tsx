@@ -11,6 +11,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
+import { ReviewApproveButton } from '@/components/jobs/review-approve-button';
 import { StatefulButton } from '@/components/motion/button';
 import { DigitSwap } from '@/components/motion/digit-swap';
 import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
@@ -34,7 +35,7 @@ import { useFlash } from '@/hooks/use-flash';
 import { reportActionError } from './action-error';
 import { APPROVE_MANY_LIMIT, ApproveManyDialog } from './approve-many-dialog';
 import { JobRow, JobStateBadge } from './job-row';
-import { JobSheet } from './job-sheet';
+import { JobDetailSheet } from '@/components/jobs/job-detail-sheet';
 import {
   canCancel,
   ENDED,
@@ -140,8 +141,6 @@ function ReviewCard({
   onReload: () => void;
   onOpenJob: (jobId: string) => void;
 }) {
-  const act = useAct();
-  const [outcome, flashOutcome] = useFlash<'success' | 'error'>();
   const manifest = review.manifest;
   const expired = manifest.expiresAt <= nowSeconds;
   // Still approvable for an hour after its time (`expiresAt`); the worker then publishes at its next run.
@@ -189,48 +188,7 @@ function ReviewCard({
       </div>
       {canApprove && needsReview && (
         <CardFooter className='flex flex-wrap items-center gap-3'>
-          <StatefulButton
-            state={act.isPending ? 'loading' : (outcome ?? 'idle')}
-            loadingText='Approving…'
-            successText='Scheduled'
-            errorText='Try again'
-            disabled={expired}
-            // Approved: the card is on its way out. It keeps full opacity so "Scheduled" reads, but takes no second click.
-            aria-disabled={outcome === 'success' || undefined}
-            onClick={() => {
-              if (outcome === 'success') return;
-              act.mutate(
-                { revision, action: 'p2_approve', payload: { reviewId: review.id, digest: review.digest, confirmed: true } },
-                {
-                  // Say "scheduled" only when the server's answer shows it: this review approved and its job there.
-                  onSuccess: (next) => {
-                    const phase = next.state.phase2;
-                    const approved = phase?.reviews.find((r) => r.id === review.id)?.status === 'approved';
-                    const job = phase?.jobs.find((j) => j.manifest.idempotencyKey === manifest.idempotencyKey);
-                    if (approved && job) {
-                      toast.success('Approved and scheduled.');
-                      flashOutcome('success');
-                    } else if (job) {
-                      toast.info('This exact post was already a job, so nothing new was scheduled.', {
-                        action: { label: 'Open job', onClick: () => onOpenJob(job.id) }
-                      });
-                    } else {
-                      toast.error('The approval was answered, but no job appeared. Reload the queue to check.', {
-                        action: { label: 'Reload', onClick: onReload }
-                      });
-                      flashOutcome('error');
-                    }
-                  },
-                  onError: (err) => {
-                    reportActionError(err, 'Approval failed.', onReload);
-                    flashOutcome('error');
-                  }
-                }
-              );
-            }}
-          >
-            Approve & schedule
-          </StatefulButton>
+          <ReviewApproveButton review={review} revision={revision} allowed={canApprove} nowSeconds={nowSeconds} onReload={onReload} onOpenJob={onOpenJob} />
           <span className={cn('text-xs', timePassed ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground')}>
             {expired
               ? 'The review window closed; prepare it again from the draft.'
@@ -632,7 +590,7 @@ function Queue() {
         nowSeconds={nowSeconds}
         onReload={reload}
       />
-      <JobSheet
+      <JobDetailSheet
         jobId={params.job}
         jobs={allJobs}
         ready={loaded}
