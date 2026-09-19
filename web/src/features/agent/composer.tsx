@@ -71,7 +71,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   }
 
   return (
-    <div className='bg-card ring-foreground/10 flex flex-col rounded-xl shadow-xs ring-1'>
+    <div data-tour='composer' className='bg-card ring-foreground/10 flex flex-col rounded-xl shadow-xs ring-1'>
       <Textarea
         ref={ref}
         value={value}
@@ -85,7 +85,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         className='min-h-0 resize-none border-0 bg-transparent px-4 pt-4 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent'
       />
       <div className='flex flex-wrap items-center justify-between gap-2 px-3 pt-1 pb-3'>
-        <div className='flex flex-wrap items-center gap-1.5'>
+        <div data-tour='composer-channels' className='flex flex-wrap items-center gap-1.5'>
           <span className='text-muted-foreground mr-1 text-xs'>Draft for</span>
           {chips.map((chip) => {
             const on = selected.includes(chip.platform);

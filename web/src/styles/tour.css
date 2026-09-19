@@ -1,0 +1,43 @@
+/* ============================================================
+   Onboarding tour
+
+   The overlay itself is drawn by src/features/onboarding/tour-overlay.tsx.
+   This file only carries the ring on the sidebar link the tour is about
+   to open: it pulses twice (transform + opacity only) and then rests as a
+   static ring, so it points without nagging.
+   ============================================================ */
+
+@keyframes tour-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+[data-tour-pulse] {
+  position: relative;
+}
+
+[data-tour-pulse]::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--radius, 0.5rem) + 3px);
+  box-shadow: 0 0 0 2px var(--primary);
+  pointer-events: none;
+  animation: tour-ring var(--duration-very-slow, 500ms) var(--ease-smooth-out, ease-out) 2 both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-tour-pulse]::after {
+    animation: none;
+  }
+}

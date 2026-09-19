@@ -14,6 +14,9 @@
 /* transitions.dev motion tokens and t-* transitions (see the file header). */
 @import './transitions.css';
 
+/* Onboarding tour: the pulse on the sidebar link a tour is about to open. */
+@import './tour.css';
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
