@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { navGroups } from '@/config/nav-config';
-import { SPRING_LAYOUT } from '@/lib/ease';
 import { cn } from '@/lib/utils';
 import { tourStore, useTourStore, type Rect } from './store';
 import { stepBody, TOURS, visibleSteps, type Placement, type TourStep } from './tours';
@@ -359,7 +358,7 @@ export function TourOverlay() {
   if (!mounted) return null;
 
   const mobile = vp.w > 0 && vp.w < MOBILE;
-  const spring = reduce ? { duration: 0 } : SPRING_LAYOUT;
+  const transition = { duration: reduce ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] as const };
   const cut: Rect = rect ?? { x: vp.w / 2 - 1, y: vp.h / 2 - 1, w: 2, h: 2 };
   const cardPos = mobile
     ? null
@@ -394,11 +393,11 @@ export function TourOverlay() {
           <motion.div
             aria-hidden
             initial={false}
-            animate={{ left: cut.x, top: cut.y, width: cut.w, height: cut.h, opacity: phase === 'waiting' ? 0.6 : 1 }}
-            transition={spring}
+            animate={{ x: cut.x, y: cut.y, opacity: phase === 'waiting' ? 0.6 : 1 }}
+            transition={transition}
             onClick={phase === 'hop' && rect ? openRoute : undefined}
             className={cn('ring-primary/70 absolute rounded-xl ring-2', phase === 'hop' && rect ? 'cursor-pointer' : 'pointer-events-none')}
-            style={{ boxShadow: '0 0 0 200vmax rgb(0 0 0 / 0.5)' }}
+            style={{ left: 0, top: 0, width: cut.w, height: cut.h, boxShadow: '0 0 0 200vmax rgb(0 0 0 / 0.5)' }}
           />
           <p className='sr-only' aria-live='polite'>
             {phase === 'shown' ? `Step ${index + 1} of ${total}: ${step.title}` : `Next: ${step.stop}`}
@@ -412,11 +411,11 @@ export function TourOverlay() {
             tabIndex={-1}
             onKeyDown={onCardKeyDown}
             initial={false}
-            animate={mobile ? { opacity: 1 } : { left: cardPos?.x ?? MARGIN, top: cardPos?.y ?? MARGIN }}
-            transition={spring}
+            animate={{ x: mobile ? 0 : cardPos?.x ?? MARGIN, y: mobile ? 0 : cardPos?.y ?? MARGIN, opacity: 1 }}
+            transition={transition}
             className={cn(
               'bg-popover text-popover-foreground ring-foreground/10 absolute flex flex-col gap-3 rounded-xl p-4 shadow-lg ring-1 outline-hidden',
-              mobile ? 'inset-x-3 bottom-3' : 'w-[336px]'
+              mobile ? 'inset-x-3 bottom-3' : 'top-0 left-0 w-[336px]'
             )}
           >
             <div className='text-muted-foreground flex items-center justify-between gap-2 text-[11px] font-semibold tracking-[0.08em] uppercase'>

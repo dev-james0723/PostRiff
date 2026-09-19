@@ -3,7 +3,7 @@
 
    The overlay itself is drawn by src/features/onboarding/tour-overlay.tsx.
    This file only carries the ring on the sidebar link the tour is about
-   to open: it pulses twice (transform + opacity only) and then rests as a
+   to open: it pulses once (transform + opacity only) and then rests as a
    static ring, so it points without nagging.
    ============================================================ */
 
@@ -33,7 +33,7 @@
   border-radius: calc(var(--radius, 0.5rem) + 3px);
   box-shadow: 0 0 0 2px var(--primary);
   pointer-events: none;
-  animation: tour-ring var(--duration-very-slow, 500ms) var(--ease-smooth-out, ease-out) 2 both;
+  animation: tour-ring 250ms var(--ease-smooth-out, ease-out) 1 both;
 }
 
 @media (prefers-reduced-motion: reduce) {

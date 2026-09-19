@@ -139,7 +139,7 @@ export const WELCOME_TOUR: Tour = {
           ? 'Your voice profile lives here: what you make, who it is for, and the tone. Drafts are written from it.'
           : ctx.hasVoice
             ? `Your voice profile is active (revision ${ctx.voiceRevision ?? 1}). Drafts are written from it, and every change you approve becomes a new revision.`
-            : 'A good first stop: say what you make, who it is for, and the tone. Drafts and previews work before you do; scheduling asks for an active voice profile.',
+            : 'A good first stop: say what you make, who it is for, and the tone. You can draft and schedule before adding a voice; a reminder helps you review the tone.',
       when: (ctx) => ctx.canEdit
     },
     {
