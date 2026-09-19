@@ -11,6 +11,8 @@ import { WorkspaceProvider } from '@/lib/workspace/provider';
 import { AppGate } from './app-gate';
 import AppSidebar from './app-sidebar';
 import Header from './header';
+import { MobileTabBar } from './mobile-tab-bar';
+import { ShortcutsDialog } from './shortcuts-dialog';
 
 /**
  * Client shell for /app/*: session → workspace → gate → sidebar + Cmd+K +
@@ -33,13 +35,15 @@ export function AppShell({ defaultOpen, children }: { defaultOpen: boolean; chil
                   Skip to content
                 </a>
                 <AppSidebar />
-                <SidebarInset id='main-content' tabIndex={-1} className='min-w-0 scroll-mt-16'>
+                <SidebarInset id='main-content' tabIndex={-1} className='min-w-0 scroll-mt-16 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0'>
                   <Header />
                   <InfobarProvider defaultOpen={false}>
                     {children}
                     <InfoSidebar side='right' />
                   </InfobarProvider>
                 </SidebarInset>
+                <MobileTabBar />
+                <ShortcutsDialog />
               </SidebarProvider>
             </KBar>
             </PreferencesProvider>

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { NotificationBell } from './notification-bell';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Icons } from '@/components/icons';
 import { LiveIsland } from '@/components/layout/live-island';
@@ -46,8 +47,9 @@ export default function Header() {
           <SearchInput />
         </div>
         <SearchIconButton />
+        <NotificationBell />
         <HelpMenu />
-        <ThemeModeToggle />
+        <div className='hidden sm:block'><ThemeModeToggle /></div>
         <div className='hidden xl:block'>
           <ThemeSelector />
         </div>

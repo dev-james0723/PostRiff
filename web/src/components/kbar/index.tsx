@@ -1,4 +1,5 @@
 'use client';
+import type { Action } from 'kbar';
 import { navGroups } from '@/config/nav-config';
 import { KBarAnimator, KBarPortal, KBarPositioner, KBarProvider, KBarSearch, useRegisterActions } from 'kbar';
 import { tourStore } from '@/features/onboarding/store';
@@ -58,7 +59,8 @@ export default function KBar({ children }: { children: React.ReactNode }) {
   }, [router, filteredGroups]);
 
   return (
-    <KBarProvider actions={actions}>
+    <KBarProvider>
+      <NavigationActions actions={actions} />
       <KBarComponent>{children}</KBarComponent>
     </KBarProvider>
   );
@@ -140,3 +142,8 @@ const KBarComponent = ({ children }: { children: React.ReactNode }) => {
     </>
   );
 };
+
+function NavigationActions({ actions }: { actions: Action[] }) {
+  useRegisterActions(actions, [actions]);
+  return null;
+}

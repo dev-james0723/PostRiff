@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { Kbd } from '@/components/ui/kbd';
+import { SHORTCUTS_EVENT } from '@/components/layout/shortcuts-dialog';
 import { tourStore } from './store';
 import { pageTourFor } from './tours';
 
@@ -48,6 +49,7 @@ export function HelpMenu() {
             </span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
+        <DropdownMenuItem className='hidden md:flex' onClick={() => window.dispatchEvent(new Event(SHORTCUTS_EVENT))}>Keyboard shortcuts<Kbd className='ml-auto'>?</Kbd></DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem

@@ -127,6 +127,7 @@ function InfobarProvider({
   // Adds a keyboard shortcut to toggle the infobar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return;
       if (event.key === INFOBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         toggleInfobar();
