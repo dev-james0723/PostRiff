@@ -1,26 +1,46 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { toast } from 'sonner';
+import Link from 'next/link';
+import { parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PageContainer from '@/components/layout/page-container';
-import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
-import { StatefulButton } from '@/components/motion/button';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Icons } from '@/components/icons';
+import { DigitSwap } from '@/components/motion/digit-swap';
+import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
-import { useAudience } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { Thread } from '@/lib/api/types';
+import { useAudience, useChannels } from '@/lib/api/hooks';
+import type { Audience, ChannelView, ProviderView, Thread } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
-import { EASE_OUT } from '@/lib/ease';
-import { relativeTime } from '@/lib/time';
+import { channelBadge, isVerified } from '@/lib/channels/state';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { CoverageStrip } from './coverage-strip';
+import { InboxLevelBadge } from './level-badge';
+import {
+  apiCounts,
+  COMMENT_READ_NAMES,
+  commentsReadFor,
+  evidenceSentence,
+  INBOX_FILTERS,
+  isAnswered,
+  mergedReplies,
+  providerFor,
+  replyHistoryReported,
+  THREAD_PAGE_LIMIT,
+  threadTime,
+  type InboxFilter,
+  type ReplyRecord
+} from './model';
+import type { ComposerState } from './reply-composer';
+import { NoThreadSelected, ThreadDetail, ThreadHeading, threadHeadline } from './thread-detail';
+import { ThreadList } from './thread-list';
+import { useTwoPane } from './use-two-pane';
 
 const infoContent = {
   title: 'Real replies, one at a time',
@@ -28,216 +48,350 @@ const infoContent = {
     { title: 'Original thread first', description: 'You always see the comment in context before writing.' },
     {
       title: 'Labelled suggestions',
-      description: 'An AI suggestion is marked as such in the draft and never sent on its own. You edit, then approve the exact account, thread and text.'
+      description:
+        'A suggestion says what produced it (an AI model or a plain starter line) and is never sent on its own. You edit, then approve the exact account, thread and text.'
     },
-    { title: 'No bulk, no auto-reply', description: 'Each reply is an individual approval with its own receipt.' }
+    { title: 'No bulk, no auto-reply', description: 'Each reply is an individual approval.' },
+    {
+      title: 'Which accounts feed this inbox',
+      description:
+        `Comments appear only for ${COMMENT_READ_NAMES} accounts whose comments capability is Direct; comments from other providers are not read in this release. Each capability shows its own level and evidence here and on the Channels page.`
+    }
   ]
 };
 
-interface Draft {
-  draftId: string;
-  text: string;
-  label: string;
+const PARAMS = {
+  filter: parseAsStringLiteral(INBOX_FILTERS).withDefault('all'),
+  thread: parseAsString
+};
+
+const EMPTY_COMPOSER: ComposerState = { text: '', draft: null };
+
+/** Both panes share one height below the header so each scrolls on its own. */
+const PANE_HEIGHT = 'lg:max-h-[calc(100dvh-16rem)] lg:min-h-80';
+
+const FILTER_LABELS: Record<InboxFilter, string> = { all: 'All', unanswered: 'Unanswered', replied: 'Replied' };
+
+export function InboxView() {
+  const { workspaceId } = useWorkspaceApi();
+  const [, setParams] = useQueryStates(PARAMS, { history: 'replace', scroll: false });
+  const previous = useRef(workspaceId);
+  // A comment from one workspace means nothing in another: switching drops the open one.
+  useEffect(() => {
+    if (previous.current === workspaceId) return;
+    previous.current = workspaceId;
+    void setParams({ thread: null });
+  }, [workspaceId, setParams]);
+  // Keyed by workspace so unsaved reply text and this visit's approvals never carry across.
+  return <InboxPage key={workspaceId} />;
 }
 
-/** The request a thread card is waiting on, so only the button that started it shows a spinner. */
-type ReplyAction = 'suggest' | 'save' | 'preview' | 'send';
+function InboxPage() {
+  const audience = useAudience();
+  const channelsQuery = useChannels();
+  const access = useWorkspaceAccess();
+  const canEdit = checkAccess(access, { permission: 'edit' });
+  const canReply = checkAccess(access, { permission: 'reply' });
+  const twoPane = useTwoPane();
+  const [params, setParams] = useQueryStates(PARAMS, { history: 'replace', scroll: false });
+  const [composers, setComposers] = useState<Record<string, ComposerState>>({});
+  const [sessionReplies, setSessionReplies] = useState<Record<string, ReplyRecord[]>>({});
+  // The sheet keeps showing the comment it opened with while it slides closed.
+  const [sheetThreadId, setSheetThreadId] = useState<string | null>(null);
 
-function ThreadCard({ thread, canReply }: { thread: Thread; canReply: boolean }) {
-  const { api, workspaceId } = useWorkspaceApi();
-  const [text, setText] = useState('');
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [preview, setPreview] = useState<{ draftId: string; digest: string; action: string; replyLevel: string } | null>(null);
-  const [pending, setPending] = useState<ReplyAction | null>(null);
-  const busy = pending !== null;
-  // A short "Saved" on the button after a manual save; cleared by the timer or by editing the text.
-  const [saved, setSaved] = useState(false);
+  const data = audience.data;
+  const channels = channelsQuery.data?.channels;
+  const providers = channelsQuery.data?.providers;
+  const channelsById = useMemo(() => new Map((channels ?? []).map((channel) => [channel.id, channel])), [channels]);
 
-  useEffect(() => {
-    if (!saved) return;
-    const timer = window.setTimeout(() => setSaved(false), 1600);
-    return () => window.clearTimeout(timer);
-  }, [saved]);
+  const threads = useMemo(() => (data?.threads ?? []).toSorted((a, b) => threadTime(b).at - threadTime(a).at), [data]);
+  const repliesFor = useCallback((thread: Thread) => mergedReplies(thread, sessionReplies[thread.threadId]), [sessionReplies]);
+  const answered = useCallback((thread: Thread) => repliesFor(thread).some(isAnswered), [repliesFor]);
+  const reported = replyHistoryReported(threads);
+  const counts = data ? countsFor(data, threads, reported, answered) : null;
+  const filtered = threads.filter((thread) => (params.filter === 'all' ? true : params.filter === 'replied' ? answered(thread) : !answered(thread)));
+  const freshReplyIds = useMemo(() => new Set(Object.values(sessionReplies).flatMap((list) => list.map((reply) => reply.draftId))), [sessionReplies]);
 
-  async function makeDraft(origin: 'manual' | 'ai_fixture') {
-    setPending(origin === 'manual' ? 'save' : 'suggest');
-    setSaved(false);
-    try {
-      const result = await api.draftReply(workspaceId, thread.threadId, { origin, text });
-      setDraft(result);
-      if (origin === 'ai_fixture') setText(result.text);
-      if (origin === 'manual') setSaved(true);
-      toast.success(`Draft saved · ${result.label}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not draft a reply.');
-    } finally {
-      setPending(null);
-    }
+  const selected = params.thread ? (threads.find((thread) => thread.threadId === params.thread) ?? null) : null;
+  const missing = Boolean(params.thread && data && !selected);
+  if (selected && selected.threadId !== sheetThreadId) setSheetThreadId(selected.threadId);
+  const sheetThread = sheetThreadId ? (threads.find((thread) => thread.threadId === sheetThreadId) ?? null) : null;
+
+  const select = (threadId: string) => void setParams({ thread: threadId });
+  const clear = () => void setParams({ thread: null });
+
+  const latestReply = useCallback(
+    (thread: Thread) => {
+      const replies = repliesFor(thread);
+      return replies.findLast(isAnswered) ?? replies.findLast((reply) => reply.status === 'draft');
+    },
+    [repliesFor]
+  );
+
+  function detailFor(thread: Thread) {
+    return (
+      <ThreadDetail
+        key={thread.threadId}
+        thread={thread}
+        channel={channelsById.get(thread.connectionId)}
+        replies={repliesFor(thread)}
+        freshReplyIds={freshReplyIds}
+        composer={composers[thread.threadId] ?? EMPTY_COMPOSER}
+        onComposerChange={(patch) =>
+          setComposers((current) => ({ ...current, [thread.threadId]: { ...(current[thread.threadId] ?? EMPTY_COMPOSER), ...patch } }))
+        }
+        onApproved={(reply) => setSessionReplies((current) => ({ ...current, [thread.threadId]: [...(current[thread.threadId] ?? []), reply] }))}
+        canEdit={canEdit}
+        canReply={canReply}
+      />
+    );
   }
 
-  async function openPreview() {
-    if (!draft) return;
-    setPending('preview');
-    try {
-      setPreview({ draftId: draft.draftId, ...(await api.replyPreview(workspaceId, draft.draftId)) });
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Preview failed.');
-    } finally {
-      setPending(null);
-    }
+  let main;
+  if (audience.isPending) {
+    main = <InboxSkeleton />;
+  } else if (!data) {
+    main = (
+      <Alert variant='destructive'>
+        <Icons.alertCircle />
+        <AlertTitle>Could not load comments</AlertTitle>
+        <AlertDescription>{audience.error instanceof ApiError ? audience.error.message : 'The server did not answer.'}</AlertDescription>
+        <AlertAction>
+          <Button variant='outline' size='sm' onClick={() => void audience.refetch()}>
+            Retry
+          </Button>
+        </AlertAction>
+      </Alert>
+    );
+  } else if (threads.length === 0) {
+    main = <InboxEmpty data={data} channels={channels} providers={providers} channelsPending={channelsQuery.isPending} />;
+  } else {
+    main = (
+      <div className='grid min-w-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]'>
+        <section aria-label='Comments' className='flex min-w-0 flex-col gap-3'>
+          <div className='-mx-1 overflow-x-auto px-1'>
+            <Tabs value={params.filter} onValueChange={(value) => void setParams({ filter: value as InboxFilter })} variant='segment'>
+              <TabsList aria-label='Show comments' className='border'>
+                {INBOX_FILTERS.map((filter) => {
+                  const count = counts?.[filter] ?? null;
+                  return (
+                    <TabsTrigger key={filter} value={filter} className='gap-1.5 px-3'>
+                      {FILTER_LABELS[filter]}
+                      {count !== null && <DigitSwap value={count} className='text-xs opacity-75' />}
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </Tabs>
+          </div>
+          {!reported && counts?.replied == null && (
+            <p className='text-muted-foreground text-xs'>
+              The server does not return reply history yet, so Unanswered and Replied only know about replies approved during this visit.
+            </p>
+          )}
+          {audience.isError && (
+            <Alert variant='destructive'>
+              <Icons.alertCircle />
+              <AlertTitle>Could not refresh comments</AlertTitle>
+              <AlertDescription>
+                {audience.error instanceof ApiError ? audience.error.message : 'The server did not answer.'} The list shows the last comments loaded.
+              </AlertDescription>
+              <AlertAction>
+                <Button variant='outline' size='sm' onClick={() => void audience.refetch()}>
+                  Retry
+                </Button>
+              </AlertAction>
+            </Alert>
+          )}
+          <div data-tour='inbox-threads' className={`min-w-0 lg:overflow-y-auto ${PANE_HEIGHT}`}>
+            {filtered.length > 0 ? (
+              <ThreadList threads={filtered} selectedId={params.thread} onSelect={select} channelsById={channelsById} latestReply={latestReply} />
+            ) : (
+              <p className='text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm'>
+                {params.filter === 'unanswered'
+                  ? 'Nothing waiting for a reply.'
+                  : reported
+                    ? 'No comment has an approved reply yet.'
+                    : 'No reply has been approved during this visit.'}
+              </p>
+            )}
+          </div>
+        </section>
+        {twoPane && (
+          <Card className={`min-w-0 gap-0 overflow-y-auto py-0 ${PANE_HEIGHT}`}>
+            {selected ? (
+              <>
+                <CardHeader className='bg-card sticky top-0 z-10 border-b py-3'>
+                  <ThreadHeading thread={selected} channel={channelsById.get(selected.connectionId)} />
+                </CardHeader>
+                <CardContent className='py-4'>{detailFor(selected)}</CardContent>
+              </>
+            ) : (
+              <NoThreadSelected missing={missing} onClear={clear} />
+            )}
+          </Card>
+        )}
+      </div>
+    );
   }
 
-  async function send() {
-    if (!preview) return;
-    setPending('send');
-    try {
-      const result = await api.approveReply(workspaceId, preview.draftId, preview.digest);
-      toast.success(`${result.status}${result.note ? ` · ${result.note}` : ''}`);
-      setPreview(null);
-      setDraft(null);
-      setText('');
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The reply could not be approved.');
-    } finally {
-      setPending(null);
-    }
-  }
+  const sheetHeadline = sheetThread ? threadHeadline(sheetThread, channelsById.get(sheetThread.connectionId)) : null;
 
   return (
-    <Card className='h-full'>
-      <CardHeader>
-        <CardTitle className='flex flex-wrap items-center gap-2 text-base'>
-          <ChannelIcon platform={thread.provider} name={thread.provider} />
-          @{thread.author || 'someone'}
-          <Badge variant='outline'>{thread.provider}</Badge>
-          {thread.tombstoned && <Badge variant='secondary'>removed by provider</Badge>}
-        </CardTitle>
-        <CardDescription>
-          post {thread.providerPostId} · {relativeTime(thread.ingestedAt)}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        <blockquote className='border-l-2 pl-3 text-sm'>{thread.text}</blockquote>
-        {thread.replyAvailable && canReply ? (
-          <div className='flex flex-col gap-2'>
-            <Textarea
-              rows={2}
-              value={text}
-              onChange={(event) => {
-                setText(event.target.value);
-                setSaved(false);
-              }}
-              placeholder='Write your reply…'
-              maxLength={500}
-              aria-label='Your reply'
-            />
-            <div className='flex flex-wrap gap-2'>
-              <StatefulButton
-                variant='outline'
-                size='sm'
-                state={pending === 'suggest' ? 'loading' : 'idle'}
-                loadingText='Suggesting…'
-                icon={<Icons.sparkles className='size-4' />}
-                disabled={busy}
-                onClick={() => void makeDraft('ai_fixture')}
-              >
-                Suggest (labelled AI)
-              </StatefulButton>
-              <StatefulButton
-                variant='outline'
-                size='sm'
-                state={pending === 'save' ? 'loading' : saved ? 'success' : 'idle'}
-                loadingText='Saving…'
-                successText='Saved'
-                disabled={busy || !text.trim()}
-                onClick={() => void makeDraft('manual')}
-              >
-                Save my reply
-              </StatefulButton>
-              <StatefulButton size='sm' state={pending === 'preview' ? 'loading' : 'idle'} loadingText='Loading preview…' disabled={busy || !draft} onClick={() => void openPreview()}>
-                Review & send
-              </StatefulButton>
-            </div>
-            {draft && <p className='text-muted-foreground text-xs'>Draft saved · {draft.label}</p>}
-          </div>
-        ) : (
-          <p className='text-muted-foreground text-xs'>
-            {thread.replyAvailable ? 'You need the reply permission to answer here.' : `Replies are ${thread.replyLevel} for this connection — read-only here.`}
-          </p>
-        )}
-      </CardContent>
-      <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{preview?.action ?? 'Send reply'}</DialogTitle>
-            <DialogDescription>
-              Reply capability: {preview?.replyLevel}. Digest <span className='font-mono'>{preview?.digest.slice(0, 12)}…</span>
-            </DialogDescription>
-          </DialogHeader>
-          <blockquote className='border-l-2 pl-3 text-sm'>{text}</blockquote>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setPreview(null)}>
-              Cancel
-            </Button>
-            <StatefulButton state={pending === 'send' ? 'loading' : 'idle'} loadingText='Sending…' disabled={busy || preview?.replyLevel !== 'Direct'} onClick={() => void send()}>
-              {preview?.replyLevel === 'Direct' ? 'Approve & send' : 'Sending not available'}
-            </StatefulButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
+    <PageContainer
+      pageTitle='Inbox'
+      pageDescription={`Comments on posts PostRiff published, from ${COMMENT_READ_NAMES} accounts whose comments capability is Direct. Each reply is approved on its own.`}
+      infoContent={infoContent}
+    >
+      <div className='flex min-w-0 flex-col gap-4'>
+        <CoverageStrip
+          channels={channels}
+          providers={providers}
+          isPending={channelsQuery.isPending}
+          error={channelsQuery.error}
+          onRetry={() => void channelsQuery.refetch()}
+        />
+        {main}
+        {data && threads.length > 0 && <p className='text-muted-foreground text-xs'>{data.limits}</p>}
+      </div>
+      {!twoPane && (
+        <Sheet open={Boolean(selected)} onOpenChange={(open) => !open && clear()}>
+          <SheetContent side='right' className='gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-lg'>
+            {sheetThread && sheetHeadline && (
+              <>
+                <SheetHeader className='border-b pr-12'>
+                  <div className='flex min-w-0 items-center gap-2'>
+                    <ChannelIcon platform={sheetHeadline.platform} name={sheetHeadline.platform} />
+                    <div className='min-w-0'>
+                      <SheetTitle className='truncate'>{sheetHeadline.title}</SheetTitle>
+                      <SheetDescription className='truncate text-xs'>{sheetHeadline.meta}</SheetDescription>
+                    </div>
+                  </div>
+                </SheetHeader>
+                <div className='min-h-0 flex-1 overflow-y-auto p-4'>{detailFor(sheetThread)}</div>
+              </>
+            )}
+          </SheetContent>
+        </Sheet>
+      )}
+    </PageContainer>
   );
 }
 
-export function InboxView() {
-  const audience = useAudience();
-  const access = useWorkspaceAccess();
-  const canReply = checkAccess(access, { permission: 'reply' });
-  const reduce = useReducedMotion();
-  const data = audience.data;
+/** Tab counts that are complete; a count the server cannot vouch for is left out rather than guessed. */
+function countsFor(data: Audience, threads: Thread[], reported: boolean, answered: (thread: Thread) => boolean): Record<InboxFilter, number | string | null> {
+  const server = apiCounts(data);
+  const capped = threads.length >= THREAD_PAGE_LIMIT;
+  const repliedHere = reported && !capped ? threads.filter(answered).length : null;
+  return {
+    all: server?.all ?? (capped ? `${THREAD_PAGE_LIMIT}+` : threads.length),
+    replied: server?.replied ?? repliedHere,
+    unanswered: server?.unanswered ?? (repliedHere === null ? null : threads.length - repliedHere)
+  };
+}
+
+function InboxSkeleton() {
   return (
-    <PageContainer pageTitle='Inbox' pageDescription='Comments on your published posts, with replies you approve one at a time.' infoContent={infoContent}>
-      {audience.isLoading || !data ? (
-        <Skeleton className='h-64 w-full' />
-      ) : data.threads.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant='icon'>
-              <Icons.inbox />
-            </EmptyMedia>
-            <EmptyTitle>No comments yet</EmptyTitle>
-            <EmptyDescription>
-              Comments appear for connections whose comments capability is Direct, after a verified publication.
-            </EmptyDescription>
-          </EmptyHeader>
-          {data.capabilities.length > 0 && (
-            <ul className='text-muted-foreground mt-2 text-sm'>
-              {data.capabilities.map((c) => (
-                <li key={c.connectionId}>
-                  connection {c.connectionId.slice(0, 8)}… · comments {c.commentsRead}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className='text-muted-foreground mt-2 text-xs'>{data.limits}</p>
-        </Empty>
-      ) : (
-        <div className='flex flex-col gap-4'>
-          <div className='grid gap-4 xl:grid-cols-2'>
-            {data.threads.map((thread, index) => (
-              <motion.div
-                key={thread.threadId}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={reduce ? { duration: 0 } : { duration: 0.28, delay: Math.min(index * 0.05, 0.3), ease: EASE_OUT }}
-              >
-                <ThreadCard thread={thread} canReply={canReply} />
-              </motion.div>
-            ))}
-          </div>
-          <p className='text-muted-foreground text-xs'>{data.limits}</p>
-        </div>
-      )}
-    </PageContainer>
+    <div className='grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]'>
+      <div className='flex flex-col gap-2'>
+        <Skeleton className='h-9 w-64 max-w-full' />
+        <Skeleton className='h-16 w-full' />
+        <Skeleton className='h-16 w-full' />
+        <Skeleton className='h-16 w-full' />
+      </div>
+      <Skeleton className='hidden h-48 w-full lg:block' />
+    </div>
+  );
+}
+
+/** Per account, why no comment is here yet: the account, its comments and reply levels, and the evidence. */
+function InboxEmpty({
+  data,
+  channels,
+  providers,
+  channelsPending
+}: {
+  data: Audience;
+  channels: ChannelView[] | undefined;
+  providers: ProviderView[] | undefined;
+  channelsPending: boolean;
+}) {
+  let accounts;
+  if (channelsPending) {
+    accounts = (
+      <div className='flex w-full flex-col gap-2'>
+        <Skeleton className='h-14 w-full' />
+        <Skeleton className='h-14 w-full' />
+      </div>
+    );
+  } else if (!channels) {
+    accounts = <p className='text-muted-foreground text-sm'>Account details are unavailable right now; retry above.</p>;
+  } else if (channels.length === 0) {
+    accounts = (
+      <Link href='/app/channels' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        Connect an account
+      </Link>
+    );
+  } else {
+    accounts = (
+      <ul className='flex w-full flex-col gap-2 text-left'>
+        {channels.map((channel) => {
+          const comments = channel.capabilities.comments_read;
+          const reply = channel.capabilities.reply;
+          const commentsLevel = comments?.level ?? 'Unsupported';
+          const replyLevel = reply?.level ?? 'Unsupported';
+          const provider = providerFor(channel.platform, providers);
+          const badge = isVerified(channel) ? null : channelBadge(channel);
+          let sentence;
+          if (commentsLevel !== 'Direct') {
+            sentence = `Comments are ${commentsLevel} for ${channel.account}, so PostRiff does not read its comments. ${evidenceSentence(comments, provider?.capabilities.comments_read, channel.platform)}`;
+          } else if (commentsReadFor(channel.platform, providers)) {
+            sentence = `Comments show up here after PostRiff publishes and verifies a post on ${channel.account}.`;
+          } else {
+            // A Direct level is not enough: the server reads comments for only some providers.
+            sentence = `Comments are Direct for ${channel.account}, but PostRiff reads only ${COMMENT_READ_NAMES} comments in this release, so none from ${channel.platform} appear here.`;
+          }
+          return (
+            <li key={channel.id} className='bg-muted/40 flex flex-col gap-1.5 rounded-lg border p-3'>
+              <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium'>
+                <ChannelIcon platform={channel.platform} name={channel.platform} size='xs' />
+                <span className='truncate'>{channel.account}</span>
+                <span className='text-muted-foreground text-xs font-normal'>{channel.platform}</span>
+                {badge && <span className='text-muted-foreground text-xs font-normal'>· {badge.label}</span>}
+              </div>
+              <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+                <span className='flex items-center gap-1'>
+                  Comments <InboxLevelBadge level={commentsLevel} />
+                </span>
+                <span className='flex items-center gap-1'>
+                  Reply <InboxLevelBadge level={replyLevel} />
+                </span>
+              </div>
+              <p className='text-muted-foreground text-xs'>{sentence}</p>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  return (
+    <Empty className='border' data-tour='inbox-empty'>
+      <EmptyHeader>
+        <EmptyMedia variant='icon'>
+          <Icons.inbox />
+        </EmptyMedia>
+        <EmptyTitle>No comments yet</EmptyTitle>
+        <EmptyDescription>
+          {channels && channels.length === 0
+            ? `Connect a ${COMMENT_READ_NAMES} account with Direct comments to read the comments on posts PostRiff publishes there.`
+            : `Comments appear for ${COMMENT_READ_NAMES} accounts whose comments capability is Direct, after PostRiff publishes and verifies a post there. Comments from other providers are not read in this release.`}
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent className='max-w-xl'>
+        {accounts}
+        <p className='text-muted-foreground text-xs'>{data.limits}</p>
+      </EmptyContent>
+    </Empty>
   );
 }
