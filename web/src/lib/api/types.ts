@@ -841,3 +841,36 @@ export interface Health {
   execution: string;
   configured: boolean;
 }
+
+/* ---------- public tool registry ---------- */
+
+export interface ToolBounds {
+  maxSeconds: number;
+  maxInputBytes: number;
+  maxOutputBytes: number;
+  network: string;
+  files: string;
+}
+
+export interface ToolDefinition {
+  id: string;
+  version: string;
+  effect: string;
+  cost: string;
+  purpose: string;
+  bounds: ToolBounds;
+  releaseId: string;
+  state: string;
+}
+
+export interface ToolIsolation {
+  isolated: boolean;
+  runner: string;
+  detail: string;
+  publicInvokeEnabled: boolean;
+}
+
+export interface ToolRegistry {
+  tools: ToolDefinition[];
+  isolation: ToolIsolation;
+}

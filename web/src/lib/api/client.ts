@@ -5,6 +5,7 @@
  * one client (see `@/lib/auth/session`).
  */
 import type {
+  ToolRegistry,
   Analytics,
   Audience,
   AuditEvent,
@@ -103,6 +104,7 @@ export function createApi(getToken: TokenSource) {
 
   return {
     /* public */
+    tools: () => get<ToolRegistry>('/api/tools', false),
     catalog: () => get<Catalog>('/api/catalog', false),
     health: () => get<Health>('/api/health', false),
     privacyNotice: () => get<PrivacyNotice>('/api/privacy/notice', false),

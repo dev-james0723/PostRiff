@@ -27,6 +27,7 @@ export const keys = {
   myChannels: ['me', 'channels'] as const,
   securityEvents: ['me', 'security-events'] as const,
   myInvitations: ['me', 'invitations'] as const,
+  tools: ['tools'] as const,
   models: ['models'] as const,
   privacyNotice: ['privacy-notice'] as const
 };
@@ -34,6 +35,11 @@ export const keys = {
 function useScoped() {
   const { api, workspaceId } = useWorkspace();
   return { api, w: workspaceId as string, enabled: Boolean(workspaceId) };
+}
+
+export function useTools() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.tools, queryFn: () => api.tools(), staleTime: 10 * 60_000 });
 }
 
 export function useSnapshot(options: { refetchInterval?: number | false } = {}) {
