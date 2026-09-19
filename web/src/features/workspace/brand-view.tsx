@@ -1,123 +1,161 @@
 'use client';
 
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useSnapshot } from '@/lib/api/hooks';
+import { StatefulButton, type ButtonState } from '@/components/motion/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import type { InfobarContent } from '@/components/ui/infobar';
+import { Icons } from '@/components/icons';
+import { ApiError } from '@/lib/api/client';
+import { useMemory, useSnapshot } from '@/lib/api/hooks';
+import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { downloadBlob } from '@/lib/download';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { toast } from 'sonner';
+import { SectionUnavailable } from './brand/brand-parts';
+import { BrandLoadError, BrandSkeleton, BrandStaleNotice } from './brand/brand-states';
+import { DraftsReadCard, MEMORY_HREF } from './brand/drafts-read-card';
+import { IdentityCard } from './brand/identity-card';
+import { ProposalReviewCard } from './brand/proposal-review-card';
+import { RevisionHistory } from './brand/revision-history';
+import { VoiceCard } from './brand/voice-card';
+import { VoiceStatusStrip } from './brand/voice-status-strip';
+import { activeProfile, canExportPackage, voiceStatus } from './brand/voice-model';
 import { VoiceSetup } from './voice-setup';
 
-interface ProfileLike {
-  tone?: string;
-  writingExample?: string;
-  observations?: string[];
-  fields?: { id: string; label: string; value: string; section: string; privacy: string }[];
-}
+const infoContent: InfobarContent = {
+  title: 'About Brand & voice',
+  sections: [
+    {
+      title: 'What a voice changes',
+      description:
+        'The tone goes into every draft request. The observations and sample become VOICE.md, and what you are building, for whom and the speaker become IDENTITY.md. Writing routes read those files before drafting.',
+      links: [{ title: 'See the files on Memory', url: MEMORY_HREF }]
+    },
+    {
+      title: 'What it never does',
+      description:
+        'PostRiff does not analyse your sample to set the tone or observations; writing routes read it in VOICE.md only as an example of how you write. Nothing here infers your experience, credentials or results; unknowns stay listed as unknown.'
+    },
+    {
+      title: 'Before a voice is approved',
+      description: 'Drafts and previews work. Scheduling waits for an approved voice. Anyone who can edit may propose one; only an owner approves it.'
+    },
+    {
+      title: 'When the voice changes',
+      description:
+        'Approving a new revision marks every draft for review and holds approved or scheduled posts; each needs a new approval to go out. Earlier revisions stay listed.'
+    },
+    {
+      title: 'Downloading a voice package',
+      description: 'The download button appears only for a voice approved field by field. A voice set up on this page does not create that package yet.'
+    },
+    {
+      title: 'Sources',
+      description: 'Material drafts may draw from is added and reviewed in Ideas, not here.',
+      links: [{ title: 'Open Ideas', url: '/app/ideas' }]
+    }
+  ]
+};
 
-export function BrandView() {
-  const snapshot = useSnapshot();
+function ExportPackageButton() {
   const { api, workspaceId } = useWorkspaceApi();
-  const state = snapshot.data?.state;
-  const you = state?.you as { identitySentence?: string } | undefined;
-  const active = state?.speaker?.activeRevision ?? null;
-  const activeProfile = state?.speaker?.revisions.find((r) => r.revision === active)?.profile ?? null;
-  const profile = (activeProfile as ProfileLike | null) ?? (state?.profile as ProfileLike | undefined);
-  const sources = state?.sources ?? [];
+  const [state, setState] = useState<ButtonState>('idle');
 
-  async function exportProfile() {
+  // A finished state rests for a moment, then the label returns; the timer never outlives the page.
+  useEffect(() => {
+    if (state !== 'success' && state !== 'error') return;
+    const timer = window.setTimeout(() => setState('idle'), 1800);
+    return () => window.clearTimeout(timer);
+  }, [state]);
+
+  async function exportPackage() {
+    setState('loading');
     try {
       downloadBlob(await api.exportProfile(workspaceId), 'postriff-personal-voice.zip');
-    } catch {
-      toast.error('The voice profile could not be exported.');
+      setState('success');
+      toast.success('Voice package downloaded.');
+    } catch (err) {
+      setState('error');
+      toast.error(err instanceof ApiError ? err.message : 'The voice package could not be downloaded.');
     }
   }
 
   return (
+    <StatefulButton variant='outline' state={state} loadingText='Preparing…' successText='Downloaded' errorText='Try again' onClick={() => void exportPackage()}>
+      Download voice package
+    </StatefulButton>
+  );
+}
+
+export function BrandView() {
+  const access = useWorkspaceAccess();
+  const canEdit = checkAccess(access, { permission: 'edit' });
+  const snapshot = useSnapshot();
+  const memory = useMemory();
+  const state = snapshot.data?.state;
+  const isOwner = snapshot.data?.membership?.role === 'owner';
+  const status = voiceStatus(state);
+  const exportable = canExportPackage(activeProfile(state));
+  const sample = state?.workspace?.sample === true;
+
+  const side = (
+    <div className='flex min-w-0 flex-col gap-4'>
+      <DraftsReadCard memory={memory} />
+      <RevisionHistory state={state} query={snapshot} />
+    </div>
+  );
+
+  return (
     <PageContainer
       pageTitle='Brand & voice'
-      pageDescription='What PostRiff knows about how you write. Every entry came from you and can be exported or deleted.'
-      pageHeaderAction={
-        <Button variant='outline' onClick={() => void exportProfile()}>
-          Export voice profile
-        </Button>
-      }
-    >
-      {snapshot.isLoading ? (
-        <Skeleton className='h-64 w-full' />
-      ) : !active ? (
-        <div className='max-w-3xl'>
-          <VoiceSetup />
+      pageDescription='Who speaks in this workspace and how they sound. Drafts are written from it; nothing here is inferred by a model.'
+      infoContent={infoContent}
+      access={canEdit}
+      accessFallback={
+        <div className='text-muted-foreground max-w-sm text-center text-sm'>
+          Brand & voice is set up by owners, admins and editors. Ask one of them if the voice needs a change.
         </div>
+      }
+      pageHeaderAction={exportable ? <ExportPackageButton /> : undefined}
+    >
+      {snapshot.isPending ? (
+        <BrandSkeleton />
+      ) : !snapshot.data ? (
+        <BrandLoadError query={snapshot} />
       ) : (
-        <div className='grid gap-4 lg:grid-cols-2'>
-          <Card>
-            <CardHeader>
-              <CardTitle>Identity</CardTitle>
-              <CardDescription>The one-line summary drafts are checked against.</CardDescription>
-            </CardHeader>
-            <CardContent className='text-sm'>
-              {you?.identitySentence ? <p>{you.identitySentence}</p> : <p className='text-muted-foreground'>{state?.brandHub?.purpose ? `${state.brandHub.purpose} — for ${state.brandHub.audience ?? 'your readers'}.` : 'Not set yet.'}</p>}
-              <p className='text-muted-foreground mt-2 text-xs'>Voice profile revision {active} · {state?.speaker?.label}</p>
-              {profile?.tone && (
-                <p className='text-muted-foreground mt-2 text-xs'>
-                  Tone: <span className='text-foreground'>{profile.tone}</span>
-                </p>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Writing sample</CardTitle>
-              <CardDescription>Used to match rhythm and vocabulary, never quoted publicly.</CardDescription>
-            </CardHeader>
-            <CardContent className='text-sm'>
-              {profile?.writingExample ? (
-                <blockquote className='border-l-2 pl-3 whitespace-pre-wrap'>{profile.writingExample}</blockquote>
-              ) : (
-                <p className='text-muted-foreground'>No sample yet. Paste one in Ideas and mark it as your own writing.</p>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Observations</CardTitle>
-              <CardDescription>Patterns noticed across your approved drafts.</CardDescription>
-            </CardHeader>
-            <CardContent className='text-sm'>
-              {profile?.observations?.length ? (
-                <ul className='list-disc pl-5'>
-                  {profile.observations.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className='text-muted-foreground'>Nothing recorded yet.</p>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Sources</CardTitle>
-              <CardDescription>
-                {sources.length} source{sources.length === 1 ? '' : 's'} in this workspace · {sources.filter((s) => s.active).length} active
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-2 text-sm'>
-              {sources.slice(0, 6).map((source) => (
-                <div key={source.id} className='flex items-center justify-between gap-3'>
-                  <span className='truncate'>{source.title || source.kind}</span>
-                  <span className='text-muted-foreground shrink-0 text-xs'>{source.visibility}</span>
-                </div>
-              ))}
-              <Link href='/app/ideas' className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                Add a source in Ideas
-              </Link>
-            </CardContent>
-          </Card>
+        <div className='flex min-w-0 flex-col gap-4'>
+          {snapshot.isError && <BrandStaleNotice query={snapshot} updatedAt={snapshot.dataUpdatedAt} />}
+          <VoiceStatusStrip state={state} isOwner={isOwner} memory={memory} />
+          <div className='grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
+            {status.kind === 'active' ? (
+              <div className='flex min-w-0 flex-col gap-4' data-tour='voice-setup'>
+                {status.waiting && (
+                  <ProposalReviewCard state={state} workspaceRevision={snapshot.data.revision} isOwner={isOwner} sample={sample} query={snapshot} />
+                )}
+                <IdentityCard state={state} query={snapshot} />
+                <VoiceCard state={state} query={snapshot} isOwner={isOwner} />
+              </div>
+            ) : (
+              <div className='flex min-w-0 flex-col gap-3' data-tour='voice-setup'>
+                {sample && (
+                  <Alert>
+                    <Icons.lock />
+                    <AlertTitle>This sample workspace is read-only</AlertTitle>
+                    <AlertDescription>You can look through voice setup here, but nothing is saved in a sample workspace.</AlertDescription>
+                  </Alert>
+                )}
+                {status.kind === 'unavailable' ? (
+                  <div className='bg-card ring-foreground/10 rounded-xl p-4 ring-1'>
+                    <SectionUnavailable message='The voice could not be read from this workspace, so setup is not shown.' query={snapshot} />
+                  </div>
+                ) : (
+                  <VoiceSetup />
+                )}
+              </div>
+            )}
+            {side}
+          </div>
         </div>
       )}
     </PageContainer>
