@@ -1,0 +1,725 @@
+<!doctype html>
+<html
+  lang="en"
+  data-theme="light"
+  data-composition-variables='[
+    {"id":"theme","type":"enum","label":"Theme","default":"light","options":[{"value":"light","label":"Light"},{"value":"dark","label":"Dark"}]}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=896, height=560" />
+    <title>PostRiff welcome loop</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      /* Geist is the app's sans (web/src/components/themes/font.config.ts).
+         Bundled from the local Next.js install so renders never hit the network. */
+      @font-face {
+        font-family: "Geist";
+        src: url("assets/fonts/Geist-latin.woff2") format("woff2");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: block;
+      }
+
+      /* ── Palette: the only place colours live ───────────────────────── */
+      :root {
+        --bg: #fafafa;
+        --card: #ffffff;
+        --hairline: #e5e5e5;
+        --text: #171717;
+        --line: #a3a3a3;
+        --accent: #111111;
+        --on-accent: #ffffff;
+        --line-mix: 55%;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 28px -6px rgba(0, 0, 0, 0.1);
+      }
+      :root[data-theme="dark"] {
+        --bg: #0a0a0a;
+        --card: #171717;
+        --hairline: #262626;
+        --text: #fafafa;
+        --line: #737373;
+        --accent: #fafafa;
+        --on-accent: #0a0a0a;
+        --line-mix: 70%;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 30px -6px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 896px;
+        height: 560px;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      #stage {
+        position: relative;
+        width: 896px;
+        height: 560px;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Geist", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        font-synthesis: none;
+      }
+      /* The fill lives on a full-bleed child: transparent render formats
+         (png-sequence, webm) force the composition root transparent. */
+      #scene {
+        position: absolute;
+        inset: 0;
+        background: var(--bg);
+      }
+
+      .card {
+        position: absolute;
+        background: var(--card);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+      }
+      .glyph-svg {
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* ── Composer (home: vertically centred; phases 2–3: raised 134px) ── */
+      #composer {
+        left: 56px;
+        top: 220px;
+        width: 784px;
+        height: 120px;
+        z-index: 3;
+      }
+      .composer-text {
+        position: absolute;
+        left: 26px;
+        top: 24px;
+        width: 660px;
+      }
+      .type-line {
+        position: relative;
+        height: 36px;
+        font-size: 26px;
+        line-height: 36px;
+        font-weight: 450;
+        letter-spacing: -0.012em;
+        white-space: nowrap;
+      }
+      .type-text {
+        display: inline-block;
+        white-space: pre;
+        clip-path: inset(-6px 100% -6px -6px);
+      }
+      .caret {
+        position: absolute;
+        left: 0;
+        top: 4px;
+        width: 2px;
+        height: 28px;
+        border-radius: 1px;
+        background: var(--accent);
+        opacity: 0;
+      }
+      #caret-1 {
+        opacity: 1;
+      }
+      #send {
+        position: absolute;
+        right: 20px;
+        top: 38px;
+        width: 44px;
+        height: 44px;
+      }
+      #send-button {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: var(--accent);
+        color: var(--on-accent);
+        display: grid;
+        place-items: center;
+      }
+      #send-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        border: 2px solid var(--accent);
+        opacity: 0;
+      }
+
+      /* ── Draft cards ─────────────────────────────────────────────────── */
+      .draft {
+        top: 234px;
+        width: 248px;
+        height: 240px;
+        z-index: 2;
+        opacity: 0;
+        visibility: hidden;
+      }
+      #card-linkedin {
+        left: 56px;
+      }
+      #card-instagram {
+        left: 324px;
+      }
+      #card-threads {
+        left: 592px;
+      }
+      .draft-head {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        top: 18px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .glyph {
+        flex: none;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        border: 1px solid var(--hairline);
+        display: grid;
+        place-items: center;
+        color: var(--text);
+      }
+      .draft-label {
+        flex: 1;
+        font-size: 20px;
+        line-height: 24px;
+        font-weight: 600;
+        letter-spacing: -0.012em;
+        white-space: nowrap;
+      }
+      .time-chip {
+        flex: none;
+        height: 28px;
+        min-width: 50px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid var(--hairline);
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        line-height: 18px;
+        font-weight: 550;
+        opacity: 0;
+        visibility: hidden;
+      }
+      .time-chip.is-empty {
+        border: 1.5px dashed var(--line);
+        color: var(--line);
+      }
+      .draft-body {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        top: 66px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .ph {
+        display: block;
+        width: var(--w, 100%);
+        height: 9px;
+        border-radius: 5px;
+        background: color-mix(in srgb, var(--line) var(--line-mix), transparent);
+      }
+      .ph-media {
+        display: block;
+        width: 100%;
+        height: 56px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--line) 22%, transparent);
+      }
+      .pill-slot {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        bottom: 18px;
+        height: 40px;
+        opacity: 0;
+        visibility: hidden;
+      }
+      .pill {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 17px;
+        line-height: 20px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+      }
+      .pill-idle {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .pill-done {
+        background: var(--hairline);
+        color: var(--text);
+        opacity: 0;
+        visibility: hidden;
+      }
+      .pill-draft {
+        border: 1.5px dashed var(--line);
+        color: var(--text);
+      }
+      .check {
+        display: block;
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* ── Mini week calendar (same slot as the raised composer) ──────── */
+      #calendar {
+        left: 56px;
+        top: 80px;
+        width: 784px;
+        height: 132px;
+        z-index: 1;
+        opacity: 0;
+        visibility: hidden;
+      }
+      .cal-grid {
+        position: absolute;
+        left: 21px;
+        top: 14px;
+        display: grid;
+        grid-template-columns: 70px repeat(7, 96px);
+        grid-template-rows: 24px 40px 40px;
+      }
+      .cal-day,
+      .cal-time {
+        display: flex;
+        align-items: center;
+        font-size: 15px;
+        line-height: 18px;
+        font-weight: 550;
+      }
+      .cal-day {
+        justify-content: center;
+      }
+      .cal-time {
+        box-shadow: inset 0 1px 0 var(--hairline);
+      }
+      .cal-cell {
+        box-shadow:
+          inset 0 1px 0 var(--hairline),
+          inset 1px 0 0 var(--hairline);
+      }
+      .slot-chip {
+        position: absolute;
+        left: 287px;
+        width: 88px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--on-accent);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        opacity: 0;
+        visibility: hidden;
+      }
+      #slot-4pm {
+        top: 42px;
+      }
+      #slot-5pm {
+        top: 82px;
+      }
+      .slot-line {
+        display: block;
+        height: 6px;
+        border-radius: 3px;
+        background: color-mix(in srgb, var(--on-accent) 45%, transparent);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="stage"
+      data-composition-id="welcome-loop"
+      data-start="0"
+      data-duration="8"
+      data-fps="60"
+      data-width="896"
+      data-height="560"
+    >
+      <div id="scene" class="clip" data-start="0" data-duration="8" data-track-index="0">
+        <!-- Mini week calendar -->
+        <section id="calendar" class="card" aria-label="Week calendar">
+          <div class="cal-grid">
+            <span></span>
+            <span class="cal-day">M</span>
+            <span class="cal-day">T</span>
+            <span class="cal-day">W</span>
+            <span class="cal-day">T</span>
+            <span class="cal-day">F</span>
+            <span class="cal-day">S</span>
+            <span class="cal-day">S</span>
+            <span class="cal-time">4pm</span>
+            <span class="cal-cell"></span><span class="cal-cell"></span><span class="cal-cell"></span>
+            <span class="cal-cell"></span><span class="cal-cell"></span><span class="cal-cell"></span>
+            <span class="cal-cell"></span>
+            <span class="cal-time">5pm</span>
+            <span class="cal-cell"></span><span class="cal-cell"></span><span class="cal-cell"></span>
+            <span class="cal-cell"></span><span class="cal-cell"></span><span class="cal-cell"></span>
+            <span class="cal-cell"></span>
+          </div>
+          <div id="slot-4pm" class="slot-chip">
+            <svg class="glyph-svg" width="16" height="16" viewBox="0 0 24 24">
+              <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
+              <circle cx="9" cy="9.5" r="1.6" />
+              <path d="M4 17l5-5 4 4 2.5-2.5L20 18" />
+            </svg>
+            <i class="slot-line" style="width: 42px"></i>
+          </div>
+          <div id="slot-5pm" class="slot-chip">
+            <svg class="glyph-svg" width="16" height="16" viewBox="0 0 24 24">
+              <rect x="3.5" y="7.5" width="17" height="12" rx="2.5" />
+              <path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5" />
+              <path d="M3.5 12.5h17" />
+            </svg>
+            <i class="slot-line" style="width: 34px"></i>
+          </div>
+        </section>
+
+        <!-- Draft cards: one per channel -->
+        <article id="card-linkedin" class="card draft">
+          <header class="draft-head">
+            <span class="glyph">
+              <svg class="glyph-svg" width="18" height="18" viewBox="0 0 24 24">
+                <rect x="3.5" y="7.5" width="17" height="12" rx="2.5" />
+                <path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5" />
+                <path d="M3.5 12.5h17" />
+              </svg>
+            </span>
+            <span class="draft-label">LinkedIn</span>
+            <span id="time-linkedin" class="time-chip">5pm</span>
+          </header>
+          <div class="draft-body">
+            <i class="ph" style="--w: 100%"></i>
+            <i class="ph" style="--w: 94%"></i>
+            <i class="ph" style="--w: 98%"></i>
+            <i class="ph" style="--w: 90%"></i>
+            <i class="ph" style="--w: 56%"></i>
+          </div>
+          <div id="pill-linkedin" class="pill-slot">
+            <div class="pill pill-idle">Approve</div>
+            <div class="pill pill-done">
+              <svg class="check" viewBox="0 0 24 24"><path d="M5.5 12.5l4.25 4.25L18.5 8" /></svg>
+              <span>Approved</span>
+            </div>
+          </div>
+        </article>
+
+        <article id="card-instagram" class="card draft">
+          <header class="draft-head">
+            <span class="glyph">
+              <svg class="glyph-svg" width="18" height="18" viewBox="0 0 24 24">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
+                <circle cx="9" cy="9.5" r="1.6" />
+                <path d="M4 17l5-5 4 4 2.5-2.5L20 18" />
+              </svg>
+            </span>
+            <span class="draft-label">Instagram</span>
+            <span id="time-instagram" class="time-chip">4pm</span>
+          </header>
+          <div class="draft-body">
+            <i class="ph-media"></i>
+            <i class="ph" style="--w: 96%"></i>
+            <i class="ph" style="--w: 58%"></i>
+          </div>
+          <div id="pill-instagram" class="pill-slot">
+            <div class="pill pill-idle">Approve</div>
+            <div class="pill pill-done">
+              <svg class="check" viewBox="0 0 24 24"><path d="M5.5 12.5l4.25 4.25L18.5 8" /></svg>
+              <span>Approved</span>
+            </div>
+          </div>
+        </article>
+
+        <article id="card-threads" class="card draft">
+          <header class="draft-head">
+            <span class="glyph">
+              <svg class="glyph-svg" width="18" height="18" viewBox="0 0 24 24">
+                <path d="M5 5.5h14A1.5 1.5 0 0 1 20.5 7v8a1.5 1.5 0 0 1-1.5 1.5h-9l-4 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5z" />
+                <path d="M8 10h8M8 13h5" />
+              </svg>
+            </span>
+            <span class="draft-label">Threads</span>
+            <span id="time-threads" class="time-chip is-empty">
+              <svg class="glyph-svg" width="14" height="14" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M12 7.5V12l3 2" />
+              </svg>
+            </span>
+          </header>
+          <div class="draft-body">
+            <i class="ph" style="--w: 100%"></i>
+            <i class="ph" style="--w: 88%"></i>
+            <i class="ph" style="--w: 70%"></i>
+          </div>
+          <div id="pill-threads" class="pill-slot">
+            <div class="pill pill-draft">Draft</div>
+          </div>
+        </article>
+
+        <!-- Composer -->
+        <section id="composer" class="card" aria-label="Composer">
+          <div class="composer-text">
+            <div class="type-line">
+              <span id="type-1" class="type-text">A post about what we learned this week</span><i id="caret-1" class="caret"></i>
+            </div>
+            <div class="type-line">
+              <span id="type-2" class="type-text">Instagram 4pm · LinkedIn 5pm</span><i id="caret-2" class="caret"></i>
+            </div>
+          </div>
+          <div id="send">
+            <div id="send-ring"></div>
+            <div id="send-button">
+              <svg class="glyph-svg" width="20" height="20" viewBox="0 0 24 24" style="stroke-width: 2.2">
+                <path d="M12 18.5V5.5M6.5 11L12 5.5l5.5 5.5" />
+              </svg>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      // ── Theme: one composition, two renders (--variables '{"theme":"dark"}') ──
+      (function applyTheme() {
+        var vars =
+          window.__hyperframes && window.__hyperframes.getVariables
+            ? window.__hyperframes.getVariables()
+            : {};
+        document.documentElement.setAttribute("data-theme", vars.theme === "dark" ? "dark" : "light");
+      })();
+
+      // The app's --ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1), as a pure
+      // function of progress so GSAP can use it without CustomEase.
+      function cubicBezier(x1, y1, x2, y2) {
+        var cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+        var cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+        function sx(t) { return ((ax * t + bx) * t + cx) * t; }
+        function sy(t) { return ((ay * t + by) * t + cy) * t; }
+        function dsx(t) { return (3 * ax * t + 2 * bx) * t + cx; }
+        return function (p) {
+          if (p <= 0) return 0;
+          if (p >= 1) return 1;
+          var t = p;
+          for (var i = 0; i < 8; i += 1) {
+            var err = sx(t) - p;
+            if (Math.abs(err) < 1e-7) return sy(t);
+            var d = dsx(t);
+            if (Math.abs(d) < 1e-7) break;
+            t = Math.min(1, Math.max(0, t - err / d));
+          }
+          var lo = 0, hi = 1;
+          t = p;
+          for (var j = 0; j < 40; j += 1) {
+            var v = sx(t);
+            if (Math.abs(v - p) < 1e-7) break;
+            if (v < p) lo = t; else hi = t;
+            t = (lo + hi) / 2;
+          }
+          return sy(t);
+        };
+      }
+
+      function build() {
+        var EASE = cubicBezier(0.22, 1, 0.36, 1);
+        // App motion tokens (web/src/styles/transitions.css).
+        var STAGGER = 0.04, MICRO = 0.08, QUICK = 0.15, FAST = 0.25, SLOW = 0.4, VERY_SLOW = 0.5;
+
+        // Layout constants mirrored from the CSS above (canvas px).
+        var CARD_W = 248;
+        var CARD_CENTER = { linkedin: [180, 354], instagram: [448, 354], threads: [716, 354] };
+        var SLOT_W = 88;
+        var SLOT_CENTER = { "4pm": [387, 138], "5pm": [387, 178] };
+        var COMPOSER_RAISE = -134;
+
+        var tl = gsap.timeline({ paused: true, defaults: { ease: EASE } });
+        function at(target, from, to, position) {
+          to.immediateRender = false;
+          return tl.fromTo(target, from, to, position);
+        }
+
+        // ── Typed prompt: measure each prefix once so the reveal and the caret
+        //    land on real glyph edges (kerning included). ─────────────────────
+        function prefixEdges(el) {
+          var node = el.firstChild;
+          var base = el.getBoundingClientRect();
+          var ratio = base.width / el.offsetWidth || 1;
+          var range = document.createRange();
+          var edges = [0];
+          for (var k = 1; k <= node.length; k += 1) {
+            range.setStart(node, 0);
+            range.setEnd(node, k);
+            edges.push(Math.round(((range.getBoundingClientRect().right - base.left) / ratio) * 10) / 10);
+          }
+          return { edges: edges, width: el.offsetWidth, text: node.nodeValue };
+        }
+        function clipTo(width, x) {
+          return "inset(-6px " + Math.max(0, width - x) + "px -6px -6px)";
+        }
+        // Deterministic typing rhythm: a steady cadence with a short beat after
+        // spaces and separators.
+        function typeLine(textEl, caretEl, start) {
+          var m = prefixEdges(textEl);
+          var t = start;
+          for (var k = 1; k <= m.text.length; k += 1) {
+            tl.set(textEl, { clipPath: clipTo(m.width, m.edges[k]) }, t);
+            tl.set(caretEl, { x: m.edges[k] }, t);
+            var ch = m.text.charAt(k - 1);
+            t += ch === " " ? 0.035 : ch === "·" ? 0.06 : 0.014;
+          }
+          return { end: t, width: m.width };
+        }
+
+        var type1 = document.getElementById("type-1");
+        var type2 = document.getElementById("type-2");
+        var caret1 = document.getElementById("caret-1");
+        var caret2 = document.getElementById("caret-2");
+
+        // Phase 1 (0–2s): type, blink, send.
+        var line1 = typeLine(type1, caret1, 0.24);
+        tl.set(caret1, { opacity: 0 }, line1.end + 0.06);
+        tl.set(caret2, { opacity: 1, x: 0 }, line1.end + 0.06);
+        var line2 = typeLine(type2, caret2, line1.end + 0.1);
+        var typed = line2.end; // ≈ 1.54s
+        tl.set(caret2, { opacity: 0 }, typed + 0.1);
+        tl.set(caret2, { opacity: 1 }, typed + 0.22);
+        var SEND = typed + 0.26; // ≈ 1.80s
+        at("#send-button", { scale: 1 }, { scale: 0.9, duration: MICRO }, SEND);
+        at("#send-button", { scale: 0.9 }, { scale: 1, duration: 0.3 }, SEND + MICRO);
+        at("#send-ring", { scale: 1, opacity: 0.35 }, { scale: 1.5, opacity: 0, duration: SLOW }, SEND + MICRO);
+        tl.set(caret2, { opacity: 0 }, SEND + 0.12);
+
+        // Phase 2 (2–4s): composer rises; drafts fan out from under it.
+        at("#composer", { y: 0 }, { y: COMPOSER_RAISE, duration: 0.45 }, SEND + 0.12);
+        var cards = [
+          { id: "#card-linkedin", x: 268, rot: -5 },
+          { id: "#card-instagram", x: 0, rot: 0 },
+          { id: "#card-threads", x: -268, rot: 5 },
+        ];
+        cards.forEach(function (c, i) {
+          var t0 = 2.02 + i * STAGGER;
+          at(c.id, { autoAlpha: 0 }, { autoAlpha: 1, duration: FAST }, t0);
+          at(
+            c.id,
+            { x: c.x, y: -96, scale: 0.82, rotation: c.rot },
+            { x: 0, y: 0, scale: 1, rotation: 0, duration: 0.6 },
+            t0,
+          );
+          // Placeholder copy "writes" itself in, line by line.
+          var marks = document.querySelectorAll(c.id + " .ph, " + c.id + " .ph-media");
+          marks.forEach(function (el, j) {
+            tl.fromTo(
+              el,
+              { scaleX: 0, transformOrigin: "left center" },
+              { scaleX: 1, duration: SLOW, immediateRender: true },
+              2.3 + i * STAGGER + j * STAGGER * 2,
+            );
+          });
+          at(c.id + " .time-chip", { autoAlpha: 0, scale: 0.9 }, { autoAlpha: 1, scale: 1, duration: FAST }, 2.62 + i * STAGGER);
+          at(c.id + " .pill-slot", { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: 0.35 }, 2.8 + i * STAGGER);
+        });
+
+        // Phase 3 (4–5.5s): approve the two cards that asked for a time.
+        var checkPaths = document.querySelectorAll(".check path");
+        checkPaths.forEach(function (p) {
+          var len = Math.ceil(p.getTotalLength() + 1);
+          p.style.strokeDasharray = len + " " + len;
+          p.style.strokeDashoffset = String(len);
+          p.setAttribute("data-len", String(len));
+        });
+        ["#pill-linkedin", "#pill-instagram"].forEach(function (pill, i) {
+          var t = 4.0 + i * 0.3;
+          at(pill, { scale: 1 }, { scale: 0.96, duration: MICRO }, t);
+          at(pill, { scale: 0.96 }, { scale: 1, duration: 0.3 }, t + MICRO);
+          at(pill + " .pill-idle", { autoAlpha: 1 }, { autoAlpha: 0, duration: QUICK }, t + MICRO);
+          at(pill + " .pill-done", { autoAlpha: 0 }, { autoAlpha: 1, duration: FAST }, t + 0.1);
+          var path = document.querySelector(pill + " .check path");
+          var len = Number(path.getAttribute("data-len"));
+          at(path, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: VERY_SLOW }, t + 0.16);
+          at(pill + " .check", { scale: 0.9 }, { scale: 1.02, duration: 0.3 }, t + 0.16);
+          at(pill + " .check", { scale: 1.02 }, { scale: 1, duration: 0.2 }, t + 0.46);
+        });
+
+        // Phase 4 (5.5–7.2s): composer yields to the week; approved cards
+        // shrink into their slots. Threads stays a draft.
+        at("#composer", { autoAlpha: 1, scale: 1 }, { autoAlpha: 0, scale: 0.98, duration: 0.18 }, 5.4);
+        at("#calendar", { autoAlpha: 0 }, { autoAlpha: 1, duration: FAST }, 5.46);
+        at("#calendar", { y: 10, scale: 0.98 }, { y: 0, scale: 1, duration: SLOW }, 5.46);
+        [
+          { id: "#card-instagram", from: CARD_CENTER.instagram, slot: "4pm" },
+          { id: "#card-linkedin", from: CARD_CENTER.linkedin, slot: "5pm" },
+        ].forEach(function (f, i) {
+          var t = 5.8 + i * STAGGER;
+          var to = SLOT_CENTER[f.slot];
+          at(
+            f.id,
+            { x: 0, y: 0, scale: 1 },
+            { x: to[0] - f.from[0], y: to[1] - f.from[1], scale: SLOT_W / CARD_W, duration: 0.6 },
+            t,
+          );
+          at(f.id, { autoAlpha: 1 }, { autoAlpha: 0, duration: 0.18 }, t + 0.34);
+          at("#slot-" + f.slot, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 }, t + 0.32);
+          at("#slot-" + f.slot, { scale: 0.85 }, { scale: 1, duration: 0.35 }, t + 0.32);
+        });
+
+        // Reset the prompt while the composer is out of view.
+        tl.set(type1, { clipPath: "inset(-6px 100% -6px -6px)" }, 6.5);
+        tl.set(type2, { clipPath: "inset(-6px 100% -6px -6px)" }, 6.5);
+        tl.set(caret1, { opacity: 1, x: 0 }, 6.5);
+        tl.set(caret2, { x: 0 }, 6.5);
+
+        // Phase 5 (7.2–8s): close fast, return to the empty composer.
+        at("#calendar", { autoAlpha: 1, scale: 1 }, { autoAlpha: 0, scale: 0.98, duration: 0.2 }, 7.2);
+        at("#card-threads", { autoAlpha: 1, scale: 1 }, { autoAlpha: 0, scale: 0.98, duration: 0.2 }, 7.2 + STAGGER);
+        at("#composer", { autoAlpha: 0 }, { autoAlpha: 1, duration: FAST }, 7.36);
+        at("#composer", { y: 10, scale: 0.98 }, { y: 0, scale: 1, duration: SLOW }, 7.36);
+
+        window.__timelines["welcome-loop"] = tl;
+        tl.seek(0);
+      }
+
+      // Build after the bundled font is ready so prefix widths are real.
+      Promise.all([
+        document.fonts.load('450 24px "Geist"'),
+        document.fonts.load('600 18px "Geist"'),
+      ])
+        .catch(function () {})
+        .then(function () {
+          return document.fonts.ready;
+        })
+        .then(build);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "category": "ui-illustration (asset-free, hand-authored; no form category covers an invented product UI and the webpage category requires a real capture)",
+  "duration_s": 8,
+  "fps": 60,
+  "canvas": { "w": 896, "h": 560, "aspect": "16:10" },
+  "style": "Calm product-UI illustration in the PostRiff app language: white cards on near-white (or dark cards on near-black), 12px radius, hairline borders, soft shadow, one monochrome accent. No metrics, names, handles or logos.",
+  "palette": {
+    "light": { "bg": "#FAFAFA", "card": "#FFFFFF", "hairline": "#E5E5E5", "text": "#171717", "line": "#A3A3A3", "accent": "#111111" },
+    "dark": { "bg": "#0A0A0A", "card": "#171717", "hairline": "#262626", "text": "#FAFAFA", "line": "#737373", "accent": "#FAFAFA" }
+  },
+  "font": "Geist (bundled assets/fonts/Geist-latin.woff2), fallback Inter, system-ui",
+  "export": "png-sequence master -> mp4 (H.264 yuv420p faststart) + webm (VP9) + first-frame jpg, per theme",
+  "asset_needs": [],
+  "block": null,
+  "customize": {},
+  "content": {
+    "motion_tokens": {
+      "ease_open": "cubic-bezier(0.22, 1, 0.36, 1)",
+      "close": "same curve, 0.15-0.2s",
+      "stagger": 0.04,
+      "check_overshoot": 1.02
+    },
+    "beats": [
+      { "id": "type", "start": 0, "end": 2, "motion": "typed prompt on two lines (prefix-measured clip reveal + caret), one caret blink, send press with ring" },
+      { "id": "fan-out", "start": 2, "end": 4, "motion": "composer rises 134px; three drafts slide out from under it with a small fan rotation, 40ms stagger; placeholder lines draw in; time chips and pills appear" },
+      { "id": "approve", "start": 4, "end": 5.5, "motion": "Approve pill pressed on LinkedIn then Instagram; label swaps to a drawn check + Approved; Threads stays Draft (dashed, no time)" },
+      { "id": "schedule", "start": 5.5, "end": 7.2, "motion": "composer closes, week calendar opens in its place; approved cards shrink into Wednesday 4pm (Instagram) and 5pm (LinkedIn) slot chips" },
+      { "id": "reset", "start": 7.2, "end": 8, "motion": "calendar and Threads close fast; empty composer reopens and holds, matching frame 0" }
+    ],
+    "proof_times": [0, 1.0, 1.85, 2.2, 3.6, 4.6, 6.05, 6.9, 7.3, 7.983]
+  }
+}

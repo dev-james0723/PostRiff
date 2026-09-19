@@ -1,0 +1,17 @@
+{
+  "duration": 8,
+  "assertions": [
+    { "kind": "appearsBy", "selector": "#composer", "bySec": 0 },
+    { "kind": "appearsBy", "selector": "#card-linkedin", "bySec": 2.4 },
+    { "kind": "appearsBy", "selector": "#card-threads", "bySec": 2.5 },
+    { "kind": "before", "a": "#card-linkedin", "b": "#calendar" },
+    { "kind": "before", "a": "#calendar", "b": "#slot-4pm" },
+    { "kind": "appearsBy", "selector": "#slot-5pm", "bySec": 6.5 },
+    { "kind": "staysInFrame", "selector": "#card-linkedin" },
+    { "kind": "staysInFrame", "selector": "#card-instagram" },
+    { "kind": "staysInFrame", "selector": "#card-threads" },
+    { "kind": "staysInFrame", "selector": "#composer" },
+    { "kind": "staysInFrame", "selector": "#calendar" },
+    { "kind": "keepsMoving", "withinSelector": "#scene" }
+  ]
+}
