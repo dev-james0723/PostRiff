@@ -172,6 +172,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
         destinations: selected.map((platform) => ({ platform, language })),
         language,
         model: choice.model,
+        reasoning: choice.reasoning,
         timeZone
       });
       if (result.status === 'memory') {
@@ -359,6 +360,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
               models={choice.options}
               model={choice.model}
               onModel={choice.choose}
+              reasoning={choice.reasoning}
+              reasoningOptions={choice.reasoningOptions}
+              onReasoning={choice.chooseReasoning}
               hint='⌘↵ to send · channels and times you name in the message win over the chips'
             />
           ) : (

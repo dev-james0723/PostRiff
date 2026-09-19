@@ -170,6 +170,7 @@ export function HomeView() {
         destinations: selected.map((platform) => ({ platform, language })),
         ...(languageTouched ? { language } : {}),
         model: choice.model,
+        reasoning: choice.reasoning,
         timeZone
       });
       client.setQueryData(['agent-run', workspaceId, result.runId], result);
@@ -233,6 +234,9 @@ export function HomeView() {
             models={choice.options}
             model={choice.model}
             onModel={choice.choose}
+              reasoning={choice.reasoning}
+              reasoningOptions={choice.reasoningOptions}
+              onReasoning={choice.chooseReasoning}
             consent={{ own, use, onOwn: setOwn, onUse: setUse }}
             hint='⌘↵ to send · nothing publishes without your approval'
           />

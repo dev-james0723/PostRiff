@@ -267,8 +267,16 @@ class ClaudeCliRuntime(AgentRuntime):
         labels = {"default": "Claude Code · your default model", "fable": "Claude Code · Fable", "opus": "Claude Code · Opus", "sonnet": "Claude Code · Sonnet", "haiku": "Claude Code · Haiku"}
         return [{"id": f"{MODEL_PREFIX}{alias}", "label": labels[alias], "qualified": ready, "costClass": "subscription", "route": ROUTE, "detail": detail} for alias in MODEL_ALIASES]
 
+    @staticmethod
+    def effort(value):
+        value = {"quick": "low", "standard": "medium", "deep": "high"}.get(value, value)
+        if value not in ("low", "medium", "high", "xhigh", "max"):
+            raise AlphaError("Choose Low, Medium, High, Extra High or Max reasoning.", 400)
+        return value
+
     def list_supported_reasoning(self):
-        return [{"id": "quick", "available": True, "detail": "The CLI's default effort."}, {"id": "standard", "available": False, "detail": "Not mapped yet."}, {"id": "deep", "available": False, "detail": "Not mapped yet."}]
+        return [{"id": value, "available": True, "detail": "Requested CLI effort; the selected model must support it."}
+                for value in ("low", "medium", "high", "xhigh", "max")]
 
     def owns(self, model_id):
         return isinstance(model_id, str) and model_id in {f"{MODEL_PREFIX}{alias}" for alias in MODEL_ALIASES}
@@ -312,13 +320,15 @@ class ClaudeCliRuntime(AgentRuntime):
         }
         return system, "INPUT\n" + json.dumps(payload, ensure_ascii=False, indent=1)
 
-    def argv(self, executable, alias, system_prompt, schema=None):
+    def argv(self, executable, alias, system_prompt, schema=None, reasoning=None):
         if not re.fullmatch(r"[a-z]+", alias) or alias not in MODEL_ALIASES:
             raise AlphaError("Choose a supported Claude Code model.", 400)
         args = [executable, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                 "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                 "--disable-slash-commands", "--no-session-persistence", "--permission-mode", "dontAsk",
                 "--max-budget-usd", f"{self.budget_usd:.2f}", "--system-prompt", system_prompt, "--json-schema", json.dumps(schema or OUTPUT_SCHEMA, separators=(",", ":"))]
+        if reasoning is not None:
+            args += ["--effort", self.effort(reasoning)]
         if alias != "default":
             args += ["--model", alias]
         return args
@@ -392,7 +402,7 @@ class ClaudeCliRuntime(AgentRuntime):
         alias = self.alias_of(request.get("model"))
         system_prompt, user_prompt = self.compose(request)
         started = time.monotonic()
-        process = self.spawn(self.argv(executable, alias, system_prompt), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=os.environ.get("TMPDIR", "/tmp"), env=self.env or restricted_environment(), start_new_session=True)
+        process = self.spawn(self.argv(executable, alias, system_prompt, reasoning=request.get("reasoning", "quick")), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=os.environ.get("TMPDIR", "/tmp"), env=self.env or restricted_environment(), start_new_session=True)
         try:
             process.stdin.write(user_prompt.encode("utf-8"))
             process.stdin.close()

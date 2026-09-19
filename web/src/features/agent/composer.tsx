@@ -42,6 +42,9 @@ interface ComposerProps {
   models: ModelOption[];
   model: string;
   onModel: (id: string) => void;
+  reasoning?: string;
+  reasoningOptions?: { id: string; detail: string }[];
+  onReasoning?: (id: string) => void;
   /** First message only: consent to draft from the text, and whether it may be quoted. */
   consent?: { own: boolean; use: boolean; onOwn: (v: boolean) => void; onUse: (v: boolean) => void };
   submitLabel?: string;
@@ -55,7 +58,7 @@ interface ComposerProps {
  * chips (the server parses them); the chips are the default when nothing is named.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, placeholder, chips, selected, onToggle, language, onLanguage, models, model, onModel, consent, submitLabel, compact, hint },
+  { value, onChange, onSubmit, busy, disabled, placeholder, chips, selected, onToggle, language, onLanguage, models, model, onModel, reasoning, reasoningOptions, onReasoning, consent, submitLabel, compact, hint },
   ref
 ) {
   const canSend = !busy && !disabled && value.trim().length > 0 && selected.length > 0 && (!consent || consent.use);
@@ -132,6 +135,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           </motion.div>
         </div>
         <div className='flex items-center gap-2'>
+          {reasoningOptions && reasoningOptions.length > 1 && <select aria-label='Reasoning effort' value={reasoning} onChange={(event) => onReasoning?.(event.target.value)} disabled={disabled || busy} className='bg-background h-7 max-w-28 rounded-md border px-1 text-xs'>
+            {reasoningOptions.map((item) => <option key={item.id} value={item.id}>{({ low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra High', max: 'Max', quick: 'Quick', standard: 'Standard', deep: 'Deep' } as Record<string, string>)[item.id] ?? item.id}</option>)}
+          </select>}
           <ModelPicker options={models} model={model} onChoose={onModel} disabled={disabled} />
           <Button size='icon' className='rounded-full' disabled={!canSend} onClick={onSubmit} aria-label={submitLabel ?? 'Send'}>
             <ActionSwapIcon value={busy ? 'busy' : 'send'} animation='blur' className='size-4'>

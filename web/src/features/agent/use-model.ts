@@ -26,6 +26,7 @@ export function shortLabel(option: ModelOption | undefined, id: string) {
  * qualified model when the remembered one is unavailable (signed out CLI, other host).
  */
 export function useModelChoice(catalog: ModelCatalog | undefined) {
+  const [effort, setEffort] = useState('low');
   const [stored, setStored] = useState<string | null>(null);
   useEffect(() => {
     try {
@@ -51,5 +52,7 @@ export function useModelChoice(catalog: ModelCatalog | undefined) {
   }, []);
 
   const option = options.find((m) => m.id === model);
-  return { model, option, options, choose, saved: stored, label: shortLabel(option, model) };
+  const reasoningOptions = (option?.reasoning ?? catalog?.reasoning ?? []).filter((item) => item.available);
+  const reasoning = reasoningOptions.some((item) => item.id === effort) ? effort : reasoningOptions[0]?.id ?? 'quick';
+  return { model, option, options, choose, reasoning, reasoningOptions, chooseReasoning: setEffort, saved: stored, label: shortLabel(option, model) };
 }

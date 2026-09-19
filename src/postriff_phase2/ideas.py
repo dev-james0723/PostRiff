@@ -104,7 +104,7 @@ class IdeasService:
         """Every model a client may name in a turn, with the agent (CLI) behind each route."""
         models, agents = [], []
         for runtime in self.runtimes:
-            models.extend(runtime.list_supported_models())
+            models.extend({**model, "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
             info = runtime.describe()
             if info:
                 agents.append(info)
@@ -354,6 +354,10 @@ class IdeasService:
         reasoning = payload.get("reasoning", "quick")
         key = clean(payload.get("idempotencyKey", ""), 100) or uid()
         runtime = self._select_runtime(payload.get("model"))
+        if isinstance(runtime, ClaudeCliRuntime):
+            reasoning = runtime.effort(reasoning)
+        elif reasoning not in ("quick", "standard", "deep"):
+            raise AlphaError("Choose a reasoning level supported by this writer.", 400)
         model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
         # Step ① of the agent pipeline: channels and times named in the message become the
         # destinations and a candidate plan. Parsed text never gains any authority of its own.
@@ -399,7 +403,7 @@ class IdeasService:
                                      max_chars=budget_for(runtime.cost_class))
             request["skills"] = bound
             skill_ids = [b["id"] for b in bound["bindings"]]
-            cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning if reasoning in ("quick", "standard", "deep") else "quick", digest(context), context["policyEpoch"], key))
+            cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning, digest(context), context["policyEpoch"], key))
             run_id = cur.fetchone()[0]
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
@@ -553,6 +557,10 @@ class IdeasService:
             raise AlphaError("Confirm that you want PostRiff to use this content for a draft.")
         own = payload.get("ownContent") is True
         runtime = self._select_runtime(payload.get("model"))  # refuse an unknown model before any source is stored
+        if isinstance(runtime, ClaudeCliRuntime):
+            runtime.effort(payload.get("reasoning", "quick"))
+        elif payload.get("reasoning", "quick") not in ("quick", "standard", "deep"):
+            raise AlphaError("Choose a reasoning level supported by this writer.", 400)
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
         language = payload.get("language") if payload.get("language") in intent.LANGUAGES else parsed["language"]
@@ -575,5 +583,5 @@ class IdeasService:
         saved = self.repository.command(workspace_id, token, revision, command)
         source = saved["state"]["sources"][-1]
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
-        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": "quick", "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model")})
+        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model")})
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}

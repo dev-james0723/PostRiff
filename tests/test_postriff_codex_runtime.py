@@ -104,6 +104,14 @@ class CodexCliRuntimeTest(unittest.TestCase):
         self.assertIn("codex login", out.detect()["guidance"])
         self.assertFalse(out.list_supported_models()[0]["qualified"])
 
+    def test_all_reasoning_levels_are_exact_config_arguments(self):
+        runtime = self.runtime()
+        for level in ("low", "medium", "high", "xhigh", "max"):
+            args = runtime.argv("/bin/codex", "default", "/tmp/w", level)
+            self.assertIn(f'model_reasoning_effort="{level}"', args)
+        with self.assertRaises(AlphaError):
+            runtime.argv("/bin/codex", "default", "/tmp/w", 'high"; echo secret')
+
     def test_argv_is_read_only_ephemeral_and_rejects_unknown_models(self):
         runtime = self.runtime()
         args = runtime.argv("/bin/codex", "default", "/tmp/w")

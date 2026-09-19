@@ -137,6 +137,16 @@ class ClaudeCliRuntimeTest(unittest.TestCase):
         self.assertNotIn("CLAUDECODE", env)
         self.assertTrue(set(env) <= {"HOME", "PATH", "LANG", "USER", "TMPDIR"})
 
+    def test_reasoning_maps_all_levels_without_changing_side_jobs(self):
+        runtime = self.runtime()
+        for old, expected in {"quick": "low", "standard": "medium", "deep": "high", "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max"}.items():
+            args = runtime.argv("/bin/claude", "sonnet", "SYSTEM", reasoning=old)
+            self.assertEqual(args[args.index("--effort") + 1], expected)
+        self.assertNotIn("--effort", runtime.argv("/bin/claude", "haiku", "SYSTEM"))
+        for bad in ("ultra", "max; echo secret", None):
+            with self.assertRaises(AlphaError):
+                runtime.effort(bad)
+
     def test_argv_is_content_only_and_rejects_unknown_models(self):
         runtime = self.runtime()
         args = runtime.argv("/bin/claude", "sonnet", "SYSTEM")

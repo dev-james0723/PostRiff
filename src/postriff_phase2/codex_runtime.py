@@ -121,10 +121,10 @@ class CodexCliRuntime(ClaudeCliRuntime):
         return {"runtime": ROUTE, "resumable": False}
 
     # --- prompt and process --------------------------------------------------------
-    def argv(self, executable, alias, workdir):
+    def argv(self, executable, alias, workdir, reasoning="quick"):
         if alias not in allowed_models():
             raise AlphaError("Choose a supported Codex model.", 400)
-        args = [executable, "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
+        args = [executable, "exec", "--json", "-c", f'model_reasoning_effort="{self.effort(reasoning)}"', "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
                 "--sandbox", "read-only", "--output-schema", os.path.join(workdir, "schema.json"), "-C", workdir]
         if alias != "default":
             args += ["-m", alias]
@@ -142,7 +142,7 @@ class CodexCliRuntime(ClaudeCliRuntime):
             os.chmod(workdir, 0o700)
             with open(os.path.join(workdir, "schema.json"), "w", encoding="utf-8") as handle:
                 json.dump(OUTPUT_SCHEMA, handle)
-            process = self.spawn(self.argv(executable, alias, workdir), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=workdir, env=self.env or restricted_environment(), start_new_session=True)
+            process = self.spawn(self.argv(executable, alias, workdir, request.get("reasoning", "quick")), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=workdir, env=self.env or restricted_environment(), start_new_session=True)
             try:
                 process.stdin.write(prompt.encode("utf-8"))
                 process.stdin.close()
