@@ -118,7 +118,7 @@ def make_server(store, static_dir, port=4326):
             try:
                 self.route(mutation)
             except AlphaError as e:
-                self.reply(e.status, {"error": str(e)})
+                self.reply(e.status, {"error": str(e), "code": e.code})
             except Exception:
                 # Do not return traceback, paths, secrets, or private input to the client.
                 self.reply(500, {"error": "The local store could not complete this action. Your previous saved state is intact; check the launcher and retry."})

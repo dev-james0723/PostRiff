@@ -29,3 +29,6 @@ next-env.d.ts
 
 # second local dev server (POSTRIFF_DIST_DIR)
 .next-alt/
+
+# Isolated Codex verification builds (keep Tailwind out of compiled caches)
+/.next-codex-*/

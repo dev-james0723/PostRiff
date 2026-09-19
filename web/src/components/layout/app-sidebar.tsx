@@ -1,5 +1,7 @@
 'use client';
 
+import { deriveAttention } from '@/lib/attention';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -126,7 +128,7 @@ export default function AppSidebar() {
   const { isOpen, setOpen } = useNavGroups(activeGroupLabel(groups, pathname));
   // Approvals waiting on someone: the only count the sidebar shows, read from the workspace ledger.
   const counts: Record<string, number> = {
-    '/app/queue': (snapshot.data?.state.phase2?.reviews ?? []).filter((r) => r.status === 'needs_review').length
+    '/app/queue': deriveAttention({ snapshot, channels: { isError: false }, usage: { isError: false }, now: Date.now() / 1000 }).approvals
   };
 
   return (

@@ -32,9 +32,17 @@ def now():
 
 
 class AlphaError(Exception):
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, *, code=None):
         super().__init__(message)
         self.status = status
+        # Stable machine vocabulary; never derive a code from user-facing copy.
+        self.code = code or {
+            400: "invalid_request", 401: "unauthenticated", 403: "permission_denied",
+            404: "not_found", 409: "conflict", 413: "request_too_large",
+            415: "unsupported_media_type", 422: "validation_failed",
+            429: "rate_limited", 500: "internal_error", 502: "upstream_error",
+            503: "service_unavailable",
+        }.get(status, "request_failed")
 
 
 def clean(value, limit=10000):
@@ -376,7 +384,7 @@ class Store:
         elif action == "variant_edit":
             v = self._variant(s, p.get("variantId"))
             if p.get("variantRevision") != v["revision"]:
-                raise AlphaError("This draft revision is stale. Reload before applying your edit.", 409)
+                raise AlphaError("This draft revision is stale. Reload before applying your edit.", 409, code="draft_revision_conflict")
             text = clean(p.get("text", ""), 20000)
             if not text:
                 raise AlphaError("Keep some draft text, or choose a different opening.")

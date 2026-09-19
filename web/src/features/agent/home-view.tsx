@@ -16,7 +16,8 @@ import { TextReveal } from '@/components/motion/text-reveal';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { QUICK_STARTS, QUICK_START_GROUPS, type QuickStart, type QuickStartGroup } from '@/config/quick-starts';
-import { keys, useConversations, useMemory, useMemoryProposals, useModels, useSnapshot } from '@/lib/api/hooks';
+import { keys, useChannels, useUsage, useConversations, useMemory, useMemoryProposals, useModels, useSnapshot } from '@/lib/api/hooks';
+import { deriveAttention } from '@/lib/attention';
 import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PRESS } from '@/lib/ease';
@@ -73,6 +74,8 @@ export function HomeView() {
   const canEdit = checkAccess(access, { permission: 'edit' });
   const snapshot = useSnapshot();
   const conversations = useConversations();
+  const channelQuery = useChannels();
+  const usage = useUsage();
   const models = useModels();
   const memory = useMemory();
   const memoryProposals = useMemoryProposals();
@@ -107,21 +110,8 @@ export function HomeView() {
     return { platform, account: account?.account, state: account?.displayState };
   });
   const activeSources = (state?.sources ?? []).filter((s) => s.active).length;
-  const needsReview = (state?.phase2?.reviews ?? []).filter((r) => r.status === 'needs_review').length;
-  const needsYou: NeedsYou[] = [];
-  if (!snapshot.isLoading && !voiceActive) {
-    needsYou.push({ id: 'voice', icon: 'user', title: 'Set up your voice', description: 'Previews work now, but drafts can only be scheduled once a voice profile is active.', href: '/app/workspace/brand', action: 'Set up your voice' });
-  }
-  if (needsReview > 0) {
-    needsYou.push({ id: 'review', icon: 'clock', title: `${needsReview} draft${needsReview === 1 ? '' : 's'} waiting for approval`, description: 'Nothing publishes until you approve the exact text, media and time.', href: '/app/queue', action: 'Review now' });
-  }
-  // The API's display state is the next step it asks for (Connect, Reconnect, Finish setup); only "Reconnect" is titled as one.
-  for (const channel of channels) {
-    if (!channel.displayState || channel.displayState === 'Ready for posting') continue;
-    const title = channel.displayState === 'Reconnect' ? `Reconnect ${channel.platform}` : `${channel.platform} is not ready for posting`;
-    const description = channel.account ? `${channel.account}: ${channel.displayState}` : channel.displayState;
-    needsYou.push({ id: `channel-${channel.id}`, icon: 'broadcast', title, description, href: '/app/channels', action: 'Open channels' });
-  }
+  const attention = deriveAttention({ snapshot, channels: channelQuery, usage, now: Date.now() / 1000 });
+  const needsYou: NeedsYou[] = attention.items.map((item) => ({ ...item, icon: item.id === 'voice' ? 'user' : item.id === 'approvals' ? 'clock' : 'broadcast' }));
   const choice = useModelChoice(models.data);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
   const timeZone = useTimeZone();

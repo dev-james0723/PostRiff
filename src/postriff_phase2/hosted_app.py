@@ -67,7 +67,7 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
             # Someone who turned on two-factor authentication must present it on every session:
             # the UI hides nothing the API would not also refuse.
             if mfa_required and verified_aal(access_token, principal) != "aal2":
-                raise AlphaError("Two-factor verification required.", 403)
+                raise AlphaError("Two-factor verification required.", 403, code="mfa_required")
         return principal
 
     verify.session_id = lambda access_token, principal: verified_session_id(access_token, principal)
@@ -495,11 +495,11 @@ class HostedApplication:
                     return self._json(start_response, 200, service.delete_account(workspace_id, token, body.get("confirmation")))
             raise AlphaError("This hosted route is unavailable.", 404)
         except AlphaError as error:
-            return self._json(start_response, error.status, {"error": str(error)})
+            return self._json(start_response, error.status, {"error": str(error), "code": error.code})
         except Exception:
             # Content-free: the traceback names code paths, never prompts, post bodies or tokens.
             logging.getLogger("postriff.hosted").exception("hosted request failed: %s %s", method, path)
-            return self._json(start_response, 500, {"error": "The hosted service could not complete this request. Saved state remains authoritative."})
+            return self._json(start_response, 500, {"error": "The hosted service could not complete this request. Saved state remains authoritative.", "code": "internal_error"})
 
 
 app = HostedApplication()

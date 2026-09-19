@@ -119,7 +119,7 @@ class PostgresWorkspaceRepository:
         auth_time = getattr(self.verify_session, "auth_time", None)
         verified_at = auth_time(token, principal) if auth_time else 0
         if self.clock() - float(verified_at or 0) > STEP_UP_WINDOW:
-            raise AlphaError("Sign in again to confirm this sensitive action.", 403)
+            raise AlphaError("Sign in again to confirm this sensitive action.", 403, code="step_up_required")
 
     def get(self, workspace_id, token):
         with self.transaction(token, workspace_id) as (_, row, _):
@@ -135,7 +135,7 @@ class PostgresWorkspaceRepository:
             if step_up:
                 self.assert_fresh(token, principal)
             if type(revision) is not int or revision != row[0]:
-                raise AlphaError("Workspace changed; reload.", 409)
+                raise AlphaError("Workspace changed; reload.", 409, code="workspace_revision_conflict")
             source = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             state = trusted_command(copy.deepcopy(source), principal)
             if not isinstance(state, dict):

@@ -46,10 +46,12 @@ export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as con
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -60,13 +62,15 @@ const ws = (id: string) => `/api/workspaces/${encodeURIComponent(id)}`;
 async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = 'The workspace could not complete that request.';
+    let code: string | undefined;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body?.error) message = body.error;
+      const body = (await res.json()) as { error?: unknown; code?: unknown };
+      if (typeof body?.error === 'string' && body.error) message = body.error;
+      if (typeof body?.code === 'string') code = body.code;
     } catch {
       /* keep the generic message */
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, code);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

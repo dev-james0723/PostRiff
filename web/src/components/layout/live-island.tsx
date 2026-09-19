@@ -14,20 +14,12 @@ import {
 import { Icons } from '@/components/icons';
 import { DynamicIsland, DynamicIslandView } from '@/components/motion/dynamic-island';
 import { useSnapshot } from '@/lib/api/hooks';
-import type { Phase2State } from '@/lib/api/types';
+import { DONE, countdownMs as countdown, readStatus, TICK_MS, type QueueStatus as Status } from '@/lib/jobs';
 import { EASE_OUT } from '@/lib/ease';
 import { useDismiss } from '@/lib/hooks/use-dismiss';
 import { cn } from '@/lib/utils';
 
-/** Job states grouped the way the Queue and Calendar group them. */
-const PUBLISHING = new Set(['submitting', 'provider_accepted', 'published', 'uncertain']);
-const WAITING = new Set(['scheduled', 'approved', 'claimed']);
-const DONE = new Set(['published', 'verified']);
-
-const MINUTE = 60_000;
 const DAY = 86_400_000;
-/** How often the countdown to the next post is recomputed while there is one. */
-const TICK_MS = 30_000;
 /** How long "Published on …" stays up before the island returns to what it showed. */
 const EVENT_MS = 4_000;
 /** Hover intent: a pointer crossing the header does not pop the panel, a corner slip does not drop it. */
@@ -39,19 +31,6 @@ const CLICK_GRACE_MS = 450;
 const PRESS_BLUR_MS = 300;
 
 type Tone = 'publishing' | 'approvals' | 'failed' | 'next' | 'quiet' | 'published';
-
-interface NextPost {
-  platform: string;
-  account: string;
-  at: number;
-}
-
-interface Status {
-  approvals: number;
-  publishing: number;
-  failed: number;
-  next: NextPost | null;
-}
 
 interface Published {
   platform: string;
@@ -94,48 +73,12 @@ const spokenTime = new Intl.DateTimeFormat('en', {
   minute: '2-digit'
 });
 
-/** Counts straight from the snapshot: open reviews, jobs in flight, recent failures, the next approved slot. */
-function readStatus(phase2: Phase2State | undefined, now: number): Status {
-  let publishing = 0;
-  let failed = 0;
-  let next: NextPost | null = null;
-  for (const job of phase2?.jobs ?? []) {
-    if (PUBLISHING.has(job.state)) {
-      publishing += 1;
-    } else if (job.state === 'failed') {
-      const last = job.events?.at(-1)?.at;
-      if (last !== undefined && last * 1000 >= now - DAY) failed += 1;
-    } else if (WAITING.has(job.state)) {
-      // The header renders on every page, so a job without timing is skipped rather than trusted.
-      const at = Date.parse(job.manifest?.timing?.utc ?? '');
-      if (at > now && (next === null || at < next.at)) {
-        next = { platform: job.manifest.platform, account: job.manifest.account, at };
-      }
-    }
-  }
-  const approvals = (phase2?.reviews ?? []).filter(
-    (review) => review.status === 'needs_review'
-  ).length;
-  return { approvals, publishing, failed, next };
-}
-
 function toneOf(status: Status): Tone {
   if (status.publishing > 0) return 'publishing';
   if (status.approvals > 0) return 'approvals';
   if (status.failed > 0) return 'failed';
   if (status.next) return 'next';
   return 'quiet';
-}
-
-/** "in 4 min", "in 2h 13m", "in 3d 5h". */
-function countdown(ms: number) {
-  const minutes = Math.floor(ms / MINUTE);
-  if (minutes < 1) return 'in <1 min';
-  if (minutes < 60) return `in ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return minutes % 60 ? `in ${hours}h ${minutes % 60}m` : `in ${hours}h`;
-  const days = Math.floor(hours / 24);
-  return hours % 24 ? `in ${days}d ${hours % 24}h` : `in ${days}d`;
 }
 
 /** "Thu 14:30" inside the coming week; the date joins once a weekday alone would be ambiguous. */
@@ -214,7 +157,7 @@ export function LiveIsland({ className }: { className?: string }) {
   }, [hasNext]);
 
   // "Published on …" fires only for a job that was already in the previous snapshot and has just
-  // reached published or verified; the first snapshot only seeds what was seen.
+  // reached verified; the first snapshot only seeds what was seen.
   const seen = useRef<Map<string, string> | null>(null);
   const [published, setPublished] = useState<Published | null>(null);
   useEffect(() => {
@@ -380,7 +323,7 @@ export function LiveIsland({ className }: { className?: string }) {
       ref={rootRef}
       initial={reduce ? false : { opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={reduce ? { duration: 0 } : { duration: 0.35, ease: EASE_OUT }}
+      transition={reduce ? { duration: 0 } : { duration: 0.25, ease: EASE_OUT }}
       className={cn('pointer-events-auto', className)}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}

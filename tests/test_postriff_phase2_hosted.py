@@ -139,6 +139,18 @@ class HostedPhase2Acceptance(unittest.TestCase):
         with self.assertRaises(AlphaError):
             storage.signed_url(wid, "media", name, 3600)
 
+    def test_error_codes_preserve_status_and_message(self):
+        class FailingService(FakeService):
+            def get(self, workspace_id, token):
+                raise AlphaError("Copy may change.", 409, code="workspace_revision_conflict")
+
+        app = HostedApplication(FailingService(), FakeWorker(), {}, "c" * 24)
+        status, _, body = invoke(app, "GET", "/api/workspaces/w", headers={"Authorization": "Bearer " + "t" * 32})
+        self.assertEqual(status, 409)
+        self.assertEqual(body, {"error": "Copy may change.", "code": "workspace_revision_conflict"})
+        self.assertEqual(AlphaError("Old caller", 403).code, "permission_denied")
+        self.assertEqual(AlphaError("Unrelated conflict", 409).code, "conflict")
+
     def test_wsgi_auth_origin_and_cron_boundaries(self):
         app = HostedApplication(FakeService(), FakeWorker(), {"projectUrl": "https://project.supabase.co", "publishableKey": "public", "flow": "pkce"}, "c" * 24)
         status, _, health = invoke(app, "GET", "/api/health")

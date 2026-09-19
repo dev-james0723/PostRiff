@@ -21,15 +21,13 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
 import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { deriveAttention, type AttentionSource } from './attention';
+import { deriveAttention, type AttentionSource } from '@/lib/attention';
 import { ChannelsCard, publishCounts } from './channels-card';
 import { NextUp } from './next-up';
 import { RecentActivity } from './recent-activity';
 import { RetryButton, type Refetchable } from './retry';
 
-const PRE_FLIGHT = new Set(['scheduled', 'approved', 'claimed']);
-const IN_FLIGHT = new Set(['submitting', 'provider_accepted', 'uncertain']);
-const DONE = new Set(['published', 'verified']);
+import { WAITING as PRE_FLIGHT, IN_FLIGHT, DONE } from '@/lib/jobs';
 
 const infoContent = {
   title: 'How the overview counts',
@@ -171,15 +169,13 @@ export function OverviewView() {
   const sending = jobs.filter((j) => IN_FLIGHT.has(j.state)).length;
   const scheduled = waiting + sending;
   let verified = 0;
-  let awaitingReceipt = 0;
   for (const job of jobs) {
     if (!DONE.has(job.state)) continue;
     const at = job.verification?.at ?? job.events[job.events.length - 1]?.at ?? 0;
     if (at <= now - 30 * 86400) continue;
-    if (job.state === 'verified') verified += 1;
-    else awaitingReceipt += 1;
+    verified += 1;
   }
-  const publishedRecently = verified + awaitingReceipt;
+  const publishedRecently = verified;
 
   const counts = publishCounts(channels.data?.channels ?? []);
 
@@ -208,12 +204,8 @@ export function OverviewView() {
     ? unavailableStat('Could not read the workspace', snapshot)
     : {
         value: publishedRecently,
-        hint: !publishedRecently
-          ? 'No publications yet'
-          : awaitingReceipt
-            ? `${verified} verified · ${awaitingReceipt} awaiting receipt`
-            : `${verified} verified`,
-        footer: 'Accepted by the provider; verified once the receipt is read back'
+        hint: publishedRecently ? `${verified} verified` : 'No verified publications yet',
+        footer: 'Confirmed by the provider; unverified jobs remain in sending'
       };
   const batchesStat = usage.isError
     ? unavailableStat('Could not read your plan', usage)
