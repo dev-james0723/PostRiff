@@ -98,7 +98,7 @@ export function describeSecurityEvent(event: SecurityEvent): { label: string; to
     case 'data.exported':
       return { label: `Exported ${ws} data`, tone: 'neutral' };
     case 'data.diagnostics':
-      return { label: `Shared a diagnostics package for ${ws}`, tone: 'neutral' };
+      return { label: `Created a diagnostics package for ${ws}`, tone: 'neutral' };
     default:
       return { label: event.kind.replace(/[._]/g, ' '), tone: 'neutral' };
   }

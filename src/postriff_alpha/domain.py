@@ -194,6 +194,14 @@ class Store:
             variant["proposedUpdate"] = None
         state["savedAt"] = None
 
+    def _mark_source_stale(self, state, source_id):
+        # Source changes do not revise the shared brief: only drafts citing this source change.
+        for variant in state["variants"]:
+            if source_id in variant.get("sourceIds", []):
+                variant["needsReview"] = True
+                variant["proposedUpdate"] = None
+        state["savedAt"] = None
+
     def _apply(self, s, action, p):
         if not isinstance(action, str):
             raise AlphaError("Choose a supported local action.")
@@ -292,8 +300,7 @@ class Store:
             if not s["brief"]["idea"]:
                 s["brief"]["idea"] = "Share the seed swap as a learning opportunity" if kind == "sample" else (body[:500] if kind == "idea" else title)
                 s["brief"]["ideaSourceId"] = source_id
-            s["brief"]["revision"] += 1
-            self._mark_stale(s)
+            self._mark_source_stale(s, source_id)
         elif action == "approve_source":
             source = self._source(s, p.get("sourceId"))
             if not source["active"]:
@@ -305,8 +312,7 @@ class Store:
             for f in source["facts"]:
                 f["approved"] = f["id"] in selected
             source["reviewedAt"] = now()
-            s["brief"]["revision"] += 1
-            self._mark_stale(s)
+            self._mark_source_stale(s, source["id"])
         elif action == "retract_source":
             source = self._source(s, p.get("sourceId"))
             source.update({"active": False, "text": "", "facts": [], "title": "Withdrawn source", "fingerprint": None, "withdrawnAt": now()})
@@ -318,8 +324,7 @@ class Store:
             for v in s["variants"]:
                 if source["id"] in v["sourceIds"]:
                     v["blockedByRetraction"] = True
-            s["brief"]["revision"] += 1
-            self._mark_stale(s)
+            self._mark_source_stale(s, source["id"])
         elif action == "source_done":
             if not s["brief"]["idea"]:
                 raise AlphaError("Add an idea or source first.")

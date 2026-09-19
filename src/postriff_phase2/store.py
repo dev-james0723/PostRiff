@@ -344,11 +344,11 @@ class Phase2Store(Store):
 
     def build_manifest(self, s, p, actor):
         data = s["phase2"]
-        preflight = content_preflight(s)
+        v = self._variant(s, p.get("variantId"))
+        preflight = content_preflight(s, v["sourceIds"])
         blockers = [item for item in preflight if item["severity"] == "blocker"]
         if blockers:
             raise AlphaError(blockers[0]["message"], 409)
-        v = self._variant(s, p.get("variantId"))
         c = find(data["channels"], p.get("channelId"))
         if not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock():
             raise AlphaError("Trial expired. Export remains available; scheduling is held.")
@@ -414,7 +414,7 @@ class Phase2Store(Store):
                     or m["capability"]["scopes"] != c["scopes"]):
                 return False
             media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"])
-            content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s), "skillRouteIds": v.get("contentSkillRouteIds", [])}
+            content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).
             return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["language"] == v["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and all(self._source(s, i)["active"] for i in v["sourceIds"]))

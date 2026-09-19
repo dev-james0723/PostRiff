@@ -205,15 +205,16 @@ def definition(state, content_type_id, version=None):
     return found[-1]
 
 
-def content_preflight(state):
+def content_preflight(state, source_ids=None):
     from .source_policy import publication_issues  # local import: source_policy has no content dependency
     system = ensure_content_state(state)
     selected = system["selection"]
-    policy_checks = publication_issues(state, list(state.get("brief", {}).get("sourceIds", [])))
+    source_ids = list(state.get("brief", {}).get("sourceIds", [])) if source_ids is None else source_ids
+    policy_checks = publication_issues(state, source_ids)
     if selected["contentTypeId"] == "unclassified":
         return [{"severity": "warning", "ruleId": "unclassified", "message": "This legacy draft has no content type. Review a suggestion before reusing it as a template."}] + policy_checks
     item = definition(state, selected["contentTypeId"], selected["contentTypeVersion"])
-    approved_facts = [fact for source in state.get("sources", []) if source.get("active") for fact in source.get("facts", []) if fact.get("approved")]
+    approved_facts = [fact for source in state.get("sources", []) if source.get("active") and source["id"] in source_ids for fact in source.get("facts", []) if fact.get("approved")]
     checks = list(policy_checks)
     if "quote_attribution" in item["preflightRuleIds"] and not approved_facts:
         checks.append({"severity": "blocker", "ruleId": "quote_attribution", "message": "Use your own confirmed line or add a clearly attributed approved source."})

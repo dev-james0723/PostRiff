@@ -68,6 +68,52 @@ class Phase2Acceptance(unittest.TestCase):
         self.j.act('p2_approve',reviewId=r['id'],digest=r['digest'],confirmed=True)
         return self.j.state['phase2']['jobs'][-1]
 
+    def test_source_changes_only_invalidate_dependent_drafts_and_posts(self):
+        from postriff_phase2 import source_policy
+        original_job = copy.deepcopy(self.enqueue())
+        original_variant = copy.deepcopy(self.j.state['variants'][0])
+        self.j.act('source', kind='idea', text='A separate source for a separate draft')
+        self.assertEqual(self.j.state['variants'][0], original_variant)
+        self.assertEqual(self.j.state['phase2']['jobs'][0], original_job)
+        source_id = self.j.state['sources'][-1]['id']
+        base = copy.deepcopy(self.j.state)
+        # Two independent drafts with valid synthetic approvals, each citing its own source.
+        dependent = copy.deepcopy(original_variant)
+        dependent.update(id='dependent-draft', sourceIds=[source_id])
+        base['variants'].append(dependent)
+        dependent_job = copy.deepcopy(original_job)
+        dependent_job['id'] = 'dependent-job'
+        dependent_job['manifest'].update(variantId=dependent['id'], sourceDigest=self.store.source_digest(base, dependent))
+        base['phase2']['jobs'].append(dependent_job)
+        self.assertTrue(self.store.current(base, dependent_job['manifest']))
+        # Keep a pending update on the unrelated draft to catch accidental whole-workspace clearing.
+        base['variants'][0]['proposedUpdate'] = {'text': 'Unrelated candidate'}
+        for action, payload in (
+            ('approve_source', {'sourceId': source_id, 'factIds': []}),
+            ('source_policy', {'sourceId': source_id, 'policy': 'prohibited', 'confirmed': True}),
+            ('retract_source', {'sourceId': source_id}),
+        ):
+            with self.subTest(action=action):
+                state = copy.deepcopy(base)
+                if not source_policy.apply_policy_action(state, action, payload, 'synthetic-owner', self.now):
+                    self.store._apply(state, action, payload)
+                self.store.invalidate(state)
+                self.assertEqual(state['brief']['revision'], base['brief']['revision'])
+                self.assertEqual(state['variants'][0], base['variants'][0])
+                self.assertEqual(state['phase2']['jobs'][0], base['phase2']['jobs'][0])
+                self.assertTrue(self.store.current(state, original_job['manifest']))
+                self.assertEqual(state['phase2']['jobs'][1]['state'], 'held')
+                self.assertFalse(self.store.current(state, dependent_job['manifest']))
+        state = copy.deepcopy(base)
+        source = state['sources'][-1]
+        source['sourcePolicy'] = 'rewrite_approval'
+        source_policy.apply_policy_action(state, 'source_use_approve', {
+            'sourceId': source_id, 'factsDigest': source_policy.facts_digest(source), 'confirmed': True,
+        }, 'synthetic-owner', self.now)
+        self.assertEqual(state['brief']['revision'], base['brief']['revision'])
+        self.assertTrue(self.store.current(state, original_job['manifest']))
+        self.assertFalse(self.store.current(state, dependent_job['manifest']))
+
     def test_auth_replay_expiry_pkce_cancel_and_no_duplicate_trial(self):
         trial=copy.deepcopy(self.j.state['phase2']['trial'])
         replay=self.store.auth.sign_in(self.j.request)

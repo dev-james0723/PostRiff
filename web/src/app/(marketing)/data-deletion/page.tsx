@@ -36,7 +36,7 @@ export default function DataDeletionPage() {
         <li>
           Choose <strong>Delete account…</strong>, type <code>DELETE</code> to confirm, and confirm again.
         </li>
-        <li>Only the workspace owner can do this. In-flight publications must finish or be cancelled first; the app tells you if any are pending.</li>
+        <li>Only the workspace owner can do this. Publications already handed to a platform must be resolved first; they cannot be recalled by cancelling. The app shows any unresolved publications. Waiting posts are removed unpublished when the workspace is deleted.</li>
       </ul>
 
       <h2 id='platform'>2. Disconnect one platform</h2>
@@ -51,7 +51,7 @@ export default function DataDeletionPage() {
 
       <h2 id='source'>3. Remove a single source</h2>
       <p>
-        In <strong>Ideas</strong> or <strong>Brand &amp; voice</strong> you can retract a source (blocks future use and any drafts that depend on it) or delete it (removes its text and derived data). Both are recorded as data requests with a receipt.
+        In <strong>Ideas</strong> or <strong>Account → Privacy &amp; data</strong> you can retract a source. Retraction removes its text and facts and blocks drafts that depend on it until drafted again. Waiting posts for those drafts are held until approved again. Retraction from Privacy &amp; data also records a data request with a receipt.
       </p>
 
       <h2 id='what'>4. What is deleted and what is kept</h2>

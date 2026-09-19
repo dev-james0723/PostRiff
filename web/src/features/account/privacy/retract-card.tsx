@@ -54,11 +54,7 @@ export function RetractCard({
     try {
       await api.dataRequest(workspaceId, { kind: 'retraction', sourceId: source.id, expectedRevision: snapshot.data.revision });
       setPicked(null);
-      const blocked = done.newlyBlocked > 0 ? ` ${plural(done.newlyBlocked, 'draft')} that used it ${done.newlyBlocked === 1 ? 'is' : 'are'} blocked.` : '';
-      const redraft =
-        done.allDrafts > 0 ? ` ${done.allDrafts === 1 ? 'Your draft' : done.allDrafts === 2 ? 'Both drafts' : `All ${done.allDrafts} drafts`} must be drafted again before review or scheduling.` : '';
-      const held = done.heldPosts > 0 ? ` ${plural(done.heldPosts, 'post')} in the Queue ${done.heldPosts === 1 ? 'is' : 'are'} held until approved again.` : '';
-      toast.success(`Source retracted.${blocked}${redraft}${held}`);
+      toast.success(`Source retracted. ${retractionLines(done).join(' ')}`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'The source could not be retracted.');
       if (err instanceof ApiError && err.status === 409) void snapshot.refetch();
@@ -78,9 +74,8 @@ export function RetractCard({
       <CardHeader>
         <CardTitle>Retract a source</CardTitle>
         <CardDescription>
-          Blanks a source&apos;s text and facts. Drafts that used it keep their text but stay blocked until you draft them again. Every other draft
-          in the workspace must also be drafted again before review or scheduling, and posts waiting in the Queue are held until approved again. This cannot be
-          undone.
+          Blanks a source&apos;s text and facts. Drafts that used it keep their text but stay blocked until you draft them again.
+          Their posts waiting in the Queue are held until approved again. This cannot be undone.
         </CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>

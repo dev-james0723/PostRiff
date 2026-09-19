@@ -213,7 +213,7 @@ export interface SnapshotSource {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -826,6 +826,7 @@ export interface DataRequest {
   status: string;
   receipt: Record<string, unknown>;
   requestedAt: number;
+  completedAt?: number | null;
 }
 
 export interface PrivacyNotice {

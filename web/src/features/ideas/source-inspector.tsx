@@ -27,9 +27,10 @@ import { useAct, useModels, useSnapshot } from '@/lib/api/hooks';
 import type { SourcePolicy } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatBytes, formatDate, formatDateTime } from '@/lib/time';
+import { retractionImpact, retractionLines } from '@/lib/sources';
 import { cn } from '@/lib/utils';
 import { useDraftHandoff } from './use-draft';
-import { factsDigest, isWeb, kindLabel, LINK_PATTERN, plural, POLICIES, toEpoch, useActError, variantsUsing, wouldBlock, type IdeaSource, type UseState } from './use-sources';
+import { factsDigest, isWeb, kindLabel, LINK_PATTERN, plural, POLICIES, toEpoch, useActError, variantsUsing, type IdeaSource, type UseState } from './use-sources';
 
 const FACT_KINDS = new Set(['text', 'document', 'sample']);
 
@@ -196,7 +197,8 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
   const approvedFacts = source.facts.filter((f) => f.approved);
   const paragraphs = (source.text ?? '').split(/\n+/).filter((line) => line.trim()).length;
   const drafts = variantsUsing(state, source.id);
-  const blocks = wouldBlock(state, source.id);
+  const impact = state ? retractionImpact(state, source.id) : null;
+  const retractionCopy = impact ? retractionLines(impact).join(" ") : "Retraction impact is unavailable.";
   const hashing = typeof crypto !== 'undefined' && Boolean(crypto.subtle);
   const revision = () => snapshot.data?.revision ?? 0;
 
@@ -249,7 +251,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
     retractAct.mutate(
       { revision: revision(), action: 'retract_source', payload: { sourceId: source.id } },
       {
-        onSuccess: () => toast.success(blocks > 0 ? `Source withdrawn. ${plural(blocks, 'draft')} that used it ${blocks === 1 ? 'is' : 'are'} blocked until regenerated.` : 'Source withdrawn.'),
+        onSuccess: () => toast.success(`Source withdrawn. ${retractionCopy}`),
         onError: (err) => {
           // Reset the hold so a failed withdrawal can be tried again.
           setHoldEpoch((n) => n + 1);
@@ -462,7 +464,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
               holdDuration={900}
               holdingLabel='Keep holding…'
               completeLabel='Withdrawing…'
-              disabled={retractAct.isPending || draft.busy}
+              disabled={!impact || retractAct.isPending || draft.busy}
               onHoldComplete={retract}
               aria-label={`Hold to withdraw ${source.title}`}
               title='Press and hold (or hold Space) to withdraw this source.'
@@ -474,7 +476,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
               Hold to withdraw
             </HoldActionButton>
             <p className='text-muted-foreground text-xs'>
-              Removes its text and facts. {blocks > 0 ? `Blocks ${plural(blocks, 'draft')} that used it until regenerated.` : 'No draft uses it, so nothing is blocked.'}
+              Removes its text and facts. {retractionCopy}
             </p>
           </div>
         </>

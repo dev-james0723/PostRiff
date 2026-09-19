@@ -125,7 +125,7 @@ def apply_policy_action(state, action, payload, actor, now):
             for variant in state.get("variants", []):
                 if source["id"] in variant.get("sourceIds", []):
                     variant["policyBlocked"] = True
-        state["brief"]["revision"] += 1
+        # Per-source publication digests invalidate dependent approvals. The shared brief stays current.
         return True
     if action == "source_use_approve":
         stamp(state)
@@ -136,7 +136,7 @@ def apply_policy_action(state, action, payload, actor, now):
         if payload.get("factsDigest") != current or payload.get("confirmed") is not True:
             raise AlphaError("Review the exact approved facts and confirm their public use.", 409)
         source["useApprovals"].append({"actor": actor, "at": now, "factsDigest": current})
-        state["brief"]["revision"] += 1
+        # Per-source publication digests invalidate dependent approvals. The shared brief stays current.
         return True
     return False
 
