@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
-from .generation import FixtureAdapter, SAMPLE_TEXT, SAMPLE_FACTS, PLATFORMS, LANGUAGES, routes
+from .generation import FixtureAdapter, SAMPLE_TEXT, SAMPLE_FACTS, PLATFORMS, routes, supported_language
 from .templates import catalog, instances, validate_overrides
 from . import learning, profiles, visuals
 
@@ -507,7 +507,7 @@ class Store:
             raise AlphaError("Approve a voice and select the deterministic preview first.")
         v = self._variant(s, p.get("variantId")) if updating else None
         platform, language = (v["platform"], v["language"]) if v else (p.get("platform", "LinkedIn"), p.get("language", "English"))
-        if platform not in PLATFORMS or language not in LANGUAGES:
+        if platform not in PLATFORMS or not supported_language(language):
             raise AlphaError("Select a supported platform and language.")
         failure = p.get("fixtureFailure")
         if failure and failure not in FAILURES:

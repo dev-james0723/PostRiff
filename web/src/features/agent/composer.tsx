@@ -1,21 +1,21 @@
 'use client';
 
-import { forwardRef, useId, type KeyboardEvent } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { forwardRef, useMemo, type KeyboardEvent } from 'react';
+import { ChannelLanguageChip, type ChipLanguage } from '@/components/application/language-picker/channel-language-chip';
+import { LanguageName } from '@/components/application/language-picker/language-badge';
 import { Icons } from '@/components/icons';
 import { ActionSwapIcon } from '@/components/motion/action-swap';
 import { Checkbox } from '@/components/motion/checkbox';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { ModelOption } from '@/lib/api/types';
-import { SPRING_LAYOUT, SPRING_PRESS } from '@/lib/ease';
+import { locales } from '@/lib/locales';
 import { cn } from '@/lib/utils';
 import { ModelPicker } from './model-picker';
+import type { ChannelLanguages } from './use-channel-languages';
 
-export type Language = 'English' | '繁體中文';
-
-/** Platforms the drafting runtime can write for today (mirrors `agent_runtime.DESTINATIONS`). */
-export const DRAFT_PLATFORMS = ['LinkedIn', 'Instagram', 'Threads'] as const;
+/** Platforms the drafting runtime can write for today (mirrors `agent_runtime.PLATFORMS`). */
+export const DRAFT_PLATFORMS = ['LinkedIn', 'Instagram', 'Threads', 'Xiaohongshu'] as const;
 export type DraftPlatform = (typeof DRAFT_PLATFORMS)[number];
 
 export interface ChannelChip {
@@ -34,10 +34,8 @@ interface ComposerProps {
   disabled?: boolean;
   placeholder: string;
   chips: ChannelChip[];
-  selected: DraftPlatform[];
-  onToggle: (platform: DraftPlatform) => void;
-  language: Language;
-  onLanguage: (language: Language) => void;
+  /** Selected channels and each channel's languages (useChannelLanguages). */
+  languages: ChannelLanguages<DraftPlatform>;
   /** Every model the deployment can write with, and which one this composer sends. */
   models: ModelOption[];
   model: string;
@@ -56,18 +54,28 @@ interface ComposerProps {
 }
 
 /**
- * One composer for Home and every conversation: text, the channels to draft for, the
- * language, and the model that will write. Channels named inside the message win over the
- * chips (the server parses them); the chips are the default when nothing is named.
+ * One composer for Home and every conversation: text, the channels to draft for, each channel's
+ * languages, and the model that will write. Channels named inside the message win over the chips
+ * (the server parses them); a language named in the message wins for its channels, and the chips
+ * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, placeholder, chips, selected, onToggle, language, onLanguage, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, consent, submitLabel, compact, hint },
+  { value, onChange, onSubmit, busy, disabled, placeholder, chips, languages, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, consent, submitLabel, compact, hint },
   ref
 ) {
-  const canSend = !busy && !disabled && value.trim().length > 0 && selected.length > 0 && (!consent || consent.use);
-  const reduce = useReducedMotion();
-  // One thumb per composer instance, so two composers never trade the gliding language thumb.
-  const languageThumb = useId();
+  const canSend = !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use);
+  const parsed = useMemo(() => locales.parseMessageLanguages(value), [value]);
+  const rows = chips.map((chip) => {
+    const selection = languages.selection.find((item) => item.platform === chip.platform);
+    const on = Boolean(selection) || parsed.perPlatform.has(chip.platform);
+    const current = languages.languagesOf(selection ?? { platform: chip.platform, languages: null });
+    const effective: ChipLanguage[] = locales
+      .effectiveLanguages(chip.platform, current, parsed)
+      .map((item) => ({ tag: item.tag, fromMessage: item.fromMessage, index: item.fromMessage ? null : current.indexOf(item.tag) }));
+    return { chip, on, effective };
+  });
+  const channelCount = rows.filter((row) => row.on).length;
+  const reminder = reminderFor(rows.filter((row) => row.on), languages);
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && canSend) {
@@ -77,7 +85,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   }
 
   return (
-    <div data-tour='composer' className='bg-card ring-foreground/10 flex flex-col rounded-xl shadow-xs ring-1'>
+    <div className='bg-card ring-foreground/10 flex flex-col rounded-xl shadow-xs ring-1'>
       <Textarea
         ref={ref}
         value={value}
@@ -91,51 +99,35 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         className='min-h-0 resize-none border-0 bg-transparent px-4 pt-4 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent'
       />
       <div className='flex flex-wrap items-center justify-between gap-2 px-3 pt-1 pb-3'>
-        <div data-tour='composer-channels' className='flex flex-wrap items-center gap-1.5'>
+        <div className='flex flex-wrap items-center gap-1.5'>
           <span className='text-muted-foreground mr-1 text-xs'>Draft for</span>
-          {chips.map((chip) => {
-            const on = selected.includes(chip.platform);
-            const ready = chip.state === 'Ready for posting';
+          {rows.map(({ chip, on, effective }) => {
+            const remembered = languages.settings.channels[chip.platform] ?? [];
+            const usual = locales.usualFor(chip.platform);
+            const suggestions = [
+              ...remembered.map((tag) => ({ tag, reason: 'Last used here' })),
+              ...(usual ? [{ tag: usual, reason: `Usual for ${chip.platform}` }] : []),
+              ...languages.suggestions
+            ].filter((item, i, all) => all.findIndex((other) => other.tag === item.tag) === i);
             return (
-              <motion.button
+              <ChannelLanguageChip
                 key={chip.platform}
-                type='button'
-                aria-pressed={on}
+                platform={chip.platform}
+                account={chip.account}
+                state={chip.state}
+                on={on}
+                languages={effective}
+                channelCount={channelCount}
+                suggestions={suggestions}
                 disabled={disabled}
-                onClick={() => onToggle(chip.platform)}
-                title={chip.account ? `${chip.account} · ${chip.state ?? 'connected'}` : 'No account connected yet · drafts only'}
-                whileTap={reduce || disabled ? undefined : { scale: 0.96 }}
-                transition={SPRING_PRESS}
-                className={cn(
-                  'inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors',
-                  on ? 'border-transparent bg-secondary text-secondary-foreground' : 'border-border bg-background text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <span aria-hidden className={cn('size-1.5 rounded-full', chip.account ? (ready ? 'bg-emerald-500' : 'bg-amber-500') : 'bg-muted-foreground/40')} />
-                {chip.platform}
-              </motion.button>
+                onToggle={() => languages.toggle(chip.platform)}
+                onChange={(index, tag) => (index === null ? languages.add(chip.platform, tag) : languages.change(chip.platform, index, tag))}
+                onAdd={(tag) => languages.add(chip.platform, tag)}
+                onRemove={(index) => languages.remove(chip.platform, index)}
+                onUseEverywhere={(tag) => languages.useEverywhere(tag)}
+              />
             );
           })}
-          <span className='bg-border mx-1 h-4 w-px' />
-          {/* layoutRoot keeps the thumb's glide measured inside this group, whatever scrolls around the composer. */}
-          <motion.div layoutRoot className='bg-muted flex rounded-lg p-0.5' role='radiogroup' aria-label='Language'>
-            {(['English', '繁體中文'] as Language[]).map((item) => (
-              <button
-                key={item}
-                type='button'
-                role='radio'
-                aria-checked={language === item}
-                disabled={disabled}
-                onClick={() => onLanguage(item)}
-                className={cn('relative h-6 rounded-md px-2 text-xs font-medium transition-colors', language === item ? 'text-foreground' : 'text-muted-foreground')}
-              >
-                {language === item && (
-                  <motion.span layoutId={`language-${languageThumb}`} layout='position' transition={reduce ? { duration: 0 } : SPRING_LAYOUT} className='bg-background absolute inset-0 rounded-md shadow-xs' />
-                )}
-                <span className='relative'>{item === 'English' ? 'EN' : '繁中'}</span>
-              </button>
-            ))}
-          </motion.div>
           {onVoiceMode && (
             <button
               type='button'
@@ -150,9 +142,11 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           )}
         </div>
         <div className='flex items-center gap-2'>
-          {reasoningOptions && reasoningOptions.length > 1 && <select aria-label='Reasoning effort' value={reasoning} onChange={(event) => onReasoning?.(event.target.value)} disabled={disabled || busy} className='bg-background h-7 max-w-28 rounded-md border px-1 text-xs'>
-            {reasoningOptions.map((item) => <option key={item.id} value={item.id}>{({ low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra High', max: 'Max', quick: 'Quick', standard: 'Standard', deep: 'Deep' } as Record<string, string>)[item.id] ?? item.id}</option>)}
-          </select>}
+          {reasoningOptions && reasoningOptions.length > 1 && (
+            <select aria-label='Reasoning effort' value={reasoning} onChange={(event) => onReasoning?.(event.target.value)} disabled={disabled || busy} className='bg-background h-7 max-w-28 rounded-md border px-1 text-xs'>
+              {reasoningOptions.map((item) => <option key={item.id} value={item.id}>{({ low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra High', max: 'Max', quick: 'Quick', standard: 'Standard', deep: 'Deep' } as Record<string, string>)[item.id] ?? item.id}</option>)}
+            </select>
+          )}
           <ModelPicker options={models} model={model} onChoose={onModel} disabled={disabled} />
           <Button size='icon' className='rounded-full' disabled={!canSend} onClick={onSubmit} aria-label={submitLabel ?? 'Send'}>
             <ActionSwapIcon value={busy ? 'busy' : 'send'} animation='blur' className='size-4'>
@@ -161,6 +155,24 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           </Button>
         </div>
       </div>
+      {reminder && (
+        <div className='border-border/60 text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t px-4 py-2 text-xs'>
+          <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${reminder.tone === 'amber' ? 'bg-amber-500' : 'bg-muted-foreground/50'}`} />
+          <span className='inline-flex min-w-0 flex-wrap items-center gap-x-1'>
+            {reminder.platform}: <LanguageName language={reminder.tag} className='text-foreground' /> {reminder.text}
+          </span>
+          {reminder.choices && (
+            <span className='inline-flex flex-wrap gap-1'>
+              {(['feminine', 'masculine', 'neutral'] as const).map((value) => (
+                <button key={value} type='button' onClick={() => languages.setSelfReference(value)} className='ring-foreground/10 hover:bg-muted text-foreground h-6 rounded-md px-2 ring-1'>
+                  {value === 'neutral' ? 'Neutral wording' : value === 'feminine' ? 'Feminine' : 'Masculine'}
+                </button>
+              ))}
+            </span>
+          )}
+          {reminder.more > 0 && <span>{reminder.more} more in the plan.</span>}
+        </div>
+      )}
       {consent && (
         <div className='border-border/60 flex flex-wrap items-center gap-x-5 gap-y-2 border-t px-4 py-2.5'>
           <Checkbox checked={consent.use} onCheckedChange={consent.onUse} disabled={disabled} label='Use this text to draft with' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
@@ -172,3 +184,20 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
     </div>
   );
 });
+
+/** The first language reminder for the selected channels (languages plan §8). Reminders never block sending. */
+function reminderFor(rows: { chip: ChannelChip; effective: ChipLanguage[] }[], languages: ChannelLanguages<DraftPlatform>) {
+  const found: { platform: string; tag: string; text: string; tone: 'amber' | 'quiet'; choices?: boolean }[] = [];
+  for (const { chip, effective } of rows) {
+    for (const language of effective) {
+      const entry = locales.entry(language.tag);
+      if (!entry) continue;
+      if (entry.regionless) found.push({ platform: chip.platform, tag: language.tag, text: 'has no region. Pick one so spelling and wording match your readers.', tone: 'amber' });
+      else if (!entry.guide) found.push({ platform: chip.platform, tag: language.tag, text: 'isn’t tuned yet. PostRiff still writes it; check the wording before you post.', tone: 'amber' });
+      else if (entry.gendered && !languages.settings.selfReference)
+        found.push({ platform: chip.platform, tag: language.tag, text: 'shows the writer’s gender in some words. How do you refer to yourself?', tone: 'quiet', choices: true });
+    }
+  }
+  const unique = found.filter((item, i) => found.findIndex((other) => other.tag === item.tag && other.text === item.text) === i);
+  return unique.length ? { ...unique[0], more: unique.length - 1 } : null;
+}

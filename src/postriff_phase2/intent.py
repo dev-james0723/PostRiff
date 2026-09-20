@@ -1,8 +1,8 @@
 """Deterministic intent and schedule parsing for Ideas turns (agent chat design §4.1, step ①).
 
-A pure function, no model. It recognises channel names and natural-language times in
-English and Cantonese / Traditional Chinese, pairs them inside a clause, and returns a
-candidate plan. Parsed text is never an instruction to the runtime: the plan is only a
+A pure function, no model. It recognises channel names, natural-language times and named
+languages in English and Cantonese / Traditional Chinese, pairs them inside a clause, and
+returns a candidate plan. Parsed text is never an instruction to the runtime: the plan is only a
 proposal that the user approves through the existing review → approve chain.
 """
 from __future__ import annotations
@@ -11,7 +11,8 @@ import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-LANGUAGES = ("English", "繁體中文")
+from . import locales
+
 INTENTS = ("draft", "schedule", "publish_now", "research", "memory")
 
 
@@ -93,10 +94,16 @@ def safe_zone(value):
 
 
 def detect_language(text):
-    return "繁體中文" if _CJK.search(text or "") else "English"
+    """A starting language from the script the message is typed in. A suggestion only: the person's
+    choice for each channel, or a language named in the message, always decides."""
+    return locales.suggest_from_text(text)
 
 
 def _platform_mentions(segment):
+    return [platform for _, platform in _platform_positions(segment)]
+
+
+def _platform_positions(segment):
     lowered = segment.lower()
     found = []
     for platform, aliases in PLATFORM_ALIASES:
@@ -111,7 +118,7 @@ def _platform_mentions(segment):
                 best = index
         if best is not None:
             found.append((best, platform))
-    return [platform for _, platform in sorted(found)]
+    return sorted(found)
 
 
 def _explicit_day(segment, today):
@@ -274,6 +281,8 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
     return {
         "intent": intent,
         "language": detect_language(text),
+        # Languages named as instructions, each paired with the channels named in its clause ([] = every channel).
+        "languages": locales.pair_with_channels(text, _platform_positions),
         "timeZone": zone,
         "destinations": [{k: d[k] for k in ("platform", "supported", "localTime", "assumed")} for d in destinations],
         "unattachedTimes": [{"localTime": t["localTime"], "assumed": t["assumed"]} for t in unattached],
@@ -289,16 +298,67 @@ def _slot(slot):
     return {"localTime": slot["localTime"], "assumed": slot["assumed"], "label": slot["label"], "past": slot["past"], "rolled": slot["rolled"]}
 
 
-def resolve_destinations(parsed, requested, language, default):
-    """Channels named in the message win; otherwise the composer's selection; otherwise the default."""
-    if language not in LANGUAGES:
-        language = parsed["language"]
+def resolve_destinations(parsed, requested, language=None, default=(), settings=None):
+    """One destination per (channel, language) pair, so a channel can be drafted in several languages.
+
+    Channels: channels named in the message win over the composer's selection, except a channel named
+    only to set its language ("Threads in British English"), which joins the selection instead of
+    replacing it. Languages: a language named for that channel in the message, else one named for
+    every channel, else the composer's languages for it, else the request's top-level language (older
+    clients), else what the workspace remembers for the channel (`settings`: state or a callable
+    returning it; see `locales.languages_for`). A family name ("Chinese") keeps a pick already in it.
+    """
+    fallback = locales.canonical(language)
+    remembered = {}
+
+    def starting(platform):
+        if fallback:
+            return [fallback]
+        if "state" not in remembered:
+            remembered["state"] = settings() if callable(settings) else settings
+        return locales.languages_for(platform, remembered["state"], parsed.get("language"))
+
+    chosen = {}
+    for item in requested if isinstance(requested, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("platform"), str) or not item["platform"]:
+            continue
+        tag = locales.canonical(item.get("language"))
+        tags = chosen.setdefault(item["platform"], [])
+        for candidate in ([tag] if tag else starting(item["platform"])):
+            if candidate not in tags:
+                tags.append(candidate)
+    languages = parsed.get("languages") or []
+    paired = {platform for pair in languages for platform in pair["platforms"]}
     named = [d["platform"] for d in parsed["destinations"] if d["supported"]]
-    if named:
-        return [{"platform": platform, "language": language} for platform in named]
-    if isinstance(requested, list) and requested:
-        return [{"platform": d.get("platform"), "language": d.get("language", language)} for d in requested if isinstance(d, dict)]
-    return [dict(d) for d in default]
+    selecting = [platform for platform in named if platform not in paired]
+    if selecting:
+        selection = {platform: chosen.get(platform) or starting(platform) for platform in selecting + [p for p in named if p in paired]}
+    else:
+        selection = dict(chosen)
+        if not selection:
+            for item in default:
+                tag = locales.canonical(item.get("language"))
+                tags = selection.setdefault(item["platform"], [])
+                for candidate in ([tag] if tag else starting(item["platform"])):
+                    if candidate not in tags:
+                        tags.append(candidate)
+        for platform in named:
+            if platform not in selection:
+                selection[platform] = starting(platform)
+    everyone, per_channel = None, {}
+    for pair in languages:
+        if pair["platforms"]:
+            for platform in pair["platforms"]:
+                per_channel[platform] = pair
+        else:
+            everyone = pair
+    destinations = []
+    for platform, tags in selection.items():
+        pair = per_channel.get(platform) or everyone
+        if pair:
+            tags = locales.apply_named(tags, pair["tags"], pair["said"])
+        destinations.extend({"platform": platform, "language": tag} for tag in dict.fromkeys(tags))
+    return destinations
 
 
 def build_plan(parsed, destinations):

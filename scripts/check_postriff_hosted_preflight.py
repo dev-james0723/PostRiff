@@ -72,7 +72,8 @@ def validate_structure(root=ROOT):
     private_exclusions = all(marker in exclusions for marker in (".env*", "broker.key", "*.command", "src/james_au_social/**", ".venv/**", ".phase3-build-venv/**", "desktop/**", "vendor/**", "web/**"))
     checks.append(_result("function-bundle-boundary", "pass" if private_exclusions else "fail", "local credentials, launchers, private social modules, tests and evidence are excluded"))
     upload_rules = (root / ".vercelignore").read_text().splitlines()
-    upload_boundary = all(rule in upload_rules for rule in (".env*", ".*-broker-*", ".upgrade-*", "broker.key", ".phase3-build-venv/", "desktop/", "vendor/", "src/james_au_social/", "studio/broker/", "studio/web/", "web/node_modules/", "web/.next/", "docs/", "tests/")) and not any(rule.startswith("!") for rule in upload_rules)
+    normalized_upload_rules = {rule.removeprefix("/") for rule in upload_rules}
+    upload_boundary = all(rule in normalized_upload_rules for rule in (".env*", ".*-broker-*", ".upgrade-*", "broker.key", ".phase3-build-venv/", "desktop/", "vendor/", "src/james_au_social/", "studio/broker/", "studio/web/", "web/node_modules/", "web/.next/", "docs/", "tests/")) and not any(rule.startswith("!") for rule in upload_rules)
     checks.append(_result("source-upload-boundary", "pass" if upload_boundary else "fail", "explicit blocklist excludes credentials, hidden broker state, caches, private modules, tests and evidence from source upload"))
 
     dependencies = set((root / "requirements.txt").read_text().splitlines())

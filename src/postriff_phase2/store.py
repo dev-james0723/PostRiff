@@ -13,7 +13,7 @@ from .contracts import PLANS, LIMITS, SCENARIOS, FixtureImages, FixtureSocial, d
 from .media import decode_upload
 from .content_types import apply_content_action, content_preflight, ensure_content_state, projection as content_projection
 from .outcomes import normalize_result, unknown
-from . import learning_signals as signals, source_policy
+from . import learning_signals as signals, locales, source_policy
 
 TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("processing", "submitting", "provider_accepted", "published", "uncertain")
@@ -100,6 +100,8 @@ class Phase2Store(Store):
             if not device or device['role'] not in ('owner', 'editor'):
                 raise AlphaError("Read-only or revoked membership.", 403)
             if source_policy.apply_policy_action(s, action, payload, device["user_id"], self.clock()):
+                pass
+            elif locales.apply_language_action(s, action, payload, device["user_id"], self.clock()):
                 pass
             elif action.startswith("p2_"):
                 self.apply_phase2(db, s, action[3:], payload, device)
@@ -262,7 +264,7 @@ class Phase2Store(Store):
             platform = p.get("platform")
             if platform not in LIMITS:
                 raise AlphaError("Use native drafting/export for this channel.")
-            data["channels"].append({"id": uid(), "platform": platform, "account": f"Fictional {platform} account {len(data['channels'])+1}", "accountType": "member" if platform == "LinkedIn" else "professional", "language": p.get("language", "English"), "configured": True, "identityVerified": False, "capabilityVerified": False, "scopes": [], "verifiedAt": 0, "expiresAt": now+86400, "revoked": False, "capabilityVersion": 0, "qualification": "implemented_with_fixtures", "evidenceSource": "synthetic", "scenario": "success"})
+            data["channels"].append({"id": uid(), "platform": platform, "account": f"Fictional {platform} account {len(data['channels'])+1}", "accountType": "member" if platform == "LinkedIn" else "professional", "language": locales.canonical(p.get("language")), "configured": True, "identityVerified": False, "capabilityVerified": False, "scopes": [], "verifiedAt": 0, "expiresAt": now+86400, "revoked": False, "capabilityVersion": 0, "qualification": "implemented_with_fixtures", "evidenceSource": "synthetic", "scenario": "success"})
         elif action == "channel_verify":
             c = find(data["channels"], p.get("channelId"))
             scenario = p.get("scenario", "success")
@@ -361,8 +363,9 @@ class Phase2Store(Store):
         policy_blockers = source_policy.publication_issues(s, v["sourceIds"])
         if policy_blockers:
             raise AlphaError(policy_blockers[0]["message"], 409)
-        if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"] or v["language"] != c["language"]:
-            raise AlphaError("The variant, language and current speaker must match this destination.")
+        # Language is not part of the match: a channel can carry drafts in several languages (languages plan §6).
+        if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"]:
+            raise AlphaError("The variant and current speaker must match this destination.")
         text = v["text"]
         if not text.strip() or len(text) > LIMITS[c["platform"]]["characters"]:
             raise AlphaError("The content exceeds this destination's versioned text limit.")
@@ -439,7 +442,7 @@ class Phase2Store(Store):
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).
-            return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["language"] == v["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and self.voice_bindings_current(s, v) and m.get("voiceSourceDigest", digest([])) == self.voice_source_digest(s, v) and all(self._source(s, i)["active"] for i in v["sourceIds"]))
+            return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and self.voice_bindings_current(s, v) and m.get("voiceSourceDigest", digest([])) == self.voice_source_digest(s, v) and all(self._source(s, i)["active"] for i in v["sourceIds"]))
         except (AlphaError, KeyError, TypeError, ValueError):
             return False
 

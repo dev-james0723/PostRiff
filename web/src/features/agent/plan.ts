@@ -8,6 +8,7 @@
  */
 import type { PostRiffApi } from '@/lib/api/client';
 import type { Run, Snapshot, SnapshotState, SnapshotVariant } from '@/lib/api/types';
+import { locales } from '@/lib/locales';
 
 export interface PlanRow {
   platform: string;
@@ -31,7 +32,7 @@ export type ApproveStep = { id: 'apply' } | { id: 'row'; index: number } | { id:
 
 /** The variant `apply` created (or updated) for this run and destination. */
 export function variantForRow(state: SnapshotState, run: Run, row: { platform: string; language: string }): SnapshotVariant | undefined {
-  const matches = (state.variants ?? []).filter((v) => v.platform === row.platform && v.language === row.language && !v.blockedByRetraction);
+  const matches = (state.variants ?? []).filter((v) => v.platform === row.platform && locales.same(v.language, row.language) && !v.blockedByRetraction);
   return (
     matches.find((v) => v.provenance?.runId === run.runId) ??
     matches.find((v) => v.proposedUpdate?.runId === run.runId) ??

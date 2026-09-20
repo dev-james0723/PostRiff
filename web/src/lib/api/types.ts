@@ -275,8 +275,21 @@ export interface ContentTypesView {
   packs: { id: string; version: string; label: string; entryCount: number; installedByDefault: boolean }[];
 }
 
+/** A BCP 47 locale tag from the shared catalogue (web/src/lib/locales), e.g. zh-Hant-HK or en-GB. Old data may say English / 繁體中文. */
+export type LocaleTag = string;
+
+/** Per-channel languages the person picked, the workspace default, and how they refer to themselves in gendered grammar. */
+export interface LanguageSettings {
+  default: LocaleTag | null;
+  channels: Record<string, LocaleTag[]>;
+  selfReference: 'feminine' | 'masculine' | 'neutral' | null;
+  updatedAt?: number;
+  updatedBy?: string;
+}
+
 export interface SnapshotState {
   workspace?: { id: string; name?: string; sample?: boolean };
+  languageSettings?: LanguageSettings;
   session?: { completed?: boolean; step?: number };
   contentTypes?: ContentTypesView;
   speaker?: Speaker;

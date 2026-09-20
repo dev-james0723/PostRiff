@@ -20,6 +20,8 @@ import time
 from postriff_alpha.domain import AlphaError
 from .agent_runtime import AgentRuntime, safe_event
 from .contracts import LIMITS, digest
+from . import locale_lint, locales
+from .text_measure import measure
 
 ROUTE = "claude-code"
 MODEL_PREFIX = "claude-code:"
@@ -71,8 +73,11 @@ facts and the idea they supplied. Rules that never bend:
   licence to supply it. If a trait calls for a detail, a habit, an admission or a physical
   particular that is not in the facts or the idea, leave that move out and name what was missing
   in `unknowns`.
-- Respect each destination's language and character limit. Adapt the framing and rhythm to the
-  platform instead of translating one text mechanically.
+- Respect each destination's character limit, and write it natively in that destination's
+  locale: `languageId` is a BCP 47 tag (zh-Hant-HK, yue-Hant-HK, en-GB…) and SKILLS carries the
+  locale guide for it. The language the idea is typed in never decides a destination's language.
+  Echo the destination's `languageId` in each variant's `language`. A platform can appear more than
+  once with different languages: write each as its own native post, never a translation of another.
 - Follow VOICE.md and BOUNDARIES.md. No hashtags, emojis, exclamation marks or rhetorical questions
   added only to look active. No motivational filler.
 - "Learned from how you edit" in VOICE.md lists preferences about form only (length, openings,
@@ -136,16 +141,19 @@ def normalize_output(structured, request, author="Claude Code", prose=None):
         raise AlphaError(f"{author} did not draft. It needs: {declined} Nothing was applied." if declined else f"{author} returned no candidate and gave no reason. Nothing was applied.", 422)
     variants, missing = [], []
     for destination in request["destinations"]:
-        match = next((v for v in structured["variants"] if isinstance(v, dict) and v.get("platform") == destination["platform"] and v.get("language") == destination["language"]), None)
+        match = next((v for v in structured["variants"] if isinstance(v, dict) and v.get("platform") == destination["platform"] and locales.same(v.get("language"), destination["language"])), None)
+        if match is None and sum(1 for other in request["destinations"] if other["platform"] == destination["platform"]) == 1:
+            match = next((v for v in structured["variants"] if isinstance(v, dict) and v.get("platform") == destination["platform"]), None)
         if not match or not isinstance(match.get("text"), str) or not match["text"].strip():
             # Never stop the person over one destination: keep what was written and say what is missing.
-            missing.append(f"{destination['platform']} · {destination['language']}")
+            missing.append(f"{destination['platform']} · {locales.display(destination['language'])}")
             continue
         text = match["text"].strip()[:12000]
         warnings = [f"Written by {author} on this machine; review every claim before scheduling."]
-        limit = PLATFORM_LIMITS.get(destination["platform"])
-        if limit and len(text) > limit:
-            warnings.append(f"{len(text)} characters exceeds the {destination['platform']} limit of {limit}; shorten before scheduling.")
+        counted = measure(destination["platform"], text)
+        if counted["limit"] and counted["used"] > counted["limit"]:
+            warnings.append(f"{counted['used']} characters exceeds the {destination['platform']} limit of {counted['limit']}; shorten before scheduling.")
+        warnings.extend(locale_lint.reminders(text, destination["language"], destination["platform"]))
         notes = match.get("notes")
         if isinstance(notes, str) and notes.strip():
             warnings.append(notes.strip()[:300])
@@ -314,7 +322,7 @@ class ClaudeCliRuntime(AgentRuntime):
         sources = [{"id": source["id"], "title": source.get("title", ""), "policy": source.get("policy"), "facts": [{"id": fact["id"], "text": fact["text"]} for fact in source.get("facts", [])]} for source in request["context"]["sources"]]
         payload = {
             "idea": request.get("idea", ""), "tone": request.get("tone", "warm"),
-            "destinations": [{"platform": d["platform"], "language": d["language"], "characterLimit": PLATFORM_LIMITS.get(d["platform"])} for d in request["destinations"]],
+            "destinations": [{"platform": d["platform"], "languageId": locales.canonical(d["language"]) or d["language"], "language": locales.prompt_name(d["language"]), "characterLimit": PLATFORM_LIMITS.get(d["platform"])} for d in request["destinations"]],
             "approvedSources": sources,
             "candidateOnly": bool(request["context"].get("candidateOnly")),
         }

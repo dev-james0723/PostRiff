@@ -32,7 +32,8 @@ import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { ActivityStrip } from './activity-strip';
-import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform, type Language } from './composer';
+import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
+import { useChannelLanguages } from './use-channel-languages';
 import { PlanCard } from './plan-card';
 import { localTimeToDate } from './plan';
 import { ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
@@ -114,8 +115,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const run = useRun(lastRunId, seed);
 
   const [text, setText] = useState('');
-  const [selected, setSelected] = useState<DraftPlatform[]>(['LinkedIn', 'Instagram']);
-  const [language, setLanguage] = useState<Language>('English');
+  const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [busy, setBusy] = useState(false);
   const [voiceMode, setVoiceMode] = useState<'neutral' | 'personalized'>('neutral');
   const [variantIndex, setVariantIndex] = useState(0);
@@ -128,13 +128,12 @@ export function ConversationView({ conversationId }: { conversationId: string })
   }
   const arrived = (messageId: string) => loadedIds.current !== null && !loadedIds.current.ids.has(messageId);
 
-  // The composer follows the last turn's destinations so "draft again" keeps the same targets.
+  // The composer follows the last turn's destinations so "draft again" keeps every channel and language.
+  const restoreLanguages = languages.restore;
   useEffect(() => {
     const last = lastAssistant ? bodyOf(lastAssistant).destinations : undefined;
-    if (last && last.length > 0) {
-      setSelected(last.map((d) => d.platform).filter((p): p is DraftPlatform => (DRAFT_PLATFORMS as readonly string[]).includes(p)));
-      setLanguage((last[0].language as Language) ?? 'English');
-    }
+    if (last && last.length > 0) restoreLanguages(last, DRAFT_PLATFORMS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per assistant turn
   }, [lastAssistant]);
 
   const state = snapshot.data?.state;
@@ -184,13 +183,12 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   async function sendTurn() {
     const body = text.trim();
-    if (!body || selected.length === 0 || busy) return;
+    if (!body || languages.selection.length === 0 || busy) return;
     setBusy(true);
     try {
       const result = await api.turn(workspaceId, conversationId, {
         text: body,
-        destinations: selected.map((platform) => ({ platform, language })),
-        language,
+        destinations: languages.destinations,
         model: choice.model,
         reasoning: choice.reasoning,
         voiceMode,
@@ -384,10 +382,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
               compact
               placeholder='Ask for another angle, a shorter version, or a different time…'
               chips={chips}
-              selected={selected}
-              onToggle={(platform) => setSelected((current) => (current.includes(platform) ? current.filter((p) => p !== platform) : [...current, platform]))}
-              language={language}
-              onLanguage={setLanguage}
+              languages={languages}
               models={choice.options}
               model={choice.model}
               onModel={choice.choose}

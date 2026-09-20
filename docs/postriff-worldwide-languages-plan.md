@@ -1,6 +1,53 @@
 # Worldwide post languages: Stage 1 proposal
 
-Status: **proposal** · 2026-09-16 · decisions 1, 4, 6, 8 and 9 made; 2, 3, 5, 7 and 10 still open (§10)
+Status: **built on branch `languages-per-channel`, not merged** · 2026-09-16 · every §10 decision made
+
+## Implementation status (2026-09-16)
+
+Built in the worktree `../James-Au-Studio-languages` on branch `languages-per-channel`, based on `consumer-saas` at `35176b0`.
+
+**Backend**
+- `scripts/build_locale_catalogue.mjs` writes `locale_catalogue.json`: 196 languages, 55 of them with guides. It writes identical copies for Python and the web app.
+- `src/postriff_phase2/locales.py` does canonical tags, parents, guide lookup, message-language pairing, and the `language_settings` action.
+- Drafting:
+  - `intent.py` pairs languages with channels and resolves one destination per (channel, language).
+  - The runtimes accept any known language, and Xiaohongshu is a drafting platform.
+  - The prompt names each locale and binds its guide.
+- Reminders and counting: `locale_lint.py` adds draft reminders (wrong script, other region's words, local rules); `text_measure.py` counts length per platform.
+- Scheduling: the language gate is gone, and new OAuth channels no longer store `English`.
+- Learned rules:
+  - Scopes read as locale tags, and parent tags reach regional drafts.
+  - `013_locale_tags.sql` rewrites stored scope keys; it is verified on a disposable Postgres. It must run after 011/012 from the account-security work.
+- IDENTITY.md carries the optional self-reference line.
+
+**Guides**
+- Full guides for the first wave; compact guides for the other 43 researched locales.
+- Seven family guides, `_generic.md`, and a rewritten `localization.md`.
+- None carries the reviewed flag yet, so no "Tuned" badge shows.
+
+**Web**
+- `lib/locales` (with `node --test` tests), `LanguagePicker`, `LanguageName` / `LanguageBadge`, `ChannelLanguageChip`.
+- `useChannelLanguages`, with remembered picks saved through `language_settings`.
+- Composer chips show icon, flag, language and a +. Reminders cover no region, no guide, and gendered grammar with inline self-reference choices.
+- Home, conversation and Ideas views are wired. Flags and names replace `EN / 繁中` on drafts, plans, pipeline, queue, memory and analytics.
+- `ChannelIcon` dark-mode fix.
+
+**Verified**
+- 409 Python unit tests pass.
+- Every phase-2 Postgres script passes in its usual pairing.
+- Migration 013 test passes.
+- Web: typecheck, lint (0 warnings) and the locale tests pass.
+- In the running app (dev harness, deterministic preview):
+  - LinkedIn en-GB, Instagram zh-Hant-HK plus en-GB, Threads en-US, and Xiaohongshu defaulting to zh-Hans-CN produced five drafts in the right languages, with four locale guides bound.
+  - The conversation composer restored both Instagram languages.
+  - "Threads in British English, and 小紅書用台灣中文寫" marked those two chips.
+
+**Not done yet**
+- **Real-model output.** The six-locale acceptance brief hasn't run through Claude Code or the cloud route; the deterministic preview writes fixed text.
+- **Post-preview phone frames** still use each template's market language rather than the post's tag. Those files have large uncommitted changes in another session, so wiring waits for them.
+- **Plan card rows** show the language but can't change it. A plan row is an already-drafted variant, so languages change in the composer before drafting.
+- **Arabic Latin-letters setting and Roman Urdu** are later, per decision 3.
+- **Merge.** Composer, home, conversation, Ideas, variant card, `types.ts`, `hosted.py`, `oauth.py` and `store.py` also have uncommitted edits in the main checkout from other sessions. Merge after those land.
 
 Companion material:
 - Research: [`postriff-language-registers.md`](postriff-language-registers.md). Regional style guides for 55 locales, with sources, confidence levels and native-check lists.
@@ -475,7 +522,7 @@ paths, and never commits the whole tree.
 - **Also decided:** a flag emoji beside every language (§7.1a) and a channel icon beside every
   channel name (§4.5).
 
-**Still open**
+**Decided 2026-09-16 (James: "decide the best for me")** — the recommendations below were adopted as written.
 
 2. **Where defaults live.**
    - *Recommended:* the workspace default and `channelLocales`, both on the server.

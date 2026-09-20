@@ -193,13 +193,13 @@ def create_proposal(cur, workspace_id, state, proposal, now, evidence=None):
         raise ValueError("Unsupported preference proposal.")
     p["statement"] = learning.lint(p.get("statement"), p["ruleKey"])
     key = learning.scope_key(p["type"], p["ruleKey"], p["polarity"], p["scope"])
-    current = next((item for item in learning.active_items(state) if item["scopeKey"] == key), None)
+    current = next((item for item in learning.active_items(state) if learning.canonical_scope_key(item["scopeKey"]) == key), None)
     if current and current["statement"] == p["statement"]:
         return None
     if suppressed(cur, workspace_id, key, now):
         return None
     pending = pending_proposals(cur, workspace_id)
-    if len(pending) >= learning.MAX_PENDING or any(row["scopeKey"] == key for row in pending):
+    if len(pending) >= learning.MAX_PENDING or any(learning.canonical_scope_key(row["scopeKey"]) == key for row in pending):
         return None
     op = p["op"] if p["op"] == "retire" else ("update" if (current or p["replaces"]) else "add")
     replaces = p["replaces"] or (current["id"] if current else None)

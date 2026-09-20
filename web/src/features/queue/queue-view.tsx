@@ -32,6 +32,7 @@ import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useFlash } from '@/hooks/use-flash';
+import { languageLabel } from '@/lib/locales';
 import { reportActionError } from './action-error';
 import { APPROVE_MANY_LIMIT, ApproveManyDialog } from './approve-many-dialog';
 import { JobRow, JobStateBadge } from './job-row';
@@ -170,7 +171,7 @@ function ReviewCard({
               )}
             </CardTitle>
             <CardDescription>
-              {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone}) · {manifest.payload.language} · {manifest.media.length} media ·{' '}
+              {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone}) · {languageLabel(manifest.payload.language)} · {manifest.media.length} media ·{' '}
               <span className='font-mono'>{review.digest.slice(0, 12)}…</span>
             </CardDescription>
           </CardHeader>

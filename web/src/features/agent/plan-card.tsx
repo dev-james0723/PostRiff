@@ -24,6 +24,7 @@ import { EASE_OUT } from '@/lib/ease';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { approvePlan, variantForRow, type ApproveStep, type PlanRow } from './plan';
+import { Destination } from './variant-card';
 
 interface RowState {
   include: boolean;
@@ -284,8 +285,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                 <Checkbox className='mt-0.5' checked={row.include} disabled={Boolean(blocker) || Boolean(done)} onCheckedChange={(v) => update(index, { include: v })} aria-label={`Include ${d.platform}`} />
                 <div className='flex min-w-0 flex-col gap-1'>
                   <span className='flex flex-wrap items-center gap-2 text-sm font-medium'>
-                    {d.platform}
-                    <span className='text-muted-foreground font-normal'>{d.language === '繁體中文' ? '繁中' : 'EN'}</span>
+                    <Destination platform={d.platform} language={d.language} />
                     {candidates.length > 0 ? <LevelBadge level='Assisted' /> : <LevelBadge level='Unsupported' label='Not connected' />}
                   </span>
                   {blocker ? (

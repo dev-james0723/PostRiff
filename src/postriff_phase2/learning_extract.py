@@ -11,6 +11,7 @@ import statistics
 from datetime import datetime, timezone
 
 from postriff_alpha import learning
+from postriff_phase2 import locales
 
 HALF_LIFE_DAYS = 45
 WINDOW_DAYS = 90
@@ -59,8 +60,10 @@ def _epoch(value):
 
 
 def _scope(event):
+    """Events keep the language they were recorded with (180-day TTL); read as a locale tag so English and en count as one."""
     scope = event.get("scope") or {}
-    return {"platform": scope.get("platform"), "language": scope.get("language"), "contentTypeId": None}
+    language = locales.canonical(scope.get("language"), family_ok=True) or scope.get("language")
+    return {"platform": scope.get("platform"), "language": language, "contentTypeId": None}
 
 
 def _observation(event, rule, polarity, weight, value=None):
@@ -131,7 +134,7 @@ def _statement(rule, polarity, scope, values):
         if not measured:
             return None
         target = int(round(statistics.median(measured) / 10.0) * 10) or 10
-        unit = "characters" if (scope.get("language") or "").endswith("中文") else "words"
+        unit = locales.count_unit(scope.get("language")) if scope.get("language") else "words"
         return f"Keep posts under {target} {unit}."
     return STATEMENTS.get((rule, polarity))
 
@@ -146,8 +149,9 @@ def accept_rate(decisions):
 
 def _levels(scope):
     """The scopes an observation counts towards: its own, its language, everyone (deduplicated)."""
-    own = {"platform": scope.get("platform"), "language": scope.get("language"), "contentTypeId": None}
-    language = {"platform": None, "language": scope.get("language"), "contentTypeId": None}
+    tag = locales.canonical(scope.get("language"), family_ok=True) or scope.get("language")
+    own = {"platform": scope.get("platform"), "language": tag, "contentTypeId": None}
+    language = {"platform": None, "language": tag, "contentTypeId": None}
     everyone = {"platform": None, "language": None, "contentTypeId": None}
     out = []
     for candidate in (own, language, everyone):
@@ -177,7 +181,7 @@ def _add(group, observation, weight):
     if scope.get("platform"):
         group["platforms"].add(scope["platform"])
     if scope.get("language"):
-        group["languages"].add(scope["language"])
+        group["languages"].add(locales.canonical(scope["language"], family_ok=True) or scope["language"])
 
 
 def consolidate(support, counter, state, now, dismissed_keys=(), recent_decisions=(), extra=()):
@@ -192,7 +196,8 @@ def consolidate(support, counter, state, now, dismissed_keys=(), recent_decision
     """
     rate = accept_rate(list(recent_decisions))
     threshold = MIN_SUPPORT * (2 if rate is not None and rate < LOW_ACCEPT_RATE else 1)
-    active = {item["scopeKey"]: item for item in learning.active_items(state)}
+    active = {learning.canonical_scope_key(item["scopeKey"]): item for item in learning.active_items(state)}
+    dismissed_keys = {learning.canonical_scope_key(key) for key in dismissed_keys}
     levels, against = {}, {}
 
     def group_for(rule, polarity, scope):

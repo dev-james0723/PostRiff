@@ -22,7 +22,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state
-from . import campaigns, memory, research, source_policy, suggestions, voice_analysis, voice_sources
+from . import campaigns, locales, memory, research, source_policy, suggestions, voice_analysis, voice_sources
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
@@ -209,6 +209,8 @@ class HostedPhase2Commands:
             return state
         if memory.apply_memory_action(state, action, payload, principal, self.clock()):
             return state
+        if locales.apply_language_action(state, action, payload, principal, self.clock()):
+            return state
         if research.apply_research_action(state, action, payload, principal, self.clock()):
             return state
         if voice_analysis.apply_action(state, action, payload, principal, self.clock()):
@@ -288,8 +290,9 @@ class HostedPhase2Commands:
     SERVER_VERIFIED_PLATFORMS = ("LinkedIn", "Instagram", "Threads", "Facebook", "X", "YouTube", "TikTok", "Pinterest", "Bluesky", "Mastodon")
 
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
-        required = {"id", "platform", "account", "accountType", "language", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
-        if set(channel) != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
+        # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
+        if set(channel) - {"language"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         saved = copy.deepcopy(channel)
         # identityVerified comes from the provider identity endpoint; capabilityVerified only when

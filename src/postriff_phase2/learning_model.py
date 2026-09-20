@@ -14,7 +14,7 @@ import json
 
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError
-from . import learning_signals as signals, source_policy
+from . import learning_signals as signals, locales, source_policy
 
 MAX_PAIRS_PER_SCOPE = 8
 MIN_PAIRS_PER_SCOPE = 2
@@ -75,7 +75,7 @@ def pairs_for(state, events, cloud):
         if not isinstance(before, str) or not isinstance(after, str) or before == after:
             continue
         scope = event.get("scope") or {}
-        grouped.setdefault((scope.get("platform"), scope.get("language")), []).append({
+        grouped.setdefault((scope.get("platform"), locales.canonical(scope.get("language"), family_ok=True) or scope.get("language")), []).append({
             "id": str(event.get("id")), "variantId": variant["id"], "before": signals.redact(before)[:MAX_TEXT_CHARS], "after": signals.redact(after)[:MAX_TEXT_CHARS]})
     return grouped
 

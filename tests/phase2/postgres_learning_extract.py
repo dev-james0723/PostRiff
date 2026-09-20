@@ -83,7 +83,7 @@ assert result["workspaces"] == 1 and result["proposed"] == 1, result
 pending = service.learning.proposals(service.repository, wid, "fixture-one")["pending"]
 assert len(pending) == 1
 p = pending[0]
-assert (p["ruleKey"], p["polarity"], p["statement"], p["scope"], p["source"], p["op"]) == ("closing.cta", "do", "End with a call to action.", {"platform": None, "language": "English", "contentTypeId": None}, "deterministic", "add"), p
+assert (p["ruleKey"], p["polarity"], p["statement"], p["scope"], p["source"], p["op"]) == ("closing.cta", "do", "End with a call to action.", {"platform": None, "language": "en", "contentTypeId": None}, "deterministic", "add"), p
 assert len(p["evidence"]) == 3 and "3 of your drafts" in p["why"]
 assert count("select count(*) from public.pr_learning_events where workspace_id=%s and consumed_by is null", wid) == 0
 assert service.get(wid, "fixture-one")["revision"] == revision_before, "extraction never touches the workspace row"

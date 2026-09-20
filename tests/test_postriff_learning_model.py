@@ -50,7 +50,7 @@ class Recording:
 class Pairs(unittest.TestCase):
     def test_pairs_are_redacted_and_grouped_by_scope(self):
         grouped = model.pairs_for(state(), [event("e1", "v1"), event("e2", "v2")], cloud=False)
-        pairs = grouped[("LinkedIn", "English")]
+        pairs = grouped[("LinkedIn", "en")]
         self.assertEqual([p["id"] for p in pairs], ["e1", "e2"])
         self.assertNotIn("kiln@studio.hk", pairs[0]["before"])
         self.assertIn("<email>", pairs[0]["before"])
@@ -58,9 +58,9 @@ class Pairs(unittest.TestCase):
 
     def test_a_cloud_model_only_sees_pairs_whose_sources_all_carry_cloud_consent(self):
         grouped = model.pairs_for(state(consent=("local",)), [event("e1", "v1"), event("e2", "v2")], cloud=True)
-        self.assertEqual([p["id"] for p in grouped[("LinkedIn", "English")]], ["e2"], "v1 used a source without cloud consent; v2 used none")
+        self.assertEqual([p["id"] for p in grouped[("LinkedIn", "en")]], ["e2"], "v1 used a source without cloud consent; v2 used none")
         self.assertEqual(model.pairs_for(state(policy="prohibited"), [event("e1", "v1")], cloud=True), {})
-        self.assertEqual([p["id"] for p in model.pairs_for(state(consent=("local",)), [event("e1", "v1")], cloud=False)[("LinkedIn", "English")]], ["e1"], "the person's own CLI needs no egress consent")
+        self.assertEqual([p["id"] for p in model.pairs_for(state(consent=("local",)), [event("e1", "v1")], cloud=False)[("LinkedIn", "en")]], ["e1"], "the person's own CLI needs no egress consent")
 
 
 class Extraction(unittest.TestCase):
@@ -78,7 +78,7 @@ class Extraction(unittest.TestCase):
         observations = extractor.observe(state(), [event("e1", "v1"), event("e2", "v2")], NOW)
         self.assertEqual(len(call.calls), 1)
         sent = json.loads(call.calls[0]["user"].split("INPUT\n", 1)[1])
-        self.assertEqual(sent["scope"], {"platform": "LinkedIn", "language": "English"})
+        self.assertEqual(sent["scope"], {"platform": "LinkedIn", "language": "en"})
         self.assertNotIn("kiln@studio.hk", call.calls[0]["user"])
         self.assertEqual(call.calls[0]["schema"], model.SCHEMA)
         self.assertEqual([(o["ruleKey"], o["polarity"], o["eventId"], o["weight"], o["source"]) for o in observations],

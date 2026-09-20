@@ -66,7 +66,7 @@ class StyleRevision(unittest.TestCase):
         item = learning.remember(state, proposal(), actor="owner-1", now=NOW)
         self.assertEqual((learning.revision(state), state["speaker"]["activeRevision"]), (1, 1))
         self.assertEqual(item["evidenceState"], "user_confirmed")
-        self.assertEqual(item["scopeKey"], "writing_preference|hashtags.use|avoid|Instagram|繁體中文|*")
+        self.assertEqual(item["scopeKey"], "writing_preference|hashtags.use|avoid|Instagram|zh-Hant|*")
         self.assertTrue(learning.applies(item, "Instagram", "繁體中文"))
         self.assertFalse(learning.applies(item, "Instagram", "English"))
         self.assertTrue(learning.retire(state, item["id"], NOW, "undone"))

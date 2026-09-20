@@ -9,6 +9,7 @@ import { limitNotes } from '@/components/application/post-preview/limits';
 import { ChannelIcon, resolveChannelSlug } from '@/components/channel-icon';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
+import { languageLabel, textAttributes } from '@/lib/locales';
 
 /**
  * Edit a draft's text in place (`variant_edit`). The edit bumps the variant revision, so any
@@ -39,13 +40,13 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
-            Edit draft{variant ? ` · ${variant.platform} · ${variant.language}` : ''}
+            Edit draft{variant ? ` · ${variant.platform} · ${languageLabel(variant.language)}` : ''}
           </DialogTitle>
           <DialogDescription>Your words, your call. Edits stay in the draft history; PostRiff learns from how you edit only through preferences you accept on the Memory page.</DialogDescription>
         </DialogHeader>
         {variant ? (
           <>
-            <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={12} className='min-h-48 text-sm' aria-label='Draft text' autoFocus />
+            <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => setText(e.target.value)} rows={12} className='min-h-48 text-sm [unicode-bidi:plaintext]' aria-label='Draft text' autoFocus />
             {notes.map((note, index) => <p key={index} className={note.tone === 'problem' ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>{note.text}</p>)}
             {notes.length === 0 && <p className='text-muted-foreground text-xs'>{Array.from(text).length} characters</p>}
 

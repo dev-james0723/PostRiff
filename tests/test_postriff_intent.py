@@ -25,7 +25,7 @@ class ParseRequestTest(unittest.TestCase):
         text = "想出一個 post 講 AI 點樣幫我練琴。今日晏晝 4 點 post 去 Instagram、今日下晝 5 點 post 去 LinkedIn、聽日晏晝 3 點半 post 去 Facebook。"
         parsed = intent.parse_request(text, at("2026-09-16T10:00"), HK, SUPPORTED)
         self.assertEqual(parsed["intent"], "schedule")
-        self.assertEqual(parsed["language"], "繁體中文")
+        self.assertEqual(parsed["language"], "zh-Hant")  # a suggestion from the script, never a decision
         self.assertEqual(self.rows(parsed), {"Instagram": "2026-09-16T16:00", "LinkedIn": "2026-09-16T17:00", "Facebook": "2026-09-17T15:30"})
         self.assertEqual(parsed["unsupported"], ["Facebook"])
         self.assertFalse(any(d["assumed"] for d in parsed["destinations"]))
@@ -33,7 +33,7 @@ class ParseRequestTest(unittest.TestCase):
     def test_english_channel_then_time(self):
         text = "A post about how AI is changing my piano practice. Instagram at 4pm today, LinkedIn at 5pm, Facebook tomorrow 3:30pm."
         parsed = intent.parse_request(text, at("2026-09-16T10:00"), HK, SUPPORTED)
-        self.assertEqual(parsed["language"], "English")
+        self.assertEqual(parsed["language"], "en")
         self.assertEqual(self.rows(parsed), {"Instagram": "2026-09-16T16:00", "LinkedIn": "2026-09-16T17:00", "Facebook": "2026-09-17T15:30"})
 
     def test_bare_hours_are_assumed_and_flagged(self):
@@ -105,12 +105,12 @@ class ResolveAndPlanTest(unittest.TestCase):
     def test_named_channels_win_over_composer_selection(self):
         parsed = intent.parse_request("Instagram at 4pm today", at("2026-09-16T10:00"), HK, SUPPORTED)
         rows = intent.resolve_destinations(parsed, [{"platform": "LinkedIn", "language": "English"}], "English", self.default)
-        self.assertEqual(rows, [{"platform": "Instagram", "language": "English"}])
+        self.assertEqual(rows, [{"platform": "Instagram", "language": "en"}])
 
     def test_unsupported_only_falls_back_to_selection(self):
         parsed = intent.parse_request("Facebook tomorrow 3pm", at("2026-09-16T10:00"), HK, SUPPORTED)
         rows = intent.resolve_destinations(parsed, [{"platform": "Threads", "language": "English"}], "English", self.default)
-        self.assertEqual(rows, [{"platform": "Threads", "language": "English"}])
+        self.assertEqual(rows, [{"platform": "Threads", "language": "en"}])
         # The time belonged to Facebook, so it does not silently move to Threads: no plan, one warning surface.
         self.assertIsNone(intent.build_plan(parsed, rows))
         self.assertEqual(parsed["unsupported"], ["Facebook"])

@@ -18,6 +18,8 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from postriff_phase2 import locales
+
 from .profiles import SENSITIVE
 
 TYPES = ("writing_preference", "working_style")
@@ -87,15 +89,29 @@ def lint(statement, rule_key="other"):
 
 def scope_of(value):
     value = value if isinstance(value, dict) else {}
-    return {key: (value.get(key) if isinstance(value.get(key), str) and value.get(key) else None) for key in ("platform", "language", "contentTypeId")}
+    scope = {key: (value.get(key) if isinstance(value.get(key), str) and value.get(key) else None) for key in ("platform", "language", "contentTypeId")}
+    if scope["language"]:
+        # Locale tags since the languages plan; English / 繁體中文 read as en / zh-Hant, `zh` is a Chinese-wide scope.
+        scope["language"] = locales.canonical(scope["language"], family_ok=True) or scope["language"]
+    return scope
 
 
 def scope_key(type_, rule_key, polarity, scope):
     return "|".join([type_, rule_key, polarity] + [scope.get(key) or "*" for key in ("platform", "language", "contentTypeId")])
 
 
+def canonical_scope_key(key):
+    """A scope key written before locale tags (…|Instagram|繁體中文|*) as it is written now (…|Instagram|zh-Hant|*)."""
+    parts = key.split("|") if isinstance(key, str) else []
+    if len(parts) != 6 or parts[4] == "*":
+        return key
+    parts[4] = locales.canonical(parts[4], family_ok=True) or parts[4]
+    return "|".join(parts)
+
+
 def scope_label(scope):
-    platform, language, content_type = scope.get("platform"), scope.get("language"), scope.get("contentTypeId")
+    platform, content_type = scope.get("platform"), scope.get("contentTypeId")
+    language = locales.display(scope["language"]) if scope.get("language") else None
     if platform and language:
         label = f"{platform} · {language}"
     elif platform:
@@ -108,8 +124,14 @@ def scope_label(scope):
 
 
 def applies(item, platform, language, content_type_id=None):
+    """A scope's language covers the draft's language and its parents: a `zh-Hant` rule reaches `zh-Hant-HK`
+    and `yue-Hant-HK` drafts, an `en` rule every English draft."""
     scope = item.get("scope") or {}
-    return all(scope.get(key) in (None, value) for key, value in (("platform", platform), ("language", language), ("contentTypeId", content_type_id)))
+    if scope.get("language") is not None:
+        wanted = locales.canonical(scope["language"], family_ok=True) or scope["language"]
+        if wanted != language and wanted not in locales.scope_chain(language):
+            return False
+    return all(scope.get(key) in (None, value) for key, value in (("platform", platform), ("contentTypeId", content_type_id)))
 
 
 def normalize_proposal(raw):
@@ -173,6 +195,22 @@ def _migrate(state, learning, now):
     learning["migratedAt"] = stamp
 
 
+def _migrate_locale_tags(state, learning, now):
+    """Once per workspace: scopes stored as English / 繁體中文 become en / zh-Hant, so a rule keeps applying
+    and a new proposal for the same scope replaces it instead of sitting beside it (languages plan §6)."""
+    for item in list(learning.get("active") or []) + list(learning.get("retired") or []):
+        if isinstance(item, dict) and isinstance(item.get("scope"), dict):
+            item["scope"] = scope_of(item["scope"])
+            if item.get("type") and item.get("ruleKey") and item.get("polarity"):
+                item["scopeKey"] = scope_key(item["type"], item["ruleKey"], item["polarity"], item["scope"])
+    for proposal in state.get("preferences") or []:
+        if isinstance(proposal, dict) and isinstance(proposal.get("scope"), dict):
+            proposal["scope"] = scope_of(proposal["scope"])
+        if isinstance(proposal, dict) and isinstance(proposal.get("language"), str):
+            proposal["language"] = locales.canonical(proposal["language"], family_ok=True) or proposal["language"]
+    learning["localeTagsAt"] = _iso(now)
+
+
 def _expire(state, now):
     moment = _moment(now)
     for proposal in state["preferences"]:
@@ -189,6 +227,8 @@ def ensure(state, now=None):
     state.setdefault("preferences", [])
     if learning["migratedAt"] is None:
         _migrate(state, learning, now)
+    if not learning.get("localeTagsAt"):
+        _migrate_locale_tags(state, learning, now)
     _expire(state, now)
     return learning
 

@@ -22,6 +22,7 @@ import { ApiError } from '@/lib/api/client';
 import type { Asset, SnapshotVariant } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { AssetPicker } from '@/components/application/asset-picker';
+import { languageLabel } from '@/lib/locales';
 
 interface ScheduleDialogProps {
   open: boolean;
@@ -277,7 +278,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); }}>
               <SelectTrigger id='schedule-draft'>
                 {/* The draft's language exactly as stored, never folded into a two-language label. */}
-                <SelectValue>{variant ? `${variant.platform} · ${variant.language} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</SelectValue>
+                <SelectValue>{variant ? `${variant.platform} · ${languageLabel(variant.language)} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {drafts.length === 0 && <SelectItem value='__none' disabled>No drafts yet — add candidates from Ideas</SelectItem>}
@@ -285,7 +286,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                   <SelectItem key={d.id} value={d.id}>
                     <span className='flex items-center gap-2'>
                       <ChannelIcon platform={d.platform} name={d.platform} size='xs' />
-                      {d.platform} · {d.language} — {d.text.slice(0, 48)}…
+                      {d.platform} · {languageLabel(d.language)} — {d.text.slice(0, 48)}…
                     </span>
                   </SelectItem>
                 ))}

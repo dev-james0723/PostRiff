@@ -13,6 +13,8 @@ import os
 import re
 from pathlib import Path
 
+from . import locales
+
 SKILLS_DIR_ENV = "POSTRIFF_SKILLS_DIR"
 CORE_SKILL = "postriff-content-craft"
 CORE_REFERENCES = ("references/editorial-workflow.md", "references/human-voice-pass.md", "references/platform-playbooks.md")
@@ -33,6 +35,10 @@ ENGINE_WORKFLOWS = "references/content-pillars-and-workflows.md"
 ENGINE_LOCALIZATION = "references/localization.md"
 ENGINE_RESEARCH = "references/research-and-sensitivity.md"
 ENGINE_TEMPLATES = "references/platform-and-templates.md"
+# One guide per destination language (docs/postriff-language-registers.md): the locale's own, or its
+# family guide plus the generic one. They decide whether a post reads as local, so they are the last
+# optional references to go when a turn is over budget: generic first, then family, then the locale's own.
+ENGINE_LOCALES = "references/locales/"
 # What every channel adapter shares (asset rules, setup, browser fallback, approval, payload
 # mapping, verification) lives once here instead of once per destination. An adapter overrides a
 # section by repeating its heading.
@@ -65,7 +71,7 @@ RESEARCH_INTENTS = {"research"}
 # Local names of content types whose preflight asks for evidence or citation. Catalog ids are namespaced
 # (pack.creator:article_news_commentary, postriff:promote, workspace_x:...), so matching uses the part after ":".
 CITED_CONTENT_TYPES = {"article_news_commentary", "deep_point_of_view", "product_feature_launch", "promote"}
-DEFAULT_LANGUAGE = "English"
+DEFAULT_LANGUAGE = "en"
 CHANNEL_SKILLS = {
     "LinkedIn": "postriff-channel-linkedin", "Instagram": "postriff-channel-instagram", "Threads": "postriff-channel-threads",
     "Facebook": "postriff-channel-facebook", "X": "postriff-channel-x", "TikTok": "postriff-channel-tiktok", "YouTube": "postriff-channel-youtube",
@@ -159,19 +165,23 @@ class SkillLibrary:
             "references": [{"path": f["path"], "text": f["text"]} for f in files[1:]],
         }
 
-    @staticmethod
-    def _engine_references(destinations, format_id, intent, content_type):
+    def _engine_references(self, destinations, format_id, intent, content_type):
         """The parts of the voice contract this turn actually uses."""
         references = []
         if format_id or content_type:
             references.append(ENGINE_WORKFLOWS)
-        languages = {d.get("language") for d in destinations if d.get("language")}
-        if len(languages) > 1 or (languages and languages != {DEFAULT_LANGUAGE}):
+        languages = list(dict.fromkeys(locales.canonical(d.get("language")) or d.get("language") for d in destinations if d.get("language")))
+        if len(languages) > 1 or any(str(tag).split("-")[0] != DEFAULT_LANGUAGE for tag in languages):
             references.append(ENGINE_LOCALIZATION)
         if cites_sources(intent, content_type):
             references.append(ENGINE_RESEARCH)
         if format_id in VISUAL_FORMATS:
             references.append(ENGINE_TEMPLATES)
+        root = self.root / ENGINE_SKILL if self.root else None
+        for tag in languages:
+            for reference in locales.guide_references(tag, lambda path: bool(root) and (root / path).is_file()):
+                if reference not in references:
+                    references.append(reference)
         return tuple(references)
 
     def bind(self, destinations, format_id=None, intent=None, content_type=None, max_chars=None):
@@ -235,7 +245,10 @@ class SkillLibrary:
             if len(composed()) <= budget:
                 break
             drop(skill_id, reference)
-        for skill_id, reference in FALLBACK_ORDER:
+        guides = sorted((r for entry in selected if entry[0] == ENGINE_SKILL for r in entry[1] if r.startswith(ENGINE_LOCALES)),
+                        key=lambda path: 0 if path.endswith("/_generic.md") else (1 if "/_family-" in path else 2))
+        fallback = FALLBACK_ORDER[:4] + tuple((ENGINE_SKILL, path) for path in guides) + FALLBACK_ORDER[4:]
+        for skill_id, reference in fallback:
             if len(composed()) <= budget:
                 break
             if drop(skill_id, reference):

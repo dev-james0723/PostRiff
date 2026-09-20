@@ -120,11 +120,13 @@ export function resolveChannelSlug(slug?: string, platform?: string) {
 export function ChannelIcon({ slug, platform, name, size = 'sm', className }: ChannelIconProps) {
   const key = resolveChannelSlug(slug, platform);
   const definition = CHANNEL_ICONS[key];
-  const color = definition?.color ?? 'var(--muted-foreground)';
+  // Black marks (Threads, X) follow the theme instead of vanishing on a dark background.
+  const monochrome = definition?.color?.toLowerCase() === '#000000';
+  const color = monochrome ? 'var(--foreground)' : (definition?.color ?? 'var(--muted-foreground)');
   const foreground = definition?.background ? '#171717' : color;
   const style: CSSProperties = {
     color: foreground,
-    backgroundColor: definition?.background ?? (definition ? `${definition.color}1f` : 'var(--muted)')
+    backgroundColor: definition?.background ?? (definition && !monochrome ? `${definition.color}1f` : 'var(--muted)')
   };
   const mark = definition?.mark ?? (name || platform || key || '?').slice(0, 1).toUpperCase();
   return (

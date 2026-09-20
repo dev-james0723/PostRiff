@@ -223,7 +223,7 @@ class LearningOnPhase2Store(unittest.TestCase):
         proposals = [p for p in self.j.state["preferences"] if p["status"] == "proposed"]
         self.assertEqual(len(proposals), 1)
         p = proposals[0]
-        self.assertEqual((p["ruleKey"], p["polarity"], p["statement"], p["scope"], p["source"]), ("closing.cta", "do", "End with a call to action.", {"platform": None, "language": "English", "contentTypeId": None}, "deterministic"))
+        self.assertEqual((p["ruleKey"], p["polarity"], p["statement"], p["scope"], p["source"]), ("closing.cta", "do", "End with a call to action.", {"platform": None, "language": "en", "contentTypeId": None}, "deterministic"))
         self.assertEqual(len(p["evidence"]), 3)
         self.assertIn("3 of your drafts", p["why"])
         self.assertTrue(all(e["consumedBy"] for e in self.store.learning_events(self.j.id, self.j.token)), "the batch marked the events seen")
