@@ -115,15 +115,54 @@ class HostedSocial:
         container_id = str(container.get("body", {}).get("id", ""))
         if container.get("status") != 200 or not container_id.isdigit():
             return _uncertain("Instagram did not return a container id; do not resubmit")
-        status = self.transport("GET", f"https://graph.instagram.com/{GRAPH_VERSION}/{container_id}?" + urlencode({"fields": "status_code", "access_token": token}))
-        code = status.get("body", {}).get("status_code")
-        if code != "FINISHED":
-            return {"state": "provider_accepted", "container": container_id, "confirmed": f"Instagram container {code or 'pending'}; publish deferred to reconciliation"}
-        publish = self.transport("POST", f"https://graph.instagram.com/{GRAPH_VERSION}/{quote(user)}/media_publish", form={"creation_id": container_id, "access_token": token})
-        media_id = str(publish.get("body", {}).get("id", ""))
-        if publish.get("status") == 200 and media_id.isdigit():
-            return {"state": "provider_accepted", "reference": media_id, "container": container_id, "confirmed": "Instagram returned a media id; publication verification pending"}
-        return _uncertain(f"Instagram container {container_id} finished but publish was inconclusive; reconcile by container")
+        return {"state": "processing", "container": container_id,
+                "progress": {"version": 1, "stage": "container_created"},
+                "confirmed": "Instagram container created; processing is not publication"}
+
+    def advance_instagram(self, manifest, job, action):
+        """One bounded request. Worker has durably recorded intent before a POST."""
+        if self._provider(manifest) is None:
+            return {"state": "held", "confirmed": "Provider review is unavailable; a new review is required"}
+        try:
+            grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
+        except AlphaError:
+            return {"state": "held", "confirmed": "Connection unavailable; re-authorize and review again"}
+        if not {"instagram_business_basic", "instagram_business_content_publish"}.issubset(grant["scopes"]):
+            return {"state": "held", "confirmed": "Instagram publishing scopes missing; re-authorize and review again"}
+        token = grant['accessToken']
+        if action == 'create':
+            return self._submit_instagram(manifest, token)
+        container = job.get('container')
+        if not isinstance(container, str) or not container.isdigit():
+            return _uncertain('Missing durable container; manual review required; do not resubmit')
+        if action == 'status':
+            try:
+                response = self.transport('GET', f'https://graph.instagram.com/{GRAPH_VERSION}/{container}?' + urlencode({'fields': 'status_code', 'access_token': token}))
+            except (AlphaError, OSError):
+                return {"state": "processing", "container": container,
+                        "progress": {"version": 1, "stage": "container_created"},
+                        "confirmed": "Read-only container lookup unavailable; no publish attempted"}
+            status = response.get('status')
+            if status in (401, 403):
+                return {"state": "held", "confirmed": "Container lookup requires re-authorization and a new review"}
+            code = response.get('body', {}).get('status_code') if status == 200 else None
+            if code in ('ERROR', 'EXPIRED'):
+                return {"state": "failed", "confirmed": "Unpublished container reports " + code}
+            if code == 'PUBLISHED':
+                return _uncertain('Container unexpectedly reports published; inspect platform; do not resubmit')
+            return {"state": "processing", "container": container,
+                    "progress": {"version": 1, "stage": "container_ready" if code == 'FINISHED' else 'container_created'},
+                    "confirmed": "Container ready for approved publication" if code == 'FINISHED' else "Container processing or lookup unavailable; no publish attempted"}
+        if action != 'publish' or job.get('progress', {}).get('stage') != 'publish_attempted':
+            return _uncertain('No durable publish intent; do not submit')
+        response = self.transport('POST', f'https://graph.instagram.com/{GRAPH_VERSION}/{quote(manifest["providerAccountId"])}/media_publish', form={'creation_id': container, 'access_token': token})
+        media_id = response.get('body', {}).get('id')
+        if response.get('status') == 200 and isinstance(media_id, str) and media_id.isdigit():
+            return {"state": "provider_accepted", "reference": media_id, "container": container,
+                    "progress": {"version": 1, "stage": "provider_accepted"},
+                    "confirmed": "Instagram accepted publication; canonical lookup pending"}
+        # Even a rate-limit response here must not authorize a second publish.
+        return _uncertain('Publish outcome not confirmed; check the platform; do not resubmit')
 
     # --- reconcile ----------------------------------------------------------------
     def reconcile(self, manifest, job):
@@ -149,15 +188,20 @@ class HostedSocial:
             if manifest["platform"] in ("Threads", "Instagram"):
                 base = "https://graph.threads.net" if manifest["platform"] == "Threads" else "https://graph.instagram.com"
                 if reference:
-                    fields = "id,text,permalink" if manifest["platform"] == "Threads" else "id,caption,permalink,username"
+                    fields = "id,text,permalink" if manifest["platform"] == "Threads" else "id,caption,permalink,owner"
                     response = self.transport("GET", f"{base}/{GRAPH_VERSION}/{quote(reference)}?" + urlencode({"fields": fields, "access_token": token}))
                     body = response.get("body", {})
                     text_key = "text" if manifest["platform"] == "Threads" else "caption"
-                    if response.get("status") == 200 and str(body.get("id")) == str(reference) and body.get(text_key) == manifest["payload"]["text"] and str(body.get("permalink", "")).startswith("https://"):
+                    owner_matches = manifest['platform'] != 'Instagram' or (isinstance(body.get('owner'), dict) and str(body['owner'].get('id')) == manifest['providerAccountId'])
+                    if response.get("status") == 200 and owner_matches and str(body.get("id")) == str(reference) and body.get(text_key) == manifest["payload"]["text"] and str(body.get("permalink", "")).startswith("https://"):
                         return {"state": "verified", "reference": reference, "url": body["permalink"], "confirmed": "Provider lookup matched the approved text and account", "verification": "provider_lookup"}
                     return _uncertain("Provider lookup did not match the exact approved publication")
                 container = job.get("container") or next((e.get("container") for e in reversed(job.get("events", [])) if e.get("container")), None)
                 if container:
+                    if manifest['platform'] == 'Instagram':
+                        response = self.transport('GET', f'{base}/{GRAPH_VERSION}/{quote(str(container))}?' + urlencode({'fields': 'status_code', 'access_token': token}))
+                        code = response.get('body', {}).get('status_code') if response.get('status') == 200 else None
+                        return _uncertain('Container ' + str(code or 'lookup unavailable') + '; publish outcome requires manual review; do not resubmit')
                     response = self.transport("GET", f"{base}/{GRAPH_VERSION}/{quote(str(container))}?" + urlencode({"fields": "status_code,status", "access_token": token}))
                     code = response.get("body", {}).get("status_code") or response.get("body", {}).get("status")
                     if code == "PUBLISHED":

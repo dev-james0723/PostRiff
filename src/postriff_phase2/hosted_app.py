@@ -440,6 +440,11 @@ class HostedApplication:
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))
+                if len(parts) == 6 and parts[5] == "picture" and method == "GET":
+                    # The account's profile picture for previews; the web app asks with ?v=<digest>, so a new picture is a new URL.
+                    raw, digest = oauth.picture(parts[2], token, parts[4])
+                    start_response("200 OK", [("Content-Type", "image/jpeg"), ("Content-Length", str(len(raw))), ("Cache-Control", "private, max-age=86400"), ("ETag", f'"{digest}"'), ("X-Content-Type-Options", "nosniff")])
+                    return [raw]
                 if len(parts) == 5 and method == "DELETE":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.disconnect(parts[2], token, parts[4]))

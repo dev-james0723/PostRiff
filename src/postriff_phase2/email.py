@@ -47,7 +47,7 @@ class NullTransport:
 
     def send(self, message):
         self.sent.append(dict(message))
-        return {"id": f"null-{len(self.sent)}"}
+        return {"id": f"null-{len(self.sent)}", "delivered": False}
 
 
 class ResendTransport:
@@ -164,7 +164,9 @@ class Mailer:
             if not valid_address(to):
                 raise AlphaError("Enter a valid email address.")
             subject, text, html_doc = self.render(kind, **ctx)
-            self.transport.send({"from": self.from_address, "to": to.strip().lower(), "subject": subject, "text": text, "html": html_doc, "tags": [{"name": "kind", "value": kind}]})
+            receipt = self.transport.send({"from": self.from_address, "to": to.strip().lower(), "subject": subject, "text": text, "html": html_doc, "tags": [{"name": "kind", "value": kind}]})
+            if not isinstance(receipt, dict) or not receipt.get('id') or receipt.get('delivered') is False:
+                return {"sent": False, "kind": kind, "reason": "Delivery not confirmed by the configured transport"}
             return {"sent": True, "kind": kind}
         except AlphaError as error:
             return {"sent": False, "kind": kind, "reason": str(error)}

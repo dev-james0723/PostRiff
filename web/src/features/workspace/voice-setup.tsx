@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { StatefulButton } from '@/components/motion/button';
 import { RadioGroup, RadioGroupItem } from '@/components/motion/radio';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +14,7 @@ import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { BrandMode } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
+import { ProfileDetails } from './brand/voice-card';
 
 // Generated copy of src/postriff_alpha/voice_interview.json; parity is checked by the Python contract test.
 import interview from './voice-interview.generated.json';
@@ -23,7 +23,8 @@ const TONES = interview.tones;
 
 /**
  * Three short steps that create a voice profile for future drafts: starting point → purpose & audience → tone & sample → approve.
- * Every step is an explicit workspace action; nothing is inferred by a model.
+ * Every step is an explicit workspace action. A selected-sample proposal may also arrive
+ * from the local evidence analyser, but remains provisional until an owner approves it.
  */
 export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   const snapshot = useSnapshot();
@@ -33,6 +34,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   const provisional = state?.speaker?.provisional ?? null;
   // Approving the voice changes every member's drafts, so it is an owner decision (like learned preferences).
   const isOwner = snapshot.data?.membership?.role === 'owner';
+  const proposalStale = provisional?.status === 'stale';
 
   const [mode, setMode] = useState<BrandMode>((state?.brandHub?.mode as BrandMode) || 'personal');
   const [purpose, setPurpose] = useState(state?.brandHub?.purpose ?? '');
@@ -88,19 +90,16 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
       <Card>
         <CardHeader>
           <CardTitle>Review your provisional voice</CardTitle>
-          <CardDescription>This is what drafts will be checked against. Approve it or start again — nothing here was analysed by a model.</CardDescription>
+          <CardDescription>
+            {proposalStale
+              ? 'A supporting sample changed or was revoked. Analyse the current selected samples again before approval.'
+              : provisional.analysisRoute
+                ? 'Built locally from the writing samples you selected. Review the evidence before activation.'
+                : 'This is what drafts will be checked against. Approve it or start again.'}
+          </CardDescription>
         </CardHeader>
-        <CardContent className='flex flex-col gap-3 text-sm'>
-          <p>
-            Tone: <Badge variant='outline'>{provisional.tone}</Badge>
-          </p>
-          <ul className='list-disc pl-5'>
-            {provisional.observations.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          {provisional.writingExample && <blockquote className='border-l-2 pl-3 whitespace-pre-wrap'>{provisional.writingExample}</blockquote>}
-          <p className='text-muted-foreground text-xs'>Unknowns kept explicit: {provisional.unknowns.join(' ')}</p>
+        <CardContent className='flex flex-col gap-5 text-sm'>
+          <ProfileDetails profile={provisional} observationsLabel='Observations in this proposal' />
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='voice-note'>Optional: one line in your words</Label>
             <Input id='voice-note' value={note} onChange={(e) => setNote(e.target.value)} maxLength={1500} placeholder='e.g. Plain, specific, never salesy.' />
@@ -108,7 +107,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
         </CardContent>
         <CardFooter className='flex flex-wrap gap-2'>
           {!isOwner && <p className='text-muted-foreground text-xs'>Only an owner can approve this voice or start again.</p>}
-          <StatefulButton state={deciding === 'approve' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner} onClick={() => void decide('approve')}>
+          <StatefulButton state={deciding === 'approve' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner || proposalStale} onClick={() => void decide('approve')}>
             Use this voice
           </StatefulButton>
           <StatefulButton variant='outline' state={deciding === 'reject' ? 'loading' : 'idle'} loadingText='Saving…' disabled={act.isPending || !isOwner} onClick={() => setConfirmRestart(true)}>

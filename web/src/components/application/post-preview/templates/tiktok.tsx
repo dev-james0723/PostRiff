@@ -1,9 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
+import { COVER_MARK, FOLD_MARK, useCaptionFold, useCoverLegend } from '../guides';
 import { AppIcons } from '../app-icons';
 import { PhoneFrame, STATUS_BAR_HEIGHT } from '../phone-frame';
-import { accountNames, formatClock, MediaFill, MissingMedia, Monogram, RichText, TabItem, truncateCaption } from '../parts';
+import { accountNames, formatClock, MediaCarousel, MissingMedia, Monogram, RichText, TabItem, truncateCaption } from '../parts';
+import { useSlideIndex } from '../playback';
 import type { TemplateProps } from '../types';
 
 const PINK = '#fe2c55';
@@ -15,20 +18,23 @@ export default function TikTokTemplate({ post, scale }: TemplateProps) {
   const media = post.media.filter((item) => item.kind !== 'file');
   const photos = media.length > 1 || media[0]?.kind === 'image';
   const caption = truncateCaption(post.text, 62);
+  const slide = useSlideIndex(media.length);
+  useCaptionFold(caption, 'more');
+  useCoverLegend();
 
   return (
     <PhoneFrame scale={scale} background='#000000' tone='light' label={`TikTok preview of the post by @${names.handle}`} clock={formatClock(post)}>
       <div className='relative flex h-full flex-col text-white'>
         <div className='relative min-h-0 flex-1 overflow-hidden'>
           {media[0] ? (
-            <MediaFill media={media[0]} className='absolute inset-0' />
+            <MediaCarousel media={media} className='absolute inset-0' />
           ) : (
             <MissingMedia need='TikTok posts need a video or photos.' dark className='absolute inset-x-6 top-[160px] bottom-[220px] rounded-2xl' />
           )}
           <div className='absolute inset-x-0 top-0 h-[150px] bg-gradient-to-b from-black/45 to-transparent' />
           <div className='absolute inset-x-0 bottom-0 h-[260px] bg-gradient-to-t from-black/60 to-transparent' />
 
-          <div className='absolute inset-x-0 flex h-[44px] items-center justify-between px-4 text-[17px]' style={{ top: STATUS_BAR_HEIGHT }}>
+          <div className={cn('absolute inset-x-0 flex h-[44px] items-center justify-between px-4 text-[17px]', COVER_MARK)} style={{ top: STATUS_BAR_HEIGHT }}>
             <AppIcons.video size={26} stroke={1.8} />
             <span className='flex items-center gap-5'>
               <span className='font-semibold text-white/70'>Following</span>
@@ -40,7 +46,7 @@ export default function TikTokTemplate({ post, scale }: TemplateProps) {
             <AppIcons.search size={26} stroke={2} />
           </div>
 
-          <div className='absolute right-2 bottom-[18px] flex w-[62px] flex-col items-center gap-[18px] text-[13px] font-semibold [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]'>
+          <div className={cn('absolute right-2 bottom-[18px] flex w-[62px] flex-col items-center gap-[18px] text-[13px] font-semibold [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]', COVER_MARK)}>
             <span className='relative mb-2'>
               <Monogram name={names.display} size={48} style={{ boxShadow: '0 0 0 1.5px #fff' }} />
               <span className='absolute -bottom-2.5 left-1/2 flex size-[22px] -translate-x-1/2 items-center justify-center rounded-full' style={{ background: PINK }}>
@@ -56,18 +62,23 @@ export default function TikTokTemplate({ post, scale }: TemplateProps) {
             </span>
           </div>
 
-          <div className='absolute bottom-[18px] left-3 w-[296px] [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]'>
+          <div className={cn('absolute bottom-[18px] left-3 w-[296px] [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]', COVER_MARK)}>
             {photos && media.length > 1 && (
               <span className='mb-3 flex w-[369px] justify-center gap-1.5'>
                 {media.map((item, index) => (
-                  <span key={item.id} className='size-[6px] rounded-full' style={{ background: index === 0 ? '#ffffff' : 'rgba(255,255,255,0.45)' }} />
+                  <span key={item.id} className='size-[6px] rounded-full' style={{ background: index === slide ? '#ffffff' : 'rgba(255,255,255,0.45)' }} />
                 ))}
               </span>
             )}
             <p className='text-[17px] font-semibold'>{names.display}</p>
             <p className='mt-1 text-[15px] leading-5'>
               <RichText text={caption.text} accent='#ffffff' className='[&>span]:font-semibold' />
-              {caption.cut && <span className='font-semibold'> more</span>}
+              {caption.cut && (
+                <>
+                  {' '}
+                  <span className={cn('font-semibold', FOLD_MARK)}>more</span>
+                </>
+              )}
             </p>
             <p className='mt-2 flex items-center gap-1.5 text-[14px]'>
               <AppIcons.music size={15} stroke={2} />

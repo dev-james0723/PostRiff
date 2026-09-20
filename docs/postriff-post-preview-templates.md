@@ -117,3 +117,48 @@
 - **新聞／改版報導**：
   - wabetainfo.com（WhatsApp）、piunikaweb.com（Instagram、X、Reddit）、9to5google.com（YouTube）、9to5mac.com（TikTok）
   - mydrivers.com、163.com（知乎 11.0）、androidauthority.com（YouTube 截圖）
+
+## 6. 第二輪：寫稿時預覽、提示、真頭像、carousel、比較、匯出、保持準確（2026-09-16）
+
+### 6.1 喺邊度見到
+
+- **Agent 對話（寫稿時）**：闊螢幕右邊 inspector 嘅 Preview tab 直接畫；窄螢幕喺每份草稿卡撳「Preview」；多過一份草稿有「Compare」並排睇晒。有 plan 時間就用 plan 時間，冇就用打開嗰刻。
+- Calendar popover、Queue 審批卡、jobs 眼睛掣：照舊，全部多咗手機下面嗰行工具同提示。
+
+### 6.2 手機下面嘅提示（只係提醒，唔會阻止排程或發佈）
+
+| 提示 | 點計 | 來源 |
+|---|---|---|
+| 字數 | 每個平台自己嘅計法：X 用 twitter-text v3 加權（CJK 當 2、連結當 23、emoji 當 2）；Bluesky 計 grapheme；Mastodon 連結當 23、遠端 @user@server 只計 @user | LinkedIn Posts API 3,000；Instagram Graph API 2,200（另 30 個 hashtag、20 個 @）；Threads API 500；X 280（冇 Premium）；Bluesky lexicon 300 graphemes；Mastodon／Pixelfed 預設 500（server 可以改）；Facebook 63,206；Pinterest API title 100／description 800；Reddit title 300；YouTube Data API title 100、唔准 < >；Telegram Bot API 4,096／相片說明 1,024；Discord 2,000；Business Profile API 1,500；LINE Messaging API 5,000；TikTok Content Posting API 影片 caption 2,200 |
+| 冇相 | app 一定要相但 post 冇 | template 本身嘅規則 |
+| 裁切 | 只喺 app 有公開比例範圍嘅 template 報：Instagram 1.91:1 至 4:5（carousel 每張跟第一張比例）、Facebook 高過 4:5 | Instagram Help Center；Meta feed 規格 |
+| 摺疊 | 量畫出嚟嘅文字：「… more」之前大約見到幾多字、最後幾個字係咩（唔會截半個字） | template 嘅行數（研究結果） |
+| 被遮住 | 直向短片 app：頂 bar、右邊按鈕、caption 遮住畫面嘅位置 | 量 template 自己畫嘅按鈕位，唔係 app 官方安全區 |
+
+冇可靠來源嘅平台（例如小紅書、抖音、微博嘅字數）**唔顯示**，唔估。
+
+撳「Guides」會喺手機上畫出嚟（粉紅虛線／陰影，PostRiff 自己嘅標記，唔係 app 一部分）。選擇記喺呢個瀏覽器。
+
+### 6.3 真頭像
+
+- LinkedIn（OpenID `picture`）、Threads（`threads_profile_picture_url`）、Instagram（`profile_picture_url`）連接或者重新驗證時，從 provider 自己嘅圖片 host（`media.licdn.com`、`*.fbcdn.net`、`*.cdninstagram.com`）下載，完整 decode、切正方形、重新壓成 200×200 JPEG（冇 metadata），存喺 `pr_channel_pictures`（migration 012，RLS：同 workspace 成員先睇到）。
+- 斷開連接即刪；下載失敗就保留舊嗰張；provider 話冇頭像就刪。
+- 名本身已經係真（連接時由 provider 讀），所以只加頭像。私隱聲明加咗 `account_pictures`（保留到斷開連接）。
+- 冇頭像嘅 channel 照用字母 monogram，唔會用假相。
+
+### 6.4 Carousel 同影片
+
+- Instagram、小紅書圖文、TikTok 相片、Pixelfed、視頻號、抖音／快手／Moj：可以 swipe、滑鼠拖、hover 出箭咀；點點／「1/N」跟住轉。
+- Threads、Dcard：成行相可以左右捲。
+- 影片：撳一下播／停（靜音、重播）。手機下面有「‹ 1/3 ›」同 Play，鍵盤用家都用到（手機本身對讀屏軟件係一張圖）。
+
+### 6.5 比較、匯出
+
+- **Compare**：所有草稿各自喺自己 app 入面並排，連埋提示。
+- **Copy image／Download PNG**：畫當刻嘅手機（當前嗰張相、影片畫面、開咗嘅 guides），約 1,200px 闊；底部一定寫住「post preview drawn by PostRiff. Not a screenshot」，唔會被當成真截圖。播放掣同箭咀唔會入圖。
+
+### 6.6 保持準確
+
+- `templates/checks.ts`：每個 template 上次核對日期同把握（高／中／低，同 §2 一致）。手機下面寫「checked 16 Sept 2026」；超過 60 日會改寫成「last checked …; it may have changed since」。
+- `web/scripts/snapshot-post-previews.mjs`：dev server 開住時，用 headless Chrome 影晒全部 template（固定 9:41、UTC），存喺 `web/.snapshots/post-previews/<日期>/`，同上次比較邊幾張變咗。
+- 排程任務「PostRiff 每月檢查 post preview 模板」（每月 1 號 10:00，app 開住先會行）：查每個 app 自上次核對之後有冇改版，只喺確認咗先更新 §3／§4／§5 同日期，行 snapshot，template 要改就列出建議等 James 批，唔會自己改 code 或者 commit。

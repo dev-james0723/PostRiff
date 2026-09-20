@@ -113,16 +113,22 @@ function StatusNotes({ post, timeZone, context }: { post: Post; timeZone: string
       'Something it was checked against changed after it was prepared (the draft, the account, the voice profile or a source), so it can no longer be approved. Schedule the draft again.'
     );
   }
-  if ((post.kind === 'held' || post.kind === 'failed' || post.kind === 'in-flight') && lastEvent?.message) notes.push(lastEvent.message);
+  if ((['held', 'failed', 'in-flight', 'processing', 'accepted', 'uncertain', 'unknown'].includes(post.kind)) && lastEvent?.message) notes.push(lastEvent.message);
   // `nextAction` is written after a worker attempt; a job held later by an approval check keeps the older
   // wording, so held jobs rely on the message written with the hold itself.
-  if ((post.kind === 'failed' || post.kind === 'in-flight') && post.job?.nextAction) {
+  if ((['failed', 'in-flight', 'processing', 'accepted', 'uncertain'].includes(post.kind)) && post.job?.nextAction) {
     notes.push(
       <>
         <span className='text-foreground font-medium'>Next:</span> {post.job.nextAction}
       </>
     );
   }
+  if (post.kind === 'assisted') notes.push('Finish the handoff in the destination app. Opening the app does not confirm publication.');
+  if (post.kind === 'manual') notes.push('This is your report of completion; it has not been verified by the provider API.');
+  if (post.manifest.execution === 'synthetic') notes.push('Local fixture only; no real publication was performed.');
+  if (post.kind === 'uncertain') notes.push('Check the platform and the queue receipt. Do not publish again while the result is unconfirmed.');
+  if (post.kind === 'unknown') notes.push('Automatic progress cannot be confirmed. Open the queue receipt for the latest events.');
+  if (post.kind === 'held') notes.push('Resolve the reason above, then prepare a new exact review in the pipeline.');
   if (post.kind === 'verified' && post.job?.providerReference) {
     notes.push(
       <>

@@ -1,5 +1,8 @@
+'use client';
+
 import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { useGuides } from './guides';
 
 /** iPhone 15/16 Pro logical screen. Templates lay out at this size; the frame scales the whole screen. */
 export const SCREEN_WIDTH = 393;
@@ -45,6 +48,8 @@ export function PhoneFrame({ scale, background, tone, lang = 'en', label, clock,
   const screenWidth = SCREEN_WIDTH * scale;
   const screenHeight = SCREEN_HEIGHT * scale;
   const glyph = tone === 'dark' ? '#000000' : '#ffffff';
+  // Marks that are plain classes (`COVER_MARK`, `FOLD_MARK`) switch on under this attribute.
+  const guides = useGuides();
   const screenStyle: CSSProperties = {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
@@ -57,11 +62,11 @@ export function PhoneFrame({ scale, background, tone, lang = 'en', label, clock,
     <div role='img' aria-label={label} className={cn('shrink-0 select-none', className)}>
       <div
         aria-hidden
-        className='relative bg-[#1c1c1e] shadow-[0_24px_48px_-20px_rgb(0_0_0/0.45)] ring-1 ring-black/30'
+        className='relative bg-[#1c1c1e] shadow-[0_24px_48px_-20px_rgb(0_0_0/0.45)] ring-1 ring-black/30 in-data-exporting:shadow-none'
         style={{ width: screenWidth + BEZEL * 2, height: screenHeight + BEZEL * 2, padding: BEZEL, borderRadius: SCREEN_RADIUS * scale + BEZEL }}
       >
         <div className='relative overflow-hidden' style={{ width: screenWidth, height: screenHeight, borderRadius: SCREEN_RADIUS * scale, background }}>
-          <div lang={lang} className='absolute top-0 left-0 origin-top-left overflow-hidden antialiased' style={screenStyle}>
+          <div lang={lang} data-guides={guides?.show ? 'on' : undefined} className='absolute top-0 left-0 origin-top-left overflow-hidden antialiased' style={screenStyle}>
             {children}
             <div className='pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center justify-between px-[42px] pt-[17px]' style={{ height: STATUS_BAR_HEIGHT, color: glyph }}>
               <span className='w-[54px] text-center text-[17px] font-semibold tracking-[-0.2px]' style={{ fontFamily: SYSTEM_FONT }}>

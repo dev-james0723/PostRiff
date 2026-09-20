@@ -11,6 +11,7 @@ RETENTION_CLASSES = {
     "sources": {"retention": "until retraction or deletion", "note": "Retraction blocks future use and dependent drafts; deletion removes text and derived chunks."},
     "generated_media": {"retention": "until customer deletion", "note": "Immutable renditions; provenance kept as hashes."},
     "provider_tokens": {"retention": "until disconnect or revocation", "note": "Encrypted at rest; ciphertext wiped on disconnect."},
+    "account_pictures": {"retention": "until disconnect", "note": "The connected account's profile picture, read from the provider at connect and re-verify and re-encoded small, only to draw post previews."},
     "approvals_receipts": {"retention": "retained as records after publication", "note": "Content-free receipts survive account deletion as tombstones/hashes where required for audit."},
     "analytics_observations": {"retention": "plan-dependent, minimum 90 days", "note": "Native metric observations; never sold or aggregated across tenants with content."},
     "audience_comments": {"retention": "until provider deletion or customer deletion", "note": "Tombstones preserved when a provider requires deletion."},

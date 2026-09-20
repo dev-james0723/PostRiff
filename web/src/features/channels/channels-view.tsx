@@ -1,5 +1,7 @@
 'use client';
 
+import { publishingSupport } from '@/lib/channels/publishing-support';
+
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -117,14 +119,15 @@ function ProviderTile({
         </div>
         <CapabilityBadge
           level={provider.productionReviewed ? 'direct' : 'assisted'}
-          label={provider.productionReviewed ? 'Direct publishing' : 'Assisted · review pending'}
+          label={provider.productionReviewed ? 'Direct · account checks required' : 'Assisted · review pending'}
         />
       </div>
       <p className='text-muted-foreground text-xs'>
         {provider.productionReviewed
-          ? 'Production-reviewed app: publishing runs through the official API after your approval.'
+          ? 'Direct candidate: confirm this account’s permissions and supported format before scheduling. App configuration is not proof of a verified publication.'
           : 'Awaiting provider review: PostRiff prepares each post and you complete the final step.'}
       </p>
+      <p className='text-muted-foreground text-xs'>{publishingSupport(provider.platform)}</p>
       {offered.length > 0 && (
         <ul className='flex flex-wrap gap-1' aria-label='Capabilities you can request'>
           {offered.map((key) => (

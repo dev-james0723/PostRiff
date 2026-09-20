@@ -74,7 +74,14 @@ def signed(event_type, obj, event_id, created=None):
 
 transport = Transport()
 provider = StripePaymentProvider("sk_test_x", "whsec_test", transport=transport, clock=lambda: clock[0])
-mail = NullTransport()
+class AcceptedMailTransport(NullTransport):
+    """Record locally and simulate provider acceptance; never send a real message."""
+    def send(self, message):
+        super().send(message)
+        return {"id": f"fixture-accepted-{len(self.sent)}"}
+
+
+mail = AcceptedMailTransport()
 mailer = Mailer(mail, "PostRiff <hello@postriff.test>", "https://app.postriff.test")
 
 with connection() as db:

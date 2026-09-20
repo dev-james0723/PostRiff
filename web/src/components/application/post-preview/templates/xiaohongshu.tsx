@@ -1,8 +1,11 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import { AppIcons } from '../app-icons';
+import { COVER_MARK, FOLD_MARK, useCaptionFold, useCoverLegend } from '../guides';
 import { PhoneFrame, STATUS_BAR_HEIGHT, StatusBarSpace } from '../phone-frame';
-import { accountNames, firstLine, formatClock, MediaFill, mediaHeight, MissingMedia, Monogram, restAfterFirstLine, RichText, truncateCaption } from '../parts';
+import { accountNames, firstLine, formatClock, MediaCarousel, MediaFill, mediaHeight, MissingMedia, Monogram, restAfterFirstLine, RichText, truncateCaption } from '../parts';
+import { useSlideIndex } from '../playback';
 import type { TemplateProps } from '../types';
 
 // Xiaohongshu's own publish-preview styles and images (tokens) plus App Store 9.47 screenshots.
@@ -26,6 +29,7 @@ function ImageNote({ post, scale }: TemplateProps) {
   const media = post.media.filter((item) => item.kind === 'image');
   const first = media[0];
   const height = mediaHeight(first, 393, { min: 0.5625, max: 1.3334, fallback: 1.3334 });
+  const slide = useSlideIndex(media.length);
   const title = firstLine(post.text);
   const body = restAfterFirstLine(post.text);
 
@@ -45,17 +49,17 @@ function ImageNote({ post, scale }: TemplateProps) {
 
         <article className='flex min-h-0 flex-1 flex-col overflow-hidden'>
           <div className='relative shrink-0' style={{ height }}>
-            {first ? <MediaFill media={first} className='size-full' /> : <MissingMedia need='小红书笔记需要图片或视频。' className='size-full' />}
+            {first ? <MediaCarousel media={media} className='size-full' /> : <MissingMedia need='小红书笔记需要图片或视频。' note='Xiaohongshu notes need photos or a video.' className='size-full' />}
             {media.length > 1 && (
               <span className='absolute top-3 right-3 rounded-full px-2 py-0.5 text-[12px] text-white' style={{ background: 'rgba(51,51,51,0.5)' }}>
-                1/{media.length}
+                {slide + 1}/{media.length}
               </span>
             )}
           </div>
           {media.length > 1 && (
             <div className='flex h-[38px] shrink-0 items-center justify-center gap-[8px]'>
               {media.slice(0, 18).map((item, index) => (
-                <span key={item.id} className='size-[5px] rounded-full' style={{ background: index === 0 ? RED : '#e5e5e5' }} />
+                <span key={item.id} className='size-[5px] rounded-full' style={{ background: index === slide ? RED : '#e5e5e5' }} />
               ))}
             </div>
           )}
@@ -103,6 +107,8 @@ function VideoNote({ post, scale }: TemplateProps) {
   const names = accountNames(post.account);
   const video = post.media[0];
   const caption = truncateCaption(post.text, 20);
+  useCaptionFold(caption, '展开');
+  useCoverLegend();
 
   return (
     <PhoneFrame scale={scale} background='#000000' tone='light' lang='zh-CN' label={`小红书视频笔记预览：${names.display}`} clock={formatClock(post)}>
@@ -110,11 +116,11 @@ function VideoNote({ post, scale }: TemplateProps) {
         <div className='relative min-h-0 flex-1 overflow-hidden'>
           {video && <MediaFill media={video} className='absolute inset-0' />}
           <div className='absolute inset-x-0 bottom-0 h-[220px] bg-gradient-to-t from-black/60 to-transparent' />
-          <div className='absolute inset-x-0 flex h-[44px] items-center justify-between px-3' style={{ top: STATUS_BAR_HEIGHT }}>
+          <div className={cn('absolute inset-x-0 flex h-[44px] items-center justify-between px-3', COVER_MARK)} style={{ top: STATUS_BAR_HEIGHT }}>
             <AppIcons.back size={28} stroke={2} />
             <AppIcons.search size={24} stroke={2} />
           </div>
-          <div className='absolute inset-x-4 bottom-4'>
+          <div className={cn('absolute inset-x-4 bottom-4', COVER_MARK)}>
             <p className='flex items-center gap-2 text-[16px]'>
               <Monogram name={names.display} size={36} />
               {names.display}
@@ -124,7 +130,7 @@ function VideoNote({ post, scale }: TemplateProps) {
             </p>
             <p className='mt-2 flex text-[14px]'>
               <span className='truncate'>{caption.text}</span>
-              {caption.cut && <span className='shrink-0 pl-1 text-white/55'>展开</span>}
+              {caption.cut && <span className={cn('ml-1 shrink-0 text-white/55', FOLD_MARK)}>展开</span>}
             </p>
           </div>
         </div>

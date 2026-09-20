@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useTimeZone } from '@/lib/preferences';
 import { channels } from '@/config/channels';
 import { PostPreview } from './post-preview';
+import { usePreviewSetting } from './preview-settings';
+import { templateCheck } from './templates/checks';
 import type { PreviewMedia, PreviewPost } from './types';
 
 /**
@@ -43,29 +46,103 @@ const SAMPLE_MEDIA: PreviewMedia[] = [
 
 const VERTICAL_MEDIA: PreviewMedia = { id: 'vertical', kind: 'image', url: svgImage(1080, 1920, 262), alt: 'Piano keys in violet light', width: 1080, height: 1920, status: 'ready' };
 
+// A drawn portrait standing in for a connected account's profile picture, to check every avatar shape.
+const SAMPLE_AVATAR = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#f6c177'/><stop offset='1' stop-color='#b4637a'/></linearGradient></defs><rect width='200' height='200' fill='url(#g)'/><circle cx='100' cy='82' r='38' fill='#2a2233'/><path d='M34 200c8-44 34-66 66-66s58 22 66 66z' fill='#2a2233'/></svg>"
+)}`;
+
 const VERTICAL_FIRST = new Set(['tiktok', 'douyin', 'kuaishou', 'wechat-channels', 'moj', 'snapchat']);
 
-type MediaChoice = 'none' | 'one' | 'several';
+type MediaChoice = 'none' | 'one' | 'tall' | 'several' | 'video';
+
+// A 9:16 photo on every channel shows which templates crop and where overlays sit.
+const MEDIA_LABELS: Record<MediaChoice, string> = { none: 'Text only', one: 'One image', tall: 'Tall photo', several: 'Several images', video: 'Video' };
+
+/** A three-second 9:16 clip recorded from a canvas in this browser, so playback can be reviewed without uploads. */
+async function recordSampleVideo() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 360;
+  canvas.height = 640;
+  const context = canvas.getContext('2d');
+  if (!context || typeof MediaRecorder === 'undefined') return null;
+  const recorder = new MediaRecorder(canvas.captureStream(24), { mimeType: 'video/webm' });
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (event) => chunks.push(event.data);
+  const stopped = new Promise((resolve) => (recorder.onstop = resolve));
+  recorder.start();
+  const started = performance.now();
+  await new Promise<void>((resolve) => {
+    const timer = window.setInterval(() => {
+      const seconds = (performance.now() - started) / 1000;
+      const lit = Math.floor(seconds * 6) % 12;
+      context.fillStyle = `hsl(${250 + seconds * 20} 45% 22%)`;
+      context.fillRect(0, 0, 360, 640);
+      for (let key = 0; key < 12; key += 1) {
+        context.fillStyle = key === lit ? '#f6c177' : '#f6f1e7';
+        context.fillRect(24 + key * 26.5, 380, 23, 150);
+      }
+      if (seconds >= 3) {
+        window.clearInterval(timer);
+        resolve();
+      }
+    }, 1000 / 24);
+  });
+  recorder.stop();
+  await stopped;
+  return URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+}
 
 const subscribeToNothing = () => () => {};
+const APPEARANCES = ['auto', 'light', 'dark'] as const;
 
 export function PostPreviewGallery() {
-  const [choice, setChoice] = useState<MediaChoice>('one');
+  // ?channel=, ?media=, ?at=, ?tz= and ?appearance= pin the sheet for snapshots (scripts/snapshot-post-previews.mjs); ?snapshot hides the controls.
+  const [params] = useState(() => new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search));
+  const [, setAppearance] = usePreviewSetting('appearance', 'auto', APPEARANCES);
+  useEffect(() => {
+    const appearance = params.get('appearance');
+    if (appearance === 'light' || appearance === 'dark') setAppearance(appearance);
+  }, [params, setAppearance]);
+  const [choice, setChoice] = useState<MediaChoice>(() => {
+    const media = params.get('media');
+    return media && media in MEDIA_LABELS ? (media as MediaChoice) : 'one';
+  });
+  const [withPicture, setWithPicture] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (choice !== 'video' || videoUrl) return;
+    let live = true;
+    void recordSampleVideo().then((url) => {
+      if (live && url) setVideoUrl(url);
+    });
+    return () => {
+      live = false;
+    };
+  }, [choice, videoUrl]);
   // Times and zones differ between server and browser, so the sheet renders in the browser only.
   const mounted = useSyncExternalStore(subscribeToNothing, () => true, () => false);
+  const preferredZone = useTimeZone();
   if (!mounted) return null;
-  const publishAt = new Date();
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const pinnedAt = params.get('at') ? new Date(params.get('at') ?? '') : null;
+  const publishAt = pinnedAt && !Number.isNaN(pinnedAt.getTime()) ? pinnedAt : new Date();
+  const timeZone = params.get('tz') ?? preferredZone;
+  const only = params.get('channel');
+  const snapshot = params.has('snapshot');
 
   return (
     <main className='flex flex-col gap-6 p-6'>
-      <header className='flex flex-wrap items-center justify-between gap-4'>
+      {snapshot && <style>{'nextjs-portal{display:none!important}'}</style>}
+      <header className={snapshot ? 'hidden' : 'flex flex-wrap items-center justify-between gap-4'}>
         <div>
           <h1 className='text-xl font-semibold'>Post preview templates</h1>
           <p className='text-muted-foreground text-sm'>{channels.length} channels · development only</p>
         </div>
+        <label className='flex items-center gap-2 text-sm'>
+          <input type='checkbox' aria-label='Profile picture' checked={withPicture} onChange={(event) => setWithPicture(event.target.checked)} />
+          Profile picture
+        </label>
         <div role='radiogroup' aria-label='Media' className='flex gap-1 rounded-lg border p-1 text-sm'>
-          {(['none', 'one', 'several'] as MediaChoice[]).map((value) => (
+          {(['none', 'one', 'tall', 'several', 'video'] as MediaChoice[]).map((value) => (
             <button
               key={value}
               type='button'
@@ -74,29 +151,38 @@ export function PostPreviewGallery() {
               onClick={() => setChoice(value)}
               className={choice === value ? 'bg-primary text-primary-foreground rounded-md px-3 py-1' : 'rounded-md px-3 py-1'}
             >
-              {value === 'none' ? 'Text only' : value === 'one' ? 'One image' : 'Several images'}
+              {MEDIA_LABELS[value]}
             </button>
           ))}
         </div>
       </header>
       <div className='grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-4 gap-y-8'>
-        {channels.map((channel) => {
+        {channels.filter((channel) => !only || channel.slug === only).map((channel) => {
           const first = VERTICAL_FIRST.has(channel.slug) ? VERTICAL_MEDIA : SAMPLE_MEDIA[0];
-          const media = choice === 'none' ? [] : choice === 'one' ? [first] : [first, ...SAMPLE_MEDIA.slice(1)];
+          const video: PreviewMedia = { id: 'video', kind: 'video', url: videoUrl ?? undefined, alt: 'Piano keys lighting up in turn', width: 360, height: 640, status: videoUrl ? 'ready' : 'loading' };
+          const media =
+            choice === 'none' ? [] : choice === 'one' ? [first] : choice === 'tall' ? [VERTICAL_MEDIA] : choice === 'video' ? [video] : [first, ...SAMPLE_MEDIA.slice(1)];
           const post: PreviewPost = {
             channel: channel.slug,
             channelName: channel.name,
             account: channel.region === 'global' || !channel.region ? '@yourstudio' : 'Your Studio',
+            avatarUrl: withPicture ? SAMPLE_AVATAR : undefined,
             text: SAMPLE_TEXT[channel.region ?? 'global'] ?? SAMPLE_TEXT.global,
             media,
             publishAt,
             timeZone
           };
+          const check = templateCheck(channel.slug);
           return (
             <section key={channel.slug} className='flex flex-col items-center gap-2'>
               <h2 className='text-sm font-medium'>
                 {channel.name} <span className='text-muted-foreground font-normal'>{channel.slug}</span>
               </h2>
+              {check && (
+                <p className={check.stale ? 'text-destructive text-[11px]' : 'text-muted-foreground text-[11px]'}>
+                  Checked {check.label} · {check.confidence} confidence{check.stale ? ' · due for a re-check' : ''}
+                </p>
+              )}
               <PostPreview post={post} scale={0.52} />
             </section>
           );

@@ -16,7 +16,7 @@ from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import content_types, intent, memory, research
+from . import content_types, intent, memory, research, voice_sources
 
 MAX_TEXT = 6000
 MAX_EVENTS = 2000
@@ -60,7 +60,14 @@ class RunSink:
             self.service._lock_run_events(cur, self.workspace_id, self.run_id)
             if not self._running(cur, lock=True):
                 return False
-            self.service._finish(cur, self.workspace_id, self.conversation_id, self.run_id, artifact, usage, self.outcome)
+            try:
+                self.service._finish(cur, self.workspace_id, self.conversation_id, self.run_id, artifact, usage, self.outcome)
+            except AlphaError as error:
+                self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.failed", message=str(error)))
+                cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (self.run_id,))
+                self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed", 0)
+                self.service._settle_message(cur, self.workspace_id, self.conversation_id, self.run_id, {"text": str(error), "runId": self.run_id, "failed": True, "intent": self.outcome["parsed"]["intent"], "destinations": self.outcome["destinations"], "plan": None, "model": self.outcome["model"]})
+                return True
             self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.completed", usage={k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "cliCostUsd", "billing") if k in usage}))
             return True
 
@@ -266,7 +273,20 @@ class IdeasService:
 
     def _finish(self, cur, workspace_id, conversation_id, run_id, artifact, usage, outcome):
         """Settle, attach the plan, hash and store the candidate, and tell the conversation. Shared by every route."""
-        self.ledger.settle(cur, workspace_id, outcome["reservationId"], "completed", int((usage.get("costUsd") or 0) * 1_000_000))
+        cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+        state_row = cur.fetchone()
+        if not state_row:
+            raise AlphaError("Workspace unavailable.", 404)
+        current_state = json.loads(state_row[0]) if isinstance(state_row[0], str) else state_row[0]
+        voice_sources.validate_bindings(current_state, outcome.get("voiceContext") or {})
+        cost_known = "costUsd" in usage and usage.get("costUsd") is not None
+        settlement = self.ledger.settle(
+            cur,
+            workspace_id,
+            outcome["reservationId"],
+            "completed" if cost_known or not usage.get("modelRequests") else "unknown",
+            int(usage["costUsd"] * 1_000_000) if cost_known else None,
+        )
         if outcome["plan"]:
             artifact["plan"] = outcome["plan"]  # a proposal; approval still runs the review → approve chain
         researched = outcome.get("research") or {}
@@ -275,8 +295,10 @@ class IdeasService:
             hosts = ", ".join(dict.fromkeys(research.host_of(p["url"]) or p["url"] for p in web_pages))
             for variant in artifact["variants"]:
                 variant.setdefault("warnings", []).append(f"Some facts came from web research ({hosts}); check them against the pages before scheduling.")
+        artifact["sourceBindings"] = [{"id": item["id"], "hash": item["hash"]} for item in outcome["context"]["sources"]]
+        artifact["voiceContext"] = {key: (outcome.get("voiceContext") or {}).get(key) for key in ("mode", "bindings", "digest", "route")}
         artifact_hash = digest(artifact)
-        usage = {**usage, "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings")}
+        usage = {**usage, "billing": usage.get("billing") or settlement.get("state"), "ledgerCostState": settlement.get("state"), "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings"), "voiceBindings": artifact["voiceContext"].get("bindings", [])}
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
         context = outcome["context"]
         found = f", {len(web_pages)} found on the web" if web_pages else ""
@@ -375,7 +397,8 @@ class IdeasService:
             self._conversation(cur, workspace_id, conversation_id)
             state = self._state(row)
             stamp(state)
-            source_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("active")][:20]
+            source_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("active") and s.get("kind") != "voice_sample"][:20]
+            source_ids = [source_id for source_id in source_ids if not any(s.get("id") == source_id and s.get("kind") == "voice_sample" for s in state.get("sources", []))]
             source_ids = list(dict.fromkeys(list(source_ids) + research_ids))
             # A cloud route only receives sources whose egress the person consented to; local routes see local consent.
             provider_class = getattr(runtime, "provider_class", "local")
@@ -395,7 +418,21 @@ class IdeasService:
             # Memory files follow the route: a cloud route reads them only with the workspace's consent (memory.projection).
             # Learned preferences arrive as the slice that applies to these destinations (design §5.7), recorded on the run.
             shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None)
-            request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"]}
+            voice_mode = payload.get("voiceMode", "neutral")
+            if voice_mode not in ("neutral", "personalized"):
+                raise AlphaError("Choose neutral or personalized writing.")
+            voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
+            if voice_mode == "personalized":
+                requested_voice = payload.get("voiceSourceIds") if isinstance(payload.get("voiceSourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("kind") == "voice_sample" and s.get("active") and s.get("selected")]
+                voice_projection = voice_sources.retrieve(state, requested_voice, "generation", voice_route, query=idea)
+                if not voice_projection["samples"]:
+                    raise AlphaError("Select and allow at least one writing sample for this writer route.", 409)
+                voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
+                style_directives = voice_sources.style_directives(voice_projection)
+            else:
+                voice_context = {"mode": "neutral", "route": None, "bindings": [], "digest": None}
+                style_directives = {}
+            request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
             # Step ③: skills are bound by destination, format, intent and content type, and recorded
             # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
             bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
@@ -408,7 +445,7 @@ class IdeasService:
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", 500_000 if paid else 0, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned")}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context}
 
             def emit(event):
                 self._insert_event(cur, workspace_id, run_id, event)
@@ -524,8 +561,11 @@ class IdeasService:
             stamp(state)
             source_ids = sorted({sid for v in artifact["variants"] for sid in v["sourceIds"]})
             current = project_context(state, "draft", "local", source_ids)
-            if current["policyEpoch"] != epoch or any(s["hash"] != next((c["hash"] for c in current["sources"] if c["id"] == s["id"]), None) for s in current["sources"]) or current["excluded"]:
+            current_bindings = sorted(({"id": item["id"], "hash": item["hash"]} for item in current["sources"]), key=lambda item: item["id"])
+            original_bindings = sorted(artifact.get("sourceBindings", []), key=lambda item: item["id"])
+            if current["policyEpoch"] != epoch or current_bindings != original_bindings or current["excluded"]:
                 raise AlphaError("Sources or their policies changed. Preserve the candidate and draft again from current context.", 409)
+            voice_sources.validate_bindings(state, artifact.get("voiceContext") or {})
             # A variant that has ever entered the queue (approved, published, verified, in flight) is a
             # record of what went out; a new candidate never becomes an "update" to it. Only a draft that
             # is still unscheduled in the same platform/language slot is refreshed in place.
@@ -533,7 +573,7 @@ class IdeasService:
             for candidate in artifact["variants"]:
                 drafts = [v for v in state["variants"] if v["platform"] == candidate["platform"] and v["language"] == candidate["language"] and v["id"] not in committed]
                 old = drafts[-1] if drafts else None
-                values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
+                values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if old:
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
@@ -583,5 +623,5 @@ class IdeasService:
         saved = self.repository.command(workspace_id, token, revision, command)
         source = saved["state"]["sources"][-1]
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
-        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model")})
+        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds")})
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}

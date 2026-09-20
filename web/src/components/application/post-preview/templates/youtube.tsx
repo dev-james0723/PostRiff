@@ -1,7 +1,9 @@
 'use client';
 
 import { CHANNEL_ICONS } from '@/components/channel-icon';
+import { cn } from '@/lib/utils';
 import { AppIcons } from '../app-icons';
+import { COVER_MARK, useCoverLegend } from '../guides';
 import { PhoneFrame, STATUS_BAR_HEIGHT, StatusBarSpace } from '../phone-frame';
 import { accountNames, BrandGlyph, ClampText, firstLine, formatClock, MediaFill, MissingMedia, Monogram, TabBar, TabItem } from '../parts';
 import type { TemplateProps } from '../types';
@@ -54,7 +56,7 @@ function HomeTemplate({ post, scale }: TemplateProps) {
           <div className='flex gap-3 px-3 pt-3'>
             <Monogram name={names.display} size={40} />
             <div className='min-w-0 flex-1'>
-              <ClampText lines={2} background='#ffffff' className='text-[16px] leading-[22px] font-semibold'>
+              <ClampText lines={2} background='#ffffff' className='text-[16px] leading-[22px] font-semibold' guide='The title'>
                 {title}
               </ClampText>
               <p className='mt-1 text-[12px]' style={{ color: MUTED }}>
@@ -84,6 +86,7 @@ function ShortTemplate({ post, scale }: TemplateProps) {
   const names = accountNames(post.account);
   const video = post.media.find((item) => item.kind !== 'file');
   const title = firstLine(post.text);
+  useCoverLegend();
 
   return (
     <PhoneFrame scale={scale} background='#000000' tone='light' label={`YouTube Shorts preview of the video by ${names.display}`} clock={formatClock(post)}>
@@ -91,11 +94,11 @@ function ShortTemplate({ post, scale }: TemplateProps) {
         <div className='relative min-h-0 flex-1 overflow-hidden'>
           {video && <MediaFill media={video} className='absolute inset-0' />}
           <div className='absolute inset-x-0 bottom-0 h-[240px] bg-gradient-to-t from-black/60 to-transparent' />
-          <div className='absolute inset-x-0 flex h-[44px] items-center justify-end gap-5 px-4' style={{ top: STATUS_BAR_HEIGHT }}>
+          <div className={cn('absolute inset-x-0 flex h-[44px] items-center justify-end gap-5 px-4', COVER_MARK)} style={{ top: STATUS_BAR_HEIGHT }}>
             <AppIcons.search size={25} stroke={2} />
             <AppIcons.dotsVertical size={25} stroke={2} />
           </div>
-          <div className='absolute right-2 bottom-[20px] flex w-[58px] flex-col items-center gap-5 text-[13px] font-medium [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]'>
+          <div className={cn('absolute right-2 bottom-[20px] flex w-[58px] flex-col items-center gap-5 text-[13px] font-medium [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]', COVER_MARK)}>
             {[
               [AppIcons.heartFilled, ''],
               [AppIcons.commentRound, ''],
@@ -114,7 +117,7 @@ function ShortTemplate({ post, scale }: TemplateProps) {
             })}
             <Monogram name={names.display} size={38} shape='rounded' style={{ boxShadow: '0 0 0 2px #fff' }} />
           </div>
-          <div className='absolute bottom-[20px] left-3 w-[300px] [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]'>
+          <div className={cn('absolute bottom-[20px] left-3 w-[300px] [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]', COVER_MARK)}>
             <p className='flex items-center gap-2 text-[15px] font-semibold'>
               <Monogram name={names.display} size={32} />@{names.handle}
               <span className='ml-1 rounded-full bg-white px-3 py-1.5 text-[13px] text-black'>Subscribe</span>

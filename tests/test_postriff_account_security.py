@@ -434,7 +434,7 @@ class NewDeviceAlerts(unittest.TestCase):
         from postriff_phase2.email import Mailer, NullTransport
         transport = NullTransport()
         outcome = Mailer(transport, "PostRiff <no-reply@postriff.invalid>", "https://app.example").new_device("me@example.invalid", "Safari on iPhone", 1_800_000_000.0, "https://app.example/app/account/profile")
-        self.assertTrue(outcome["sent"])
+        self.assertFalse(outcome["sent"])  # NullTransport renders but does not deliver.
         mail = transport.sent[0]
         self.assertEqual(mail["to"], "me@example.invalid")
         self.assertIn("sign-in", mail["subject"].lower())

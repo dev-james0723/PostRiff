@@ -3,7 +3,7 @@
 import { CHANNEL_ICONS } from '@/components/channel-icon';
 import { AppIcons } from '../app-icons';
 import { PhoneFrame, StatusBarSpace } from '../phone-frame';
-import { accountNames, BrandGlyph, formatClock, MediaFill, mediaHeight, Monogram, RichText, TabBar, TabItem } from '../parts';
+import { accountNames, BrandGlyph, formatClock, MediaFill, mediaHeight, MediaStrip, Monogram, RichText, TabBar, TabItem } from '../parts';
 import type { TemplateProps } from '../types';
 
 // Measured from threads.com, which shares the iOS app's tokens (light theme).
@@ -60,11 +60,11 @@ export default function ThreadsTemplate({ post, scale }: TemplateProps) {
               />
             )}
             {media.length > 1 && (
-              <div className='mt-2.5 -mr-3 flex shrink-0 gap-1.5 overflow-hidden'>
-                {media.slice(0, 3).map((item) => (
-                  <MediaFill key={item.id} media={item} rounded={8} className='h-[250px] w-[188px] shrink-0 ring-[0.5px] ring-black/15' />
+              <MediaStrip className='mt-2.5 -mr-3 shrink-0 gap-1.5 pr-3'>
+                {media.map((item) => (
+                  <MediaFill key={item.id} media={item} rounded={8} className='h-[250px] w-[188px] shrink-0 snap-start ring-[0.5px] ring-black/15 ring-inset' />
                 ))}
-              </div>
+              </MediaStrip>
             )}
             <div className='mt-3 flex items-center gap-[20px]' style={{ color: ICON }}>
               <AppIcons.heart size={19} stroke={1.8} />

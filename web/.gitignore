@@ -30,5 +30,8 @@ next-env.d.ts
 # second local dev server (POSTRIFF_DIST_DIR)
 .next-alt/
 
+# post preview template snapshots (scripts/snapshot-post-previews.mjs)
+/.snapshots/
+
 # Isolated Codex verification builds (keep Tailwind out of compiled caches)
 /.next-codex-*/

@@ -37,6 +37,55 @@ class SafetyRegressions(unittest.TestCase):
                 manifest[key] = value
                 self.assertFalse(self.store.current(self.j.state, manifest))
 
+    def test_source_change_requires_replacement_even_after_edit_or_reapproval(self):
+        self.draft()
+        source = self.j.state['sources'][0]
+        facts = [f['id'] for f in source['facts']]
+        self.j.act('approve_source', sourceId=source['id'], factIds=facts[:1])
+        self.j.edit()
+        for selected in (facts[:1], facts):
+            self.j.act('approve_source', sourceId=source['id'], factIds=selected)
+            v = self.j.state['variants'][0]
+            with self.assertRaises(AlphaError):
+                self.j.act('p2_variant_review', variantId=v['id'], variantRevision=v['revision'],
+                           confirmed=True, excludedUnknowns=v['unknowns'])
+
+    def test_fresh_source_replacement_can_be_reviewed_and_scheduled(self):
+        self.draft()
+        source = self.j.state['sources'][0]
+        self.j.act('approve_source', sourceId=source['id'], factIds=[source['facts'][0]['id']])
+        v = self.j.state['variants'][0]
+        self.j.act('preview_update', variantId=v['id'])
+        self.j.act('accept_update', variantId=v['id'])
+        v = self.j.state['variants'][0]
+        self.j.act('p2_variant_review', variantId=v['id'], variantRevision=v['revision'],
+                   confirmed=True, excludedUnknowns=v['unknowns'])
+        review = self.review(self.channel())
+        self.j.act('p2_approve', reviewId=review['id'], digest=review['digest'], confirmed=True)
+        self.assertEqual(self.j.state['phase2']['jobs'][0]['state'], 'scheduled')
+
+    def test_source_change_discards_pending_replacement(self):
+        self.draft()
+        v = self.j.state['variants'][0]
+        self.j.act('preview_update', variantId=v['id'])
+        source = self.j.state['sources'][0]
+        self.j.act('approve_source', sourceId=source['id'], factIds=[])
+        with self.assertRaises(AlphaError):
+            self.j.act('accept_update', variantId=v['id'])
+
+    def test_hosted_commands_reject_source_stale_review(self):
+        from postriff_phase2.hosted import HostedPhase2Commands
+        self.draft()
+        state = copy.deepcopy(self.j.state)
+        commands = HostedPhase2Commands(clock=lambda: self.now)
+        commands(state, 'synthetic-owner', 'approve_source',
+                 {'sourceId': state['sources'][0]['id'], 'factIds': []})
+        v = state['variants'][0]
+        with self.assertRaises(AlphaError):
+            commands(state, 'synthetic-owner', 'p2_variant_review',
+                     {'variantId': v['id'], 'variantRevision': v['revision'],
+                      'confirmed': True, 'excludedUnknowns': v['unknowns']})
+
     def test_viewer_cannot_mutate(self):
         with self.store.connect() as db:
             db.execute("UPDATE alpha_memberships SET role='viewer' WHERE workspace_id=?", (self.j.id,))

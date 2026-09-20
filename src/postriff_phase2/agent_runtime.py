@@ -103,9 +103,10 @@ class FixtureAgentRuntime(AgentRuntime):
             emit(safe_event("warning.created", sourceId=item["id"], message=f"Source excluded: {item['reason']}."))
         emit(safe_event("progress.updated", stage="drafting", percent=25))
         facts = [f for s in context["sources"] for f in s["facts"]]
+        style = request.get("styleDirectives") or {}
         variants = []
         for index, d in enumerate(destinations):
-            result = FixtureAdapter().generate({**d, "facts": facts, "idea": request.get("idea", ""), "tone": request.get("tone", "warm"), "shortOpenings": request.get("shortOpenings", False)})
+            result = FixtureAdapter().generate({**d, "facts": facts, "idea": request.get("idea", ""), "tone": request.get("tone", "warm"), "shortOpenings": style.get("shortOpenings", False), "styleDirectives": style})
             text = result["text"]
             # Deliver text as bounded deltas, then the completed message for this destination.
             for start in range(0, len(text), 400):
@@ -113,7 +114,8 @@ class FixtureAgentRuntime(AgentRuntime):
             emit(safe_event("message.completed", destination=index))
             variants.append({**d, "text": text, "sourceIds": result["sourceIds"], "unknowns": result["unknowns"], "warnings": result["warnings"], "candidateOnly": context["candidateOnly"]})
             emit(safe_event("progress.updated", stage="drafting", percent=25 + int(70 * (index + 1) / len(destinations))))
-        artifact = {"variants": variants}
+        voice = request.get("voiceContext") or {"mode": "neutral", "bindings": [], "digest": None, "route": None}
+        artifact = {"variants": variants, "voiceContext": {key: voice.get(key) for key in ("mode", "bindings", "digest", "route")}}
         emit(safe_event("artifact.created", artifactHash=digest(artifact), variants=len(variants)))
         emit(safe_event("run.completed", usage={"provenance": "measured_locally", "modelRequests": 0}))
         return {"artifact": artifact, "usage": {"provenance": "measured_locally", "modelRequests": 0, "costUsd": 0}}

@@ -71,7 +71,8 @@ export function ProposalReviewCard({
   const nextName = next ? `revision ${next}` : 'the proposed revision';
   const changes = status.record ? describeChanges(status.record.profile, provisional) : null;
   const counts = voiceCounts(state);
-  const canApprove = isOwner && !sample;
+  const stale = provisional.status === 'stale';
+  const canApprove = isOwner && !sample && !stale;
 
   async function approve() {
     setButtonState('loading');
@@ -97,7 +98,9 @@ export function ProposalReviewCard({
       <CardHeader>
         <CardTitle>Proposed {nextName}</CardTitle>
         <CardDescription>
-          {canApprove
+          {stale
+            ? 'A supporting sample changed or was revoked. Analyse the current selected samples again.'
+            : canApprove
             ? `Waiting for your approval. Drafts keep using revision ${status.revision} until you approve it.`
             : `Waiting for an owner. Drafts keep using revision ${status.revision} until an owner approves it.`}
         </CardDescription>

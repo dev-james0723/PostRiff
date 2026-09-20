@@ -1,6 +1,8 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import { AppIcons } from '../app-icons';
+import { COVER_MARK, FOLD_MARK, useCaptionFold, useCoverLegend } from '../guides';
 import { PhoneFrame, STATUS_BAR_HEIGHT } from '../phone-frame';
 import { accountNames, formatClock, MediaFill, MissingMedia, Monogram, truncateCaption } from '../parts';
 import type { TemplateProps } from '../types';
@@ -17,6 +19,8 @@ export default function SnapchatTemplate({ post, scale }: TemplateProps) {
   const names = accountNames(post.account);
   const media = post.media.filter((item) => item.kind !== 'file');
   const caption = truncateCaption(post.text, 58);
+  useCaptionFold(caption, 'more');
+  useCoverLegend();
   const shadow = '[filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.6))_drop-shadow(0_0_10px_rgb(0_0_0/0.35))]';
 
   return (
@@ -31,7 +35,7 @@ export default function SnapchatTemplate({ post, scale }: TemplateProps) {
           <div className='absolute inset-x-0 top-0 h-[140px] bg-gradient-to-b from-black/45 to-transparent' />
           <div className='absolute inset-x-0 bottom-0 h-[260px] bg-gradient-to-t from-black/65 to-transparent' />
 
-          <div className={`absolute inset-x-0 flex h-[48px] items-center justify-between px-3 ${shadow}`} style={{ top: STATUS_BAR_HEIGHT }}>
+          <div className={cn('absolute inset-x-0 flex h-[48px] items-center justify-between px-3', shadow, COVER_MARK)} style={{ top: STATUS_BAR_HEIGHT }}>
             <span className='flex items-center gap-2'>
               <Monogram name={names.display} size={34} />
               <span className='flex size-[34px] items-center justify-center rounded-full bg-white/20'>
@@ -44,7 +48,7 @@ export default function SnapchatTemplate({ post, scale }: TemplateProps) {
             </span>
           </div>
 
-          <div className={`absolute right-2 bottom-[18px] flex w-[56px] flex-col items-center gap-[20px] text-[12px] font-semibold ${shadow}`}>
+          <div className={cn('absolute right-2 bottom-[18px] flex w-[56px] flex-col items-center gap-[20px] text-[12px] font-semibold', shadow, COVER_MARK)}>
             <AppIcons.heart size={32} stroke={2} />
             <AppIcons.repeat size={31} stroke={2} />
             <AppIcons.commentRound size={31} stroke={2} />
@@ -52,7 +56,7 @@ export default function SnapchatTemplate({ post, scale }: TemplateProps) {
             <AppIcons.dots size={28} stroke={2.2} />
           </div>
 
-          <div className={`absolute bottom-[18px] left-3 w-[292px] ${shadow}`}>
+          <div className={cn('absolute bottom-[18px] left-3 w-[292px]', shadow, COVER_MARK)}>
             <p className='flex items-center gap-2 text-[15px] font-bold'>
               <Monogram name={names.display} size={28} />
               {names.display}
@@ -60,7 +64,14 @@ export default function SnapchatTemplate({ post, scale }: TemplateProps) {
             </p>
             <p className='mt-2 text-[17px] leading-[22px] font-semibold'>
               {caption.text}
-              {caption.cut && <span className='font-normal' style={{ color: MUTED }}> more</span>}
+              {caption.cut && (
+                <>
+                  {' '}
+                  <span className={cn('font-normal', FOLD_MARK)} style={{ color: MUTED }}>
+                    more
+                  </span>
+                </>
+              )}
             </p>
             <p className='mt-2 flex items-center gap-1.5 text-[13px] text-white/80'>
               <AppIcons.music size={14} stroke={2} />

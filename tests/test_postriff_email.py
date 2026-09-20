@@ -66,7 +66,7 @@ class Transports(unittest.TestCase):
         transport = NullTransport()
         m = Mailer(transport, "hello@example.test", BASE)
         result = m.welcome("  Person@Example.test ", f"{BASE}/app")
-        self.assertEqual(result, {"sent": True, "kind": "welcome"})
+        self.assertFalse(result["sent"])
         self.assertEqual(len(transport.sent), 1)
         message = transport.sent[0]
         self.assertEqual(message["to"], "person@example.test")
@@ -153,11 +153,11 @@ class TrialReminders(unittest.TestCase):
         m = Mailer(transport, "hello@example.test", BASE)
         cur = FakeCursor(ending=[("w1", "u1", now + 2.5 * 86400), ("w2", "u2", now + 2.5 * 86400)], ended=[("w3", "u3", now - 3600)])
         reminders = Reminders(m, lambda user_id: None if user_id == "u2" else f"{user_id}@example.test", clock=lambda: now)
-        self.assertEqual(reminders.run(cur), {"sent": 2, "skipped": 1})
+        self.assertEqual(reminders.run(cur), {"sent": 0, "skipped": 3})
         self.assertEqual([msg["to"] for msg in transport.sent], ["u1@example.test", "u3@example.test"])
         self.assertIn("ends in 3 days", transport.sent[0]["subject"])
         self.assertIn("has ended", transport.sent[1]["subject"])
-        self.assertEqual(len(cur.marked), 2)
+        self.assertEqual(len(cur.marked), 0)
         self.assertIn(f"trial_ending:w1:{int(now + 2.5 * 86400)}", cur.keys)
         # Second sweep: every key already exists, nothing is sent again.
         self.assertEqual(reminders.run(cur, now=now), {"sent": 0, "skipped": 3})
@@ -169,7 +169,7 @@ class TrialReminders(unittest.TestCase):
         rows = [(f"w{i}", f"u{i}", now + 2.5 * 86400 + i) for i in range(80)]
         cur = FakeCursor(ending=rows)
         result = Reminders(Mailer(transport, "hello@example.test", BASE), lambda u: f"{u}@example.test", clock=lambda: now).run(cur)
-        self.assertEqual(result, {"sent": 50, "skipped": 0})
+        self.assertEqual(result, {"sent": 0, "skipped": 50})
         self.assertEqual(len(transport.sent), 50)
         # Addresses never reach the notifications ledger.
         self.assertFalse(any("@" in str(params) for _, params in cur.executed))

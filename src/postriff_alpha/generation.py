@@ -77,6 +77,11 @@ class FixtureAdapter:
         label = "主題（作者提供）：" if chinese else "Topic supplied by author: "
         topic = (label + idea) if idea else ("待確認主題" if chinese else "Topic to confirm")
         text = "\n\n".join([options[0], topic, evidence, (zh_closing if chinese else closing)[platform]])
+        style = request.get("styleDirectives") or {}
+        if style.get("usesEmoji") and not any(char in text for char in "🌱✨💡🎹🎬"):
+            text = ("✨ " if chinese else "✨ ") + text
+        if platform == "Instagram" and style and not style.get("usesHashtags"):
+            text = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
         return {"text": text, "openings": options, "sourceIds": sorted({f["sourceId"] for f in facts}), "warnings": list(dict.fromkeys(warnings)), "unknowns": unknowns}
 
 

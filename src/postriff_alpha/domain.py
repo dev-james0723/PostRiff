@@ -177,6 +177,14 @@ class Store:
         return variant
 
     def _voice(self, state, profile, reason):
+        # A restored or newly approved evidence-backed profile cannot revive access
+        # to a sample that was revoked or changed after analysis.
+        sources = {source.get("id"): source for source in state.get("sources", []) if isinstance(source, dict)}
+        for binding in profile.get("sourceBindings", []) if isinstance(profile, dict) else []:
+            source = sources.get(binding.get("id")) if isinstance(binding, dict) else None
+            if (not source or not source.get("active") or source.get("revision") != binding.get("revision")
+                    or source.get("contentHash") != binding.get("contentHash")):
+                raise AlphaError("Voice evidence changed or was revoked. Analyse the current selected samples again.", 409)
         revision = len(state["speaker"]["revisions"]) + 1
         record = {"revision": revision, "profile": copy.deepcopy(profile), "approvedAt": now(), "reason": reason}
         state["speaker"]["revisions"].append(record)
@@ -199,6 +207,8 @@ class Store:
         for variant in state["variants"]:
             if source_id in variant.get("sourceIds", []):
                 variant["needsReview"] = True
+                # An uncertainty confirmation cannot authorize text based on older source facts.
+                variant["sourceReviewRequired"] = True
                 variant["proposedUpdate"] = None
         state["savedAt"] = None
 
@@ -383,6 +393,7 @@ class Store:
             revision = v["revision"] + 1
             v.update({k: candidate[k] for k in ("text", "openings", "sourceIds", "warnings", "unknowns", "voiceRevision", "briefRevision", "runId")})
             v.update({"revision": revision, "customized": False, "needsReview": False, "blockedByRetraction": False, "proposedUpdate": None, "selectedOpening": 0})
+            v.pop("sourceReviewRequired", None)
             v.pop("rejected", None)
             v["revisions"].append({"revision": revision, "text": v["text"], "origin": "accepted-fixture-replacement", "at": now()})
             # Hosted Ideas candidates carry a pr_agent_runs id that is not in the local runs list.

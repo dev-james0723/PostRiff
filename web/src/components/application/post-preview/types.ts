@@ -15,6 +15,8 @@ export interface PreviewPost {
   channelName: string;
   /** The connected account exactly as the API names it: `@yourstudio`, `Your Studio`. */
   account: string;
+  /** Object URL of the account's real profile picture, when the provider gave PostRiff one. */
+  avatarUrl?: string;
   text: string;
   media: PreviewMedia[];
   /** When the post goes out; templates show it where the app shows a time. */

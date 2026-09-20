@@ -2,7 +2,8 @@
 
 import { AppIcons } from '../app-icons';
 import { PhoneFrame, StatusBarSpace } from '../phone-frame';
-import { accountNames, ClampText, formatClock, MediaFill, mediaHeight, MissingMedia, Monogram, RichText, TabBar, TabItem } from '../parts';
+import { accountNames, ClampText, formatClock, MediaCarousel, mediaHeight, MissingMedia, Monogram, RichText, TabBar, TabItem } from '../parts';
+import { useSlideIndex } from '../playback';
 import type { TemplateProps } from '../types';
 
 // Values from pixelfed/pixelfed-rn at tag v1.8.0.
@@ -22,6 +23,7 @@ export default function PixelfedTemplate({ post, scale }: TemplateProps) {
   const media = post.media.filter((item) => item.kind !== 'file');
   const first = media[0];
   const height = mediaHeight(first, 393, { min: 0.5, max: 1.25, fallback: 1 });
+  const slide = useSlideIndex(media.length);
 
   return (
     <PhoneFrame scale={scale} background='#ffffff' tone='dark' label={`Pixelfed preview of the post by ${names.handle}`} clock={formatClock(post)}>
@@ -48,12 +50,12 @@ export default function PixelfedTemplate({ post, scale }: TemplateProps) {
             <AppIcons.dots size={22} stroke={2} />
           </div>
           <div className='relative shrink-0 bg-black' style={{ height }}>
-            {first ? <MediaFill media={first} className='size-full' /> : <MissingMedia need='Pixelfed posts need a photo.' className='size-full' />}
+            {first ? <MediaCarousel media={media} className='size-full' /> : <MissingMedia need='Pixelfed posts need a photo.' className='size-full' />}
           </div>
           {media.length > 1 && (
             <div className='flex h-[18px] shrink-0 items-center justify-center gap-1.5'>
               {media.map((item, index) => (
-                <span key={item.id} className='size-[7px] rounded-full' style={{ background: index === 0 ? '#408df6' : '#d0d0d0' }} />
+                <span key={item.id} className='size-[7px] rounded-full' style={{ background: index === slide ? '#408df6' : '#d0d0d0' }} />
               ))}
             </div>
           )}

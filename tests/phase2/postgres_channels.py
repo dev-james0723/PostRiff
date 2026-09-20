@@ -1,6 +1,7 @@
 """Milestone C on disposable PostgreSQL: OAuth start→complete with PKCE, encrypted custody,
-capability rows, scope drift, replay/expiry/cross-member, refresh, disconnect, tenancy.
+capability rows, scope drift, replay/expiry/cross-member, refresh, disconnect, tenancy, account pictures.
 """
+import io
 import json
 import sys
 import time
@@ -12,6 +13,7 @@ import psycopg
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.oauth import CredentialVault
+from PIL import Image
 
 DSN = "host=127.0.0.1 port=55438 dbname=postgres"
 ONE = "00000000-0000-0000-0000-000000000001"
@@ -71,7 +73,7 @@ class FakeProvider:
 
     def identity(self, access_token):
         assert access_token.startswith("ACCESS-")
-        return {"providerAccountId": "urn:li:person:abc", "handle": "Verified Member", "accountType": "member"}
+        return {"providerAccountId": "urn:li:person:abc", "handle": "Verified Member", "accountType": "member", "pictureUrl": "https://media.licdn.com/dms/image/member.jpg"}
 
     def refresh(self, refresh_token):
         self.refreshes += 1
@@ -95,6 +97,18 @@ snap_a = service.bootstrap("one", "studio")
 snap_b = service.bootstrap("six", "assist")
 wid_b = snap_b["workspaceId"]
 oauth = service.oauth
+picture_png = io.BytesIO()
+Image.new("RGB", (400, 300), (40, 90, 160)).save(picture_png, format="PNG")
+picture_fetches = []
+
+
+def fetch_picture(url):
+    picture_fetches.append(url)
+    return (200, "image/png", picture_png.getvalue()) if picture_fetch_ok[0] else (503, "", b"")
+
+
+picture_fetch_ok = [True]
+oauth.picture_fetch = fetch_picture
 
 # 1. Start binds workspace/member/provider/capability/redirect/expiry; state stored hashed; verifier encrypted.
 started = oauth.start(wid_a, "one", "linkedin", "publish")
@@ -137,6 +151,30 @@ listed = oauth.channels(wid_a, "one")["channels"]
 assert listed[0]["connectionState"] == "publish_verified" and listed[0]["capabilities"]["publish"]["level"] == "Direct"
 checks.append("complete exchanges with PKCE, encrypts tokens at rest, records per-capability levels, single-use state, token absent from state and API")
 
+# 4b. The account's picture is read once from the provider's image host, re-encoded, listed by digest, and
+#     readable by members of this workspace only (browser role: select own workspace, never write).
+assert picture_fetches == ["https://media.licdn.com/dms/image/member.jpg"]
+digest = listed[0]["pictureDigest"]
+jpeg, served_digest = oauth.picture(wid_a, "one", done["connectionId"])
+assert len(digest) == 64 and served_digest == digest and jpeg.startswith(b"\xff\xd8")
+denied(lambda: oauth.picture(wid_a, "six", done["connectionId"]), 403)
+denied(lambda: oauth.picture(wid_a, "one", "0" * 32), 404)
+for member, visible in ((ONE, 1), (SIX, 0)):
+    with connection() as db:
+        db.execute("SET ROLE authenticated")
+        db.execute("SELECT set_config('request.jwt.claim.sub',%s,false)", (member,))
+        assert db.execute("SELECT count(*) FROM public.pr_channel_pictures").fetchone()[0] == visible
+with connection() as db:
+    db.execute("SET ROLE authenticated")
+    db.execute("SELECT set_config('request.jwt.claim.sub',%s,false)", (ONE,))
+    try:
+        db.execute("DELETE FROM public.pr_channel_pictures")
+    except psycopg.errors.InsufficientPrivilege:
+        db.rollback()
+    else:
+        raise AssertionError("browser role could delete pictures")
+checks.append("the account picture is fetched from the provider's image host, re-encoded, listed by digest, and member-only readable")
+
 # 5. Scope drift: granted scopes missing publish → Assisted publish, capabilityVerified False.
 provider.grant_scopes = ["openid"]
 drift_start = oauth.start(wid_a, "one", "linkedin", "publish")
@@ -146,6 +184,13 @@ assert drifted["missingScopes"] == ["w_member_social"] and drifted["capabilities
 assert oauth.channels(wid_a, "one")["channels"][0]["connectionState"] == "read_verified"
 provider.grant_scopes = None
 checks.append("scope drift downgrades publish to Assisted and the connection to read_verified")
+
+# 5b. A picture that cannot be fetched on a later identity read keeps the stored one.
+picture_fetch_ok[0] = False
+kept = oauth.verify(wid_a, "one", done["connectionId"])
+assert kept["identityVerified"] and oauth.channels(wid_a, "one")["channels"][0]["pictureDigest"] == digest and len(picture_fetches) == 3
+picture_fetch_ok[0] = True
+checks.append("a failed picture refresh keeps the stored picture")
 
 # 6. Worker token path refreshes an expired access token server-side; browser role cannot read credentials.
 clock[0] += 120
@@ -182,7 +227,11 @@ with connection() as db:
 assert wiped == ("", True)
 denied(lambda: oauth.token_for_worker(wid_a, done["connectionId"]), 404)
 assert oauth.channels(wid_a, "one")["channels"][0]["connectionState"] == "reauthorization_required"
-checks.append("disconnect needs step-up, revokes remotely, wipes ciphertext, and the worker can no longer obtain a token")
+assert oauth.channels(wid_a, "one")["channels"][0]["pictureDigest"] is None
+denied(lambda: oauth.picture(wid_a, "one", done["connectionId"]), 404)
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM public.pr_channel_pictures WHERE workspace_id=%s", (wid_a,)).fetchone()[0] == 0
+checks.append("disconnect needs step-up, revokes remotely, wipes ciphertext and the account picture, and the worker can no longer obtain a token")
 
 # 9. Audit trail present and content-free.
 events = service.audit_events(wid_a, "one")["events"]

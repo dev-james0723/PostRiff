@@ -5,7 +5,7 @@ import type { Job, Review, Phase2State } from '@/lib/api/types';
 /** Approved and waiting for the worker; `p2_cancel` ends these at once. */
 export const WAITING: ReadonlySet<string> = new Set(['scheduled', 'approved', 'claimed']);
 /** The worker has handed the post to the provider. A cancel here cannot recall it; it turns uncertain. */
-export const PUBLISHING: ReadonlySet<string> = new Set(['submitting', 'provider_accepted', 'published']);
+export const PUBLISHING: ReadonlySet<string> = new Set(['processing', 'submitting', 'provider_accepted', 'published']);
 /** The worker handed the post to the provider, or the provider has not confirmed it yet. */
 export const IN_FLIGHT: ReadonlySet<string> = new Set([...PUBLISHING, 'uncertain']);
 /**
@@ -118,20 +118,22 @@ export function jobBadge(job: { state: string; cancelRequested?: boolean; verifi
     case 'waiting':
       return { status: 'info', label: 'waiting', pulse: false, title: `Approved and waiting for its time (${label})` };
     case 'publishing':
+      if (job.state === 'processing') return { status: 'info', label: 'preparing media', pulse: false, title: 'Container processing; publication has not been attempted.' };
+      if (job.state === 'provider_accepted') return { status: 'info', label: 'accepted · checking result', pulse: false, title: 'Provider acceptance is not verified publication.' };
       return job.state === 'published'
         ? { status: 'loading', label: 'published · verifying', pulse: true, title: 'The provider reported it published; PostRiff has not verified it yet.' }
         : { status: 'loading', label, pulse: true, title: 'Handed to the provider; waiting for its answer.' };
     case 'uncertain':
       return {
         status: 'warning',
-        label: 'uncertain · reconciling',
+        label: 'result not confirmed',
         pulse: false,
         title: job.cancelRequested
           ? 'A cancel was requested after submission, which cannot recall the post. Nothing is retried until it is reconciled.'
           : 'The provider did not confirm; nothing is retried until it is reconciled.'
       };
     case 'held':
-      return { status: 'warning', label: 'held', pulse: false, title: 'Something changed after approval. Nothing publishes from this job; prepare a new review.' };
+      return { status: 'warning', label: 'needs action', pulse: false, title: 'Something changed after approval. Nothing publishes from this job; prepare a new review.' };
     case 'verified':
       return {
         status: 'success',

@@ -7,7 +7,7 @@ import type { Job, Review } from '@/lib/api/types';
  * passed `manifest.expiresAt` (approving it now returns 409), `stale` was invalidated by the backend because
  * something it was checked against changed. Jobs follow `job.state`; `held` is a job the worker will not run.
  */
-export const KINDS = ['review', 'expired', 'stale', 'waiting', 'held', 'in-flight', 'verified', 'failed', 'canceled'] as const;
+export const KINDS = ['review', 'expired', 'stale', 'waiting', 'held', 'in-flight', 'processing', 'accepted', 'uncertain', 'unknown', 'assisted', 'manual', 'verified', 'failed', 'canceled'] as const;
 
 export type Kind = (typeof KINDS)[number];
 
@@ -25,9 +25,15 @@ export const KIND_META: Record<Kind, KindMeta> = {
   expired: { label: 'Review expired', color: 'pink', status: 'danger' },
   stale: { label: 'Out of date', color: 'brand', status: 'neutral' },
   waiting: { label: 'Scheduled', color: 'blue', status: 'info' },
-  held: { label: 'Held', color: 'orange', status: 'warning' },
+  held: { label: 'Needs action', color: 'orange', status: 'warning' },
   'in-flight': { label: 'Publishing', color: 'indigo', status: 'loading' },
-  verified: { label: 'Published', color: 'green', status: 'success' },
+  processing: { label: 'Preparing media', color: 'indigo', status: 'info' },
+  accepted: { label: 'Accepted; checking result', color: 'indigo', status: 'info' },
+  uncertain: { label: 'Result not confirmed', color: 'orange', status: 'warning' },
+  unknown: { label: 'Unknown status', color: 'gray', status: 'warning' },
+  assisted: { label: 'Finish in the app', color: 'orange', status: 'warning' },
+  manual: { label: 'Marked completed by you', color: 'gray', status: 'neutral' },
+  verified: { label: 'Published and verified', color: 'green', status: 'success' },
   failed: { label: 'Failed', color: 'red', status: 'danger' },
   canceled: { label: 'Canceled', color: 'gray', status: 'neutral' }
 };
@@ -36,15 +42,21 @@ export const KIND_META: Record<Kind, KindMeta> = {
 export const WAITING_STATES = new Set(['approved', 'scheduled', 'claimed']);
 
 /** Submitted or being reconciled (`store.py` IN_FLIGHT). */
-export const IN_FLIGHT_STATES = new Set(['submitting', 'provider_accepted', 'published', 'uncertain']);
+export const IN_FLIGHT_STATES = new Set(['processing', 'submitting', 'provider_accepted', 'published', 'uncertain']);
 
 export function jobKind(state: string): Kind {
+  if (state === 'handoff_opened') return 'assisted';
+  if (state === 'user_reported_completed') return 'manual';
   if (state === 'verified') return 'verified';
   if (state === 'failed') return 'failed';
   if (state === 'canceled') return 'canceled';
   if (state === 'held') return 'held';
-  if (IN_FLIGHT_STATES.has(state)) return 'in-flight';
-  return 'waiting';
+  if (state === 'uncertain') return 'uncertain';
+  if (state === 'processing') return 'processing';
+  if (state === 'provider_accepted' || state === 'published') return 'accepted';
+  if (state === 'submitting') return 'in-flight';
+  if (WAITING_STATES.has(state)) return 'waiting';
+  return 'unknown';
 }
 
 /** A review past `manifest.expiresAt` can no longer be approved (the backend answers 409). */

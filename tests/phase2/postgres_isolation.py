@@ -98,6 +98,10 @@ assert [item["workspaceId"] for item in listed] == [wid_a]
 checks.append("workspace list contains only own memberships")
 
 # 3. Invitation flow: owner invites, third user accepts, roles enforced, token single-use.
+service.usage(wid_a, "one")  # Materialize this fixture's entitlement before changing its seats.
+with connection() as db:
+    # Grant this synthetic workspace one extra seat so the test reaches the role boundary.
+    db.execute("UPDATE public.pr_entitlements SET members=2 WHERE workspace_id=%s", (wid_a,))
 invited = service.invite(wid_a, "one", "Third@Example.com", "editor", {"can_publish": False})
 raw = invited["token"]
 with connection() as db:

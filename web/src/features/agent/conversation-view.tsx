@@ -24,7 +24,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
 import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, SchedulePlan } from '@/lib/api/types';
+import type { MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
+import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { ProposalCard } from '@/features/memory/proposal-card';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatDate, relativeTime } from '@/lib/time';
@@ -33,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { ActivityStrip } from './activity-strip';
 import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform, type Language } from './composer';
 import { PlanCard } from './plan-card';
+import { localTimeToDate } from './plan';
 import { ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
 import { useRun } from './use-run';
 import { VariantCard, destinationLabel } from './variant-card';
@@ -115,6 +117,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const [selected, setSelected] = useState<DraftPlatform[]>(['LinkedIn', 'Instagram']);
   const [language, setLanguage] = useState<Language>('English');
   const [busy, setBusy] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<'neutral' | 'personalized'>('neutral');
   const [variantIndex, setVariantIndex] = useState(0);
   const [inspectorTab, setInspectorTab] = useState('preview');
 
@@ -136,6 +139,8 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   const state = snapshot.data?.state;
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
+  const voiceSourceIds = (state?.sources ?? []).filter((source) => source.kind === 'voice_sample' && source.active && source.selected && source.useGrants?.some((grant) => grant.purpose === 'generation' && grant.route === 'local-cli')).map((source) => source.id);
+  const voiceAvailable = voiceSourceIds.length > 0;
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
     return { platform, account: account?.account, state: account?.displayState };
@@ -164,6 +169,19 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const variants = run?.artifact?.variants ?? [];
   const sources = (state?.sources ?? []).filter((s) => s.active);
 
+  // A draft as its app would show it: the connected account (or the workspace's speaker) and the planned time if any.
+  function draftFor(variant: RunVariant) {
+    const planned = plan?.destinations.find((d) => d.platform === variant.platform && d.language === variant.language)?.localTime;
+    const channel = channels.find((c) => c.platform === variant.platform);
+    return {
+      platform: variant.platform,
+      text: variant.text,
+      account: channel?.account ?? state?.speaker?.label ?? 'You',
+      channelId: channel?.id,
+      publishAt: planned ? localTimeToDate(planned) : null
+    };
+  }
+
   async function sendTurn() {
     const body = text.trim();
     if (!body || selected.length === 0 || busy) return;
@@ -175,6 +193,8 @@ export function ConversationView({ conversationId }: { conversationId: string })
         language,
         model: choice.model,
         reasoning: choice.reasoning,
+        voiceMode,
+        voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
         timeZone
       });
       if (result.status === 'memory') {
@@ -318,7 +338,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
                           {run.status === 'failed' && !(message.body as { failed?: boolean }).failed && (
                             <p className='text-sm text-amber-700 dark:text-amber-300'>{run.events.findLast((e) => e.type === 'run.failed')?.message ?? 'The run did not complete.'}</p>
                           )}
-                          {variants.length > 0 && <VariantCard variants={variants} selected={variantIndex} onSelect={setVariantIndex} />}
+                          {variants.length > 0 && (
+                            <VariantCard
+                              variants={variants}
+                              selected={variantIndex}
+                              onSelect={setVariantIndex}
+                              preview={(variant, options) => <DraftPreview {...draftFor(variant)} scale={options?.scale} />}
+                            />
+                          )}
                           {plan && snapshot.data && <PlanCard run={run} plan={plan} snapshot={snapshot.data} />}
                           {!plan && variants.length > 0 && (
                             <p className='text-muted-foreground text-xs'>
@@ -367,6 +394,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
               reasoning={choice.reasoning}
               reasoningOptions={choice.reasoningOptions}
               onReasoning={choice.chooseReasoning}
+              voiceMode={voiceMode}
+              onVoiceMode={setVoiceMode}
+              voiceAvailable={voiceAvailable}
               hint='⌘↵ to send · channels and times you name in the message win over the chips'
             />
           ) : (
@@ -387,26 +417,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
             </TabsList>
             <TabsContent value='preview' className='mt-3 flex flex-col gap-3'>
               {variants[variantIndex] ? (
-                <div className='bg-card ring-foreground/10 overflow-hidden rounded-xl ring-1'>
-                  <div className='flex items-center gap-2 px-3 py-2.5'>
-                    <span className='bg-muted size-7 rounded-full' />
-                    <span className='flex flex-col leading-tight'>
-                      <span className='text-xs font-semibold'>{channels.find((c) => c.platform === variants[variantIndex].platform)?.account ?? state?.speaker?.label ?? 'You'}</span>
-                      <span className='text-muted-foreground text-[11px]'>{destinationLabel(variants[variantIndex])}</span>
-                    </span>
-                  </div>
-                  {variants[variantIndex].platform === 'Instagram' && (
-                    <div className='bg-muted text-muted-foreground flex h-40 flex-col items-center justify-center gap-1 text-xs'>
-                      <Icons.media className='size-5' />
-                      Image required for Instagram
-                    </div>
-                  )}
-                  <p className='px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap'>{variants[variantIndex].text}</p>
-                </div>
+                <>
+                  <p className='text-muted-foreground text-xs'>{destinationLabel(variants[variantIndex])}</p>
+                  {/* Keyed by draft so switching tabs draws the other app instead of morphing this one. */}
+                  <DraftPreview key={`${variantIndex}:${variants[variantIndex].platform}`} scale={0.7} {...draftFor(variants[variantIndex])} />
+                </>
               ) : (
                 <p className='text-muted-foreground text-xs'>The selected draft renders here as it would look on the channel.</p>
               )}
-              <p className='text-muted-foreground text-[11px]'>A preview, not a guarantee of how the provider renders it.</p>
             </TabsContent>
             <TabsContent value='sources' className='mt-3 flex flex-col gap-2'>
               {sources.length === 0 ? (

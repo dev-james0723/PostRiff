@@ -1,0 +1,1200 @@
+{
+  "snapshot": {
+    "state": {
+      "schemaVersion": 1,
+      "workspace": {
+        "id": "7be89518d0c54f04be66b6bb57b42d8c",
+        "name": "My agency",
+        "sample": false,
+        "visibility": "private-local",
+        "createdAt": "2026-09-19T20:37:02.389187+00:00"
+      },
+      "session": {
+        "id": "0600bc90125d430a95fd13b48277fe71",
+        "step": 5,
+        "answers": {
+          "mode": "personal",
+          "purpose": "Make community learning accessible",
+          "audience": "Curious beginners",
+          "subject": "Community workshops",
+          "speaker": "The author",
+          "layers": [
+            "personal"
+          ],
+          "writing": "A small step can be a useful beginning."
+        },
+        "answerRecords": [
+          {
+            "id": "c876d8a5677f46bf82aba979b68f0e8e",
+            "key": "mode",
+            "value": "personal",
+            "confirmedAt": "2026-09-19T20:37:02.395463+00:00"
+          },
+          {
+            "id": "eea0a8d126d74e05bbe56ca2228eba77",
+            "key": "purpose",
+            "value": "Make community learning accessible",
+            "confirmedAt": "2026-09-19T20:37:02.419555+00:00"
+          },
+          {
+            "id": "644825f5d8f9462e974499f4c40ba5e5",
+            "key": "audience",
+            "value": "Curious beginners",
+            "confirmedAt": "2026-09-19T20:37:02.419565+00:00"
+          },
+          {
+            "id": "5d9887c1ed0541aa99c5e52937d93552",
+            "key": "subject",
+            "value": "Community workshops",
+            "confirmedAt": "2026-09-19T20:37:02.419569+00:00"
+          },
+          {
+            "id": "4a3df2f74d3b4a2684ff221d48bca7cd",
+            "key": "speaker",
+            "value": "The author",
+            "confirmedAt": "2026-09-19T20:37:02.419573+00:00"
+          },
+          {
+            "id": "52a2d5858a234ceda3e7e05a657e00b4",
+            "key": "layers",
+            "value": [
+              "personal"
+            ],
+            "confirmedAt": "2026-09-19T20:37:02.419577+00:00"
+          },
+          {
+            "id": "b3dc6bd22c074edfba596156b5a91840",
+            "key": "writing",
+            "value": "A small step can be a useful beginning.",
+            "confirmedAt": "2026-09-19T20:37:02.428975+00:00"
+          }
+        ],
+        "completed": false
+      },
+      "brandHub": {
+        "id": "e74188bee88b4690a256e0fb1b257668",
+        "purpose": "Make community learning accessible",
+        "audience": "Curious beginners",
+        "subject": "Community workshops",
+        "mode": "personal",
+        "layers": [
+          "personal"
+        ],
+        "speaker": "The author"
+      },
+      "speaker": {
+        "id": "62c08810003c41aea65248f739ff50b3",
+        "label": "The author",
+        "revisions": [
+          {
+            "revision": 1,
+            "profile": {
+              "tone": "warm",
+              "writingExample": "A small step can be a useful beginning.",
+              "observations": [
+                "A warm starting tone (chosen by you).",
+                "Use concrete language; preserve source attribution.",
+                "Your writing example is included in VOICE.md for writing routes to read. It was not analyzed to set this starting tone."
+              ],
+              "unknowns": [
+                "Personal history, qualifications and results are unknown.",
+                "Voice fit has not been tested with a model."
+              ],
+              "preferences": []
+            },
+            "approvedAt": "2026-09-19T20:37:02.431628+00:00",
+            "reason": "Explicit provisional-profile approval"
+          }
+        ],
+        "activeRevision": 1,
+        "provisional": null
+      },
+      "sources": [
+        {
+          "id": "edabad8b6b0e489d8a5ef35f6193e6d7",
+          "kind": "sample",
+          "title": "Fictional community seed swap",
+          "text": "The community garden hosts a free seed-swap on Saturday. Visitors can bring seeds or simply come to learn. The event includes a beginner planting demonstration.",
+          "fingerprint": "ded69dd1dcff0fbbbcbd257108b7536d27ead1b6e9481017ec56683997c87016",
+          "visibility": "private-local",
+          "active": true,
+          "facts": [
+            {
+              "id": "6f29672bb7ec4972aec4f42c63e22c73",
+              "text": "The community garden hosts a free seed-swap on Saturday.",
+              "approved": true,
+              "sourceId": "edabad8b6b0e489d8a5ef35f6193e6d7",
+              "locator": "paragraph 1",
+              "fixture": true
+            },
+            {
+              "id": "f9e6184f4dae444d8798a746f3b6a4d8",
+              "text": "Visitors can bring seeds or simply come to learn.",
+              "approved": true,
+              "sourceId": "edabad8b6b0e489d8a5ef35f6193e6d7",
+              "locator": "paragraph 2",
+              "fixture": true
+            },
+            {
+              "id": "802f60bfa93745a7abd89c6001875eac",
+              "text": "The event includes a beginner planting demonstration.",
+              "approved": true,
+              "sourceId": "edabad8b6b0e489d8a5ef35f6193e6d7",
+              "locator": "paragraph 3",
+              "fixture": true
+            }
+          ],
+          "createdAt": "2026-09-19T20:37:02.424962+00:00",
+          "unknowns": [
+            "Only selected source statements are approved; missing details stay unknown."
+          ],
+          "sourcePolicy": "public_quote",
+          "egressConsent": [],
+          "useApprovals": [],
+          "reviewedAt": "2026-09-19T20:37:02.426503+00:00"
+        }
+      ],
+      "brief": {
+        "id": "eff6c10be96e4b6eb161da3725821136",
+        "revision": 1,
+        "idea": "Share the seed swap as a learning opportunity",
+        "sourceIds": [
+          "edabad8b6b0e489d8a5ef35f6193e6d7"
+        ],
+        "ideaSourceId": "edabad8b6b0e489d8a5ef35f6193e6d7"
+      },
+      "variants": [
+        {
+          "id": "fac42f027e804545884928e52d05bbeb",
+          "platform": "LinkedIn",
+          "language": "English",
+          "text": "A small idea worth a closer look.\n\nTopic supplied by author: A seed swap is also a chance to exchange what we know\n\n\u2022 Source note: \u201cThe community garden hosts a free seed-swap on Saturday.\u201d\n\u2022 Source note: \u201cVisitors can bring seeds or simply come to learn.\u201d\n\u2022 Source note: \u201cThe event includes a beginner planting demonstration.\u201d\n\nWhat is one practical question you would ask before taking the next step?",
+          "openings": [
+            "A small idea worth a closer look.",
+            "What would make this useful in practice?",
+            "Start with what we can actually support."
+          ],
+          "sourceIds": [
+            "edabad8b6b0e489d8a5ef35f6193e6d7"
+          ],
+          "warnings": [
+            "Deterministic writing preview. No language model was called."
+          ],
+          "unknowns": [],
+          "revision": 1,
+          "voiceRevision": 1,
+          "styleRevision": 0,
+          "speakerId": "62c08810003c41aea65248f739ff50b3",
+          "briefRevision": 1,
+          "runId": "2c3d71b3233c4813a43b6ccd43510b9c",
+          "customized": false,
+          "needsReview": false,
+          "blockedByRetraction": false,
+          "selectedOpening": 0,
+          "revisions": [
+            {
+              "revision": 1,
+              "text": "A small idea worth a closer look.\n\nTopic supplied by author: A seed swap is also a chance to exchange what we know\n\n\u2022 Source note: \u201cThe community garden hosts a free seed-swap on Saturday.\u201d\n\u2022 Source note: \u201cVisitors can bring seeds or simply come to learn.\u201d\n\u2022 Source note: \u201cThe event includes a beginner planting demonstration.\u201d\n\nWhat is one practical question you would ask before taking the next step?",
+              "origin": "fixture",
+              "at": "2026-09-19T20:37:02.437801+00:00"
+            }
+          ],
+          "localPreferences": {},
+          "contentTypeId": "unclassified",
+          "contentTypeVersion": "legacy",
+          "formatId": null,
+          "contentSkillRouteIds": [],
+          "uncertaintyReview": {
+            "excludedFromDraft": [
+              "Timing, location, outcomes and personal experience not supplied in approved facts remain unknown."
+            ],
+            "actor": "0bdb7cee9c7f472b9742d19f86dd54ee",
+            "at": 1800000000.0,
+            "revision": 1,
+            "claim": "user_confirmed_exclusion_not_fact_verification"
+          }
+        }
+      ],
+      "preferences": [],
+      "runs": [
+        {
+          "id": "2c3d71b3233c4813a43b6ccd43510b9c",
+          "adapter": "deterministic-preview",
+          "adapterVersion": "1.0.0",
+          "voiceRevision": 1,
+          "styleRevision": 0,
+          "briefRevision": 1,
+          "speakerId": "62c08810003c41aea65248f739ff50b3",
+          "status": "completed",
+          "events": [
+            {
+              "type": "started",
+              "at": "2026-09-19T20:37:02.437755+00:00"
+            },
+            {
+              "type": "artifact-validated",
+              "at": "2026-09-19T20:37:02.437833+00:00"
+            }
+          ],
+          "artifacts": [
+            {
+              "variantId": "fac42f027e804545884928e52d05bbeb",
+              "revision": 1
+            }
+          ],
+          "createdAt": "2026-09-19T20:37:02.437757+00:00"
+        }
+      ],
+      "runtime": {
+        "selected": "deterministic-preview",
+        "routes": [
+          {
+            "id": "deterministic-preview",
+            "label": "Deterministic preview",
+            "status": "tested-by-local-checks",
+            "version": "1.0.0",
+            "detail": "Local authored templates and approved source quotations; no model, network, credits or automatic fallback."
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "status": "untested",
+            "detail": "No alpha authentication, capability or model execution has been qualified. Personal Studio bindings are not reused."
+          },
+          {
+            "id": "claude",
+            "label": "Claude",
+            "status": "untested",
+            "detail": "Planned adapter; no alpha authentication or model execution tested."
+          },
+          {
+            "id": "google",
+            "label": "Google",
+            "status": "untested",
+            "detail": "Planned adapter; no alpha authentication or model execution tested."
+          },
+          {
+            "id": "managed",
+            "label": "PostRiff managed writing",
+            "status": "blocked",
+            "detail": "Provider and billing are not provisioned in this private alpha."
+          }
+        ]
+      },
+      "skillInstances": [
+        {
+          "templateId": "social-agency-orchestrator",
+          "templateVersion": "1.0.0",
+          "overrides": {},
+          "profileRevision": 1
+        },
+        {
+          "templateId": "content-pack",
+          "templateVersion": "1.0.0",
+          "overrides": {},
+          "profileRevision": 1
+        },
+        {
+          "templateId": "content-craft",
+          "templateVersion": "1.0.0",
+          "overrides": {},
+          "profileRevision": 1
+        }
+      ],
+      "savedAt": null,
+      "importProposal": null,
+      "research": {
+        "phase0": "incomplete",
+        "customerValidation": false,
+        "pendingParticipants": [
+          "P02",
+          "P03",
+          "P04",
+          "P05"
+        ]
+      },
+      "profileSetup": {
+        "schema": "postriff.personal-voice.v1",
+        "stage": "relationship",
+        "relationshipIndex": 0,
+        "guideIndex": 0,
+        "history": [],
+        "relationship": {},
+        "guidedAnswers": {},
+        "transfer": "",
+        "scope": null,
+        "request": null,
+        "candidate": [],
+        "importReport": null,
+        "inspection": null,
+        "job": null,
+        "approved": false,
+        "startedAt": "2026-09-19T20:37:02.390463+00:00",
+        "reviewedAt": null
+      },
+      "learning": {
+        "enabled": true,
+        "teamEdits": false,
+        "cloudExtraction": false,
+        "revision": 0,
+        "active": [],
+        "retired": [],
+        "migratedAt": "2026-09-19T20:37:02.390491+00:00"
+      },
+      "account": {
+        "userId": "0bdb7cee9c7f472b9742d19f86dd54ee",
+        "displayName": "Founder preview",
+        "gateway": "phase2-local-fixture",
+        "status": "simulated_verified",
+        "productionAccount": false,
+        "methodsPreviewed": [
+          "google"
+        ]
+      },
+      "membership": {
+        "userId": "0bdb7cee9c7f472b9742d19f86dd54ee",
+        "workspaceId": "7be89518d0c54f04be66b6bb57b42d8c",
+        "role": "owner",
+        "status": "active"
+      },
+      "phase2": {
+        "execution": "local-fixtures",
+        "trial": {
+          "plan": "studio",
+          "startedAt": 1800000000.0,
+          "expiresAt": 1801209600.0,
+          "writingGrant": 10,
+          "writingUsed": 1,
+          "artworkSets": 1,
+          "artworkUsed": 0,
+          "autoConvert": false,
+          "status": "active"
+        },
+        "channels": [
+          {
+            "id": "32f947fac7064bbb8529f8ad67fbc052",
+            "platform": "LinkedIn",
+            "account": "Fictional LinkedIn account 1",
+            "accountType": "member",
+            "language": "English",
+            "configured": true,
+            "identityVerified": true,
+            "capabilityVerified": true,
+            "scopes": [
+              "w_member_social"
+            ],
+            "verifiedAt": 1800000000.0,
+            "expiresAt": 1800086400.0,
+            "revoked": false,
+            "capabilityVersion": 1,
+            "qualification": "implemented_with_fixtures",
+            "evidenceSource": "synthetic",
+            "scenario": "success",
+            "displayState": "Ready for posting"
+          }
+        ],
+        "assets": [],
+        "art": {
+          "candidates": [],
+          "selected": null,
+          "consents": [],
+          "status": "local_fallback",
+          "providerBrief": null,
+          "briefHash": null
+        },
+        "reviews": [
+          {
+            "id": "5f7804792f7d4e78a5c338ff0780276e",
+            "manifest": {
+              "schema": "postriff.approval.v1",
+              "workspaceId": "7be89518d0c54f04be66b6bb57b42d8c",
+              "actor": "0bdb7cee9c7f472b9742d19f86dd54ee",
+              "brandHubId": "e74188bee88b4690a256e0fb1b257668",
+              "brandDigest": "0bbebc852b4a76df4ad9f1739397050caac86525f80581391bef54824157afbe",
+              "speakerId": "62c08810003c41aea65248f739ff50b3",
+              "voiceRevision": 1,
+              "styleRevision": 0,
+              "channelId": "32f947fac7064bbb8529f8ad67fbc052",
+              "account": "Fictional LinkedIn account 1",
+              "platform": "LinkedIn",
+              "operation": "member_post",
+              "variantId": "fac42f027e804545884928e52d05bbeb",
+              "contentRevision": 1,
+              "contentType": {
+                "id": "unclassified",
+                "version": "legacy",
+                "formatId": null,
+                "preflight": [
+                  {
+                    "severity": "warning",
+                    "ruleId": "unclassified",
+                    "message": "This legacy draft has no content type. Review a suggestion before reusing it as a template."
+                  }
+                ],
+                "skillRouteIds": []
+              },
+              "payload": {
+                "text": "A small idea worth a closer look.\n\nTopic supplied by author: A seed swap is also a chance to exchange what we know\n\n\u2022 Source note: \u201cThe community garden hosts a free seed-swap on Saturday.\u201d\n\u2022 Source note: \u201cVisitors can bring seeds or simply come to learn.\u201d\n\u2022 Source note: \u201cThe event includes a beginner planting demonstration.\u201d\n\nWhat is one practical question you would ask before taking the next step?",
+                "language": "English"
+              },
+              "payloadDigest": "346793814aeeb7e08bb55a36f9d4472f5cc3234c4ab3fa20cc709e0022b3af81",
+              "media": [],
+              "timing": {
+                "local": "2027-01-15T08:01:00",
+                "timeZone": "UTC",
+                "fold": 0,
+                "utc": "2027-01-15T08:01:00+00:00",
+                "timestamp": 1800000060.0,
+                "tzdb": "system:/usr/share/zoneinfo,/usr/lib/zoneinfo,/usr/share/lib/zoneinfo,/etc/zoneinfo"
+              },
+              "capability": {
+                "version": 1,
+                "scopes": [
+                  "w_member_social"
+                ],
+                "verifiedAt": 1800000000.0,
+                "source": "synthetic"
+              },
+              "limitsVersion": "local-conservative-2026-09-14",
+              "acknowledgedWarnings": [
+                "Deterministic writing preview. No language model was called."
+              ],
+              "expiresAt": 1800003660.0,
+              "execution": "synthetic",
+              "briefRevision": 1,
+              "sourceDigest": "280320d8f25b3d6ee3b9ba7f9281a0f196d1ba1d8aa8f493e499537b751c77a0",
+              "providerAccountId": "Fictional LinkedIn account 1",
+              "idempotencyKey": "c7c5df4931b9b697c28eb93bc6efb020ba2d42f00d6d48fbaa2e096f3858e535"
+            },
+            "digest": "16ecfc9b486d197506d32435395f8a4b1009e5f5a9ad3da31d6e78cbc39f51a0",
+            "status": "approved",
+            "createdAt": 1800000000.0,
+            "jobId": "ba3c06253fc248648fb45ee52ea9bb77"
+          }
+        ],
+        "jobs": [
+          {
+            "id": "fixture-held",
+            "manifest": {
+              "schema": "postriff.approval.v1",
+              "workspaceId": "7be89518d0c54f04be66b6bb57b42d8c",
+              "actor": "0bdb7cee9c7f472b9742d19f86dd54ee",
+              "brandHubId": "e74188bee88b4690a256e0fb1b257668",
+              "brandDigest": "0bbebc852b4a76df4ad9f1739397050caac86525f80581391bef54824157afbe",
+              "speakerId": "62c08810003c41aea65248f739ff50b3",
+              "voiceRevision": 1,
+              "styleRevision": 0,
+              "channelId": "32f947fac7064bbb8529f8ad67fbc052",
+              "account": "Fictional LinkedIn account 1",
+              "platform": "LinkedIn",
+              "operation": "member_post",
+              "variantId": "fac42f027e804545884928e52d05bbeb",
+              "contentRevision": 1,
+              "contentType": {
+                "id": "unclassified",
+                "version": "legacy",
+                "formatId": null,
+                "preflight": [
+                  {
+                    "severity": "warning",
+                    "ruleId": "unclassified",
+                    "message": "This legacy draft has no content type. Review a suggestion before reusing it as a template."
+                  }
+                ],
+                "skillRouteIds": []
+              },
+              "payload": {
+                "text": "A small idea worth a closer look.\n\nTopic supplied by author: A seed swap is also a chance to exchange what we know\n\n\u2022 Source note: \u201cThe community garden hosts a free seed-swap on Saturday.\u201d\n\u2022 Source note: \u201cVisitors can bring seeds or simply come to learn.\u201d\n\u2022 Source note: \u201cThe event includes a beginner planting demonstration.\u201d\n\nWhat is one practical question you would ask before taking the next step?",
+                "language": "English"
+              },
+              "payloadDigest": "346793814aeeb7e08bb55a36f9d4472f5cc3234c4ab3fa20cc709e0022b3af81",
+              "media": [],
+              "timing": {
+                "local": "2027-01-15T08:01:00",
+                "timeZone": "UTC",
+                "fold": 0,
+                "utc": "2027-01-15T08:01:00+00:00",
+                "timestamp": 1800000060.0,
+                "tzdb": "system:/usr/share/zoneinfo,/usr/lib/zoneinfo,/usr/share/lib/zoneinfo,/etc/zoneinfo"
+              },
+              "capability": {
+                "version": 1,
+                "scopes": [
+                  "w_member_social"
+                ],
+                "verifiedAt": 1800000000.0,
+                "source": "synthetic"
+              },
+              "limitsVersion": "local-conservative-2026-09-14",
+              "acknowledgedWarnings": [
+                "Deterministic writing preview. No language model was called."
+              ],
+              "expiresAt": 1800003660.0,
+              "execution": "synthetic",
+              "briefRevision": 1,
+              "sourceDigest": "280320d8f25b3d6ee3b9ba7f9281a0f196d1ba1d8aa8f493e499537b751c77a0",
+              "providerAccountId": "Fictional LinkedIn account 1",
+              "idempotencyKey": "c7c5df4931b9b697c28eb93bc6efb020ba2d42f00d6d48fbaa2e096f3858e535"
+            },
+            "approvalDigest": "16ecfc9b486d197506d32435395f8a4b1009e5f5a9ad3da31d6e78cbc39f51a0",
+            "approvedAt": 1800000000.0,
+            "approvedBy": "0bdb7cee9c7f472b9742d19f86dd54ee",
+            "state": "held",
+            "events": [
+              {
+                "state": "held",
+                "message": "Source approval changed. Review the current draft.",
+                "at": 1800000000
+              }
+            ],
+            "attempts": [],
+            "checks": 0,
+            "leaseOwner": null,
+            "leaseUntil": 0,
+            "nextAt": 1800000060.0,
+            "cancelRequested": false,
+            "scheduleId": null,
+            "nextAction": "Source approval changed. Review the current draft."
+          },
+          {
+            "id": "fixture-uncertain",
+            "manifest": {
+              "schema": "postriff.approval.v1",
+              "workspaceId": "7be89518d0c54f04be66b6bb57b42d8c",
+              "actor": "0bdb7cee9c7f472b9742d19f86dd54ee",
+              "brandHubId": "e74188bee88b4690a256e0fb1b257668",
+              "brandDigest": "0bbebc852b4a76df4ad9f1739397050caac86525f80581391bef54824157afbe",
+              "speakerId": "62c08810003c41aea65248f739ff50b3",
+              "voiceRevision": 1,
+              "styleRevision": 0,
+              "channelId": "32f947fac7064bbb8529f8ad67fbc052",
+              "account": "Fictional LinkedIn account 1",
+              "platform": "LinkedIn",
+              "operation": "member_post",
+              "variantId": "fac42f027e804545884928e52d05bbeb",
+              "contentRevision": 1,
+              "contentType": {
+                "id": "unclassified",
+                "version": "legacy",
+                "formatId": null,
+                "preflight": [
+                  {
+                    "severity": "warning",
+                    "ruleId": "unclassified",
+                    "message": "This legacy draft has no content type. Review a suggestion before reusing it as a template."
+                  }
+                ],
+                "skillRouteIds": []
+              },
+              "payload": {
+                "text": "A small idea worth a closer look.\n\nTopic supplied by author: A seed swap is also a chance to exchange what we know\n\n\u2022 Source note: \u201cThe community garden hosts a free seed-swap on Saturday.\u201d\n\u2022 Source note: \u201cVisitors can bring seeds or simply come to learn.\u201d\n\u2022 Source note: \u201cThe event includes a beginner planting demonstration.\u201d\n\nWhat is one practical question you would ask before taking the next step?",
+                "language": "English"
+              },
+              "payloadDigest": "346793814aeeb7e08bb55a36f9d4472f5cc3234c4ab3fa20cc709e0022b3af81",
+              "media": [],
+              "timing": {
+                "local": "2027-01-15T08:01:00",
+                "timeZone": "UTC",
+                "fold": 0,
+                "utc": "2027-01-15T08:01:00+00:00",
+                "timestamp": 1800000060.0,
+                "tzdb": "system:/usr/share/zoneinfo,/usr/lib/zoneinfo,/usr/share/lib/zoneinfo,/etc/zoneinfo"
+              },
+              "capability": {
+                "version": 1,
+                "scopes": [
+                  "w_member_social"
+                ],
+                "verifiedAt": 1800000000.0,
+                "source": "synthetic"
+              },
+              "limitsVersion": "local-conservative-2026-09-14",
+              "acknowledgedWarnings": [
+                "Deterministic writing preview. No language model was called."
+              ],
+              "expiresAt": 1800003660.0,
+              "execution": "synthetic",
+              "briefRevision": 1,
+              "sourceDigest": "280320d8f25b3d6ee3b9ba7f9281a0f196d1ba1d8aa8f493e499537b751c77a0",
+              "providerAccountId": "Fictional LinkedIn account 1",
+              "idempotencyKey": "c7c5df4931b9b697c28eb93bc6efb020ba2d42f00d6d48fbaa2e096f3858e535"
+            },
+            "approvalDigest": "16ecfc9b486d197506d32435395f8a4b1009e5f5a9ad3da31d6e78cbc39f51a0",
+            "approvedAt": 1800000000.0,
+            "approvedBy": "0bdb7cee9c7f472b9742d19f86dd54ee",
+            "state": "uncertain",
+            "events": [
+              {
+                "state": "uncertain",
+                "message": "Provider result unknown. Check the platform before another attempt.",
+                "at": 1800000000
+              }
+            ],
+            "attempts": [],
+            "checks": 0,
+            "leaseOwner": null,
+            "leaseUntil": 0,
+            "nextAt": 1800000060.0,
+            "cancelRequested": false,
+            "scheduleId": null,
+            "nextAction": "Provider result unknown. Check the platform before another attempt."
+          }
+        ],
+        "devices": [
+          {
+            "id": "5adb5a61ae8f4e2ab0d1fa554b1fe762",
+            "createdAt": 1800000000.0,
+            "expiresAt": 1800086400.0,
+            "status": "active"
+          }
+        ],
+        "identities": [
+          "google"
+        ],
+        "plans": [
+          {
+            "id": "studio",
+            "price": 19,
+            "features": [
+              "drafts",
+              "export",
+              "scheduling"
+            ]
+          },
+          {
+            "id": "assist",
+            "price": 39,
+            "features": [
+              "drafts",
+              "export",
+              "scheduling",
+              "assisted-writing"
+            ]
+          }
+        ]
+      },
+      "device": {
+        "id": "5adb5a61ae8f4e2ab0d1fa554b1fe762",
+        "workspaceId": "7be89518d0c54f04be66b6bb57b42d8c",
+        "status": "synthetic-session",
+        "runtimeAccess": "not_granted"
+      },
+      "contentSystem": {
+        "schema": "postriff.content-system.v1",
+        "catalogVersion": "postriff-content-catalog-2026.09.14.1",
+        "installedPacks": [],
+        "workspaceTypes": [],
+        "templates": [],
+        "recommendationContext": {
+          "role": "general",
+          "goals": [],
+          "audience": "",
+          "sources": [],
+          "channels": []
+        },
+        "suggestions": [],
+        "interview": null,
+        "proposal": null,
+        "selection": {
+          "contentTypeId": "unclassified",
+          "contentTypeVersion": "legacy",
+          "formatId": null,
+          "pillarIds": [],
+          "changedAt": null
+        },
+        "migration": {
+          "legacyDraftsPreserved": 0,
+          "classification": "unclassified"
+        }
+      },
+      "you": {
+        "identitySentence": "",
+        "artFieldIds": [],
+        "artwork": null,
+        "events": []
+      },
+      "profileVisuals": {
+        "center": {
+          "id": "speaker",
+          "label": "The author",
+          "revision": 1
+        },
+        "groups": [
+          {
+            "id": "knowledge",
+            "label": "What I know",
+            "nodes": []
+          },
+          {
+            "id": "goals",
+            "label": "What I care about",
+            "nodes": []
+          },
+          {
+            "id": "voice",
+            "label": "How I sound",
+            "nodes": []
+          },
+          {
+            "id": "audience",
+            "label": "Who I serve",
+            "nodes": []
+          },
+          {
+            "id": "working",
+            "label": "How I work",
+            "nodes": []
+          },
+          {
+            "id": "support",
+            "label": "Where support helps",
+            "nodes": []
+          },
+          {
+            "id": "languages",
+            "label": "Languages & contexts",
+            "nodes": []
+          },
+          {
+            "id": "boundaries",
+            "label": "Boundaries",
+            "nodes": []
+          }
+        ],
+        "nodes": [],
+        "edges": [],
+        "artBrief": {
+          "status": "insufficient_approved_context",
+          "profileRevisionId": 1,
+          "themes": [],
+          "energy": "quiet momentum",
+          "visualRhythm": "layered but spacious",
+          "motifs": [
+            "open horizon",
+            "soft ripples"
+          ],
+          "palette": [
+            "paper cream",
+            "moss green",
+            "muted rust",
+            "ink blue"
+          ],
+          "light": "soft morning light",
+          "avoid": [
+            "portraits",
+            "text",
+            "identifiable places",
+            "personality symbols"
+          ],
+          "sourceFieldIds": [],
+          "promptVersion": "abstract-allowlist-v1",
+          "provider": null,
+          "model": null,
+          "consent": "not_requested_no_model_call",
+          "remoteRequest": null,
+          "hash": "63d32590449a6a96d44e4b99ddc18f58391e17505b44e9efa2af7a89a96cf9e0"
+        },
+        "artworkSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1536\" height=\"512\" viewBox=\"0 0 1536 512\"><defs><filter id=\"wash\" x=\"-25%\" y=\"-50%\" width=\"150%\" height=\"200%\"><feTurbulence type=\"fractalNoise\" baseFrequency=\".011 .02\" numOctaves=\"3\" seed=\"17\" result=\"noise\"/><feDisplacementMap in=\"SourceGraphic\" in2=\"noise\" scale=\"46\"/><feGaussianBlur stdDeviation=\"9\"/></filter></defs><rect width=\"1536\" height=\"512\" fill=\"#eeeede\"/><g filter=\"url(#wash)\"><path d=\"M550 250Q800 30 1010 180T1600 70L1600 530H530Z\" fill=\"#97aa86\" opacity=\".65\"/><path d=\"M690 530Q830 120 1110 300T1610 165L1600 530Z\" fill=\"#64796c\" opacity=\".45\"/><ellipse cx=\"1310\" cy=\"165\" rx=\"190\" ry=\"110\" fill=\"#b57350\" opacity=\".33\"/><path d=\"M680 185Q1050 370 1540 225\" fill=\"none\" stroke=\"#f6f1dd\" stroke-width=\"60\" opacity=\".58\"/></g><path d=\"M620 420Q850 215 1070 360T1540 250\" stroke=\"#405b50\" stroke-width=\"1.2\" fill=\"none\" opacity=\".3\"/></svg>",
+        "assetHash": "7309632cb4dca43d5ab0cdbc9b91164866005b053071350229af52122f983d8d",
+        "artEligibleFields": [],
+        "storageBytes": 16078,
+        "approvedAt": "2026-09-19T20:37:02.431628+00:00",
+        "needsReview": 0,
+        "unknown": 0
+      },
+      "contentTypes": {
+        "catalogVersion": "postriff-content-catalog-2026.09.14.1",
+        "formats": [
+          {
+            "id": "short_text",
+            "version": "1.0.0",
+            "label": "Short text"
+          },
+          {
+            "id": "image_caption",
+            "version": "1.0.0",
+            "label": "Image + caption"
+          },
+          {
+            "id": "quote_card",
+            "version": "1.0.0",
+            "label": "Quote card"
+          },
+          {
+            "id": "carousel",
+            "version": "1.0.0",
+            "label": "Carousel"
+          },
+          {
+            "id": "article",
+            "version": "1.0.0",
+            "label": "Article"
+          },
+          {
+            "id": "short_video",
+            "version": "1.0.0",
+            "label": "Short video"
+          },
+          {
+            "id": "long_video",
+            "version": "1.0.0",
+            "label": "Long video"
+          },
+          {
+            "id": "story",
+            "version": "1.0.0",
+            "label": "Story"
+          },
+          {
+            "id": "community_post",
+            "version": "1.0.0",
+            "label": "Community Post"
+          },
+          {
+            "id": "poll",
+            "version": "1.0.0",
+            "label": "Poll"
+          }
+        ],
+        "packs": [
+          {
+            "id": "pack.creator",
+            "version": "1.0.0",
+            "label": "Creator Starter Pack",
+            "entryCount": 11,
+            "installedByDefault": false
+          },
+          {
+            "id": "pack.restaurant",
+            "version": "1.0.0",
+            "label": "Restaurant Starter Pack",
+            "entryCount": 5,
+            "installedByDefault": false
+          },
+          {
+            "id": "pack.realtor",
+            "version": "1.0.0",
+            "label": "Realtor Starter Pack",
+            "entryCount": 5,
+            "installedByDefault": false
+          },
+          {
+            "id": "pack.nonprofit",
+            "version": "1.0.0",
+            "label": "Nonprofit Starter Pack",
+            "entryCount": 5,
+            "installedByDefault": false
+          },
+          {
+            "id": "pack.coach",
+            "version": "1.0.0",
+            "label": "Coach Starter Pack",
+            "entryCount": 5,
+            "installedByDefault": false
+          },
+          {
+            "id": "pack.saas",
+            "version": "1.0.0",
+            "label": "Saas Starter Pack",
+            "entryCount": 5,
+            "installedByDefault": false
+          },
+          {
+            "id": "pack.musician",
+            "version": "1.0.0",
+            "label": "Musician Starter Pack",
+            "entryCount": 5,
+            "installedByDefault": false
+          }
+        ],
+        "catalog": [
+          {
+            "id": "postriff:promote",
+            "version": "1.0.0",
+            "origin": "postriff",
+            "originId": null,
+            "visibility": "catalog",
+            "label": "Offer or announcement",
+            "shortLabel": "Offer or announcement",
+            "description": "Explain an available offer, event, or release.",
+            "defaultStructure": [
+              "Context",
+              "Main point",
+              "Next step"
+            ],
+            "recommendedFormatIds": [
+              "image_caption",
+              "short_text"
+            ],
+            "recommendedPlatformIds": [],
+            "requiredInputKinds": [
+              "idea"
+            ],
+            "optionalInputKinds": [
+              "source",
+              "media"
+            ],
+            "skillRouteIds": [
+              "postriff.editorial-craft"
+            ],
+            "preflightRuleIds": [
+              "availability",
+              "claim_evidence"
+            ],
+            "status": "active"
+          },
+          {
+            "id": "postriff:teach",
+            "version": "1.0.0",
+            "origin": "postriff",
+            "originId": null,
+            "visibility": "catalog",
+            "label": "Practical tip",
+            "shortLabel": "Practical tip",
+            "description": "Teach one useful method or lesson.",
+            "defaultStructure": [
+              "Context",
+              "Main point",
+              "Next step"
+            ],
+            "recommendedFormatIds": [
+              "short_text",
+              "carousel",
+              "short_video"
+            ],
+            "recommendedPlatformIds": [],
+            "requiredInputKinds": [
+              "idea"
+            ],
+            "optionalInputKinds": [
+              "source",
+              "media"
+            ],
+            "skillRouteIds": [
+              "postriff.editorial-craft"
+            ],
+            "preflightRuleIds": [
+              "tested_steps",
+              "prerequisites"
+            ],
+            "status": "active"
+          },
+          {
+            "id": "postriff:engage",
+            "version": "1.0.0",
+            "origin": "postriff",
+            "originId": null,
+            "visibility": "catalog",
+            "label": "Question or discussion",
+            "shortLabel": "Question or discussion",
+            "description": "Invite a specific, useful response.",
+            "defaultStructure": [
+              "Context",
+              "Main point",
+              "Next step"
+            ],
+            "recommendedFormatIds": [
+              "community_post",
+              "poll",
+              "short_text"
+            ],
+            "recommendedPlatformIds": [],
+            "requiredInputKinds": [
+              "idea"
+            ],
+            "optionalInputKinds": [
+              "source",
+              "media"
+            ],
+            "skillRouteIds": [
+              "postriff.editorial-craft"
+            ],
+            "preflightRuleIds": [
+              "community_context",
+              "engagement_bait"
+            ],
+            "status": "active"
+          },
+          {
+            "id": "postriff:story",
+            "version": "1.0.0",
+            "origin": "postriff",
+            "originId": null,
+            "visibility": "catalog",
+            "label": "Story",
+            "shortLabel": "Story",
+            "description": "Tell a concrete moment and its meaning.",
+            "defaultStructure": [
+              "Context",
+              "Main point",
+              "Next step"
+            ],
+            "recommendedFormatIds": [
+              "image_caption",
+              "short_text",
+              "short_video"
+            ],
+            "recommendedPlatformIds": [],
+            "requiredInputKinds": [
+              "idea"
+            ],
+            "optionalInputKinds": [
+              "source",
+              "media"
+            ],
+            "skillRouteIds": [
+              "postriff.editorial-craft"
+            ],
+            "preflightRuleIds": [
+              "privacy",
+              "invented_experience"
+            ],
+            "status": "active"
+          },
+          {
+            "id": "postriff:update",
+            "version": "1.0.0",
+            "origin": "postriff",
+            "originId": null,
+            "visibility": "catalog",
+            "label": "Update",
+            "shortLabel": "Update",
+            "description": "Share what changed and what it means.",
+            "defaultStructure": [
+              "Context",
+              "Main point",
+              "Next step"
+            ],
+            "recommendedFormatIds": [
+              "short_text",
+              "image_caption"
+            ],
+            "recommendedPlatformIds": [],
+            "requiredInputKinds": [
+              "idea"
+            ],
+            "optionalInputKinds": [
+              "source",
+              "media"
+            ],
+            "skillRouteIds": [
+              "postriff.editorial-craft"
+            ],
+            "preflightRuleIds": [
+              "result_state"
+            ],
+            "status": "active"
+          }
+        ],
+        "suggestions": [
+          {
+            "contentTypeId": "postriff:update",
+            "version": "1.0.0",
+            "label": "Update",
+            "reason": "Recommended for the general workspace context."
+          },
+          {
+            "contentTypeId": "postriff:teach",
+            "version": "1.0.0",
+            "label": "Practical tip",
+            "reason": "Recommended for the general workspace context."
+          },
+          {
+            "contentTypeId": "postriff:story",
+            "version": "1.0.0",
+            "label": "Story",
+            "reason": "Recommended for the general workspace context."
+          }
+        ],
+        "selection": {
+          "contentTypeId": "unclassified",
+          "contentTypeVersion": "legacy",
+          "formatId": null,
+          "pillarIds": [],
+          "changedAt": null
+        },
+        "interview": null,
+        "proposal": null,
+        "templates": [],
+        "preflight": [
+          {
+            "severity": "warning",
+            "ruleId": "unclassified",
+            "message": "This legacy draft has no content type. Review a suggestion before reusing it as a template."
+          }
+        ],
+        "installedPacks": []
+      }
+    },
+    "revision": 15,
+    "membership": {
+      "role": "owner",
+      "can_publish": true,
+      "can_reply": true,
+      "can_moderate": true,
+      "can_manage_connections": true
+    }
+  },
+  "memory": {
+    "files": [
+      {
+        "name": "AGENT.md",
+        "purpose": "How the agent works with you",
+        "source": "Fixed in this version",
+        "body": "# Agent\n\nHow the PostRiff agent works with you today. These are the rules the current build enforces, not aspirations.\n\n- Channels and times named in a message win over the composer chips.\n- Every draft, schedule plan and memory note is a proposal until the person approves it.\n- The chat cannot publish, reply, connect an account, spend money or delete anything.\n- Only sources the person added and marked usable are read; nothing else in the workspace is visible to the agent.\n- Unknown facts stay out of drafts until the person confirms they are excluded.\n- Approving a plan binds the exact text, media, account and time of each row (one job per destination).\n- A cloud model reads these files only if you allow it, and never a boundary marked private or local-only.",
+        "editHref": null
+      },
+      {
+        "name": "IDENTITY.md",
+        "purpose": "Who you are, publicly",
+        "source": "From your brand context",
+        "body": "# Identity\n\nSpeaker: The author\nMode: personal\nPurpose: Make community learning accessible\nAudience: Curious beginners\nSubject: Community workshops\nIdentity sentence: (not set)\n\n> Public-facing facts only. Anything private stays in BOUNDARIES.md.",
+        "editHref": "/app/workspace/brand"
+      },
+      {
+        "name": "VOICE.md",
+        "purpose": "How you sound \u00b7 rev 1",
+        "source": "From your active voice profile",
+        "body": "# Voice\n\nRevision 1 \u00b7 approved 2026-09-19 20:37 UTC \u00b7 Explicit provisional-profile approval\n\nTone: warm\n\n## Observations\nHow to handle what you supply. A trait is never a reason to add a detail, habit or admission you did not supply.\n- A warm starting tone (chosen by you).\n- Use concrete language; preserve source attribution.\n- Your writing example is included in VOICE.md for writing routes to read. It was not analyzed to set this starting tone.\n\n## Learned from how you edit\nForm only. The facts and what you ask for in the message win over these.\n- (none yet)\n\n## Writing example\n> A small step can be a useful beginning.\n\n## Unknowns kept explicit\n- Personal history, qualifications and results are unknown.\n- Voice fit has not been tested with a model.",
+        "editHref": "/app/workspace/brand"
+      },
+      {
+        "name": "BOUNDARIES.md",
+        "purpose": "What stays out of content",
+        "source": "Not recorded yet",
+        "body": "# Boundaries\n\nNo boundaries recorded yet.\n\nName the topics and personal details that must stay out of public content. Categories only, never secret values.",
+        "editHref": "/app/workspace/brand"
+      },
+      {
+        "name": "BRAND.md",
+        "purpose": "Brand context for this workspace",
+        "source": "From your brand context",
+        "body": "# Brand\n\nWorkspace speaker: The author\nMode: personal\nLayers: personal\n\n> One workspace speaks with one brand today. Separate brands belong in their own workspaces.",
+        "editHref": "/app/workspace/brand"
+      }
+    ],
+    "egress": {
+      "cloud": false,
+      "decidedAt": null,
+      "decidedBy": null,
+      "sharedFiles": [
+        "BOUNDARIES.md",
+        "IDENTITY.md",
+        "VOICE.md"
+      ],
+      "shareablePrivacy": [
+        "public",
+        "workspace_only"
+      ],
+      "withheldBoundaries": 0
+    },
+    "learning": {
+      "enabled": true,
+      "teamEdits": false,
+      "cloudExtraction": false,
+      "revision": 0,
+      "resetAt": null,
+      "items": []
+    }
+  }
+}

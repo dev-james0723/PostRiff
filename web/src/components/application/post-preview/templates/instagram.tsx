@@ -2,7 +2,8 @@
 
 import { AppIcons } from '../app-icons';
 import { PhoneFrame, StatusBarSpace } from '../phone-frame';
-import { accountNames, ClampText, formatClock, formatTime, MediaFill, mediaHeight, MissingMedia, Monogram, RichText, TabBar, TabItem } from '../parts';
+import { accountNames, ClampText, formatClock, formatTime, MediaCarousel, mediaHeight, MissingMedia, Monogram, RichText, TabBar, TabItem } from '../parts';
+import { useSlideIndex } from '../playback';
 import type { TemplateProps } from '../types';
 
 // Measured from Instagram's shared colour tokens (light theme).
@@ -21,7 +22,9 @@ export default function InstagramTemplate({ post, scale }: TemplateProps) {
   const names = accountNames(post.account);
   const visual = post.media.filter((item) => item.kind !== 'file');
   const first = visual[0];
+  // Every slide takes the first item's ratio, as Instagram's carousels do.
   const height = mediaHeight(first, 393, { min: 1 / 1.91, max: 1.25, fallback: 1.25 });
+  const slide = useSlideIndex(visual.length);
 
   return (
     <PhoneFrame scale={scale} background='#ffffff' tone='dark' label={`Instagram preview of the post by ${names.handle}`} clock={formatClock(post)}>
@@ -44,11 +47,11 @@ export default function InstagramTemplate({ post, scale }: TemplateProps) {
 
           <div className='relative shrink-0' style={{ height }}>
             {first ? (
-              <MediaFill media={first} className='size-full' />
+              <MediaCarousel media={visual} crop className='size-full' />
             ) : (
               <MissingMedia need='Instagram posts need a photo or video.' className='size-full' />
             )}
-            {first?.kind === 'video' && (
+            {visual[slide]?.kind === 'video' && (
               <span className='absolute right-3 bottom-3 flex size-7 items-center justify-center rounded-full bg-black/50 text-white'>
                 <AppIcons.volume size={15} stroke={2} />
               </span>
@@ -63,7 +66,7 @@ export default function InstagramTemplate({ post, scale }: TemplateProps) {
             {visual.length > 1 && (
               <span className='absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 gap-1'>
                 {visual.slice(0, 10).map((item, index) => (
-                  <span key={item.id} className='size-[6px] rounded-full' style={{ background: index === 0 ? ACTIVE_DOT : LINE }} />
+                  <span key={item.id} className='size-[6px] rounded-full' style={{ background: index === slide ? ACTIVE_DOT : LINE }} />
                 ))}
               </span>
             )}

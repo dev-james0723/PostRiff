@@ -1,5 +1,7 @@
 'use client';
 
+import { PublicationReceipt } from './publication-receipt';
+
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { ManifestPreview } from '@/components/application/post-preview/manifest-preview';
@@ -214,11 +216,7 @@ function Provider({ job, nowSeconds }: { job: QueueJob; nowSeconds: number }) {
           </Row>
         )}
       </dl>
-      {job.url && (
-        <a href={job.url} target='_blank' rel='noreferrer' className='text-primary inline-flex items-center gap-1 text-sm hover:underline'>
-          Open post <Icons.externalLink className='size-3.5' />
-        </a>
-      )}
+      <PublicationReceipt job={job} />
       {note && (
         <p className='bg-muted/60 rounded-md border px-3 py-2 text-sm'>
           <span className='text-muted-foreground block text-xs'>Last worker note</span>

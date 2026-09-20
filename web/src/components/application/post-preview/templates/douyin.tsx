@@ -54,6 +54,7 @@ export default function DouyinTemplate({ post, scale }: TemplateProps) {
         </>
       }
       missingMedia='抖音需要视频或图文。'
+      missingNote='Douyin posts need a video or photos.'
       tabBarBackground={TAB_BAR}
       tabBar={
         <>

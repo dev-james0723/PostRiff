@@ -45,6 +45,9 @@ interface ComposerProps {
   reasoning?: string;
   reasoningOptions?: { id: string; detail: string }[];
   onReasoning?: (id: string) => void;
+  voiceMode?: 'neutral' | 'personalized';
+  onVoiceMode?: (mode: 'neutral' | 'personalized') => void;
+  voiceAvailable?: boolean;
   /** First message only: consent to draft from the text, and whether it may be quoted. */
   consent?: { own: boolean; use: boolean; onOwn: (v: boolean) => void; onUse: (v: boolean) => void };
   submitLabel?: string;
@@ -58,7 +61,7 @@ interface ComposerProps {
  * chips (the server parses them); the chips are the default when nothing is named.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, placeholder, chips, selected, onToggle, language, onLanguage, models, model, onModel, reasoning, reasoningOptions, onReasoning, consent, submitLabel, compact, hint },
+  { value, onChange, onSubmit, busy, disabled, placeholder, chips, selected, onToggle, language, onLanguage, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, consent, submitLabel, compact, hint },
   ref
 ) {
   const canSend = !busy && !disabled && value.trim().length > 0 && selected.length > 0 && (!consent || consent.use);
@@ -133,6 +136,18 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
               </button>
             ))}
           </motion.div>
+          {onVoiceMode && (
+            <button
+              type='button'
+              aria-pressed={voiceMode === 'personalized'}
+              disabled={disabled || busy || !voiceAvailable}
+              onClick={() => onVoiceMode(voiceMode === 'personalized' ? 'neutral' : 'personalized')}
+              title={voiceAvailable ? 'Use only the selected writing samples allowed for this local writer' : 'Select writing samples and allow local generation on the Brand page'}
+              className={cn('h-7 rounded-lg border px-2.5 text-xs font-medium transition-colors', voiceMode === 'personalized' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground', !voiceAvailable && 'opacity-50')}
+            >
+              {voiceMode === 'personalized' ? 'Writing like me' : 'Neutral voice'}
+            </button>
+          )}
         </div>
         <div className='flex items-center gap-2'>
           {reasoningOptions && reasoningOptions.length > 1 && <select aria-label='Reasoning effort' value={reasoning} onChange={(event) => onReasoning?.(event.target.value)} disabled={disabled || busy} className='bg-background h-7 max-w-28 rounded-md border px-1 text-xs'>

@@ -53,6 +53,7 @@ export default function KuaishouTemplate({ post, scale }: TemplateProps) {
         </>
       }
       missingMedia='快手作品需要视频或图片。'
+      missingNote='Kuaishou posts need a video or photos.'
       progressColor={PINK}
       tabBarBackground={TAB_BAR}
       tabBar={

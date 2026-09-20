@@ -22,7 +22,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state
-from . import memory, research, source_policy
+from . import campaigns, memory, research, source_policy, suggestions, voice_analysis, voice_sources
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
@@ -210,6 +210,20 @@ class HostedPhase2Commands:
         if memory.apply_memory_action(state, action, payload, principal, self.clock()):
             return state
         if research.apply_research_action(state, action, payload, principal, self.clock()):
+            return state
+        if voice_analysis.apply_action(state, action, payload, principal, self.clock()):
+            self.engine.invalidate(state)
+            return state
+        if action.startswith("voice_sample"):
+            voice_sources.apply_action(state, action, payload, principal, self.clock())
+            source_policy.stamp(state)
+            self.engine.invalidate(state)
+            return state
+        if action.startswith("raffi_campaign_") or action.startswith("raffi_recurrence_"):
+            campaigns.apply_action(state, action, payload, principal, self.clock())
+            return state
+        if action.startswith("raffi_suggestion_"):
+            suggestions.apply_action(state, action, payload, principal, self.clock())
             return state
         if action.startswith("p2_"):
             hosted_action = action[3:]

@@ -21,6 +21,7 @@ import { ProposalReviewCard } from './brand/proposal-review-card';
 import { RevisionHistory } from './brand/revision-history';
 import { VoiceCard } from './brand/voice-card';
 import { VoiceStatusStrip } from './brand/voice-status-strip';
+import { VoiceSamplesCard } from './brand/voice-samples-card';
 import { activeProfile, canExportPackage, voiceStatus } from './brand/voice-model';
 import { VoiceSetup } from './voice-setup';
 
@@ -36,7 +37,7 @@ const infoContent: InfobarContent = {
     {
       title: 'What it never does',
       description:
-        'PostRiff does not analyse your sample to set the tone or observations; writing routes read it in VOICE.md only as an example of how you write. Nothing here infers your experience, credentials or results; unknowns stay listed as unknown.'
+        'Raffi analyses only samples you select and explicitly allow for the chosen writing route. It learns writing form, not your identity, credentials, beliefs or results. Sample facts never become current brand facts.'
     },
     {
       title: 'Before a voice is approved',
@@ -128,6 +129,7 @@ export function BrandView() {
         <div className='flex min-w-0 flex-col gap-4'>
           {snapshot.isError && <BrandStaleNotice query={snapshot} updatedAt={snapshot.dataUpdatedAt} />}
           <VoiceStatusStrip state={state} isOwner={isOwner} memory={memory} />
+          <VoiceSamplesCard state={state} revision={snapshot.data.revision} isOwner={isOwner} />
           <div className='grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
             {status.kind === 'active' ? (
               <div className='flex min-w-0 flex-col gap-4' data-tour='voice-setup'>

@@ -13,6 +13,7 @@ import time
 from urllib.parse import urlencode, urlparse
 from postriff_alpha.domain import AlphaError, clean
 from .audience import COMMENT_READ_PROVIDERS
+from . import account_pictures
 from .permissions import require
 from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix
 
@@ -62,6 +63,7 @@ class OAuthService:
         self.repository, self.commands, self.vault, self.clock = repository, commands, vault, clock
         self.providers = providers or {}
         self.public_base_url = (public_base_url or "").rstrip("/")
+        self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
 
     def _provider(self, provider_id):
         adapter = self.providers.get(provider_id)
@@ -149,7 +151,27 @@ class OAuthService:
         channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "language": "English", "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + 86400 * 30, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
         snapshot = self.repository.get(workspace_id, token)
         saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections")
+        self._keep_picture(workspace_id, token, connection_id, identity)
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
+
+    def _keep_picture(self, workspace_id, token, connection_id, identity):
+        """Download outside any transaction, then store: the account's picture for previews (account_pictures.py)."""
+        outcome = account_pictures.picture_from_identity(identity, self.picture_fetch)
+        if outcome[0] == "unavailable":
+            return  # keep whatever picture was stored before
+        try:
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                account_pictures.guarded(cur, account_pictures.store, workspace_id, connection_id, outcome)
+        except AlphaError:
+            pass  # membership ended in between; nothing to decorate
+
+    def picture(self, workspace_id, token, connection_id):
+        """The connected account's profile picture as (jpeg, digest); any member of the workspace may see it."""
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            found = account_pictures.guarded(cur, account_pictures.read, workspace_id, connection_id)
+        if not found:
+            raise AlphaError("This account has no picture.", 404)
+        return found
 
     @staticmethod
     def _capabilities(adapter, requested, granted, missing, now):
@@ -174,11 +196,12 @@ class OAuthService:
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             cur.execute("SELECT connection_id,capability,level,evidence,capability_version,extract(epoch from verified_at) FROM public.pr_channel_capabilities WHERE workspace_id=%s", (workspace_id,))
             rows = cur.fetchall()
+            pictures = account_pictures.guarded(cur, account_pictures.digests, workspace_id) or {}
         matrices = {}
         for connection_id, capability, level, evidence, version, verified in rows:
             matrices.setdefault(connection_id, unsupported_matrix())[capability] = {"level": level, "evidence": evidence, "capabilityVersion": version, "verifiedAt": float(verified) if verified else None}
         now = self.clock()
-        return {"channels": [customer_view(c, matrices.get(c["id"], assisted_matrix()), now) for c in snapshot["state"].get("phase2", {}).get("channels", [])], "providers": [{"id": pid, "platform": a.platform, "productionReviewed": a.production_reviewed, "commentsReadImplemented": pid in COMMENT_READ_PROVIDERS, "capabilities": {cap: bool(a.capability_scopes(cap)) for cap in ("publish", "analytics", "comments_read", "reply")}} for pid, a in self.providers.items()]}
+        return {"channels": [{**customer_view(c, matrices.get(c["id"], assisted_matrix()), now), "pictureDigest": pictures.get(c["id"])} for c in snapshot["state"].get("phase2", {}).get("channels", [])], "providers": [{"id": pid, "platform": a.platform, "productionReviewed": a.production_reviewed, "commentsReadImplemented": pid in COMMENT_READ_PROVIDERS, "capabilities": {cap: bool(a.capability_scopes(cap)) for cap in ("publish", "analytics", "comments_read", "reply")}} for pid, a in self.providers.items()]}
 
     def token_for_worker(self, workspace_id, connection_id):
         """Server-side only. Decrypts for the connector worker; refreshes when supported and expired."""
@@ -215,6 +238,8 @@ class OAuthService:
             identity = adapter.identity(grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             result = {"connectionId": connection_id, "identityVerified": not drift, "scopes": list(scopes), "state": "reauthorization_required" if drift else "read_verified"}
+            if not drift:
+                self._keep_picture(workspace_id, token, connection_id, identity)
         except AlphaError as error:
             result = {"connectionId": connection_id, "identityVerified": False, "state": "token_expired", "detail": str(error)}
         with self.repository.transaction(token, workspace_id) as (cur, _, principal):
@@ -238,6 +263,7 @@ class OAuthService:
                 remote = False
             cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Disconnected by the customer.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+            account_pictures.guarded(cur, account_pictures.remove, workspace_id, connection_id)
             audit(cur, workspace_id, principal, "channel.disconnected", connection_id, {"remoteRevoked": bool(remote)})
         snapshot = self.repository.get(workspace_id, token)
         try:

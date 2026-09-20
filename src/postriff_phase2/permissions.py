@@ -35,6 +35,10 @@ ACTION_CLASSES = {
     # Accepting or undoing a learned preference changes how every member's drafts read (design decision D);
     # approving the voice profile itself changes them just as much, so it is an owner decision too.
     "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner", "you_restore_voice": "owner",
+    # This is the durable privacy boundary for analysis/generation routes.
+    "voice_sample_grant": "owner",
+    "raffi_recurrence_activate": "owner", "raffi_recurrence_pause": "owner",
+    "raffi_recurrence_resume": "owner", "raffi_recurrence_cancel": "owner",
     "refresh": "read", "p2_refresh": "read",
 }
 

@@ -90,6 +90,9 @@ export interface Job {
   url?: string;
   events: { at: number; state: string; message: string; execution?: string }[];
   attempts: { number: number; startedAt: number; endedAt?: number }[];
+  container?: string;
+  resultSchema?: string;
+  progress?: { version: number; stage: string };
   providerReference?: string;
   providerConfirmed?: string;
   nextAction?: string;
@@ -208,6 +211,20 @@ export interface SnapshotSource {
   unknowns?: string[];
   origin?: SourceOrigin | null;
   useApprovals?: SourceUseApproval[];
+  /** Voice-sample fields are present only when `kind === 'voice_sample'`. */
+  selected?: boolean;
+  revision?: number;
+  contentHash?: string;
+  platform?: string;
+  account?: string;
+  language?: string;
+  publishedAt?: string;
+  label?: 'representative' | 'outdated' | 'sponsored' | 'guest' | 'ai_generated' | null;
+  partialCoverage?: boolean;
+  purposeGrants?: ('analysis' | 'generation')[];
+  routeGrants?: string[];
+  useGrants?: { purpose: 'analysis' | 'generation'; route: string }[];
+  cleanupStatus?: string;
 }
 
 export interface Phase2State {
@@ -226,6 +243,17 @@ export interface VoiceProfile {
   writingExample: string;
   observations: string[];
   unknowns: string[];
+  status?: 'proposed' | 'stale';
+  staleReason?: string;
+  analysisRoute?: string;
+  evidenceSourceIds?: string[];
+  dimensions?: {
+    id: string;
+    observation: string;
+    support: string[];
+    counterEvidence: string[];
+    evidenceLevel: 'limited' | 'supported' | 'conflicting';
+  }[];
 }
 
 export interface Speaker {
@@ -257,6 +285,14 @@ export interface SnapshotState {
   phase2?: Phase2State;
   variants?: SnapshotVariant[];
   sources?: SnapshotSource[];
+  raffi?: {
+    campaignPlanning?: {
+      campaigns: { id: string; version: number; goal: string; audience: string; facts: Record<string, string>; status: string; missingFacts: string[]; items: unknown[] }[];
+      recurringTasks: { id: string; campaignId: string; version: number; status: string; schedule: { weekday: string; localTime: string; timeZone: string }; nextOccurrence?: { local: string; utc: string; offset: string } }[];
+      occurrences: { id: string; taskId: string; state: string; scheduledFor: number }[];
+    };
+    suggestions?: { id: string; kind: string; reason: string; status: string; evidence: { type: string; id: string; revision: number }[]; action: string; actionRef?: { id: string; type: string; authority: string } | null }[];
+  };
   [key: string]: unknown;
 }
 

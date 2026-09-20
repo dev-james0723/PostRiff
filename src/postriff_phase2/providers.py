@@ -36,7 +36,8 @@ def http_transport(method, url, headers=None, form=None, body=None):
             raw = response.read(262145)
             status, response_headers = response.status, dict(response.headers)
     except HTTPError as error:
-        raw, status, response_headers = error.read(262144), error.code, dict(error.headers)
+        with error:
+            raw, status, response_headers = error.read(262145), error.code, dict(error.headers)
     except (URLError, TimeoutError, OSError) as error:
         raise AlphaError("The provider is temporarily unreachable.", 503) from error
     if len(raw) > 262144:
@@ -101,7 +102,8 @@ class LinkedInProvider(OAuthProvider):
 
     def identity(self, access_token):
         body = self._ok(self.transport("GET", self.USERINFO, headers={"Authorization": "Bearer " + access_token}), "sub")
-        return {"providerAccountId": "urn:li:person:" + str(body["sub"]), "handle": body.get("name") or str(body["sub"]), "accountType": "member"}
+        # `picture` is part of the OpenID `profile` claims already requested; previews draw it (account_pictures.py).
+        return {"providerAccountId": "urn:li:person:" + str(body["sub"]), "handle": body.get("name") or str(body["sub"]), "accountType": "member", "pictureUrl": body.get("picture")}
 
     def refresh(self, refresh_token):
         # Refresh tokens are issued only to approved partners; otherwise the customer re-authorizes every 60 days.
@@ -132,8 +134,8 @@ class ThreadsProvider(OAuthProvider):
         return {"accessToken": long_lived["access_token"], "refreshToken": long_lived["access_token"], "expiresIn": long_lived.get("expires_in", 5184000), "scopes": None, "userId": str(short["user_id"])}
 
     def identity(self, access_token):
-        body = self._ok(self.transport("GET", self.ME + "?" + urlencode({"fields": "id,username", "access_token": access_token})), "id")
-        return {"providerAccountId": str(body["id"]), "handle": "@" + body["username"] if body.get("username") else str(body["id"]), "accountType": "profile"}
+        body = self._ok(self.transport("GET", self.ME + "?" + urlencode({"fields": "id,username,threads_profile_picture_url", "access_token": access_token})), "id")
+        return {"providerAccountId": str(body["id"]), "handle": "@" + body["username"] if body.get("username") else str(body["id"]), "accountType": "profile", "pictureUrl": body.get("threads_profile_picture_url")}
 
     def refresh(self, refresh_token):
         body = self._ok(self.transport("GET", self.REFRESH + "?" + urlencode({"grant_type": "th_refresh_token", "access_token": refresh_token})), "access_token")
@@ -159,8 +161,8 @@ class InstagramProvider(OAuthProvider):
         return {"accessToken": long_lived["access_token"], "refreshToken": long_lived["access_token"], "expiresIn": long_lived.get("expires_in", 5184000), "scopes": short.get("permissions") if isinstance(short.get("permissions"), list) else None, "userId": str(short["user_id"])}
 
     def identity(self, access_token):
-        body = self._ok(self.transport("GET", self.ME + "?" + urlencode({"fields": "id,username,account_type", "access_token": access_token})), "id")
-        return {"providerAccountId": str(body["id"]), "handle": "@" + body["username"] if body.get("username") else str(body["id"]), "accountType": (body.get("account_type") or "professional").lower()}
+        body = self._ok(self.transport("GET", self.ME + "?" + urlencode({"fields": "id,username,account_type,profile_picture_url", "access_token": access_token})), "id")
+        return {"providerAccountId": str(body["id"]), "handle": "@" + body["username"] if body.get("username") else str(body["id"]), "accountType": (body.get("account_type") or "professional").lower(), "pictureUrl": body.get("profile_picture_url")}
 
     def refresh(self, refresh_token):
         body = self._ok(self.transport("GET", self.REFRESH + "?" + urlencode({"grant_type": "ig_refresh_token", "access_token": refresh_token})), "access_token")

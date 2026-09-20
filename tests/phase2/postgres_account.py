@@ -67,6 +67,10 @@ assert a["memberCounts"] == {"owner": 1, "admin": 0, "editor": 0, "approver": 0,
 checks.append("workspace list carries name, trial plan, owner display name and role counts")
 
 # 2. An invited editor sees the same workspace summary from their side, with their own role.
+service.usage(wid_a, "one")  # Materialize this fixture's entitlement before changing its seats.
+with connection() as db:
+    # This membership fixture needs a second seat; production trial terms remain unchanged.
+    db.execute("UPDATE public.pr_entitlements SET members=2 WHERE workspace_id=%s", (wid_a,))
 invitation = service.invite(wid_a, "one", "six@example.invalid", "editor", {})
 service.accept_invitation("six", invitation["token"])
 mine = {w["workspaceId"]: w for w in service.workspaces("six")["workspaces"]}
@@ -192,8 +196,8 @@ assert len(sent) == before + 1
 history = [event["kind"] for event in service.security_events("one")["events"]]
 assert history.index("session.alerted") < history.index("session.started")
 alerted = next(event for event in service.security_events("one")["events"] if event["kind"] == "session.alerted")
-assert alerted["meta"] == {"sent": True} and alerted["subject"].startswith("session-one-tablet")
-checks.append("a new device emails the person once, only after they opted in, and the alert is recorded in the account history")
+assert alerted["meta"] == {"sent": False} and alerted["subject"].startswith("session-one-tablet")
+checks.append("a new device records one opt-in notification attempt; NullTransport records sent=false in account history")
 
 # 11. Ownership transfer: only the owner may act, needs an active admin and a fresh sign-in, swaps roles atomically.
 service.update_member(wid_a, "one", SIX, "admin", {})

@@ -19,6 +19,7 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
   const unknowns = strings(profile.unknowns);
   const sample = typeof profile.writingExample === 'string' ? profile.writingExample.trim() : '';
   const tone = profile.tone ? TONE_LABELS[profile.tone] : undefined;
+  const dimensions = Array.isArray(profile.dimensions) ? profile.dimensions : [];
 
   return (
     <>
@@ -44,6 +45,27 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
           <p className='text-muted-foreground'>None recorded.</p>
         )}
       </div>
+
+      {dimensions.length > 0 && (
+        <div className='flex flex-col gap-2'>
+          <span className='text-muted-foreground text-xs'>Evidence by writing dimension</span>
+          <ul className='flex flex-col gap-2'>
+            {dimensions.map((item) => (
+              <li key={item.id} className='border-border rounded-md border p-2'>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <span className='font-medium'>{item.id.replaceAll('_', ' ')}</span>
+                  <Badge variant={item.evidenceLevel === 'conflicting' ? 'outline' : 'secondary'}>{item.evidenceLevel}</Badge>
+                </div>
+                <p className='mt-1'>{item.observation}</p>
+                <p className='text-muted-foreground mt-1 text-[11px]'>
+                  {item.support.length} supporting sample{item.support.length === 1 ? '' : 's'}
+                  {item.counterEvidence.length ? ` · ${item.counterEvidence.length} conflicting sample${item.counterEvidence.length === 1 ? '' : 's'}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className='flex flex-col gap-1.5'>
         <span className='text-muted-foreground text-xs'>Your sample</span>

@@ -62,7 +62,7 @@ export default function FacebookTemplate({ post, scale }: TemplateProps) {
               <RichText text={post.text} accent={LINK} />
             </ClampText>
           </div>
-          {media.length === 1 && <MediaFill media={media[0]} className='w-full shrink-0' style={{ height: single }} />}
+          {media.length === 1 && <MediaFill media={media[0]} crop='tall' className='w-full shrink-0' style={{ height: single }} />}
           {media.length > 1 && <MediaGrid media={media} height={393} gap={2} />}
           <div className='flex h-[46px] shrink-0 items-center gap-7 px-4' style={{ color: MUTED }}>
             <AppIcons.thumbUp size={22} stroke={1.8} />

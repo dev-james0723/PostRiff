@@ -2,7 +2,7 @@
 
 import { AppIcons } from '../app-icons';
 import { PhoneFrame, StatusBarSpace } from '../phone-frame';
-import { accountNames, firstLine, formatClock, MediaFill, Monogram, restAfterFirstLine, TabBar, TabItem } from '../parts';
+import { accountNames, firstLine, formatClock, MediaFill, MediaStrip, Monogram, restAfterFirstLine, TabBar, TabItem } from '../parts';
 import type { TemplateProps } from '../types';
 
 // Dcard App Store and help-centre screenshots, 2026 (light).
@@ -69,11 +69,11 @@ export default function DcardTemplate({ post, scale }: TemplateProps) {
             </p>
           )}
           {images.length > 0 && (
-            <div className='-mr-4 flex shrink-0 gap-2 overflow-hidden'>
-              {images.slice(0, 3).map((item) => (
-                <MediaFill key={item.id} media={item} rounded={8} className='h-[210px] w-[280px] shrink-0' />
+            <MediaStrip className='-mr-4 shrink-0 gap-2 pr-4'>
+              {images.map((item) => (
+                <MediaFill key={item.id} media={item} rounded={8} className='h-[210px] w-[280px] shrink-0 snap-start' />
               ))}
-            </div>
+            </MediaStrip>
           )}
           <div className='mt-1 flex items-center gap-5 text-[13px]' style={{ color: MUTED }}>
             <span className='flex items-center gap-1'>

@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -14,7 +18,9 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
     "incremental": true,
     "plugins": [
@@ -28,7 +34,16 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-verify-plan/types/**/*.ts",
+    ".next-verify-plan/dev/types/**/*.ts",
+    ".next-alt/types/**/*.ts",
+    ".next-alt/dev/types/**/*.ts",
+    ".next-codex-wp04a/types/**/*.ts",
+    ".next-codex-wp04a/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "plans"]
+  "exclude": [
+    "node_modules",
+    "plans"
+  ]
 }

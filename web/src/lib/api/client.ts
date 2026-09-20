@@ -149,6 +149,9 @@ export function createApi(getToken: TokenSource) {
     act: (w: string, expectedRevision: number, action: string, payload: Record<string, unknown> = {}) =>
       send<Snapshot>('POST', `${ws(w)}/actions`, { expectedRevision, action, payload }),
     media: (w: string, assetId: string) => blob(`${ws(w)}/media/${encodeURIComponent(assetId)}`),
+    /** A connected account's profile picture; the digest in the URL makes a changed picture a new request. */
+    channelPicture: (w: string, channelId: string, digest: string) =>
+      blob(`${ws(w)}/channels/${encodeURIComponent(channelId)}/picture?v=${encodeURIComponent(digest)}`),
     exportDrafts: (w: string) => blob(`${ws(w)}/export`),
     exportProfile: (w: string) => blob(`${ws(w)}/profile-export`),
     memory: (w: string) => get<{ files: MemoryFile[]; egress?: MemoryEgress; research?: ResearchEgress; learning?: LearningSummary }>(`${ws(w)}/memory`),

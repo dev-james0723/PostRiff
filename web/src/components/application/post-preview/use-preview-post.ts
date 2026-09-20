@@ -5,6 +5,7 @@ import { channelByPlatform } from '@/config/channels';
 import type { Manifest } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { PreviewMedia, PreviewPost } from './types';
+import { useAccountPicture } from './use-account-picture';
 
 function mediaKind(mime: string): PreviewMedia['kind'] {
   if (mime.startsWith('image/')) return 'image';
@@ -27,11 +28,13 @@ export function usePreviewPost(manifest: Manifest, timeZone: string): PreviewPos
     }))
   });
   const channel = channelByPlatform(manifest.platform);
+  const avatarUrl = useAccountPicture(manifest.channelId);
 
   return {
     channel: channel?.slug ?? manifest.platform.toLowerCase().replace(/\s+/g, '-'),
     channelName: channel?.name ?? manifest.platform,
     account: manifest.account,
+    avatarUrl,
     text: manifest.payload.text,
     media: assets.map((asset, index) => {
       const result = loaded[index];

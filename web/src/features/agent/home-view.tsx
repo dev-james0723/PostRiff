@@ -28,6 +28,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform, type Language } from './composer';
 import { useModelChoice } from './use-model';
+import { RaffiPlanner } from './raffi-planner';
 
 const CREATOR_PACK = { packId: 'pack.creator', version: '1.0.0' };
 
@@ -95,6 +96,7 @@ export function HomeView() {
   const [own, setOwn] = useState(true);
   const [use, setUse] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<'neutral' | 'personalized'>('neutral');
   const [template, setTemplate] = useState<QuickStart | null>(null);
   const [group, setGroup] = useState<QuickStartGroup | 'all'>('all');
 
@@ -106,6 +108,8 @@ export function HomeView() {
   const revision = snapshot.data?.revision ?? 0;
   const voiceActive = Boolean(state?.speaker?.activeRevision);
   const voiceRevision = state?.speaker?.activeRevision ?? null;
+  const voiceSourceIds = (state?.sources ?? []).filter((source) => source.kind === 'voice_sample' && source.active && source.selected && source.useGrants?.some((grant) => grant.purpose === 'generation' && grant.route === 'local-cli')).map((source) => source.id);
+  const voiceAvailable = voiceSourceIds.length > 0;
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
@@ -173,6 +177,8 @@ export function HomeView() {
         ...(languageTouched ? { language } : {}),
         model: choice.model,
         reasoning: choice.reasoning,
+        voiceMode,
+        voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
         timeZone
       });
       client.setQueryData(['agent-run', workspaceId, result.runId], result);
@@ -239,7 +245,10 @@ export function HomeView() {
             onModel={choice.choose}
               reasoning={choice.reasoning}
               reasoningOptions={choice.reasoningOptions}
-              onReasoning={choice.chooseReasoning}
+            onReasoning={choice.chooseReasoning}
+            voiceMode={voiceMode}
+            onVoiceMode={setVoiceMode}
+            voiceAvailable={voiceAvailable}
             consent={{ own, use, onOwn: setOwn, onUse: setUse }}
             hint='⌘↵ to send · nothing publishes without your approval'
           />
@@ -272,6 +281,8 @@ export function HomeView() {
             Nothing publishes until you approve.
           </span>
         </div>
+
+        {state && <RaffiPlanner state={state} revision={revision} canEdit={canEdit} />}
         {template && (
           <div className='-mt-3 flex flex-wrap items-center gap-2 px-1 text-xs'>
             <Badge variant='secondary' className='gap-1.5'>

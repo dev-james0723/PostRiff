@@ -1,5 +1,7 @@
 'use client';
 
+import { publishingSupport } from '@/lib/channels/publishing-support';
+
 import { useMemo, useState } from 'react';
 import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
@@ -339,6 +341,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 Connect a {variant.platform} account
               </Link>
             )}
+            {channel && <p className='text-muted-foreground text-xs'>{publishingSupport(channel.platform)}</p>}
             {channel?.displayState && channel.displayState !== 'Ready for posting' && (
               <p className='text-xs text-amber-700 dark:text-amber-300'>
                 This account shows “{channel.displayState}”. A review can only be prepared for an account that is ready for posting.{' '}

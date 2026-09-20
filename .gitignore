@@ -34,3 +34,11 @@ desktop/artifacts/
 
 # .env.example is documentation, not a secret (the earlier .env* line re-ignored it)
 !.env.example
+/.token-pilot/
+/.claude/settings.local.json
+/.agents/
+/.codex/
+/AGENTS.md
+/CLAUDE.md
+/web/AGENTS.md
+/web/CLAUDE.md
