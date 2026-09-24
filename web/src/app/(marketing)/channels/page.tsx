@@ -9,13 +9,13 @@ import { ChannelDirectory } from './channel-directory';
 export const metadata: Metadata = {
   title: 'Channels',
   description: `${channels.length} platforms — hosted connectors through official APIs, and a desktop companion for the platforms that have none, including 小紅書, B站, 知乎 and 抖音.`,
-  openGraph: { title: 'Channels · PostRiff', url: '/channels' }
+  openGraph: { title: 'Channels · Rafii', url: '/channels' }
 };
 
 export default function ChannelsPage() {
   return (
     <>
-      <PageHero eyebrow='Channels' title={`${channels.length} platforms, each labelled with what PostRiff can really do.`} description='Hosted connectors use the official APIs and clear their own provider reviews. The desktop companion covers the platforms that offer no honest third-party publishing API — through your own login, on your own machine.' />
+      <PageHero eyebrow='Channels' title={`${channels.length} platforms, each labelled with what Rafii can really do.`} description='Hosted connectors use the official APIs and clear their own provider reviews. Companion channels are listed as pending until a released companion and account workflow have been verified.' />
       <Section>
         <ChannelDirectory channels={channels} />
       </Section>

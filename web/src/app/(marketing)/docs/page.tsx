@@ -7,14 +7,14 @@ import { DOCS } from '@/content/docs';
 
 export const metadata: Metadata = {
   title: 'Docs',
-  description: 'How PostRiff works: getting started, channels and capabilities, approvals, usage and billing, privacy and data.',
-  openGraph: { title: 'Docs · PostRiff', url: '/docs' }
+  description: 'How Rafii works: getting started, channels and capabilities, approvals, usage and billing, privacy and data.',
+  openGraph: { title: 'Docs · Rafii', url: '/docs' }
 };
 
 export default function DocsPage() {
   return (
     <>
-      <PageHero eyebrow='Docs' title='Short guides to how PostRiff works.' description='Written for people who want to know exactly what happens when they press a button.' />
+      <PageHero eyebrow='Docs' title='Short guides to how Rafii works.' description='Written for people who want to know exactly what happens when they press a button.' />
       <Section>
         <ul className='grid gap-3 sm:grid-cols-2'>
           {DOCS.map((doc) => (

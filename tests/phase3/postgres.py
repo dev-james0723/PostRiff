@@ -9,7 +9,7 @@ import psycopg
 from postriff_phase3.hosted import HostedRuntimeService
 from postriff_alpha.domain import initial_state,AlphaError
 root=Path(__file__).resolve().parents[2]
-pg=Path('/opt/homebrew/opt/postgresql@17/bin')
+pg=Path(__import__('os').environ.get('POSTRIFF_PG_BIN', '/opt/homebrew/opt/postgresql@17/bin'))
 with tempfile.TemporaryDirectory(prefix='postriff-p3-pg-') as tmp:
  data=Path(tmp)/'data';sock=Path(tmp)/'socket';sock.mkdir()
  subprocess.run([str(pg/'initdb'),'-D',str(data),'-A','trust','--no-locale'],check=True,stdout=subprocess.DEVNULL)

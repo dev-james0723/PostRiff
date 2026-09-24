@@ -26,7 +26,7 @@ export interface Channel {
   notes?: string[];
 }
 
-const hostedPending = 'Provider review in progress — publish is export-only until it passes.';
+const hostedPending = 'Production review and non-founder account verification are pending; use export until the connection explicitly supports publishing.';
 
 const local = (
   slug: string,
@@ -38,8 +38,9 @@ const local = (
   slug,
   name,
   group: 'local',
-  capability: 'local',
-  capabilities: { identity: 'Assisted', publish: 'Assisted', schedule: 'Assisted' },
+  capability: 'unsupported',
+  reviewStatus: 'Companion release and account verification pending',
+  capabilities: { identity: 'Unsupported', publish: 'Unsupported', schedule: 'Unsupported' },
   description,
   formats,
   region: 'global',
@@ -52,7 +53,7 @@ export const channels: Channel[] = [
     name: 'LinkedIn',
     group: 'hosted',
     capability: 'assisted',
-    reviewStatus: 'provider review in progress',
+    reviewStatus: 'production verification pending',
     capabilities: {
       identity: 'Direct',
       publish: 'Assisted',
@@ -61,8 +62,8 @@ export const channels: Channel[] = [
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Member posts with text, one image or several. Written for a professional reader in your voice.',
-    formats: ['Text post', 'Image post', 'Multi-image post'],
+    description: 'Text member posts are implemented; hosted image upload and non-founder publishing verification are pending.',
+    formats: ['Text post'],
     region: 'global',
     notes: [
       hostedPending,
@@ -75,7 +76,7 @@ export const channels: Channel[] = [
     name: 'Threads',
     group: 'hosted',
     capability: 'assisted',
-    reviewStatus: 'Meta App Review in progress',
+    reviewStatus: 'production verification pending',
     capabilities: {
       identity: 'Direct',
       publish: 'Assisted',
@@ -84,17 +85,17 @@ export const channels: Channel[] = [
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Short text, image and carousel posts. Insights and replies follow once Meta’s review passes.',
-    formats: ['Text (500 chars)', 'Image', 'Carousel (2–20)'],
+    description: 'Text and single-image publishing are implemented. Carousel and additional account capabilities are not part of the verified launch scope.',
+    formats: ['Text (500 chars)', 'Single image'],
     region: 'global',
-    notes: [hostedPending, 'Threads allows 250 posts per 24 hours; PostRiff’s preflight enforces it.']
+    notes: [hostedPending, 'Provider quotas can change and may include activity outside Rafii; provider rejection is handled without claiming a complete remote quota count.']
   },
   {
     slug: 'instagram',
     name: 'Instagram',
     group: 'hosted',
     capability: 'assisted',
-    reviewStatus: 'Meta Business Verification + App Review in progress',
+    reviewStatus: 'production verification pending',
     capabilities: {
       identity: 'Direct',
       publish: 'Assisted',
@@ -103,8 +104,8 @@ export const channels: Channel[] = [
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Image and carousel posts for professional accounts, with captions rewritten per language.',
-    formats: ['Image', 'Carousel (≤10)'],
+    description: 'Single-image posts for professional accounts. Direct publishing remains gated by permissions and release verification.',
+    formats: ['Single image'],
     region: 'global',
     notes: [hostedPending, 'Instagram allows 100 published posts per 24 hours per account.']
   },
@@ -126,7 +127,7 @@ export const channels: Channel[] = [
   local('kakaotalk-channel', 'KakaoTalk Channel', 'Messages to subscribers of your KakaoTalk channel.', ['Text', 'Image'], { region: 'kr' }),
   local('sharechat', 'ShareChat', 'Regional-language posts for India.', ['Text', 'Image', 'Video'], { region: 'in' }),
   local('moj', 'Moj', 'Short vertical video for India.', ['Video'], { region: 'in' }),
-  local('x', 'X', 'Posts and threads. X bills every API call, so PostRiff runs it through the companion instead.', ['Text', 'Image', 'Thread']),
+  local('x', 'X', 'Posts and threads. X bills every API call, so Rafii runs it through the companion instead.', ['Text', 'Image', 'Thread']),
   local('facebook', 'Facebook Pages', 'Page posts with photos and links.', ['Text', 'Image', 'Link']),
   local('youtube', 'YouTube', 'Video uploads with titles, descriptions, tags and scheduling.', ['Video', 'Short']),
   local('tiktok', 'TikTok', 'Short vertical video. TikTok keeps unaudited API posts private, so the companion publishes through your own login.', ['Video', 'Photo']),

@@ -7,7 +7,7 @@
  * formats a time reads the same choice.
  */
 
-import { createContext, Fragment, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { useMe } from '@/lib/api/hooks';
 import { setTimeDefaults } from '@/lib/time';
 
@@ -33,9 +33,9 @@ export function browserLocale(): string {
   return typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en';
 }
 
-function resolve(saved?: { timeZone: string; locale: string }): Preferences {
-  const tz = browserTimeZone();
-  const loc = browserLocale();
+function resolve(saved?: { timeZone: string; locale: string }, hydrated = true): Preferences {
+  const tz = hydrated ? browserTimeZone() : 'UTC';
+  const loc = hydrated ? browserLocale() : 'en';
   return {
     timeZone: saved?.timeZone || tz,
     locale: saved?.locale || loc,
@@ -46,16 +46,21 @@ function resolve(saved?: { timeZone: string; locale: string }): Preferences {
   };
 }
 
+const subscribe = () => () => {};
+const clientReady = () => true;
+const serverReady = () => false;
+
 const PreferencesContext = createContext<Preferences | null>(null);
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const me = useMe();
   const saved = me.data?.preferences;
-  const value = useMemo(() => resolve(saved), [saved]);
+  const hydrated = useSyncExternalStore(subscribe, clientReady, serverReady);
+  const value = useMemo(() => resolve(saved, hydrated), [saved, hydrated]);
   // The formatting helpers read module defaults, and children format dates while rendering, so the
   // defaults are set here, before the subtree renders, rather than in an effect that would run after.
   // A changed choice re-keys the subtree so dates already on screen are formatted again.
-  setTimeDefaults({ timeZone: value.timeZone, locale: value.locale });
+  if (typeof window !== 'undefined') setTimeDefaults({ timeZone: value.timeZone, locale: value.locale });
   return (
     <PreferencesContext.Provider value={value}>
       <Fragment key={`${value.timeZone}|${value.locale}`}>{children}</Fragment>

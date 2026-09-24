@@ -46,6 +46,7 @@ interface ComposerProps {
   voiceMode?: 'neutral' | 'personalized';
   onVoiceMode?: (mode: 'neutral' | 'personalized') => void;
   voiceAvailable?: boolean;
+  imageGeneration?: { enabled: boolean; available: boolean; detail: string; onChange: (enabled: boolean) => void };
   /** First message only: consent to draft from the text, and whether it may be quoted. */
   consent?: { own: boolean; use: boolean; onOwn: (v: boolean) => void; onUse: (v: boolean) => void };
   submitLabel?: string;
@@ -60,10 +61,10 @@ interface ComposerProps {
  * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, placeholder, chips, languages, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, consent, submitLabel, compact, hint },
+  { value, onChange, onSubmit, busy, disabled, placeholder, chips, languages, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint },
   ref
 ) {
-  const canSend = !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use);
+  const canSend = !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use) && (!imageGeneration?.enabled || imageGeneration.available);
   const parsed = useMemo(() => locales.parseMessageLanguages(value), [value]);
   const rows = chips.map((chip) => {
     const selection = languages.selection.find((item) => item.platform === chip.platform);
@@ -134,20 +135,27 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
               aria-pressed={voiceMode === 'personalized'}
               disabled={disabled || busy || !voiceAvailable}
               onClick={() => onVoiceMode(voiceMode === 'personalized' ? 'neutral' : 'personalized')}
-              title={voiceAvailable ? 'Use only the selected writing samples allowed for this local writer' : 'Select writing samples and allow local generation on the Brand page'}
+              title={voiceAvailable ? 'Use only the selected writing samples allowed for this writer' : 'Select writing samples and allow this writer on the Brand page'}
               className={cn('h-7 rounded-lg border px-2.5 text-xs font-medium transition-colors', voiceMode === 'personalized' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground', !voiceAvailable && 'opacity-50')}
             >
               {voiceMode === 'personalized' ? 'Writing like me' : 'Neutral voice'}
             </button>
           )}
+          {imageGeneration && (
+            <button
+              type='button'
+              aria-pressed={imageGeneration.enabled}
+              disabled={disabled || busy || !imageGeneration.available}
+              onClick={() => imageGeneration.onChange(!imageGeneration.enabled)}
+              title={imageGeneration.detail}
+              className={cn('h-7 rounded-lg border px-2.5 text-xs font-medium transition-colors', imageGeneration.enabled ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground', !imageGeneration.available && 'opacity-50')}
+            >
+              <span className='inline-flex items-center gap-1.5'><Icons.media className='size-3.5' />{imageGeneration.enabled ? 'Image on' : 'Generate image'}</span>
+            </button>
+          )}
         </div>
         <div className='flex items-center gap-2'>
-          {reasoningOptions && reasoningOptions.length > 1 && (
-            <select aria-label='Reasoning effort' value={reasoning} onChange={(event) => onReasoning?.(event.target.value)} disabled={disabled || busy} className='bg-background h-7 max-w-28 rounded-md border px-1 text-xs'>
-              {reasoningOptions.map((item) => <option key={item.id} value={item.id}>{({ low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra High', max: 'Max', quick: 'Quick', standard: 'Standard', deep: 'Deep' } as Record<string, string>)[item.id] ?? item.id}</option>)}
-            </select>
-          )}
-          <ModelPicker options={models} model={model} onChoose={onModel} disabled={disabled} />
+          <ModelPicker options={models} model={model} onChoose={onModel} disabled={disabled || busy} reasoning={reasoning} reasoningOptions={reasoningOptions} onReasoning={onReasoning} />
           <Button size='icon' className='rounded-full' disabled={!canSend} onClick={onSubmit} aria-label={submitLabel ?? 'Send'}>
             <ActionSwapIcon value={busy ? 'busy' : 'send'} animation='blur' className='size-4'>
               {busy ? <Icons.spinner className='size-4 animate-spin' /> : <Icons.send className='size-4' />}

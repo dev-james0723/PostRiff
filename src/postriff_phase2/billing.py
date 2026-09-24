@@ -33,8 +33,8 @@ class Ledger:
         cur.execute(f"INSERT INTO public.pr_budgets(scope,window_kind,window_start,warn_usd_micro,stop_usd_micro) VALUES(%s,%s,{_window_start_sql(spec['window_kind'])},%s,%s) ON CONFLICT(scope) DO NOTHING", (scope, spec["window_kind"], spec["warn"], spec["stop"]))
         cur.execute("SELECT window_kind,window_start,warn_usd_micro,stop_usd_micro,spent_usd_micro,reserved_usd_micro,status FROM public.pr_budgets WHERE scope=%s FOR UPDATE", (scope,))
         row = cur.fetchone()
-        # Roll the window forward when it lapsed (fixed window; spent/reserved reset).
-        cur.execute(f"UPDATE public.pr_budgets SET window_start={_window_start_sql(row[0])},spent_usd_micro=0,reserved_usd_micro=0,updated_at=now() WHERE scope=%s AND window_start < {_window_start_sql(row[0])} RETURNING 1", (scope,))
+        # Outstanding/unknown reservations survive a calendar boundary.
+        cur.execute(f"UPDATE public.pr_budgets SET window_start={_window_start_sql(row[0])},spent_usd_micro=0,updated_at=now() WHERE scope=%s AND window_start < {_window_start_sql(row[0])} RETURNING 1", (scope,))
         if cur.fetchone():
             cur.execute("SELECT window_kind,window_start,warn_usd_micro,stop_usd_micro,spent_usd_micro,reserved_usd_micro,status FROM public.pr_budgets WHERE scope=%s", (scope,))
             row = cur.fetchone()
@@ -67,13 +67,17 @@ class Ledger:
                 raise AlphaError("This usage key belongs to a different operation.", 409)
             return {"reservationId": existing[1] or existing[0], "duplicate": True}
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
-        if charge_batch and entitlement["writingBatchesRemaining"] <= 0:
+        cur.execute("SELECT count(*) FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND r.charge_batch AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id AND s.cost_state IN ('actual','released'))", (workspace_id,))
+        pending_batches = cur.fetchone()[0]
+        if charge_batch and entitlement["writingBatchesRemaining"] <= pending_batches:
             raise AlphaError("No writing allowance left in this plan. Drafts, exports and reviews remain available; overage is not charged silently.", 402)
         if dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
             raise AlphaError("No media credits left in this plan.", 402)
         ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
         gl_budget = self._budget(cur, "global", "day")
         for scope, budget in (("workspace", ws_budget), ("global", gl_budget)):
+            if estimated_usd_micro > 0 and budget['status'] != 'approved':
+                raise AlphaError(f"The {scope} spending budget has not been approved; no provider call was made.", 402)
             if budget["spent"] + budget["reserved"] + estimated_usd_micro > budget["stop"]:
                 raise AlphaError(f"The {scope} spending stop-line would be exceeded; this request is refused before any provider call.", 402)
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**(meta or {}), "fingerprint": fingerprint})))
@@ -89,6 +93,13 @@ class Ledger:
         unknown → reservation kept and cost booked as estimated_unknown until reconciled."""
         if outcome not in ("completed", "failed", "unknown"):
             raise AlphaError("Invalid settlement outcome.", 400)
+        cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("pr_ledger:" + str(reservation_id),))
+        # A release or known settlement is terminal for the reservation, even if
+        # another caller supplies a different outcome/idempotency key.
+        cur.execute("SELECT cost_state FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND cost_state IN ('actual','released') LIMIT 1", (workspace_id, reservation_id))
+        terminal = cur.fetchone()
+        if terminal:
+            return {"reservationId": reservation_id, "duplicate": True, "state": terminal[0]}
         cur.execute("SELECT dimension,estimated_usd_micro,charge_batch,provider,model,run_id,job_id,member_id FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'", (workspace_id, reservation_id))
         reservation = cur.fetchone()
         if not reservation:

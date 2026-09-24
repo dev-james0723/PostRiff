@@ -212,6 +212,16 @@ export interface SnapshotSource {
   origin?: SourceOrigin | null;
   useApprovals?: SourceUseApproval[];
   /** Voice-sample fields are present only when `kind === 'voice_sample'`. */
+  voiceOrigin?: 'user_provided' | 'official_api';
+  provider?: string;
+  externalPostId?: string;
+  permalink?: string | null;
+  mediaType?: string;
+  thumbnailUrl?: string | null;
+  importedAt?: number;
+  sourceCoverage?: { selectionOnly: boolean; verifiedPages: number; providerPage: Record<string, unknown> };
+  connectionId?: string;
+  providerAccountId?: string;
   selected?: boolean;
   revision?: number;
   contentHash?: string;
@@ -239,20 +249,24 @@ export interface Phase2State {
 export interface VoiceProfile {
   packageSchema?: string;
   fields?: Record<string, unknown>[];
-  tone: 'warm' | 'direct' | 'reflective';
+  tone: 'warm' | 'direct' | 'reflective' | null;
   writingExample: string;
   observations: string[];
   unknowns: string[];
   status?: 'proposed' | 'stale';
   staleReason?: string;
   analysisRoute?: string;
+  analysisMethod?: 'local-rules' | 'ai';
+  analysisModel?: string;
+  analysisProvider?: string;
   evidenceSourceIds?: string[];
   dimensions?: {
     id: string;
     observation: string;
     support: string[];
     counterEvidence: string[];
-    evidenceLevel: 'limited' | 'supported' | 'conflicting';
+    quotes?: { sourceId: string; text: string }[];
+    evidenceLevel: 'limited' | 'supported' | 'conflicting' | 'insufficient';
   }[];
 }
 
@@ -300,11 +314,11 @@ export interface SnapshotState {
   sources?: SnapshotSource[];
   raffi?: {
     campaignPlanning?: {
-      campaigns: { id: string; version: number; goal: string; audience: string; facts: Record<string, string>; status: string; missingFacts: string[]; items: unknown[] }[];
-      recurringTasks: { id: string; campaignId: string; version: number; status: string; schedule: { weekday: string; localTime: string; timeZone: string }; nextOccurrence?: { local: string; utc: string; offset: string } }[];
-      occurrences: { id: string; taskId: string; state: string; scheduledFor: number }[];
+      campaigns: { id: string; version: number; goal: string; audience: string; facts: Record<string, string>; status: string; missingFacts: string[]; items: { id: string; conversationId?: string; runId?: string; status?: string }[] }[];
+      recurringTasks: { id: string; campaignId: string; version: number; status: string; route?: string; maxCostUsdMicro?: number; pauseReason?: string; schedule: { weekday: string; localTime: string; timeZone: string }; nextOccurrence?: { local: string; utc: string; offset: string } }[];
+      occurrences: { id: string; taskId: string; state: string; scheduledFor: number; reason?: string; runId?: string }[];
     };
-    suggestions?: { id: string; kind: string; reason: string; status: string; evidence: { type: string; id: string; revision: number }[]; action: string; actionRef?: { id: string; type: string; authority: string } | null }[];
+    suggestions?: { id: string; kind: string; reason: string; status: string; evidence: { type: string; id: string; revision: number }[]; action: string; actionRef?: { id: string; type: string; authority: string; workspaceId?: string; targetType?: string; targetId?: string; targetRevision?: number } | null }[];
   };
   [key: string]: unknown;
 }
@@ -336,6 +350,7 @@ export interface SafeEvent {
   stage?: string;
   percent?: number;
   variants?: number;
+  images?: number;
   /** `action.proposed`: which proposal (for example `schedule_plan`) and its time zone. */
   action?: string;
   timeZone?: string;
@@ -349,6 +364,16 @@ export interface RunVariant {
   unknowns: string[];
   warnings?: string[];
   candidateOnly?: boolean;
+}
+
+export interface GeneratedImage {
+  id: string;
+  hash: string;
+  mime: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  alt?: string;
 }
 
 /** Candidate schedule proposed by the agent from channels and times named in the message (design §4.4). */
@@ -373,7 +398,7 @@ export interface Run {
   conversationId: string;
   status: string;
   artifactHash: string | null;
-  artifact: { variants: RunVariant[]; plan?: SchedulePlan | null } | null;
+  artifact: { variants: RunVariant[]; plan?: SchedulePlan | null; images?: GeneratedImage[]; imageModel?: string } | null;
   usage: Record<string, unknown>;
   model: string;
   reasoning: string;
@@ -409,6 +434,9 @@ export interface ModelOption {
   route?: string;
   costClass?: 'none' | 'subscription' | 'paid' | string;
   provider?: string;
+  egress?: 'local' | 'cloud';
+  voiceRoute?: string;
+  voiceAnalysisAvailable?: boolean;
   reasoning?: { id: string; available: boolean; detail: string }[];
 }
 
@@ -442,6 +470,14 @@ export interface ModelCatalog {
   models: ModelOption[];
   reasoning: { id: string; available: boolean; detail: string }[];
   agents?: AgentInfo[];
+  imageGeneration?: {
+    available: boolean;
+    model: string | null;
+    provider: string | null;
+    costClass: 'paid';
+    independentOfWritingModel: true;
+    detail: string;
+  };
 }
 
 /** One of the Markdown memory files rendered by the API (`GET /memory`). */
@@ -491,7 +527,7 @@ export interface LearningSummary {
   resetAt: string | null;
   items: LearnedItem[];
   pendingProposals?: number;
-  extractor?: { kind: 'rules' | 'local' | 'cloud'; model: string | null; allowed: boolean };
+  extractor?: { kind: 'rules' | 'local' | 'cloud'; egress?: 'rules' | 'local' | 'cloud'; model: string | null; allowed: boolean };
 }
 
 /** A suggested change to the learned preferences. Only an owner decides it (`POST /memory/proposals/{id}/decide`). */
@@ -575,6 +611,7 @@ export interface ChannelView {
   account: string;
   accountType?: string;
   connectionState: string;
+  socialReadiness?: { connection: string; history: string; publishing: string; fullyAvailable: boolean; evidence: string; liveVerified: boolean };
   capabilities: Record<string, Capability>;
   evidenceSource: string;
   scopes: string[];
@@ -584,11 +621,52 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  configurationState?: string;
+  credentialPresence?: { clientId: boolean; clientSecret: boolean };
+  readinessState?: string;
+  publicConnectionReady?: boolean;
+  liveVerified?: boolean;
+  reviewStatus?: string;
+  reviewNote?: string;
+  configured?: boolean;
+  connectReady?: boolean;
+  setupIssues?: string[];
+  callbackUri?: string | null;
+  accountRequirement?: string;
+  historyAvailableForApp?: boolean;
   commentsReadImplemented?: boolean;
   id: string;
   platform: string;
   productionReviewed: boolean;
+  executionPaused?: boolean;
   capabilities: Record<string, boolean>;
+}
+
+export interface OwnedPost {
+  id: string;
+  externalPostId?: string;
+  provider?: string;
+  providerAccountId?: string;
+  text: string;
+  platform: string;
+  publishedAt: string;
+  permalink: string | null;
+  thumbnailUrl: string | null;
+  mediaType?: string;
+}
+
+export interface OwnedPostPage {
+  connectionId: string;
+  providerAccountId: string;
+  receipt: string;
+  expiresAt: number;
+  posts: OwnedPost[];
+  coverage?: { startedFromBeginning: boolean; endReached: boolean; from: string | null; to: string | null; undatedCount: number; eligibleCount: number };
+  nextCursor: string | null;
+  scannedCount: number;
+  skippedCount: number;
+  partialCoverage: boolean;
+  coverageNote: string;
 }
 
 export interface OAuthStart {

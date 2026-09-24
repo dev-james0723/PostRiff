@@ -42,3 +42,6 @@ desktop/artifacts/
 /CLAUDE.md
 /web/AGENTS.md
 /web/CLAUDE.md
+
+# Keep the existing local credential-setup helper out of source control.
+/scripts/consumer_ready_secrets.py

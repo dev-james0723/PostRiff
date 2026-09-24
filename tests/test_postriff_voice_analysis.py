@@ -36,7 +36,8 @@ class VoiceAnalysisTests(unittest.TestCase):
         self.assertEqual(proposal["status"], "proposed")
         self.assertEqual(proposal["evidenceSourceIds"], [source_id])
         self.assertTrue(proposal["dimensions"])
-        self.assertTrue(all(item["evidenceLevel"] == "limited" for item in proposal["dimensions"]))
+        self.assertTrue(all(item['evidenceLevel'] in ('limited', 'insufficient') for item in proposal['dimensions']))
+        self.assertTrue(all(item['observation'] not in proposal['observations'] for item in proposal['dimensions'] if item['evidenceLevel'] == 'insufficient'))
         self.assertIn("provisional", " ".join(proposal["unknowns"]).lower())
 
     def test_conflicting_hashtag_evidence_is_visible_instead_of_becoming_a_rule(self):

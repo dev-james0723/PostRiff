@@ -65,6 +65,7 @@ class Taxonomy(unittest.TestCase):
 
 
 class FakeOAuth:
+    public_base_url = 'https://postriff.example'
     def channels(self, w, t): return {"channels": [], "providers": []}
     def start(self, w, t, p, cap): return {"authorizeUrl": f"https://{p}.example/auth", "capability": cap}
     def complete(self, w, t, p, state, code, error=None): return {"connected": bool(code and not error), "confirmAccount": True}

@@ -24,6 +24,7 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
   return (
     <>
       <div className='flex flex-col gap-1'>
+        {profile.analysisMethod && <p className='text-muted-foreground text-xs'>{profile.analysisMethod === 'ai' ? `AI analysis · ${profile.analysisModel ?? 'managed model'} · evidence excerpts checked; interpretations need human review.` : 'Local text statistics, not AI semantic tone analysis.'}</p>}
         <span className='text-muted-foreground text-xs'>Starting tone</span>
         <div className='flex flex-wrap items-center gap-2'>
           <Badge variant='secondary'>{toneLabel(profile.tone) ?? 'Not set'}</Badge>
@@ -57,6 +58,7 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
                   <Badge variant={item.evidenceLevel === 'conflicting' ? 'outline' : 'secondary'}>{item.evidenceLevel}</Badge>
                 </div>
                 <p className='mt-1'>{item.observation}</p>
+                {item.quotes?.map((quote, index) => <blockquote key={`${quote.sourceId}-${index}`} className='text-muted-foreground mt-2 border-l-2 pl-2 text-xs'>“{quote.text}” <span className='break-all'>— sample {quote.sourceId}</span></blockquote>)}
                 <p className='text-muted-foreground mt-1 text-[11px]'>
                   {item.support.length} supporting sample{item.support.length === 1 ? '' : 's'}
                   {item.counterEvidence.length ? ` · ${item.counterEvidence.length} conflicting sample${item.counterEvidence.length === 1 ? '' : 's'}` : ''}
@@ -74,7 +76,7 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
             <ExpandableText as='blockquote' text={sample} lines={6} className='border-l-2 pl-3' />
             {/* memory.py puts the sample in VOICE.md, so every writing route reads it; PostRiff itself never analyses it. */}
             <span className='text-muted-foreground text-[11px] leading-snug'>
-              Writing routes read it in VOICE.md as an example of how you write. PostRiff does not analyse it to set the tone or observations.
+              This explicitly supplied writing example is shared through VOICE.md. Samples supplied only for analysis are not copied into this field.
             </span>
           </>
         ) : (
@@ -133,7 +135,7 @@ export function VoiceCard({ state, query, isOwner }: { state: SnapshotState | un
         )}
       </CardContent>
       <CardFooter>
-        <p className='text-muted-foreground text-xs'>Proposing a new revision is not available on this page yet. Every approved revision stays listed under Revisions.</p>
+        <p className='text-muted-foreground text-xs'>Use Learn my voice to propose a new revision. Review and approve it separately; every approved revision stays listed under Revisions.</p>
       </CardFooter>
     </Card>
   );

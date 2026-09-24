@@ -1,5 +1,9 @@
 'use client';
 
+import { eligibleVoiceSources } from './voice-consent';
+import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
+import { VoiceLearningPanel } from './voice-learning-panel';
+
 import { StartVoiceInterview } from './onboarding-chat';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -14,7 +18,6 @@ import { Icons } from '@/components/icons';
 import { NotificationStack } from '@/components/motion/notification-stack';
 import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
 import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
-import { TextReveal } from '@/components/motion/text-reveal';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { QUICK_STARTS, QUICK_START_GROUPS, type QuickStart, type QuickStartGroup } from '@/config/quick-starts';
@@ -30,10 +33,11 @@ import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from 
 import { useChannelLanguages } from './use-channel-languages';
 import { useModelChoice } from './use-model';
 import { RaffiPlanner } from './raffi-planner';
+import { ImageGenerationCard } from './image-generation-card';
 
 const CREATOR_PACK = { packId: 'pack.creator', version: '1.0.0' };
 
-type ModeId = 'post' | 'thread' | 'carousel' | 'video' | 'research' | 'schedule';
+type ModeId = 'post' | 'thread' | 'carousel' | 'image' | 'video' | 'research' | 'schedule';
 
 const MODES: { id: ModeId; label: string; icon: keyof typeof Icons; placeholder: string; platforms: DraftPlatform[] }[] = [
   {
@@ -45,6 +49,7 @@ const MODES: { id: ModeId; label: string; icon: keyof typeof Icons; placeholder:
   },
   { id: 'thread', label: 'Thread', icon: 'listDetails', placeholder: 'What is the thread about? Give me the one thing you want people to take away…', platforms: ['Threads'] },
   { id: 'carousel', label: 'Carousel', icon: 'media', placeholder: 'What should the carousel teach or show? One idea per slide is enough to start…', platforms: ['Instagram', 'LinkedIn'] },
+  { id: 'image', label: 'Image', icon: 'media', placeholder: 'Describe the image you want—subject, setting, mood, palette, composition and any text that must appear…', platforms: ['Instagram', 'LinkedIn'] },
   { id: 'video', label: 'Video script', icon: 'video', placeholder: 'Paste the outline or your notes; I will draft the hook, the beats and the caption…', platforms: ['Instagram', 'Threads'] },
   { id: 'research', label: 'Research', icon: 'search', placeholder: 'What should I look into? Every source is logged before anything is written…', platforms: ['LinkedIn'] },
   { id: 'schedule', label: 'Schedule week', icon: 'calendar', placeholder: 'Tell me what goes out this week and when, e.g. “LinkedIn Tuesday 9am, Instagram Thursday 4pm, Threads Friday noon”…', platforms: ['LinkedIn', 'Instagram', 'Threads'] }
@@ -91,6 +96,7 @@ export function HomeView() {
 
   const [mode, setMode] = useState<ModeId>('post');
   const [text, setText] = useState('');
+  const [learning, setLearning] = useState<(VoiceLearningRequest & { workspaceId: string; id: string }) | null>(null);
   // Each selected channel carries its own languages, remembered per channel (languages plan §4).
   const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [own, setOwn] = useState(true);
@@ -108,7 +114,8 @@ export function HomeView() {
   const revision = snapshot.data?.revision ?? 0;
   const voiceActive = Boolean(state?.speaker?.activeRevision);
   const voiceRevision = state?.speaker?.activeRevision ?? null;
-  const voiceSourceIds = (state?.sources ?? []).filter((source) => source.kind === 'voice_sample' && source.active && source.selected && source.useGrants?.some((grant) => grant.purpose === 'generation' && grant.route === 'local-cli')).map((source) => source.id);
+  const choice = useModelChoice(models.data);
+  const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
   const voiceAvailable = voiceSourceIds.length > 0;
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
@@ -118,8 +125,9 @@ export function HomeView() {
   const activeSources = (state?.sources ?? []).filter((s) => s.active).length;
   const attention = deriveAttention({ snapshot, channels: channelQuery, usage, now: Date.now() / 1000 });
   const needsYou: NeedsYou[] = attention.items.map((item) => ({ ...item, icon: item.id.startsWith('voice') ? 'user' : item.id === 'approvals' ? 'clock' : 'broadcast' }));
-  const choice = useModelChoice(models.data);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const imageCapability = models.data?.imageGeneration;
+  const imageRequested = mode === 'image';
   const timeZone = useTimeZone();
 
   function pickMode(next: ModeId) {
@@ -151,7 +159,14 @@ export function HomeView() {
 
   async function start() {
     const body = text.trim();
-    if (!body || !use || languages.selection.length === 0 || busy) return;
+    if (!body || busy) return;
+    const learningRequest = voiceLearningIntent(body);
+    if (learningRequest) {
+      setLearning({ ...learningRequest, workspaceId, id: crypto.randomUUID() });
+      setText('');
+      return; // No draft, model call, retention, analysis grant or publishing action.
+    }
+    if (!use || languages.selection.length === 0 || imageRequested && !imageCapability?.available) return;
     setBusy(true);
     try {
       const current = template ? await selectContentType(template, revision) : revision;
@@ -164,6 +179,7 @@ export function HomeView() {
         reasoning: choice.reasoning,
         voiceMode,
         voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
+        imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
         timeZone
       });
       client.setQueryData(['agent-run', workspaceId, result.runId], result);
@@ -185,16 +201,10 @@ export function HomeView() {
     <PageContainer infoContent={infoContent}>
       <div className='mx-auto flex w-full max-w-3xl flex-col gap-6 pt-6 md:pt-10'>
         <div className='flex flex-col items-center gap-1.5 text-center'>
-          <TextReveal as='h1' split='word' once text='What are we putting out this week?' className='text-2xl font-semibold tracking-tight md:text-[28px]' />
-          {/* The initial style is the same with reduced motion (no hydration drift); only the timing drops to zero. */}
-          <motion.p
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={reduce ? { duration: 0 } : { duration: 0.6, delay: 0.45, ease: EASE_OUT }}
-            className='text-muted-foreground text-sm'
-          >
-            Tell me the topic. I write it in your voice for each channel and line up the schedule for you to approve.
-          </motion.p>
+          <h1 className='text-2xl font-semibold tracking-tight md:text-[28px]'>What are we putting out this week?</h1>
+          <p className='text-muted-foreground text-sm'>
+            Tell me the topic. I can write, research, plan or generate a private image candidate for you to review.
+          </p>
         </div>
 
         <Tabs value={mode} onValueChange={(value) => pickMode(value as ModeId)} variant='pill' className='flex justify-center'>
@@ -219,24 +229,34 @@ export function HomeView() {
             onChange={setText}
             onSubmit={() => void start()}
             busy={busy}
+            disabled={!models.data || !snapshot.data}
             placeholder={current.placeholder}
             chips={chips}
             languages={languages}
             models={choice.options}
             model={choice.model}
             onModel={choice.choose}
-              reasoning={choice.reasoning}
-              reasoningOptions={choice.reasoningOptions}
+            reasoning={choice.reasoning}
+            reasoningOptions={choice.reasoningOptions}
             onReasoning={choice.chooseReasoning}
             voiceMode={voiceMode}
             onVoiceMode={setVoiceMode}
             voiceAvailable={voiceAvailable}
+            imageGeneration={{
+              enabled: imageRequested,
+              available: Boolean(imageCapability?.available),
+              detail: imageCapability?.detail ?? 'Checking the managed image route…',
+              onChange: (enabled) => pickMode(enabled ? 'image' : 'post')
+            }}
             consent={{ own, use, onOwn: setOwn, onUse: setUse }}
-            hint='⌘↵ to send · nothing publishes without your approval'
+            hint={imageRequested ? 'Uses the managed image route and one media credit · nothing publishes' : '⌘↵ to send · nothing publishes without your approval'}
           />
         ) : (
           <p className='text-muted-foreground text-center text-sm'>You need the edit permission to draft in this workspace.</p>
         )}
+
+        {busy && imageRequested && <ImageGenerationCard running className='mx-auto' />}
+        {learning?.workspaceId === workspaceId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
 
         <div className='text-muted-foreground -mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs'>
           <Link href='/app/workspace/brand' className='hover:text-foreground inline-flex items-center gap-1.5'>
@@ -249,7 +269,7 @@ export function HomeView() {
             Memory · <span className='text-foreground font-medium'>{memoryFiles === null ? '…' : `${memoryFiles} files`}</span>
             {pendingProposals > 0 && (
               <span className='bg-primary/10 text-primary rounded-full px-1.5 py-0.5 text-[11px] font-medium' aria-label={`${pendingProposals} learned preference${pendingProposals === 1 ? '' : 's'} waiting for your decision`}>
-                PostRiff noticed {pendingProposals} · review
+                Rafii noticed {pendingProposals} · review
               </span>
             )}
           </Link>
@@ -264,7 +284,7 @@ export function HomeView() {
           </span>
         </div>
 
-        {state && <RaffiPlanner state={state} revision={revision} canEdit={canEdit} />}
+        {state && <RaffiPlanner state={state} revision={revision} canEdit={canEdit} isOwner={checkAccess(access, { permission: 'owner' })} />}
         {template && (
           <div className='-mt-3 flex flex-wrap items-center gap-2 px-1 text-xs'>
             <Badge variant='secondary' className='gap-1.5'>

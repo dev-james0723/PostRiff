@@ -35,7 +35,7 @@ export default function Header() {
       <div className='flex items-center gap-2 px-4'>
         {/* One place to start a post: Home's composer (focused by ?new=1). Ideas captures sources. */}
         {checkAccess(access, { permission: 'edit' }) && (
-          <Link href='/app?new=1' className={cn(buttonVariants({ size: 'sm' }), 'gap-1')}>
+          <Link aria-label='Create a new draft' href='/app?new=1' className={cn(buttonVariants({ size: 'sm' }), 'gap-1')}>
             <Icons.add className='size-4' />
             <span className='hidden sm:inline'>Create</span>
           </Link>

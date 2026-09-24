@@ -240,4 +240,52 @@ assert {"oauth.started", "oauth.denied", "channel.connected", "channel.disconnec
 assert not any("ACCESS-" in json.dumps(e) or "REFRESH-" in json.dumps(e) for e in events)
 checks.append("OAuth lifecycle is audited without tokens")
 
+# Unknown and explicitly empty grants must never inherit scopes from the request.
+clock[0] = time.time()
+base_exchange = provider.exchange
+for granted_scopes in (None, []):
+    provider.exchange = lambda *args, **kwargs: {**base_exchange(*args, **kwargs), 'scopes': granted_scopes}
+    request = oauth.start(wid_a, 'one', 'linkedin', 'publish')
+    state = parse_qs(urlparse(request['authorizeUrl']).query)['state'][0]
+    unknown = oauth.complete(wid_a, 'one', 'linkedin', state, 'good-code')
+    assert unknown['capabilities']['publish']['level'] == 'Assisted'
+    assert set(unknown['missingScopes']) == {'openid', 'w_member_social'}
+provider.exchange = base_exchange
+checks.append('unknown and empty OAuth scope responses do not acquire requested publish authority')
+provider.execution_enabled = False
+denied(lambda: oauth.token_for_worker(wid_a, done['connectionId']), 503)
+denied(lambda: oauth.start(wid_a, 'one', 'linkedin', 'publish'), 503)
+assert oauth.channels(wid_a, 'one')['providers'][0]['executionPaused'] is True
+checks.append('provider pause blocks token use and new consent while retaining channel records')
+
+# Live permission re-check updates both credential and workspace authority, never upgrades silently.
+provider.execution_enabled = True
+request = oauth.start(wid_a, 'one', 'linkedin', 'publish')
+state = parse_qs(urlparse(request['authorizeUrl']).query)['state'][0]
+connected = oauth.complete(wid_a, 'one', 'linkedin', state, 'good-code')
+cid = connected['connectionId']
+provider.inspect_scopes = lambda access, account: ['openid']
+verified = oauth.verify(wid_a, 'one', cid)
+assert verified['state'] == 'scope_changed'
+view = next(c for c in oauth.channels(wid_a, 'one')['channels'] if c['id'] == cid)
+assert view['scopes'] == ['openid'] and view['capabilities']['publish']['level'] == 'Unsupported'
+assert not next(c for c in service.get(wid_a, 'one')['state']['phase2']['channels'] if c['id'] == cid)['capabilityVerified']
+assert oauth.token_for_worker(wid_a, cid)['scopes'] == ['openid']
+provider.inspect_scopes = lambda access, account: None
+assert oauth.verify(wid_a, 'one', cid)['state'] == 'scope_missing'
+assert oauth.channels(wid_a, 'one')['channels'][0]['connectionState'] == 'scope_missing'
+# Simulate another connection being authorized while identity lookup is in flight.
+base_identity = provider.identity
+rotated, rotated_key = oauth.vault.encrypt('ACCESS-reauthorized')
+def raced_identity(access):
+    with connection() as db:
+        db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s WHERE workspace_id=%s AND connection_id=%s', (rotated, rotated_key, wid_a, cid))
+    return base_identity(access)
+provider.identity = raced_identity
+denied(lambda: oauth.verify(wid_a, 'one', cid), 409)
+with connection() as db:
+    assert db.execute('SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid_a,cid)).fetchone()[0] == rotated
+provider.identity = base_identity
+checks.append('scope re-verification persists downgraded authority, fails closed on unknown grants, and fences a reauthorization race')
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))

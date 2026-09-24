@@ -20,7 +20,7 @@ export function WelcomeDialog({ open, onStart, onDismiss }: { open: boolean; onS
     <Dialog open={open} onOpenChange={(next) => !next && onDismiss()}>
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
-          <DialogTitle>Welcome to PostRiff</DialogTitle>
+          <DialogTitle>Welcome to Rafii</DialogTitle>
           <DialogDescription>Three things worth knowing before you write anything.</DialogDescription>
         </DialogHeader>
         <WelcomeClip />

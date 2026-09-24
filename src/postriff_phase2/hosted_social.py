@@ -10,7 +10,7 @@ from postriff_alpha.domain import AlphaError
 from .provider_candidates import LinkedInCandidate
 from .providers import GRAPH_VERSION, http_transport
 
-LINKEDIN_VERSION = "202509"  # documented monthly version string; re-verify at launch review
+LINKEDIN_VERSION = "202609"  # official versioning + Posts API docs checked 2026-09-20; live account validation pending
 
 
 def _uncertain(message):
@@ -35,7 +35,7 @@ class HostedSocial:
 
     def _provider(self, manifest):
         provider = self.providers.get({"LinkedIn": "linkedin", "Threads": "threads", "Instagram": "instagram"}.get(manifest["platform"]))
-        if provider is None or not provider.production_reviewed:
+        if provider is None or not provider.production_reviewed or not getattr(provider, "execution_enabled", True):
             return None
         return provider
 
@@ -51,8 +51,11 @@ class HostedSocial:
     def submit(self, manifest):
         provider = self._provider(manifest)
         if provider is None:
-            return {"state": "held", "confirmed": "This provider has not passed its production review; export only."}
+            return {"state": "held", "confirmed": "This provider is paused or awaiting production review; export only."}
         grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
+        required = {"LinkedIn": {"w_member_social"}, "Threads": {"threads_basic", "threads_content_publish"}, "Instagram": {"instagram_business_basic", "instagram_business_content_publish"}}.get(manifest["platform"], set())
+        if not required or not required.issubset(grant.get("scopes", [])):
+            return {"state": "held", "confirmed": "Publishing permissions changed or are unverified; reconnect and review again."}
         token = grant["accessToken"]
         try:
             if manifest["platform"] == "LinkedIn":
@@ -188,11 +191,11 @@ class HostedSocial:
             if manifest["platform"] in ("Threads", "Instagram"):
                 base = "https://graph.threads.net" if manifest["platform"] == "Threads" else "https://graph.instagram.com"
                 if reference:
-                    fields = "id,text,permalink" if manifest["platform"] == "Threads" else "id,caption,permalink,owner"
+                    fields = "id,text,permalink,owner" if manifest["platform"] == "Threads" else "id,caption,permalink,owner"
                     response = self.transport("GET", f"{base}/{GRAPH_VERSION}/{quote(reference)}?" + urlencode({"fields": fields, "access_token": token}))
                     body = response.get("body", {})
                     text_key = "text" if manifest["platform"] == "Threads" else "caption"
-                    owner_matches = manifest['platform'] != 'Instagram' or (isinstance(body.get('owner'), dict) and str(body['owner'].get('id')) == manifest['providerAccountId'])
+                    owner_matches = isinstance(body.get('owner'), dict) and str(body['owner'].get('id')) == manifest['providerAccountId']
                     if response.get("status") == 200 and owner_matches and str(body.get("id")) == str(reference) and body.get(text_key) == manifest["payload"]["text"] and str(body.get("permalink", "")).startswith("https://"):
                         return {"state": "verified", "reference": reference, "url": body["permalink"], "confirmed": "Provider lookup matched the approved text and account", "verification": "provider_lookup"}
                     return _uncertain("Provider lookup did not match the exact approved publication")

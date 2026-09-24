@@ -49,11 +49,13 @@ export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as con
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(message: string, status: number, code?: string) {
+  requestId?: string;
+  constructor(message: string, status: number, code?: string, requestId?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.requestId = requestId;
   }
 }
 
@@ -72,7 +74,8 @@ async function parse<T>(res: Response): Promise<T> {
     } catch {
       /* keep the generic message */
     }
-    throw new ApiError(message, res.status, code);
+    const requestId = res.headers.get('X-Request-ID') ?? undefined;
+    throw new ApiError(message, res.status, code, requestId && /^[a-f0-9]{32}$/.test(requestId) ? requestId : undefined);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -162,7 +165,7 @@ export function createApi(getToken: TokenSource) {
     updateLearnedItem: (w: string, id: string, status: 'active' | 'paused' | 'retired', expectedRevision: number) =>
       send<{ revision: number; itemId: string; status: string; learning: LearningSummary }>('PATCH', `${ws(w)}/memory/versions/${encodeURIComponent(id)}`, { status, expectedRevision }),
     deleteAccount: (w: string, confirmation: string) =>
-      send<{ deleted: boolean }>('DELETE', `${ws(w)}/account`, { confirmation }),
+      send<{ deleted: boolean; workspaceDeleted: boolean; identityDeleted: boolean; receiptId: string; providerRevocationPending?: string[] }>('DELETE', `${ws(w)}/account`, { confirmation }),
 
     /* usage & billing */
     usage: (w: string) => get<Usage>(`${ws(w)}/usage`),
@@ -177,7 +180,7 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
-    oauthStart: (w: string, provider: string, capability = 'publish') =>
+    oauthStart: (w: string, provider: string, capability = 'identity') =>
       send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, { capability }),
     oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string) =>
       send<OAuthComplete>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/complete`, {
@@ -185,6 +188,12 @@ export function createApi(getToken: TokenSource) {
         code,
         error
       }),
+    ownedPosts: (w: string, id: string, cursor?: string) =>
+      send<import('./types').OwnedPostPage>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts`, { confirmed: true, cursor: cursor ?? null, limit: 25 }),
+    importOwnedPosts: (w: string, id: string, receipt: string, postIds: string[], expectedRevision: number) =>
+      send<Snapshot>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts/import`, { receipt, postIds, expectedRevision, confirmedAuthorship: true }),
+    importOwnedPostSelection: (w: string, id: string, selections: { receipt: string; postIds: string[] }[], labels: Record<string, string>, expectedRevision: number) =>
+      send<Snapshot>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts/import`, { selections, labels, expectedRevision, confirmedAuthorship: true }),
     verifyChannel: (w: string, id: string) =>
       send<{ connectionId: string; state: string; identityVerified: boolean; detail?: string }>(
         'POST',

@@ -47,6 +47,8 @@ with connection() as db:
         db.execute(f"delete from public.{table} where workspace_id=%s", (wid,))
 service = HostedWorkspaceService(connection, verify, clock=lambda: clock[0])
 snapshot = service.bootstrap("fixture-one", "studio")
+from consumer_fixtures import approve_budgets
+approve_budgets(connection,wid)
 
 
 def act(action, payload):
@@ -138,12 +140,16 @@ class FakeExtractor:
     def __init__(self, local):
         self.local, self.runs = local, 0
 
+    def price_quote_micro(self, state, events):
+        return 10000
+
     def observe(self, state, events, now):
         self.runs += 1
         scope = {"platform": "LinkedIn", "language": "English", "contentTypeId": None}
         key = learning.scope_key("writing_preference", "other", "do", scope)
         # Strong enough to outrank the deterministic candidates still waiting for a daily slot.
-        return [{"ruleKey": "other", "polarity": "do", "scope": scope, "scopeKey": key, "weight": 2.0, "at": now, "eventId": e["id"], "variantId": f"v-{n}", "value": None, "source": "model", "statement": "Lead with the concrete thing that happened."} for n, e in enumerate(events[:3])]
+        from postriff_phase2.learning_model import Observations
+        return Observations([{"ruleKey": "other", "polarity": "do", "scope": scope, "scopeKey": key, "weight": 2.0, "at": now, "eventId": e["id"], "variantId": f"v-{n}", "value": None, "source": "model", "statement": "Lead with the concrete thing that happened."} for n, e in enumerate(events[:3])], cost_usd_micro=10000)
 
 
 snapshot = service.get(wid, "fixture-one")
@@ -192,6 +198,60 @@ with connection() as db:
     assert db.execute("select count(*) from public.pr_usage_ledger where workspace_id=%s and provider='learning'", (wid,)).fetchone()[0] == 2, "the person's own CLI books nothing"
 service.learning.extractor = None
 checks.append("a cloud model call is reserved and settled in the usage ledger, refused past the stop-line, and free on the person's own CLI")
+
+# Paid learning is durable before I/O; another cron cannot dispatch this consumed batch.
+from postriff_phase2.learning_service import HostedLearning
+class ConcurrentExtractor(FakeExtractor):
+    def observe(self, state, events, now):
+        import threading
+        with connection() as db:
+            assert db.execute("SELECT count(*) FROM public.pr_usage_ledger r WHERE workspace_id=%s AND provider='learning' AND kind='reserve' AND NOT EXISTS(SELECT 1 FROM public.pr_usage_ledger t WHERE t.reservation_id=r.id AND t.kind<>'reserve')", (wid,)).fetchone()[0] == 1
+            assert db.execute('SELECT count(*) FROM public.pr_learning_events WHERE workspace_id=%s AND consumed_by IS NULL',(wid,)).fetchone()[0] == 0
+        # Ledger timestamps use the database clock; align the accelerated fixture clock.
+        with connection() as db:
+            db.execute("UPDATE public.pr_usage_ledger SET at=to_timestamp(%s) WHERE workspace_id=%s AND kind='reserve'", (clock[0],wid))
+        other = HostedLearning(connection, lambda:clock[0], extractor=self)
+        results=[]
+        thread=threading.Thread(target=lambda:results.append(other.extract()))
+        thread.start(); thread.join(timeout=5)
+        assert not thread.is_alive() and results[0]['modelRuns']==0
+        # A real concurrent command can revoke consent while I/O is in flight.
+        snap = service.get(wid, 'fixture-one')
+        service.mutate(wid, 'fixture-one', snap['revision'], 'memory_egress', {'cloud':False,'confirmed':True})
+        return super().observe(state, events, now)
+with connection() as db:
+    db.execute('UPDATE public.pr_learning_events SET consumed_by=NULL WHERE workspace_id=%s',(wid,))
+    db.execute('DELETE FROM public.pr_memory_proposals WHERE workspace_id=%s',(wid,))
+service.learning.extractor=ConcurrentExtractor(local=False)
+clock[0]+=86401
+result=service.learning.extract()
+assert result['modelRuns']==1 and result.get('staleDiscarded')==1 and result['proposed']==0, result
+assert service.learning.extract()['modelRuns']==0
+
+# A process crash after dispatch leaves the reserve and consumed batch; no automatic replay.
+snapshot=service.get(wid,'fixture-one')
+act('memory_egress',{'cloud':True,'confirmed':True})
+class Interrupted(BaseException):pass
+class CrashedExtractor(FakeExtractor):
+    def observe(self,*args):raise Interrupted()
+with connection() as db:
+    db.execute('UPDATE public.pr_learning_events SET consumed_by=NULL WHERE workspace_id=%s',(wid,))
+service.learning.extractor=CrashedExtractor(local=False)
+clock[0]+=86401
+try:service.learning.extract()
+except Interrupted:pass
+else:raise AssertionError('simulated process crash was hidden')
+with connection() as db:
+    rid=db.execute("SELECT id::text FROM public.pr_usage_ledger r WHERE workspace_id=%s AND provider='learning' AND kind='reserve' AND NOT EXISTS(SELECT 1 FROM public.pr_usage_ledger t WHERE t.reservation_id=r.id AND t.kind<>'reserve')",(wid,)).fetchone()[0]
+with connection() as db:
+    db.execute('UPDATE public.pr_usage_ledger SET at=to_timestamp(%s) WHERE id::text=%s',(clock[0],rid))
+clock[0]+=601
+assert service.learning.extract()['modelRuns']==0
+with connection() as db:
+    assert db.execute("SELECT cost_state FROM public.pr_usage_ledger WHERE reservation_id::text=%s AND kind='settle'",(rid,)).fetchone()[0]=='estimated_unknown'
+    assert db.execute('SELECT reserved_usd_micro FROM public.pr_budgets WHERE scope=%s',('workspace:'+wid,)).fetchone()[0]>=10000
+service.learning.extractor=None
+checks.append('learning reservation and event claim commit before I/O; concurrent cron makes no repeat call; revoked consent discards output; process crash retains unknown spend without replay')
 
 # 6. Performance: the newest available value per job feeds a like-for-like note (never a proposal by itself).
 from postriff_phase2 import learning_extract as extract  # noqa: E402

@@ -36,6 +36,10 @@ try:
 except AlphaError as error:
     assert error.status == 403
 
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_campaigns WHERE workspace_id=%s", (workspace_id,)).fetchone()[0] == 1
+    assert db.execute("SELECT status FROM pr_recurring_tasks WHERE workspace_id=%s", (workspace_id,)).fetchone()[0] == 'active'
+
 for table in ("pr_campaigns", "pr_recurring_tasks", "pr_recurring_occurrences", "pr_suggestions"):
     with connection() as db:
         db.execute("SET ROLE authenticated")

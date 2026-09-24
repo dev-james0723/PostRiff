@@ -10,13 +10,14 @@
  * and page gating never need to know where it came from.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, type PostRiffApi } from '@/lib/api/client';
 import type { Membership, WorkspaceListItem } from '@/lib/api/types';
 import { WorkspaceAccessProvider, type WorkspaceAccess } from '@/lib/auth/access';
 import { permissionsFor } from '@/lib/auth/permissions';
 import { useAuth } from '@/lib/auth/session';
+import type { WorkspaceBootstrap } from './bootstrap';
 import type { WorkspacePlan } from '@/types';
 
 const WORKSPACE_KEY = 'postriff-workspace';
@@ -69,13 +70,15 @@ function toPlan(value: string | undefined | null): WorkspacePlan {
   return value === 'studio' || value === 'assist' ? value : 'trial';
 }
 
-export function WorkspaceProvider({ children }: { children: ReactNode }) {
+export function WorkspaceProvider({ children, initial }: { children: ReactNode; initial?: WorkspaceBootstrap | null }) {
   const auth = useAuth();
   const { api } = auth;
-  const [status, setStatus] = useState<WorkspaceStatus>('idle');
+  const seed = initial?.me.userId === auth.user?.id ? initial : null;
+  const seeded = useRef(Boolean(seed));
+  const [status, setStatus] = useState<WorkspaceStatus>(seed ? 'ready' : 'idle');
   const [error, setError] = useState<string | null>(null);
-  const [workspaces, setWorkspaces] = useState<WorkspaceListItem[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceListItem[]>(seed?.workspaces ?? []);
+  const [selected, setSelected] = useState<string | null>(seed?.workspaceId ?? null);
 
   const load = useCallback(async (select?: string) => {
     setStatus('loading');
@@ -95,6 +98,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setSelected(active);
       try {
         localStorage.setItem(WORKSPACE_KEY, active);
+        document.cookie = `postriff_workspace=${encodeURIComponent(active)}; Path=/; SameSite=Lax`;
       } catch {
         /* ignore */
       }
@@ -107,6 +111,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (auth.status === 'signed-in') {
+      if (seeded.current) { seeded.current = false; return; }
       void load();
     } else {
       setStatus('idle');
@@ -121,6 +126,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setSelected(workspaceId);
       try {
         localStorage.setItem(WORKSPACE_KEY, workspaceId);
+        document.cookie = `postriff_workspace=${encodeURIComponent(workspaceId)}; Path=/; SameSite=Lax`;
       } catch {
         /* ignore */
       }
@@ -140,7 +146,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     enabled: status === 'ready' && Boolean(selected),
     staleTime: 60_000
   });
-  const plan = toPlan(usage.data?.subscription?.plan);
+  const plan = toPlan(usage.data?.subscription?.plan ?? seed?.workspaces.find((w) => w.workspaceId === selected)?.plan);
 
   const access = useMemo<WorkspaceAccess>(
     () => ({

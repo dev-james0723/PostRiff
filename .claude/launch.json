@@ -36,6 +36,56 @@
         "cd /Users/ouxianxing/Documents/James-Au-Studio/web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4332 POSTRIFF_DIST_DIR=.next-alt npm run dev -- -p 3101"
       ],
       "port": 3101
+    },
+    {
+      "name": "language-picker-mockup",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4390",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "/private/tmp/claude-501/-Users-ouxianxing-Documents-James-Au-Studio/ef36d43a-9e7b-4543-9a0d-1ee3f6ef6455/scratchpad"
+      ],
+      "port": 4390
+    },
+    {
+      "name": "languages-api",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio-languages && LC_ALL=C POSTRIFF_DEV_WEB_ORIGIN=http://localhost:3102 /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -c \"import importlib.util,sys; sys.argv=['postriff_dev_hosted.py','--port','4333']; spec=importlib.util.spec_from_file_location('devharness','scripts/postriff_dev_hosted.py'); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.PORT_PG=55443; m.main()\""
+      ],
+      "port": 4333
+    },
+    {
+      "name": "ai-routing-api",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio-ai-routing && LC_ALL=C POSTRIFF_DEV_WEB_ORIGIN=http://localhost:3121 POSTRIFF_DEV_RELAY_TEST_CODEX_VERSIONS=9.9.9 POSTRIFF_RESEARCH=0 /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -c \"import importlib.util,sys; sys.argv=['postriff_dev_hosted.py','--port','4351']; spec=importlib.util.spec_from_file_location('devharness','scripts/postriff_dev_hosted.py'); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.PORT_PG=55461; m.main()\""
+      ],
+      "port": 4351
+    },
+    {
+      "name": "ai-routing-web",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio-ai-routing/web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4351 npx next dev --webpack -p 3121"
+      ],
+      "port": 3121
+    },
+    {
+      "name": "languages-web",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/ouxianxing/Documents/James-Au-Studio-languages/web && POSTRIFF_API_ORIGIN=http://127.0.0.1:4333 npm run dev -- -p 3102"
+      ],
+      "port": 3102
     }
   ]
 }

@@ -38,6 +38,8 @@ def refresh(state: dict, now: float) -> list[dict]:
         if item["identity"] not in live and item["status"] in ("open", "snoozed"):
             item["status"] = "stale"
             item["staleAt"] = now
+        elif item['status'] == 'snoozed' and item.get('snoozedUntil', now + 1) <= now:
+            item['status'] = 'open'
     return items
 
 
@@ -57,9 +59,13 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         if not isinstance(until, (int, float)) or until <= now: raise AlphaError("Choose a future snooze time.")
         item.update({"status": "snoozed", "snoozedUntil": until, "snoozedBy": actor})
     elif action == "raffi_suggestion_accept":
-        if item.get("actionRef"):
+        live = {digest({'kind': entry['kind'], 'evidence': entry['evidence']}) for entry in _evidence(state)}
+        if item['identity'] not in live:
+            raise AlphaError("This suggestion's evidence changed. Refresh suggestions.", 409)
+        if (item.get('actionRef') or {}).get('targetId'):
             return {"suggestionId": item["id"], "status": item["status"], "actionRef": item["actionRef"]}
-        item["actionRef"] = {"id": uid(), "type": {"draft": "draft_intent", "campaign": "campaign_editor", "review": "review_queue"}[item["action"]], "authority": "open_for_review"}
+        evidence = item['evidence'][0]
+        item["actionRef"] = {"id": (item.get('actionRef') or {}).get('id') or uid(), "type": {"draft": "draft_intent", "campaign": "campaign_editor", "review": "review_queue"}[item["action"]], "authority": "open_for_review", "workspaceId": state['workspace']['id'], "targetType": evidence['type'], "targetId": evidence['id'], "targetRevision": evidence['revision']}
         item.update({"status": "accepted", "acceptedBy": actor, "acceptedAt": now})
     else:
         raise AlphaError("Unsupported suggestion action.")

@@ -113,7 +113,7 @@ class Gating(unittest.TestCase):
         self.assertFalse(hosted.model_allowed({"learning": {"cloudExtraction": True}, "memoryEgress": {"cloud": False}}))
         self.assertTrue(hosted.model_allowed({"learning": {"cloudExtraction": True}, "memoryEgress": {"cloud": True}}))
         hosted.extractor = model.ModelExtractor(Recording({"candidates": []}), "cli", local=True)
-        self.assertTrue(hosted.model_allowed({"learning": {}}))
+        self.assertFalse(hosted.model_allowed({"learning": {}}), "a local CLI still sends to cloud and needs egress consent")
 
     def test_environment_prefers_the_cli_then_the_gateway_then_nothing(self):
         previous = os.environ.get("POSTRIFF_LOCAL_CLI")

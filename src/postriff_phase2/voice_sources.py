@@ -81,6 +81,8 @@ def normalize_import(payload: dict) -> list[dict]:
         record = {
             "text": text,
             "title": _bounded(raw.get("title"), 200) or "Writing sample",
+            # Only the server's verified social importer can attest official provenance.
+            "voiceOrigin": "user_provided",
             "externalId": _bounded(raw.get("externalId"), 300),
             "platform": _bounded(raw.get("platform"), 80),
             "account": _bounded(raw.get("account"), 200),
@@ -101,6 +103,13 @@ def _source(state: dict, source_id: str) -> dict:
     if source is None:
         raise AlphaError("This voice sample is not available in your workspace.", 404)
     return source
+
+
+def _remove_evidence_quotes(profile: dict, source_id: str) -> None:
+    """Revoking a sample also removes its copied excerpts from retained proposals."""
+    for dimension in profile.get('dimensions', []):
+        if isinstance(dimension, dict):
+            dimension['quotes'] = [quote for quote in dimension.get('quotes', []) if isinstance(quote, dict) and quote.get('sourceId') != source_id]
 
 
 def apply_action(state: dict, action: str, payload: dict, actor: str, now: float) -> dict:
@@ -192,10 +201,17 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             if source["id"] in evidence_ids:
                 profile["stale"] = True
                 profile["staleReason"] = "supporting_sample_revoked"
+                profile['writingExample'] = ''
+                if isinstance(profile.get('profile'), dict):
+                    profile['profile']['writingExample'] = ''
+                    _remove_evidence_quotes(profile['profile'], source['id'])
+                _remove_evidence_quotes(profile, source['id'])
         provisional = state.get("speaker", {}).get("provisional")
         if isinstance(provisional, dict) and source["id"] in provisional.get("evidenceSourceIds", []):
             provisional["status"] = "stale"
             provisional["staleReason"] = "supporting_sample_revoked"
+            provisional['writingExample'] = ''
+            _remove_evidence_quotes(provisional, source['id'])
         for variant in state.get("variants", []):
             if source["id"] in variant.get("sourceIds", []) or source["id"] in variant.get("voiceSourceIds", []):
                 variant["blockedByRetraction"] = True
@@ -209,7 +225,7 @@ def project(state: dict, source_ids: list[str], purpose: str, route: str) -> dic
         raise AlphaError("Unsupported voice sample purpose.")
     if not isinstance(route, str) or not route or len(route) > 120:
         raise AlphaError("Choose an exact writer route.")
-    if not isinstance(source_ids, list) or len(source_ids) > MAX_RECORDS or len(set(source_ids)) != len(source_ids):
+    if not isinstance(source_ids, list) or len(source_ids) > MAX_RECORDS or any(not isinstance(source_id, str) for source_id in source_ids) or len(set(source_ids)) != len(source_ids):
         raise AlphaError("Select at most 50 distinct voice samples.")
     samples, excluded = [], []
     for source_id in source_ids:
@@ -267,6 +283,14 @@ def retrieve(
         used += len(text)
     bindings = [{"id": item["id"], "revision": item["revision"], "contentHash": item["contentHash"]} for item in selected]
     return {**projection, "samples": selected, "bindings": bindings, "digest": digest(bindings), "retrievedChars": used}
+
+
+def bounded_style_directives(value) -> dict:
+    """Only formatting booleans may cross the writer boundary; never sample prose."""
+    if not isinstance(value, dict):
+        return {}
+    return {key: value[key] for key in ("shortOpenings", "shortParagraphs", "usesEmoji", "usesHashtags")
+            if type(value.get(key)) is bool}
 
 
 def style_directives(projection: dict) -> dict:

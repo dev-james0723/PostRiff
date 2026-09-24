@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api/client';
@@ -65,7 +65,8 @@ export function useChannelLanguages<P extends string>(initial: P[]) {
   const [selection, setSelection] = useState<ChannelSelection<P>[]>(() => initial.map((platform) => ({ platform, languages: null })));
   const saving = useRef<Promise<unknown>>(Promise.resolve());
   const settings = useMemo(() => settingsOf(snapshot.data), [snapshot.data]);
-  const suggestions = useMemo(() => browserSuggestions(), []);
+  const [suggestions, setSuggestions] = useState<{ tag: LocaleTag; reason: string }[]>([]);
+  useEffect(() => { setSuggestions(browserSuggestions()); }, []);
 
   const startingLanguages = useCallback(
     (platform: string): LocaleTag[] => {

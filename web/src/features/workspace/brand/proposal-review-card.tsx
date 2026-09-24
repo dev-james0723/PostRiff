@@ -13,6 +13,7 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApiError } from '@/lib/api/client';
 import { useAct } from '@/lib/api/hooks';
@@ -60,6 +61,7 @@ export function ProposalReviewCard({
 }) {
   const act = useAct();
   const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
   const [buttonState, setButtonState] = useState<ButtonState>('idle');
   const status = voiceStatus(state);
   const provisional = state?.speaker?.provisional ?? null;
@@ -77,7 +79,7 @@ export function ProposalReviewCard({
   async function approve() {
     setButtonState('loading');
     try {
-      await act.mutateAsync({ revision: workspaceRevision, action: 'profile_decide', payload: { decision: 'approve', note: '' } });
+      await act.mutateAsync({ revision: workspaceRevision, action: 'profile_decide', payload: { decision: 'approve', note: note.trim() } });
       setOpen(false);
       toast.success(`${next ? `Revision ${next}` : 'The proposed revision'} is active. New drafts are written with it.`);
     } catch (err) {
@@ -112,6 +114,10 @@ export function ProposalReviewCard({
           </p>
         )}
         <ProfileDetails profile={provisional} observationsLabel='Observations in this proposal' />
+        {canApprove && <label htmlFor='voice-revision-guidance' className='flex flex-col gap-2 text-sm'>Edit the writing guidance before approval (optional)
+          <Textarea id='voice-revision-guidance' aria-label='Edited writing guidance for this voice revision' value={note} onChange={(event) => setNote(event.target.value)} maxLength={1500} rows={3} disabled={act.isPending} placeholder='Leave blank to keep the proposed observations, or write your own guidance.' />
+          <span className='text-muted-foreground text-xs'>Your text replaces the proposed writing observations. Evidence remains visible for review; your edits are not labelled as AI findings.</span>
+        </label>}
       </CardContent>
       <CardFooter className='flex flex-col items-start gap-2'>
         {canApprove ? (

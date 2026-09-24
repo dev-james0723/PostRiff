@@ -1,5 +1,9 @@
 'use client';
 
+import { eligibleVoiceSources } from './voice-consent';
+import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
+import { VoiceLearningPanel } from './voice-learning-panel';
+
 import { OnboardingAnswer } from './onboarding-chat';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -24,7 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
 import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
+import type { GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { ProposalCard } from '@/features/memory/proposal-card';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -39,11 +43,13 @@ import { localTimeToDate } from './plan';
 import { ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
 import { useRun } from './use-run';
 import { VariantCard, destinationLabel } from './variant-card';
+import { ImageGenerationCard } from './image-generation-card';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
 const STAGE_LABELS: Record<string, string> = {
   writing: 'Writing',
-  drafting: 'Drafting'
+  drafting: 'Drafting',
+  image_generation: 'Generating image'
 };
 
 /** `queued` is emitted for every background runtime: name the local CLI only when the run's model belongs to one. */
@@ -63,6 +69,7 @@ interface AssistantBody {
   memoryProposal?: MemoryProposal | null;
   /** Which learned preferences the run received (design §5.7). */
   memory?: MemoryBinding | null;
+  images?: GeneratedImage[];
 }
 
 function bodyOf(message: ThreadMessage): AssistantBody & { text: string } {
@@ -115,9 +122,11 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const run = useRun(lastRunId, seed);
 
   const [text, setText] = useState('');
+  const [learning, setLearning] = useState<(VoiceLearningRequest & { workspaceId: string; conversationId: string; id: string }) | null>(null);
   const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [busy, setBusy] = useState(false);
   const [voiceMode, setVoiceMode] = useState<'neutral' | 'personalized'>('neutral');
+  const [imageRequested, setImageRequested] = useState(false);
   const [variantIndex, setVariantIndex] = useState(0);
   const [inspectorTab, setInspectorTab] = useState('preview');
 
@@ -138,16 +147,17 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   const state = snapshot.data?.state;
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
-  const voiceSourceIds = (state?.sources ?? []).filter((source) => source.kind === 'voice_sample' && source.active && source.selected && source.useGrants?.some((grant) => grant.purpose === 'generation' && grant.route === 'local-cli')).map((source) => source.id);
+  const choice = useModelChoice(models.data);
+  const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
   const voiceAvailable = voiceSourceIds.length > 0;
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
     return { platform, account: account?.account, state: account?.displayState };
   });
-  const choice = useModelChoice(models.data);
   const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
   const runModelLabel = run ? shortLabel(runOption, run.model) : choice.label;
   const timeZone = useTimeZone();
+  const imageCapability = models.data?.imageGeneration;
   const running = run?.status === 'running';
   const streamed = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'message.delta').map((e) => e.text ?? '').join(''), [run?.events]);
   const stage = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'progress.updated').at(-1)?.stage ?? null, [run?.events]);
@@ -183,7 +193,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   async function sendTurn() {
     const body = text.trim();
-    if (!body || languages.selection.length === 0 || busy) return;
+    if (!body || busy) return;
+    const learningRequest = voiceLearningIntent(body);
+    if (learningRequest) {
+      setLearning({ ...learningRequest, workspaceId, conversationId, id: crypto.randomUUID() });
+      setText('');
+      return; // The reviewed sample workflow is separate from draft generation.
+    }
+    if (languages.selection.length === 0) return;
     setBusy(true);
     try {
       const result = await api.turn(workspaceId, conversationId, {
@@ -193,6 +210,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
         reasoning: choice.reasoning,
         voiceMode,
         voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
+        imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
         timeZone
       });
       if (result.status === 'memory') {
@@ -203,6 +221,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
       }
       setText('');
+      setImageRequested(false);
       setVariantIndex(0);
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
       await client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
@@ -322,7 +341,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
                                   Cancel
                                 </button>
                               </span>
-                              {streamed ? (
+                              {stage === 'image_generation' ? (
+                                <ImageGenerationCard running />
+                              ) : streamed ? (
                                 <p className='text-sm leading-relaxed whitespace-pre-wrap'>
                                   {/* transitions.dev streaming text: each word the run sends resolves out of a soft blur. */}
                                   <StreamingText text={streamed} />
@@ -344,6 +365,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
                               preview={(variant, options) => <DraftPreview {...draftFor(variant)} scale={options?.scale} />}
                             />
                           )}
+                          {run.artifact?.images?.[0] && <ImageGenerationCard image={run.artifact.images[0]} />}
                           {plan && snapshot.data && <PlanCard run={run} plan={plan} snapshot={snapshot.data} />}
                           {!plan && variants.length > 0 && (
                             <p className='text-muted-foreground text-xs'>
@@ -356,11 +378,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
                           )}
                         </>
                       ) : (
-                        body.plan && (
-                          <p className='text-muted-foreground text-xs'>
-                            Proposed {body.plan.destinations.length} post{body.plan.destinations.length === 1 ? '' : 's'} ({body.plan.destinations.map((d) => d.platform).join(', ')}) · earlier turn
-                          </p>
-                        )
+                        <>
+                          {body.images?.[0] && <ImageGenerationCard image={body.images[0]} />}
+                          {body.plan && (
+                            <p className='text-muted-foreground text-xs'>
+                              Proposed {body.plan.destinations.length} post{body.plan.destinations.length === 1 ? '' : 's'} ({body.plan.destinations.map((d) => d.platform).join(', ')}) · earlier turn
+                            </p>
+                          )}
+                        </>
                       )}
                       <span className='text-muted-foreground text-[11px]'>{relativeTime(message.at)}</span>
                     </MessageContent>
@@ -369,6 +394,8 @@ export function ConversationView({ conversationId }: { conversationId: string })
               );
             })}
           </ol>
+
+          {learning?.workspaceId === workspaceId && learning.conversationId === conversationId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
 
           {messages.at(-1)?.body.intent === 'onboarding' ? (
             <OnboardingAnswer key={messages.at(-1)!.messageId} message={messages.at(-1)!} conversationId={conversationId} canEdit={canEdit} />
@@ -380,7 +407,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
               onSubmit={() => void sendTurn()}
               busy={busy}
               compact
-              placeholder='Ask for another angle, a shorter version, or a different time…'
+              placeholder={imageRequested ? 'Describe the image you want to generate…' : 'Ask for another angle, a shorter version, or a different time…'}
               chips={chips}
               languages={languages}
               models={choice.options}
@@ -392,11 +419,18 @@ export function ConversationView({ conversationId }: { conversationId: string })
               voiceMode={voiceMode}
               onVoiceMode={setVoiceMode}
               voiceAvailable={voiceAvailable}
-              hint='⌘↵ to send · channels and times you name in the message win over the chips'
+              imageGeneration={{
+                enabled: imageRequested,
+                available: Boolean(imageCapability?.available),
+                detail: imageCapability?.detail ?? 'Checking the managed image route…',
+                onChange: setImageRequested
+              }}
+              hint={imageRequested ? 'Uses the managed image route and one media credit · independent of the writing model' : '⌘↵ to send · channels and times you name in the message win over the chips'}
             />
           ) : (
             <p className='text-muted-foreground text-sm'>You need the edit permission to draft in this workspace.</p>
           )}
+          {busy && imageRequested && <ImageGenerationCard running className='mx-auto' />}
         </section>
 
         {/* Inspector */}

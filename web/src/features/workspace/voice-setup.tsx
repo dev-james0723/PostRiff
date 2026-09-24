@@ -41,7 +41,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   const [audience, setAudience] = useState(state?.brandHub?.audience ?? '');
   const [subject, setSubject] = useState(state?.brandHub?.subject ?? '');
   const [speaker, setSpeaker] = useState(state?.brandHub?.speaker ?? '');
-  const [tone, setTone] = useState<'warm' | 'direct' | 'reflective'>('warm');
+  const [tone, setTone] = useState<'' | 'warm' | 'direct' | 'reflective'>('');
   const [writing, setWriting] = useState('');
   const [note, setNote] = useState('');
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -50,9 +50,10 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   const fieldTransition = reduce ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT };
 
   const needsSubject = mode !== 'personal';
-  const canPropose = purpose.trim() && audience.trim() && (!needsSubject || subject.trim()) && (mode !== 'hybrid' || speaker.trim());
+  const canPropose = Boolean(tone) && purpose.trim() && audience.trim() && (!needsSubject || subject.trim()) && (mode !== 'hybrid' || speaker.trim());
 
   async function propose() {
+    if (!canPropose) return;
     try {
       let current = revision;
       const modeResult = await act.mutateAsync({ revision: current, action: 'mode', payload: { mode } });
@@ -94,14 +95,14 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
             {proposalStale
               ? 'A supporting sample changed or was revoked. Analyse the current selected samples again before approval.'
               : provisional.analysisRoute
-                ? 'Built locally from the writing samples you selected. Review the evidence before activation.'
+                ? provisional.analysisMethod === 'ai' ? 'Proposed by your selected AI model from consented samples. Review and edit it before activation.' : 'Local writing statistics from selected samples, not AI tone analysis. Review them before activation.'
                 : 'This is what drafts will be checked against. Approve it or start again.'}
           </CardDescription>
         </CardHeader>
         <CardContent className='flex flex-col gap-5 text-sm'>
           <ProfileDetails profile={provisional} observationsLabel='Observations in this proposal' />
           <div className='flex flex-col gap-1.5'>
-            <Label htmlFor='voice-note'>Optional: one line in your words</Label>
+            <Label htmlFor='voice-note'>Optional: replace the proposed observations with your own writing guidance</Label>
             <Input id='voice-note' value={note} onChange={(e) => setNote(e.target.value)} maxLength={1500} placeholder='e.g. Plain, specific, never salesy.' />
           </div>
         </CardContent>
@@ -181,6 +182,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
 
         <fieldset className='flex flex-col gap-3'>
           <legend className='mb-1 text-sm font-medium'>3. Tone and a sample</legend>
+          <p className='text-muted-foreground text-xs'>Choose a tone explicitly. This is your preference, not a learned conclusion. Evidence-backed analysis is available in Learn my voice.</p>
           <RadioGroup value={tone} onValueChange={(value) => setTone(value as 'warm' | 'direct' | 'reflective')} className='grid gap-2 sm:grid-cols-3'>
             {TONES.map((option) => (
               <RadioGroupItem

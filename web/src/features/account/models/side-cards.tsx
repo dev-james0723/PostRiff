@@ -75,8 +75,8 @@ function LearningRow({ learning }: { learning: LearningSummary; egress: MemoryEg
   }
   const extractor = learning.extractor;
   if (extractor?.kind === 'rules') return <ConsentRow title='Learning from your edits' state='Counting rules'>Counting rules read your edits. No model extractor is configured.</ConsentRow>;
-  if (extractor?.kind === 'local') return <ConsentRow title='Learning from your edits' state='Local model'>Counting rules and the configured local model ({extractor.model ?? 'model name unavailable'}) may read edit pairs. The cloud switch does not govern this local route.</ConsentRow>;
-  if (extractor?.kind === 'cloud') return <ConsentRow title='Learning from your edits' state={extractor.allowed ? 'Cloud model allowed' : 'Counting rules only'}>Counting rules read your edits. {extractor.allowed ? `The configured cloud model (${extractor.model ?? 'model name unavailable'}) may read redacted edit pairs.` : 'The configured cloud model cannot read edit pairs until both cloud extraction and memory sharing are enabled.'}</ConsentRow>;
+  if (extractor?.kind === 'local' && extractor.egress === 'local') return <ConsentRow title='Learning from your edits' state='Local model'>Counting rules and the configured local model ({extractor.model ?? 'model name unavailable'}) may read edit pairs. The cloud switch does not govern this local route.</ConsentRow>;
+  if (extractor?.kind === 'cloud' || extractor?.egress === 'cloud' || extractor?.kind === 'local') return <ConsentRow title='Learning from your edits' state={extractor.allowed ? 'Cloud model allowed' : 'Counting rules only'}>Counting rules read your edits. {extractor.allowed ? `The configured cloud model (${extractor.model ?? 'model name unavailable'}) may read redacted edit pairs.` : 'The configured cloud model cannot read edit pairs until both cloud extraction and memory sharing are enabled.'}</ConsentRow>;
   return <ConsentRow title='Learning from your edits' state='Extractor unavailable'>Counting rules read your edits. This server did not report whether a model extractor is configured.</ConsentRow>;
 }
 

@@ -139,7 +139,7 @@ function ModelsBody() {
             </div>
             {agents.length > 0 && (
               <p className='text-muted-foreground max-w-prose text-xs'>
-                PostRiff treats a CLI as local: your memory files and a draft’s sources reach it without the cloud-consent checks the managed model gets, and the CLI sends the request on to its own provider under the sign-in on that machine. Picking one of its models makes it the writer for new drafts in this browser; every run still records which writer produced it.
+                Rafii applies cloud-consent checks to CLI writers too: Claude Code and Codex run on this machine but send selected context to their providers. Writing samples additionally require permission for the exact writer route. Picking one of its models makes it the writer for new drafts in this browser; every run still records which writer produced it.
               </p>
             )}
             {loading ? (

@@ -14,7 +14,7 @@ import { siteConfig } from '@/config/site';
 export const metadata: Metadata = {
   title: 'Pricing',
   description: 'Simple monthly plans. 14-day trial, no card. Allowances stop at the limit — never a surprise charge.',
-  openGraph: { title: 'Pricing · PostRiff', url: '/pricing' }
+  openGraph: { title: 'Pricing · Rafii', url: '/pricing' }
 };
 
 const ROWS: { label: string; value: (plan: (typeof plans)[number]) => string }[] = [
@@ -32,7 +32,7 @@ const PRICING_FAQ = [
   { q: 'When am I billed?', a: 'Monthly, in advance, from the day you subscribe. The trial never converts automatically; you choose a plan yourself.' },
   { q: 'Can I cancel any time?', a: 'Yes, from the billing portal. Paid features run to the end of the period; drafts stay readable and exportable afterwards.' },
   { q: 'What does “introductory pricing” mean?', a: 'These are the prices for early customers. If they change before general availability, existing subscribers keep their price for at least a year.' },
-  { q: 'Refunds?', a: 'See the Terms of Service. Nothing is charged during the trial, so you can evaluate PostRiff fully before paying.' },
+  { q: 'Refunds?', a: 'See the Terms of Service. Nothing is charged during the trial, so you can evaluate Rafii fully before paying.' },
   { q: 'Taxes?', a: 'Shown at checkout where applicable, based on your billing address.' }
 ];
 

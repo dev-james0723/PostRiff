@@ -18,10 +18,10 @@ export const DOCS: Doc[] = [
     summary: 'From a new account to your first approved post.',
     sections: [
       { heading: 'Create your workspace', paragraphs: ['Sign up with Google or an email code and choose a trial plan. A workspace is created for you; you are its owner.'] },
-      { heading: 'Add a source', paragraphs: ['Open Ideas, paste a thought or a paragraph, mark whether it is your own writing, and choose destinations and a language. PostRiff drafts one candidate per destination.'] },
+      { heading: 'Add a source', paragraphs: ['Open Ideas, paste a thought or a paragraph, mark whether it is your own writing, and choose destinations and a language. Rafii drafts one candidate per destination.'] },
       { heading: 'Add candidates to your drafts', paragraphs: ['Pick the versions that sound like you and add them. This creates reviewable drafts — nothing is published yet.'] },
       { heading: 'Connect a channel', paragraphs: ['In Channels, connect the account you want to publish to. The card shows each capability’s verified level.'] },
-      { heading: 'Approve and publish', paragraphs: ['Prepare a draft for a channel and time, then approve the exact review in the Queue. The worker publishes at the approved time and records a receipt. If the channel is Assisted, PostRiff prepares the post and you complete the last step.'] }
+      { heading: 'Approve and publish', paragraphs: ['Prepare a draft for a channel and time, then approve the exact review in the Queue. The worker publishes at the approved time and records a receipt. If the channel is Assisted, Rafii prepares the post and you complete the last step.'] }
     ]
   },
   {
@@ -30,8 +30,8 @@ export const DOCS: Doc[] = [
     summary: 'Direct, Assisted, Local — and why a connection is not a permission.',
     sections: [
       { heading: 'Six capabilities', paragraphs: ['Identity, publish, schedule, analytics, read comments and reply are verified separately for every connected account.'] },
-      { heading: 'Levels', paragraphs: ['Direct: PostRiff acts through the official API after your approval. Assisted: PostRiff prepares the post; a reviewed connector or you completes the final step. Local: the desktop companion publishes through your own login on your machine. Unsupported: not offered for this provider yet.'] },
-      { heading: 'Provider reviews', paragraphs: ['LinkedIn, Threads and Instagram require PostRiff to pass their app reviews before direct publishing is allowed. Until then their cards read “Assisted · review pending”. We never label a capability Direct before the review passes.'] }
+      { heading: 'Levels', paragraphs: ['Direct: Rafii acts through the official API after your approval. Assisted: Rafii prepares the post; a reviewed connector or you completes the final step. Local: a planned companion route; it is unavailable until the companion release is verified. Unsupported: not offered for this provider yet.'] },
+      { heading: 'Provider reviews', paragraphs: ['LinkedIn, Threads and Instagram require Rafii to pass their app reviews before direct publishing is allowed. Until then their cards read “Assisted · review pending”. We never label a capability Direct before the review passes.'] }
     ]
   },
   {
@@ -41,7 +41,7 @@ export const DOCS: Doc[] = [
     sections: [
       { heading: 'What a review contains', paragraphs: ['The text, the media (by hash), the account, the capability level and the time, frozen into a manifest with a digest.'] },
       { heading: 'Approving', paragraphs: ['Approving the digest creates a job. Changing anything — text, media, account, time — requires a new review. Approvers need the approve permission or the “can approve publications” grant.'] },
-      { heading: 'Receipts', paragraphs: ['Every publication records the provider’s reference and confirmation. Uncertain outcomes are reconciled before any retry, so a post is never duplicated.'] }
+      { heading: 'Receipts', paragraphs: ['Every publication records the provider’s reference and confirmation. Uncertain outcomes are reconciled before any retry, and unresolved results require manual verification; do not resubmit an uncertain publication.'] }
     ]
   },
   {
@@ -51,7 +51,7 @@ export const DOCS: Doc[] = [
     sections: [
       { heading: 'Allowances', paragraphs: ['Writing batches, media credits, connected accounts and storage are per plan. When an allowance is used up, the action stops and tells you; nothing is charged silently.'] },
       { heading: 'Trial', paragraphs: ['14 days, no card, no automatic conversion. You choose a plan yourself when you are ready.'] },
-      { heading: 'Subscriptions', paragraphs: ['Monthly billing through Stripe. Payment method, plan changes, cancellation and invoices live in the billing portal (Account → Usage & plan → Manage billing).'] }
+      { heading: 'Subscriptions', paragraphs: ['Proposed monthly billing through Stripe, available only when the plan and payment integration are activated. Payment method, plan changes, cancellation and invoices live in the billing portal (Account → Usage & plan → Manage billing).'] }
     ]
   },
   {

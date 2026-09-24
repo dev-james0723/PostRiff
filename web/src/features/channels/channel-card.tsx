@@ -86,7 +86,7 @@ function DisconnectButton({
           <AlertDialogHeader>
             <AlertDialogTitle>Disconnect {platform}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {account}: stored tokens are wiped and revoked remotely where supported. Approved jobs for this account will be held until you reconnect.
+              {account}: stored tokens are wiped and revoked remotely where supported. Officially imported writing samples for this connection are revoked and their retained text is removed; dependent Writing DNA is invalidated. Manual samples remain. Approved jobs for this account will be held until you reconnect.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -252,6 +252,11 @@ export const ChannelCard = forwardRef<HTMLDivElement, ChannelCardProps>(function
         )}
 
         <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />
+        {channel.socialReadiness && <div className='space-y-1 text-xs' aria-label='Independent social permissions'>
+          <p>{channel.socialReadiness.history === 'HISTORICAL_IMPORT_AVAILABLE' ? 'Historical import available for the last verified grant. Each retrieval rechecks access.' : channel.socialReadiness.connection === 'CONNECTED' && channel.platform === 'LinkedIn' ? 'LinkedIn is connected, but LinkedIn has not granted this app permission to import your historical posts.' : 'Historical import is not currently available. Verify or reconnect this account.'}</p>
+          <p>{channel.socialReadiness.publishing === 'PUBLISHING_AVAILABLE' ? 'Publishing permission is available. Every post still needs your explicit approval.' : channel.socialReadiness.publishing === 'PUBLISHING_AWAITING_PROVIDER_REVIEW' ? 'Publishing awaits confirmed platform review.' : 'Publishing permission is unavailable for this connection.'}</p>
+          {channel.socialReadiness.history !== 'HISTORICAL_IMPORT_AVAILABLE' && <Link href='/app/workspace/brand#manual-writing-samples' className='underline'>Import writing samples manually</Link>}
+        </div>}
 
         {/* A div, not a p: the scopes list expands a block inside this row. */}
         <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>

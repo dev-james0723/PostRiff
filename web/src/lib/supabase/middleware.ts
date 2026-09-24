@@ -11,7 +11,13 @@ import { getSupabaseEnv, hasSupabaseEnv } from './env';
 export async function updateSession(
   request: NextRequest
 ): Promise<{ response: NextResponse; user: User | null }> {
-  let supabaseResponse = NextResponse.next({ request });
+  function nextResponse() {
+    const headers = new Headers(request.headers);
+    // Overwrite any incoming value; the server layout never trusts a browser's route hint.
+    headers.set('x-postriff-home-render', request.nextUrl.pathname === '/app' ? '1' : '0');
+    return NextResponse.next({ request: { headers } });
+  }
+  let supabaseResponse = nextResponse();
 
   if (!hasSupabaseEnv()) {
     return { response: supabaseResponse, user: null };
@@ -26,7 +32,7 @@ export async function updateSession(
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        supabaseResponse = NextResponse.next({ request });
+        supabaseResponse = nextResponse();
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)
         );

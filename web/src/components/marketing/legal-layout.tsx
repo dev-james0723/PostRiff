@@ -33,7 +33,7 @@ export function LegalLayout({ eyebrow, title, intro, sections, children }: Legal
             <Icons.info className='size-4' />
             <AlertTitle>{LEGAL_REVIEW_BANNER}</AlertTitle>
             <AlertDescription>
-              This document describes how PostRiff actually works today. It has not yet been reviewed by qualified counsel; placeholders in brackets will be completed before general availability.
+              This document describes how Rafii actually works today. It has not yet been reviewed by qualified counsel; placeholders in brackets will be completed before general availability.
             </AlertDescription>
           </Alert>
         )}

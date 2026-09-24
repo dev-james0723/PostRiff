@@ -32,6 +32,16 @@ class Adapters(unittest.TestCase):
         self.assertFalse(registry["linkedin"].production_reviewed)
         self.assertTrue(registry["threads"].production_reviewed)
 
+    def test_provider_kill_switch_stops_before_any_grant_or_transport(self):
+        values = {'POSTRIFF_OAUTH_LINKEDIN_CLIENT_ID':'id', 'POSTRIFF_OAUTH_LINKEDIN_CLIENT_SECRET':'synthetic', 'POSTRIFF_OAUTH_LINKEDIN_REVIEWED':'true', 'POSTRIFF_OAUTH_LINKEDIN_DISABLED':'true'}
+        providers = registry_from_environment(values)
+        class DenyOAuth:
+            def token_for_worker(self, *args): raise AssertionError('Disabled provider must not request tokens')
+        social = HostedSocial(DenyOAuth(), providers, transport=lambda *a, **k: self.fail('No network'))
+        self.assertEqual(social.submit({'platform':'LinkedIn'})['state'], 'held')
+        self.assertTrue(providers['linkedin'].production_reviewed)
+        self.assertFalse(providers['linkedin'].execution_enabled)
+
     def test_linkedin_flow_shapes(self):
         transport = Recorder([
             {"status": 200, "headers": {}, "body": {"access_token": "AT", "expires_in": 5184000, "scope": "openid profile w_member_social"}},
@@ -72,6 +82,19 @@ class Adapters(unittest.TestCase):
                 self.assertEqual((identity["providerAccountId"], identity["handle"]), ("1789", "@creator"))
                 self.assertEqual(provider.refresh("LONG")["accessToken"], "LONG2")
                 self.assertFalse(provider.revoke("LONG"))
+
+    def test_threads_scope_inspection_never_substitutes_requested_permissions(self):
+        for body, expected in [({'data':{'is_valid':True,'user_id':'1789','scopes':['threads_basic']}}, ['threads_basic']), ({'data':{'is_valid':False,'user_id':'1789','scopes':['threads_content_publish']}}, None), ({'data':{'is_valid':True,'user_id':'foreign','scopes':['threads_content_publish']}}, None), ({'data':{}}, None)]:
+            provider = ThreadsProvider('cid', 'synthetic', transport=Recorder([{'status':200,'body':body}]))
+            self.assertEqual(provider.inspect_scopes('SYNTHETIC','1789'),expected)
+
+    def test_linkedin_introspection_binds_active_token_and_client(self):
+        for body, expected in [({'active': True, 'client_id': 'cid', 'scope': 'openid,profile,w_member_social'}, ['openid','profile','w_member_social']), ({'active': True, 'client_id': 'other', 'scope': 'w_member_social'}, None), ({'active': False, 'client_id': 'cid', 'scope': 'w_member_social'}, None), ({'active': True, 'client_id': 'cid'}, None)]:
+            transport = Recorder([{'status':200, 'body':body}])
+            adapter = LinkedInProvider('cid','synthetic',transport=transport)
+            self.assertEqual(adapter.inspect_scopes('synthetic-access','urn:li:person:abc'), expected)
+            self.assertEqual(transport.calls[0]['url'], 'https://www.linkedin.com/oauth/v2/introspectToken')
+            self.assertNotIn('synthetic', transport.calls[0]['url'])
 
     def test_provider_error_is_502_not_silent(self):
         provider = ThreadsProvider("cid", "s", transport=Recorder([{"status": 400, "headers": {}, "body": {"error": "bad"}}]))
@@ -128,17 +151,22 @@ class Worker(unittest.TestCase):
         social_no_read = HostedSocial(FakeOAuth(scopes=("w_member_social",)), providers, transport=Recorder([]))
         self.assertEqual(social_no_read.reconcile(manifest(), {"providerReference": "urn:li:share:1"})["state"], "uncertain")
 
+    def test_threads_readback_needs_exact_author_even_when_id_and_text_match(self):
+        for owner in ({}, {'id':'foreign'}, None):
+            social = HostedSocial(FakeOAuth(), {'threads':ReviewedProvider()}, transport=Recorder([{'status':200,'body':{'id':'999','text':'Hello world','permalink':'https://www.threads.net/@creator/post/x','owner':owner}}]))
+            self.assertEqual(social.reconcile(manifest('Threads'), {'providerReference':'999'})['state'], 'uncertain')
+
     def test_threads_container_flow_and_reconcile_by_container(self):
         providers = {"threads": ReviewedProvider()}
         transport = Recorder([
             {"status": 200, "headers": {}, "body": {"id": "555"}},
             {"status": 200, "headers": {}, "body": {"id": "999"}},
-            {"status": 200, "headers": {}, "body": {"id": "999", "text": "Hello world", "permalink": "https://www.threads.net/@creator/post/x"}},
+            {"status": 200, "headers": {}, "body": {"id": "999", "text": "Hello world", "owner": {"id":"1789"}, "permalink": "https://www.threads.net/@creator/post/x"}},
             {"status": 200, "headers": {}, "body": {"id": "556"}},
             {"status": 500, "headers": {}, "body": {}},
             {"status": 200, "headers": {}, "body": {"status_code": "PUBLISHED"}},
         ])
-        social = HostedSocial(FakeOAuth(), providers, transport=transport)
+        social = HostedSocial(FakeOAuth(scopes=("threads_basic", "threads_content_publish")), providers, transport=transport)
         accepted = social.submit(manifest("Threads"))
         self.assertEqual((accepted["state"], accepted["reference"], accepted["container"]), ("provider_accepted", "999", "555"))
         self.assertEqual(transport.calls[0]["form"]["media_type"], "TEXT")
@@ -152,7 +180,7 @@ class Worker(unittest.TestCase):
 
     def test_instagram_requires_image_and_holds_without_grant(self):
         social = HostedSocial(FakeOAuth(), {"instagram": ReviewedProvider()}, transport=Recorder([]))
-        self.assertEqual(social.submit(manifest("Instagram"))["state"], "failed")
+        self.assertEqual(social.submit(manifest("Instagram"))["state"], "held")
         missing = manifest()
         missing["channelId"] = "missing"
         with self.assertRaises(AlphaError):

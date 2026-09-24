@@ -1,0 +1,78 @@
+name: Rafii local release gates
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: consumer-ready-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  local-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and validation tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+      - name: Install PostgreSQL 17 using its signed official repository
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+      - name: Python domain and security contracts
+        run: python scripts/consumer_ready_check.py ci-python python -m unittest discover -s tests -p 'test_*.py'
+      - name: Disposable DB integration, migrations and restore
+        run: python scripts/consumer_ready_check.py ci-postgres python scripts/postriff_pg_suite.py
+      - name: Web contracts and locale checks
+        run: python scripts/consumer_ready_check.py ci-web node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs
+      - name: Types, lint and isolated production build
+        run: |
+          python scripts/consumer_ready_check.py ci-types npm --prefix web run typecheck
+          python scripts/consumer_ready_check.py ci-lint npm --prefix web run lint
+          python scripts/consumer_ready_web.py --prepare npm ci
+          python scripts/consumer_ready_check.py ci-build python scripts/consumer_ready_web.py npm run build
+      - name: Actual isolated Python function archive
+        run: |
+          npm install --prefix .codex/consumer-ready/vercel --no-save vercel@59.23.2 ignore@7.0.5
+          python scripts/consumer_ready_check.py ci-python-artifact node scripts/consumer_ready_artifact.cjs
+      - name: Offline source secret scan
+        run: python scripts/consumer_ready_check.py ci-secrets python scripts/consumer_ready_secrets.py
+      - name: Dependency audits
+        run: |
+          python -m pip_audit -r requirements.txt --format json --output docs/consumer-ready/evidence/ci-python-audit.json
+          npm --prefix web audit --audit-level=high --json > docs/consumer-ready/evidence/ci-npm-audit.json
+      - name: Real local browser, API and database integration
+        run: |
+          cd .codex/consumer-ready/web
+          npx playwright install --with-deps chromium
+          cd ../../..
+          python scripts/consumer_ready_check.py ci-session-cache node web/tests/session-cache-browser.cjs
+          python scripts/consumer_ready_check.py ci-browser python scripts/consumer_ready_browser.py
+          python scripts/consumer_ready_check.py ci-performance python scripts/consumer_ready_browser.py --performance
+      - name: Retain evidence tied to this commit
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-gates-${{ github.sha }}
+          path: docs/consumer-ready/evidence/
+          retention-days: 14

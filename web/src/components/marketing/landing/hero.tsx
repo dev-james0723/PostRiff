@@ -56,10 +56,10 @@ export function Hero() {
             Your ideas, on every platform
           </p>
           <h1 id='hero-title' style={line(1)} className='t-stagger-line text-4xl font-semibold tracking-tight text-balance sm:text-5xl md:text-6xl'>
-            One idea. 30+ platforms, including 小紅書 and B站. Still your voice.
+            Your AI teammate for social media.
           </h1>
           <p style={line(2)} className='t-stagger-line text-muted-foreground max-w-xl text-lg text-pretty'>
-            PostRiff rewrites a source for each platform and language the way you would, shows you every version, and publishes only what you approve — with a receipt.
+            Prepare drafts from the sources you allow, review and edit each version, then use an available connector or export for manual posting. Automatic publishing depends on the connected account and its verified permissions.
           </p>
           <div style={line(3)} className='t-stagger-line flex flex-wrap items-center gap-3'>
             <Magnetic strength={0.2} className='flex'>

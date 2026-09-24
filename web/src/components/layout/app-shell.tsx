@@ -1,5 +1,6 @@
 'use client';
 
+import type { WorkspaceBootstrap } from '@/lib/workspace/bootstrap';
 import { Suspense } from 'react';
 import KBar from '@/components/kbar';
 import { InfoSidebar } from '@/components/layout/info-sidebar';
@@ -19,10 +20,10 @@ import { ShortcutsDialog } from './shortcuts-dialog';
  * header + contextual info sidebar. Server work (cookie for the sidebar
  * state, metadata) stays in `src/app/app/layout.tsx`.
  */
-export function AppShell({ defaultOpen, children }: { defaultOpen: boolean; children: React.ReactNode }) {
+export function AppShell({ defaultOpen, children, initial }: { defaultOpen: boolean; children: React.ReactNode; initial?: WorkspaceBootstrap | null }) {
   return (
-    <AuthProvider>
-      <WorkspaceProvider>
+    <AuthProvider initial={initial}>
+      <WorkspaceProvider initial={initial}>
         <Suspense fallback={null}>
           <AppGate>
             <PreferencesProvider>

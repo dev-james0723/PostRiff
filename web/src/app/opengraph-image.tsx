@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { siteConfig } from '@/config/site';
 
-export const alt = 'PostRiff — your ideas, on every platform, in your voice';
+export const alt = 'Rafii — your ideas, on every platform, in your voice';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -26,7 +26,7 @@ export default function OpenGraphImage() {
           {siteConfig.name}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div style={{ fontSize: 64, fontWeight: 700, lineHeight: 1.1, maxWidth: 1000 }}>One idea. 30+ platforms. Still your voice.</div>
+          <div style={{ fontSize: 64, fontWeight: 700, lineHeight: 1.1, maxWidth: 1000 }}>Your AI teammate for social media.</div>
           <div style={{ fontSize: 30, color: '#a1a1aa', maxWidth: 1000 }}>Rewritten per platform, approved by you, published with a receipt.</div>
         </div>
         <div style={{ display: 'flex', gap: 14, fontSize: 22, color: '#d4d4d8' }}>

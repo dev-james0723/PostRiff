@@ -22,6 +22,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/lib/api/client';
 import type { OAuthStart, ProviderView } from '@/lib/api/types';
 import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
+import { defaultConnectCapability } from '@/lib/channels/onboarding';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
 import { CONNECT_CAPABILITIES, type ConnectCapability } from '@/lib/channels/state';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -40,11 +41,7 @@ function offeredCapabilities(provider: ProviderView | undefined): ConnectCapabil
   return CONNECT_CAPABILITIES.filter((key) => provider.capabilities[key] === true);
 }
 
-function defaultCapability(provider: ProviderView | undefined, wanted?: ConnectCapability): ConnectCapability {
-  const offered = offeredCapabilities(provider);
-  if (wanted && offered.includes(wanted)) return wanted;
-  return offered.includes('publish') ? 'publish' : (offered[0] ?? 'publish');
-}
+const defaultCapability = defaultConnectCapability;
 
 function ProviderTile({
   provider,
@@ -70,8 +67,8 @@ function ProviderTile({
       <span className='flex min-w-0 flex-col gap-1'>
         <span className='text-sm font-medium'>{provider.platform}</span>
         <CapabilityBadge
-          level={provider.productionReviewed ? 'direct' : 'assisted'}
-          label={provider.productionReviewed ? 'Direct publishing' : 'Assisted · review pending'}
+          level={!provider.executionPaused && provider.productionReviewed ? 'direct' : 'assisted'}
+          label={provider.connectReady === false ? 'Setup required' : provider.executionPaused ? 'Paused' : 'Connection available'}
         />
       </span>
     </button>
@@ -197,7 +194,7 @@ export function ConnectSheet({
             </div>
           ) : providers.length === 0 ? (
             <p className='text-muted-foreground text-sm'>
-              No providers are configured on this deployment yet. Each appears here once its app credentials are in place.
+              Channel setup information is unavailable. Refresh this page or ask the operator to check the channel API. App sign-in and social connections are separate.
             </p>
           ) : (
             <>
@@ -213,6 +210,13 @@ export function ConnectSheet({
                   </div>
                 </section>
               )}
+
+              {provider && <div className='space-y-2 text-xs'>
+                <p>{provider.accountRequirement}</p>
+                {provider.setupIssues?.map((issue) => <p key={issue} role='status' className='text-destructive'>{issue}</p>)}
+                {provider.callbackUri && provider.connectReady === false && <p className='break-all'>Register this callback: <code>{provider.callbackUri}</code></p>}
+                {provider.id === 'linkedin' && !provider.historyAvailableForApp && <p>Connecting or publishing on LinkedIn does not grant access to historical posts. Until restricted read access is approved, import your own text in Learn my voice.</p>}
+              </div>}
 
               <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
@@ -239,9 +243,9 @@ export function ConnectSheet({
                 )}
                 {provider && (
                   <p className='text-muted-foreground text-xs'>
-                    {provider.productionReviewed
-                      ? 'Production-reviewed app: publishing runs through the official API after your approval.'
-                      : 'Awaiting provider review: PostRiff prepares each post and you complete the final step.'}
+                    {provider.executionPaused ? 'This connector is temporarily paused. Existing drafts and receipts remain available.' : provider.productionReviewed
+                      ? 'Publishing has its own permissions and per-post approval, separate from connecting and learning.'
+                      : 'Publishing review is pending. This does not by itself prevent connecting your eligible test account for read-only learning.'}
                   </p>
                 )}
               </section>
@@ -271,7 +275,7 @@ export function ConnectSheet({
               <StatefulButton
                 state={busy ? 'loading' : 'idle'}
                 loadingText='Preparing…'
-                disabled={!provider || offered.length === 0}
+                disabled={!provider || provider.connectReady === false || provider.executionPaused || offered.length === 0}
                 onClick={() => void start()}
               >
                 Continue

@@ -1,4 +1,6 @@
 import type { NextConfig } from 'next';
+import { assertPreviewEnvironment } from './src/lib/deployment-env.mjs';
+assertPreviewEnvironment(process.env);
 import { withSentryConfig } from '@sentry/nextjs/config';
 
 // The Python WSGI API is served at /api/*. On Vercel the platform-level

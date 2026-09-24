@@ -103,7 +103,8 @@ class VoiceSourceImportTests(unittest.TestCase):
         source_id = result["imported"][0]
         voice_sources.apply_action(self.state, "voice_sample_select", {"sourceId": source_id, "selected": True}, "owner-one", 101)
         voice_sources.apply_action(self.state, "voice_sample_grant", {"sourceId": source_id, "grants": [{"purpose": "analysis", "route": "local-cli"}, {"purpose": "generation", "route": "local-cli"}], "confirmed": True}, "owner-one", 102)
-        self.state["speaker"]["revisions"] = [{"revision": 1, "status": "approved", "evidenceSourceIds": [source_id]}]
+        self.state["speaker"]["revisions"] = [{"revision": 1, "status": "approved", "evidenceSourceIds": [source_id], "profile": {"evidenceSourceIds": [source_id], "writingExample": "Do not retain me"}}]
+        self.state["speaker"]["provisional"] = {"evidenceSourceIds": [source_id], "writingExample": "Do not retain me"}
         self.state["variants"] = [{"id": "variant-one", "sourceIds": [source_id], "blockedByRetraction": False}]
 
         voice_sources.apply_action(self.state, "voice_sample_revoke", {"sourceId": source_id, "confirmed": True}, "owner-one", 103)
@@ -113,6 +114,8 @@ class VoiceSourceImportTests(unittest.TestCase):
         self.assertEqual(source["text"], "")
         self.assertEqual(source["revisions"], [])
         self.assertEqual(source["purposeGrants"], [])
+        self.assertEqual(self.state["speaker"]["provisional"]["writingExample"], "")
+        self.assertEqual(self.state["speaker"]["revisions"][0]["profile"]["writingExample"], "")
         self.assertTrue(self.state["speaker"]["revisions"][0]["stale"])
         self.assertTrue(self.state["variants"][0]["blockedByRetraction"])
         self.assertEqual(voice_sources.project(self.state, [source_id], "analysis", "local-cli")["excluded"][0]["reason"], "revoked")

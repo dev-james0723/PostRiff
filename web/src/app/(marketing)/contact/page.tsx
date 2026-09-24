@@ -6,8 +6,8 @@ import { ContactForm } from './contact-form';
 
 export const metadata: Metadata = {
   title: 'Contact',
-  description: 'Support, billing, design partner applications, press and security contact for PostRiff.',
-  openGraph: { title: 'Contact · PostRiff', url: '/contact' }
+  description: 'Support, billing, design partner applications, press and security contact for Rafii.',
+  openGraph: { title: 'Contact · Rafii', url: '/contact' }
 };
 
 export default function ContactPage() {

@@ -29,7 +29,7 @@ export function ContactForm() {
     if (requested && TOPICS.some((t) => t.id === requested)) setTopic(requested);
   }, [params]);
 
-  const subject = `[${TOPICS.find((t) => t.id === topic)?.label ?? 'Contact'}] ${name || 'PostRiff enquiry'}`;
+  const subject = `[${TOPICS.find((t) => t.id === topic)?.label ?? 'Contact'}] ${name || 'Rafii enquiry'}`;
   const href = `mailto:${siteConfig.supportEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
 
   return (

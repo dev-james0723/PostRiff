@@ -230,7 +230,7 @@ class HostedLearning:
     def summary(self, state):
         result = learning.summary(state)
         kind = "rules" if self.extractor is None else ("local" if getattr(self.extractor, "local", False) else "cloud")
-        result["extractor"] = {"kind": kind, "model": getattr(self.extractor, "model", None),
+        result["extractor"] = {"kind": kind, "model": getattr(self.extractor, "model", None), "egress": getattr(self.extractor, "provider_class", kind),
                                "allowed": bool(result["enabled"] and self.model_allowed(state))}
         return result
 
@@ -359,95 +359,116 @@ class HostedLearning:
     def model_allowed(self, state):
         if self.extractor is None:
             return False
-        if getattr(self.extractor, "local", False):
+        if getattr(self.extractor, "provider_class", "local" if getattr(self.extractor, "local", False) else "cloud") == "local":
             return True
         from . import memory
         settings = state.get("learning") if isinstance(state.get("learning"), dict) else {}
         return bool(settings.get("cloudExtraction")) and memory.egress(state).get("cloud") is True
 
-    def _model_observations(self, cur, workspace_id, state, events, now, batch, stats):
-        """The model half of extraction under the same money rules as drafting (SPEC §6): a cloud call is reserved in
-        the usage ledger first, so the workspace and global stop-lines apply and the spend shows in Usage, without
-        consuming a writing batch; it is settled after the call. The person's own CLI costs nothing and books nothing.
-        A refused reservation skips the model for this sweep; the deterministic rules still propose."""
-        reservation = None
-        if not getattr(self.extractor, "local", False):
-            from .billing import Ledger
-            cur.execute("SAVEPOINT learning_reserve")
-            try:
-                reservation = Ledger().reserve(cur, workspace_id, next(iter(owners(cur, workspace_id)), None), "text_model", LEARNING_MODEL_ESTIMATE_USD_MICRO, f"learning:{batch}",
-                                               charge_batch=False, provider="learning", model=getattr(self.extractor, "model", "") or "", meta={"batch": batch})
-                cur.execute("RELEASE SAVEPOINT learning_reserve")
-            except Exception:  # noqa: BLE001 - a stop-line or a ledger fault: no provider call is made
-                cur.execute("ROLLBACK TO SAVEPOINT learning_reserve")
-                stats["modelBlocked"] = stats.get("modelBlocked", 0) + 1
-                return []
-        found = None
-        try:
-            found = self.extractor.observe(state, events, now)
-            stats["modelRuns"] += 1
-        except Exception:  # noqa: BLE001 - the deterministic half still proposes
-            stats["modelFailures"] = stats.get("modelFailures", 0) + 1
-        if reservation is not None:
-            from .billing import Ledger
-            Ledger().settle(cur, workspace_id, reservation["reservationId"], "completed" if found is not None else "failed", LEARNING_MODEL_ESTIMATE_USD_MICRO if found is not None else 0)
-        return found or []
+    def _recover_model_reservations(self, now):
+        """Crashed extractions never retry: unknown cost remains reserved for operator reconciliation."""
+        from .billing import Ledger
+        with self.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT w.id::text FROM public.pr_workspaces w WHERE EXISTS(SELECT 1 FROM public.pr_usage_ledger r WHERE r.workspace_id=w.id AND r.provider='learning' AND r.kind='reserve' AND r.at<to_timestamp(%s) AND NOT EXISTS(SELECT 1 FROM public.pr_usage_ledger s WHERE s.reservation_id=r.id AND s.kind<>'reserve')) ORDER BY w.id FOR UPDATE SKIP LOCKED LIMIT 25", (now-600,))
+            for (wid,) in cur.fetchall():
+                cur.execute("SELECT id::text FROM public.pr_usage_ledger r WHERE workspace_id=%s AND provider='learning' AND kind='reserve' AND at<to_timestamp(%s) AND NOT EXISTS(SELECT 1 FROM public.pr_usage_ledger s WHERE s.reservation_id=r.id AND s.kind<>'reserve') LIMIT 25", (wid, now-600))
+                for (rid,) in cur.fetchall():
+                    Ledger().settle(cur, wid, rid, 'unknown')
 
     def extract(self, max_seconds=15, max_workspaces=20):
-        """Design §5.2–§5.3: for each workspace that is due, read the last 90 days of events, consolidate
-        deterministic observations (and a model extractor's, when one is configured and allowed) into
-        proposals, and mark the events seen. Never touches workspace state, so open tabs see no 409."""
+        """Commit event claim and cost reserve before I/O; finish against current consent/state.
+
+        A crash may lose one optional learning batch, but cannot repeat its model call or erase cost.
+        Workspace revision stays unchanged: the only results are reviewable proposals.
+        """
         from . import learning_extract as extract
+        from .billing import Ledger
+        from .contracts import digest
         started, now = time.monotonic(), self.clock()
         stats = {"workspaces": 0, "proposed": 0, "skipped": 0, "modelRuns": 0}
-        with self.connection_factory() as db:
-            with db.cursor() as cur:
-                due = workspaces_due(cur, now, limit=max_workspaces)
+        self._recover_model_reservations(now)
+        with self.connection_factory() as db, db.cursor() as cur:
+            due = workspaces_due(cur, now, limit=max_workspaces)
         for workspace_id in due:
             if time.monotonic() - started > max_seconds:
                 break
-            stats["workspaces"] += 1
             batch = uuid.uuid4().hex
-            with self.connection_factory() as db:
-                with db.cursor() as cur:
-                    cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
-                    row = cur.fetchone()
-                    if row is None:
-                        continue
-                    state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
-                    settings = state.get("learning") if isinstance(state.get("learning"), dict) else {}
-                    if settings.get("enabled") is False:
-                        mark_consumed(cur, workspace_id, batch, now)
-                        stats["skipped"] += 1
-                        continue
-                    allowed_actors = None if settings.get("teamEdits") else owners(cur, workspace_id)
-                    events = [e for e in events_window(cur, workspace_id, now, extract.WINDOW_DAYS) if allowed_actors is None or e["actor"] is None or e["actor"] in allowed_actors]
-                    support, counter = extract.observations(events)
-                    if self.model_allowed(state):
-                        # Decision C: the person's own CLI needs no consent beyond learning being on; a cloud model needs
-                        # memory-egress consent plus the cloudExtraction switch (and per-source consent, checked per pair).
-                        support.extend(self._model_observations(cur, workspace_id, state, events, now, batch, stats))
-                    candidates = extract.consolidate(support, counter, state, now, dismissed_keys(cur, workspace_id, now), recent_decisions(cur, workspace_id))
-                    # Phase D: the kill switch adds retire proposals; performance is attached as a note, never as a reason.
-                    replaced = {c.get("replaces") for c in candidates}
-                    candidates += [r for r in extract.regressions(state, events, now) if r["replaces"] not in replaced]
-                    approved = [e for e in events if e["kind"] == "draft.approved"]
-                    if approved:
-                        metrics = latest_metrics_by_job(cur, workspace_id)
-                        for candidate in candidates:
-                            note = extract.performance_note(candidate, approved, metrics) if metrics else None
-                            if note:
-                                candidate["performance"] = note
-                    budget = max(0, 1 - automatic_proposals_since(cur, workspace_id, now - 86400))
-                    for candidate in candidates:
-                        if budget <= 0:
-                            break
-                        try:
-                            created = create_proposal(cur, workspace_id, state, candidate, now)
-                        except ValueError:
-                            created = None
-                        if created is not None:
-                            stats["proposed"] += 1
-                            budget -= 1
+            reservation = None
+            model = None
+            with self.connection_factory() as db, db.cursor() as cur:
+                cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE SKIP LOCKED", (workspace_id,))
+                row = cur.fetchone()
+                if row is None:
+                    continue
+                cur.execute("SELECT 1 FROM public.pr_learning_events WHERE workspace_id=%s AND consumed_by IS NULL LIMIT 1", (workspace_id,))
+                if not cur.fetchone():
+                    continue
+                stats['workspaces'] += 1
+                state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                settings = state.get("learning") if isinstance(state.get("learning"), dict) else {}
+                if state.get("accountDeletion") or settings.get("enabled") is False:
                     mark_consumed(cur, workspace_id, batch, now)
+                    stats['skipped'] += 1
+                    continue
+                allowed_actors = None if settings.get('teamEdits') else owners(cur, workspace_id)
+                events = [e for e in events_window(cur, workspace_id, now, extract.WINDOW_DAYS) if allowed_actors is None or e['actor'] is None or e['actor'] in allowed_actors]
+                support, counter = extract.observations(events)
+                if self.model_allowed(state):
+                    model = self.extractor
+                    if not getattr(model, 'local', False):
+                        cur.execute('SAVEPOINT learning_reserve')
+                        try:
+                            estimate = model.price_quote_micro(state, events)
+                            reservation = Ledger().reserve(cur, workspace_id, next(iter(owners(cur, workspace_id)), None), 'text_model', estimate, 'learning:'+batch, charge_batch=False, provider='learning', model=getattr(model,'model','') or '', meta={'batch':batch})
+                            cur.execute('RELEASE SAVEPOINT learning_reserve')
+                        except Exception:
+                            cur.execute('ROLLBACK TO SAVEPOINT learning_reserve')
+                            stats['modelBlocked'] = stats.get('modelBlocked',0)+1
+                            model = None
+                # Consumed before dispatch: a second cron or a process restart cannot replay this batch.
+                mark_consumed(cur, workspace_id, batch, now)
+            observations = []
+            actual = None
+            if model is not None:
+                try:
+                    observations = model.observe(state, events, now)
+                    actual = getattr(observations, 'cost_usd_micro', None)
+                    stats['modelRuns'] += 1
+                except Exception:
+                    stats['modelFailures'] = stats.get('modelFailures',0)+1
+            with self.connection_factory() as db, db.cursor() as cur:
+                cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+                row = cur.fetchone()
+                if row is None:
+                    continue
+                current = json.loads(row[0]) if isinstance(row[0],str) else row[0]
+                if reservation is not None:
+                    Ledger().settle(cur, workspace_id, reservation['reservationId'], 'completed' if actual is not None else 'unknown', actual)
+                # Any source, consent, owner setting or draft change invalidates this snapshot's proposals.
+                if digest(current) != digest(state) or (allowed_actors is not None and owners(cur, workspace_id) != allowed_actors):
+                    stats['staleDiscarded'] = stats.get('staleDiscarded',0)+1
+                    continue
+                support.extend(observations)
+                candidates = extract.consolidate(support, counter, state, now, dismissed_keys(cur, workspace_id, now), recent_decisions(cur, workspace_id))
+                # Phase D: the kill switch adds retire proposals; performance is attached as a note, never as a reason.
+                replaced = {c.get("replaces") for c in candidates}
+                candidates += [r for r in extract.regressions(state, events, now) if r["replaces"] not in replaced]
+                approved = [e for e in events if e["kind"] == "draft.approved"]
+                if approved:
+                    metrics = latest_metrics_by_job(cur, workspace_id)
+                    for candidate in candidates:
+                        note = extract.performance_note(candidate, approved, metrics) if metrics else None
+                        if note:
+                            candidate["performance"] = note
+                budget = max(0, 1 - automatic_proposals_since(cur, workspace_id, now - 86400))
+                for candidate in candidates:
+                    if budget <= 0:
+                        break
+                    try:
+                        created = create_proposal(cur, workspace_id, state, candidate, now)
+                    except ValueError:
+                        created = None
+                    if created is not None:
+                        stats["proposed"] += 1
+                        budget -= 1
         return stats

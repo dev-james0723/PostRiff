@@ -77,8 +77,10 @@ export function DeleteCard({
     setDeleting(true);
     setStepUp(false);
     try {
-      await api.deleteAccount(workspaceId, confirmation.trim());
-      toast.success('Your account and workspace were deleted.');
+      const result = await api.deleteAccount(workspaceId, confirmation.trim());
+      if (result.identityDeleted && result.deleted) toast.success('Your account and workspace were deleted.');
+      else toast.warning(`Your workspace was removed. Sign-in deletion is still pending. Contact support with receipt ${result.receiptId}.`, { duration: Infinity });
+      if (result.providerRevocationPending?.length) toast.warning(`Remove Rafii access in your platform settings: ${result.providerRevocationPending.join(', ')}. Stored credentials were deleted.`, { duration: Infinity });
       await auth.signOut();
       router.replace('/');
     } catch (err) {
@@ -88,7 +90,7 @@ export function DeleteCard({
         return;
       }
       toast.error(err instanceof ApiError ? err.message : 'The account could not be deleted.');
-      if (err instanceof ApiError && err.status === 409) void snapshot.refetch();
+      if (err instanceof ApiError && (err.status === 409 || err.code === 'account_deletion_pending')) void snapshot.refetch();
     }
   }
 
@@ -103,11 +105,12 @@ export function DeleteCard({
       <CardHeader>
         <CardTitle>Delete account</CardTitle>
         <CardDescription>
-          Removes this workspace, its media, its memberships and your sign-in. Content-free receipts and a trial record stay, so the trial cannot be
-          restarted.
+          Removes this workspace, its media, its memberships and your sign-in. A deletion receipt and a trial record stay, so the trial cannot be
+          restarted. Cancel any renewing subscription and transfer other workspace ownership first.
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {Boolean(snapshot.data?.state.accountDeletion) && <Alert className='mb-4'><AlertTitle>Deletion is pending</AlertTitle><AlertDescription>This workspace is frozen. Retry deletion to finish cleanup; some private files may already have been removed.</AlertDescription></Alert>}
         <div className='divide-y'>
           <Check
             label='Who can delete'

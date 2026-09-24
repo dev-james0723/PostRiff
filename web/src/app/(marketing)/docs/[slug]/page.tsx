@@ -13,7 +13,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const doc = docBySlug(slug);
-  return doc ? { title: doc.title, description: doc.summary, openGraph: { title: `${doc.title} · PostRiff Docs`, url: `/docs/${doc.slug}` } } : {};
+  return doc ? { title: doc.title, description: doc.summary, openGraph: { title: `${doc.title} · Rafii Docs`, url: `/docs/${doc.slug}` } } : {};
 }
 
 export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {

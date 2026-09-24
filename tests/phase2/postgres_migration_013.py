@@ -11,7 +11,7 @@ from pathlib import Path
 
 import psycopg
 
-PG = Path("/opt/homebrew/opt/postgresql@17/bin")
+PG = Path(__import__("os").environ.get("POSTRIFF_PG_BIN", "/opt/homebrew/opt/postgresql@17/bin"))
 PORT = 55463
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = (ROOT / "migrations/postriff/013_locale_tags.sql").read_text(encoding="utf-8")

@@ -420,9 +420,13 @@ function InfobarSeparator({ className, ...props }: React.ComponentProps<typeof S
 }
 
 function InfobarContent({ className, ...props }: React.ComponentProps<'div'>) {
+  // oxlint-disable jsx-a11y/no-noninteractive-tabindex -- Scrollable region needs keyboard focus for arrow/page scrolling.
   return (
     <div
       data-slot='infobar-content'
+      tabIndex={0}
+      role='region'
+      aria-label='Page guidance'
       data-infobar='content'
       className={cn(
         'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden',
@@ -432,6 +436,7 @@ function InfobarContent({ className, ...props }: React.ComponentProps<'div'>) {
     />
   );
 }
+// oxlint-enable jsx-a11y/no-noninteractive-tabindex
 
 function InfobarGroup({ className, ...props }: React.ComponentProps<'div'>) {
   return (

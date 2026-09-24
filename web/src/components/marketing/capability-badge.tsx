@@ -11,11 +11,11 @@ export type CapabilityLevel = 'direct' | 'assisted' | 'local' | 'unsupported';
 export const CAPABILITY_LEVELS: Record<CapabilityLevel, { label: string; description: string }> = {
   direct: {
     label: 'Direct',
-    description: 'PostRiff publishes through the provider API after you approve.'
+    description: 'Rafii publishes through the provider API after you approve.'
   },
   assisted: {
     label: 'Assisted',
-    description: 'PostRiff prepares the post; a reviewed connector or you completes the final step.'
+    description: 'Rafii prepares the post; a reviewed connector or you completes the final step.'
   },
   local: {
     label: 'Local',

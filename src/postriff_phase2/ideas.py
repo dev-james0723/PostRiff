@@ -5,6 +5,7 @@ AgentRuntime against a policy projection only; artifacts are candidates until an
 `apply`, which re-checks the projection so stale candidates are never applied silently.
 """
 import copy
+import base64
 import hashlib
 import json
 from postriff_alpha import learning
@@ -59,13 +60,16 @@ class RunSink:
         with self._open() as db, db.cursor() as cur:
             self.service._lock_run_events(cur, self.workspace_id, self.run_id)
             if not self._running(cur, lock=True):
+                # Cancellation wins for content; late provider usage still settles
+                # once so a cancelled billable request is never recorded as free.
+                self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed" if usage.get("costUsd") is not None else "unknown", int(usage["costUsd"] * 1_000_000) if usage.get("costUsd") is not None else None)
                 return False
             try:
                 self.service._finish(cur, self.workspace_id, self.conversation_id, self.run_id, artifact, usage, self.outcome)
             except AlphaError as error:
                 self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.failed", message=str(error)))
                 cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (self.run_id,))
-                self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed", 0)
+                self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed" if usage.get("costUsd") is not None else "unknown", int(usage["costUsd"] * 1_000_000) if usage.get("costUsd") is not None else None)
                 self.service._settle_message(cur, self.workspace_id, self.conversation_id, self.run_id, {"text": str(error), "runId": self.run_id, "failed": True, "intent": self.outcome["parsed"]["intent"], "destinations": self.outcome["destinations"], "plan": None, "model": self.outcome["model"]})
                 return True
             self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.completed", usage={k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "cliCostUsd", "billing") if k in usage}))
@@ -78,13 +82,13 @@ class RunSink:
                 return False
             self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.failed", message=message))
             cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (self.run_id,))
-            self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed", 0)
+            self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "unknown" if self.outcome.get("paid") else "failed", None if self.outcome.get("paid") else 0)
             self.service._settle_message(cur, self.workspace_id, self.conversation_id, self.run_id, {"text": message, "runId": self.run_id, "failed": True, "intent": self.outcome["parsed"]["intent"], "destinations": self.outcome["destinations"], "plan": None, "model": self.outcome["model"]})
             return True
 
 
 class IdeasService:
-    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None, skill_library=None, researcher=None):
+    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None, skill_library=None, researcher=None, image_runtime=None, assets=None):
         from .billing import Ledger
         self.repository = repository
         self.commands = commands
@@ -101,6 +105,10 @@ class IdeasService:
                     runtimes.append(cli(clock=self.clock))
         self.runtimes = list(runtimes)
         self.skills = skill_library or SkillLibrary()
+        # Image generation is deliberately separate from every writing runtime. Selecting a hosted
+        # model, Claude CLI, Codex CLI, or the fixture writer never changes this media route.
+        self.image_runtime = image_runtime
+        self.assets = assets
         # The hosted service sets this to its HostedLearning; without it a memory instruction is answered but not kept.
         self.learning = None
         # Web research runs before drafting when a turn needs facts the workspace lacks (research.py); False disables it.
@@ -111,11 +119,24 @@ class IdeasService:
         """Every model a client may name in a turn, with the agent (CLI) behind each route."""
         models, agents = [], []
         for runtime in self.runtimes:
-            models.extend({**model, "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
+            models.extend({**model, "voiceAnalysisAvailable": callable(getattr(runtime, 'analyze_voice', None)), "provider": runtime.provider, "egress": getattr(runtime, "provider_class", "local"), "voiceRoute": (f"cloud:{runtime.provider}:{model['id']}" if getattr(runtime, "provider_class", "local") == "cloud" else "local-cli"), "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
             info = runtime.describe()
             if info:
                 agents.append(info)
-        return {"models": models, "reasoning": self.runtime.list_supported_reasoning(), "agents": agents}
+        image_available = self.image_runtime is not None and self.assets is not None
+        return {
+            "models": models,
+            "reasoning": self.runtime.list_supported_reasoning(),
+            "agents": agents,
+            "imageGeneration": {
+                "available": image_available,
+                "model": self.image_runtime.model if self.image_runtime is not None else None,
+                "provider": self.image_runtime.provider if self.image_runtime is not None else None,
+                "costClass": "paid",
+                "independentOfWritingModel": True,
+                "detail": "Uses one managed media credit and the approved image budget, independently of the selected writing model or local CLI." if image_available else "Configure the managed image route and private media storage to generate images in chat.",
+            },
+        }
 
     def rescan_models(self, workspace_id, token):
         """An editor may refresh installation and sign-in probes; no model generation runs."""
@@ -253,10 +274,9 @@ class IdeasService:
     @staticmethod
     def _lock_run_events(cur, workspace_id, run_id):
         """One event writer per run at a time, in a fixed order so a background sink and a request
-        never deadlock: first the foreign-key share lock on the workspace row (a request transaction
-        holds that row FOR UPDATE, which blocks the key-share lock every event insert needs), then the
+        never deadlock: first the workspace update lock (matching request transactions), then the
         per-run advisory lock, and only after both any FOR UPDATE on the run row itself."""
-        cur.execute("SELECT 1 FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE", (workspace_id,))
+        cur.execute("SELECT 1 FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
         cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("pr_agent_events:" + run_id,))
 
     def _insert_event(self, cur, workspace_id, run_id, event):
@@ -278,6 +298,28 @@ class IdeasService:
         if not state_row:
             raise AlphaError("Workspace unavailable.", 404)
         current_state = json.loads(state_row[0]) if isinstance(state_row[0], str) else state_row[0]
+        if outcome.get('recurringBinding'):
+            from .campaign_worker import validate
+            validate(current_state, outcome['recurringBinding'])
+        if outcome.get("actor"):
+            cur.execute("SELECT m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL", (workspace_id, outcome['actor']))
+            member = cur.fetchone()
+            if not member:
+                raise AlphaError("Workspace access was revoked while writing.", 403)
+            require(self._member((None, None, *member)), "owner" if outcome.get('recurringBinding') else "edit")
+        if outcome.get('apiTokenId'):
+            cur.execute("SELECT scopes FROM public.pr_api_tokens WHERE id::text=%s AND workspace_id=%s AND created_by=%s AND revoked_at IS NULL AND expires_at>to_timestamp(%s) FOR SHARE", (outcome['apiTokenId'], workspace_id, outcome['actor'], self.clock()))
+            grant = cur.fetchone()
+            if not grant or 'draft' not in grant[0]:
+                raise AlphaError('The API token was revoked or expired while writing.', 403)
+        if outcome.get('sessionId'):
+            cur.execute("SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s", (outcome['actor'], outcome['sessionId']))
+            if cur.fetchone():
+                raise AlphaError('The session was revoked while writing.', 403)
+        previous = outcome['context']
+        current = project_context(current_state, previous['operation'], previous['providerClass'], [s['id'] for s in previous['sources']])
+        if current['sources'] != previous['sources']:
+            raise AlphaError("Selected sources or their permissions changed while writing. Review a new candidate.", 409)
         voice_sources.validate_bindings(current_state, outcome.get("voiceContext") or {})
         cost_known = "costUsd" in usage and usage.get("costUsd") is not None
         settlement = self.ledger.settle(
@@ -314,7 +356,7 @@ class IdeasService:
         else:
             cur.execute("UPDATE public.pr_conversations SET updated_at=now() WHERE id::text=%s", (conversation_id,))
 
-    def _research(self, workspace_id, token, payload, text, parsed):
+    def _research(self, workspace_id, token, payload, text, parsed, key, conversation_id):
         """Step ①b: when the turn needs facts the workspace does not hold, look them up on the web before
         drafting (design §11 Phase 5). Runs outside the run's transaction because it is network I/O; the
         pages become ordinary third-party sources (use still needs the person's approval to publish) with
@@ -337,14 +379,30 @@ class IdeasService:
         own_method = "tested_steps" in (content_types.selected_rule_ids(state) or ())
         if not research.needs_research(message, parsed["intent"], has_facts) or (own_method and not explicit):
             return [], None
+        request_digest = digest({'message':message, 'intent':parsed['intent'], 'conversationId':conversation_id, 'sourceIds':selected})
+        # Persist the claim before external I/O. A crashed/uncertain lookup cannot replay its key.
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), 'edit')
+            self._conversation(cur, workspace_id, conversation_id)
+            if not research.allowed(self._state(row)):
+                return [], research.off_record(research.query_for(message))
+            cur.execute("SELECT request_digest,status,result FROM public.pr_research_requests WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id,key))
+            prior = cur.fetchone()
+            if prior:
+                if prior[0] != request_digest:
+                    raise AlphaError('This request key belongs to different research.',409)
+                if prior[1] != 'completed':
+                    raise AlphaError('Research for this request is pending or interrupted. It will not repeat automatically.',409)
+                return prior[2].get('sourceIds',[]), prior[2]
+            cur.execute("INSERT INTO public.pr_research_requests(workspace_id,idempotency_key,request_digest,status) VALUES(%s,%s,%s,'pending')", (workspace_id,key,request_digest))
         result = self.researcher.run(message, parsed["intent"])
         record = research.summary(result)
         record["sourceIds"] = []
-        if not result["pages"]:
-            return [], record
         added = []
 
         def command(state, actor):
+            if not research.allowed(state):
+                raise AlphaError('Web research permission changed. The result was discarded.',409)
             for page in result["pages"]:
                 body, title = research.source_body(page), research.source_title(page)
                 fingerprint = hashlib.sha256(("text" + clean(body, 20000)).encode()).hexdigest()
@@ -362,25 +420,179 @@ class IdeasService:
                     added.append(source["id"])
             return state
 
+        def save_record(cur, state, actor):
+            record['sourceIds'] = added
+            cur.execute("UPDATE public.pr_research_requests SET status='completed',result=%s::jsonb WHERE workspace_id=%s AND idempotency_key=%s AND status='pending'", (json.dumps(record),workspace_id,key))
+
         try:
-            self.repository.command(workspace_id, token, snapshot["revision"], command)
+            self.repository.command(workspace_id, token, snapshot["revision"], command, after=save_record)
         except AlphaError as error:
             if error.status != 409:
                 raise
-            self.repository.command(workspace_id, token, self.repository.get(workspace_id, token)["revision"], command)
+            self.repository.command(workspace_id, token, self.repository.get(workspace_id, token)["revision"], command, after=save_record)
         record["sourceIds"] = added
         return added, record
+
+    @staticmethod
+    def _wants_image(payload):
+        request = payload.get("imageGeneration")
+        return request is True or isinstance(request, dict) and request.get("enabled") is True
+
+    def _fail_image_run(self, workspace_id, token, conversation_id, run_id, reservation_id, message, *, usage=None, uncertain=False):
+        """Persist a failed media run once; a possibly billed request is never recorded as free."""
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            self._lock_run_events(cur, workspace_id, run_id)
+            cur.execute("SELECT status FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
+            row = cur.fetchone()
+            if not row or row[0] != "running":
+                return
+            cost = (usage or {}).get("costUsd")
+            known = type(cost) in (int, float) and cost >= 0
+            self.ledger.settle(
+                cur,
+                workspace_id,
+                reservation_id,
+                "failed" if known or not uncertain else "unknown",
+                int(cost * 1_000_000) if known else 0 if not uncertain else None,
+            )
+            self._insert_event(cur, workspace_id, run_id, safe_event("run.failed", message=message))
+            cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (run_id,))
+            self._settle_message(cur, workspace_id, conversation_id, run_id, {"text": message, "runId": run_id, "failed": True, "pending": False, "intent": "image_generation", "images": []})
+
+    def _image_turn(self, workspace_id, token, conversation_id, payload, text, selected_model):
+        """Generate and privately store one image without delegating the capability to the writer."""
+        if self.image_runtime is None:
+            raise AlphaError("Image generation is not configured for this deployment.", 503, code="image_generation_not_configured")
+        if self.assets is None:
+            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
+        request = payload.get("imageGeneration")
+        if request is not True and (not isinstance(request, dict) or set(request) - {"enabled", "count"}):
+            raise AlphaError("Choose a supported image-generation request.", 400)
+        count = request.get("count", 1) if isinstance(request, dict) else 1
+        if count != 1:
+            raise AlphaError("This chat generates one reviewable image candidate at a time.", 400)
+        prompt = clean(text or payload.get("intentText", ""), 4000)
+        if not prompt:
+            raise AlphaError("Describe the image you want to generate.", 400)
+        key = clean(payload.get("idempotencyKey", ""), 100) or uid()
+
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self._member(row), "edit")
+            self._conversation(cur, workspace_id, conversation_id)
+            state = self._state(row)
+            stamp(state)
+            context = project_context(state, "draft", "cloud", [])
+            from .api_tokens import is_api_token
+            if is_api_token(token):
+                grant = self.repository.api_tokens.validate(cur, token, workspace_id)
+                if "draft" not in grant["scopes"]:
+                    raise AlphaError("This API token does not allow drafting.", 403)
+            cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
+            prior = cur.fetchone()
+            if prior:
+                return self._events_for(cur, workspace_id, prior[0], 0)
+            self._append_message(cur, workspace_id, conversation_id, "user", {"text": prompt, "sourceIds": [], "intent": "image_generation"})
+            cur.execute(
+                "INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'running',%s,'quick',%s,%s,%s) RETURNING id::text",
+                (conversation_id, workspace_id, principal, selected_model, digest(context), context["policyEpoch"], key),
+            )
+            run_id = cur.fetchone()[0]
+            reservation = self.ledger.reserve(
+                cur,
+                workspace_id,
+                principal,
+                "image_generation",
+                self.image_runtime.estimate_usd_micro,
+                f"image:{run_id}",
+                charge_batch=True,
+                provider=self.image_runtime.provider,
+                model=self.image_runtime.model,
+                run_id=run_id,
+            )
+            self._insert_event(cur, workspace_id, run_id, safe_event("run.started", model=selected_model, imageModel=self.image_runtime.model, reasoning="image"))
+            self._insert_event(cur, workspace_id, run_id, safe_event("progress.updated", stage="image_generation", percent=5))
+            cur.execute(
+                "UPDATE public.pr_agent_runs SET usage=%s::jsonb WHERE id::text=%s",
+                (json.dumps({"provenance": "pending", "reservationId": reservation["reservationId"], "imageModel": self.image_runtime.model}), run_id),
+            )
+            self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": "", "pending": True, "runId": run_id, "intent": "image_generation", "images": [], "model": selected_model}, run_id)
+
+        staged = None
+        result = None
+        queued_events = []
+        try:
+            result = self.image_runtime.generate(prompt, count=1, emit=queued_events.append)
+            raw = result["images"][0]
+            staged = self.assets.stage_upload(workspace_id, {"data": base64.b64encode(raw).decode()})
+            public_asset = {key: staged.get(key) for key in ("id", "hash", "mime", "width", "height", "bytes")}
+            public_asset["alt"] = clean(prompt, 300)
+            artifact = {"variants": [], "images": [public_asset], "imageModel": self.image_runtime.model}
+            artifact_hash = digest(artifact)
+
+            def add_asset(state, actor):
+                return self.commands.add_asset(state, actor, staged)
+
+            def finish(cur, _state, _principal):
+                self._lock_run_events(cur, workspace_id, run_id)
+                cur.execute("SELECT status FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
+                row = cur.fetchone()
+                if not row or row[0] != "running":
+                    raise AlphaError("This image run is no longer active.", 409)
+                for event in queued_events:
+                    self._insert_event(cur, workspace_id, run_id, event)
+                self._insert_event(cur, workspace_id, run_id, safe_event("artifact.created", artifactHash=artifact_hash, images=1))
+                cost = result["usage"].get("costUsd")
+                known = type(cost) in (int, float) and cost >= 0
+                settlement = self.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if known else "unknown", int(cost * 1_000_000) if known else None)
+                usage = {**result["usage"], "billing": settlement.get("state"), "ledgerCostState": settlement.get("state"), "selectedWritingModel": selected_model}
+                cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact), artifact_hash, json.dumps(usage), run_id))
+                self._settle_message(cur, workspace_id, conversation_id, run_id, {"text": "Generated one private image candidate for review.", "runId": run_id, "artifactHash": artifact_hash, "intent": "image_generation", "images": artifact["images"], "model": selected_model})
+                self._insert_event(cur, workspace_id, run_id, safe_event("run.completed", usage={"provenance": usage["provenance"], "modelRequests": 1, "costUsd": cost, "billing": settlement.get("state")}))
+
+            # The asset metadata and completed run commit together. A concurrent workspace edit is
+            # retried against the current revision; the provider call is never repeated.
+            for attempt in range(2):
+                snapshot = self.repository.get(workspace_id, token)
+                try:
+                    self.repository.command(
+                        workspace_id,
+                        token,
+                        snapshot["revision"],
+                        add_asset,
+                        audit_event=lambda _state: ("media.generated", public_asset["id"], {"model": self.image_runtime.model}),
+                        after=finish,
+                    )
+                    break
+                except AlphaError as error:
+                    if error.status != 409 or attempt:
+                        raise
+            # Ownership has moved to workspace state; later response-shaping failures must not
+            # delete bytes that now back a committed asset.
+            staged = None
+            return self.events(workspace_id, token, run_id)
+        except Exception as error:
+            if staged is not None:
+                try:
+                    self.assets.remove(workspace_id, staged)
+                except Exception:
+                    pass
+            from .image_runtime import ImageGenerationError
+            uncertain = isinstance(error, ImageGenerationError) and error.uncertain or result is not None
+            self._fail_image_run(workspace_id, token, conversation_id, run_id, reservation["reservationId"], str(error), usage=(result or {}).get("usage"), uncertain=uncertain)
+            raise
 
     def turn(self, workspace_id, token, conversation_id, payload):
         text = clean(payload.get("text", ""), MAX_TEXT)
         reasoning = payload.get("reasoning", "quick")
         key = clean(payload.get("idempotencyKey", ""), 100) or uid()
         runtime = self._select_runtime(payload.get("model"))
+        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
+        if self._wants_image(payload):
+            return self._image_turn(workspace_id, token, conversation_id, {**payload, "idempotencyKey": key}, text, model_id)
         if isinstance(runtime, ClaudeCliRuntime):
             reasoning = runtime.effort(reasoning)
         elif reasoning not in ("quick", "standard", "deep"):
             raise AlphaError("Choose a reasoning level supported by this writer.", 400)
-        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
         # Step ① of the agent pipeline: channels and times named in the message become the
         # destinations and a candidate plan. Parsed text never gains any authority of its own.
         zone = intent.safe_zone(payload.get("timeZone"))
@@ -391,7 +603,15 @@ class IdeasService:
         plan = intent.build_plan(parsed, destinations)
         if parsed["intent"] == "memory" and text:
             return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id)
-        research_ids, researched = self._research(workspace_id, token, payload, text, parsed)
+        # A completed or in-flight writing run must not repeat research on HTTP replay.
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), 'edit')
+            self._conversation(cur, workspace_id, conversation_id)
+            cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id,key))
+            prior = cur.fetchone()
+            if prior:
+                return self._events_for(cur, workspace_id, prior[0], 0)
+        research_ids, researched = self._research(workspace_id, token, payload, text, parsed, key, conversation_id)
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
@@ -418,11 +638,11 @@ class IdeasService:
             # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
             # Memory files follow the route: a cloud route reads them only with the workspace's consent (memory.projection).
             # Learned preferences arrive as the slice that applies to these destinations (design §5.7), recorded on the run.
-            shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None)
             voice_mode = payload.get("voiceMode", "neutral")
             if voice_mode not in ("neutral", "personalized"):
                 raise AlphaError("Choose neutral or personalized writing.")
             voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
+            shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
             if voice_mode == "personalized":
                 requested_voice = payload.get("voiceSourceIds") if isinstance(payload.get("voiceSourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("kind") == "voice_sample" and s.get("active") and s.get("selected")]
                 voice_projection = voice_sources.retrieve(state, requested_voice, "generation", voice_route, query=idea)
@@ -445,8 +665,24 @@ class IdeasService:
             run_id = cur.fetchone()[0]
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
-            reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", 500_000 if paid else 0, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context}
+            estimate = __import__('math').ceil(runtime.price_quote(request, model_id) * 1_000_000) if paid and hasattr(runtime, 'price_quote') else 500_000 if paid else 0
+            recurring = getattr(self, 'recurring_binding', None)
+            if recurring and estimate > recurring['maxCostUsdMicro']:
+                raise AlphaError('This writer exceeds the confirmed per-occurrence cost limit.', 402)
+            reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
+            from .api_tokens import is_api_token
+            if is_api_token(token):
+                grant = self.repository.api_tokens.validate(cur, token, workspace_id)
+                if 'draft' not in grant['scopes']:
+                    raise AlphaError('This API token does not allow drafting.', 403)
+                outcome['apiTokenId'] = grant['tokenId']
+            elif not recurring:
+                session_id = getattr(self.repository.verify_session, 'session_id', None)
+                if session_id:
+                    outcome['sessionId'] = session_id(token, principal)
+            if recurring:
+                outcome['recurringBinding'] = recurring
 
             def emit(event):
                 self._insert_event(cur, workspace_id, run_id, event)
@@ -462,7 +698,7 @@ class IdeasService:
             if plan:
                 context_events.append(safe_event("action.proposed", action="schedule_plan", destinations=len(plan["destinations"]), timeZone=plan["timeZone"]))
 
-            if runtime.asynchronous:
+            if runtime.asynchronous or paid:
                 emit(safe_event("run.started", model=model_id, reasoning="quick", contextDigest=digest(context)))
                 for pending in context_events:
                     emit(pending)
@@ -492,7 +728,19 @@ class IdeasService:
         if dispatch:
             # Only after the run row is committed can a background thread or device see it.
             runtime, run_id, request, sink = dispatch
-            runtime.dispatch(run_id, request, sink)
+            if runtime.asynchronous:
+                runtime.dispatch(run_id, request, sink)
+            else:
+                # Persist the idempotency key and reservation before any billable I/O.
+                # The request stays synchronous on hosted functions; no background thread
+                # can be frozen after the HTTP response. An interrupted run is never retried.
+                try:
+                    result = runtime.start_turn(request, sink.emit)
+                    sink.complete(result["artifact"], result["usage"])
+                except Exception:
+                    sink.fail("The writer did not finish. Usage may be pending; this run will not retry automatically.")
+                    raise AlphaError("The writer did not finish. Check this run before starting another request.", 502)
+                response = self.events(workspace_id, token, run_id)
         return response
 
     @staticmethod
@@ -527,6 +775,24 @@ class IdeasService:
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             return self._events_for(cur, workspace_id, run_id, cursor)
 
+    def recover_stalled(self, max_runs=25):
+        """Bounded cron recovery: hold uncertain spend, never repeat provider I/O."""
+        recovered = 0
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT w.id::text FROM public.pr_workspaces w WHERE EXISTS (SELECT 1 FROM public.pr_agent_runs r WHERE r.workspace_id=w.id AND r.status='running' AND r.updated_at<to_timestamp(%s)) ORDER BY w.id FOR UPDATE SKIP LOCKED LIMIT %s", (self.clock()-600, max_runs))
+            for (wid,) in cur.fetchall():
+                cur.execute("SELECT id::text,conversation_id::text,usage FROM public.pr_agent_runs WHERE workspace_id=%s AND status='running' AND updated_at<to_timestamp(%s) ORDER BY created_at LIMIT %s", (wid, self.clock()-600, max_runs-recovered))
+                for run_id, cid, usage in cur.fetchall():
+                    self._lock_run_events(cur, wid, run_id)
+                    reservation = (usage or {}).get('reservationId')
+                    if reservation:
+                        self.ledger.settle(cur, wid, reservation, 'unknown')
+                    self._insert_event(cur, wid, run_id, safe_event('run.failed', message='Writer interrupted; usage needs reconciliation. No automatic retry.'))
+                    cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (run_id,))
+                    self._settle_message(cur, wid, cid, run_id, {'text':'Writer interrupted. Review usage before starting another request.','runId':run_id,'failed':True,'pending':False})
+                    recovered += 1
+        return {'recovered': recovered, 'providerRequests': 0}
+
     def cancel(self, workspace_id, token, run_id):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             require(self._member(row), "edit")
@@ -536,6 +802,10 @@ class IdeasService:
             if not run:
                 raise AlphaError("Run unavailable.", 404)
             if run[0] == "running":
+                cur.execute("SELECT id::text,estimated_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND run_id::text=%s AND kind='reserve'", (workspace_id, run_id))
+                reservation = cur.fetchone()
+                if reservation:
+                    self.ledger.settle(cur, workspace_id, reservation[0], 'unknown' if reservation[1] else 'failed', None if reservation[1] else 0)
                 self._insert_event(cur, workspace_id, run_id, safe_event("run.cancelled", message="Cancelled. Partial text retained; no automatic retry."))
                 cur.execute("UPDATE public.pr_agent_runs SET status='cancelled',updated_at=now() WHERE id::text=%s", (run_id,))
                 cur.execute("UPDATE public.pr_messages SET body=body || '{\"pending\": false, \"cancelled\": true, \"text\": \"Cancelled before the draft finished.\"}'::jsonb WHERE workspace_id=%s AND run_id::text=%s AND role='assistant' AND (body->>'pending')='true'", (workspace_id, run_id))
@@ -625,5 +895,5 @@ class IdeasService:
         saved = self.repository.command(workspace_id, token, revision, command)
         source = saved["state"]["sources"][-1]
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
-        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds")})
+        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration")})
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}

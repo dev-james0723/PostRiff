@@ -6,8 +6,8 @@ import { siteConfig } from '@/config/site';
 
 export const metadata: Metadata = {
   title: 'Security',
-  description: 'How PostRiff protects your workspace, your connected accounts and your content.',
-  openGraph: { title: 'Security · PostRiff', url: '/security' }
+  description: 'How Rafii protects your workspace, your connected accounts and your content.',
+  openGraph: { title: 'Security · Rafii', url: '/security' }
 };
 
 const sections = [
@@ -26,24 +26,24 @@ export default function SecurityPage() {
     <LegalLayout
       eyebrow='Trust'
       title='Security'
-      intro='PostRiff holds the keys to your social accounts, so we built it to act only on an explicit approval and to leave a receipt every time it does.'
+      intro='Rafii holds the keys to your social accounts, so we built it to act only on an explicit approval and to leave a receipt every time it does.'
       sections={sections}
     >
       <h2 id='architecture'>1. Architecture</h2>
       <p>
-        The web app runs on Vercel; the API is a Python service on Vercel Functions; authentication, PostgreSQL and private object storage are Supabase (us-east-1). Every API call carries your session token, which is verified server-side against Supabase Auth on each request — the browser never supplies your identity.
+        The web app runs on Vercel; the API is a Python service on Vercel Functions; authentication, PostgreSQL and private object storage are Supabase; release regions still require verification. Authenticated API calls use a server-verified session or an explicitly scoped API token; a browser-supplied user ID grants no access.
       </p>
 
       <h2 id='tenancy'>2. Tenant isolation</h2>
       <p>
-        Every workspace table uses PostgreSQL row-level security keyed on membership. The API derives your workspace from that membership, never from the request body, and a foreign workspace is indistinguishable from a missing one (“Workspace unavailable”). An isolation suite runs on every change with two tenants that try to read and write each other’s data.
+        Every workspace table uses PostgreSQL row-level security keyed on membership. The API derives your workspace from that membership, never from the request body, and a foreign workspace is indistinguishable from a missing one (“Workspace unavailable”). Local isolation tests exercise cross-tenant reads and writes. Remote CI and release-environment isolation still require verification.
       </p>
 
       <h2 id='tokens'>3. Connected-account tokens</h2>
       <ul>
         <li>OAuth with PKCE and per-transaction state; the public callback never exchanges codes — the signed-in app completes the exchange.</li>
         <li>Tokens are encrypted at the application layer (Fernet) with a server-held key before they reach the database; the key id is stored with each ciphertext so a rotation is detectable and forces re-authorisation rather than failing silently.</li>
-        <li>Tokens are decrypted only inside the publishing worker and are never returned by any API, logged, or written to audit rows.</li>
+        <li>Tokens are decrypted only inside server-side provider operations and are never returned by any API, logged, or written to audit rows.</li>
         <li>Minimum scopes per capability; the connection card shows exactly which were granted.</li>
         <li>Disconnect wipes the ciphertext and revokes remotely where the platform supports it.</li>
       </ul>
@@ -60,7 +60,7 @@ export default function SecurityPage() {
 
       <h2 id='money'>6. Money and limits</h2>
       <p>
-        Card details go to Stripe only. Billing webhooks are signature-verified, replay-safe and out-of-order safe. Usage is metered in an append-only ledger with a reserve-then-settle model and hard stop-lines per workspace and globally, so a runaway job cannot spend beyond the plan.
+        Card details go to Stripe only. Billing webhooks are signature-verified, replay-safe and out-of-order safe. Usage is metered in an append-only ledger with a reserve-then-settle model and hard stop-lines per workspace and globally, which refuse new paid work when the approved budget cannot cover its reservation. Uncertain provider usage remains reserved until reconciled.
       </p>
 
       <h2 id='not'>7. What we do not do</h2>
@@ -74,7 +74,7 @@ export default function SecurityPage() {
 
       <h2 id='disclosure'>8. Responsible disclosure</h2>
       <p>
-        Found a vulnerability? Email <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className='underline'>{LEGAL_CONTACT_EMAIL}</a> with the subject “Security”. We acknowledge within 3 business days, keep you informed, and do not take action against good-faith research that avoids other customers’ data and service disruption.
+        Found a vulnerability? Email <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className='underline'>{LEGAL_CONTACT_EMAIL}</a> with the subject “Security”. The support mailbox, response commitment and disclosure policy are pending release review; no response-time guarantee is active yet. Avoid other customers’ data and service disruption when reporting a concern.
       </p>
       <p>
         Related:{' '}

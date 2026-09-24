@@ -6,8 +6,8 @@ import { siteConfig } from '@/config/site';
 
 export const metadata: Metadata = {
   title: 'Data Deletion',
-  description: 'How to delete your PostRiff account and data, or disconnect a single platform, and what is removed.',
-  openGraph: { title: 'Data Deletion · PostRiff', url: '/data-deletion' }
+  description: 'How to delete your Rafii account and data, or disconnect a single platform, and what is removed.',
+  openGraph: { title: 'Data Deletion · Rafii', url: '/data-deletion' }
 };
 
 const sections = [
@@ -24,7 +24,7 @@ export default function DataDeletionPage() {
     <LegalLayout
       eyebrow='Legal'
       title='Data deletion'
-      intro='You can delete everything, disconnect one platform, or remove one source — from inside the app, without asking us. This page is also the deletion instructions we register with each platform.'
+      intro='Use the in-app controls to request account deletion, disconnect a platform, or retract a source. Deletion can require reconciliation when storage, identity or a publication has an unresolved outcome.'
       sections={sections}
     >
       <h2 id='account'>1. Delete your account</h2>
@@ -36,7 +36,7 @@ export default function DataDeletionPage() {
         <li>
           Choose <strong>Delete account…</strong>, type <code>DELETE</code> to confirm, and confirm again.
         </li>
-        <li>Only the workspace owner can do this. Publications already handed to a platform must be resolved first; they cannot be recalled by cancelling. The app shows any unresolved publications. Waiting posts are removed unpublished when the workspace is deleted.</li>
+        <li>Only the workspace owner can do this after a recent sign-in. Cancel a renewing subscription and transfer any other owned workspaces first. Publications already handed to a platform must be resolved first; they cannot be recalled by cancelling. The app shows any unresolved publications. Waiting posts are removed unpublished when the workspace is deleted.</li>
       </ul>
 
       <h2 id='platform'>2. Disconnect one platform</h2>
@@ -46,7 +46,7 @@ export default function DataDeletionPage() {
         </li>
         <li>The stored access token is wiped immediately and revoked with the platform where the platform supports it.</li>
         <li>Metrics and comments for that account stop being collected. Approved jobs for it are held, not published.</li>
-        <li>You can also revoke PostRiff from the platform’s own settings (for example LinkedIn → Settings → Permitted services, or Meta → Apps and websites); the next PostRiff request will then fail and the connection will be shown as needing re-authorisation.</li>
+        <li>You can also revoke Rafii from the platform’s own settings (for example LinkedIn → Settings → Permitted services, or Meta → Apps and websites); the next Rafii request will then fail and the connection will be shown as needing re-authorisation.</li>
       </ul>
 
       <h2 id='source'>3. Remove a single source</h2>
@@ -65,7 +65,7 @@ export default function DataDeletionPage() {
         <tbody>
           <tr>
             <td>Account, memberships, sessions</td>
-            <td>Deleted; the Supabase Auth user is removed.</td>
+            <td>Removed in separate stages. An identity-service failure leaves a pending receipt for recovery.</td>
           </tr>
           <tr>
             <td>Workspace state: sources, drafts, approvals, schedules</td>
@@ -85,7 +85,7 @@ export default function DataDeletionPage() {
           </tr>
           <tr>
             <td>Publication receipts and audit events</td>
-            <td>Kept as content-free tombstones (ids, hashes, timestamps) where audit rules require it. They contain no post text, media or tokens.</td>
+            <td>Limited deletion, trial and audit records remain; workspace publication records are removed. Retained records must not contain post text, media or tokens.</td>
           </tr>
           <tr>
             <td>Billing records</td>
@@ -93,17 +93,17 @@ export default function DataDeletionPage() {
           </tr>
           <tr>
             <td>Backups</td>
-            <td>Rotate out within 30 days.</td>
+            <td>30-day rotation is a candidate policy; release backup retention is not yet verified.</td>
           </tr>
         </tbody>
       </table>
 
       <h2 id='timing'>5. Timing</h2>
-      <p>In-app deletion is immediate for live data. Backups holding a copy rotate out within 30 days and are never restored into the live service except to recover from an outage.</p>
+      <p>Deletion first freezes workspace mutations and future dispatch, then removes stored media, workspace data and the sign-in identity. If storage fails, retry the pending deletion. If identity removal fails, the workspace has already been removed and its receipt stays pending. Backup expiry and recovery deletion replay must be verified for the release environment; a 30-day rotation is not yet an operational guarantee.</p>
 
       <h2 id='email'>6. Requesting by email</h2>
       <p>
-        If you cannot sign in, email <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className='underline'>{LEGAL_CONTACT_EMAIL}</a> from the address on the account with the subject “Delete my data”. We will verify it is you and complete the deletion within 30 days, confirming by reply. Platform users who never had a PostRiff account but whose comment on a PostRiff-published post was collected can use the same address; we remove the comment record and keep only a tombstone.
+        If you cannot sign in, email <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className='underline'>{LEGAL_CONTACT_EMAIL}</a> from the address on the account with the subject “Delete my data”. The privacy mailbox and handling deadline are pending review. Identity verification and a completion receipt are required; the draft does not promise an unverified response time. Platform users who never had a Rafii account but whose comment on a Rafii-published post was collected can use the same address; we remove the comment record and keep only a tombstone.
       </p>
       <p>
         See also the{' '}

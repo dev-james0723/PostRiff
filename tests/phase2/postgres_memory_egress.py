@@ -94,6 +94,8 @@ service = HostedWorkspaceService(connection, verify, clock=lambda: clock[0])
 service.ideas.runtimes = [service.ideas.runtime, cloud]
 ideas = service.ideas
 service.bootstrap("one", "studio")
+from consumer_fixtures import approve_budgets
+approve_budgets(connection,wid)
 
 
 def with_voice_and_boundaries(state):

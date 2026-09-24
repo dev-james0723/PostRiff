@@ -34,3 +34,26 @@ studio/web/
 web/node_modules/
 web/.next/
 web/.env*.local
+
+# Local task state, research archives and private tooling never enter a deployment.
+/.codex/
+/.claude/
+/.agents/
+/.token-pilot/
+/.git/
+/PostRiff_Research_2026-09-18/
+/*.zip
+/*.md
+/.phase3-qualification/
+/.pytest_cache/
+/.github/
+/integrations/
+/motion/
+.DS_Store
+**/__pycache__/
+**/*.pyc
+web/.next*/
+web/.env*
+web/tests/
+web/plans/
+requirements-dev.txt

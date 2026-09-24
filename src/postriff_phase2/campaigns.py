@@ -34,7 +34,7 @@ def _text(value: Any, name: str, limit: int) -> str:
 def missing_facts(goal: str, facts: dict) -> list[str]:
     lower = goal.casefold()
     missing = []
-    if any(word in lower for word in ("concert", "event", "festival", "recital")):
+    if any(word in lower for word in ("concert", "event", "festival", "recital", "音樂會", "演奏會", "活動", "音樂節")):
         if not facts.get("date"): missing.append("date")
         if not facts.get("venue"): missing.append("venue")
     return missing
@@ -101,6 +101,9 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         campaign["status"] = "needs_input" if campaign["missingFacts"] else "draft"
         campaign["version"] += 1
         campaign["updatedAt"], campaign["updatedBy"] = now, actor
+        for task in root['recurringTasks']:
+            if task['campaignId'] == campaign['id'] and task['status'] == 'active':
+                task.update(status='paused', pauseReason='campaign_changed')
         for item in campaign.get("items", []):
             if item.get("status") not in ("published", "scheduled"):
                 item["needsReview"] = True
@@ -111,29 +114,51 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         schedule = payload.get("schedule")
         if not isinstance(schedule, dict): raise AlphaError("Add a recurring schedule.")
         preview = next_occurrence(schedule, now)
+        if type(payload.get('draftsPerOccurrence', 1)) is not int or payload.get('draftsPerOccurrence', 1) != 1:
+            raise AlphaError('Recurring preparation currently supports one draft per occurrence.')
+        max_cost = payload.get('maxCostUsdMicro', 0)
+        if type(max_cost) is not int or not 0 <= max_cost <= 10_000_000:
+            raise AlphaError('Choose a per-occurrence cost limit between $0 and $10.')
         task = {
             "id": uid(), "campaignId": campaign["id"], "version": 1, "status": "draft", "schedule": schedule,
             "limits": {"draftsPerOccurrence": min(max(int(payload.get("draftsPerOccurrence", 1)), 1), 10)},
             "route": clean(payload.get("route", "local-cli"), 120), "contextSourceIds": list(dict.fromkeys(payload.get("sourceIds") or []))[:50],
             "nextOccurrence": preview, "createdBy": actor, "createdAt": now,
+            "authorityVersion": 1, "campaignVersion": campaign['version'], "maxCostUsdMicro": max_cost,
+            "destination": {"platform": "LinkedIn", "language": payload.get('language', 'en')},
         }
-        task["definitionDigest"] = digest({key: task[key] for key in ("campaignId", "version", "schedule", "limits", "route", "contextSourceIds")})
+        task["definitionDigest"] = digest({key: task[key] for key in ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "contextSourceIds", "destination", "maxCostUsdMicro")})
         root["recurringTasks"].append(task)
         return {"taskId": task["id"], "preview": preview, "status": "draft"}
     task = _find(root["recurringTasks"], payload.get("taskId"), "Recurring task")
+    if task['status'] == 'cancelled':
+        raise AlphaError('This recurring task is cancelled. Create a new preview.', 409)
     if action == "raffi_recurrence_activate":
         if payload.get("confirmed") is not True: raise AlphaError("Confirm recurring draft preparation.")
+        if task['status'] != 'draft': raise AlphaError('Only a draft task can be activated.', 409)
+        campaign = _find(root['campaigns'], task['campaignId'], 'Campaign')
+        if campaign['version'] != task.get('campaignVersion') or campaign.get('missingFacts'):
+            raise AlphaError('Campaign facts changed. Create a new schedule preview.', 409)
         task["status"], task["activatedBy"], task["activatedAt"] = "active", actor, now
     elif action == "raffi_recurrence_pause":
         task["status"], task["pausedBy"], task["pausedAt"] = "paused", actor, now
     elif action == "raffi_recurrence_resume":
+        if payload.get('confirmed') is not True: raise AlphaError('Confirm recurring draft preparation.')
+        campaign = _find(root['campaigns'], task['campaignId'], 'Campaign')
+        if campaign['version'] != task.get('campaignVersion'):
+            raise AlphaError('Campaign facts changed. Create a new schedule preview.', 409)
         task["status"], task["nextOccurrence"] = "active", next_occurrence(task["schedule"], now)
+        task['activatedBy'] = actor
         task["resumedBy"], task["resumedAt"] = actor, now
     elif action == "raffi_recurrence_cancel":
         if payload.get("confirmed") is not True: raise AlphaError("Confirm cancellation of future draft preparation.")
         task["status"], task["cancelledBy"], task["cancelledAt"] = "cancelled", actor, now
     else:
         raise AlphaError("Unsupported campaign action.")
+    if task['status'] in ('paused', 'cancelled'):
+        for occurrence in root['occurrences']:
+            if occurrence['taskId'] == task['id'] and occurrence['state'] in ('pending', 'running'):
+                occurrence.update(state='cancelled', reason='authority_revoked')
     return {"taskId": task["id"], "status": task["status"], "nextOccurrence": task.get("nextOccurrence")}
 
 

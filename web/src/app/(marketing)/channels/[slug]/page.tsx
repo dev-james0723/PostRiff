@@ -33,8 +33,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const name = channel.nameZh ? `${channel.name} (${channel.nameZh})` : channel.name;
   return {
     title: `${name} publishing`,
-    description: `${channel.description} How PostRiff connects to ${channel.name}, what it can do today, and what is still pending.`,
-    openGraph: { title: `${name} · PostRiff`, url: `/channels/${channel.slug}` }
+    description: `${channel.description} How Rafii connects to ${channel.name}, what it can do today, and what is still pending.`,
+    openGraph: { title: `${name} · Rafii`, url: `/channels/${channel.slug}` }
   };
 }
 
@@ -50,14 +50,14 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
   const faq =
     channel.group === 'hosted'
       ? [
-          { q: `Can PostRiff publish to ${channel.name} directly today?`, a: `Not yet. ${channel.reviewStatus ?? 'Provider review is pending'}. Until it passes, PostRiff prepares the post and you complete the final step; the badge on your channel card says exactly that.` },
-          { q: 'What permissions does PostRiff ask for?', a: 'Only the scopes for the capability you enable — publishing, analytics, comments or replies — and the connection card lists the ones actually granted.' },
+          { q: `Can Rafii publish to ${channel.name} directly today?`, a: `Not yet. ${channel.reviewStatus ?? 'Provider review is pending'}. Until it passes, Rafii prepares the post and you complete the final step; the badge on your channel card says exactly that.` },
+          { q: 'What permissions does Rafii ask for?', a: 'Only the scopes for the capability you enable — publishing, analytics, comments or replies — and the connection card lists the ones actually granted.' },
           { q: 'How do I disconnect?', a: 'From Channels → Disconnect. The stored token is wiped and revoked with the provider where supported.' }
         ]
       : [
           { q: `Why is ${channel.name} not a hosted connector?`, a: `${channel.name} does not offer a third-party publishing API a small studio can use honestly, or its API is restricted or paid. The desktop companion publishes through your own login on your own machine instead — never from our servers.` },
           { q: 'When is the companion available?', a: 'It is in development alongside the hosted connectors. We do not promise dates; the changelog shows what has shipped.' },
-          { q: 'Is my login shared with PostRiff?', a: 'No. The companion keeps your session on your machine. Drafts and approvals still come from your PostRiff workspace.' }
+          { q: 'Is my login shared with Rafii?', a: 'No. The companion keeps your session on your machine. Drafts and approvals still come from your Rafii workspace.' }
         ];
 
   return (
@@ -83,7 +83,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
         ))}
       </PageHero>
 
-      <Section eyebrow='Capabilities' title={`What PostRiff can do on ${channel.name} today`}>
+      <Section eyebrow='Capabilities' title={`What Rafii can do on ${channel.name} today`}>
         <div className='max-w-2xl overflow-x-auto rounded-xl border'>
           <Table>
             <TableHeader>
@@ -118,15 +118,15 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
         <div className='max-w-2xl text-sm text-pretty'>
           {channel.group === 'hosted' ? (
             <ol className='flex list-decimal flex-col gap-2 pl-5'>
-              <li>In Channels, choose the capability you want and press Connect. PostRiff shows the exact scopes before you leave.</li>
-              <li>{channel.name} asks you to authorise PostRiff. Your password never touches PostRiff.</li>
-              <li>Back in PostRiff, confirm the account. The card shows each capability’s verified level.</li>
+              <li>In Channels, choose the capability you want and press Connect. Rafii shows the exact scopes before you leave.</li>
+              <li>{channel.name} asks you to authorise Rafii. Your password never touches Rafii.</li>
+              <li>Back in Rafii, confirm the account. The card shows each capability’s verified level.</li>
             </ol>
           ) : (
             <ol className='flex list-decimal flex-col gap-2 pl-5'>
-              <li>Install the PostRiff desktop companion on your own computer (coming with the companion release).</li>
+              <li>The desktop companion is pending release; there is no verified installation flow to offer yet.</li>
               <li>Sign in to {channel.name} inside the companion. The session stays on your machine.</li>
-              <li>Approve a post in your PostRiff workspace; the companion publishes it through your session and reports the receipt back.</li>
+              <li>Approve a post in your Rafii workspace; companion execution remains unavailable until its release and account verification pass.</li>
             </ol>
           )}
         </div>

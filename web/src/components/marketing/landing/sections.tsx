@@ -48,7 +48,7 @@ export function ChannelMatrix() {
               </Link>
             ))}
           </div>
-          <p className='text-muted-foreground text-xs'>Direct publishing switches on per platform once its provider review passes. Until then PostRiff prepares the post and you complete the last step.</p>
+          <p className='text-muted-foreground text-xs'>Direct publishing switches on per platform once its provider review passes. Until then Rafii prepares the post and you complete the last step.</p>
         </div>
         <div className='flex flex-col gap-3 rounded-xl border p-5'>
           <p className='flex items-center gap-2 text-sm font-semibold'>
@@ -100,7 +100,7 @@ export function HowItWorks() {
 export function Honesty() {
   const levels = ['direct', 'assisted', 'local'] as const;
   return (
-    <Section id='honesty' eyebrow='We do not pretend' title='Every channel shows what it can really do.' description='Most tools show a green “Connected”. PostRiff shows each capability — identity, publish, schedule, analytics, comments, reply — with the level it has actually verified.'>
+    <Section id='honesty' eyebrow='We do not pretend' title='Every channel shows what it can really do.' description='Most tools show a green “Connected”. Rafii shows each capability — identity, publish, schedule, analytics, comments, reply — with the level it has actually verified.'>
       <div className='grid gap-4 md:grid-cols-3'>
         {levels.map((level, index) => (
           <ScrollReveal key={level} {...REVEAL} delay={index * STAGGER} className='bg-card flex flex-col gap-3 rounded-xl border p-5'>
@@ -118,7 +118,7 @@ export function Honesty() {
 
 export function DesignPartners() {
   return (
-    <Section id='early-access' eyebrow='Early access' title='Design partner programme' description='PostRiff is new. Instead of borrowed logos, here is what early partners get and how to apply.'>
+    <Section id='early-access' eyebrow='Early access' title='Design partner programme' description='Rafii is new. Instead of borrowed logos, here is what early partners get and how to apply.'>
       <ScrollReveal {...REVEAL} className='grid gap-4 md:grid-cols-[1fr_auto] md:items-center'>
         <ul className='grid gap-2 text-sm sm:grid-cols-3'>
           <li className='rounded-lg border p-4'>A weekly call with the founder while we tune drafts to your voice.</li>
@@ -178,7 +178,7 @@ export function PricingSummary() {
 
 export const FAQ_ITEMS = [
   { q: 'Do you ever post without my approval?', a: 'No. A review freezes the exact text, media, account and time; only approving that review creates a publication. There is no auto-post, auto-reply or bulk mode.' },
-  { q: 'Which channels are direct today?', a: 'None yet. LinkedIn, Threads and Instagram are hosted connectors awaiting provider review; until each passes, publishing is Assisted (PostRiff prepares the post, you complete the last step). Chinese and other platforms run through the desktop companion on your own machine.' },
+  { q: 'Which channels are direct today?', a: 'None yet. LinkedIn, Threads and Instagram are hosted connectors awaiting provider review; until each passes, publishing is Assisted (Rafii prepares the post, you complete the last step). Other platforms may offer assisted export or a separately verified desktop workflow; they are not promised as automatic publishing.' },
   { q: 'What happens while a platform review is pending?', a: 'The channel card says “Assisted · review pending”. You can still draft, schedule and export; direct publishing switches on for that platform when the review passes.' },
   { q: 'Can I export everything?', a: 'Yes — drafts, sources, approvals and receipts as a zip with a SHA-256 receipt, at any time, on any plan, including after cancellation.' },
   { q: 'How does the trial work?', a: `${TRIAL.days} days, ${TRIAL.connectedAccounts} connected accounts, ${TRIAL.writingBatches} writing batches, no card. It never converts into a paid plan by itself.` },

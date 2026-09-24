@@ -27,7 +27,7 @@ function scopeLabel(scope: LearnedItem['scope']) {
 
 /**
  * The learned half of memory (preference-learning design §5.6): proposals waiting for an owner, the items
- * PostRiff already follows, the switch that stops learning, and the reset that forgets everything.
+ * Rafii already follows, the switch that stops learning, and the reset that forgets everything.
  */
 export function LearningPanel() {
   const { api, workspaceId } = useWorkspaceApi();
@@ -65,7 +65,7 @@ export function LearningPanel() {
       {
         onSuccess: () => {
           invalidate('memory', 'memoryProposals');
-          toast.success(enabled ? 'PostRiff learns from what you tell it and how you edit again.' : 'Learning is off. Nothing new is recorded or proposed.');
+          toast.success(enabled ? 'Rafii learns from what you tell it and how you edit again.' : 'Learning is off. Nothing new is recorded or proposed.');
         },
         onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
       }
@@ -78,7 +78,7 @@ export function LearningPanel() {
       {
         onSuccess: () => {
           invalidate('memory', 'memoryProposals');
-          toast.success(cloudExtraction ? 'Cloud extraction permission is on. The configured extractor and memory sharing determine whether a model reads edit pairs.' : 'Cloud extraction permission is off. Counting rules and any configured local extractor can still run.');
+          toast.success(cloudExtraction ? 'Cloud extraction permission is on. The configured extractor and memory sharing determine whether a model reads edit pairs.' : 'Cloud extraction permission is off. Counting rules can still run. Claude CLI also needs cloud permission.');
         },
         onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
       }
@@ -127,7 +127,7 @@ export function LearningPanel() {
             {learning && learning.revision > 0 && <Badge variant='outline'>style rev {learning.revision}</Badge>}
           </div>
           <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>
-            When you tell the agent how to write, or your edits show a pattern, PostRiff proposes a preference. Nothing changes until you accept it, a preference is about form only (length, openings, hashtags, how a post closes), and it shapes future drafts without touching anything already scheduled.
+            When you tell the agent how to write, or your edits show a pattern, Rafii proposes a preference. Nothing changes until you accept it, a preference is about form only (length, openings, hashtags, how a post closes), and it shapes future drafts without touching anything already scheduled.
           </p>
           <p className='text-muted-foreground text-xs'>{isOwner ? 'You decide proposals and can pause, retire or forget any of them.' : 'Only an owner can decide proposals or change these.'}</p>
         </div>
@@ -142,7 +142,7 @@ export function LearningPanel() {
               <Badge variant={learning.cloudExtraction && cloudAccess ? 'secondary' : 'outline'}>{learning.cloudExtraction && cloudAccess ? 'On' : 'Off'}</Badge>
             </div>
             <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>
-              Counting rules read your edits. This permits a configured cloud extractor to read redacted before/after pairs, only for drafts whose sources allow cloud use. A configured local extractor can run regardless of this switch.
+              Counting rules read your edits. This permits a configured cloud extractor to read redacted before/after pairs, only for drafts whose sources allow cloud use. Claude CLI sends text to a cloud provider and needs the same permission.
               {!cloudAccess ? ' It needs “Cloud model access” above to be on.' : ''}
             </p>
           </div>

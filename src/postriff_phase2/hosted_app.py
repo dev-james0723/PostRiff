@@ -7,6 +7,8 @@ import logging
 import json
 import os
 import ssl
+import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -128,7 +130,8 @@ def billing_from_environment(values):
 
 
 def runtime_from_environment(environ=None):
-    values = environ or os.environ
+    from .deployment import isolated_environment
+    values = isolated_environment(os.environ if environ is None else environ)
     database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"))
     project_url = values.get("POSTRIFF_SUPABASE_URL")
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
@@ -143,7 +146,8 @@ def runtime_from_environment(environ=None):
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values))
+    from .image_runtime import from_environment as image_runtime_from_environment
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values))
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
@@ -276,6 +280,31 @@ class HostedApplication:
         raise AlphaError("This hosted route is unavailable.", 404)
 
     def __call__(self, environ, start_response):
+        request_id = uuid.uuid4().hex
+        environ['postriff.request_id'] = request_id
+        started = time.monotonic()
+        status_code = 500
+        def respond(status, headers, exc_info=None):
+            nonlocal status_code
+            status_code = int(status.split()[0])
+            headers = [(key,value) for key,value in headers if key.lower() != 'x-request-id']
+            headers.append(('X-Request-ID', request_id))
+            return start_response(status, headers, exc_info) if exc_info else start_response(status, headers)
+        try:
+            return self._handle(environ, respond)
+        finally:
+            # No URL, body, identity, exception text, query, headers or credential is logged.
+            method = environ.get('REQUEST_METHOD','GET').upper()
+            logger = logging.getLogger('postriff.request')
+            logger.setLevel(logging.INFO)
+            logger.log(logging.ERROR if status_code >= 500 else logging.INFO, json.dumps({
+                'event':'request.completed', 'requestId':request_id,
+                'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
+                'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api'
+            }))
+
+    def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
         path = environ.get("PATH_INFO", "/")
         mutation = method in ("POST", "PUT", "PATCH", "DELETE")
@@ -325,10 +354,17 @@ class HostedApplication:
                 from urllib.parse import parse_qs
                 from .oauth import OAuthService
                 query = {k: v[0] for k, v in parse_qs(environ.get("QUERY_STRING", "")).items()}
-                proto = environ.get("HTTP_X_FORWARDED_PROTO", environ.get("wsgi.url_scheme", "https")).split(",")[0].strip()
-                host = (environ.get("HTTP_X_FORWARDED_HOST") or environ.get("HTTP_HOST", "")).split(",")[0].strip()
-                location = OAuthService.callback_redirect(f"{proto}://{host}", oauth_parts[2], query)
-                start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Content-Length", "0")])
+                from .providers import ADAPTERS
+                if oauth_parts[2] not in ADAPTERS:
+                    raise AlphaError('Unknown OAuth provider.', 404)
+                # Never send a code to a Host/X-Forwarded-Host supplied by the request.
+                configured_base = getattr(getattr(self.service, 'oauth', None), 'public_base_url', None)
+                if configured_base is None:
+                    configured_base = os.environ.get('POSTRIFF_PUBLIC_BASE_URL', '')
+                callback_config = OAuthService(None, None, None, {}, configured_base)
+                callback_config.callback_uri(oauth_parts[2])  # fixed HTTPS origin validation; no provider call
+                location = OAuthService.callback_redirect(callback_config.public_base_url, oauth_parts[2], query)
+                start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
@@ -337,10 +373,25 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                ideas = getattr(service, 'ideas', None)
+                if ideas is not None:
+                    result['writingRecovery'] = ideas.recover_stalled()
+                    from .campaign_worker import CampaignWorker
+                    result['campaignPreparation'] = CampaignWorker(service).tick()
                 result["reminders"] = service.run_reminders()
                 learning = getattr(service, "learning", None)
                 if learning is not None:
                     result["learning"] = learning.sweep()
+                if getattr(service, 'identity', None) is not None:
+                    from .account_deletion import reconcile_identity
+                    result['identityDeletion'] = reconcile_identity(service)
+                from .operational_signals import snapshot as operational_snapshot
+                try:
+                    result['operations'] = operational_snapshot(service.repository.connection_factory)
+                except Exception:
+                    result['operations'] = {'status':'unavailable', 'notificationDelivery':'not_configured'}
+                logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' else logging.WARNING,
+                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations']}))
                 return self._json(start_response, 200, result)
             if not api_bearer:
                 self._origin(environ, mutation)
@@ -433,10 +484,15 @@ class HostedApplication:
                     return self._json(start_response, 200, oauth.channels(parts[2], token))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
-                    return self._json(start_response, 201, oauth.start(parts[2], token, parts[4], body.get("capability", "publish")))
+                    return self._json(start_response, 201, oauth.start(parts[2], token, parts[4], body.get("capability", "identity")))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "complete" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error")))
+                if len(parts) == 6 and parts[5] == 'posts' and method == 'POST':
+                    return self._json(start_response, 200, oauth.history.preview(parts[2], token, parts[4], self._body(environ)))
+                if len(parts) == 7 and parts[5:] == ['posts', 'import'] and method == 'POST':
+                    saved = oauth.history.retain(parts[2], token, parts[4], self._body(environ))
+                    return self._json(start_response, 200, service._present(saved))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))
@@ -521,8 +577,7 @@ class HostedApplication:
         except AlphaError as error:
             return self._json(start_response, error.status, {"error": str(error), "code": error.code})
         except Exception:
-            # Content-free: the traceback names code paths, never prompts, post bodies or tokens.
-            logging.getLogger("postriff.hosted").exception("hosted request failed: %s %s", method, path)
+            # Exception text/tracebacks may contain third-party payloads or credentials.
             return self._json(start_response, 500, {"error": "The hosted service could not complete this request. Saved state remains authoritative.", "code": "internal_error"})
 
 

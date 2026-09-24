@@ -1,5 +1,7 @@
 'use client';
 
+import { providerReadinessLabel } from '@/lib/channels/onboarding';
+
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
@@ -118,15 +120,18 @@ function ProviderTile({
           <span className='truncate font-medium'>{provider.platform}</span>
         </div>
         <CapabilityBadge
-          level={provider.productionReviewed ? 'direct' : 'assisted'}
-          label={provider.productionReviewed ? 'Direct · account checks required' : 'Assisted · review pending'}
+          level={!provider.executionPaused && provider.productionReviewed ? 'direct' : 'assisted'}
+          label={providerReadinessLabel(provider)}
         />
       </div>
       <p className='text-muted-foreground text-xs'>
-        {provider.productionReviewed
+        {provider.configured === false ? 'This provider is not ready for OAuth. Correct the presence-only configuration issues below; credentials never belong in the browser.' : provider.executionPaused ? 'This connector is temporarily paused. Existing drafts and receipts remain available.' : provider.productionReviewed
           ? 'Direct candidate: confirm this account’s permissions and supported format before scheduling. App configuration is not proof of a verified publication.'
-          : 'Awaiting provider review: PostRiff prepares each post and you complete the final step.'}
+          : 'Platform review has not been confirmed. Eligible developer/test accounts may connect; public-user access, history and publishing remain separately checked.'}
       </p>
+      <p className='text-muted-foreground text-xs'>{provider.accountRequirement}</p>
+      {provider.setupIssues?.map((issue) => <p key={issue} role='status' className='text-destructive break-words text-xs'>{issue}</p>)}
+      {provider.callbackUri && provider.connectReady === false && <p className='text-muted-foreground break-all text-xs'>Callback: <code>{provider.callbackUri}</code></p>}
       <p className='text-muted-foreground text-xs'>{publishingSupport(provider.platform)}</p>
       {offered.length > 0 && (
         <ul className='flex flex-wrap gap-1' aria-label='Capabilities you can request'>
@@ -139,7 +144,7 @@ function ProviderTile({
       )}
       {canManage && (
         <div className='mt-auto'>
-          <Button variant={alreadyConnected ? 'outline' : 'default'} size='sm' onClick={onConnect}>
+          <Button variant={alreadyConnected ? 'outline' : 'default'} size='sm' disabled={provider.connectReady === false || provider.executionPaused} onClick={onConnect}>
             <Icons.add className='size-3.5' />
             {alreadyConnected ? 'Connect another account' : 'Connect'}
           </Button>
@@ -310,7 +315,7 @@ function ChannelsPage() {
             <>
               <ChannelsSummary
                 counts={counts}
-                providersCount={providers.length}
+                providersCount={providers.filter((provider) => provider.connectReady !== false).length}
                 usage={usage.data}
                 data-tour='channels-summary'
               />
@@ -417,7 +422,7 @@ function ChannelsPage() {
               <p className='text-muted-foreground text-sm'>Available connections could not be loaded.</p>
             ) : providers.length === 0 ? (
               <p className='text-muted-foreground text-sm'>
-                No providers are configured on this deployment yet. LinkedIn, Threads and Instagram are the audited launch set; each appears here once its app credentials are in place.
+                Channel setup information is unavailable. Refresh this page or check the channel API; app sign-in configuration is separate from connecting social accounts.
               </p>
             ) : (
               <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>

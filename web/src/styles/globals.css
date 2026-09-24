@@ -1,4 +1,6 @@
-@import 'tailwindcss';
+/* Scan only application source, never compiled .next caches or verification artifacts. */
+@import 'tailwindcss' source(none);
+@source '../';
 
 @import 'tw-animate-css';
 

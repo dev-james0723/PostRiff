@@ -5,8 +5,8 @@ import { CHANGELOG } from '@/content/changelog';
 
 export const metadata: Metadata = {
   title: 'Changelog',
-  description: 'What has shipped in PostRiff, by date.',
-  openGraph: { title: 'Changelog · PostRiff', url: '/changelog' }
+  description: 'What has shipped in Rafii, by date.',
+  openGraph: { title: 'Changelog · Rafii', url: '/changelog' }
 };
 
 export default function ChangelogPage() {

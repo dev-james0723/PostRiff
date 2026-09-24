@@ -1,6 +1,5 @@
 'use client';
 
-import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 
 // global-error replaces the root layout when it errors, so globals.css is not
@@ -13,7 +12,9 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    if (!process.env.NEXT_PUBLIC_SENTRY_DISABLED && process.env.NEXT_PUBLIC_SENTRY_DSN) {
+      void import('@sentry/nextjs').then((Sentry) => Sentry.captureException(error)).catch(() => {});
+    }
   }, [error]);
 
   return (
@@ -31,7 +32,7 @@ export default function GlobalError({
         <div style={{ textAlign: 'center', padding: '1rem', maxWidth: '28rem' }}>
           <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Something went wrong</h1>
           <p style={{ color: '#6b7280', marginBottom: '1.25rem' }}>
-            PostRiff hit an unexpected error. Nothing was published. Please try again.
+            Rafii hit an unexpected error. Check your activity before retrying any publication.
           </p>
           <button
             onClick={() => reset()}

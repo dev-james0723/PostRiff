@@ -368,7 +368,7 @@ class LearningExtractorDisclosureTest(unittest.TestCase):
         learning.ensure(state)
         state['learning']['enabled'] = True
         service = HostedLearning(None, lambda: 0)
-        self.assertEqual(service.summary(state)['extractor'], {'kind': 'rules', 'model': None, 'allowed': False})
+        self.assertEqual(service.summary(state)['extractor'], {'kind': 'rules', 'model': None, 'egress': 'rules', 'allowed': False})
         service.extractor = type('Extractor', (), {'local': True, 'model': 'synthetic-local'})()
         self.assertTrue(service.summary(state)['extractor']['allowed'])
         self.assertEqual(service.summary(state)['extractor']['kind'], 'local')
@@ -376,6 +376,10 @@ class LearningExtractorDisclosureTest(unittest.TestCase):
         state['learning']['cloudExtraction'] = False
         self.assertEqual(service.summary(state)['extractor']['kind'], 'cloud')
         self.assertFalse(service.summary(state)['extractor']['allowed'])
+        service.extractor.local = True
+        service.extractor.provider_class = 'cloud'
+        self.assertEqual(service.summary(state)['extractor']['egress'], 'cloud')
+        self.assertFalse(service.summary(state)['extractor']['allowed'], 'Cloud CLI also requires cloud consent')
         state['learning']['enabled'] = False
         service.extractor.local = True
         self.assertFalse(service.summary(state)['extractor']['allowed'])
