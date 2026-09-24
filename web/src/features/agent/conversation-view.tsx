@@ -17,10 +17,10 @@ import { AgentProgress } from '@/components/agents/loading-states/agent-progress
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
 import { Message, MessageAvatar, MessageBubble, MessageBubbleContent, MessageContent } from '@/components/agents/message';
 import { Icons } from '@/components/icons';
+import { SegmentedControl, StateMessage, Surface } from '@/components/rafii';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { Loader } from '@/components/motion/loader';
 import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -128,7 +128,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const [voiceMode, setVoiceMode] = useState<'neutral' | 'personalized'>('neutral');
   const [imageRequested, setImageRequested] = useState(false);
   const [variantIndex, setVariantIndex] = useState(0);
-  const [inspectorTab, setInspectorTab] = useState('preview');
+  const [inspectorTab, setInspectorTab] = useState<'preview' | 'sources'>('preview');
 
   // Turns already in the thread when it first loads render still; only turns that arrive after that pop in.
   const loadedIds = useRef<{ conversationId: string; ids: Set<string> } | null>(null);
@@ -180,13 +180,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   // A draft as its app would show it: the connected account (or the workspace's speaker) and the planned time if any.
   function draftFor(variant: RunVariant) {
-    const planned = plan?.destinations.find((d) => d.platform === variant.platform && d.language === variant.language)?.localTime;
-    const channel = channels.find((c) => c.platform === variant.platform);
+    const sameAccount = (d: { platform: string; language: string; channelId?: string }) => d.platform === variant.platform && d.language === variant.language && (!variant.channelId || !d.channelId || d.channelId === variant.channelId);
+    const planned = plan?.destinations.find(sameAccount)?.localTime;
+    const channel = (variant.channelId ? channels.find((c) => c.id === variant.channelId) : undefined) ?? channels.find((c) => c.platform === variant.platform);
     return {
       platform: variant.platform,
       text: variant.text,
-      account: channel?.account ?? state?.speaker?.label ?? 'You',
-      channelId: channel?.id,
+      account: variant.account ?? channel?.account ?? state?.speaker?.label ?? 'You',
+      channelId: variant.channelId ?? channel?.id,
       publishAt: planned ? localTimeToDate(planned) : null
     };
   }
@@ -233,45 +234,51 @@ export function ConversationView({ conversationId }: { conversationId: string })
   }
 
   return (
-    <PageContainer>
-      <div className='grid gap-4 lg:grid-cols-[13rem_1fr] xl:grid-cols-[13rem_1fr_20rem]'>
+    <PageContainer className='pt-4 md:pt-6'>
+      <div className='grid gap-6 lg:grid-cols-[14rem_1fr] xl:grid-cols-[14rem_1fr_21rem]'>
         {/* Conversations */}
-        <aside className='hidden lg:flex lg:flex-col lg:gap-2'>
+        <aside className='hidden lg:flex lg:flex-col lg:gap-2' aria-label='Conversations'>
           <div className='flex items-center justify-between px-1'>
-            <span className='text-sm font-semibold'>Conversations</span>
-            <Link href='/app?new=1' className='text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs'>
+            <span className='rafii-eyebrow'>Conversations</span>
+            <Link href='/app?new=1' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-8 items-center gap-1 rounded-md text-xs'>
               <Icons.add className='size-3.5' /> New
             </Link>
           </div>
-          <ScrollArea className='h-[70vh]'>
-            {conversations.isLoading ? (
-              <div className='flex flex-col gap-2 p-1'>
-                <Skeleton className='h-9 w-full' />
-                <Skeleton className='h-9 w-full' />
-              </div>
-            ) : (
-              <SharedLayoutBg as='ul' inset={0} className='gap-0.5' pillClassName='rounded-lg bg-muted/60'>
-                {list.map((c) => (
-                  <li key={c.conversationId}>
-                    <Link
-                      href={`/app/agent/${encodeURIComponent(c.conversationId)}`}
-                      className={cn('flex flex-col gap-0.5 rounded-lg px-2.5 py-2 text-sm', c.conversationId === conversationId && 'bg-muted font-medium')}
-                    >
-                      <span className='line-clamp-1'>{c.title || 'Untitled'}</span>
-                      <span className='text-muted-foreground text-xs font-normal'>{formatDate(c.updatedAt)}</span>
-                    </Link>
-                  </li>
-                ))}
-              </SharedLayoutBg>
-            )}
-          </ScrollArea>
+          <Surface material='quiet' padding='none' className='overflow-hidden'>
+            <ScrollArea className='h-[70vh]'>
+              {conversations.isLoading ? (
+                <div className='flex flex-col gap-2 p-2'>
+                  <Skeleton className='h-9 w-full' />
+                  <Skeleton className='h-9 w-full' />
+                </div>
+              ) : (
+                <SharedLayoutBg as='ul' inset={0} className='gap-0.5 p-1.5' pillClassName='rounded-[var(--rafii-radius-control)] rafii-glass-selected'>
+                  {list.map((c) => (
+                    <li key={c.conversationId}>
+                      <Link
+                        href={`/app/agent/${encodeURIComponent(c.conversationId)}`}
+                        aria-current={c.conversationId === conversationId ? 'page' : undefined}
+                        className={cn('rafii-focus flex min-h-11 flex-col justify-center gap-0.5 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm', c.conversationId === conversationId && 'text-foreground font-medium')}
+                      >
+                        <span className='line-clamp-1'>{c.title || 'Untitled'}</span>
+                        <span className='text-muted-foreground text-xs font-normal'>{formatDate(c.updatedAt)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </SharedLayoutBg>
+              )}
+            </ScrollArea>
+          </Surface>
         </aside>
 
         {/* Thread */}
-        <section className='flex min-w-0 flex-col gap-4'>
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <h1 className='truncate text-base font-semibold'>{title}</h1>
-            <div className='flex items-center gap-2'>
+        <section className='flex min-w-0 flex-col gap-5'>
+          <div className='flex flex-wrap items-end justify-between gap-3'>
+            <div className='flex min-w-0 flex-col gap-1'>
+              <span className='rafii-eyebrow'>Conversation</span>
+              <h1 className='text-foreground truncate text-[26px] leading-[1.15] font-normal tracking-[-0.02em]'>{title}</h1>
+            </div>
+            <div className='flex flex-wrap items-center gap-2'>
               {plan && (
                 <AnimatedBadge status={planApplied ? 'success' : 'warning'} size='sm' pulse={!planApplied}>
                   {planApplied ? 'Plan applied' : 'Plan awaiting your approval'}
@@ -281,7 +288,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
                 <Icons.sparkles className='size-3' />
                 <span className='font-mono text-[11px]'>{runModelLabel}</span>
               </Badge>
-              <Link href='/app/queue' className='text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline'>
+              <Link href='/app/queue' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-8 items-center rounded-md text-xs underline-offset-2 hover:underline'>
                 Open Queue
               </Link>
             </div>
@@ -298,7 +305,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
                     <Message from='user' animateIn={animateIn}>
                       <MessageBubble animateIn={animateIn}>
                         {/* The soft bubble's surface is its first child span; recolor it to today's secondary look. */}
-                        <MessageBubbleContent className='text-secondary-foreground max-w-[80%] px-4 leading-relaxed whitespace-pre-wrap [&>span]:bg-secondary'>{body.text}</MessageBubbleContent>
+                        <MessageBubbleContent className='text-foreground max-w-[80%] px-4 leading-relaxed whitespace-pre-wrap [&>span]:rafii-glass'>{body.text}</MessageBubbleContent>
                       </MessageBubble>
                     </Message>
                   </li>
@@ -308,7 +315,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
               return (
                 <li key={message.messageId}>
                   <Message from='assistant' animateIn={animateIn} className='gap-3'>
-                    <MessageAvatar className='bg-primary text-primary-foreground mt-0.5 rounded-lg'>
+                    <MessageAvatar className='rafii-glass text-foreground mt-0.5 rounded-lg'>
                       <Icons.sparkles className='size-3.5' />
                     </MessageAvatar>
                     <MessageContent className='items-stretch gap-3'>
@@ -325,7 +332,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
                       {isCurrent && run ? (
                         <>
                           {running && (
-                            <div className='bg-card ring-foreground/10 flex flex-col gap-2 rounded-xl p-4 ring-1'>
+                            <Surface material='glass' padding='md' className='flex flex-col gap-2'>
                               <span className='text-muted-foreground flex items-center gap-2 text-xs'>
                                 {stage === 'queued' ? (
                                   <>
@@ -352,10 +359,10 @@ export function ConversationView({ conversationId }: { conversationId: string })
                               ) : (
                                 <Skeleton className='h-16 w-full' />
                               )}
-                            </div>
+                            </Surface>
                           )}
                           {run.status === 'failed' && !(message.body as { failed?: boolean }).failed && (
-                            <p className='text-sm text-amber-700 dark:text-amber-300'>{run.events.findLast((e) => e.type === 'run.failed')?.message ?? 'The run did not complete.'}</p>
+                            <StateMessage kind='error' title='The run did not complete.' description={run.events.findLast((e) => e.type === 'run.failed')?.message} />
                           )}
                           {variants.length > 0 && (
                             <VariantCard
@@ -426,41 +433,47 @@ export function ConversationView({ conversationId }: { conversationId: string })
                 onChange: setImageRequested
               }}
               hint={imageRequested ? 'Uses the managed image route and one media credit · independent of the writing model' : '⌘↵ to send · channels and times you name in the message win over the chips'}
+              accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
             />
           ) : (
-            <p className='text-muted-foreground text-sm'>You need the edit permission to draft in this workspace.</p>
+            <StateMessage kind='permission' title='Viewing only.' description='You need the edit permission to draft in this workspace.' />
           )}
           {busy && imageRequested && <ImageGenerationCard running className='mx-auto' />}
         </section>
 
         {/* Inspector */}
-        <aside className='hidden xl:block'>
-          <Tabs value={inspectorTab} onValueChange={setInspectorTab} variant='underline'>
-            <TabsList className='w-full'>
-              <TabsTrigger value='preview' className='flex-1 justify-center'>
-                Preview
-              </TabsTrigger>
-              <TabsTrigger value='sources' className='flex-1 justify-center'>
-                Sources · {sources.length}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value='preview' className='mt-3 flex flex-col gap-3'>
+        <aside className='hidden xl:block' aria-label='Inspector'>
+          <SegmentedControl
+            pattern='tabs'
+            label='Inspector'
+            value={inspectorTab}
+            onChange={setInspectorTab}
+            panelIds={['conversation-inspector-preview', 'conversation-inspector-sources']}
+            options={[
+              { value: 'preview', label: 'Preview' },
+              { value: 'sources', label: `Sources · ${sources.length}` }
+            ]}
+          />
+          {inspectorTab === 'preview' ? (
+            <div role='tabpanel' id='conversation-inspector-preview' aria-label='Preview' className='mt-3 flex flex-col items-center gap-3'>
               {variants[variantIndex] ? (
                 <>
-                  <p className='text-muted-foreground text-xs'>{destinationLabel(variants[variantIndex])}</p>
+                  <p className='text-muted-foreground w-full text-xs'>{destinationLabel(variants[variantIndex])}</p>
                   {/* Keyed by draft so switching tabs draws the other app instead of morphing this one. */}
-                  <DraftPreview key={`${variantIndex}:${variants[variantIndex].platform}`} scale={0.7} {...draftFor(variants[variantIndex])} />
+                  <DraftPreview key={`${variantIndex}:${variants[variantIndex].platform}:${variants[variantIndex].channelId ?? ''}`} scale={0.7} {...draftFor(variants[variantIndex])} />
+                  <p className='text-muted-foreground w-full text-xs'>An illustrative layout, not a published post.</p>
                 </>
               ) : (
-                <p className='text-muted-foreground text-xs'>The selected draft renders here as it would look on the channel.</p>
+                <StateMessage kind='empty' title='Nothing to preview yet.' description='The selected draft renders here as it would look in its app.' />
               )}
-            </TabsContent>
-            <TabsContent value='sources' className='mt-3 flex flex-col gap-2'>
+            </div>
+          ) : (
+            <div role='tabpanel' id='conversation-inspector-sources' aria-label='Sources' className='mt-3 flex flex-col gap-2'>
               {sources.length === 0 ? (
-                <p className='text-muted-foreground text-xs'>No usable sources in this workspace yet.</p>
+                <StateMessage kind='empty' title='No usable sources yet.' description='Sources you add and mark usable appear here for the agent to read.' />
               ) : (
                 sources.slice(0, 12).map((s) => (
-                  <div key={s.id} className='bg-card ring-foreground/10 flex flex-col gap-1 rounded-lg p-2.5 text-xs ring-1'>
+                  <Surface key={s.id} material='quiet' radius='control' padding='sm' className='flex flex-col gap-1 text-xs'>
                     <span className='flex items-center justify-between gap-2'>
                       <span className='truncate font-medium'>{s.title}</span>
                       <Badge variant='outline' className='shrink-0'>
@@ -468,14 +481,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
                       </Badge>
                     </span>
                     <span className='text-muted-foreground line-clamp-2'>{s.text}</span>
-                  </div>
+                  </Surface>
                 ))
               )}
-              <Button variant='outline' size='sm' className='w-fit' onClick={() => composer.current?.focus()}>
+              <Button variant='glass' size='control' className='w-fit' onClick={() => composer.current?.focus()}>
                 Add context in the message
               </Button>
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
         </aside>
       </div>
     </PageContainer>

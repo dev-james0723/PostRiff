@@ -19,11 +19,11 @@ function Row({ ok, running, children }: { ok?: boolean; running: boolean; childr
     <motion.div variants={LINE} className='text-muted-foreground flex min-h-6 items-start gap-2 text-xs'>
       <ActionSwapIcon value={state} className='mt-0.5 size-3.5'>
         {state === 'warning' ? (
-          <Icons.warning className='size-3.5 text-amber-500' />
+          <Icons.warning className='text-foreground size-3.5' />
         ) : state === 'running' ? (
           <Icons.spinner className='size-3.5 animate-spin' />
         ) : (
-          <Icons.check className='size-3.5 text-emerald-500' />
+          <Icons.check className='text-foreground size-3.5' />
         )}
       </ActionSwapIcon>
       <span className='[&_b]:text-foreground [&_b]:font-medium'>{children}</span>
@@ -35,7 +35,7 @@ function Row({ ok, running, children }: { ok?: boolean; running: boolean; childr
  * What the run actually did, from its safe events only: detected intent, sources it was
  * allowed to read, warnings, cost. Lines with no data are omitted rather than faked.
  */
-export function ActivityStrip({ run, plan, intent, destinations, skills, memory }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string }[]; skills?: string[]; memory?: MemoryBinding | null }) {
+export function ActivityStrip({ run, plan, intent, destinations, skills, memory }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string; account?: string }[]; skills?: string[]; memory?: MemoryBinding | null }) {
   const [open, setOpen] = useState(false);
   const reduce = useReducedMotion();
   const logId = useId();
@@ -64,7 +64,7 @@ export function ActivityStrip({ run, plan, intent, destinations, skills, memory 
           {destinations && destinations.length > 0 && (
             <>
               {' · '}
-              {destinations.length} destination{destinations.length === 1 ? '' : 's'} ({destinations.map((d) => d.platform).join(', ')})
+              {destinations.length} destination{destinations.length === 1 ? '' : 's'} ({destinations.map((d) => (d.account ? `${d.platform} · ${d.account}` : d.platform)).join(', ')})
             </>
           )}
           {plan && <> · times read in <b>{plan.timeZone}</b></>}
