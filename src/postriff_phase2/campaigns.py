@@ -9,6 +9,7 @@ the new definition before it runs. Renaming alone keeps the current status.
 """
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 import re
 import zoneinfo
@@ -26,7 +27,11 @@ MAX_DESTINATIONS = 10
 MAX_COST_USD_MICRO = 10_000_000
 # The definition an activation authorizes. Legacy (authority 1) tasks keep their original digest.
 LEGACY_DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "contextSourceIds", "destination", "maxCostUsdMicro")
-DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "reasoning", "contextSourceIds", "destinations", "contentType", "maxCostUsdMicro")
+DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "reasoning", "contextSourceIds", "destinations", "contentType", "maxCostUsdMicro", "include")
+SCHEDULE_KINDS = ("weekly", "monthly", "countdown")
+MAX_MONTH_DAYS = 4
+MAX_COUNTDOWN_STEPS = 8
+MAX_COUNTDOWN_DAYS = 90
 LIBRARY_ID = re.compile(r"[a-z0-9][a-z0-9_.:-]{0,79}")
 
 
@@ -87,12 +92,8 @@ def _local_time(schedule: dict) -> tuple[int, int]:
     return hour, minute
 
 
-def _next_local(current: dt.datetime, weekday: int, hour: int, minute: int, zone: zoneinfo.ZoneInfo) -> dt.datetime:
-    days = (weekday - current.weekday()) % 7
-    local = dt.datetime.combine(current.date() + dt.timedelta(days=days), dt.time(hour, minute), zone).replace(fold=0)
-    if local <= current:
-        local += dt.timedelta(days=7)
-    # A nonexistent wall time does not round-trip. Advance to the next valid local minute.
+def _valid_local(local: dt.datetime, zone: zoneinfo.ZoneInfo) -> dt.datetime:
+    """A nonexistent wall time does not round-trip: advance to the next valid local minute."""
     for _ in range(180):
         round_trip = local.astimezone(dt.timezone.utc).astimezone(zone)
         if (round_trip.hour, round_trip.minute, round_trip.date()) == (local.hour, local.minute, local.date()):
@@ -101,15 +102,92 @@ def _next_local(current: dt.datetime, weekday: int, hour: int, minute: int, zone
     raise AlphaError("Could not resolve the next local occurrence.")
 
 
-def next_occurrence(schedule: dict, after: float) -> dict:
-    """The first scheduled local time strictly after `after` (epoch), across every chosen weekday.
-    A repeated wall time (autumn) uses its first, earlier-offset instance; a skipped one (spring)
-    moves to the next valid local minute."""
+def _next_local(current: dt.datetime, weekday: int, hour: int, minute: int, zone: zoneinfo.ZoneInfo) -> dt.datetime:
+    days = (weekday - current.weekday()) % 7
+    local = dt.datetime.combine(current.date() + dt.timedelta(days=days), dt.time(hour, minute), zone).replace(fold=0)
+    if local <= current:
+        local += dt.timedelta(days=7)
+    return _valid_local(local, zone)
+
+
+def schedule_kind(schedule: dict) -> str:
+    kind = schedule.get("kind", "weekly")
+    if kind not in SCHEDULE_KINDS:
+        raise AlphaError("Choose a weekly, monthly or countdown schedule.")
+    return kind
+
+
+def month_days_of(schedule: dict) -> list:
+    """Days of the month (1–31, or "last"), in calendar order. A day a month lacks runs on its last day."""
+    raw = schedule.get("monthDays")
+    if not isinstance(raw, list) or not raw or len(raw) > MAX_MONTH_DAYS:
+        raise AlphaError(f"Choose one to {MAX_MONTH_DAYS} days of the month.")
+    days = []
+    for value in raw:
+        if value != "last" and (type(value) is not int or not 1 <= value <= 31):
+            raise AlphaError("Choose days of the month between 1 and 31, or the last day.")
+        if value not in days:
+            days.append(value)
+    return sorted(days, key=lambda day: 32 if day == "last" else day)
+
+
+def countdown_of(schedule: dict) -> tuple[dt.date, list[int]]:
+    """The event date and the days before it that get a run (descending, so runs come in date order)."""
+    try:
+        event = dt.date.fromisoformat(str(schedule.get("eventDate", "")))
+    except ValueError:
+        raise AlphaError("Choose the event date as YYYY-MM-DD.")
+    raw = schedule.get("daysBefore")
+    if (not isinstance(raw, list) or not raw or len(raw) > MAX_COUNTDOWN_STEPS
+            or any(type(day) is not int or not 0 <= day <= MAX_COUNTDOWN_DAYS for day in raw)):
+        raise AlphaError(f"Choose up to {MAX_COUNTDOWN_STEPS} countdown days, each 0 to {MAX_COUNTDOWN_DAYS} days before the event.")
+    return event, sorted(set(raw), reverse=True)
+
+
+def _next_monthly(current: dt.datetime, days: list, hour: int, minute: int, zone: zoneinfo.ZoneInfo) -> dt.datetime:
+    year, month = current.year, current.month
+    for _ in range(14):
+        last = calendar.monthrange(year, month)[1]
+        for day in sorted({last if value == "last" else min(value, last) for value in days}):
+            local = dt.datetime.combine(dt.date(year, month, day), dt.time(hour, minute), zone).replace(fold=0)
+            if local > current:
+                return _valid_local(local, zone)
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    raise AlphaError("Could not resolve the next local occurrence.")
+
+
+def _next_countdown(current: dt.datetime, event: dt.date, days_before: list[int], hour: int, minute: int, zone: zoneinfo.ZoneInfo) -> dt.datetime | None:
+    for days in days_before:
+        local = dt.datetime.combine(event - dt.timedelta(days=days), dt.time(hour, minute), zone).replace(fold=0)
+        if local > current:
+            return _valid_local(local, zone)
+    return None
+
+
+def next_occurrence(schedule: dict, after: float) -> dict | None:
+    """The first scheduled local time strictly after `after` (epoch). Weekly: across every chosen weekday.
+    Monthly: across the chosen days (a day the month lacks runs on its last day). Countdown: the chosen
+    days before the event date; None once every date has passed. A repeated wall time (autumn) uses its
+    first, earlier-offset instance; a skipped one (spring) moves to the next valid local minute."""
     zone = _zone(schedule)
-    weekdays = weekdays_of(schedule)
-    hour, minute = _local_time(schedule)
-    current = dt.datetime.fromtimestamp(after, dt.timezone.utc).astimezone(zone)
-    local = min((_next_local(current, weekday, hour, minute, zone) for weekday in weekdays), key=lambda item: item.astimezone(dt.timezone.utc))
+    kind = schedule_kind(schedule)
+    if kind == "weekly":
+        weekdays = weekdays_of(schedule)
+        hour, minute = _local_time(schedule)
+        current = dt.datetime.fromtimestamp(after, dt.timezone.utc).astimezone(zone)
+        local = min((_next_local(current, weekday, hour, minute, zone) for weekday in weekdays), key=lambda item: item.astimezone(dt.timezone.utc))
+    elif kind == "monthly":
+        days = month_days_of(schedule)
+        hour, minute = _local_time(schedule)
+        current = dt.datetime.fromtimestamp(after, dt.timezone.utc).astimezone(zone)
+        local = _next_monthly(current, days, hour, minute, zone)
+    else:
+        event, days_before = countdown_of(schedule)
+        hour, minute = _local_time(schedule)
+        current = dt.datetime.fromtimestamp(after, dt.timezone.utc).astimezone(zone)
+        local = _next_countdown(current, event, days_before, hour, minute, zone)
+        if local is None:
+            return None
     utc = local.astimezone(dt.timezone.utc)
     return {"scheduledFor": utc.timestamp(), "local": local.isoformat(), "utc": utc.isoformat(), "offset": local.strftime("%z"), "fold": local.fold}
 
@@ -119,18 +197,42 @@ def upcoming(schedule: dict, after: float, count: int = 3) -> list[dict]:
     items, cursor = [], after
     for _ in range(max(0, min(count, 14))):
         item = next_occurrence(schedule, cursor)
+        if item is None:
+            break
         items.append(item)
         cursor = item["scheduledFor"] + 1
     return items
 
 
 def normalize_schedule(schedule: Any) -> dict:
+    """Weekly schedules keep their original shape (no `kind`); monthly and countdown carry theirs."""
     if not isinstance(schedule, dict):
         raise AlphaError("Add a recurring schedule.")
     zone = _zone(schedule)
-    days = weekdays_of(schedule)
+    kind = schedule_kind(schedule)
+    if kind == "weekly":
+        days = weekdays_of(schedule)
+        hour, minute = _local_time(schedule)
+        return {"weekdays": [WEEKDAY_NAMES[day] for day in days], "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
+    if kind == "monthly":
+        days = month_days_of(schedule)
+        hour, minute = _local_time(schedule)
+        return {"kind": "monthly", "monthDays": days, "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
+    event, days_before = countdown_of(schedule)
     hour, minute = _local_time(schedule)
-    return {"weekdays": [WEEKDAY_NAMES[day] for day in days], "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
+    return {"kind": "countdown", "eventDate": event.isoformat(), "daysBefore": days_before, "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
+
+
+def normalize_include(value: Any) -> dict | None:
+    """Extra context each run reads: `recentPostsDays` adds this workspace's own published posts from that many days."""
+    if value is None or value == {}:
+        return None
+    if not isinstance(value, dict) or set(value) - {"recentPostsDays"}:
+        raise AlphaError("Choose what each run should include.")
+    days = value.get("recentPostsDays")
+    if type(days) is not int or not 7 <= days <= 92:
+        raise AlphaError("Include published posts from the last 7 to 92 days.")
+    return {"recentPostsDays": days}
 
 
 def normalize_destinations(state: dict, value: Any) -> list[dict]:
@@ -234,6 +336,31 @@ def _required(value: Any, message: str, limit: int) -> str:
     return clean(value, limit)
 
 
+def recent_posts(state: dict, until: float, days: int, limit: int = 10) -> list[dict]:
+    """This workspace's own posts verified as published in the `days` before `until`, newest first (text trimmed).
+    Only what the workspace already published: no drafts, sources or other workspaces."""
+    since = until - days * 86400
+    items = []
+    for job in (state.get("phase2") or {}).get("jobs", []):
+        at = (job.get("verification") or {}).get("at")
+        if job.get("state") != "verified" or not isinstance(at, (int, float)) or not since <= at <= until:
+            continue
+        manifest = job.get("manifest") or {}
+        text = str((manifest.get("payload") or {}).get("text") or "").strip()
+        if text:
+            items.append({"platform": manifest.get("platform"), "publishedAt": dt.datetime.fromtimestamp(at, dt.timezone.utc).date().isoformat(), "text": text[:600], "_at": at})
+    items.sort(key=lambda item: item["_at"], reverse=True)
+    return [{key: item[key] for key in ("platform", "publishedAt", "text")} for item in items[:limit]]
+
+
+def countdown_context(schedule: dict, scheduled_for: float) -> dict | None:
+    """For a countdown run: the event date and the whole days left, counted in the schedule's own time zone."""
+    if schedule.get("kind") != "countdown":
+        return None
+    day = dt.datetime.fromtimestamp(scheduled_for, dt.timezone.utc).astimezone(_zone(schedule)).date()
+    return {"eventDate": schedule["eventDate"], "daysToGo": (dt.date.fromisoformat(schedule["eventDate"]) - day).days}
+
+
 def definition_digest(task: dict) -> str:
     keys = DEFINITION if task.get("authorityVersion") == 2 else LEGACY_DEFINITION
     return digest({key: task.get(key) for key in keys})
@@ -264,6 +391,13 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     audience = _required(payload.get("audience"), "Describe who the drafts are for.", 800)
     facts = _facts(payload.get("facts"))
     schedule = normalize_schedule(payload.get("schedule"))
+    first_run = next_occurrence(schedule, now)
+    if first_run is None:
+        raise AlphaError("Every countdown date has passed. Choose a later event date.", 409)
+    if schedule.get("kind") == "countdown" and not facts.get("date"):
+        # The countdown's event date is the brief's date fact unless the person wrote one.
+        facts["date"] = schedule["eventDate"]
+    include = normalize_include(payload.get("include"))
     destinations = normalize_destinations(state, payload.get("destinations"))
     content = normalize_content_type(state, payload.get("contentType"))
     content_label, library = _content_display(payload.get("contentType"))
@@ -285,7 +419,7 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     # Display only, so a later account rename never changes the authorized definition.
     account_labels = {d["channelId"]: clean(channels[d["channelId"]].get("account") or "", 120) for d in destinations if d.get("channelId")}
     definition = {"schedule": schedule, "destinations": destinations, "contentType": content, "route": route, "reasoning": reasoning,
-                  "maxCostUsdMicro": max_cost, "contextSourceIds": sources, "limits": {"draftsPerOccurrence": len(destinations)}}
+                  "maxCostUsdMicro": max_cost, "contextSourceIds": sources, "limits": {"draftsPerOccurrence": len(destinations)}, "include": include}
     task_id = payload.get("taskId")
     account_ids = list(dict.fromkeys(d["channelId"] for d in destinations if d.get("channelId")))
     if task_id is None:
@@ -321,7 +455,7 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
         task.pop("destination", None)
         for key in ("activatedBy", "activatedAt", "pauseReason"):
             task.pop(key, None)
-        task.update(definition, status="draft", authorityVersion=2, campaignVersion=campaign["version"], nextOccurrence=next_occurrence(schedule, now))
+        task.update(definition, status="draft", authorityVersion=2, campaignVersion=campaign["version"], nextOccurrence=first_run)
         task["definitionDigest"] = definition_digest(task)
         # Nothing prepared under the previous definition may still run.
         for occurrence in root["occurrences"]:
@@ -392,6 +526,26 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         return {"taskId": task["id"], "preview": preview, "status": "draft"}
     if action == "raffi_recurrence_save":
         return _save_automation(state, root, payload, actor, now)
+    if action == "raffi_recurrence_seen":
+        # Marks prepared drafts as looked at for the whole workspace (clears "drafts ready"); changes no draft.
+        task = _find(root["recurringTasks"], payload.get("taskId"), "Automation")
+        wanted = payload.get("occurrenceIds")
+        if wanted is not None and (not isinstance(wanted, list) or not all(isinstance(item, str) for item in wanted)):
+            raise AlphaError("Choose runs of this automation.")
+        marked = 0
+        for occurrence in root["occurrences"]:
+            if occurrence["taskId"] == task["id"] and occurrence["state"] == "completed" and not occurrence.get("seenAt") and (wanted is None or occurrence["id"] in wanted):
+                occurrence.update(seenAt=now, seenBy=actor)
+                marked += 1
+        return {"taskId": task["id"], "marked": marked}
+    if action == "raffi_recurrence_watch":
+        # A person's own opt-in to an email when this automation's drafts are ready. Outside the definition.
+        task = _find(root["recurringTasks"], payload.get("taskId"), "Automation")
+        if type(payload.get("email")) is not bool:
+            raise AlphaError("Choose whether to email you when drafts are ready.")
+        watchers = [item for item in task.get("emailWatchers", []) if item != actor]
+        task["emailWatchers"] = (watchers + [actor]) if payload["email"] else watchers
+        return {"taskId": task["id"], "email": payload["email"]}
     task = _find(root["recurringTasks"], payload.get("taskId"), "Recurring task")
     if task['status'] == 'cancelled':
         raise AlphaError('This recurring task is cancelled. Create a new preview.', 409)
@@ -408,9 +562,12 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             normalize_destinations(state, task['destinations'])
             if task.get('contentType'):
                 content_types.definition(state, task['contentType']['contentTypeId'], task['contentType']['contentTypeVersion'])
-        task["status"], task["activatedBy"], task["activatedAt"] = "active", actor, now
         # A definition saved earlier must not run at a time that passed while it waited for activation.
-        task["nextOccurrence"] = next_occurrence(task["schedule"], now)
+        upcoming_run = next_occurrence(task["schedule"], now)
+        if upcoming_run is None:
+            raise AlphaError("Every countdown date has passed. Edit the event date to use it again.", 409)
+        task["status"], task["activatedBy"], task["activatedAt"] = "active", actor, now
+        task["nextOccurrence"] = upcoming_run
     elif action == "raffi_recurrence_pause":
         task["status"], task["pausedBy"], task["pausedAt"] = "paused", actor, now
     elif action == "raffi_recurrence_resume":
@@ -418,7 +575,10 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         campaign = _find(root['campaigns'], task['campaignId'], 'Campaign')
         if campaign['version'] != task.get('campaignVersion'):
             raise AlphaError('Campaign facts changed. Create a new schedule preview.', 409)
-        task["status"], task["nextOccurrence"] = "active", next_occurrence(task["schedule"], now)
+        upcoming_run = next_occurrence(task["schedule"], now)
+        if upcoming_run is None:
+            raise AlphaError("Every countdown date has passed. Edit the event date to use it again.", 409)
+        task["status"], task["nextOccurrence"] = "active", upcoming_run
         task['activatedBy'] = actor
         task["resumedBy"], task["resumedAt"] = actor, now
     elif action == "raffi_recurrence_cancel":

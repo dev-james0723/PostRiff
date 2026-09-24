@@ -39,6 +39,8 @@ ACTION_CLASSES = {
     "voice_sample_grant": "owner",
     "raffi_recurrence_activate": "owner", "raffi_recurrence_pause": "owner",
     "raffi_recurrence_resume": "owner", "raffi_recurrence_cancel": "owner",
+    # Any member may ask for their own "drafts ready" email; it changes nothing that is drafted.
+    "raffi_recurrence_watch": "read",
     "refresh": "read", "p2_refresh": "read",
 }
 

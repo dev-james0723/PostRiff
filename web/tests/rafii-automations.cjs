@@ -121,11 +121,21 @@ async function settle(page) {
   }
 }
 
+/** Wait for the app (or its dev sign-in gate) to render, then pass the gate if it shows. */
+async function arrive(page, ready) {
+  const enter = page.getByRole('button', { name: 'Enter dev workspace' });
+  await ready.or(enter).first().waitFor({ timeout: 400000 });
+  if (await enter.isVisible().catch(() => false)) {
+    await enter.click();
+    await ready.first().waitFor({ timeout: 300000 });
+  }
+  await settle(page);
+}
+
 async function gotoHub(page) {
   // A loaded machine can take minutes to compile a route; wait for the page itself, not network silence.
   await page.goto(`${base}/app/automations`, { waitUntil: 'domcontentloaded', timeout: 400000 });
-  await settle(page);
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ timeout: 300000 });
+  await arrive(page, page.getByRole('heading', { name: 'Automations', level: 1 }));
   await page.getByText(/No automations yet|Active/).first().waitFor({ timeout: 120000 });
   await page.waitForTimeout(600);
 }
@@ -171,9 +181,9 @@ async function build(browser) {
 
     await page.getByRole('button', { name: 'New automation' }).first().click();
     const builder = page.getByRole('dialog', { name: /automation/i }).first();
-    await builder.getByLabel('Name').waitFor();
+    await builder.getByLabel('Name', { exact: true }).waitFor();
     await page.waitForTimeout(500);
-    await builder.getByLabel('Name').fill(NAME);
+    await builder.getByLabel('Name', { exact: true }).fill(NAME);
     // Channels and times inside the brief are text, never settings (checked on the server after the run).
     await builder.getByLabel('What should each draft be about?').fill('One practical practice tip for adult piano students. Share it on Instagram at 8pm tomorrow.');
     await builder.getByLabel('Who is it for?').fill('Adult beginners and parents of young students');
@@ -190,7 +200,7 @@ async function build(browser) {
       const pressed = (await button.getAttribute('aria-pressed')) === 'true';
       if (pressed !== (day === when.weekday)) await button.click();
     }
-    await builder.getByLabel('At').fill(when.time);
+    await builder.getByLabel('At', { exact: true }).fill(when.time);
     await builder.getByLabel('Time zone').selectOption(ZONE);
     await page.waitForTimeout(400);
     const whenText = await builder.innerText();
@@ -208,7 +218,7 @@ async function build(browser) {
     await page.waitForTimeout(400);
     for (const account of accounts) check(`destination listed: ${account.account}`, (await builder.innerText()).includes(account.account));
     // A second language for the first account: two drafts for it each run.
-    await builder.getByRole('button', { name: `Add a language for ${accounts[0].account}` }).click();
+    await builder.getByRole("button", { name: `Add a language for ${accounts[0].account}`, exact: true }).click();
     const search = page.getByRole('combobox').last();
     await search.fill('Hong Kong');
     await page.waitForTimeout(300);
@@ -223,7 +233,7 @@ async function build(browser) {
     await builder.getByLabel('Cost limit per run (USD)').fill('0');
     await page.waitForTimeout(300);
     const review = await builder.innerText();
-    check('budget shows the per-run and weekly ceiling', /Up to \$0\.00 a run · 1 run a week · at most \$0\.00 a week/.test(review), review.slice(0, 800));
+    check('budget shows the per-run limit and the monthly ceiling', /Up to \$0\.00 a run · up to 5 runs a month · at most \$0\.00 a month/.test(review), review.slice(0, 800));
     check('nothing blocks saving', !/Choose at least|Name the automation|Describe/.test(review));
     await shot(page, dir, '05-builder-review');
     await axe(page, 'builder: review');
@@ -234,14 +244,14 @@ async function build(browser) {
     const saved = await ours(page);
     const t = saved.task;
     check('saved and active on the server', t?.status === 'active' && t?.authorityVersion === 2, t && { status: t.status, authority: t.authorityVersion });
-    check('schedule: today in Hong Kong at the chosen minute', JSON.stringify(t?.schedule) === JSON.stringify({ weekdays: [when.weekday], localTime: when.time, timeZone: ZONE }), t?.schedule);
+    check('schedule: today in Hong Kong at the chosen minute', JSON.stringify(t?.schedule?.weekdays) === JSON.stringify([when.weekday]) && t?.schedule?.localTime === when.time && t?.schedule?.timeZone === ZONE, t?.schedule);
     const expected = [`LinkedIn|en|${accounts[0].id}`, `LinkedIn|${t?.destinations?.[1]?.language}|${accounts[0].id}`, `LinkedIn|en|${accounts[1].id}`];
     check('three destinations: both accounts, the first in two languages', t?.destinations?.length === 3 && new Set(t.destinations.map((d) => d.channelId)).size === 2 && t.destinations.filter((d) => d.channelId === accounts[0].id).length === 2, { destinations: t?.destinations, expected });
     check('content type recorded on the automation', t?.contentType?.contentTypeId === 'pack.creator:building_in_public' && t?.contentType?.formatId === 'carousel', t?.contentType);
     check('fixture writer, quick, $0 limit', t?.route === MODEL && t?.reasoning === 'quick' && t?.maxCostUsdMicro === 0);
     check('Home content selection untouched by the automation', (await snapshot(page)).contentTypes?.selection?.contentTypeId !== 'pack.creator:building_in_public');
     await card(page).waitFor();
-    check('card shows Active and the next run', /Active/.test(await card(page).innerText()) && /Next run/.test(await card(page).innerText()));
+    check('card shows Active and the next run', /Active/.test(await card(page).innerText()) && /next run/i.test(await card(page).innerText()));
     await shot(page, dir, '06-hub-active');
     await axe(page, 'hub with an automation');
 
@@ -252,7 +262,8 @@ async function build(browser) {
       process.stdout.write(`waiting ${Math.round(wait / 1000)}s for the scheduled minute (${t.nextOccurrence.local})\n`);
       await page.waitForTimeout(wait);
       const cron = await (await fetch(`${api}/api/cron/worker`, { headers: { Authorization: `Bearer ${CRON}` } })).json();
-      check('harness cron ran the automation', cron.campaignPreparation?.state === 'completed', cron.campaignPreparation);
+      const prepared = cron.campaignPreparation?.runs ?? (cron.campaignPreparation ? [cron.campaignPreparation] : []);
+      check('harness cron ran the automation', prepared.length === 1 && prepared[0].state === 'completed', cron.campaignPreparation ?? cron);
       const ran = await ours(page);
       const runOne = ran.runs.at(-1);
       check('one completed run with a conversation', ran.runs.length === 1 && runOne?.state === 'completed' && Boolean(runOne?.conversationId), ran.runs);
@@ -263,10 +274,21 @@ async function build(browser) {
       check('no schedule plan from the time in the brief', !assistant.plan, assistant.plan);
       check('conversation titled with the automation name', (conversation.title ?? '').startsWith(NAME), conversation.title);
       const second = await (await fetch(`${api}/api/cron/worker`, { headers: { Authorization: `Bearer ${CRON}` } })).json();
-      check('a second tick does not repeat the run', !second.campaignPreparation?.state && (await ours(page)).runs.length === 1, second.campaignPreparation);
+      check('a second tick does not repeat the run', second.campaignPreparation?.idle === true && (await ours(page)).runs.length === 1, second.campaignPreparation);
+      check('run records its draft count and cost', runOne.draftCount === 3 && runOne.costUsdMicro === 0, { draftCount: runOne.draftCount, cost: runOne.costUsdMicro });
+      // The in-app digest: Home's attention list names the ready drafts until someone opens them.
+      await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+      await arrive(page, page.getByRole('region', { name: 'Automations and Rafii suggestions' }));
+      await page.waitForTimeout(800);
+      check('Home attention lists the ready automation drafts', (await page.getByText(/3 automation drafts ready/).count()) > 0);
       await gotoHub(page);
       const text = await card(page).innerText();
       check('card shows the last run as Drafts ready', /Last run/.test(text) && /Drafts ready/.test(text), text.slice(0, 600));
+      check('card shows 1 new run and this month’s spend', /1 new/.test(text) && /\$0\.00 spent this month/.test(text), text.slice(0, 600));
+      // Personal opt-in to the "drafts ready" email.
+      await card(page).getByRole('switch', { name: /Email me when drafts from/ }).click();
+      await page.waitForTimeout(800);
+      check('email opt-in recorded for this member only', JSON.stringify((await ours(page)).task?.emailWatchers) === JSON.stringify([seed.principal]), (await ours(page)).task?.emailWatchers);
       await card(page).getByRole('button', { name: /Run history/ }).click();
       await page.waitForTimeout(500);
       await shot(page, dir, '07-run-history');
@@ -277,16 +299,18 @@ async function build(browser) {
       const body = await page.locator('main').innerText();
       check('conversation shows drafts for both accounts', accounts.every((a) => body.includes(a.account)), body.slice(0, 600));
       await shot(page, dir, '08-drafts');
+      check('opening the drafts marked the run as seen', Boolean((await ours(page)).runs.at(-1)?.seenAt));
       await gotoHub(page);
+      check('the new-drafts chip is gone after review', !/\b1 new\b/.test(await card(page).innerText()));
     }
 
     // Editing the definition returns it to draft; the owner activates it again.
     await card(page).getByRole('button', { name: 'Edit' }).click();
     const edit = page.getByRole('dialog', { name: /automation/i }).first();
-    await edit.getByLabel('Name').waitFor();
+    await edit.getByLabel('Name', { exact: true }).waitFor();
     await edit.getByRole('tab', { name: /When/ }).click();
     const later = soon(90, ZONE);
-    await edit.getByLabel('At').fill(later.time);
+    await edit.getByLabel('At', { exact: true }).fill(later.time);
     await edit.getByRole('tab', { name: /Review/ }).click();
     check('edit warns that saving returns it to draft', /returns it to draft/.test(await edit.innerText()));
     await edit.getByRole('button', { name: 'Save as draft' }).click();
@@ -307,9 +331,8 @@ async function build(browser) {
 
     // Home lists it and links back.
     await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded', timeout: 400000 });
-    await settle(page);
     const panel = page.getByRole('region', { name: 'Automations and Rafii suggestions' });
-    await panel.waitFor({ timeout: 60000 });
+    await arrive(page, panel);
     await panel.scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
     check('Home panel lists the automation', (await panel.innerText()).includes(NAME));
@@ -336,6 +359,79 @@ async function build(browser) {
   }
 }
 
+async function templates(browser) {
+  const s = await open(browser, 'templates');
+  const { page, dir } = s;
+  const created = [];
+  try {
+    await gotoHub(page);
+    const eventDay = new Date(Date.now() + 20 * 86400000);
+    const eventDate = new Intl.DateTimeFormat('en-CA', { timeZone: ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(eventDay);
+    for (const template of ['Event countdown', 'Monthly recap']) {
+      await page.getByRole('button', { name: 'New automation' }).first().click();
+      const builder = page.getByRole('dialog', { name: /automation/i }).first();
+      await builder.getByLabel('Name', { exact: true }).waitFor();
+      await page.waitForTimeout(500);
+      await builder.getByRole('button', { name: new RegExp(`^${template}`) }).click();
+      await page.waitForTimeout(300);
+      check(`${template}: template fills the name`, (await builder.getByLabel('Name', { exact: true }).inputValue()) === template);
+      await builder.getByLabel('Who is it for?').fill('Students and their families');
+      if (template === 'Event countdown') {
+        await builder.getByLabel('Venue').fill('City Hall');
+        await builder.getByRole('tab', { name: /When/ }).click();
+        check('countdown: schedule type selected', (await builder.getByRole('radio', { name: 'Countdown' }).getAttribute('aria-checked')) === 'true');
+        check('countdown: 14 days before and on the day pressed', (await builder.getByRole('button', { name: '14 days before' }).getAttribute('aria-pressed')) === 'true' && (await builder.getByRole('button', { name: 'On the day' }).getAttribute('aria-pressed')) === 'true');
+        await builder.getByLabel('Event date').fill(eventDate);
+        await builder.getByLabel('Time zone').selectOption(ZONE);
+        await page.waitForTimeout(400);
+        check('countdown: preview lists the first run', /First run ·/.test(await builder.innerText()) && /Countdown to/.test(await builder.innerText()));
+        await shot(page, dir, '01-countdown-when');
+      } else {
+        check('recap: published posts included', await builder.getByRole('checkbox', { name: 'Include my published posts from the last month' }).isChecked());
+        await builder.getByRole('tab', { name: /When/ }).click();
+        check('recap: monthly on the last day', (await builder.getByRole('radio', { name: 'Monthly' }).getAttribute('aria-checked')) === 'true' && (await builder.getByRole('button', { name: 'Last day of the month' }).getAttribute('aria-pressed')) === 'true');
+        await shot(page, dir, '02-recap-when');
+      }
+      await builder.getByRole('tab', { name: /Where/ }).click();
+      await builder.getByRole('button', { name: 'Choose accounts or folders' }).click();
+      const bloom = page.getByRole('dialog').filter({ has: page.getByRole('checkbox', { name: /^Personal/ }) }).last();
+      await bloom.getByRole('checkbox', { name: /^Personal/ }).click();
+      await page.waitForTimeout(300);
+      await bloom.getByRole('button', { name: /^Done/ }).click();
+      await bloom.waitFor({ state: 'hidden' });
+      await builder.getByRole('tab', { name: /Review/ }).click();
+      await builder.getByLabel('Writer').selectOption(MODEL);
+      await page.waitForTimeout(300);
+      if (template === 'Event countdown') check('countdown budget counts the whole countdown', /for the whole countdown/.test(await builder.innerText()));
+      await builder.getByRole('button', { name: 'Save as draft' }).click();
+      await builder.waitFor({ state: 'hidden', timeout: 60000 });
+      await page.waitForTimeout(600);
+      const planning = (await snapshot(page)).raffi.campaignPlanning;
+      const task = planning.recurringTasks.at(-1);
+      created.push(task.id);
+      const campaign = planning.campaigns.find((c) => c.id === task.campaignId);
+      if (template === 'Event countdown') {
+        check('countdown saved: kind, days and event date as the date fact', task.schedule.kind === 'countdown' && JSON.stringify(task.schedule.daysBefore) === '[14,7,1,0]' && task.schedule.eventDate === eventDate && campaign.facts.date === eventDate && campaign.facts.venue === 'City Hall', { schedule: task.schedule, facts: campaign.facts });
+        check('countdown content type from the template', task.contentType?.contentTypeId === 'postriff:promote', task.contentType);
+      } else {
+        check('recap saved: monthly last day, reads 31 days of published posts', task.schedule.kind === 'monthly' && JSON.stringify(task.schedule.monthDays) === '["last"]' && task.include?.recentPostsDays === 31, { schedule: task.schedule, include: task.include });
+        check('recap content type from the template', task.contentType?.contentTypeId === 'postriff:update', task.contentType);
+      }
+    }
+    await shot(page, dir, '03-hub-with-templates');
+  } catch (error) {
+    check('templates scene completed', false, error.message);
+    await shot(page, dir, 'zz-failure').catch(() => {});
+  } finally {
+    // Leave nothing running: cancel what this scene created (owner action through the same API).
+    for (const taskId of created) {
+      const current = await (await page.request.get(`${base}/api/workspaces/${seed.workspaceId}`, { headers })).json().catch(() => null);
+      if (current) await page.request.post(`${base}/api/workspaces/${seed.workspaceId}/actions`, { headers, data: { expectedRevision: current.revision, action: 'raffi_recurrence_cancel', payload: { taskId, confirmed: true } } }).catch(() => {});
+    }
+    await close(s);
+  }
+}
+
 async function phone(browser) {
   const s = await open(browser, 'phone', { width: 390, height: 844, theme: 'light' });
   const { page, dir } = s;
@@ -345,9 +441,9 @@ async function phone(browser) {
     await shot(page, dir, '01-hub');
     await page.getByRole('button', { name: 'New automation' }).first().click();
     const builder = page.getByRole('dialog', { name: /automation/i }).first();
-    await builder.getByLabel('Name').waitFor();
+    await builder.getByLabel('Name', { exact: true }).waitFor();
     await page.waitForTimeout(700);
-    check('builder field text is 16px on phones (no zoom)', (await builder.getByLabel('Name').evaluate((el) => getComputedStyle(el).fontSize)) === '16px');
+    check('builder field text is 16px on phones (no zoom)', (await builder.getByLabel('Name', { exact: true }).evaluate((el) => getComputedStyle(el).fontSize)) === '16px');
     await shot(page, dir, '02-builder-what');
     await builder.getByRole('tab', { name: /When/ }).click();
     await page.waitForTimeout(400);
@@ -370,8 +466,9 @@ async function phone(browser) {
   const executablePath = (engine === webkit ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
   const browser = await engine.launch({ headless: true, executablePath });
   try {
-    await build(browser);
-    await phone(browser);
+    if (!args.only || String(args.only).includes('build')) await build(browser);
+    if (!args.only || String(args.only).includes('templates')) await templates(browser);
+    if (!args.only || String(args.only).includes('phone')) await phone(browser);
   } finally {
     await browser.close();
   }

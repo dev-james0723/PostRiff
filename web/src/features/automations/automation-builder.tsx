@@ -25,7 +25,8 @@ import { languageLabel, locales } from '@/lib/locales';
 import { useTimeZone } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
 import type { Automation } from './use-automations';
-import { WEEKDAYS, WEEKDAY_SHORT, missingFacts, nextRuns, parseTime, runLabel, scheduleSummary, usd, validTimeZone, weekdaysOf, weeklyCeilingMicro, type Weekday } from './schedule';
+import { WEEKDAYS, WEEKDAY_SHORT, ceilingText, daysBeforeOf, kindOf, missingFacts, monthDaysOf, nextRuns, parseTime, runLabel, scheduleSummary, usd, validTimeZone, weekdaysOf, type MonthDay, type ScheduleKind, type ScheduleValue, type Weekday } from './schedule';
+import { TEMPLATES, type AutomationTemplate } from './templates';
 
 /** 48px fields with 16px text on phones (no iOS zoom), quiet field material (DNA §10, §12). */
 const FIELD = 'rafii-field h-12 rounded-[var(--rafii-radius-control)] px-3.5 text-base md:h-11 md:text-sm';
@@ -69,7 +70,11 @@ export interface BuilderInitial {
   goal: string;
   audience: string;
   facts: Record<string, string>;
+  kind: ScheduleKind;
   weekdays: Weekday[];
+  monthDays: MonthDay[];
+  eventDate: string;
+  daysBefore: number[];
   localTime: string;
   timeZone: string;
   targets: TargetState[];
@@ -80,7 +85,17 @@ export interface BuilderInitial {
   reasoning: Reasoning;
   maxCostUsd: string;
   sourceIds: string[];
+  /** Include this workspace's own published posts from this many days (recaps). */
+  recentPostsDays: number | null;
 }
+
+const MONTH_DAYS: MonthDay[] = [...Array.from({ length: 31 }, (_, i) => i + 1), 'last'];
+const COUNTDOWN_STEPS = [30, 14, 7, 3, 2, 1, 0];
+const KINDS: { value: ScheduleKind; label: string }[] = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'countdown', label: 'Countdown' }
+];
 
 const REASONING: Reasoning[] = ['quick', 'standard', 'deep'];
 const REASONING_LABEL: Record<Reasoning, string> = { quick: 'Quick', standard: 'Standard', deep: 'Deep' };
@@ -98,7 +113,7 @@ function groupTargets(destinations: RecurringDestination[]): TargetState[] {
 }
 
 export function blankInitial(timeZone: string): BuilderInitial {
-  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, weekdays: ['Monday'], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [] };
+  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], recentPostsDays: null };
 }
 
 /** Start a new automation from an existing campaign brief (an older campaign or a suggestion). */
@@ -118,7 +133,11 @@ export function initialFromAutomation(automation: Automation, timeZone: string):
     goal: campaign?.goal ?? '',
     audience: campaign?.audience ?? '',
     facts: campaign?.facts ?? {},
-    weekdays: weekdaysOf(task.schedule),
+    kind: kindOf(task.schedule),
+    weekdays: weekdaysOf(task.schedule).length ? weekdaysOf(task.schedule) : ['Monday'],
+    monthDays: monthDaysOf(task.schedule).length ? monthDaysOf(task.schedule) : [1],
+    eventDate: task.schedule.eventDate ?? '',
+    daysBefore: daysBeforeOf(task.schedule).length ? daysBeforeOf(task.schedule) : [14, 7, 1, 0],
     localTime: task.schedule.localTime,
     timeZone: validTimeZone(task.schedule.timeZone) ? task.schedule.timeZone : timeZone,
     targets: groupTargets(automation.destinations),
@@ -128,7 +147,8 @@ export function initialFromAutomation(automation: Automation, timeZone: string):
     route: task.route && task.route !== 'local-cli' ? task.route : null,
     reasoning: (REASONING as string[]).includes(task.reasoning ?? '') ? (task.reasoning as Reasoning) : 'quick',
     maxCostUsd: String((task.maxCostUsdMicro ?? 0) / 1_000_000),
-    sourceIds: task.contextSourceIds ?? []
+    sourceIds: task.contextSourceIds ?? [],
+    recentPostsDays: task.include?.recentPostsDays ?? null
   };
 }
 
@@ -171,7 +191,13 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const [audience, setAudience] = useState(initial.audience);
   const [date, setDate] = useState(initial.facts.date ?? '');
   const [venue, setVenue] = useState(initial.facts.venue ?? '');
+  const [kind, setKind] = useState<ScheduleKind>(initial.kind);
   const [weekdays, setWeekdays] = useState<Weekday[]>(initial.weekdays);
+  const [monthDays, setMonthDays] = useState<MonthDay[]>(initial.monthDays);
+  const [eventDate, setEventDate] = useState(initial.eventDate);
+  const [daysBefore, setDaysBefore] = useState<number[]>(initial.daysBefore);
+  const [recentPostsDays, setRecentPostsDays] = useState<number | null>(initial.recentPostsDays);
+  const [templateId, setTemplateId] = useState<AutomationTemplate['id'] | null>(null);
   const [localTime, setLocalTime] = useState(initial.localTime);
   const [timeZone, setTimeZone] = useState(initial.timeZone);
   const [targets, setTargets] = useState<TargetState[]>(initial.targets);
@@ -221,8 +247,9 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const accountName = (target: TargetState) => (target.channelId ? (accounts.find((a) => a.id === target.channelId)?.account ?? 'Disconnected account') : `${target.platform} (no account)`);
   const accountConnected = (target: TargetState) => !target.channelId || Boolean(accounts.find((a) => a.id === target.channelId)?.connected);
 
-  const schedule = { weekdays, localTime, timeZone };
-  const runs = useMemo(() => nextRuns(schedule, now, 3), [weekdays, localTime, timeZone, now]); // eslint-disable-line react-hooks/exhaustive-deps
+  const schedule: ScheduleValue = kind === 'monthly' ? { kind, monthDays, localTime, timeZone } : kind === 'countdown' ? { kind, eventDate, daysBefore, localTime, timeZone } : { weekdays, localTime, timeZone };
+  const runs = useMemo(() => nextRuns(schedule, now, 3), [kind, weekdays, monthDays, eventDate, daysBefore, localTime, timeZone, now]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scheduleReady = kind === 'monthly' ? monthDays.length > 0 : kind === 'countdown' ? /^\d{4}-\d{2}-\d{2}$/.test(eventDate) && daysBefore.length > 0 : weekdays.length > 0;
   const destinations: RecurringDestination[] = targets.flatMap((t) => t.languages.map((language) => ({ platform: t.platform, language, ...(t.channelId ? { channelId: t.channelId } : {}) })));
   const costMicro = Math.round(Number(maxCost || '0') * 1_000_000);
   const costValid = Number.isFinite(costMicro) && costMicro >= 0 && costMicro <= 10_000_000;
@@ -234,7 +261,11 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
     ...(!name.trim() ? [{ step: 'what' as Step, text: 'Name the automation.' }] : []),
     ...(!goal.trim() ? [{ step: 'what' as Step, text: 'Describe what the drafts should be about.' }] : []),
     ...(!audience.trim() ? [{ step: 'what' as Step, text: 'Describe who the drafts are for.' }] : []),
-    ...(!weekdays.length ? [{ step: 'when' as Step, text: 'Choose at least one day.' }] : []),
+    ...(kind === 'weekly' && !weekdays.length ? [{ step: 'when' as Step, text: 'Choose at least one day.' }] : []),
+    ...(kind === 'monthly' && !monthDays.length ? [{ step: 'when' as Step, text: 'Choose at least one day of the month.' }] : []),
+    ...(kind === 'countdown' && !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? [{ step: 'when' as Step, text: 'Choose the event date.' }] : []),
+    ...(kind === 'countdown' && !daysBefore.length ? [{ step: 'when' as Step, text: 'Choose when the countdown drafts.' }] : []),
+    ...(kind === 'countdown' && scheduleReady && parseTime(localTime) && validTimeZone(timeZone) && !runs.length ? [{ step: 'when' as Step, text: 'Every countdown date has passed. Choose a later event date.' }] : []),
     ...(!parseTime(localTime) ? [{ step: 'when' as Step, text: 'Choose a time.' }] : []),
     ...(!validTimeZone(timeZone) ? [{ step: 'when' as Step, text: 'Choose a time zone.' }] : []),
     ...(!destinations.length ? [{ step: 'where' as Step, text: 'Choose at least one account or channel.' }] : []),
@@ -284,6 +315,28 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
     setDestinationLabel(null);
   }
 
+  function applyTemplate(template: AutomationTemplate) {
+    setTemplateId(template.id);
+    setName(template.name);
+    setGoal(template.goal);
+    const choice = contentChoice(template.library);
+    if (choice) setContent({ contentTypeId: choice.contentTypeId, formatId: choice.formatId, label: choice.summary, library: choice.value, needsCreatorPack: choice.needsCreatorPack });
+    setKind(template.kind);
+    if (template.weekdays) setWeekdays(template.weekdays);
+    if (template.monthDays) setMonthDays(template.monthDays);
+    if (template.daysBefore) setDaysBefore(template.daysBefore);
+    setLocalTime(template.localTime);
+    setRecentPostsDays(template.recentPostsDays ?? null);
+  }
+
+  function toggleMonthDay(day: MonthDay) {
+    setMonthDays((current) => (current.includes(day) ? current.filter((d) => d !== day) : current.length >= 4 ? current : monthDaysOf({ monthDays: [...current, day] })));
+  }
+
+  function toggleCountdownDay(day: number) {
+    setDaysBefore((current) => (current.includes(day) ? current.filter((d) => d !== day) : current.length >= 8 ? current : daysBeforeOf({ daysBefore: [...current, day] })));
+  }
+
   function applyLibrary(value: LibraryValue) {
     const choice = contentChoice(value);
     if (!choice) return;
@@ -306,7 +359,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
         goal: goal.trim(),
         audience: audience.trim(),
         facts: cleanFacts,
-        schedule: { weekdays, localTime, timeZone },
+        schedule,
+        include: recentPostsDays ? { recentPostsDays } : null,
         destinations,
         destinationLabel,
         contentType: content ? { contentTypeId: content.contentTypeId, formatId: content.formatId, label: content.label, ...(content.library ? { library: content.library } : {}) } : null,
@@ -347,6 +401,27 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
           <RafiiDialogBody className='flex flex-col gap-5'>
             {step === 'what' && (
               <section id='automation-step-what' role='tabpanel' aria-label='What' className='flex flex-col gap-4'>
+                {!savedTaskId && !initial.campaignId && (
+                  <fieldset className='flex flex-col gap-2'>
+                    <legend className={cn(LABEL, 'mb-1')}>Start from a template (optional)</legend>
+                    <div className='grid gap-2 sm:grid-cols-3'>
+                      {TEMPLATES.map((template) => {
+                        const Icon = Icons[template.icon];
+                        const on = templateId === template.id;
+                        return (
+                          <button key={template.id} type='button' aria-pressed={on} onClick={() => applyTemplate(template)} className={cn('rafii-focus flex min-h-11 flex-col items-start gap-1 rounded-[var(--rafii-radius-control)] px-3 py-2.5 text-left transition-colors', on ? 'rafii-glass-selected' : 'rafii-quiet hover:text-foreground')}>
+                            <span className='inline-flex items-center gap-2 text-sm font-medium'>
+                              <Icon className='size-4' />
+                              {template.title}
+                            </span>
+                            <span className='text-muted-foreground text-xs leading-snug'>{template.description}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {templateId && <p className={HINT}>{TEMPLATES.find((t) => t.id === templateId)?.note}. Everything below stays editable.</p>}
+                  </fieldset>
+                )}
                 <Field label='Name' htmlFor='automation-name' hint='Shown on the Automations page and as the title of each run’s conversation.'>
                   <Input id='automation-name' value={name} onChange={(e) => setName(e.target.value)} placeholder='Weekly practice tip' maxLength={120} className={FIELD} />
                 </Field>
@@ -397,6 +472,10 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                     </span>
                   </Surface>
                 </div>
+                <div className='flex flex-col gap-1'>
+                  <Checkbox checked={recentPostsDays !== null} onCheckedChange={(checked) => setRecentPostsDays(checked ? 31 : null)} label='Include my published posts from the last month' className='min-h-11 gap-2.5 [&>span]:text-sm' />
+                  <p className={HINT}>For recaps and follow-ups. Each run reads up to ten posts this workspace published in the 31 days before it; nothing else.</p>
+                </div>
                 {sources.length > 0 && (
                   <fieldset className='flex flex-col gap-2'>
                     <legend className={cn(LABEL, 'mb-1')}>Sources to draw from (optional)</legend>
@@ -413,6 +492,48 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
 
             {step === 'when' && (
               <section id='automation-step-when' role='tabpanel' aria-label='When' className='flex flex-col gap-5'>
+                <div className='flex flex-col gap-2'>
+                  <span className={LABEL}>Repeats</span>
+                  <SegmentedControl options={KINDS} value={kind} onChange={setKind} label='Schedule type' size='sm' widths='content' className='self-start' />
+                </div>
+                {kind === 'monthly' && (
+                  <fieldset className='flex flex-col gap-2'>
+                    <legend className={cn(LABEL, 'mb-1')}>On these days of the month (up to 4)</legend>
+                    <div className='grid grid-cols-7 gap-1.5'>
+                      {MONTH_DAYS.map((day) => {
+                        const on = monthDays.includes(day);
+                        const full = !on && monthDays.length >= 4;
+                        return (
+                          <button key={day} type='button' aria-pressed={on} disabled={full} aria-label={day === 'last' ? 'Last day of the month' : `Day ${day}`} onClick={() => toggleMonthDay(day)} className={cn('rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] text-sm font-medium transition-colors disabled:opacity-40', day === 'last' && 'col-span-3', on ? 'rafii-glass-selected text-foreground' : 'rafii-quiet text-muted-foreground hover:text-foreground')}>
+                            {day === 'last' ? 'Last day' : day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className={HINT}>A day a month does not have (like the 31st) runs on that month’s last day.</p>
+                  </fieldset>
+                )}
+                {kind === 'countdown' && (
+                  <div className='flex flex-col gap-3'>
+                    <Field label='Event date' htmlFor='automation-event-date' hint='The countdown runs before this date in the time zone below. The date is also added to the brief.'>
+                      <Input id='automation-event-date' type='date' value={eventDate} onChange={(e) => setEventDate(e.target.value)} className={cn(FIELD, 'sm:max-w-[14rem]')} />
+                    </Field>
+                    <fieldset className='flex flex-col gap-2'>
+                      <legend className={cn(LABEL, 'mb-1')}>Draft on these days</legend>
+                      <div className='flex flex-wrap gap-1.5'>
+                        {COUNTDOWN_STEPS.map((day) => {
+                          const on = daysBefore.includes(day);
+                          return (
+                            <button key={day} type='button' aria-pressed={on} onClick={() => toggleCountdownDay(day)} className={cn('rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-sm font-medium transition-colors', on ? 'rafii-glass-selected text-foreground' : 'rafii-quiet text-muted-foreground hover:text-foreground')}>
+                              {day === 0 ? 'On the day' : `${day} day${day === 1 ? '' : 's'} before`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  </div>
+                )}
+                {kind === 'weekly' && (
                 <fieldset className='flex flex-col gap-2'>
                   <legend className={cn(LABEL, 'mb-1')}>On these days</legend>
                   <div className='grid grid-cols-7 gap-1.5'>
@@ -444,6 +565,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                     </Button>
                   </div>
                 </fieldset>
+                )}
                 <div className='grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]'>
                   <Field label='At' htmlFor='automation-time'>
                     <Input id='automation-time' type='time' value={localTime} onChange={(e) => setLocalTime(e.target.value)} className={FIELD} />
@@ -459,7 +581,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </Field>
                 </div>
                 <Surface material='quiet' radius='control' padding='sm' aria-live='polite'>
-                  <p className='text-sm font-medium'>{weekdays.length && parseTime(localTime) ? scheduleSummary(schedule) : 'Choose days and a time'}</p>
+                  <p className='text-sm font-medium'>{scheduleReady && parseTime(localTime) ? scheduleSummary(schedule) : kind === 'countdown' ? 'Choose the event date and days' : 'Choose days and a time'}</p>
+                  {kind === 'countdown' && scheduleReady && parseTime(localTime) && runs.length === 0 && <p className='text-muted-foreground mt-1 text-xs'>Every countdown date has passed. Choose a later event date.</p>}
                   {runs.length > 0 && (
                     <ul className='mt-2 flex flex-col gap-1'>
                       {runs.map((run, index) => (
@@ -470,7 +593,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                       ))}
                     </ul>
                   )}
-                  <p className={cn(HINT, 'mt-2')}>A run that is more than a day late, for example after a pause, is skipped rather than caught up.</p>
+                  <p className={cn(HINT, 'mt-2')}>{kind === 'countdown' ? 'After the last date the countdown finishes on its own. ' : ''}A run that is more than a day late, for example after a pause, is skipped rather than caught up.</p>
                 </Surface>
               </section>
             )}
@@ -587,7 +710,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                 <Surface material='quiet' radius='control' padding='sm' className='flex flex-col gap-1'>
                   <span className='rafii-eyebrow'>Budget</span>
                   <p className='text-sm'>
-                    Up to <span className='font-medium'>{usd(costValid ? costMicro : 0)}</span> a run · {weekdays.length} run{weekdays.length === 1 ? '' : 's'} a week · at most <span className='font-medium'>{usd(weeklyCeilingMicro(costValid ? costMicro : 0, schedule))}</span> a week.
+                    Up to <span className='font-medium'>{usd(costValid ? costMicro : 0)}</span> a run · {ceilingText(costValid ? costMicro : 0, schedule)}.
                   </p>
                   <p className={HINT}>Charges come from your workspace credits, the same as drafting on Home.</p>
                 </Surface>
@@ -595,10 +718,13 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   <Summary term='What' onEdit={() => setStep('what')}>
                     <span className='font-medium'>{name || 'Unnamed'}</span>
                     <span className='text-muted-foreground line-clamp-2'>{goal || 'No brief yet'}</span>
-                    <span className='text-muted-foreground'>{content ? content.label : 'General writing'} · {sourceIds.length ? `${sourceIds.length} source${sourceIds.length === 1 ? '' : 's'}` : 'brief only'}</span>
+                    <span className='text-muted-foreground'>
+                      {content ? content.label : 'General writing'} · {sourceIds.length ? `${sourceIds.length} source${sourceIds.length === 1 ? '' : 's'}` : 'brief only'}
+                      {recentPostsDays ? ' · reads your published posts' : ''}
+                    </span>
                   </Summary>
                   <Summary term='When' onEdit={() => setStep('when')}>
-                    <span>{weekdays.length ? scheduleSummary(schedule) : 'No days chosen'}</span>
+                    <span>{scheduleReady ? scheduleSummary(schedule) : 'Not complete yet'}</span>
                     {runs[0] && <span className='text-muted-foreground'>First run after activation: {runLabel(runs[0], timeZone)}</span>}
                   </Summary>
                   <Summary term='Where' onEdit={() => setStep('where')}>

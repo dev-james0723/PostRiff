@@ -10,11 +10,41 @@ export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
 export type Weekday = (typeof WEEKDAYS)[number];
 export const WEEKDAY_SHORT: Record<Weekday, string> = { Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun' };
 
+export type ScheduleKind = 'weekly' | 'monthly' | 'countdown';
+export type MonthDay = number | 'last';
+
 export interface ScheduleValue {
+  /** Absent means weekly (the original shape). */
+  kind?: ScheduleKind | string;
   weekdays?: string[];
   weekday?: string;
+  /** Monthly: 1–31 or "last"; a day a month lacks runs on its last day. */
+  monthDays?: MonthDay[];
+  /** Countdown: the event date (YYYY-MM-DD) and the days before it that get a run. */
+  eventDate?: string;
+  daysBefore?: number[];
   localTime: string;
   timeZone: string;
+}
+
+export const kindOf = (schedule: Pick<ScheduleValue, 'kind'>): ScheduleKind => (schedule.kind === 'monthly' || schedule.kind === 'countdown' ? schedule.kind : 'weekly');
+
+export function monthDaysOf(schedule: Pick<ScheduleValue, 'monthDays'>): MonthDay[] {
+  const valid = (schedule.monthDays ?? []).filter((d): d is MonthDay => d === 'last' || (Number.isInteger(d) && (d as number) >= 1 && (d as number) <= 31));
+  return Array.from(new Set(valid)).toSorted((a, b) => (a === 'last' ? 32 : a) - (b === 'last' ? 32 : b));
+}
+
+export function daysBeforeOf(schedule: Pick<ScheduleValue, 'daysBefore'>): number[] {
+  return Array.from(new Set((schedule.daysBefore ?? []).filter((d) => Number.isInteger(d) && d >= 0 && d <= 90))).toSorted((a, b) => b - a);
+}
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+function parseDate(value: string | undefined): { year: number; month: number; day: number } | null {
+  const match = ISO_DATE.exec(value ?? '');
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day ? { year, month, day } : null;
 }
 
 const SHORT_INDEX: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
@@ -101,12 +131,50 @@ function nextForWeekday(now: WallParts, weekday: number, hour: number, minute: n
   return null;
 }
 
-/** The next run strictly after `afterMs`, as epoch milliseconds, or null for an incomplete schedule. */
+/** The first valid instant at or after a wall time (a skipped wall time moves to the next valid minute). */
+function validInstant(year: number, month: number, day: number, hour: number, minute: number, timeZone: string): number | null {
+  for (let step = 0; step < 180; step += 1) {
+    const at = new Date(Date.UTC(year, month - 1, day, hour, minute + step));
+    const instant = instantFor(at.getUTCFullYear(), at.getUTCMonth() + 1, at.getUTCDate(), at.getUTCHours(), at.getUTCMinutes(), timeZone);
+    if (instant !== null) return instant;
+  }
+  return null;
+}
+
+/** The next run strictly after `afterMs`, as epoch milliseconds, or null for an incomplete or finished schedule. */
 export function nextRun(schedule: ScheduleValue, afterMs: number): number | null {
   const time = parseTime(schedule.localTime);
-  const days = weekdaysOf(schedule);
-  if (!time || !days.length || !validTimeZone(schedule.timeZone)) return null;
+  if (!time || !validTimeZone(schedule.timeZone)) return null;
   const now = wallAt(afterMs, schedule.timeZone);
+  const kind = kindOf(schedule);
+  if (kind === 'monthly') {
+    const days = monthDaysOf(schedule);
+    if (!days.length) return null;
+    let year = now.year;
+    let month = now.month;
+    for (let i = 0; i < 14; i += 1) {
+      const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const dates = Array.from(new Set(days.map((d) => (d === 'last' ? last : Math.min(d, last))))).toSorted((a, b) => a - b);
+      for (const day of dates) {
+        if (wallNumber({ year, month, day, hour: time.hour, minute: time.minute, second: 0 }) > wallNumber(now)) return validInstant(year, month, day, time.hour, time.minute, schedule.timeZone);
+      }
+      [year, month] = month === 12 ? [year + 1, 1] : [year, month + 1];
+    }
+    return null;
+  }
+  if (kind === 'countdown') {
+    const event = parseDate(schedule.eventDate);
+    const before = daysBeforeOf(schedule);
+    if (!event || !before.length) return null;
+    for (const days of before) {
+      const date = new Date(Date.UTC(event.year, event.month - 1, event.day - days));
+      const wall = { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour: time.hour, minute: time.minute, second: 0 };
+      if (wallNumber(wall) > wallNumber(now)) return validInstant(wall.year, wall.month, wall.day, time.hour, time.minute, schedule.timeZone);
+    }
+    return null;
+  }
+  const days = weekdaysOf(schedule);
+  if (!days.length) return null;
   const runs = days.map((day) => nextForWeekday(now, WEEKDAYS.indexOf(day), time.hour, time.minute, schedule.timeZone)).filter((run): run is number => run !== null);
   return runs.length ? Math.min(...runs) : null;
 }
@@ -148,9 +216,30 @@ export function zoneLabel(timeZone: string): string {
   return last.replaceAll('_', ' ');
 }
 
-/** "Mondays and Thursdays at 9:00 AM · Hong Kong time" style summary. */
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+
+/** "Monthly on the 1st and 15th", "Monthly on the last day". */
+export function monthDaysLabel(schedule: Pick<ScheduleValue, 'monthDays'>): string {
+  const days = monthDaysOf(schedule).map((d) => (d === 'last' ? 'last day' : ordinal(d)));
+  return days.length ? `Monthly on the ${days.length > 1 ? `${days.slice(0, -1).join(', ')} and ${days.at(-1)}` : days[0]}` : 'No days chosen';
+}
+
+/** "Countdown to 18 Oct: 14, 7, 1 days before and on the day". */
+export function countdownLabel(schedule: Pick<ScheduleValue, 'eventDate' | 'daysBefore'>, locale?: string): string {
+  const event = parseDate(schedule.eventDate);
+  if (!event) return 'Countdown (choose the event date)';
+  const date = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(event.year, event.month - 1, event.day)));
+  const before = daysBeforeOf(schedule);
+  const steps = before.filter((d) => d > 0);
+  const parts = [steps.length ? `${steps.join(', ')} day${steps.length === 1 && steps[0] === 1 ? '' : 's'} before` : '', before.includes(0) ? 'on the day' : ''].filter(Boolean);
+  return `Countdown to ${date}${parts.length ? `: ${parts.join(' and ')}` : ''}`;
+}
+
+/** "Mondays and Thursdays at 9:00 AM · Hong Kong time" style summary, for every schedule kind. */
 export function scheduleSummary(schedule: ScheduleValue, locale?: string): string {
-  return `${daysLabel(schedule)} at ${timeLabel(schedule.localTime, locale)} · ${zoneLabel(schedule.timeZone)} time`;
+  const kind = kindOf(schedule);
+  const days = kind === 'monthly' ? monthDaysLabel(schedule) : kind === 'countdown' ? countdownLabel(schedule, locale) : daysLabel(schedule);
+  return `${days} at ${timeLabel(schedule.localTime, locale)} · ${zoneLabel(schedule.timeZone)} time`;
 }
 
 /** A run instant as "Wed 4 Mar, 9:00 AM" in the given zone. */
@@ -161,6 +250,28 @@ export function runLabel(ms: number, timeZone: string, locale?: string): string 
 /** Runs in an average week: one per chosen weekday. */
 export function runsPerWeek(schedule: Pick<ScheduleValue, 'weekdays' | 'weekday'>): number {
   return weekdaysOf(schedule).length;
+}
+
+/**
+ * The most runs a schedule can have, and over what: a calendar month for weekly (a month can hold five of a
+ * weekday) and monthly schedules, the whole countdown for a countdown.
+ */
+export function maxRuns(schedule: ScheduleValue): { runs: number; per: 'month' | 'countdown' } {
+  const kind = kindOf(schedule);
+  if (kind === 'monthly') return { runs: monthDaysOf(schedule).length, per: 'month' };
+  if (kind === 'countdown') return { runs: daysBeforeOf(schedule).length, per: 'countdown' };
+  return { runs: weekdaysOf(schedule).length * 5, per: 'month' };
+}
+
+/** The budget ceiling: the per-run limit times the most runs (a month, or the whole countdown). */
+export function ceilingMicro(maxCostUsdMicro: number | undefined, schedule: ScheduleValue): number {
+  return Math.max(0, maxCostUsdMicro ?? 0) * maxRuns(schedule).runs;
+}
+
+export function ceilingText(maxCostUsdMicro: number | undefined, schedule: ScheduleValue): string {
+  const { runs, per } = maxRuns(schedule);
+  const total = usd(ceilingMicro(maxCostUsdMicro, schedule));
+  return per === 'countdown' ? `${runs} run${runs === 1 ? '' : 's'} in total · at most ${total} for the whole countdown` : `up to ${runs} run${runs === 1 ? '' : 's'} a month · at most ${total} a month`;
 }
 
 export function usd(micro: number): string {

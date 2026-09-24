@@ -43,6 +43,27 @@ export function automationsOf(state: SnapshotState | undefined): Automation[] {
     .toSorted((a, b) => (ORDER[a.task.status] ?? 9) - (ORDER[b.task.status] ?? 9) || (b.task.updatedAt ?? b.task.createdAt ?? 0) - (a.task.updatedAt ?? a.task.createdAt ?? 0));
 }
 
+/** A countdown whose every date has passed: still `active` on the server, with no next run. */
+export function finished(automation: Pick<Automation, 'task'>): boolean {
+  return automation.task.status === 'active' && automation.task.schedule.kind === 'countdown' && !automation.task.nextOccurrence;
+}
+
+/** Runs whose drafts nobody has opened or dismissed yet. */
+export function unseen(automation: Pick<Automation, 'runs'>): RecurringOccurrence[] {
+  return automation.runs.filter((run) => run.state === 'completed' && run.conversationId && !run.seenAt);
+}
+
+/** What the automation's runs cost since `since` (epoch seconds), in micro-dollars. */
+export function spentSince(automation: Pick<Automation, 'runs'>, since: number): number {
+  return automation.runs.reduce((sum, run) => sum + (run.state === 'completed' && (run.completedAt ?? run.scheduledFor) >= since ? (run.costUsdMicro ?? 0) : 0), 0);
+}
+
+/** The start of the viewer's current calendar month, in epoch seconds. */
+export function monthStart(nowSeconds: number): number {
+  const now = new Date(nowSeconds * 1000);
+  return new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000;
+}
+
 /** Campaign briefs that no automation uses yet (made by the earlier planner or a suggestion). */
 export function unscheduledBriefs(state: SnapshotState | undefined): RaffiCampaign[] {
   const planning = state?.raffi?.campaignPlanning;

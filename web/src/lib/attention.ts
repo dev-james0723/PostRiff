@@ -135,6 +135,22 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
     });
   }
 
+  // Automations: runs whose drafts nobody has opened yet (the in-app "drafts ready" digest).
+  const planning = state?.raffi?.campaignPlanning;
+  const readyRuns = (planning?.occurrences ?? []).filter((run) => run.state === 'completed' && run.conversationId && !run.seenAt);
+  if (readyRuns.length > 0) {
+    const names = Array.from(new Set(readyRuns.map((run) => planning?.recurringTasks.find((task) => task.id === run.taskId)?.name).filter((name): name is string => Boolean(name))));
+    const drafts = readyRuns.reduce((sum, run) => sum + (run.draftCount ?? 1), 0);
+    items.push({
+      id: 'automation-drafts',
+      tone: 'info',
+      title: `${drafts} automation draft${drafts === 1 ? '' : 's'} ready`,
+      description: `${names.length ? `${names.slice(0, 2).join(', ')}${names.length > 2 ? ` and ${names.length - 2} more` : ''} prepared` : 'Your automations prepared'} drafts for review. Nothing is scheduled until you approve it.`,
+      href: '/app/automations',
+      action: 'Review drafts'
+    });
+  }
+
   const trialDays = (usageData?.lifecycle?.status === 'trial' || (usageData?.entitlement?.source === 'trial' && usageData?.lifecycle?.status === 'expired')) ? daysUntil(usageData.entitlement?.resetsAt, now) : null;
   if (trialDays !== null && trialDays <= 5) {
     items.push({

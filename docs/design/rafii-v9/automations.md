@@ -64,11 +64,31 @@ See the Verification table in this file's commit message and `evidence/automatio
   harness cron): build → activate → scheduled minute → drafts for both accounts → edit returns to draft
   → activate / pause / resume → Home panel → cancel; phone layout; axe on the builder and hub.
 
-## Limitations (Phase 1)
+## Phase 2: templates, schedule types, "drafts ready", batching and spend
 
-- One schedule per automation (several weekdays, one time). Monthly or date-relative schedules
-  (countdowns) and templates are Phase 2.
-- The run digest ("drafts ready" notification) is Phase 2; today the hub, Home panel and conversation
-  list show new drafts.
-- The worker still claims one workspace per cron tick (batching is Phase 2).
-- The budget view shows the configured ceiling, not measured spend per automation.
+- **Schedule types.** Weekly (unchanged shape), monthly (`monthDays`: 1–31 or `last`; a day a month
+  lacks runs on its last day) and countdown (`eventDate` + `daysBefore`, up to 8 steps, 0–90 days;
+  finishes by itself after the last date; its date becomes the brief's date fact). Saving or activating
+  a countdown whose dates have all passed is refused. Previews in the builder follow the server rules
+  (node tests share the server's cases, including DST).
+- **Templates** (`web/src/features/automations/templates.ts`): Weekly tip, Event countdown, Monthly
+  recap. They only fill the builder; the text is general, never a particular person's details.
+- **Recap context.** `include.recentPostsDays` (7–92, part of the activated definition): each run adds
+  up to ten of this workspace's own published posts from that window as data. Countdown runs add the
+  days left. The worker's fixed instruction says to use only what the data lists.
+- **"Drafts ready".** In-app: runs nobody has opened count as "new" on the hub, the Home panel and the
+  shared attention list (Home, Overview, sidebar badge); opening a run's drafts, or "Mark all as seen",
+  records `seenAt` (`raffi_recurrence_seen`, edit). Email: a member's own opt-in per automation
+  (`raffi_recurrence_watch`, any member; outside the definition) sends one email per run, deduplicated
+  in `pr_notifications`, only while they are still an active member. Nothing is sent from the local
+  harness (no mail transport).
+- **Batching.** The cron entry prepares up to five due runs (any workspaces) within 90 seconds instead
+  of one per minute.
+- **Spend.** Each completed run records its writer's charge (`costUsdMicro`) and draft count. The hub
+  shows spend this month per automation and in total, next to the ceiling: per-run limit × the most runs
+  in a month (a weekly day can occur five times) or in the whole countdown.
+
+## Limitations
+
+- Several times a day is not offered (runs prepare drafts; the posting time is chosen at approval).
+- Measured spend covers completed runs only; a held run costs nothing by design.

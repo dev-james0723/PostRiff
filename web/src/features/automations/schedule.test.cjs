@@ -59,3 +59,27 @@ test('labels: days, zones, budget and plain run wording', () => {
   assert.deepEqual(S.missingFacts('Promote my spring recital', { date: '2026-04-18' }), ['venue']);
   assert.deepEqual(S.missingFacts('Weekly tips', {}), []);
 });
+
+// Phase 2 kinds: the same cases as ScheduleKindTests in tests/test_postriff_campaigns.py.
+test('monthly: a day the month lacks runs on its last day; "last" follows the month', () => {
+  const after = Date.UTC(2026, 2, 3, 12);
+  const runs = S.nextRuns({ kind: 'monthly', monthDays: [31, 15], localTime: '18:00', timeZone: 'Asia/Hong_Kong' }, after, 4);
+  assert.deepEqual(runs.map((ms) => iso(ms, 'Asia/Hong_Kong').slice(0, 17)), ['2026-03-15, 18:00', '2026-03-31, 18:00', '2026-04-15, 18:00', '2026-04-30, 18:00']);
+  const last = S.nextRuns({ kind: 'monthly', monthDays: ['last'], localTime: '09:00', timeZone: 'UTC' }, Date.UTC(2026, 0, 31, 10), 2);
+  assert.deepEqual(last.map((ms) => new Date(ms).toISOString().slice(0, 10)), ['2026-02-28', '2026-03-31']);
+  assert.equal(S.monthDaysLabel({ monthDays: [15, 1] }), 'Monthly on the 1st and 15th');
+  assert.equal(S.monthDaysLabel({ monthDays: ['last'] }), 'Monthly on the last day');
+  assert.deepEqual(S.maxRuns({ kind: 'monthly', monthDays: [1, 15], localTime: '09:00', timeZone: 'UTC' }), { runs: 2, per: 'month' });
+});
+
+test('countdown: runs before the event in date order, then finishes', () => {
+  const schedule = { kind: 'countdown', eventDate: '2026-03-10', daysBefore: [0, 7, 3, 1, 7], localTime: '10:00', timeZone: 'Asia/Hong_Kong' };
+  const runs = S.nextRuns(schedule, Date.UTC(2026, 2, 3, 12), 10);
+  assert.deepEqual(runs.map((ms) => iso(ms, 'Asia/Hong_Kong').slice(0, 17)), ['2026-03-07, 10:00', '2026-03-09, 10:00', '2026-03-10, 10:00']);
+  assert.equal(S.nextRun(schedule, runs.at(-1) + 1000), null);
+  assert.equal(S.nextRun({ ...schedule, eventDate: '2026-02-30' }, 0), null);
+  assert.match(S.countdownLabel({ eventDate: '2026-03-10', daysBefore: [7, 1, 0] }, 'en-GB'), /^Countdown to 10 Mar 2026: 7, 1 days before and on the day$/);
+  assert.deepEqual(S.maxRuns(schedule), { runs: 4, per: 'countdown' });
+  assert.equal(S.ceilingText(250_000, schedule), '4 runs in total · at most $1.00 for the whole countdown');
+  assert.equal(S.ceilingText(100_000, { weekdays: ['Monday'], localTime: '09:00', timeZone: 'UTC' }), 'up to 5 runs a month · at most $0.50 a month');
+});

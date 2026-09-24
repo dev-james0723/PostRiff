@@ -184,3 +184,62 @@ paused = current(task['id'])
 assert (paused['status'], paused['pauseReason']) == ('paused', 'destinations_unavailable'), paused
 service.ideas.skills.bind = base_bind
 print('PASS: automation drafts every activated account with its own content type, brief text stays data, disconnected accounts skipped then paused')
+
+# Phase 2: a countdown and a monthly recap due together are both prepared by one batched cron call; the
+# countdown's days left and the recap's published posts reach the writer as data; each run records its
+# cost and draft count; an opted-in member gets exactly one "drafts ready" email per run.
+import datetime as dt
+for t in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['recurringTasks']:
+    if t['status'] != 'cancelled':
+        act('raffi_recurrence_cancel', {'taskId': t['id'], 'confirmed': True})
+third = connect('Third page')
+ideas_seen = []
+class RecordingRuntime(CountingRuntime):
+    def start_turn(self, request, emit):
+        ideas_seen.append(request['idea'])
+        return super().start_turn(request, emit)
+recording = RecordingRuntime(); service.ideas.runtimes = [recording]
+emails = []
+class Mail:
+    def drafts_ready(self, to, name, count, url):
+        emails.append((to, name, count, url))
+        return {'sent': True}
+service.mailer, service._email_for, service.public_base_url = Mail(), (lambda user_id: 'owner@example.com'), 'https://postriff.example'
+today = dt.datetime.fromtimestamp(clock[0], dt.timezone.utc).date()
+event, tomorrow = today + dt.timedelta(days=5), today + dt.timedelta(days=1)
+base = {'audience': 'Students', 'destinations': [{'platform': 'LinkedIn', 'language': 'en', 'channelId': third['id']}], 'route': 'deterministic-preview', 'maxCostUsdMicro': 0}
+state = act('raffi_recurrence_save', {**base, 'name': 'Recital countdown', 'goal': 'Countdown to my recital', 'facts': {'venue': 'City Hall'},
+                                      'schedule': {'kind': 'countdown', 'eventDate': event.isoformat(), 'daysBefore': [4, 2], 'localTime': '09:00', 'timeZone': 'UTC'}})['state']
+countdown = state['raffi']['campaignPlanning']['recurringTasks'][-1]
+state = act('raffi_recurrence_save', {**base, 'name': 'Monthly recap', 'goal': 'A warm recap of the month', 'include': {'recentPostsDays': 30},
+                                      'schedule': {'kind': 'monthly', 'monthDays': [tomorrow.day], 'localTime': '09:00', 'timeZone': 'UTC'}})['state']
+recap = state['raffi']['campaignPlanning']['recurringTasks'][-1]
+assert countdown['schedule']['kind'] == 'countdown' and recap['include'] == {'recentPostsDays': 30}
+for t in (countdown, recap):
+    act('raffi_recurrence_activate', {'taskId': t['id'], 'confirmed': True})
+act('raffi_recurrence_watch', {'taskId': countdown['id'], 'email': True})
+due = [current(t['id'])['nextOccurrence']['scheduledFor'] for t in (countdown, recap)]
+assert due[0] == due[1], due  # both tomorrow 09:00 UTC
+clock[0] = due[0] + 1
+batch = worker.tick_many()
+assert [run['state'] for run in batch['runs']] == ['completed', 'completed'], batch
+assert CampaignWorker(service).tick_many() == {'idle': True}
+assert any(f'"countdown": {{"eventDate": "{event.isoformat()}", "daysToGo": 4}}' in idea and 'counting down to the event' in idea for idea in ideas_seen), ideas_seen
+assert any('"recentPosts": []' in idea and 'recapping the recent published posts' in idea for idea in ideas_seen), ideas_seen
+planning = service.get(workspace, 'one')['state']['raffi']['campaignPlanning']
+runs = {o['taskId']: o for o in planning['occurrences'] if o['taskId'] in (countdown['id'], recap['id'])}
+assert all(o['state'] == 'completed' and o['costUsdMicro'] == 0 and o['draftCount'] == 1 for o in runs.values()), runs
+assert emails == [('owner@example.com', 'Recital countdown', 1, f"https://postriff.example/app/agent/{runs[countdown['id']]['conversationId']}")], emails
+with connection() as db:
+    assert db.execute("SELECT count(*), bool_and(sent) FROM pr_notifications WHERE workspace_id=%s AND kind='drafts_ready'", (workspace,)).fetchone() == (1, True)
+# A replayed completion never emails twice.
+assert worker._notify(workspace, countdown, runs[countdown['id']], [ONE]) == [] and len(emails) == 1
+# The countdown moves to its last date, then finishes: no next run, never due again.
+assert current(countdown['id'])['nextOccurrence']['local'].startswith((event - dt.timedelta(days=2)).isoformat())
+clock[0] = current(countdown['id'])['nextOccurrence']['scheduledFor'] + 1
+assert worker.tick_many()['runs'][0]['state'] == 'completed'
+assert current(countdown['id'])['nextOccurrence'] is None and current(countdown['id'])['status'] == 'active'
+clock[0] += 40 * 86400
+result = worker.tick_many()
+assert all(run.get('state') != 'completed' or run.get('occurrenceId') not in [o['id'] for o in planning['occurrences'] if o['taskId'] == countdown['id']] for run in result.get('runs', [])), result
+print('PASS: countdown and recap context reach the writer, costs and draft counts recorded, batched cron, one deduplicated drafts-ready email, countdown finishes')

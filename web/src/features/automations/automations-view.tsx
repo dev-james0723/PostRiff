@@ -10,17 +10,19 @@ import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { StatusChip, type StatusTone } from '@/features/queue/status-chip';
 import { ApiError } from '@/lib/api/client';
-import { useModels } from '@/lib/api/hooks';
+import { useMe, useModels } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { languageLabel } from '@/lib/locales';
 import { useTimeZone } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
 import { AutomationBuilder, blankInitial, initialFromAutomation, initialFromBrief, type BuilderInitial } from './automation-builder';
-import { runLabel, runText, runsPerWeek, scheduleSummary, statusText, usd, weeklyCeilingMicro } from './schedule';
-import { useAutomations, type Automation } from './use-automations';
+import { ceilingMicro, ceilingText, runLabel, runText, scheduleSummary, statusText, usd } from './schedule';
+import { finished, monthStart, spentSince, unseen, useAutomations, type Automation } from './use-automations';
 
 const infoContent = {
   title: 'How automations work',
@@ -34,7 +36,6 @@ const infoContent = {
 
 const STATUS_TONE: Record<string, StatusTone> = { active: 'success', draft: 'neutral', paused: 'warning', cancelled: 'neutral' };
 const RUN_TONE: Record<string, StatusTone> = { quiet: 'neutral', success: 'success', attention: 'warning', failure: 'danger' };
-const WEEK = 7 * 86400;
 
 export function AutomationsView() {
   const params = useSearchParams();
@@ -44,6 +45,8 @@ export function AutomationsView() {
   const isOwner = checkAccess(access, { permission: 'owner' });
   const timeZone = useTimeZone();
   const models = useModels();
+  const me = useMe();
+  const userId = me.data?.userId ?? null;
   const { snapshot, state, automations, briefs, act, busy } = useAutomations();
   const [builder, setBuilder] = useState<{ key: number; initial: BuilderInitial } | null>(null);
   const [cancelling, setCancelling] = useState<Automation | null>(null);
@@ -72,22 +75,32 @@ export function AutomationsView() {
 
   const live = automations.filter((a) => a.task.status !== 'cancelled');
   const cancelled = automations.filter((a) => a.task.status === 'cancelled');
-  const active = live.filter((a) => a.task.status === 'active');
+  const active = live.filter((a) => a.task.status === 'active' && !finished(a));
   const waiting = live.filter((a) => statusText(a.task).needsOwner || statusText(a.task).needsEdit);
-  const recentDrafts = automations.flatMap((a) => a.drafted).filter((run) => run.scheduledFor >= now - WEEK).length;
+  const toReview = automations.reduce((sum, a) => sum + unseen(a).length, 0);
+  const sinceMonth = monthStart(now);
+  const spentThisMonth = automations.reduce((sum, a) => sum + spentSince(a, sinceMonth), 0);
   const next = active
     .map((a) => ({ a, at: a.task.nextOccurrence?.scheduledFor ?? (a.task.nextOccurrence ? Date.parse(a.task.nextOccurrence.utc) / 1000 : Infinity) }))
     .toSorted((x, y) => x.at - y.at)[0];
-  const weeklyCeiling = active.reduce((sum, a) => sum + weeklyCeilingMicro(a.task.maxCostUsdMicro, a.task.schedule), 0);
+  const ceiling = active.reduce((sum, a) => sum + ceilingMicro(a.task.maxCostUsdMicro, a.task.schedule), 0);
   const writerLabel = useMemo(() => new Map((models.data?.models ?? []).map((m) => [m.id, m.label])), [models.data]);
 
-  async function run(action: string, automation: Automation, success: string) {
+  async function run(action: string, automation: Automation, success: string | null, extra: Record<string, unknown> = { confirmed: true }) {
     try {
-      await act(action, { taskId: automation.task.id, confirmed: true });
-      toast.success(success);
+      await act(action, { taskId: automation.task.id, ...extra });
+      if (success) toast.success(success);
+      return true;
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Rafii could not change this automation.');
+      return false;
     }
+  }
+
+  /** Opening a run's drafts marks that run as seen for the workspace (editors), then navigates. */
+  async function openRun(automation: Automation, runId: string, conversationId: string) {
+    if (canEdit && automation.runs.find((r) => r.id === runId && !r.seenAt)) await run('raffi_recurrence_seen', automation, null, { occurrenceIds: [runId] });
+    router.push(`/app/agent/${encodeURIComponent(conversationId)}`);
   }
 
   return (
@@ -116,15 +129,15 @@ export function AutomationsView() {
           <section aria-label='Automation summary' className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
             <Tile label='Active' value={String(active.length)} detail={live.length > active.length ? `${live.length - active.length} not running` : 'All running'} />
             <Tile label='Needs you' value={String(waiting.length)} detail={waiting.length ? (isOwner ? 'Activate or review' : 'Waiting for the owner') : 'Nothing waiting'} />
-            <Tile label='Drafts this week' value={String(recentDrafts)} detail={recentDrafts ? 'Ready in their conversations' : 'None prepared yet'} />
+            <Tile label='Drafts to review' value={String(toReview)} detail={toReview ? `From ${toReview} run${toReview === 1 ? '' : 's'} not opened yet` : 'All caught up'} />
             <Tile label='Next run' value={next && Number.isFinite(next.at) ? runLabel(next.at * 1000, next.a.task.schedule.timeZone) : '—'} detail={next ? next.a.name : 'Nothing active'} small />
           </section>
 
-          {active.length > 0 && (
+          {(active.length > 0 || spentThisMonth > 0) && (
             <Surface material='quiet' padding='sm' className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm'>
               <span className='rafii-eyebrow'>Budget</span>
               <span>
-                Active automations can spend at most <span className='font-medium'>{usd(weeklyCeiling)}</span> a week in total.
+                Spent this month: <span className='font-medium'>{usd(spentThisMonth)}</span>. Active automations can spend at most <span className='font-medium'>{usd(ceiling)}</span> in a month (a countdown counts in full).
               </span>
               <Link href='/app/account/billing' className='text-muted-foreground hover:text-foreground ml-auto inline-flex min-h-11 items-center gap-1 text-xs'>
                 Usage and credits
@@ -156,13 +169,17 @@ export function AutomationsView() {
                     canEdit={canEdit}
                     isOwner={isOwner}
                     busy={busy}
+                    spent={spentSince(automation, sinceMonth)}
+                    watching={Boolean(userId && automation.task.emailWatchers?.includes(userId))}
+                    onWatch={(email) => void run('raffi_recurrence_watch', automation, email ? 'You will get an email when its drafts are ready.' : 'Emails for this automation are off.', { email })}
+                    onSeen={() => void run('raffi_recurrence_seen', automation, 'Marked as seen.', {})}
                     writer={automation.task.route ? (writerLabel.get(automation.task.route) ?? automation.task.route) : 'No writer'}
                     onEdit={() => open(initialFromAutomation(automation, timeZone))}
                     onActivate={() => void run('raffi_recurrence_activate', automation, 'Automation active. Drafts will wait for your review.')}
                     onPause={() => void run('raffi_recurrence_pause', automation, 'Automation paused.')}
                     onResume={() => void run('raffi_recurrence_resume', automation, 'Automation resumed.')}
                     onCancel={() => setCancelling(automation)}
-                    onOpenRun={(conversationId) => router.push(`/app/agent/${encodeURIComponent(conversationId)}`)}
+                    onOpenRun={(runId, conversationId) => void openRun(automation, runId, conversationId)}
                   />
                 </li>
               ))}
@@ -283,18 +300,24 @@ interface CardProps {
   canEdit: boolean;
   isOwner: boolean;
   busy: boolean;
+  spent: number;
+  watching: boolean;
+  onWatch: (email: boolean) => void;
+  onSeen: () => void;
   writer: string;
   onEdit: () => void;
   onActivate: () => void;
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
-  onOpenRun: (conversationId: string) => void;
+  onOpenRun: (runId: string, conversationId: string) => void;
 }
 
-function AutomationCard({ automation, canEdit, isOwner, busy, writer, onEdit, onActivate, onPause, onResume, onCancel, onOpenRun }: CardProps) {
+function AutomationCard({ automation, canEdit, isOwner, busy, spent, watching, onWatch, onSeen, writer, onEdit, onActivate, onPause, onResume, onCancel, onOpenRun }: CardProps) {
   const { task, campaign, destinations, runs, legacy } = automation;
-  const status = statusText(task);
+  const done = finished(automation);
+  const status = done ? { label: 'Finished', detail: 'Every countdown date has passed. Edit the event date to use it again.', needsOwner: false, needsEdit: false } : statusText(task);
+  const fresh = unseen(automation);
   const labels = task.accountLabels ?? {};
   const platforms = Array.from(new Set(destinations.map((d) => d.platform)));
   const accountsCount = new Set(destinations.map((d) => d.channelId ?? d.platform)).size;
@@ -318,9 +341,12 @@ function AutomationCard({ automation, canEdit, isOwner, busy, writer, onEdit, on
           </h2>
           <p className='text-muted-foreground text-sm'>{scheduleSummary(task.schedule)}</p>
         </div>
-        <StatusChip tone={STATUS_TONE[task.status] ?? 'neutral'} size='md'>
-          {status.label}
-        </StatusChip>
+        <span className='flex flex-wrap items-center gap-1.5'>
+          {fresh.length > 0 && <StatusChip tone='info' size='md' icon={<Icons.sparkles />}>{fresh.length} new</StatusChip>}
+          <StatusChip tone={done ? 'neutral' : (STATUS_TONE[task.status] ?? 'neutral')} size='md'>
+            {status.label}
+          </StatusChip>
+        </span>
       </div>
 
       <dl className='grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-4'>
@@ -339,16 +365,15 @@ function AutomationCard({ automation, canEdit, isOwner, busy, writer, onEdit, on
         <Fact term='What'>{legacy ? 'One LinkedIn draft (earlier planner)' : (task.contentLabel ?? 'General writing')}</Fact>
         <Fact term='Writer'>
           {writer} · {task.reasoning ? `${task.reasoning[0].toUpperCase()}${task.reasoning.slice(1)}` : 'Quick'} · up to {usd(task.maxCostUsdMicro ?? 0)} a run
+          <span className='text-muted-foreground block text-xs'>{usd(spent)} spent this month</span>
         </Fact>
-        <Fact term={task.status === 'active' ? 'Next run' : 'Schedule'}>
-          {task.status === 'active' && nextAt ? runLabel(nextAt * 1000, task.schedule.timeZone) : task.status === 'draft' ? 'Starts after activation' : 'Not running'}
-          <span className='text-muted-foreground block text-xs'>
-            {runsPerWeek(task.schedule)} run{runsPerWeek(task.schedule) === 1 ? '' : 's'} a week · at most {usd(weeklyCeilingMicro(task.maxCostUsdMicro, task.schedule))} a week
-          </span>
+        <Fact term={task.status === 'active' && !done ? 'Next run' : 'Schedule'}>
+          {done ? 'Finished' : task.status === 'active' && nextAt ? runLabel(nextAt * 1000, task.schedule.timeZone) : task.status === 'draft' ? 'Starts after activation' : 'Not running'}
+          <span className='text-muted-foreground block text-xs'>{ceilingText(task.maxCostUsdMicro, task.schedule)}</span>
         </Fact>
       </dl>
 
-      {(status.needsOwner || status.needsEdit || missing.length > 0 || legacy) && task.status !== 'active' && (
+      {(status.needsOwner || status.needsEdit || missing.length > 0 || legacy || done) && (task.status !== 'active' || done) && (
         <p className='text-muted-foreground flex items-start gap-2 text-sm'>
           <Icons.info className='mt-0.5 size-4 shrink-0' />
           <span>
@@ -370,9 +395,15 @@ function AutomationCard({ automation, canEdit, isOwner, busy, writer, onEdit, on
 
       <div className='flex flex-wrap items-center gap-2'>
         {lastDrafts?.conversationId && (
-          <Button variant='glass' size='sm' className='min-h-11' onClick={() => onOpenRun(lastDrafts.conversationId!)}>
+          <Button variant='glass' size='sm' className='min-h-11' onClick={() => onOpenRun(lastDrafts.id, lastDrafts.conversationId!)}>
             <Icons.chat />
             Review latest drafts
+          </Button>
+        )}
+        {canEdit && fresh.length > 1 && (
+          <Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={onSeen}>
+            <Icons.checks />
+            Mark all as seen
           </Button>
         )}
         {canEdit && (
@@ -387,7 +418,7 @@ function AutomationCard({ automation, canEdit, isOwner, busy, writer, onEdit, on
             Activate
           </Button>
         )}
-        {isOwner && task.status === 'active' && (
+        {isOwner && task.status === 'active' && !done && (
           <Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={onPause}>
             <Icons.pause />
             Pause
@@ -406,6 +437,11 @@ function AutomationCard({ automation, canEdit, isOwner, busy, writer, onEdit, on
         )}
       </div>
 
+      <Label className='text-muted-foreground flex min-h-11 items-center justify-between gap-3 text-sm font-normal'>
+        <span>Email me when its drafts are ready</span>
+        <Switch checked={watching} disabled={busy} onCheckedChange={(checked) => onWatch(checked)} aria-label={`Email me when drafts from ${automation.name} are ready`} />
+      </Label>
+
       {runs.length > 0 && (
         <Collapsible>
           <CollapsibleTrigger className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm'>
@@ -423,10 +459,11 @@ function AutomationCard({ automation, canEdit, isOwner, busy, writer, onEdit, on
                     <StatusChip tone={RUN_TONE[text.tone]}>{text.label}</StatusChip>
                     <span className='text-muted-foreground min-w-0 flex-[1_1_12rem] text-xs'>
                       {text.detail}
+                      {run.state === 'completed' && `${run.draftCount ? `${run.draftCount} draft${run.draftCount === 1 ? '' : 's'}` : 'Drafts'} · ${usd(run.costUsdMicro ?? 0)}${run.seenAt ? '' : ' · new'}`}
                       {skipped.length > 0 && ` Skipped ${skipped.map((s) => s.account || s.platform).join(', ')}: no longer connected.`}
                     </span>
                     {run.state === 'completed' && run.conversationId && (
-                      <Button variant='quiet' size='sm' className='min-h-11' onClick={() => onOpenRun(run.conversationId!)}>
+                      <Button variant='quiet' size='sm' className='min-h-11' onClick={() => onOpenRun(run.id, run.conversationId!)}>
                         Open drafts
                       </Button>
                     )}

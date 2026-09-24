@@ -128,6 +128,14 @@ class Mailer:
                     [f"Someone signed in to your {b} account from {device} on {_date(ctx.get('at'))}.",
                      "If this was you, there is nothing to do. If it wasn’t, open your profile, sign out every other session and turn on two-factor authentication."],
                     "Review where you are signed in", ctx.get("profile_url"))
+        if kind == "drafts_ready":
+            name = _clean(ctx.get("automation_name"), 80) or "Your automation"
+            count = max(1, int(ctx.get("count") or 1))
+            drafts = f"{count} draft{'' if count == 1 else 's'}"
+            return (f"{drafts} ready for review: {name}",
+                    [f"Your automation “{name}” prepared {drafts} for your review.",
+                     "Nothing was scheduled or published. Open the drafts to edit, approve or discard them."],
+                    "Review drafts", ctx.get("review_url"))
         raise AlphaError("Unknown email kind.", 500)
 
     def render(self, kind, **ctx):
@@ -188,6 +196,10 @@ class Mailer:
 
     def subscription_activated(self, to, plan_label, billing_url):
         return self._deliver("subscription_activated", to, plan_label=plan_label, billing_url=billing_url)
+
+    def drafts_ready(self, to, automation_name, count, review_url):
+        """Opt-in: an automation prepared drafts (`CampaignWorker._notify`); one per run and person."""
+        return self._deliver("drafts_ready", to, automation_name=automation_name, count=count, review_url=review_url)
 
     def new_device(self, to, device_label, at, profile_url):
         """Opt-in alert the first time a session is seen (hosted `_alert_new_device`)."""

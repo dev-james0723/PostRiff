@@ -377,7 +377,7 @@ class HostedApplication:
                 if ideas is not None:
                     result['writingRecovery'] = ideas.recover_stalled()
                     from .campaign_worker import CampaignWorker
-                    result['campaignPreparation'] = CampaignWorker(service).tick()
+                    result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()
                 learning = getattr(service, "learning", None)
                 if learning is not None:

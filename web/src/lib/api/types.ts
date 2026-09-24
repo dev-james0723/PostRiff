@@ -364,9 +364,16 @@ export interface RecurringDestination {
 }
 
 export interface RecurringSchedule {
-  /** Automations: one or more weekday names. Older tasks carry a single `weekday`. */
+  /** Absent means weekly. */
+  kind?: 'weekly' | 'monthly' | 'countdown' | string;
+  /** Weekly: one or more weekday names. Older tasks carry a single `weekday`. */
   weekdays?: string[];
   weekday?: string;
+  /** Monthly: days 1–31 or "last". */
+  monthDays?: (number | 'last')[];
+  /** Countdown: the event date (YYYY-MM-DD) and the days before it that get a run. */
+  eventDate?: string;
+  daysBefore?: number[];
   localTime: string;
   timeZone: string;
 }
@@ -395,6 +402,10 @@ export interface RecurringTask {
   contentLibrary?: { editorialId: string; nativeId: string } | null;
   contextSourceIds?: string[];
   limits?: { draftsPerOccurrence: number };
+  /** Extra context each run reads (part of the activated definition). */
+  include?: { recentPostsDays?: number } | null;
+  /** Members who asked for a "drafts ready" email (outside the definition). */
+  emailWatchers?: string[];
   createdBy?: string;
   createdAt?: number;
   updatedAt?: number;
@@ -413,6 +424,12 @@ export interface RecurringOccurrence {
   conversationId?: string;
   completedAt?: number;
   skippedDestinations?: { platform: string; channelId?: string; account?: string }[];
+  draftCount?: number;
+  /** What the run's writer charged, in micro-dollars (0 for free routes). */
+  costUsdMicro?: number;
+  /** Set when someone opened or dismissed the drafts ("drafts ready" clears). */
+  seenAt?: number;
+  seenBy?: string;
 }
 
 export interface Snapshot {

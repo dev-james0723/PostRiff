@@ -10,7 +10,7 @@ import { StateMessage, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { StatusChip } from '@/features/queue/status-chip';
 import { runLabel, scheduleSummary, statusText } from '@/features/automations/schedule';
-import { automationsOf } from '@/features/automations/use-automations';
+import { automationsOf, finished, unseen } from '@/features/automations/use-automations';
 import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
 import type { SnapshotState } from '@/lib/api/types';
@@ -74,7 +74,8 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
         ) : (
           <ul className='flex flex-col gap-2'>
             {automations.slice(0, 3).map((item) => {
-              const status = statusText(item.task);
+              const status = finished(item) ? { label: 'Finished' } : statusText(item.task);
+              const fresh = unseen(item).length;
               const next = item.task.status === 'active' && item.task.nextOccurrence ? (item.task.nextOccurrence.scheduledFor ?? Date.parse(item.task.nextOccurrence.utc) / 1000) : null;
               return (
                 <li key={item.task.id}>
@@ -84,7 +85,8 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
                       <span className='truncate text-sm font-medium'>{item.name}</span>
                       <span className='text-muted-foreground truncate text-xs'>{next ? `Next ${runLabel(next * 1000, item.task.schedule.timeZone)}` : scheduleSummary(item.task.schedule)}</span>
                     </span>
-                    <StatusChip tone={item.task.status === 'active' ? 'success' : item.task.status === 'paused' ? 'warning' : 'neutral'}>{status.label}</StatusChip>
+                    {fresh > 0 && <StatusChip tone='info'>{fresh} new</StatusChip>}
+                    <StatusChip tone={finished(item) ? 'neutral' : item.task.status === 'active' ? 'success' : item.task.status === 'paused' ? 'warning' : 'neutral'}>{status.label}</StatusChip>
                   </Link>
                 </li>
               );

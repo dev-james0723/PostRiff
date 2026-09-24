@@ -219,5 +219,117 @@ class AutomationTests(unittest.TestCase):
         self.assertIn("no longer available", note)
 
 
+class ScheduleKindTests(unittest.TestCase):
+    """Phase 2: monthly and countdown schedules, recap context, seen marks and email opt-in."""
+
+    def setUp(self):
+        self.state = initial_state("workspace-one")
+        self.state["phase2"] = {"channels": [{"id": "acct-linkedin", "platform": "LinkedIn", "account": "Studio page"}], "jobs": []}
+        # Tuesday 3 March 2026, 12:00 UTC (20:00 in Hong Kong).
+        self.now = dt.datetime(2026, 3, 3, 12, tzinfo=dt.timezone.utc).timestamp()
+
+    def save(self, schedule, **changes):
+        payload = {"name": "Automation", "goal": "Studio notes", "audience": "Students", "schedule": schedule,
+                   "destinations": [{"platform": "LinkedIn", "language": "en", "channelId": "acct-linkedin"}], "route": "deterministic-preview"}
+        payload.update(changes)
+        return campaigns.apply_action(self.state, "raffi_recurrence_save", payload, "editor", self.now)
+
+    def task(self):
+        return self.state["raffi"]["campaignPlanning"]["recurringTasks"][-1]
+
+    def test_monthly_days_clamp_to_short_months_and_last_day(self):
+        schedule = {"kind": "monthly", "monthDays": [31, 15], "localTime": "18:00", "timeZone": "Asia/Hong_Kong"}
+        runs = [item["local"][:16] for item in campaigns.upcoming(schedule, self.now, 4)]
+        self.assertEqual(runs, ["2026-03-15T18:00", "2026-03-31T18:00", "2026-04-15T18:00", "2026-04-30T18:00"])
+        last = campaigns.upcoming({"kind": "monthly", "monthDays": ["last"], "localTime": "09:00", "timeZone": "UTC"}, dt.datetime(2026, 1, 31, 10, tzinfo=dt.timezone.utc).timestamp(), 2)
+        self.assertEqual([item["local"][:10] for item in last], ["2026-02-28", "2026-03-31"])
+        for bad in ([], [0], [32], ["first"], [1, 2, 3, 4, 5], "15"):
+            with self.subTest(bad), self.assertRaises(AlphaError):
+                campaigns.next_occurrence({"kind": "monthly", "monthDays": bad, "localTime": "09:00", "timeZone": "UTC"}, self.now)
+
+    def test_countdown_runs_before_the_event_then_finishes(self):
+        schedule = {"kind": "countdown", "eventDate": "2026-03-10", "daysBefore": [0, 7, 3, 1, 7], "localTime": "10:00", "timeZone": "Asia/Hong_Kong"}
+        runs = campaigns.upcoming(schedule, self.now, 10)
+        # The run 7 days before (3 March, 10:00) already passed at 20:00 local; the rest remain, in date order.
+        self.assertEqual([item["local"][:16] for item in runs], ["2026-03-07T10:00", "2026-03-09T10:00", "2026-03-10T10:00"])
+        self.assertIsNone(campaigns.next_occurrence(schedule, runs[-1]["scheduledFor"] + 1))
+        self.assertEqual(campaigns.countdown_context(schedule, runs[0]["scheduledFor"]), {"eventDate": "2026-03-10", "daysToGo": 3})
+        self.assertIsNone(campaigns.countdown_context({"weekdays": ["Monday"], "localTime": "09:00", "timeZone": "UTC"}, self.now))
+        for bad in ({"eventDate": "10 March"}, {"daysBefore": []}, {"daysBefore": [91]}, {"daysBefore": [1, 2, 3, 4, 5, 6, 7, 8, 9]}):
+            with self.subTest(bad), self.assertRaises(AlphaError):
+                campaigns.next_occurrence({**schedule, **bad}, self.now)
+
+    def test_countdown_save_fills_the_date_fact_and_refuses_a_past_event(self):
+        self.save({"kind": "countdown", "eventDate": "2026-03-20", "daysBefore": [14, 7, 1], "localTime": "10:00", "timeZone": "Asia/Hong_Kong"}, goal="Countdown to my spring recital", facts={"venue": "City Hall"})
+        task, campaign = self.task(), self.state["raffi"]["campaignPlanning"]["campaigns"][-1]
+        self.assertEqual(task["schedule"], {"kind": "countdown", "eventDate": "2026-03-20", "daysBefore": [14, 7, 1], "localTime": "10:00", "timeZone": "Asia/Hong_Kong"})
+        self.assertEqual((campaign["facts"], campaign["missingFacts"]), ({"venue": "City Hall", "date": "2026-03-20"}, []))
+        self.assertEqual(task["nextOccurrence"]["local"][:16], "2026-03-06T10:00")
+        with self.assertRaisesRegex(AlphaError, "countdown date has passed"):
+            self.save({"kind": "countdown", "eventDate": "2026-03-01", "daysBefore": [0], "localTime": "10:00", "timeZone": "Asia/Hong_Kong"})
+        # Activating after the last date is refused rather than silently doing nothing.
+        campaigns.apply_action(self.state, "raffi_recurrence_activate", {"taskId": task["id"], "confirmed": True}, "owner", self.now)
+        self.assertEqual(task["status"], "active")
+        campaigns.apply_action(self.state, "raffi_recurrence_pause", {"taskId": task["id"]}, "owner", self.now)
+        with self.assertRaisesRegex(AlphaError, "countdown date has passed"):
+            campaigns.apply_action(self.state, "raffi_recurrence_resume", {"taskId": task["id"], "confirmed": True}, "owner", dt.datetime(2026, 3, 21, tzinfo=dt.timezone.utc).timestamp())
+
+    def test_recap_include_is_part_of_the_definition_and_reads_only_published_posts(self):
+        self.save({"kind": "monthly", "monthDays": ["last"], "localTime": "17:00", "timeZone": "UTC"}, include={"recentPostsDays": 30})
+        task = self.task()
+        self.assertEqual(task["include"], {"recentPostsDays": 30})
+        digest = task["definitionDigest"]
+        campaigns.apply_action(self.state, "raffi_recurrence_save", {"taskId": task["id"], "name": "Automation", "goal": "Studio notes", "audience": "Students",
+                               "schedule": task["schedule"], "destinations": task["destinations"], "route": "deterministic-preview", "include": None}, "editor", self.now)
+        self.assertNotEqual(task["definitionDigest"], digest)
+        for bad in ({"recentPostsDays": 3}, {"recentPostsDays": 120}, {"posts": 30}, "30"):
+            with self.subTest(bad), self.assertRaises(AlphaError):
+                self.save(task["schedule"], include=bad)
+        day = 86400
+        self.state["phase2"]["jobs"] = [
+            {"state": "verified", "verification": {"at": self.now - 2 * day}, "manifest": {"platform": "LinkedIn", "payload": {"text": "Recital recap " + "x" * 700}}},
+            {"state": "verified", "verification": {"at": self.now - 40 * day}, "manifest": {"platform": "LinkedIn", "payload": {"text": "Too old"}}},
+            {"state": "failed", "verification": None, "manifest": {"platform": "LinkedIn", "payload": {"text": "Never published"}}},
+            {"state": "verified", "verification": {"at": self.now - 1 * day}, "manifest": {"platform": "Threads", "payload": {"text": "Newest"}}},
+        ]
+        posts = campaigns.recent_posts(self.state, self.now, 30)
+        self.assertEqual([post["text"][:13] for post in posts], ["Newest", "Recital recap"])
+        self.assertEqual(len(posts[1]["text"]), 600)
+        self.assertEqual(posts[0], {"platform": "Threads", "publishedAt": "2026-03-02", "text": "Newest"})
+
+    def test_seen_marks_completed_runs_and_watch_is_a_personal_opt_in(self):
+        self.save({"weekdays": ["Monday"], "localTime": "09:00", "timeZone": "UTC"})
+        task = self.task()
+        planning = self.state["raffi"]["campaignPlanning"]
+        planning["occurrences"] += [{"id": "run-1", "taskId": task["id"], "state": "completed"}, {"id": "run-2", "taskId": task["id"], "state": "completed"}, {"id": "run-3", "taskId": task["id"], "state": "held"}]
+        result = campaigns.apply_action(self.state, "raffi_recurrence_seen", {"taskId": task["id"], "occurrenceIds": ["run-1"]}, "editor", self.now)
+        self.assertEqual(result["marked"], 1)
+        self.assertEqual(campaigns.apply_action(self.state, "raffi_recurrence_seen", {"taskId": task["id"]}, "editor", self.now + 1)["marked"], 1)
+        self.assertEqual([(o["id"], o.get("seenAt")) for o in planning["occurrences"]], [("run-1", self.now), ("run-2", self.now + 1), ("run-3", None)])
+        digest, version = task["definitionDigest"], task["version"]
+        campaigns.apply_action(self.state, "raffi_recurrence_watch", {"taskId": task["id"], "email": True}, "viewer", self.now)
+        campaigns.apply_action(self.state, "raffi_recurrence_watch", {"taskId": task["id"], "email": True}, "viewer", self.now)
+        campaigns.apply_action(self.state, "raffi_recurrence_watch", {"taskId": task["id"], "email": True}, "owner", self.now)
+        self.assertEqual(task["emailWatchers"], ["viewer", "owner"])
+        campaigns.apply_action(self.state, "raffi_recurrence_watch", {"taskId": task["id"], "email": False}, "viewer", self.now)
+        self.assertEqual(task["emailWatchers"], ["owner"])
+        self.assertEqual((task["definitionDigest"], task["version"], task["status"]), (digest, version, "draft"))
+        with self.assertRaises(AlphaError):
+            campaigns.apply_action(self.state, "raffi_recurrence_watch", {"taskId": task["id"], "email": "yes"}, "viewer", self.now)
+
+    def test_drafts_ready_email_names_the_automation_and_links_to_the_drafts(self):
+        from postriff_phase2.email import Mailer
+        sent = []
+        class Transport:
+            def send(self, message):
+                sent.append(message)
+                return {"id": "message-1"}
+        mailer = Mailer(Transport(), "PostRiff <no-reply@postriff.invalid>", "https://postriff.example")
+        self.assertTrue(mailer.drafts_ready("owner@example.com", "Weekly tip", 3, "https://postriff.example/app/agent/c1")["sent"])
+        self.assertEqual(sent[0]["subject"], "3 drafts ready for review: Weekly tip")
+        self.assertIn("https://postriff.example/app/agent/c1", sent[0]["text"])
+        self.assertIn("Nothing was scheduled or published", sent[0]["text"])
+
+
 if __name__ == "__main__":
     unittest.main()
