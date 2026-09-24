@@ -1,6 +1,6 @@
 import Providers from '@/components/layout/providers';
 import { Toaster } from '@/components/ui/sonner';
-import { fontVariables } from '@/components/themes/font.config';
+import { fontVariables, uiFontFamily } from '@/components/themes/font.config';
 import { DEFAULT_THEME, THEMES } from '@/components/themes/theme.config';
 import ThemeProvider from '@/components/themes/theme-provider';
 import { siteConfig } from '@/config/site';
@@ -14,7 +14,7 @@ import '../styles/globals.css';
 
 const META_THEME_COLORS = {
   light: '#ffffff',
-  dark: '#09090b'
+  dark: '#000000'
 };
 
 export const metadata: Metadata = {
@@ -65,6 +65,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             `
           }}
         />
+        {/* The next/font Geist face for the Rafii theme (styles/rafii.css re-applies it after the theme layer resets --font-sans). */}
+        <style dangerouslySetInnerHTML={{ __html: `:root{--font-rafii-ui:${uiFontFamily}}` }} />
       </head>
       <body
         className={cn(

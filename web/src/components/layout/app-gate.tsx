@@ -2,59 +2,57 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
+import { StateMessage, type StateKind } from '@/components/rafii';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { verifyHref } from '@/lib/auth/navigation';
 import { devSignIn, useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { siteConfig } from '@/config/site';
 
+/** Stable geometry while the session and workspace load (DNA §20.1): the rail, a heading and quiet blocks. */
 function ShellSkeleton() {
   return (
     <div role='status' aria-label='Loading workspace' className='flex min-h-svh'>
-      <div className='hidden w-64 shrink-0 border-r p-4 md:block'>
-        <Skeleton className='mb-6 h-10 w-full' />
+      <div className='rafii-panel hidden w-64 shrink-0 p-4 md:block'>
+        <Skeleton className='mb-6 h-12 w-full rounded-[var(--rafii-radius-control)]' />
         {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className='mb-2 h-8 w-full' />
+          <Skeleton key={i} className='mb-2 h-9 w-full rounded-[var(--rafii-radius-control)]' />
         ))}
       </div>
-      <div className='flex flex-1 flex-col gap-4 p-6'>
+      <div className='flex flex-1 flex-col gap-4 p-4 md:p-8'>
         <Skeleton className='h-8 w-48' />
-        <Skeleton className='h-4 w-80' />
+        <Skeleton className='h-4 w-80 max-w-full' />
         <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className='h-28 w-full' />
+            <div key={i} className='rafii-quiet h-28 w-full rounded-[var(--rafii-radius-card)]' />
           ))}
         </div>
-        <Skeleton className='h-64 w-full' />
+        <div className='rafii-quiet h-64 w-full rounded-[var(--rafii-radius-card)]' />
       </div>
     </div>
   );
 }
 
+/** One gate state on the ambient canvas, in the shared state grammar (§20.4: errors keep the design language). */
 function Problem({
+  kind,
   title,
   description,
-  action
+  action,
+  media
 }: {
+  kind: StateKind;
   title: string;
   description: string;
   action?: React.ReactNode;
+  media?: React.ReactNode;
 }) {
   return (
-    <div className='flex min-h-svh items-center justify-center p-6'>
-      <Empty className='max-w-md'>
-        <EmptyHeader>
-          <EmptyMedia variant='icon'>
-            <Icons.alertCircle />
-          </EmptyMedia>
-          <EmptyTitle>{title}</EmptyTitle>
-          <EmptyDescription>{description}</EmptyDescription>
-        </EmptyHeader>
-        {action}
-      </Empty>
+    <div className='relative isolate flex min-h-svh items-center justify-center p-6'>
+      <div aria-hidden className='rafii-ambient' />
+      <StateMessage kind={kind} title={title} description={description} action={action} media={media} className='rafii-glass w-full max-w-md' />
     </div>
   );
 }
@@ -91,10 +89,11 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   if (auth.status === 'unavailable') {
     return (
       <Problem
+        kind='offline'
         title='PostRiff is temporarily unavailable'
         description={auth.error ?? 'The API did not respond. Please try again in a moment.'}
         action={
-          <Button variant='outline' onClick={() => window.location.reload()}>
+          <Button variant='glass' size='control' onClick={() => window.location.reload()}>
             Try again
           </Button>
         }
@@ -106,10 +105,18 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     if (auth.mode === 'dev') {
       return (
         <Problem
+          kind='empty'
+          media={
+            <span aria-hidden className='rafii-glass text-foreground flex size-11 items-center justify-center rounded-full'>
+              <Icons.terminal className='size-5' />
+            </span>
+          }
           title='Local dev workspace'
           description='Identity is simulated on this machine. Everything behind it — tenancy, policies, OAuth custody, the ledger — is the real hosted code on a throwaway database.'
           action={
             <Button
+              variant='action'
+              size='control'
               onClick={() => {
                 devSignIn();
                 window.location.reload();
@@ -127,15 +134,18 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   if (workspace.status === 'error') {
     return (
       <Problem
+        kind='error'
         title='Your workspace could not be loaded'
         description={workspace.error ?? 'Please try again.'}
         action={
-          <div className='flex gap-2'>
-            <Button onClick={() => void workspace.refresh()}>Retry</Button>
-            <Button variant='outline' onClick={() => void auth.signOut()}>
+          <>
+            <Button variant='action' size='control' onClick={() => void workspace.refresh()}>
+              Retry
+            </Button>
+            <Button variant='glass' size='control' onClick={() => void auth.signOut()}>
               Sign out
             </Button>
-          </div>
+          </>
         }
       />
     );

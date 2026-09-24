@@ -118,6 +118,9 @@ const fontPlayfairDisplay = Playfair_Display({
   variable: '--font-playfair-display'
 });
 
+/** The next/font Geist face, re-applied under the Rafii theme (styles/rafii.css) after the theme layer resets `--font-sans`. */
+export const uiFontFamily = fontSans.style.fontFamily;
+
 export const fontVariables = cn(
   fontSans.variable,
   fontMono.variable,

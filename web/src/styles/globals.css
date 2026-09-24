@@ -19,6 +19,9 @@
 /* Onboarding tour: the pulse on the sidebar link a tour is about to open. */
 @import './tour.css';
 
+/* Rafii design DNA: monochrome glass tokens, material utilities and motion roles. */
+@import './rafii.css';
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -18,8 +18,9 @@ import { cn } from '@/lib/utils';
 export default function Header() {
   const access = useWorkspaceAccess();
   return (
-    <header className='bg-background/60 sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 backdrop-blur-md md:h-14'>
-      <div className='flex items-center gap-2 px-4'>
+    <header className='rafii-panel sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 md:h-[3.75rem]'>
+      {/* The breadcrumb side shrinks (and its page name truncates) so the header never widens a 320px screen. */}
+      <div className='flex min-w-0 flex-1 items-center gap-2 px-3 sm:px-4 md:flex-initial'>
         <SidebarTrigger className='-ml-1' />
         <Separator orientation='vertical' className='mr-2 h-4 data-vertical:self-center' />
         <Breadcrumbs />
@@ -32,10 +33,10 @@ export default function Header() {
           <LiveIsland />
         </div>
       </div>
-      <div className='flex items-center gap-2 px-4'>
+      <div className='flex shrink-0 items-center gap-1.5 px-3 sm:gap-2 sm:px-4'>
         {/* One place to start a post: Home's composer (focused by ?new=1). Ideas captures sources. */}
         {checkAccess(access, { permission: 'edit' }) && (
-          <Link aria-label='Create a new draft' href='/app?new=1' className={cn(buttonVariants({ size: 'sm' }), 'gap-1')}>
+          <Link aria-label='Create a new draft' href='/app?new=1' className={cn(buttonVariants({ variant: 'action', size: 'sm' }), 'gap-1')}>
             <Icons.add className='size-4' />
             <span className='hidden sm:inline'>Create</span>
           </Link>

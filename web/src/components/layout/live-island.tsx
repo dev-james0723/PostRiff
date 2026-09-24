@@ -38,9 +38,9 @@ interface Published {
 }
 
 const DOT: Record<'approvals' | 'failed' | 'next' | 'quiet', string> = {
-  approvals: 'bg-amber-500',
-  failed: 'bg-red-500',
-  next: 'bg-emerald-500',
+  approvals: 'bg-foreground',
+  failed: 'bg-destructive',
+  next: 'bg-foreground/50',
   quiet: 'bg-background/40'
 };
 
@@ -120,9 +120,9 @@ function Glyph({ tone }: { tone: Tone }) {
   return (
     <span aria-hidden='true' className='grid size-4 shrink-0 place-items-center'>
       {tone === 'publishing' ? (
-        <Icons.spinner className={cn('size-3.5 text-violet-500', !reduce && 'animate-spin')} />
+        <Icons.spinner className={cn('size-3.5 text-background', !reduce && 'animate-spin')} />
       ) : tone === 'published' ? (
-        <span className='grid size-4 place-items-center rounded-full bg-emerald-500 text-white'>
+        <span className='bg-foreground text-background grid size-4 place-items-center rounded-full'>
           <Icons.check className='size-3' stroke={3} />
         </span>
       ) : (
@@ -432,7 +432,7 @@ export function LiveIsland({ className }: { className?: string }) {
         <DynamicIslandView id='event' className='gap-2.5 px-4 py-2.5'>
           <span
             aria-hidden='true'
-            className='grid size-6 shrink-0 place-items-center rounded-full bg-emerald-500 text-white'
+            className='bg-foreground text-background grid size-6 shrink-0 place-items-center rounded-full'
           >
             <Icons.check className='size-3.5' stroke={3} />
           </span>
