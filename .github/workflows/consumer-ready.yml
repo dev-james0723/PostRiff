@@ -39,6 +39,8 @@ jobs:
           sudo apt-get install -y postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-17
+          # The scripts start their own disposable server; its socket directory must be writable by the runner.
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
       - name: Install ffmpeg (media decoding tests render a test image with it)
         run: sudo apt-get install -y ffmpeg
       - name: Python domain and security contracts

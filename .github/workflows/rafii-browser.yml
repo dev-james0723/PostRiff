@@ -50,6 +50,8 @@ jobs:
           sudo apt-get install -y postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-17
+          # The scripts start their own disposable server; its socket directory must be writable by the runner.
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
       - name: Build the web app for the local harness
         run: |
           python scripts/consumer_ready_web.py --prepare npm ci
@@ -62,7 +64,7 @@ jobs:
             if curl -sf http://127.0.0.1:4438/api/health > /dev/null && curl -sf -o /dev/null http://127.0.0.1:4439/; then echo ready; exit 0; fi
             sleep 2
           done
-          echo "harness or web app did not start"; tail -50 harness.log web.log; exit 1
+          echo "harness or web app did not start"; tail -n 50 harness.log web.log; cat /tmp/postriff-dev-pg-*/postgres.log 2>/dev/null | tail -n 20; exit 1
       - name: Install Chromium for Playwright
         run: npx --prefix web playwright install --with-deps chromium
       - name: Seed the synthetic workspace
