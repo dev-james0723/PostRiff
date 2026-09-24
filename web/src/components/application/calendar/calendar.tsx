@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * Month, week and day calendar laid out after the Untitled UI calendar anatomy: a one-row header with
- * today's date icon, period title, range line, prev/Today/next group and a view dropdown; month cells with
- * 26px chips and a "+N more" link; week and day views on a 96px-per-hour ruler with a now marker; a day
- * panel with a month picker. Dates are `@internationalized/date` values; wording and weekday names come
- * from `@react-aria/i18n`. See README.md for the API.
+ * Month, week and day calendar laid out after the Untitled UI calendar anatomy, on the Rafii materials: a compact
+ * functional header (today's date tile, period title, range line, a glass prev/Today/next group and a segmented
+ * Month/Week/Day lens), quiet month cells with 26px chips and a "+N more" link, week and day views on a
+ * 96px-per-hour ruler with a now marker, and a day panel with a month picker. Dates are `@internationalized/date`
+ * values; wording and weekday names come from `@react-aria/i18n`. See README.md for the API.
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -17,13 +17,12 @@ import {
   type ZonedDateTime
 } from '@internationalized/date';
 import { I18nProvider, useDateFormatter } from '@react-aria/i18n';
-import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
+import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { Icons } from '@/components/icons';
-import { Badge } from '@/components/ui/badge';
+import { SegmentedControl } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
-import { ButtonGroup } from '@/components/ui/button-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EASE_OUT } from '@/lib/ease';
+import { useMotionPreference } from '@/lib/rafii/motion';
 import { cn } from '@/lib/utils';
 import {
   CALENDAR_VIEWS,
@@ -101,7 +100,7 @@ function CalendarFrame<T>({
   noun = { one: 'event', other: 'events' },
   className
 }: CalendarProps<T> & { locale: string }) {
-  const reduce = useReducedMotion();
+  const { reduced: reduce } = useMotionPreference();
   const titleId = useId();
   const [direction, setDirection] = useState(0);
   const keyboardMove = useRef(false);
@@ -127,7 +126,7 @@ function CalendarFrame<T>({
   }
 
   const slide = (content: ReactNode) => (
-    <div className='relative min-w-0 overflow-hidden'>
+    <div className='relative -m-1 min-w-0 overflow-hidden p-1'>
       <AnimatePresence mode='popLayout' initial={false} custom={reduce ? 0 : direction}>
         <motion.div
           key={`${view}:${days[0].toString()}`}
@@ -145,10 +144,7 @@ function CalendarFrame<T>({
   );
 
   return (
-    <section
-      aria-labelledby={titleId}
-      className={cn('bg-card text-card-foreground overflow-hidden rounded-xl border shadow-xs', className)}
-    >
+    <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-4', className)}>
       <CalendarHeader
         view={view}
         focusedDate={focusedDate}
@@ -198,7 +194,7 @@ function CalendarFrame<T>({
         )}
 
       {view === 'day' && (
-        <div className='grid lg:grid-cols-[minmax(0,1fr)_20rem]'>
+        <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
           {slide(
             <TimeGrid
               days={days}
@@ -241,6 +237,10 @@ interface CalendarHeaderProps {
   onViewChange: (view: CalendarView) => void;
 }
 
+/**
+ * Date navigation and the view lens (DNA §21.3): a glass tool group for prev / Today / next and a segmented
+ * control for Month / Week / Day, both 44px tall so they share a baseline.
+ */
 function CalendarHeader({
   view,
   focusedDate,
@@ -272,46 +272,37 @@ function CalendarHeader({
   const unit = view === 'month' ? 'month' : view === 'week' ? 'week' : 'day';
 
   return (
-    <header className='flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between lg:px-6 lg:py-5'>
+    <header className='flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between'>
       <div className='flex min-w-0 items-center gap-3'>
         <TodayIcon timeZone={timeZone} />
         <div className='min-w-0'>
           <div className='flex flex-wrap items-center gap-2'>
-            <h2 id={titleId} aria-live='polite' className='text-lg font-semibold'>
+            <h2 id={titleId} aria-live='polite' className='text-foreground text-lg font-medium tracking-tight'>
               {title}
             </h2>
             {view !== 'month' && firstDayOfWeek === 'mon' && (
-              <Badge variant='outline'>Week {isoWeek(range.start)}</Badge>
+              <span className='rafii-quiet text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium tabular-nums'>Week {isoWeek(range.start)}</span>
             )}
           </div>
           <p className='text-muted-foreground text-sm'>{subtitle}</p>
         </div>
       </div>
 
-      <div className='flex flex-wrap items-center gap-2 md:gap-3'>
-        <ButtonGroup data-tour='calendar-period-nav' aria-label='Change period'>
-          <Button variant='outline' size='icon' aria-label={`Previous ${unit}`} onClick={onPrevious}>
+      <div className='flex flex-wrap items-center gap-2'>
+        <div role='group' aria-label='Change period' data-tour='calendar-period-nav' className='rafii-glass inline-flex items-center gap-0.5 rounded-[var(--rafii-radius-segment)] p-1'>
+          <Button variant='quiet' size='icon-control' aria-label={`Previous ${unit}`} onClick={onPrevious}>
             <Icons.chevronLeft />
           </Button>
-          <Button variant='outline' onClick={onToday}>
+          <Button variant='quiet' size='control' className='h-11 px-3.5 text-[13px]' onClick={onToday}>
             Today
           </Button>
-          <Button variant='outline' size='icon' aria-label={`Next ${unit}`} onClick={onNext}>
+          <Button variant='quiet' size='icon-control' aria-label={`Next ${unit}`} onClick={onNext}>
             <Icons.chevronRight />
           </Button>
-        </ButtonGroup>
-        <Select value={view} onValueChange={(value) => onViewChange(value as CalendarView)}>
-          <SelectTrigger data-tour='calendar-view-select' aria-label='Calendar view' className='w-32'>
-            <SelectValue>{CALENDAR_VIEWS.find((option) => option.value === view)?.label}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {CALENDAR_VIEWS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        </div>
+        <div data-tour='calendar-view-select' className='min-w-0'>
+          <SegmentedControl options={CALENDAR_VIEWS} value={view} onChange={onViewChange} label='Calendar view' size='md' className='w-[14.5rem] max-w-full' />
+        </div>
         {action}
       </div>
     </header>
@@ -324,11 +315,9 @@ function TodayIcon({ timeZone }: { timeZone: string }) {
   const date = today(timeZone);
 
   return (
-    <div aria-hidden className='bg-background hidden w-14 shrink-0 flex-col overflow-hidden rounded-lg border text-center shadow-xs sm:flex'>
-      <span className='bg-muted text-muted-foreground py-0.5 text-[10px] font-semibold tracking-wide uppercase'>
-        {monthShort.format(date.toDate(timeZone))}
-      </span>
-      <span className='text-primary py-1 text-lg leading-6 font-bold tabular-nums'>{date.day}</span>
+    <div aria-hidden className='rafii-glass hidden w-14 shrink-0 flex-col overflow-hidden rounded-[var(--rafii-radius-control)] text-center sm:flex'>
+      <span className='rafii-eyebrow pt-1.5'>{monthShort.format(date.toDate(timeZone))}</span>
+      <span className='text-foreground pb-1.5 text-lg leading-6 font-semibold tabular-nums'>{date.day}</span>
     </div>
   );
 }
@@ -345,8 +334,9 @@ interface DayPanelProps<T> {
   footer?: ReactNode;
 }
 
+/** The selected day's detail surface: a quiet panel with the month picker and one small glass card per event. */
 function DayPanel<T>({ date, byDay, timeZone, firstDayOfWeek, noun, countLabel, onPick, renderDetails, footer }: DayPanelProps<T>) {
-  const reduce = useReducedMotion();
+  const { reduced: reduce } = useMotionPreference();
   const headingId = useId();
   const heading = useDateFormatter({ weekday: 'long', month: 'long', day: 'numeric', timeZone });
   const time = useDateFormatter({ hour: 'numeric', minute: '2-digit', timeZone });
@@ -355,7 +345,7 @@ function DayPanel<T>({ date, byDay, timeZone, firstDayOfWeek, noun, countLabel, 
   const count = countLabel(events.length);
 
   return (
-    <aside className='flex min-w-0 flex-col gap-5 border-t p-4 lg:border-t-0 lg:border-l'>
+    <aside className='rafii-quiet flex min-w-0 flex-col gap-5 rounded-[var(--rafii-radius-card)] p-4'>
       <MiniCalendar
         className='max-lg:hidden'
         value={date}
@@ -364,9 +354,9 @@ function DayPanel<T>({ date, byDay, timeZone, firstDayOfWeek, noun, countLabel, 
         markedDays={markedDays}
         firstDayOfWeek={firstDayOfWeek}
       />
-      <section aria-labelledby={headingId} className='flex flex-col gap-3 lg:border-t lg:pt-5'>
+      <section aria-labelledby={headingId} className='flex flex-col gap-3'>
         <div>
-          <h3 id={headingId} className='text-sm font-semibold'>
+          <h3 id={headingId} className='text-sm font-medium'>
             {heading.format(date.toDate(timeZone))}
           </h3>
           <p className='text-muted-foreground text-xs'>
@@ -375,14 +365,14 @@ function DayPanel<T>({ date, byDay, timeZone, firstDayOfWeek, noun, countLabel, 
         </div>
         {events.length > 0 && (
           <ul className='flex flex-col gap-2'>
-            {events.map((event, index) => (
+            {events.map((event) => (
               <motion.li
                 // Keyed by day too, so picking another day plays the entrance again.
                 key={`${date.toString()}:${event.id}`}
                 initial={reduce ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22, ease: EASE_OUT, delay: Math.min(index, 7) * 0.04 }}
-                className='rounded-lg border p-3 text-sm'
+                transition={{ duration: 0.22, ease: EASE_OUT }}
+                className='rafii-glass rounded-[var(--rafii-radius-control)] p-3 text-sm'
               >
                 {renderDetails ? (
                   renderDetails(event, 'list')

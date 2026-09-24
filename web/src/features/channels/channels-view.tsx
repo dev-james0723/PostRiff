@@ -1,30 +1,24 @@
 'use client';
 
-import { providerReadinessLabel } from '@/lib/channels/onboarding';
-
-import { publishingSupport } from '@/lib/channels/publishing-support';
-
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import PageContainer from '@/components/layout/page-container';
-import { Icons } from '@/components/icons';
+import { Icons, type Icon } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
-import { CapabilityBadge } from '@/components/marketing/capability-badge';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { SegmentedControl, StateMessage, Surface, type SegmentOption } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { HoverLiftGroup } from '@/components/ui/hover-lift-group';
-import { Skeleton } from '@/components/ui/skeleton';
 import { localChannels } from '@/config/channels';
 import { useChannels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import type { ProviderView } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { capabilityLabel } from '@/lib/channels/capabilities';
+import { providerReadinessLabel } from '@/lib/channels/onboarding';
+import { publishingSupport } from '@/lib/channels/publishing-support';
 import {
   channelCounts,
   CONNECT_CAPABILITIES,
@@ -35,8 +29,11 @@ import {
   type ChannelFilter
 } from '@/lib/channels/state';
 import { EASE_OUT } from '@/lib/ease';
+import { useMotionPreference } from '@/lib/rafii/motion';
 import { cn } from '@/lib/utils';
+import { toFolderAccounts } from './channel-bloom/helpers';
 import { ChannelCard, type ChannelActivity } from './channel-card';
+import { ChannelFoldersSection } from './channel-folders-section';
 import { ChannelsSummary } from './channels-summary';
 import { ConnectSheet, type ConnectRequest } from './connect-sheet';
 
@@ -83,20 +80,36 @@ const FILTER_LABELS: Record<ChannelFilter, string> = {
   local: 'Local'
 };
 
+/** The same identity block on the Suspense fallback and the page (DNA §9.1). */
+const PAGE_FRAME = { pageEyebrow: 'Connections', pageTitle: 'Channels', pageDescription: PAGE_DESCRIPTION, infoContent };
+
+/** Loading keeps the page geometry and says what is being loaded (DNA §20.1). */
 function ChannelsSkeleton() {
   return (
     <div className='flex flex-col gap-8' aria-busy>
-      <Skeleton className='h-5 w-64' />
-      <div className='grid gap-4 xl:grid-cols-2'>
-        <Skeleton className='h-56 w-full rounded-xl' />
-        <Skeleton className='h-56 w-full rounded-xl' />
-      </div>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
-        <Skeleton className='h-32 w-full rounded-lg' />
-        <Skeleton className='h-32 w-full rounded-lg' />
-        <Skeleton className='h-32 w-full rounded-lg' />
+      <StateMessage kind='loading' title='Loading channels…' />
+      <div className='grid gap-4 xl:grid-cols-2' aria-hidden>
+        <div className='rafii-quiet h-56 rounded-[var(--rafii-radius-card)]' />
+        <div className='rafii-quiet h-56 rounded-[var(--rafii-radius-card)]' />
       </div>
     </div>
+  );
+}
+
+/** A provider's setup state as icon + words (DNA §4.3): ready, connectable while review is pending, or blocked. */
+function ProviderReadiness({ provider }: { provider: ProviderView }) {
+  const blocked =
+    provider.configured === false ||
+    provider.connectReady === false ||
+    provider.executionPaused === true ||
+    provider.configurationState === 'partial_configuration' ||
+    provider.configurationState === 'invalid_configuration';
+  const IconMark: Icon = blocked ? Icons.warning : provider.productionReviewed ? Icons.check : Icons.info;
+  return (
+    <span className='text-muted-foreground inline-flex shrink-0 items-center gap-1.5 text-xs'>
+      <IconMark className='size-3.5 shrink-0' aria-hidden />
+      {providerReadinessLabel(provider)}
+    </span>
   );
 }
 
@@ -112,45 +125,58 @@ function ProviderTile({
   onConnect: () => void;
 }) {
   const offered = CONNECT_CAPABILITIES.filter((key) => provider.capabilities[key] === true);
+  const blocked = provider.connectReady === false || provider.executionPaused === true;
   return (
-    <div className='flex h-full flex-col gap-3 rounded-lg border p-4'>
-      <div className='flex items-start justify-between gap-2'>
-        <div className='flex min-w-0 items-center gap-2'>
+    <Surface material='quiet' radius='card' padding='md' className='flex h-full flex-col gap-3'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='flex min-w-0 items-center gap-2.5'>
           <ChannelIcon platform={provider.platform} name={provider.platform} size='md' />
-          <span className='truncate font-medium'>{provider.platform}</span>
+          <span className='text-foreground truncate font-medium'>{provider.platform}</span>
         </div>
-        <CapabilityBadge
-          level={!provider.executionPaused && provider.productionReviewed ? 'direct' : 'assisted'}
-          label={providerReadinessLabel(provider)}
-        />
+        <ProviderReadiness provider={provider} />
       </div>
-      <p className='text-muted-foreground text-xs'>
-        {provider.configured === false ? 'This provider is not ready for OAuth. Correct the presence-only configuration issues below; credentials never belong in the browser.' : provider.executionPaused ? 'This connector is temporarily paused. Existing drafts and receipts remain available.' : provider.productionReviewed
-          ? 'Direct candidate: confirm this account’s permissions and supported format before scheduling. App configuration is not proof of a verified publication.'
-          : 'Platform review has not been confirmed. Eligible developer/test accounts may connect; public-user access, history and publishing remain separately checked.'}
+      <p className='text-muted-foreground text-[13px] leading-relaxed'>
+        {provider.configured === false
+          ? 'This provider is not ready for OAuth. Correct the presence-only configuration issues below; credentials never belong in the browser.'
+          : provider.executionPaused
+            ? 'This connector is temporarily paused. Existing drafts and receipts remain available.'
+            : provider.productionReviewed
+              ? 'Direct candidate: confirm this account’s permissions and supported format before scheduling. App configuration is not proof of a verified publication.'
+              : 'Platform review has not been confirmed. Eligible developer/test accounts may connect; public-user access, history and publishing remain separately checked.'}
       </p>
-      <p className='text-muted-foreground text-xs'>{provider.accountRequirement}</p>
-      {provider.setupIssues?.map((issue) => <p key={issue} role='status' className='text-destructive break-words text-xs'>{issue}</p>)}
-      {provider.callbackUri && provider.connectReady === false && <p className='text-muted-foreground break-all text-xs'>Callback: <code>{provider.callbackUri}</code></p>}
-      <p className='text-muted-foreground text-xs'>{publishingSupport(provider.platform)}</p>
+      <p className='text-muted-foreground text-[13px] leading-relaxed'>{provider.accountRequirement}</p>
+      {/* Setup issues stay visible on the tile: they are what blocks Connect. */}
+      {provider.setupIssues?.map((issue) => (
+        <p key={issue} role='status' className='text-destructive flex min-w-0 items-start gap-1.5 text-[13px] [overflow-wrap:anywhere]'>
+          <Icons.warning className='mt-0.5 size-3.5 shrink-0' aria-hidden />
+          {issue}
+        </p>
+      ))}
+      {provider.callbackUri && provider.connectReady === false && (
+        <p className='text-muted-foreground text-xs break-all'>
+          Callback: <code className='rafii-field rounded-md px-1.5 py-0.5 font-mono'>{provider.callbackUri}</code>
+        </p>
+      )}
+      <p className='text-muted-foreground text-[13px] leading-relaxed'>{publishingSupport(provider.platform)}</p>
       {offered.length > 0 && (
-        <ul className='flex flex-wrap gap-1' aria-label='Capabilities you can request'>
-          {offered.map((key) => (
-            <li key={key} className='bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[11px]'>
+        <ul className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs' aria-label='Capabilities you can request'>
+          {offered.map((key, index) => (
+            <li key={key} className='inline-flex items-center gap-1.5'>
+              {index > 0 && <span aria-hidden>·</span>}
               {capabilityLabel(key)}
             </li>
           ))}
         </ul>
       )}
       {canManage && (
-        <div className='mt-auto'>
-          <Button variant={alreadyConnected ? 'outline' : 'default'} size='sm' disabled={provider.connectReady === false || provider.executionPaused} onClick={onConnect}>
-            <Icons.add className='size-3.5' />
+        <div className='mt-auto pt-1'>
+          <Button variant='glass' size='control' disabled={blocked} onClick={onConnect}>
+            <Icons.add className='size-4' />
             {alreadyConnected ? 'Connect another account' : 'Connect'}
           </Button>
         </div>
       )}
-    </div>
+    </Surface>
   );
 }
 
@@ -159,11 +185,7 @@ function CompanionDirectory() {
     // transitions.dev avatar group hover: the hovered chip lifts and its neighbours follow.
     <HoverLiftGroup className='flex flex-wrap gap-2'>
       {localChannels.map((channel) => (
-        <Link
-          key={channel.slug}
-          href={`/channels/${channel.slug}`}
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
-        >
+        <Link key={channel.slug} href={`/channels/${channel.slug}`} className={cn(buttonVariants({ variant: 'glass' }), 'h-11 gap-2 px-3.5 text-sm')}>
           <ChannelIcon slug={channel.slug} name={channel.name} size='xs' />
           {channel.name}
           {channel.nameZh && <span className='text-muted-foreground'>{channel.nameZh}</span>}
@@ -181,7 +203,7 @@ function ChannelsPage() {
   const usage = useUsage();
   const snapshot = useSnapshot();
   const access = useWorkspaceAccess();
-  const reduce = useReducedMotion();
+  const { reduced } = useMotionPreference();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -197,6 +219,8 @@ function ChannelsPage() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState<boolean | null>(null);
+  // Saved folders narrow the account list below (a view, never a mutation); empty means every account.
+  const [folderView, setFolderView] = useState<string[]>([]);
 
   // Per-account job counts from the snapshot. `channelId` is on the API manifest but not yet in the TS type.
   const activityByChannel = useMemo(() => {
@@ -219,7 +243,8 @@ function ChannelsPage() {
   const now = nowSeconds();
   const counts = channelCounts(channels, now, heldByChannel);
   const sorted = useMemo(() => sortForAttention(channels, now, heldByChannel), [channels, now, heldByChannel]);
-  const visible = sorted.filter((channel) => matchesFilter(channel, filter, now, heldByChannel[channel.id] ?? 0));
+  const visible = sorted.filter((channel) => matchesFilter(channel, filter, now, heldByChannel[channel.id] ?? 0) && (folderView.length === 0 || folderView.includes(channel.id)));
+  const folderAccounts = useMemo(() => toFolderAccounts(snapshot.data?.state.phase2?.channels), [snapshot.data]);
   const connectedPlatforms = useMemo(() => new Set(channels.map((channel) => channel.platform)), [channels]);
 
   const replaceParams = useCallback(
@@ -251,11 +276,11 @@ function ChannelsPage() {
     if (exists) {
       setHighlightId(connectedParam);
       window.requestAnimationFrame(() => {
-        document.getElementById(`channel-${connectedParam}`)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+        document.getElementById(`channel-${connectedParam}`)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
       });
     }
     replaceParams((search) => search.delete('connected'));
-  }, [channels, connectedParam, data, isFetching, reduce, replaceParams]);
+  }, [channels, connectedParam, data, isFetching, reduced, replaceParams]);
 
   const openConnect = useCallback(
     (request: ConnectRequest) => {
@@ -285,32 +310,45 @@ function ChannelsPage() {
   const companionExpanded = companionOpen ?? (data ? counts.connected === 0 : false);
   const errorMessage = error instanceof Error ? error.message : 'Channels could not be loaded.';
 
+  // WHAT: the account views, each with its real count (DNA §22.4).
+  const filterOptions: SegmentOption<ChannelFilter>[] = (Object.keys(FILTER_LABELS) as ChannelFilter[]).map((key) => ({
+    value: key,
+    label: (
+      <>
+        {FILTER_LABELS[key]}
+        <DigitSwap value={key === 'local' ? localChannels.length : counts[key === 'all' ? 'all' : key]} className='text-muted-foreground text-xs' />
+      </>
+    )
+  }));
+
+  // COMMIT: Connect channel is the page's one primary action (DNA §21.6); it stays visible with its label on phones.
   const headerAction = canManage ? (
-    <Button data-tour='channels-connect' onClick={() => openConnect({})} aria-label='Connect an account'>
+    <Button data-tour='channels-connect' variant='action' size='control' onClick={() => openConnect({})} aria-label='Connect an account'>
       <Icons.add className='size-4' />
-      <span className='sr-only sm:not-sr-only'>Connect</span>
+      Connect account
     </Button>
   ) : (
-    <p className='text-muted-foreground text-xs'>Ask an owner or admin to connect accounts</p>
+    <p className='text-muted-foreground text-sm'>Ask an owner or admin to connect accounts</p>
   );
 
   return (
-    <PageContainer pageTitle='Channels' pageDescription={PAGE_DESCRIPTION} infoContent={infoContent} pageHeaderAction={headerAction}>
+    <PageContainer {...PAGE_FRAME} pageHeaderAction={headerAction}>
       {isLoading ? (
         <ChannelsSkeleton />
       ) : (
         <div className='flex flex-col gap-8'>
           {error ? (
-            <Alert variant='destructive'>
-              <Icons.alertCircle className='size-4' />
-              <AlertTitle>Channels could not be loaded</AlertTitle>
-              <AlertDescription>{errorMessage}</AlertDescription>
-              <AlertAction>
-                <Button size='sm' variant='outline' onClick={() => void refetch()}>
+            <StateMessage
+              kind='error'
+              title='Channels could not be loaded'
+              description={errorMessage}
+              action={
+                <Button variant='glass' size='control' onClick={() => void refetch()}>
+                  <Icons.refresh className='size-4' />
                   Retry
                 </Button>
-              </AlertAction>
-            </Alert>
+              }
+            />
           ) : (
             <>
               <ChannelsSummary
@@ -320,76 +358,89 @@ function ChannelsPage() {
                 data-tour='channels-summary'
               />
 
+              {/* rafii-v9: folders — Saved folders (Phase2State.channelFolders) through Stream A's Channel Bloom package. */}
+              <ChannelFoldersSection accounts={folderAccounts} view={folderView} onViewChange={setFolderView} />
+
               <section className='flex flex-col gap-4' aria-labelledby='connected-heading'>
-                <div className='flex flex-wrap items-center justify-between gap-3'>
-                  <h3 id='connected-heading' className='text-lg font-semibold'>
+                <div className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
+                  <h2 id='connected-heading' className='text-foreground text-lg font-medium tracking-tight'>
                     Connected accounts
-                  </h3>
-                  <Tabs value={filter} onValueChange={setFilter} variant='pill' className='min-w-0 max-w-full'>
-                    <TabsList aria-label='Filter accounts' data-tour='channels-filter' className='max-w-full overflow-x-auto'>
-                      {(Object.keys(FILTER_LABELS) as ChannelFilter[]).map((key) => (
-                        <TabsTrigger key={key} value={key} className='gap-1.5'>
-                          {FILTER_LABELS[key]}
-                          <DigitSwap
-                            value={key === 'local' ? localChannels.length : counts[key === 'all' ? 'all' : key]}
-                            className='opacity-70'
-                          />
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
+                  </h2>
+                  <div data-tour='channels-filter' className='relative -mx-1 max-w-full overflow-x-auto px-1 py-0.5 md:mx-0 md:px-0'>
+                    <SegmentedControl options={filterOptions} value={filter} onChange={setFilter} label='Filter accounts' widths='content' />
+                  </div>
                 </div>
 
                 {filter === 'local' ? (
                   <div className='flex flex-col gap-3'>
-                    <p className='text-muted-foreground text-sm'>{COMPANION_SENTENCE}</p>
+                    <p className='text-muted-foreground max-w-[70ch] text-sm leading-relaxed'>{COMPANION_SENTENCE}</p>
                     <CompanionDirectory />
                   </div>
                 ) : channels.length === 0 ? (
-                  <Empty data-tour='channels-empty'>
-                    <EmptyHeader>
-                      <EmptyMedia variant='icon'>
-                        <Icons.broadcast />
-                      </EmptyMedia>
-                      <EmptyTitle>No accounts connected</EmptyTitle>
-                      <EmptyDescription>
-                        You can draft and export without connecting anything. Connect an account when you want previews, scheduling, analytics or comments for it — each capability is verified on its own.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      {canManage ? (
-                        <Button onClick={() => openConnect({})}>
-                          <Icons.add className='size-4' />
-                          Connect an account
-                        </Button>
-                      ) : (
-                        <p className='text-muted-foreground text-xs'>Ask an owner or admin to connect accounts</p>
-                      )}
-                    </EmptyContent>
-                  </Empty>
+                  <div data-tour='channels-empty'>
+                    <StateMessage
+                      kind='empty'
+                      title='No accounts connected'
+                      description='You can draft and export without connecting anything. Connect an account when you want previews, scheduling, analytics or comments for it — each capability is verified on its own.'
+                      media={
+                        <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
+                          <Icons.broadcast className='size-5' />
+                        </span>
+                      }
+                      action={
+                        canManage ? (
+                          <Button variant='action' size='control' onClick={() => openConnect({})}>
+                            <Icons.add className='size-4' />
+                            Connect an account
+                          </Button>
+                        ) : (
+                          <span className='text-muted-foreground text-sm'>Ask an owner or admin to connect accounts</span>
+                        )
+                      }
+                    />
+                  </div>
                 ) : visible.length === 0 ? (
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyMedia variant='icon'>{filter === 'attention' ? <Icons.circleCheck /> : <Icons.broadcast />}</EmptyMedia>
-                      <EmptyTitle>{filter === 'attention' ? 'Nothing needs attention' : `No ${FILTER_LABELS[filter].toLowerCase()} accounts`}</EmptyTitle>
-                      <EmptyDescription>
-                        {filter === 'attention'
+                  <StateMessage
+                    kind={filter === 'attention' && folderView.length === 0 ? 'success' : 'empty'}
+                    title={
+                      folderView.length > 0
+                        ? 'No accounts match this view'
+                        : filter === 'attention'
+                          ? 'Nothing needs attention'
+                          : `No ${FILTER_LABELS[filter].toLowerCase()} accounts`
+                    }
+                    description={
+                      folderView.length > 0
+                        ? 'The folder you picked and the filter above leave nothing to show. The accounts are still connected.'
+                        : filter === 'attention'
                           ? 'Tokens are checked when a post is claimed and when you re-verify.'
-                          : 'No connected account publishes at this level right now.'}
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
+                          : 'No connected account publishes at this level right now. The other accounts are still here; this view is only filtered.'
+                    }
+                    action={
+                      <Button
+                        variant='quiet'
+                        size='sm'
+                        className='h-9'
+                        onClick={() => {
+                          setFilter('all');
+                          setFolderView([]);
+                        }}
+                      >
+                        Show all accounts
+                      </Button>
+                    }
+                  />
                 ) : (
                   <div className='grid gap-4 xl:grid-cols-2'>
                     <AnimatePresence initial={false} mode='popLayout'>
                       {visible.map((channel, index) => (
                         <motion.div
                           key={channel.id}
-                          layout={!reduce}
-                          initial={reduce ? { opacity: 1 } : { opacity: 0, y: 8 }}
+                          layout={!reduced}
+                          initial={reduced ? { opacity: 1 } : { opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
-                          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
-                          transition={{ duration: reduce ? 0 : 0.18, ease: EASE_OUT, delay: reduce ? 0 : Math.min(index, 3) * 0.04 }}
+                          exit={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                          transition={{ duration: reduced ? 0 : 0.18, ease: EASE_OUT }}
                         >
                           <ChannelCard
                             channel={channel}
@@ -410,20 +461,23 @@ function ChannelsPage() {
           )}
 
           <section className='flex flex-col gap-4' aria-labelledby='providers-heading'>
-            <div>
-              <h3 id='providers-heading' className='text-lg font-semibold'>
+            <div className='flex flex-col gap-1'>
+              <h2 id='providers-heading' className='text-foreground text-lg font-medium tracking-tight'>
                 Connect
-              </h3>
-              <p className='text-muted-foreground text-sm'>
+              </h2>
+              <p className='text-muted-foreground max-w-[70ch] text-sm leading-relaxed'>
                 Hosted connectors use the provider’s official API. Each one clears its own review before it can publish directly.
               </p>
             </div>
             {error ? (
-              <p className='text-muted-foreground text-sm'>Available connections could not be loaded.</p>
+              <StateMessage kind='partial' layout='inline' title='Available connections could not be loaded.' />
             ) : providers.length === 0 ? (
-              <p className='text-muted-foreground text-sm'>
-                Channel setup information is unavailable. Refresh this page or check the channel API; app sign-in configuration is separate from connecting social accounts.
-              </p>
+              <StateMessage
+                kind='partial'
+                layout='inline'
+                title='Channel setup information is unavailable.'
+                description='Refresh this page or check the channel API; app sign-in configuration is separate from connecting social accounts.'
+              />
             ) : (
               <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
                 {providers.map((provider) => (
@@ -444,18 +498,21 @@ function ChannelsPage() {
               <Collapsible open={companionExpanded} onOpenChange={setCompanionOpen}>
                 <CollapsibleTrigger
                   data-tour='companion-section'
-                  className='flex w-full items-center justify-between gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50'
+                  className='rafii-focus flex min-h-11 w-full items-center justify-between gap-3 rounded-[var(--rafii-radius-control)] text-left'
                 >
-                  <span className='flex flex-wrap items-center gap-2'>
-                    <h3 id='local-heading' className='text-lg font-semibold'>
+                  <span className='flex flex-wrap items-center gap-x-3 gap-y-1'>
+                    <h2 id='local-heading' className='text-foreground text-lg font-medium tracking-tight'>
                       Desktop companion
-                    </h3>
-                    <CapabilityBadge level='local' label='Local · not available yet' />
+                    </h2>
+                    <span className='text-muted-foreground inline-flex items-center gap-1.5 text-xs'>
+                      <Icons.slash className='size-3.5' aria-hidden />
+                      Local · not available yet
+                    </span>
                   </span>
                   <Icons.chevronDown className={cn('text-muted-foreground size-4 shrink-0 transition-transform', companionExpanded && 'rotate-180')} />
                 </CollapsibleTrigger>
                 <CollapsibleContent className='flex flex-col gap-4 pt-3'>
-                  <p className='text-muted-foreground text-sm'>{COMPANION_SENTENCE}</p>
+                  <p className='text-muted-foreground max-w-[70ch] text-sm leading-relaxed'>{COMPANION_SENTENCE}</p>
                   <CompanionDirectory />
                 </CollapsibleContent>
               </Collapsible>
@@ -474,7 +531,7 @@ export function ChannelsView() {
   return (
     <Suspense
       fallback={
-        <PageContainer pageTitle='Channels' pageDescription={PAGE_DESCRIPTION} infoContent={infoContent}>
+        <PageContainer {...PAGE_FRAME}>
           <ChannelsSkeleton />
         </PageContainer>
       }

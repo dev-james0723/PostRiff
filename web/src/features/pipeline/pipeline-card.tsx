@@ -61,13 +61,25 @@ export const canSetAside = (card: BoardCard, permissions: CardPermissions) =>
 
 export const TONE_STATUS: Record<ChipTone, AnimatedBadgeStatus> = { neutral: 'neutral', info: 'info', warning: 'warning', danger: 'danger', success: 'success' };
 
+/**
+ * Monochrome status text (DNA §4.3): the words carry the state. Only a state that needs attention keeps a
+ * semantic tint, and only where the text says the same thing.
+ */
 const TONE_TEXT: Record<ChipTone, string> = {
   neutral: 'text-muted-foreground',
-  info: 'text-primary',
-  warning: 'text-amber-600 dark:text-amber-400',
+  info: 'text-foreground',
+  warning: 'text-foreground font-medium',
   danger: 'text-destructive',
-  success: 'text-emerald-600 dark:text-emerald-400'
+  success: 'text-foreground'
 };
+
+/**
+ * The status badge without its coloured chip: a quiet monochrome capsule, except for a warning or failure,
+ * which keeps its tint but loses the outline. The badge's icon-and-text roll stays (it animates the actual change).
+ */
+export function badgeClass(status: AnimatedBadgeStatus) {
+  return status === 'warning' || status === 'danger' ? 'border-transparent' : 'border-transparent bg-foreground/[0.06] text-foreground dark:text-foreground';
+}
 
 /** What a revision's origin means, in plain words (`domain.py` and `ideas.py` origins). */
 export const REVISION_ORIGIN: Record<string, string> = {
@@ -134,7 +146,8 @@ export function cardWhen(card: BoardCard): string | null {
   return last ? `${stateWords(last.state)} ${relativeTime(last.at)}` : null;
 }
 
-const LINK_CLASS = 'text-foreground decoration-muted-foreground/50 hover:decoration-foreground rounded-sm font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50';
+/** Tertiary text actions (DNA §9.2) with a visible focus ring and a comfortable hit area. */
+const LINK_CLASS = 'rafii-focus text-foreground decoration-muted-foreground/50 hover:decoration-foreground inline-flex min-h-8 items-center rounded-sm font-medium underline underline-offset-2';
 
 function TextButton({ children, onClick, className }: { children: ReactNode; onClick: () => void; className?: string }) {
   return (
@@ -225,7 +238,7 @@ function CardActionsRow({
   return (
     // The row is outside the card's long-press: holding "Hold to cancel" on a touch screen must not open the menu.
     <div
-      className='relative z-10 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs'
+      className='relative z-10 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]'
       onPointerDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.stopPropagation()}
     >
@@ -272,10 +285,11 @@ export function PipelineCard({
   return (
     <ContextMenu>
       <ContextMenuTrigger disabled={!menu}>
+        {/* An opaque quiet row inside the column's panel (DNA §5.4): the glass shadow gives it edge without a blur layer per card. */}
         <motion.article
           whileHover={lift ? { y: -2 } : undefined}
           transition={{ duration: 0.18, ease: EASE_OUT }}
-          className='bg-card relative flex min-w-0 flex-col gap-1 rounded-lg border p-3 text-sm shadow-xs'
+          className='bg-card text-card-foreground relative flex min-w-0 flex-col gap-1.5 rounded-[var(--rafii-radius-card)] p-3.5 text-sm shadow-[var(--rafii-shadow-glass)]'
           data-testid='pipeline-card'
           data-card-kind={card.kind}
           data-card-key={card.key}
@@ -293,30 +307,30 @@ export function PipelineCard({
                 type='button'
                 onClick={() => actions.open(card)}
                 data-card-open=''
-                className='min-w-0 truncate rounded-sm text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring/50'
+                className='min-w-0 truncate rounded-sm text-left outline-none after:absolute after:inset-0 after:rounded-[var(--rafii-radius-card)] focus-visible:after:ring-2 focus-visible:after:ring-ring/50'
                 aria-label={`Open details: ${card.title}`}
               >
                 {card.title}
               </button>
             </span>
             {badge && (
-              <AnimatedBadge size='sm' status={badge.status} pulse={badge.pulse} title={badge.title} contentKey={badge.label} className='max-w-full'>
+              <AnimatedBadge size='sm' status={badge.status} pulse={badge.pulse} title={badge.title} contentKey={badge.label} className={cn('max-w-full', badgeClass(badge.status))}>
                 {badge.label}
               </AnimatedBadge>
             )}
           </div>
-          {meta && <p className='text-muted-foreground truncate text-[11px]'>{meta}</p>}
-          <p className='text-muted-foreground line-clamp-3 text-xs break-words whitespace-pre-wrap'>{card.body}</p>
+          {meta && <p className='text-muted-foreground truncate text-xs'>{meta}</p>}
+          <p className='text-muted-foreground line-clamp-3 text-[13px] leading-relaxed break-words whitespace-pre-wrap'>{card.body}</p>
           {chips.length > 0 && (
-            <ul className='relative flex flex-wrap gap-1' aria-label='Situation'>
+            <ul className='relative flex flex-wrap gap-x-2 gap-y-0.5 text-xs' aria-label='Situation'>
               {chips.map((chip) => (
-                <li key={chip.label} title={chip.title} className={cn('bg-muted/60 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-medium', TONE_TEXT[chip.tone])}>
+                <li key={chip.label} title={chip.title} className={cn('font-medium', TONE_TEXT[chip.tone])}>
                   {chip.label}
                 </li>
               ))}
             </ul>
           )}
-          {card.tag && <p className='relative line-clamp-2 text-xs text-amber-600 dark:text-amber-400'>{card.tag}</p>}
+          {card.tag && <p className='text-foreground relative line-clamp-2 text-xs font-medium'>{card.tag}</p>}
           <CardActionsRow card={card} permissions={permissions} actions={actions} cancelPending={cancelPending} holdEpoch={holdEpoch} />
         </motion.article>
       </ContextMenuTrigger>

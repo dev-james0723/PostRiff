@@ -13,7 +13,7 @@ export default function StatusPage() {
   return (
     <>
       <PageHero eyebrow='Status' title='Is Rafii up?' description='Checked live from this page. No historical uptime figures are shown until we have enough real history to be honest about.' />
-      <Section>
+      <Section className='pt-8 sm:pt-12'>
         <StatusPanel />
       </Section>
     </>

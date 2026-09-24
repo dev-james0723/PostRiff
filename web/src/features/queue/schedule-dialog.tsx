@@ -2,13 +2,14 @@
 
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { now as zonedNow, parseDateTime, toCalendarDateTime, toZoned } from '@internationalized/date';
 import { toast } from 'sonner';
 import { ChannelIcon } from '@/components/channel-icon';
+import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -38,6 +39,16 @@ interface ScheduleDialogProps {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
+
+/** A caution beside a field: icon + plain text in the monochrome system (DNA §11.4, §20.4), never a tinted line. */
+function Note({ children, role, className }: { children: ReactNode; role?: 'status'; className?: string }) {
+  return (
+    <p role={role} className={`text-muted-foreground flex items-start gap-1.5 text-xs ${className ?? ''}`}>
+      <Icons.warning aria-hidden className='mt-0.5 size-3.5 shrink-0' />
+      <span className='min-w-0'>{children}</span>
+    </p>
+  );
+}
 
 /** The next whole hour on the wall clock of the zone the review is prepared in (the person's zone, not the browser's). */
 function defaultLocalTime(timeZone: string) {
@@ -241,9 +252,9 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-lg'>
+      <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
-          <DialogTitle>Schedule a draft</DialogTitle>
+          <DialogTitle className='text-lg font-medium tracking-tight'>Schedule a draft</DialogTitle>
           <DialogDescription>Choose the draft, the account and the exact time. This prepares a review; nothing publishes until you approve it.</DialogDescription>
         </DialogHeader>
         {!state ? (
@@ -251,7 +262,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           snapshot.isError ? (
             <div className='flex flex-col items-start gap-2 text-sm'>
               <p>The workspace could not be loaded{snapshot.error instanceof ApiError ? `: ${snapshot.error.message}` : '.'}</p>
-              <Button variant='outline' size='sm' onClick={() => void snapshot.refetch()}>
+              <Button variant='glass' size='control' className='h-11' onClick={() => void snapshot.refetch()}>
                 Retry
               </Button>
             </div>
@@ -264,19 +275,23 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           )
         ) : (
         <div className='flex flex-col gap-4'>
-          {!voiceActive && <p className='text-sm text-amber-700 dark:text-amber-300'>No voice profile is active. You can continue; review the wording carefully. <Link href='/app/workspace/brand' onClick={() => onOpenChange(false)} className='underline'>Set up your voice</Link> to guide future drafts.</p>}
-          {!canPrepare && (
-            <p className='text-xs text-amber-700 dark:text-amber-300'>
-              Preparing a review is for the owner, approvers and members who can approve publications. Ask one of them to schedule this draft.
-            </p>
+          {!voiceActive && (
+            <Note className='text-sm'>
+              No voice profile is active. You can continue; review the wording carefully.{' '}
+              <Link href='/app/workspace/brand' onClick={() => onOpenChange(false)} className='text-foreground underline underline-offset-2'>
+                Set up your voice
+              </Link>{' '}
+              to guide future drafts.
+            </Note>
           )}
+          {!canPrepare && <Note>Preparing a review is for the owner, approvers and members who can approve publications. Ask one of them to schedule this draft.</Note>}
           {staleDrafts > 0 && (
             <p className='text-muted-foreground text-xs'>{staleDrafts} draft{staleDrafts === 1 ? '' : 's'} were written before your current voice profile and cannot be scheduled; draft them again from Ideas.</p>
           )}
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='schedule-draft'>Draft</Label>
             <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); }}>
-              <SelectTrigger id='schedule-draft'>
+              <SelectTrigger id='schedule-draft' className='h-12 w-full text-base'>
                 {/* The draft's language exactly as stored, never folded into a two-language label. */}
                 <SelectValue>{variant ? `${variant.platform} · ${languageLabel(variant.language)} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</SelectValue>
               </SelectTrigger>
@@ -302,10 +317,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             )}
             {canPrepare && steps.blocked && (
               // Accepting a version and confirming unknowns are edits, which this person cannot make; nothing is sent.
-              <p className='text-xs text-amber-700 dark:text-amber-300' role='status'>
+              <Note role='status'>
                 Before this draft can be scheduled, someone who can edit drafts (the owner, an admin or an editor) needs to {steps.needsEditor.join(' and ')}. Ask
                 one of them, then prepare the review.
-              </p>
+              </Note>
             )}
             {variant && canEdit && steps.confirmUnknowns && (
               <Label className='flex items-start gap-2 text-xs font-normal'>
@@ -322,7 +337,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='schedule-channel'>Account</Label>
             <Select value={channelId} onValueChange={(value) => setChannelId(String(value))}>
-              <SelectTrigger id='schedule-channel' disabled={!variant}>
+              <SelectTrigger id='schedule-channel' disabled={!variant} className='h-12 w-full text-base'>
                 <SelectValue>{channelsForVariant.find((c) => c.id === channelId)?.account ?? (variant ? `Choose a ${variant.platform} account` : 'Choose a draft first')}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -344,12 +359,12 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             )}
             {channel && <p className='text-muted-foreground text-xs'>{publishingSupport(channel.platform)}</p>}
             {channel?.displayState && channel.displayState !== 'Ready for posting' && (
-              <p className='text-xs text-amber-700 dark:text-amber-300'>
+              <Note>
                 This account shows “{channel.displayState}”. A review can only be prepared for an account that is ready for posting.{' '}
-                <Link href='/app/channels' className='underline underline-offset-2' onClick={() => onOpenChange(false)}>
+                <Link href='/app/channels' className='text-foreground underline underline-offset-2' onClick={() => onOpenChange(false)}>
                   Open Channels
                 </Link>
-              </p>
+              </Note>
             )}
           </div>
 
@@ -359,6 +374,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               <Input
                 id='schedule-time'
                 type='datetime-local'
+                className='text-base md:text-sm'
                 value={localTime}
                 onChange={(e) => {
                   setLocalTime(e.target.value);
@@ -366,10 +382,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 }}
               />
               <span className='text-muted-foreground text-xs'>{timeZone}</span>
-              {timePassed && <span className='text-xs text-amber-700 dark:text-amber-300'>This time has already passed. Reviews are prepared for a future time.</span>}
-              {wallTime.kind === 'gap' && (
-                <span className='text-xs text-amber-700 dark:text-amber-300'>Clocks skip this time in {timeZone}. Choose a time before or after the change.</span>
-              )}
+              {timePassed && <Note>This time has already passed. Reviews are prepared for a future time.</Note>}
+              {wallTime.kind === 'gap' && <Note>Clocks skip this time in {timeZone}. Choose a time before or after the change.</Note>}
             </div>
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-asset'>Image (optional)</Label>
@@ -402,7 +416,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           {asset && (
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-alt'>Alt text</Label>
-              <Input id='schedule-alt' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Describe the image for people who cannot see it' />
+              <Input id='schedule-alt' className='text-base md:text-sm' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Describe the image for people who cannot see it' />
             </div>
           )}
 
@@ -421,11 +435,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         </div>
         )}
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+          <Button variant='glass' size='control' onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           {/* The server refuses `p2_review` without the approve permission; the sentence above says who can. */}
-          <Button disabled={!ready || !canPrepare || act.isPending} onClick={() => void submit()}>
+          <Button variant='action' size='control' disabled={!ready || !canPrepare || act.isPending} onClick={() => void submit()}>
             {act.isPending ? 'Preparing…' : 'Prepare review'}
           </Button>
         </DialogFooter>

@@ -3,11 +3,10 @@
 import { useId, useState, type ComponentPropsWithoutRef } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
-import { Badge } from '@/components/ui/badge';
+import { SegmentedControl, StateMessage, Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useMemory, useSnapshot } from '@/lib/api/hooks';
 import type { MemoryEgress, MemoryFile } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
@@ -50,14 +49,14 @@ function routeLine(file: MemoryFile, group: DraftGroup | null, egress: MemoryEgr
 function FileAction({ file, noVoice }: { file: MemoryFile; noVoice: boolean }) {
   if (file.name === 'VOICE.md' && noVoice) {
     return (
-      <Link href={file.editHref ?? BRAND_HREF} className={buttonVariants({ size: 'sm' })}>
+      <Link href={file.editHref ?? BRAND_HREF} className={buttonVariants({ variant: 'action', size: 'default' })}>
         Set up your voice
       </Link>
     );
   }
   if (!file.editHref) return null;
   return (
-    <Link href={file.editHref} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+    <Link href={file.editHref} className={buttonVariants({ variant: 'glass', size: 'default' })}>
       Edit in Brand
     </Link>
   );
@@ -66,19 +65,15 @@ function FileAction({ file, noVoice }: { file: MemoryFile; noVoice: boolean }) {
 function FileMeta({ file, group, noVoice, nameId, showName }: { file: MemoryFile; group: DraftGroup | null; noVoice: boolean; nameId?: string; showName: boolean }) {
   return (
     <div className='flex flex-wrap items-start justify-between gap-2'>
-      <div className='flex min-w-0 flex-col gap-1'>
+      <div className='flex min-w-0 flex-col gap-1.5'>
         <div className='flex flex-wrap items-center gap-2'>
           {showName && (
-            <span id={nameId} className='font-mono text-sm font-semibold'>
+            <span id={nameId} className='text-foreground font-mono text-sm font-semibold'>
               {file.name}
             </span>
           )}
-          {group && (
-            <AnimatedBadge size='sm' status={group === 'given' ? 'info' : 'neutral'} contentKey={group}>
-              {DRAFT_GROUP_LABEL[group]}
-            </AnimatedBadge>
-          )}
-          <Badge variant='secondary'>{file.source}</Badge>
+          {group && <StatusChip icon={group === 'given' ? 'send' : 'eye'}>{DRAFT_GROUP_LABEL[group]}</StatusChip>}
+          <StatusChip icon={null}>{file.source}</StatusChip>
         </div>
         {file.purpose && <p className='text-muted-foreground text-xs'>{file.purpose}</p>}
       </div>
@@ -89,7 +84,7 @@ function FileMeta({ file, group, noVoice, nameId, showName }: { file: MemoryFile
 
 function BodySkeleton() {
   return (
-    <div className='flex flex-col gap-2 p-4'>
+    <div className='flex flex-col gap-2 p-5' role='status' aria-label='Loading the file'>
       <Skeleton className='h-4 w-2/3' />
       <Skeleton className='h-4 w-1/2' />
       <Skeleton className='h-4 w-3/4' />
@@ -107,6 +102,7 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
   const snapshot = useSnapshot();
   const reduce = useReducedMotion();
   const nameId = useId();
+  const panelBase = useId();
   const [tab, setTab] = useState('VOICE.md');
   const tabbed = selected === undefined;
   const files = memory.data?.files ?? [];
@@ -115,9 +111,8 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
   // Only a loaded snapshot can say there is no active voice; until then no call to action is shown.
   const noVoice = snapshot.data ? (snapshot.data.state.speaker?.activeRevision ?? null) === null : false;
 
-  const shell = cn('bg-card ring-foreground/10 flex min-w-0 flex-col overflow-hidden rounded-xl ring-1', className);
   const memoryLink = showMemoryLink ? (
-    <Link href={MEMORY_HREF} className='text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline'>
+    <Link href={MEMORY_HREF} className='rafii-focus text-muted-foreground hover:text-foreground rounded-md text-xs underline-offset-4 hover:underline'>
       Change who reads these on Memory
     </Link>
   ) : null;
@@ -126,53 +121,60 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
   if (!memory.data) {
     content = memory.isLoading ? (
       <>
-        <div className='flex flex-col gap-2 border-b px-4 py-3'>
+        <div className='flex flex-col gap-2 px-5 pt-5'>
           <Skeleton className='h-5 w-40' />
           <Skeleton className='h-3 w-56' />
         </div>
         <BodySkeleton />
       </>
     ) : (
-      <Unavailable className='p-4' message='Memory files are unavailable right now.' query={memory} />
+      <Unavailable className='p-5' message='Memory files are unavailable right now.' query={memory} />
     );
   } else if (tabbed) {
     const given = grouped.given;
     const current = given.some((f) => f.name === tab) ? tab : (given[0]?.name ?? '');
+    const panelIds = given.map((file) => `${panelBase}-${file.name.replace(/[^a-zA-Z0-9_-]/g, '_')}`);
+    const currentFile = given.find((file) => file.name === current);
+    const currentIndex = given.findIndex((file) => file.name === current);
     content = (
       <>
-        <div className='flex flex-col gap-2 border-b px-4 py-3'>
-          <h2 id={nameId} className='text-sm font-semibold'>
+        <div className='flex flex-col gap-1 px-5 pt-5'>
+          <h2 id={nameId} className='text-foreground text-base font-medium tracking-tight'>
             What drafts read
           </h2>
-          <p className='text-muted-foreground text-xs leading-relaxed'>The files a writing route receives before it drafts, as your workspace renders them right now.</p>
+          <p className='text-muted-foreground text-sm leading-relaxed'>The files a writing route receives before it drafts, as your workspace renders them right now.</p>
         </div>
         {!grouped.known ? (
-          <p className='text-muted-foreground p-4 text-sm'>Which files writing routes receive is unavailable right now.</p>
+          <StateMessage kind='partial' layout='inline' className='px-5 pb-5' title='Which files writing routes receive is unavailable right now.' />
         ) : given.length === 0 ? (
-          <p className='text-muted-foreground p-4 text-sm'>No memory files are given to writing routes.</p>
+          <StateMessage kind='empty' layout='inline' className='px-5 pb-5' title='No memory files are given to writing routes.' />
         ) : (
-          <Tabs value={current} onValueChange={setTab} variant='segment' className='flex flex-col'>
-            <div className='border-b px-4 py-2'>
-              <TabsList className='bg-muted max-w-full flex-wrap'>
-                {given.map((file) => (
-                  <TabsTrigger key={file.name} value={file.name} className='px-2.5 py-1 font-mono text-xs'>
-                    {file.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+          <div className='flex flex-col'>
+            <div className='relative scrollbar-hide overflow-x-auto px-5 pt-4 pb-2'>
+              <SegmentedControl
+                options={given.map((file) => ({ value: file.name, label: <span className='font-mono text-xs'>{file.name}</span> }))}
+                value={current}
+                onChange={setTab}
+                pattern='tabs'
+                label='Memory files given to writing routes'
+                size='sm'
+                widths='content'
+                panelIds={panelIds}
+                className='min-w-max'
+              />
             </div>
-            {given.map((file) => (
-              <TabsContent key={file.name} value={file.name} className='mt-0'>
-                <div className='border-b px-4 py-3'>
-                  <FileMeta file={file} group='given' noVoice={noVoice} showName={false} />
+            {currentFile && (
+              <div role='tabpanel' id={panelIds[currentIndex]} tabIndex={0} className='rafii-focus flex flex-col rounded-b-[var(--rafii-radius-card)]'>
+                <div className='px-5 py-3'>
+                  <FileMeta file={currentFile} group='given' noVoice={noVoice} showName={false} />
                 </div>
                 <div className='max-h-[40vh] overflow-y-auto'>
-                  <pre className={BODY_CLASS}>{file.body}</pre>
+                  <pre className={BODY_CLASS}>{currentFile.body}</pre>
                 </div>
-                <p className='text-muted-foreground border-t px-4 py-2.5 text-xs'>{routeLine(file, 'given', egress)}</p>
-              </TabsContent>
-            ))}
-          </Tabs>
+                <p className='text-muted-foreground px-5 py-3 text-xs leading-relaxed'>{routeLine(currentFile, 'given', egress)}</p>
+              </div>
+            )}
+          </div>
         )}
       </>
     );
@@ -180,10 +182,10 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
     const file = files.find((f) => f.name === selected) ?? grouped.given[0] ?? files[0];
     const group = file ? draftGroupOf(grouped, file.name) : null;
     content = !file ? (
-      <p className='text-muted-foreground p-4 text-sm'>The workspace returned no memory files.</p>
+      <StateMessage kind='empty' layout='inline' className='p-5' title='The workspace returned no memory files.' />
     ) : (
       <>
-        <div className='border-b px-4 py-3'>
+        <div className='px-5 pt-5 pb-3'>
           <FileMeta file={file} group={group} noVoice={noVoice} nameId={nameId} showName />
         </div>
         <AnimatePresence mode='wait' initial={false}>
@@ -197,16 +199,24 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
             {file.body}
           </motion.pre>
         </AnimatePresence>
-        <p className='text-muted-foreground mt-auto border-t px-4 py-2.5 text-xs'>{routeLine(file, group, egress)}</p>
+        <p className='text-muted-foreground mt-auto px-5 py-3 text-xs leading-relaxed'>{routeLine(file, group, egress)}</p>
       </>
     );
   }
 
   return (
-    <section {...rest} aria-labelledby={memory.data && (tabbed || files.length > 0) ? nameId : undefined} aria-label={memory.data ? undefined : 'Memory file'} className={shell}>
+    <Surface
+      as='section'
+      material='quiet'
+      padding='none'
+      {...rest}
+      aria-labelledby={memory.data && (tabbed || files.length > 0) ? nameId : undefined}
+      aria-label={memory.data ? undefined : 'Memory file'}
+      className={cn('flex min-w-0 flex-col overflow-hidden', className)}
+    >
       {content}
-      {memory.data && memory.isRefetchError && <StaleNotice className='border-t px-4 py-2' query={memory} />}
-      {memoryLink && <div className='border-t px-4 py-2.5'>{memoryLink}</div>}
-    </section>
+      {memory.data && memory.isRefetchError && <StaleNotice className='px-5 py-2' query={memory} />}
+      {memoryLink && <div className='px-5 pt-1 pb-4'>{memoryLink}</div>}
+    </Surface>
   );
 }

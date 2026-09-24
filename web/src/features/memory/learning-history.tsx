@@ -1,12 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { useId, useState } from 'react';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/motion/tabs';
-import { Badge } from '@/components/ui/badge';
+import { SegmentedControl } from '@/components/rafii';
+import { StatusChip } from '@/features/workspace/rafii-parts';
 import type { LearnedItem, MemoryProposal, MemoryProposals } from '@/lib/api/types';
-import { EASE_OUT } from '@/lib/ease';
 import { formatDate } from '@/lib/time';
 import { ProposalCard } from './proposal-card';
 
@@ -23,11 +21,6 @@ const RETIRED_LABEL: Record<string, string> = {
   undone: 'Undone',
   retired: 'Retired'
 };
-
-/** Rows enter 40ms apart. The delay stops at 120ms so the last row settles by 300ms (120 + 180), however long the list is. */
-const STAGGER = 0.04;
-const MAX_STAGGERED = 3;
-const ROW_DURATION = 0.18;
 
 function scopeLabel(scope: LearnedItem['scope']) {
   const { platform, language, contentTypeId } = scope;
@@ -53,11 +46,7 @@ interface DecidedRow {
 function decidedRows(data: MemoryProposals): DecidedRow[] {
   const proposals = (data.recent ?? []).map((proposal: MemoryProposal): DecidedRow => {
     const label = DECISION_LABEL[proposal.status] ?? proposal.status.replace(/_/g, ' ');
-    const when = proposal.decidedAt
-      ? `Decided ${formatDate(proposal.decidedAt)}`
-      : proposal.status === 'expired' && proposal.expiresAt
-        ? `Expired ${formatDate(proposal.expiresAt)}`
-        : null;
+    const when = proposal.decidedAt ? `Decided ${formatDate(proposal.decidedAt)}` : proposal.status === 'expired' && proposal.expiresAt ? `Expired ${formatDate(proposal.expiresAt)}` : null;
     return { key: `proposal-${proposal.id}`, statement: proposal.statement, label, scope: proposal.scopeLabel, when, at: proposal.decidedAt ?? (proposal.status === 'expired' ? proposal.expiresAt : null) };
   });
   const retired = (data.learning?.items ?? [])
@@ -71,21 +60,15 @@ function decidedRows(data: MemoryProposals): DecidedRow[] {
   return [...proposals, ...retired].toSorted((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
 }
 
-function Row({ index, statement, meta, badge }: { index: number; statement: string; meta: string; badge?: string }) {
-  const reduce = useReducedMotion();
+function Row({ statement, meta, badge }: { statement: string; meta: string; badge?: string }) {
   return (
-    <motion.li
-      initial={reduce ? false : { opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={reduce ? { duration: 0 } : { duration: ROW_DURATION, ease: EASE_OUT, delay: Math.min(index, MAX_STAGGERED) * STAGGER }}
-      className='flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0'
-    >
-      <span className='text-sm leading-snug'>{statement}</span>
+    <li className='flex flex-col gap-1.5 py-2.5'>
+      <span className='text-foreground text-sm leading-snug'>{statement}</span>
       <span className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
-        {badge && <Badge variant='outline'>{badge}</Badge>}
+        {badge && <StatusChip icon={null}>{badge}</StatusChip>}
         {meta}
       </span>
-    </motion.li>
+    </li>
   );
 }
 
@@ -94,42 +77,65 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
   const decided = decidedRows(data);
   const retiredCount = (data.learning?.items ?? []).filter((item) => item.status === 'retired').length;
   const total = data.recentTotal === undefined ? null : data.recentTotal + retiredCount;
-  const [tab, setTab] = useState(pending.length > 0 ? 'waiting' : 'decided');
+  const [tab, setTab] = useState<'waiting' | 'decided'>(pending.length > 0 ? 'waiting' : 'decided');
+  const base = useId();
+  const panelIds = [`${base}-waiting`, `${base}-decided`];
 
   return (
-    <Tabs value={tab} onValueChange={setTab} variant='segment' className='flex flex-col'>
-      <TabsList className='bg-muted grid w-full grid-cols-2 sm:inline-flex sm:w-fit' aria-label='Suggestions'>
-        <TabsTrigger value='waiting' wrapperClassName='min-w-0' className='w-full gap-1.5 px-3 py-1 text-xs'>
-          Waiting <DigitSwap value={pending.length} />
-        </TabsTrigger>
-        <TabsTrigger value='decided' wrapperClassName='min-w-0' className='w-full gap-1.5 px-3 py-1 text-xs'>
-          Recent {total !== null && <DigitSwap value={total} />}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value='waiting' className='mt-3'>
-        {pending.length === 0 ? (
-          <p className='text-muted-foreground text-xs'>Nothing is waiting for a decision.</p>
-        ) : (
-          <div className='flex flex-col gap-2'>
-            {pending.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} />)}
-          </div>
-        )}
-      </TabsContent>
-      <TabsContent value='decided' className='mt-3'>
-        {decided.length === 0 ? (
-          <p className='text-muted-foreground text-xs'>No decisions yet. Suggestions an owner remembers, rewords or dismisses appear here, and so do retired preferences.</p>
-        ) : (
-          <div className='flex flex-col gap-3'>
-            <ul className='flex flex-col divide-y'>
-              {decided.map((row, index) => (
-                <Row key={row.key} index={index} statement={row.statement} badge={row.label} meta={[row.scope, row.when].filter(Boolean).join(' · ')} />
+    <div className='flex flex-col gap-3'>
+      <SegmentedControl
+        pattern='tabs'
+        label='Suggestions'
+        size='sm'
+        value={tab}
+        onChange={setTab}
+        panelIds={panelIds}
+        className='w-full sm:w-fit'
+        widths='equal'
+        options={[
+          {
+            value: 'waiting',
+            label: (
+              <span className='inline-flex items-center gap-1.5'>
+                Waiting <DigitSwap value={pending.length} />
+              </span>
+            )
+          },
+          {
+            value: 'decided',
+            label: <span className='inline-flex items-center gap-1.5'>Recent {total !== null && <DigitSwap value={total} />}</span>
+          }
+        ]}
+      />
+      {tab === 'waiting' ? (
+        <div role='tabpanel' id={panelIds[0]} tabIndex={0} className='rafii-focus rounded-[var(--rafii-radius-control)]'>
+          {pending.length === 0 ? (
+            <p className='text-muted-foreground text-xs'>Nothing is waiting for a decision.</p>
+          ) : (
+            <div className='flex flex-col gap-2'>
+              {pending.map((proposal) => (
+                <ProposalCard key={proposal.id} proposal={proposal} />
               ))}
-            </ul>
-            <p className='text-muted-foreground border-t pt-2 text-xs'>Newest first. {total !== null ? `Showing ${decided.length} of ${total} decisions and retired preferences.` : 'Showing the latest decisions and retired preferences. The total is unavailable.'}</p>
-          </div>
-        )}
-      </TabsContent>
-    </Tabs>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div role='tabpanel' id={panelIds[1]} tabIndex={0} className='rafii-focus rounded-[var(--rafii-radius-control)]'>
+          {decided.length === 0 ? (
+            <p className='text-muted-foreground text-xs'>No decisions yet. Suggestions an owner remembers, rewords or dismisses appear here, and so do retired preferences.</p>
+          ) : (
+            <div className='flex flex-col gap-3'>
+              <ul className='flex flex-col'>
+                {decided.map((row) => (
+                  <Row key={row.key} statement={row.statement} badge={row.label} meta={[row.scope, row.when].filter(Boolean).join(' · ')} />
+                ))}
+              </ul>
+              <p className='text-muted-foreground text-xs'>Newest first. {total !== null ? `Showing ${decided.length} of ${total} decisions and retired preferences.` : 'Showing the latest decisions and retired preferences. The total is unavailable.'}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -139,8 +145,10 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
  */
 export function LearningHistory({ data }: { data: MemoryProposals }) {
   return (
-    <section aria-labelledby='learning-history-title' className='flex flex-col gap-3 border-t pt-3'>
-      <h2 id='learning-history-title' className='text-sm font-semibold'>Suggestions and decisions</h2>
+    <section aria-labelledby='learning-history-title' className='flex flex-col gap-3 pt-1'>
+      <h3 id='learning-history-title' className='text-foreground text-sm font-medium'>
+        Suggestions and decisions
+      </h3>
       <HistoryTabs data={data} />
     </section>
   );

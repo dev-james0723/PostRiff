@@ -16,14 +16,13 @@ import { visibleRange } from '@/components/application/calendar/utils';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import PageContainer from '@/components/layout/page-container';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { LoadingButton } from '@/components/ui/loading-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScheduleDialog } from '@/features/queue/schedule-dialog';
+import { StatusChip } from '@/features/queue/status-chip';
 import { ApiError } from '@/lib/api/client';
 import { useSnapshot } from '@/lib/api/hooks';
 import type { Job, Manifest } from '@/lib/api/types';
@@ -63,12 +62,12 @@ const infoContent = {
     {
       title: 'What shows here',
       description:
-        'Reviews and publishing jobs, each at its approved time in your time zone. A review that expired or went out of date, and a job the worker held, stay visible with their own colour, so nothing disappears quietly.'
+        'Reviews and publishing jobs, each at its approved time in your time zone. A review that expired or went out of date, and a job the worker held, stay visible with their own state, so nothing disappears quietly.'
     },
     {
-      title: 'Colours and filters',
+      title: 'States and filters',
       description:
-        'Each colour is a state. The chips above the calendar count the posts in the period on screen; choose one to show only those, and the address keeps the filter for a bookmark.'
+        'Each entry names its state beside its title. The chips above the calendar count the posts in the period on screen; choose one to show only those, and the address keeps the filter for a bookmark.'
     },
     {
       title: 'Month, week and day',
@@ -167,9 +166,9 @@ function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<
           <ChannelIcon platform={post.platform} name={post.platform} size='xs' />
           <span className='truncate'>{post.platform}</span>
         </span>
-        <AnimatedBadge size='sm' status={meta.status} contentKey={post.kind}>
+        <StatusChip tone={meta.status} contentKey={post.kind}>
           {meta.label}
-        </AnimatedBadge>
+        </StatusChip>
       </div>
       <p className='text-muted-foreground text-xs'>
         {post.account} · {when}
@@ -182,9 +181,9 @@ function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<
           href={next.href}
           className={cn(
             't-learn',
-            buttonVariants({ variant: 'ghost', size: 'sm' }),
-            // A full-width touch target on phones; the quiet "learn more" link beside the preview on wider screens.
-            'bg-muted w-full justify-center sm:-ml-2.5 sm:w-auto sm:self-start sm:bg-transparent'
+            buttonVariants({ variant: 'quiet', size: 'sm' }),
+            // A full-width 44px touch target on phones; the quiet "learn more" link beside the preview on wider screens.
+            'rafii-quiet h-11 w-full justify-center text-xs sm:-ml-2.5 sm:h-8 sm:w-auto sm:self-start sm:bg-transparent'
           )}
         >
           {next.label} <LearnMoreChevron />
@@ -201,36 +200,38 @@ function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<
         manifest={post.manifest}
         timeZone={timeZone}
         scale={wide ? undefined : 0.5}
-        className='border-t pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4'
+        className='pt-3 sm:pt-0 sm:pl-4'
       />
     </div>
   );
 }
 
-/** The calendar's outline while the snapshot loads: the chip row, the header and a month of cells. */
+/** The calendar's outline while the snapshot loads: the chip row, the header and a month of quiet cells. */
 function CalendarSkeleton() {
   return (
-    <div aria-busy='true' className='flex flex-col gap-3'>
+    <div aria-busy='true' className='flex flex-col gap-4'>
       <span className='sr-only'>Loading the calendar</span>
-      <Skeleton className='h-9 w-full max-w-3xl rounded-full' />
-      <div className='bg-card overflow-hidden rounded-xl border'>
-        <div className='flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between lg:px-6 lg:py-5'>
-          <div className='flex items-center gap-3'>
-            <Skeleton className='hidden size-14 sm:block' />
-            <div className='flex flex-col gap-2'>
-              <Skeleton className='h-5 w-40' />
-              <Skeleton className='h-4 w-56' />
-            </div>
+      <div className='flex gap-1.5 p-1'>
+        {Array.from({ length: 5 }, (_, index) => (
+          <Skeleton key={index} className='h-9 w-24 rounded-full' />
+        ))}
+      </div>
+      <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+        <div className='flex items-center gap-3'>
+          <Skeleton className='hidden size-14 rounded-[var(--rafii-radius-control)] sm:block' />
+          <div className='flex flex-col gap-2'>
+            <Skeleton className='h-5 w-40' />
+            <Skeleton className='h-4 w-56' />
           </div>
-          <Skeleton className='h-9 w-full max-w-md' />
         </div>
-        <div className='bg-border grid grid-cols-7 gap-px'>
-          {Array.from({ length: 35 }, (_, index) => (
-            <div key={index} className='bg-card p-1.5 md:p-2'>
-              <Skeleton className='h-12 md:h-20' />
-            </div>
-          ))}
-        </div>
+        <Skeleton className='h-11 w-full max-w-md rounded-[var(--rafii-radius-segment)]' />
+      </div>
+      <div className='grid grid-cols-7 gap-1'>
+        {Array.from({ length: 35 }, (_, index) => (
+          <div key={index} className='rafii-quiet min-h-[5.5rem] rounded-[0.625rem] p-1.5 md:min-h-[8.5rem] md:p-2'>
+            <Skeleton className='size-7 rounded-full' />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -292,7 +293,7 @@ export function CalendarView() {
         id,
         title: firstLine || `${manifest.platform} post`,
         start: fromDate(at, timeZone),
-        color: KIND_META[kind].color,
+        tone: KIND_META[kind].tone,
         status: `${manifest.platform}, ${KIND_META[kind].label}`,
         icon: <ChannelIcon platform={manifest.platform} name={manifest.platform} size='xs' />,
         data: {
@@ -353,20 +354,29 @@ export function CalendarView() {
     void setParams({ date: isToday(day, timeZone) ? null : day.toString() });
   }
 
+  const retry = (
+    <LoadingButton variant='glass' size='control' className='h-11' loading={snapshot.isFetching} loadingLabel='Trying again…' onClick={() => void snapshot.refetch()}>
+      Try again
+    </LoadingButton>
+  );
+
+  // The page's one dominant action (DNA §9.2), rendered once the calendar has loaded; the empty state below offers
+  // the missing prerequisite (drafts, an account) rather than repeating it (DNA §9.3).
+  const scheduleAction = canSchedule ? (
+    <Button variant='action' size='control' data-tour='calendar-schedule' onClick={() => setScheduling(true)}>
+      <Icons.add />
+      Schedule a draft
+    </Button>
+  ) : canEdit ? (
+    <Link href='/app' data-tour='calendar-schedule' className={buttonVariants({ variant: 'action', size: 'control' })}>
+      <Icons.add />
+      New post
+    </Link>
+  ) : undefined;
+
   function body() {
     if (fatalError) {
-      return (
-        <Alert variant='destructive'>
-          <Icons.alertCircle />
-          <AlertTitle>Couldn&apos;t load your schedule</AlertTitle>
-          <AlertDescription>{errorMessage(snapshot.error)}</AlertDescription>
-          <div className='col-start-2 mt-2'>
-            <LoadingButton variant='outline' size='sm' loading={snapshot.isFetching} loadingLabel='Trying again…' onClick={() => void snapshot.refetch()}>
-              Try again
-            </LoadingButton>
-          </div>
-        </Alert>
-      );
+      return <StateMessage kind='error' title='Couldn’t load your schedule' description={errorMessage(snapshot.error)} action={retry} />;
     }
     if (loading || !timeZone || !focusedDate) return <CalendarSkeleton />;
 
@@ -406,7 +416,7 @@ export function CalendarView() {
         <span className='flex flex-wrap items-center gap-x-2'>
           {events.length === 0 ? 'No posts match these filters.' : filtering ? `Nothing ${unitPhrase} matches the filters.` : `Nothing ${unitPhrase}.`}
           {target && label && (
-            <Button variant='link' size='xs' className='h-auto px-0 text-xs' onClick={() => goToDay(toCalendarDate(target.start))}>
+            <Button variant='link' size='xs' className='text-foreground h-auto px-0 text-xs' onClick={() => goToDay(toCalendarDate(target.start))}>
               {after ? 'Next post' : 'Latest post'}: {label}
               {after ? <Icons.arrowRight /> : null}
             </Button>
@@ -418,56 +428,53 @@ export function CalendarView() {
     const variantsCount = snapshot.data?.state.variants?.length ?? 0;
 
     return (
-      <div className='flex flex-col gap-3' data-tour='calendar-grid'>
+      <div className='flex flex-col gap-4' data-tour='calendar-grid'>
         {snapshot.isError && (
-          <Alert variant='destructive'>
-            <Icons.alertCircle />
-            <AlertTitle>Couldn&apos;t refresh your schedule</AlertTitle>
-            <AlertDescription>
-              {errorMessage(snapshot.error)} The calendar shows what loaded at{' '}
-              {new Intl.DateTimeFormat('en', { timeStyle: 'short', timeZone }).format(snapshot.dataUpdatedAt)}.
-            </AlertDescription>
-            <div className='col-start-2 mt-2'>
-              <LoadingButton variant='outline' size='sm' loading={snapshot.isFetching} loadingLabel='Trying again…' onClick={() => void snapshot.refetch()}>
-                Try again
-              </LoadingButton>
-            </div>
-          </Alert>
+          <StateMessage
+            kind='stale'
+            title='Couldn’t refresh your schedule'
+            description={
+              <>
+                {errorMessage(snapshot.error)} The calendar shows what loaded at{' '}
+                {new Intl.DateTimeFormat('en', { timeStyle: 'short', timeZone }).format(snapshot.dataUpdatedAt)}.
+              </>
+            }
+            action={retry}
+          />
         )}
 
         {allEvents.length === 0 ? (
-          <Empty className='border'>
-            <EmptyHeader>
-              <EmptyMedia variant='icon'>
-                <Icons.calendar />
-              </EmptyMedia>
-              <EmptyTitle>Nothing scheduled yet</EmptyTitle>
-              <EmptyDescription>
+          <StateMessage
+            kind='empty'
+            media={
+              <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-full'>
+                <Icons.calendar className='size-5' />
+              </span>
+            }
+            title='Nothing scheduled yet'
+            description={
+              <>
                 Draft something in Ideas, then schedule it for an account at an exact time. It appears here at that time, in your time zone, and publishes only after you approve it.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <div className='flex flex-wrap items-center justify-center gap-2'>
-                {variantsCount > 0 && canSchedule && (
-                  <Button onClick={() => setScheduling(true)}>
-                    <Icons.add />
-                    Schedule a draft
-                  </Button>
-                )}
-                {variantsCount === 0 && canEdit && (
-                  <Link href='/app/ideas' className={buttonVariants()}>
-                    Go to Ideas
-                  </Link>
-                )}
-                {channels.length === 0 && canConnect && (
-                  <Link href='/app/channels' className={buttonVariants({ variant: 'outline' })}>
-                    Connect a channel
-                  </Link>
-                )}
-              </div>
-              {channels.length === 0 && <p className='text-muted-foreground text-xs'>No accounts are connected yet.</p>}
-            </EmptyContent>
-          </Empty>
+                {channels.length === 0 && ' No accounts are connected yet.'}
+              </>
+            }
+            action={
+              variantsCount === 0 || channels.length === 0 ? (
+                <>
+                  {variantsCount === 0 && canEdit && (
+                    <Link href='/app/ideas' className={buttonVariants({ variant: scheduleAction ? 'glass' : 'action', size: 'control' })}>
+                      Go to Ideas
+                    </Link>
+                  )}
+                  {channels.length === 0 && canConnect && (
+                    <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+                      Connect a channel
+                    </Link>
+                  )}
+                </>
+              ) : undefined
+            }
+          />
         ) : (
           <CalendarFilters
             unit={params.view}
@@ -492,22 +499,9 @@ export function CalendarView() {
           onFocusedDateChange={goToDay}
           timeZone={timeZone}
           noun={NOUN}
-          headerAction={
-            canSchedule ? (
-              <Button data-tour='calendar-schedule' onClick={() => setScheduling(true)}>
-                <Icons.add />
-                Schedule a draft
-              </Button>
-            ) : canEdit ? (
-              <Link href='/app' data-tour='calendar-schedule' className={buttonVariants()}>
-                <Icons.add />
-                New post
-              </Link>
-            ) : undefined
-          }
           renderEventDetails={(event, context) => <PostDetails event={event} context={context} timeZone={timeZone} wide={wide} />}
           dayPanelFooter={
-            <Link href='/app/queue' className={cn('t-learn self-start', buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2.5')}>
+            <Link href='/app/queue' className={cn('t-learn self-start', buttonVariants({ variant: 'quiet', size: 'sm' }), '-ml-2.5 h-8 text-xs')}>
               Open the queue <LearnMoreChevron />
             </Link>
           }
@@ -517,7 +511,12 @@ export function CalendarView() {
   }
 
   return (
-    <PageContainer pageTitle='Calendar' pageDescription='Approved and pending publications at their exact times.' infoContent={infoContent}>
+    <PageContainer
+      pageTitle='Calendar'
+      pageDescription='Approved and pending publications at their exact times, in your time zone.'
+      infoContent={infoContent}
+      pageHeaderAction={!fatalError && !loading ? scheduleAction : undefined}
+    >
       {canSchedule && <ScheduleDialog open={scheduling} onOpenChange={setScheduling} />}
       {body()}
     </PageContainer>

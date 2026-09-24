@@ -1,11 +1,11 @@
 'use client';
 
 import { Icons } from '@/components/icons';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-/** One card's load failure: the API's message and a Retry that refetches only that card's query. */
+/** One section's load failure: the API's message and a Retry that refetches only that section's query. */
 export function LoadError({
   title,
   error,
@@ -18,16 +18,17 @@ export function LoadError({
   onRetry: () => void;
 }) {
   return (
-    <Alert variant='destructive'>
-      <Icons.alertCircle aria-hidden />
-      <AlertTitle>{title}</AlertTitle>
-      <AlertDescription className='flex flex-col items-start gap-2'>
-        <span>{error instanceof Error && error.message ? error.message : 'The workspace did not respond.'}</span>
-        <Button size='sm' variant='outline' disabled={retrying} onClick={onRetry}>
-          <Icons.refresh className={cn(retrying && 'animate-spin')} aria-hidden />
+    <StateMessage
+      kind='error'
+      layout='inline'
+      title={title}
+      description={error instanceof Error && error.message ? error.message : 'The workspace did not respond.'}
+      action={
+        <Button size='sm' variant='glass' className='min-h-9' disabled={retrying} onClick={onRetry}>
+          <Icons.refresh className={cn(retrying && 'animate-spin motion-reduce:animate-none')} aria-hidden />
           Retry
         </Button>
-      </AlertDescription>
-    </Alert>
+      }
+    />
   );
 }

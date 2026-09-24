@@ -3,16 +3,17 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/icons';
+import { StateMessage } from '@/components/rafii';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { LearningSummary, MemoryEgress, ModelOption, ResearchEgress } from '@/lib/api/types';
 import { cn } from '@/lib/utils';
+import { SettingsSection } from '../settings-section';
 import { costCopy, distinctCostClasses } from './catalog';
 
-const linkClass = cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2.5');
+const linkClass = cn('t-learn', buttonVariants({ variant: 'quiet', size: 'sm' }), 'text-foreground -ml-2.5 min-h-9');
 
 function PageLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -28,27 +29,23 @@ export function BillingCard({ options, owner }: { options: ModelOption[]; owner:
   if (classes.length === 0) return null;
 
   return (
-    <Card data-tour='models-billing'>
-      <CardHeader>
-        <CardTitle className='text-base'>How each writer is paid for</CardTitle>
-        <CardDescription>Only the kinds of writer available to pick here.</CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3 text-sm'>
+    <SettingsSection id='models-billing' title='How each writer is paid for' description='Only the kinds of writer available to pick here.' data-tour='models-billing'>
+      <div className='flex flex-col gap-3 text-sm'>
         {classes.map((costClass) => {
           const copy = costCopy(costClass || undefined);
           return (
             <div key={costClass || 'unreported'} className='flex flex-col items-start gap-1'>
-              <Badge variant='outline'>{copy.badge}</Badge>
-              <span className='text-muted-foreground'>{copy.line}</span>
+              <Badge variant='secondary'>{copy.badge}</Badge>
+              <span className='text-muted-foreground leading-relaxed'>{copy.line}</span>
             </div>
           );
         })}
-      </CardContent>
-      <CardFooter className='flex flex-col items-start gap-1'>
+      </div>
+      <div className='flex flex-col items-start gap-1'>
         <PageLink href='/app/account/billing'>Usage &amp; plan</PageLink>
         {!owner && <span className='text-muted-foreground text-xs'>Costs and billing controls are visible to the workspace owner.</span>}
-      </CardFooter>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -56,10 +53,10 @@ function ConsentRow({ title, state, children }: { title: string; state: string; 
   return (
     <div className='flex flex-col gap-1'>
       <div className='flex flex-wrap items-center gap-2'>
-        <span className='text-sm font-medium'>{title}</span>
-        <Badge variant='outline'>{state}</Badge>
+        <span className='text-foreground text-sm font-medium'>{title}</span>
+        <Badge variant='secondary'>{state}</Badge>
       </div>
-      <p className='text-muted-foreground text-xs'>{children}</p>
+      <p className='text-muted-foreground text-xs leading-relaxed'>{children}</p>
     </div>
   );
 }
@@ -102,15 +99,19 @@ export function ConsentCard({ loading, error, onRetry, egress, research, learnin
     }
     if (error || (!egress && !research)) {
       return (
-        <div className='flex flex-col items-start gap-2'>
-          <p className='text-sm'>Unavailable</p>
-          <p className='text-muted-foreground text-xs'>These settings could not be loaded. Nothing here means they are off.</p>
-          {error && (
-            <Button variant='outline' size='sm' onClick={onRetry}>
-              <Icons.refresh className='size-3.5' /> Retry
-            </Button>
-          )}
-        </div>
+        <StateMessage
+          kind='error'
+          layout='inline'
+          title='Unavailable'
+          description='These settings could not be loaded. Nothing here means they are off.'
+          action={
+            error ? (
+              <Button variant='glass' size='sm' className='min-h-9' onClick={onRetry}>
+                <Icons.refresh className='size-3.5' /> Retry
+              </Button>
+            ) : undefined
+          }
+        />
       );
     }
     const withheld = egress?.withheldBoundaries ?? 0;
@@ -146,16 +147,12 @@ export function ConsentCard({ loading, error, onRetry, egress, research, learnin
   };
 
   return (
-    <Card data-tour='models-consent'>
-      <CardHeader>
-        <CardTitle className='text-base'>What may leave this workspace</CardTitle>
-        <CardDescription>An owner decides these on the Memory page.</CardDescription>
-      </CardHeader>
-      <CardContent>{body()}</CardContent>
-      <CardFooter className='flex flex-wrap gap-x-3'>
+    <SettingsSection id='models-consent' title='What may leave this workspace' description='An owner decides these on the Memory page.' data-tour='models-consent'>
+      {body()}
+      <div className='flex flex-wrap gap-x-3'>
         <PageLink href='/app/workspace/memory'>Memory</PageLink>
         <PageLink href='/app/account/privacy'>Privacy &amp; data</PageLink>
-      </CardFooter>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }

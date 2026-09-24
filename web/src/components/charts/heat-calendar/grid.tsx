@@ -56,7 +56,7 @@ export function HeatCalendarGrid({
           <span
             key={c.id}
             className={cn(
-              'whitespace-nowrap text-[10px] leading-none transition-colors duration-200',
+              'whitespace-nowrap text-[11px] leading-none transition-colors duration-200',
               hotMonth === c.m ? 'text-foreground' : 'text-muted-foreground'
             )}
             style={{ gridColumn: c.w + 1, gridRow: 1 }}

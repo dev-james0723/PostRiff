@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
-import { Badge } from '@/components/ui/badge';
+import { Icons } from '@/components/icons';
+import { StateMessage, Surface } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useAudit } from '@/lib/api/hooks';
 import type { AuditEvent } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -16,6 +16,7 @@ import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { WorkspaceRole } from '@/types';
 import { FLAGS, shortId } from './access-model';
+import { SectionHeading, StatusChip } from './rafii-parts';
 
 const MAX_ROWS = 10;
 
@@ -47,20 +48,18 @@ function Row({ event, you, fresh }: { event: AuditEvent; you: string | null; fre
       initial={fresh ? { opacity: 0, y: reduce ? 0 : 6 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: EASE_OUT }}
-      className='flex flex-col gap-1.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4'
+      className='flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4'
     >
       <div className='flex min-w-0 flex-wrap items-center gap-1.5 text-sm'>
-        <Badge variant='outline'>{KIND_LABELS[event.kind] ?? event.kind}</Badge>
-        {subject ? <span className='font-mono text-xs'>{who(subject, you)}</span> : null}
-        {role && <Badge variant='secondary'>{role}</Badge>}
+        <StatusChip icon={event.kind === 'member.removed' ? 'minus' : event.kind === 'member.left' ? 'logout' : 'userPen'}>{KIND_LABELS[event.kind] ?? event.kind}</StatusChip>
+        {subject ? <span className='text-foreground font-mono text-xs'>{who(subject, you)}</span> : null}
+        {role && <StatusChip icon={null}>{role}</StatusChip>}
         {grants.map((flag) => (
-          <Badge key={flag.key} variant='secondary' className='font-normal' title={flag.label}>
+          <StatusChip key={flag.key} icon={null} className='font-normal' title={flag.label}>
             {flag.short}
-          </Badge>
+          </StatusChip>
         ))}
-        {event.kind === 'member.updated' && role && grants.length === 0 && (
-          <span className='text-muted-foreground text-xs'>no extra grants</span>
-        )}
+        {event.kind === 'member.updated' && role && grants.length === 0 && <span className='text-muted-foreground text-xs'>no extra grants</span>}
       </div>
       <div className='text-muted-foreground flex shrink-0 items-center gap-2 text-xs'>
         <span>by {who(event.actor, you)}</span>
@@ -88,45 +87,37 @@ export function RecentAccessChanges({ you }: { you: string | null }) {
   if (known === null && audit.data) setKnown(new Set(ids));
 
   const searched = all?.length ?? 0;
-  const empty =
-    searched === 0
-      ? 'Nothing has been recorded in this workspace yet.'
-      : `No access changes among the ${searched === 1 ? 'latest workspace event' : `${searched} latest workspace events`}.`;
+  const empty = searched === 0 ? 'Nothing has been recorded in this workspace yet.' : `No access changes among the ${searched === 1 ? 'latest workspace event' : `${searched} latest workspace events`}.`;
 
   return (
     <section className='flex flex-col gap-3' aria-labelledby='roles-recent-heading' data-tour='roles-recent'>
-      <div className='flex flex-col gap-1'>
-        <h3 id='roles-recent-heading' className='text-lg font-semibold'>
-          Recent access changes
-        </h3>
-        <p className='text-muted-foreground text-sm'>Role and grant changes, removals and departures, newest first.</p>
-      </div>
-      <div className='rounded-lg border px-4'>
-        {audit.isPending ? (
-          <div className='py-3'>
-            <Skeleton className='h-24 w-full' />
-            <span className='sr-only'>Loading recent changes</span>
-          </div>
-        ) : audit.error ? (
-          <div role='alert' className='flex flex-wrap items-center justify-between gap-2 py-3 text-sm'>
-            <span className='text-destructive'>Recent changes could not be loaded.</span>
-            <Button size='sm' variant='outline' onClick={() => void audit.refetch()} disabled={audit.isFetching}>
-              Retry
+      <SectionHeading id='roles-recent-heading' title='Recent access changes' description='Role and grant changes, removals and departures, newest first.' />
+      {audit.isPending ? (
+        <StateMessage kind='loading' title='Loading recent changes…' />
+      ) : audit.error ? (
+        <StateMessage
+          kind='error'
+          title='Recent changes could not be loaded.'
+          action={
+            <Button size='default' variant='glass' onClick={() => void audit.refetch()} disabled={audit.isFetching}>
+              <Icons.refresh className={cn(audit.isFetching && 'motion-safe:animate-spin')} /> Retry
             </Button>
-          </div>
-        ) : events.length === 0 ? (
-          <p className='text-muted-foreground py-3 text-sm'>{empty}</p>
-        ) : (
-          <ul className='divide-y'>
+          }
+        />
+      ) : events.length === 0 ? (
+        <StateMessage kind='empty' title={empty} />
+      ) : (
+        <Surface material='quiet' padding='none' className='py-1'>
+          <ul className='flex flex-col'>
             {events.map((event, index) => {
               const key = ids[index];
               return <Row key={key} event={event} you={you} fresh={known !== null && !known.has(key)} />;
             })}
           </ul>
-        )}
-      </div>
+        </Surface>
+      )}
       {checkAccess(access, { role: 'admin' }) && (
-        <Link href='/app/workspace/audit' className={cn('t-learn w-fit', buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2.5')}>
+        <Link href='/app/workspace/audit' className={cn('t-learn w-fit', buttonVariants({ variant: 'quiet', size: 'default' }), '-ml-2.5')}>
           Full audit log <LearnMoreChevron />
         </Link>
       )}

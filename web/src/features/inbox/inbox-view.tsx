@@ -2,25 +2,23 @@
 
 import Link from 'next/link';
 import { parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import PageContainer from '@/components/layout/page-container';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { SegmentedControl, StateMessage, Surface, type SegmentOption } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
+import { SHEET_ELEVATED } from '@/features/channels/rafii-materials';
 import { ApiError } from '@/lib/api/client';
 import { useAudience, useChannels } from '@/lib/api/hooks';
 import type { Audience, ChannelView, ProviderView, Thread } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { channelBadge, isVerified } from '@/lib/channels/state';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { CoverageStrip } from './coverage-strip';
+import { cn } from '@/lib/utils';
+import { ConnectionNote, CoverageStrip } from './coverage-strip';
 import { InboxLevelBadge } from './level-badge';
 import {
   apiCounts,
@@ -69,6 +67,9 @@ const EMPTY_COMPOSER: ComposerState = { text: '', draft: null };
 
 /** Both panes share one height below the header so each scrolls on its own. */
 const PANE_HEIGHT = 'lg:max-h-[calc(100dvh-16rem)] lg:min-h-80';
+
+/** Conversation list beside the open thread from `lg` up (DNA §21.5); below it the thread is a separate step. */
+const PANES = 'grid min-w-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]';
 
 const FILTER_LABELS: Record<InboxFilter, string> = { all: 'All', unanswered: 'Unanswered', replied: 'Replied' };
 
@@ -147,89 +148,103 @@ function InboxPage() {
     );
   }
 
-  let main;
+  // WHAT: the three reply-state views. Counts the server cannot vouch for are left out, never guessed.
+  const filterOptions: SegmentOption<InboxFilter>[] = INBOX_FILTERS.map((filter) => {
+    const count = counts?.[filter] ?? null;
+    return {
+      value: filter,
+      label: (
+        <>
+          {FILTER_LABELS[filter]}
+          {count !== null && <DigitSwap value={count} className='text-muted-foreground text-xs' />}
+        </>
+      )
+    };
+  });
+
+  let main: ReactNode;
   if (audience.isPending) {
     main = <InboxSkeleton />;
   } else if (!data) {
     main = (
-      <Alert variant='destructive'>
-        <Icons.alertCircle />
-        <AlertTitle>Could not load comments</AlertTitle>
-        <AlertDescription>{audience.error instanceof ApiError ? audience.error.message : 'The server did not answer.'}</AlertDescription>
-        <AlertAction>
-          <Button variant='outline' size='sm' onClick={() => void audience.refetch()}>
+      <StateMessage
+        kind='error'
+        title='Could not load comments'
+        description={audience.error instanceof ApiError ? audience.error.message : 'The server did not answer.'}
+        action={
+          <Button variant='glass' size='control' onClick={() => void audience.refetch()}>
+            <Icons.refresh className='size-4' />
             Retry
           </Button>
-        </AlertAction>
-      </Alert>
+        }
+      />
     );
   } else if (threads.length === 0) {
     main = <InboxEmpty data={data} channels={channels} providers={providers} channelsPending={channelsQuery.isPending} />;
   } else {
     main = (
-      <div className='grid min-w-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]'>
+      <div className={PANES}>
         <section aria-label='Comments' className='flex min-w-0 flex-col gap-3'>
-          <div className='-mx-1 overflow-x-auto px-1'>
-            <Tabs value={params.filter} onValueChange={(value) => void setParams({ filter: value as InboxFilter })} variant='segment'>
-              <TabsList aria-label='Show comments' className='border'>
-                {INBOX_FILTERS.map((filter) => {
-                  const count = counts?.[filter] ?? null;
-                  return (
-                    <TabsTrigger key={filter} value={filter} className='gap-1.5 px-3'>
-                      {FILTER_LABELS[filter]}
-                      {count !== null && <DigitSwap value={count} className='text-xs opacity-75' />}
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-            </Tabs>
+          <div className='relative -mx-1 overflow-x-auto px-1 py-0.5'>
+            <SegmentedControl options={filterOptions} value={params.filter} onChange={(value) => void setParams({ filter: value })} label='Show comments' widths='content' />
           </div>
           {!reported && counts?.replied == null && (
-            <p className='text-muted-foreground text-xs'>
+            <p className='text-muted-foreground text-xs leading-relaxed'>
               The server does not return reply history yet, so Unanswered and Replied only know about replies approved during this visit.
             </p>
           )}
           {audience.isError && (
-            <Alert variant='destructive'>
-              <Icons.alertCircle />
-              <AlertTitle>Could not refresh comments</AlertTitle>
-              <AlertDescription>
-                {audience.error instanceof ApiError ? audience.error.message : 'The server did not answer.'} The list shows the last comments loaded.
-              </AlertDescription>
-              <AlertAction>
-                <Button variant='outline' size='sm' onClick={() => void audience.refetch()}>
+            <StateMessage
+              kind='stale'
+              layout='inline'
+              title='Could not refresh comments'
+              description={`${audience.error instanceof ApiError ? audience.error.message : 'The server did not answer.'} The list shows the last comments loaded.`}
+              action={
+                <Button variant='glass' size='sm' className='h-9' onClick={() => void audience.refetch()}>
                   Retry
                 </Button>
-              </AlertAction>
-            </Alert>
+              }
+              className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3'
+            />
           )}
-          <div data-tour='inbox-threads' className={`min-w-0 lg:overflow-y-auto ${PANE_HEIGHT}`}>
+          <Surface material='quiet' radius='card' padding='none' data-tour='inbox-threads' className={cn('p-1.5 lg:overflow-y-auto', PANE_HEIGHT)}>
             {filtered.length > 0 ? (
               <ThreadList threads={filtered} selectedId={params.thread} onSelect={select} channelsById={channelsById} latestReply={latestReply} />
             ) : (
-              <p className='text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm'>
-                {params.filter === 'unanswered'
-                  ? 'Nothing waiting for a reply.'
-                  : reported
-                    ? 'No comment has an approved reply yet.'
-                    : 'No reply has been approved during this visit.'}
-              </p>
+              <StateMessage
+                kind='empty'
+                layout='inline'
+                title={
+                  params.filter === 'unanswered'
+                    ? 'Nothing waiting for a reply.'
+                    : reported
+                      ? 'No comment has an approved reply yet.'
+                      : 'No reply has been approved during this visit.'
+                }
+                description='The other comments are still here; this view is only filtered.'
+                action={
+                  <Button variant='quiet' size='sm' className='h-9' onClick={() => void setParams({ filter: 'all' })}>
+                    Show all comments
+                  </Button>
+                }
+                className='px-3 py-4'
+              />
             )}
-          </div>
+          </Surface>
         </section>
         {twoPane && (
-          <Card className={`min-w-0 gap-0 overflow-y-auto py-0 ${PANE_HEIGHT}`}>
+          <Surface material='quiet' radius='card' padding='none' className={cn('flex min-w-0 flex-col overflow-y-auto', PANE_HEIGHT)}>
             {selected ? (
               <>
-                <CardHeader className='bg-card sticky top-0 z-10 border-b py-3'>
+                <div className='rafii-panel sticky top-0 z-10 rounded-t-[var(--rafii-radius-card)] px-5 py-3'>
                   <ThreadHeading thread={selected} channel={channelsById.get(selected.connectionId)} />
-                </CardHeader>
-                <CardContent className='py-4'>{detailFor(selected)}</CardContent>
+                </div>
+                <div className='px-5 py-4'>{detailFor(selected)}</div>
               </>
             ) : (
               <NoThreadSelected missing={missing} onClear={clear} />
             )}
-          </Card>
+          </Surface>
         )}
       </div>
     );
@@ -239,11 +254,13 @@ function InboxPage() {
 
   return (
     <PageContainer
+      pageEyebrow='Conversations'
       pageTitle='Inbox'
+      pageAccent='one reply at a time'
       pageDescription={`Comments on posts PostRiff published, from ${commentReadNames(providers)} accounts whose comments capability is Direct. Each reply is approved on its own.`}
       infoContent={infoContent}
     >
-      <div className='flex min-w-0 flex-col gap-4'>
+      <div className='flex min-w-0 flex-col gap-5'>
         <CoverageStrip
           channels={channels}
           providers={providers}
@@ -254,13 +271,18 @@ function InboxPage() {
         {main}
         {data && threads.length > 0 && <p className='text-muted-foreground text-xs'>{data.limits}</p>}
       </div>
+      {/* Below `lg` the open comment is its own step: the list stays behind, Back returns to it (DNA §21.5). */}
       {!twoPane && (
         <Sheet open={Boolean(selected)} onOpenChange={(open) => !open && clear()}>
-          <SheetContent side='right' className='gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-lg'>
+          <SheetContent side='right' showCloseButton={false} className={cn(SHEET_ELEVATED, 'data-[side=right]:w-full data-[side=right]:sm:max-w-lg')}>
             {sheetThread && sheetHeadline && (
               <>
-                <SheetHeader className='border-b pr-12'>
-                  <div className='flex min-w-0 items-center gap-2'>
+                <SheetHeader className='gap-3 px-4 pt-3 pb-3'>
+                  <Button variant='quiet' size='sm' className='-ml-2 h-11 w-fit gap-1 px-2.5 text-sm' onClick={clear}>
+                    <Icons.chevronLeft className='size-4' aria-hidden />
+                    Back to comments
+                  </Button>
+                  <div className='flex min-w-0 items-center gap-2.5'>
                     <ChannelIcon platform={sheetHeadline.platform} name={sheetHeadline.platform} />
                     <div className='min-w-0'>
                       <SheetTitle className='truncate'>{sheetHeadline.title}</SheetTitle>
@@ -268,7 +290,7 @@ function InboxPage() {
                     </div>
                   </div>
                 </SheetHeader>
-                <div className='min-h-0 flex-1 overflow-y-auto p-4'>{detailFor(sheetThread)}</div>
+                <div className='min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))]'>{detailFor(sheetThread)}</div>
               </>
             )}
           </SheetContent>
@@ -290,16 +312,12 @@ function countsFor(data: Audience, threads: Thread[], reported: boolean, answere
   };
 }
 
+/** Loading keeps the two-pane geometry (DNA §20.1) and says what is being loaded. */
 function InboxSkeleton() {
   return (
-    <div className='grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]'>
-      <div className='flex flex-col gap-2'>
-        <Skeleton className='h-9 w-64 max-w-full' />
-        <Skeleton className='h-16 w-full' />
-        <Skeleton className='h-16 w-full' />
-        <Skeleton className='h-16 w-full' />
-      </div>
-      <Skeleton className='hidden h-48 w-full lg:block' />
+    <div className={PANES}>
+      <StateMessage kind='loading' title='Loading comments…' />
+      <div aria-hidden className='rafii-quiet hidden min-h-48 rounded-[var(--rafii-radius-card)] lg:block' />
     </div>
   );
 }
@@ -316,25 +334,14 @@ function InboxEmpty({
   providers: ProviderView[] | undefined;
   channelsPending: boolean;
 }) {
-  let accounts;
+  let accounts: ReactNode = null;
   if (channelsPending) {
-    accounts = (
-      <div className='flex w-full flex-col gap-2'>
-        <Skeleton className='h-14 w-full' />
-        <Skeleton className='h-14 w-full' />
-      </div>
-    );
+    accounts = <StateMessage kind='loading' layout='inline' title='Loading accounts…' />;
   } else if (!channels) {
-    accounts = <p className='text-muted-foreground text-sm'>Account details are unavailable right now; retry above.</p>;
-  } else if (channels.length === 0) {
+    accounts = <StateMessage kind='partial' layout='inline' title='Account details are unavailable right now.' description='Retry above to load them.' />;
+  } else if (channels.length > 0) {
     accounts = (
-      <Link href='/app/channels' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        Connect an account
-      </Link>
-    );
-  } else {
-    accounts = (
-      <ul className='flex w-full flex-col gap-2 text-left'>
+      <ul className='flex w-full flex-col gap-2 text-left' aria-label='Connected accounts and their comment coverage'>
         {channels.map((channel) => {
           const comments = channel.capabilities.comments_read;
           const reply = channel.capabilities.reply;
@@ -352,12 +359,12 @@ function InboxEmpty({
             sentence = `Comments are Direct for ${channel.account}, but PostRiff reads only ${commentReadNames(providers)} comments in this release, so none from ${channel.platform} appear here.`;
           }
           return (
-            <li key={channel.id} className='bg-muted/40 flex flex-col gap-1.5 rounded-lg border p-3'>
+            <Surface as='li' key={channel.id} material='quiet' radius='control' padding='sm' className='flex flex-col gap-1.5'>
               <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium'>
                 <ChannelIcon platform={channel.platform} name={channel.platform} size='xs' />
                 <span className='truncate'>{channel.account}</span>
                 <span className='text-muted-foreground text-xs font-normal'>{channel.platform}</span>
-                {badge && <span className='text-muted-foreground text-xs font-normal'>· {badge.label}</span>}
+                {badge && <ConnectionNote badge={badge} />}
               </div>
               <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
                 <span className='flex items-center gap-1'>
@@ -367,8 +374,8 @@ function InboxEmpty({
                   Reply <InboxLevelBadge level={replyLevel} />
                 </span>
               </div>
-              <p className='text-muted-foreground text-xs'>{sentence}</p>
-            </li>
+              <p className='text-muted-foreground text-xs leading-relaxed'>{sentence}</p>
+            </Surface>
           );
         })}
       </ul>
@@ -376,22 +383,30 @@ function InboxEmpty({
   }
 
   return (
-    <Empty className='border' data-tour='inbox-empty'>
-      <EmptyHeader>
-        <EmptyMedia variant='icon'>
-          <Icons.inbox />
-        </EmptyMedia>
-        <EmptyTitle>No comments yet</EmptyTitle>
-        <EmptyDescription>
-          {channels && channels.length === 0
+    <div className='flex flex-col gap-4' data-tour='inbox-empty'>
+      <StateMessage
+        kind='empty'
+        title='No comments yet'
+        description={
+          channels && channels.length === 0
             ? `Connect a ${commentReadNames(providers)} account with Direct comments to read the comments on posts PostRiff publishes there.`
-            : `Comments appear for ${commentReadNames(providers)} accounts whose comments capability is Direct, after PostRiff publishes and verifies a post there. Comments from other providers are not read in this release.`}
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent className='max-w-xl'>
-        {accounts}
-        <p className='text-muted-foreground text-xs'>{data.limits}</p>
-      </EmptyContent>
-    </Empty>
+            : `Comments appear for ${commentReadNames(providers)} accounts whose comments capability is Direct, after PostRiff publishes and verifies a post there. Comments from other providers are not read in this release.`
+        }
+        media={
+          <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
+            <Icons.inbox className='size-5' />
+          </span>
+        }
+        action={
+          channels && channels.length === 0 ? (
+            <Link href='/app/channels' className={buttonVariants({ variant: 'action', size: 'control' })}>
+              Connect an account
+            </Link>
+          ) : undefined
+        }
+      />
+      {accounts}
+      <p className='text-muted-foreground text-xs'>{data.limits}</p>
+    </div>
   );
 }

@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { LevelBadge } from '@/components/app/level-badge';
 import { Icons, type Icon } from '@/components/icons';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { siteConfig } from '@/config/site';
+import { SettingsSection } from '../settings-section';
 
 interface PlannedItem {
   title: string;
@@ -41,44 +41,36 @@ const PLANNED: readonly PlannedItem[] = [
 
 export function NotYetCard() {
   return (
-    <Card data-tour='api-roadmap'>
-      <CardHeader>
-        <CardTitle>Not available yet</CardTitle>
-        <CardDescription>
-          Planned ways for outside tools to reach this workspace. None of them works today, so there is nothing to set up.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='@container'>
-        <ul className='grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-3'>
-          {PLANNED.map((item) => (
-            <li
-              key={item.title}
-              data-tour={item.tour}
-              className='flex flex-col gap-2 rounded-lg border border-dashed p-3'
-            >
-              <div className='flex flex-wrap items-center justify-between gap-2'>
-                <span className='flex items-center gap-2 text-sm font-medium'>
-                  <span className='bg-muted text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md'>
-                    <item.icon className='size-4' aria-hidden />
-                  </span>
-                  {item.title}
+    <SettingsSection
+      id='api-not-yet'
+      title='Not available yet'
+      description='Planned ways for outside tools to reach this workspace. None of them works today, so there is nothing to set up.'
+      bodyClassName='@container gap-5'
+      data-tour='api-roadmap'
+    >
+      <ul className='grid gap-x-6 gap-y-5 @lg:grid-cols-2 @3xl:grid-cols-3'>
+        {PLANNED.map((item) => (
+          <li key={item.title} data-tour={item.tour} className='flex flex-col gap-2'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <span className='text-foreground flex items-center gap-2 text-sm font-medium'>
+                <span className='rafii-glass text-foreground flex size-8 shrink-0 items-center justify-center rounded-full'>
+                  <item.icon className='size-4' aria-hidden />
                 </span>
-                <LevelBadge level='Unsupported' label='Not available yet' />
-              </div>
-              <p className='text-muted-foreground text-sm'>{item.body}</p>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-      <CardFooter className='text-muted-foreground text-sm'>
-        <p>
-          Would you build on one of these?{' '}
-          <Link href={`${siteConfig.links.contact}?topic=api`} className='text-foreground underline underline-offset-4'>
-            Tell us what you need
-          </Link>
-          .
-        </p>
-      </CardFooter>
-    </Card>
+                {item.title}
+              </span>
+              <LevelBadge level='Unsupported' label='Not available yet' />
+            </div>
+            <p className='text-muted-foreground text-sm leading-relaxed'>{item.body}</p>
+          </li>
+        ))}
+      </ul>
+      <p className='text-muted-foreground text-sm'>
+        Would you build on one of these?{' '}
+        <Link href={`${siteConfig.links.contact}?topic=api`} className='rafii-focus text-foreground rounded-sm underline underline-offset-4'>
+          Tell us what you need
+        </Link>
+        .
+      </p>
+    </SettingsSection>
   );
 }

@@ -1,11 +1,12 @@
 'use client';
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { StateMessage } from '@/components/rafii';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/session';
 import { safeNext } from '@/lib/auth/navigation';
+import { AuthSurface } from './auth-form';
 import { MfaChallenge } from './mfa-challenge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
 
 export function VerifySession() {
   const auth = useAuth();
@@ -17,6 +18,25 @@ export function VerifySession() {
     if (auth.status === 'signed-in') router.replace(next);
   }, [auth.status, router, next]);
   if (auth.status === 'mfa-required') return <MfaChallenge />;
-  if (auth.status === 'unavailable') return <div role='alert' className='flex flex-col gap-3'><p>{auth.error ?? 'Sign-in is unavailable right now.'}</p><Button onClick={() => window.location.reload()}>Try again</Button></div>;
-  return <Skeleton role='status' aria-label='Checking sign-in' className='h-32 w-full' />;
+  if (auth.status === 'unavailable') {
+    return (
+      <AuthSurface>
+        <StateMessage
+          kind='offline'
+          title={auth.error ?? 'Sign-in is unavailable right now.'}
+          action={
+            <Button variant='glass' size='control' onClick={() => window.location.reload()}>
+              Try again
+            </Button>
+          }
+          className='bg-transparent px-0 py-2'
+        />
+      </AuthSurface>
+    );
+  }
+  return (
+    <AuthSurface>
+      <StateMessage kind='loading' title='Checking sign-in' className='bg-transparent p-0' />
+    </AuthSurface>
+  );
 }

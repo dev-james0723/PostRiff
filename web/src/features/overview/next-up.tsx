@@ -6,9 +6,9 @@ import { ChannelIcon } from '@/components/channel-icon';
 import { LevelBadge } from '@/components/app/level-badge';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Panel } from '@/features/workspace/rafii-parts';
 import { useChannels, useSnapshot } from '@/lib/api/hooks';
 import type { ChannelView } from '@/lib/api/types';
 import { publishLevel } from '@/lib/channels/state';
@@ -25,9 +25,7 @@ const MAX_MARKS = 3;
 /** "Thu 14:30" inside the coming week; the date joins once a weekday alone would be ambiguous. */
 function formatSlot(at: number, now: number, timeZone: string) {
   const options: Intl.DateTimeFormatOptions =
-    at - now < 6 * DAY_MS
-      ? { weekday: 'short', hour: 'numeric', minute: '2-digit' }
-      : { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+    at - now < 6 * DAY_MS ? { weekday: 'short', hour: 'numeric', minute: '2-digit' } : { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
   return new Intl.DateTimeFormat(timeDefaults().locale, { ...options, timeZone }).format(at);
 }
 
@@ -47,11 +45,7 @@ function DayCell({ day, today }: { day: StripDay; today: boolean }) {
   const spoken = new Intl.DateTimeFormat(locale, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(day.date);
   const total = day.waiting.length + day.sending.length;
   const platforms = [...new Set([...day.sending, ...day.waiting].map((job) => job.platform))];
-  const parts = [
-    day.waiting.length ? `${day.waiting.length} approved` : null,
-    day.sending.length ? `${day.sending.length} sending` : null,
-    day.failed ? `${day.failed} failed` : null
-  ].filter(Boolean);
+  const parts = [day.waiting.length ? `${day.waiting.length} approved` : null, day.sending.length ? `${day.sending.length} sending` : null, day.failed ? `${day.failed} failed` : null].filter(Boolean);
 
   return (
     <Link
@@ -59,23 +53,14 @@ function DayCell({ day, today }: { day: StripDay; today: boolean }) {
       aria-label={`${today ? 'Today, ' : ''}${spoken}: ${parts.length ? parts.join(', ') : 'nothing scheduled'}. Open in Calendar.`}
       aria-current={today ? 'date' : undefined}
       className={cn(
-        'hover:bg-muted/60 focus-visible:ring-ring/50 relative flex h-full min-h-24 w-full flex-col items-center gap-1 rounded-lg border px-1 py-2 text-center transition-colors outline-none focus-visible:ring-3',
-        today && 'border-primary/40 bg-primary/5'
+        'rafii-focus relative flex h-full min-h-24 w-full flex-col items-center gap-1 rounded-[var(--rafii-radius-control)] px-1 py-2 text-center transition-colors',
+        today ? 'rafii-glass-selected' : 'rafii-quiet hover:rafii-glass'
       )}
     >
-      <span className={cn('text-[11px] leading-none', today ? 'text-primary font-medium' : 'text-muted-foreground')}>
-        {today ? 'Today' : weekday}
-      </span>
-      <span className='text-sm leading-tight font-medium tabular-nums'>{dayOfMonth}</span>
+      <span className={cn('text-xs leading-none', today ? 'text-foreground font-medium' : 'text-muted-foreground')}>{today ? 'Today' : weekday}</span>
+      <span className='text-foreground text-sm leading-tight font-medium tabular-nums'>{dayOfMonth}</span>
       {total > 0 ? (
-        <AnimatedBadge
-          size='sm'
-          showIcon={false}
-          status={day.sending.length ? 'info' : 'neutral'}
-          pulse={day.sending.length > 0}
-          contentKey={total}
-          className='h-5 px-1.5'
-        >
+        <AnimatedBadge size='sm' showIcon={false} status='info' pulse={day.sending.length > 0} contentKey={total} className='h-5 px-1.5'>
           {total}
         </AnimatedBadge>
       ) : (
@@ -85,7 +70,7 @@ function DayCell({ day, today }: { day: StripDay; today: boolean }) {
       )}
       <span aria-hidden className='flex h-4 items-center -space-x-1'>
         {platforms.slice(0, MAX_MARKS).map((platform) => (
-          <ChannelIcon key={platform} platform={platform} name={platform} size='xs' className='ring-card ring-1' />
+          <ChannelIcon key={platform} platform={platform} name={platform} size='xs' className='ring-background ring-1' />
         ))}
       </span>
       {day.failed > 0 && <span aria-hidden className='bg-destructive absolute top-1.5 right-1.5 size-1.5 rounded-full' />}
@@ -126,87 +111,82 @@ export function NextUp({ className }: { className?: string }) {
   const nextChannel = next && channels.data && !channels.isError ? channelFor(next, channels.data.channels) : undefined;
 
   return (
-    <Card data-tour='overview-next-up' className={className}>
-      <CardHeader>
-        <CardTitle>Next up</CardTitle>
-        <CardDescription>
-          Approved posts only, shown in your time zone ({timeZone.replace(/_/g, ' ')}).
-        </CardDescription>
-        <CardAction>
-          <Link href='/app/calendar' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }))}>
-            Calendar <LearnMoreChevron />
-          </Link>
-        </CardAction>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-4'>
-        {snapshot.isError ? (
-          <SectionUnavailable message='Next up is unavailable right now.' query={snapshot} />
-        ) : !status || !week || now === null ? (
-          <>
-            <Skeleton className='h-12 w-full' />
-            <Skeleton className='h-24 w-full' />
-          </>
-        ) : (
-          <>
-            {next ? (
-              <div className='flex min-w-0 items-center gap-3'>
-                <ChannelIcon platform={next.platform} name={next.platform} size='md' />
-                <div className='min-w-0 flex-1'>
-                  <p className='truncate text-sm font-medium'>
-                    {next.platform} · {next.account}
-                  </p>
-                  <p className='text-muted-foreground text-xs'>
-                    Approved for <time dateTime={new Date(next.at).toISOString()}>{formatSlot(next.at, now, timeZone)}</time>
-                    <span className='tabular-nums'> · {countdown(next.at - now)}</span>
-                  </p>
+    <Panel
+      data-tour='overview-next-up'
+      className={className}
+      title='Next up'
+      titleId='overview-next-up-heading'
+      description={`Approved posts only, shown in your time zone (${timeZone.replace(/_/g, ' ')}).`}
+      actions={
+        <Link href='/app/calendar' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }))}>
+          Calendar <LearnMoreChevron />
+        </Link>
+      }
+    >
+      {snapshot.isError ? (
+        <SectionUnavailable message='Next up is unavailable right now.' query={snapshot} />
+      ) : !status || !week || now === null ? (
+        <>
+          <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)]' />
+          <Skeleton className='h-24 w-full rounded-[var(--rafii-radius-control)]' />
+        </>
+      ) : (
+        <>
+          {next ? (
+            <div className='rafii-glass flex min-w-0 items-center gap-3 rounded-[var(--rafii-radius-control)] p-3.5'>
+              <ChannelIcon platform={next.platform} name={next.platform} size='md' />
+              <div className='min-w-0 flex-1'>
+                <p className='text-foreground truncate text-sm font-medium'>
+                  {next.platform} · {next.account}
+                </p>
+                <p className='text-muted-foreground text-xs'>
+                  Approved for <time dateTime={new Date(next.at).toISOString()}>{formatSlot(next.at, now, timeZone)}</time>
+                  <span className='tabular-nums'> · {countdown(next.at - now)}</span>
+                </p>
+              </div>
+              {nextChannel && (
+                <div className='flex shrink-0 items-center gap-1.5'>
+                  <span className='text-muted-foreground hidden text-xs sm:inline'>publish</span>
+                  <LevelBadge level={publishLevel(nextChannel)} />
                 </div>
-                {nextChannel && (
-                  <div className='flex shrink-0 items-center gap-1.5'>
-                    <span className='text-muted-foreground hidden text-xs sm:inline'>publish</span>
-                    <LevelBadge level={publishLevel(nextChannel)} />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className='flex flex-col items-start gap-1'>
-                <p className='text-sm font-medium'>Nothing approved is waiting.</p>
-                <p className='text-muted-foreground text-sm'>Approve a draft in the Queue and its slot appears here.</p>
-                <Link href='/app/queue' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2.5')}>
-                  Open the Queue <LearnMoreChevron />
-                </Link>
-              </div>
-            )}
+              )}
+            </div>
+          ) : (
+            <div className='flex flex-col items-start gap-1'>
+              <p className='text-foreground text-sm font-medium'>Nothing approved is waiting.</p>
+              <p className='text-muted-foreground text-sm'>Approve a draft in the Queue and its slot appears here.</p>
+              <Link href='/app/queue' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }), '-ml-2.5')}>
+                Open the Queue <LearnMoreChevron />
+              </Link>
+            </div>
+          )}
 
-            {(sending > 0 || status.failed > 0) && (
-              <div className='flex flex-wrap gap-2'>
-                {sending > 0 && (
-                  <AnimatedBadge size='sm' status='info' pulse contentKey={sending}>
-                    {sending} sending now
+          {(sending > 0 || status.failed > 0) && (
+            <div className='flex flex-wrap gap-2'>
+              {sending > 0 && (
+                <AnimatedBadge size='sm' status='info' pulse contentKey={sending}>
+                  {sending} sending now
+                </AnimatedBadge>
+              )}
+              {status.failed > 0 && (
+                <Link href='/app/queue' className='rafii-focus rounded-full'>
+                  <AnimatedBadge size='sm' status='danger' contentKey={status.failed}>
+                    {status.failed} failed in the last 24 hours
                   </AnimatedBadge>
-                )}
-                {status.failed > 0 && (
-                  <Link href='/app/queue' className='rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50'>
-                    <AnimatedBadge size='sm' status='danger' contentKey={status.failed}>
-                      {status.failed} failed in the last 24 hours
-                    </AnimatedBadge>
-                  </Link>
-                )}
-              </div>
-            )}
+                </Link>
+              )}
+            </div>
+          )}
 
-            <ul
-              aria-label='The next seven days'
-              className='-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pt-0.5 pb-1 sm:grid sm:grid-cols-7 sm:overflow-visible'
-            >
-              {week.map((day, index) => (
-                <li key={day.key} className='min-w-14 shrink-0 snap-start sm:min-w-0'>
-                  <DayCell day={day} today={index === 0} />
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          <ul aria-label='The next seven days' className='relative -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pt-0.5 pb-1 sm:grid sm:grid-cols-7 sm:overflow-visible'>
+            {week.map((day, index) => (
+              <li key={day.key} className='min-w-14 shrink-0 snap-start sm:min-w-0'>
+                <DayCell day={day} today={index === 0} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Panel>
   );
 }

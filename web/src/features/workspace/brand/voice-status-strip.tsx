@@ -1,7 +1,9 @@
 'use client';
 
-import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import { DigitSwap } from '@/components/motion/digit-swap';
+import { Surface } from '@/components/rafii';
+import { StatusChip } from '@/features/workspace/rafii-parts';
 import type { LearningSummary, SnapshotState } from '@/lib/api/types';
 import { ApprovedDate, type Refetchable } from './brand-parts';
 import { reasonLabel, voiceCounts, voiceStatus, type VoiceStatus } from './voice-model';
@@ -29,7 +31,7 @@ function plural(count: number, one: string, many: string) {
   return count === 1 ? one : many;
 }
 
-/** The reminder under the badge. Rules are stated as what waits, never as what is blocked. */
+/** The reminder under the chip. Rules are stated as what waits, never as what is blocked. */
 function reminder(status: VoiceStatus, earlier: number | null, isOwner: boolean) {
   switch (status.kind) {
     case 'active': {
@@ -69,11 +71,11 @@ function Count({ label, value, hint }: { label: string; value: number | null | '
       ) : value === null ? (
         <span className='text-muted-foreground text-sm font-medium'>Unavailable</span>
       ) : (
-        <span className='text-xl font-semibold tabular-nums'>
+        <span className='text-foreground text-xl font-semibold tabular-nums'>
           <DigitSwap value={value} />
         </span>
       )}
-      <span className='text-muted-foreground text-[11px] leading-snug'>{hint}</span>
+      <span className='text-muted-foreground text-xs leading-snug'>{hint}</span>
     </div>
   );
 }
@@ -83,19 +85,13 @@ export function VoiceStatusStrip({ state, isOwner, memory }: { state: SnapshotSt
   const counts = voiceCounts(state);
   const badge = badgeFor(status);
   const learning = memory.data?.learning;
-  const learned: number | null | 'pending' = memory.isLoading
-    ? 'pending'
-    : memory.isError || !learning || !Array.isArray(learning.items)
-      ? null
-      : learning.items.filter((item) => item.status === 'active').length;
+  const learned: number | null | 'pending' = memory.isLoading ? 'pending' : memory.isError || !learning || !Array.isArray(learning.items) ? null : learning.items.filter((item) => item.status === 'active').length;
 
   return (
-    <section aria-label='Voice status' data-tour='brand-status' className='bg-card ring-foreground/10 flex flex-col gap-4 rounded-xl p-4 ring-1'>
+    <Surface as='section' material='glass' aria-label='Voice status' data-tour='brand-status' className='flex flex-col gap-5'>
       <div className='flex min-w-0 flex-col gap-2'>
         <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
-          <AnimatedBadge status={badge.status} contentKey={badge.label}>
-            {badge.label}
-          </AnimatedBadge>
+          <StatusChip status={badge.status}>{badge.label}</StatusChip>
           {status.kind === 'active' && status.record && (
             <span className='text-muted-foreground text-xs'>
               Approved <ApprovedDate iso={status.record.approvedAt} />
@@ -103,9 +99,9 @@ export function VoiceStatusStrip({ state, isOwner, memory }: { state: SnapshotSt
             </span>
           )}
         </div>
-        <p className='text-muted-foreground max-w-prose text-sm leading-relaxed'>{reminder(status, counts.earlier, isOwner)}</p>
+        <p className='text-muted-foreground max-w-prose text-sm leading-relaxed text-pretty'>{reminder(status, counts.earlier, isOwner)}</p>
       </div>
-      <div className='grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-4'>
+      <div className='grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4'>
         {status.kind === 'active' ? (
           <>
             <Count label='Drafts on this voice' value={counts.onVoice} hint='Written with the active voice' />
@@ -117,6 +113,6 @@ export function VoiceStatusStrip({ state, isOwner, memory }: { state: SnapshotSt
         <Count label='Approved or scheduled posts' value={counts.bound} hint='Held if the voice changes' />
         <Count label='Learned preferences' value={learned} hint='Accepted on the Memory page' />
       </div>
-    </section>
+    </Surface>
   );
 }

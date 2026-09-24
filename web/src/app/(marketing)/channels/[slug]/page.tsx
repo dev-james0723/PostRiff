@@ -7,7 +7,7 @@ import { CtaBand } from '@/components/marketing/cta-band';
 import { Faq } from '@/components/marketing/landing/sections';
 import { PageHero } from '@/components/marketing/page-hero';
 import { Section } from '@/components/marketing/section';
-import { Badge } from '@/components/ui/badge';
+import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { channelBySlug, channels, type ChannelCapabilityKey } from '@/config/channels';
@@ -77,36 +77,36 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
       >
         <CapabilityBadge level={channel.capability} size='md' label={channel.reviewStatus ? `${channel.capability === 'assisted' ? 'Assisted' : 'Local'} · ${channel.reviewStatus}` : undefined} />
         {channel.formats.map((format) => (
-          <Badge key={format} variant='outline'>
+          <span key={format} className='rafii-quiet text-foreground inline-flex h-7 items-center rounded-full px-3 text-xs font-medium'>
             {format}
-          </Badge>
+          </span>
         ))}
       </PageHero>
 
-      <Section eyebrow='Capabilities' title={`What Rafii can do on ${channel.name} today`}>
-        <div className='max-w-2xl overflow-x-auto rounded-xl border'>
+      <Section eyebrow='Capabilities' title={`What Rafii can do on ${channel.name} today`} className='pt-10 sm:pt-14'>
+        <Surface material='quiet' radius='card' padding='none' className='max-w-2xl overflow-hidden'>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Capability</TableHead>
-                <TableHead>Level</TableHead>
+              <TableRow className='hover:bg-transparent'>
+                <TableHead className='px-4'>Capability</TableHead>
+                <TableHead className='px-4'>Level</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(Object.keys(CAP_LABELS) as ChannelCapabilityKey[]).map((key) => {
                 const level = channel.capabilities[key];
                 return (
-                  <TableRow key={key}>
-                    <TableCell className='font-medium'>{CAP_LABELS[key]}</TableCell>
-                    <TableCell>{channel.group === 'local' ? <CapabilityBadge level='local' /> : <CapabilityBadge level={levelKey(level ?? 'Unsupported')} />}</TableCell>
+                  <TableRow key={key} className='hover:bg-transparent'>
+                    <TableCell className='text-foreground px-4 py-3 font-medium'>{CAP_LABELS[key]}</TableCell>
+                    <TableCell className='px-4 py-3'>{channel.group === 'local' ? <CapabilityBadge level='local' /> : <CapabilityBadge level={levelKey(level ?? 'Unsupported')} />}</TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
-        </div>
+        </Surface>
         {channel.notes && channel.notes.length > 0 && (
-          <ul className='text-muted-foreground mt-4 flex max-w-2xl list-disc flex-col gap-1 pl-5 text-sm'>
+          <ul className='text-muted-foreground mt-5 flex max-w-2xl list-disc flex-col gap-1.5 pl-5 text-sm leading-relaxed'>
             {channel.notes.map((note) => (
               <li key={note}>{note}</li>
             ))}
@@ -115,7 +115,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
       </Section>
 
       <Section eyebrow='Connecting' title='How connection works'>
-        <div className='max-w-2xl text-sm text-pretty'>
+        <div className='text-foreground max-w-2xl text-base leading-relaxed text-pretty'>
           {channel.group === 'hosted' ? (
             <ol className='flex list-decimal flex-col gap-2 pl-5'>
               <li>In Channels, choose the capability you want and press Connect. Rafii shows the exact scopes before you leave.</li>
@@ -130,11 +130,11 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
             </ol>
           )}
         </div>
-        <div className='mt-4 flex flex-wrap gap-2'>
-          <Link href={siteConfig.links.signUp} className={buttonVariants()}>
+        <div className='mt-6 flex flex-wrap gap-3'>
+          <Link href={siteConfig.links.signUp} className={buttonVariants({ variant: 'action', size: 'control' })}>
             Start free trial
           </Link>
-          <Link href={siteConfig.links.channels} className={buttonVariants({ variant: 'outline' })}>
+          <Link href={siteConfig.links.channels} className={buttonVariants({ variant: 'glass', size: 'control' })}>
             All channels
           </Link>
         </div>

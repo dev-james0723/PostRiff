@@ -11,10 +11,9 @@ import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { DigitSwap } from '@/components/motion/digit-swap';
 import { NotificationStack } from '@/components/motion/notification-stack';
-import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
+import { SegmentedControl, StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScheduleDialog } from '@/features/queue/schedule-dialog';
@@ -72,14 +71,15 @@ const COLUMN_LIMIT = 40;
 /** How often the board re-reads the snapshot while something is in flight or due (the worker runs every minute). */
 const LIVE_REFRESH_MS = 15_000;
 
-/** First-render entrance: 30ms apart, capped at the fifth card, so the last card settles within 300ms. */
+/** Cards glide into place (DNA §18.6); a long column never staggers its entrance. */
 const ENTER_DURATION = 0.18;
-const ENTER_STAGGER = 0.03;
-const ENTER_CAP = 4;
 /** Closes faster than it opens. */
 const EXIT_DURATION = 0.15;
 
 const ALL = '__all';
+
+/** The column's quiet reading panel (DNA §5.2): the cards inside are its opaque rows. */
+const COLUMN_CLASS = 'rafii-quiet flex flex-col rounded-[var(--rafii-radius-card)]';
 
 /**
  * Re-reads the snapshot only while the board says something is moving (a job being published or due within
@@ -113,10 +113,10 @@ function useLiveRefresh(board: Board, now: number, setNow: (now: number) => void
 
 function ColumnHeader({ column, count }: { column: Pick<BoardColumn, 'key' | 'title' | 'hint'>; count: number | null }) {
   return (
-    <header className='px-3 pt-2 pb-1'>
-      <h3 id={`pipeline-col-${column.key}-title`} className='flex items-center gap-1.5 text-sm font-semibold'>
+    <header className='px-4 pt-3 pb-1.5'>
+      <h3 id={`pipeline-col-${column.key}-title`} className='flex items-center gap-1.5 text-sm font-medium'>
         {column.title}
-        {count !== null && <DigitSwap value={count} className='text-muted-foreground font-normal' />}
+        {count !== null && <DigitSwap value={count} className='text-muted-foreground font-normal tabular-nums' />}
       </h3>
       <p className='text-muted-foreground text-xs'>{column.hint}</p>
     </header>
@@ -147,15 +147,15 @@ function ColumnView({ column, platform, now, permissions, actions, cancelPending
 
   const renderCards = (cards: BoardCard[]) => (
     <AnimatePresence mode='popLayout'>
-      {cards.map((card, index) => (
-        // Entrance and glide on the wrapper, lift on the card: sharing one element, the entrance delay would
-        // also hold the card up after the pointer leaves.
+      {cards.map((card) => (
+        // Entrance and glide on the wrapper, lift on the card: sharing one element, the entrance would also hold
+        // the card up after the pointer leaves.
         <motion.div
           key={card.key}
           layoutId={reduce ? undefined : card.key}
           layout={reduce ? false : 'position'}
           initial={reduce ? false : { opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0, transition: { duration: ENTER_DURATION, ease: EASE_OUT, delay: Math.min(index, ENTER_CAP) * ENTER_STAGGER } }}
+          animate={{ opacity: 1, y: 0, transition: { duration: ENTER_DURATION, ease: EASE_OUT } }}
           exit={{ opacity: 0, transition: { duration: EXIT_DURATION, ease: EASE_OUT } }}
           transition={{ layout: SPRING_LAYOUT }}
         >
@@ -170,7 +170,7 @@ function ColumnView({ column, platform, now, permissions, actions, cancelPending
       id={`pipeline-col-${column.key}`}
       data-tour={`pipeline-col-${column.key}`}
       aria-labelledby={`pipeline-col-${column.key}-title`}
-      className={cn('bg-muted/40 flex flex-col rounded-xl border', single ? 'w-full' : 'w-72 shrink-0 snap-start min-[1440px]:w-auto min-[1440px]:min-w-0')}
+      className={cn(COLUMN_CLASS, single ? 'w-full' : 'w-72 shrink-0 snap-start min-[1440px]:w-auto min-[1440px]:min-w-0')}
     >
       <ColumnHeader column={column} count={column.items.length} />
       <motion.div
@@ -178,15 +178,15 @@ function ColumnView({ column, platform, now, permissions, actions, cancelPending
         className={cn('relative flex flex-col gap-2 px-2 pb-2', !single && 'max-h-[calc(100dvh-14rem)] min-h-24 overflow-y-auto')}
       >
         {renderCards(visible)}
-        {column.items.length === 0 && <p className='text-muted-foreground px-2 py-3 text-center text-xs text-balance'>{emptySentence}</p>}
+        {column.items.length === 0 && <p className='text-muted-foreground px-2 py-3 text-center text-[13px] leading-relaxed text-balance'>{emptySentence}</p>}
         {hidden > 0 && (
-          <Button variant='outline' size='sm' onClick={() => setShowAll(true)}>
+          <Button variant='glass' size='control' onClick={() => setShowAll(true)}>
             Show {hidden} more
           </Button>
         )}
         {footer && footer.items.length > 0 && (
-          <Collapsible className='rounded-lg border border-dashed'>
-            <CollapsibleTrigger className='group/footer hover:bg-muted/60 flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50'>
+          <Collapsible className='rafii-quiet rounded-[var(--rafii-radius-control)]'>
+            <CollapsibleTrigger className='group/footer rafii-focus hover:rafii-glass-selected flex min-h-11 w-full items-center justify-between gap-2 rounded-[var(--rafii-radius-control)] px-3 py-2 text-left text-[13px] font-medium'>
               <span className='flex items-center gap-1'>
                 {footer.label} · <DigitSwap value={footer.items.length} />
               </span>
@@ -197,7 +197,7 @@ function ColumnView({ column, platform, now, permissions, actions, cancelPending
             </CollapsibleTrigger>
             <CollapsibleContent className='t-nav-panel'>
               <div className='flex flex-col gap-2 px-1.5 pb-1.5'>
-                <p className='text-muted-foreground px-1 text-[11px]'>
+                <p className='text-muted-foreground px-1.5 text-xs leading-relaxed'>
                   {column.key === 'drafts'
                     ? 'Kept, not scheduled. Edit a draft to bring it back.'
                     : column.key === 'review'
@@ -209,7 +209,7 @@ function ColumnView({ column, platform, now, permissions, actions, cancelPending
             </CollapsibleContent>
           </Collapsible>
         )}
-        <Link href={column.href} className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), 'justify-start')}>
+        <Link href={column.href} className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'lg' }), 'justify-start')}>
           {column.cta} <LearnMoreChevron />
         </Link>
       </motion.div>
@@ -220,25 +220,25 @@ function ColumnView({ column, platform, now, permissions, actions, cancelPending
 function BoardSkeleton({ single }: { single: boolean }) {
   if (single) {
     return (
-      <div className='flex flex-col gap-3' aria-busy='true'>
-        <Skeleton className='h-9 w-full rounded-lg' />
-        <div className='bg-muted/40 flex flex-col gap-2 rounded-xl border p-2'>
+      <div className='flex flex-col gap-3' role='status' aria-busy='true' aria-label='Loading the board'>
+        <Skeleton className='h-11 w-full rounded-[var(--rafii-radius-segment)]' />
+        <div className={cn(COLUMN_CLASS, 'gap-2 p-2')}>
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className='h-28 w-full rounded-lg' />
+            <Skeleton key={i} className='h-28 w-full rounded-[var(--rafii-radius-card)]' />
           ))}
         </div>
       </div>
     );
   }
   return (
-    <div className='flex gap-4 overflow-hidden pb-2 min-[1440px]:grid min-[1440px]:grid-cols-5' aria-busy='true'>
+    <div className='flex gap-4 overflow-hidden pb-2 min-[1440px]:grid min-[1440px]:grid-cols-5' role='status' aria-busy='true' aria-label='Loading the board'>
       {COLUMN_ORDER.map((key) => (
-        <section key={key} aria-labelledby={`pipeline-col-${key}-title`} className='bg-muted/40 flex w-72 shrink-0 flex-col rounded-xl border min-[1440px]:w-auto min-[1440px]:min-w-0'>
+        <section key={key} aria-labelledby={`pipeline-col-${key}-title`} className={cn(COLUMN_CLASS, 'w-72 shrink-0 min-[1440px]:w-auto min-[1440px]:min-w-0')}>
           {/* Real titles; the count stays blank until the snapshot says what it is. */}
           <ColumnHeader column={COLUMN_META[key]} count={null} />
           <div className='flex flex-col gap-2 px-2 pb-2'>
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className='h-24 w-full rounded-lg' />
+              <Skeleton key={i} className='h-24 w-full rounded-[var(--rafii-radius-card)]' />
             ))}
           </div>
         </section>
@@ -384,71 +384,64 @@ export function PipelineView() {
 
       {!snapshot.data ? (
         snapshot.isError ? (
-          <Empty className='flex-none border'>
-            <EmptyHeader>
-              <EmptyMedia variant='icon'>
-                <Icons.refresh />
-              </EmptyMedia>
-              <EmptyTitle>The board could not load</EmptyTitle>
-              <EmptyDescription>{snapshot.error instanceof ApiError ? snapshot.error.message : 'The workspace snapshot did not arrive.'}</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button onClick={() => void snapshot.refetch()} disabled={snapshot.isFetching}>
+          <StateMessage
+            kind='error'
+            title='The board could not load'
+            description={snapshot.error instanceof ApiError ? snapshot.error.message : 'The workspace snapshot did not arrive.'}
+            action={
+              <Button variant='glass' size='control' onClick={() => void snapshot.refetch()} disabled={snapshot.isFetching}>
                 Try again
               </Button>
-            </EmptyContent>
-          </Empty>
+            }
+          />
         ) : (
           <BoardSkeleton single={isMobile} />
         )
       ) : (
         <div className='flex min-w-0 flex-col gap-4'>
+          {/* Freshness, partial data and read-only access are stated, never implied (DNA §20.1). */}
           {snapshot.isError && (
-            <p className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs' role='status'>
-              <Icons.alertCircle className='size-3.5 text-amber-600 dark:text-amber-400' aria-hidden />
-              The latest refresh failed. Last updated {relativeTime(snapshot.dataUpdatedAt / 1000)}.
-              <Button variant='link' size='xs' className='h-auto p-0' onClick={() => void snapshot.refetch()} disabled={snapshot.isFetching}>
-                Try again
-              </Button>
-            </p>
+            <StateMessage
+              kind='stale'
+              layout='inline'
+              title='The latest refresh failed.'
+              description={`Last updated ${relativeTime(snapshot.dataUpdatedAt / 1000)}.`}
+              action={
+                <Button variant='quiet' size='lg' onClick={() => void snapshot.refetch()} disabled={snapshot.isFetching}>
+                  Try again
+                </Button>
+              }
+            />
           )}
           {channels.isError && (
-            <p className='text-muted-foreground flex items-center gap-2 text-xs' role='status'>
-              <Icons.broadcast className='size-3.5' aria-hidden />
-              Channel capabilities unavailable, so channels that cannot publish directly are not listed.
-            </p>
+            <StateMessage kind='partial' layout='inline' title='Channel capabilities unavailable' description='Channels that cannot publish directly are not listed.' />
           )}
-          {readOnly && (
-            <p className='text-muted-foreground flex items-center gap-2 text-xs' role='note'>
-              <Icons.lock className='size-3.5' aria-hidden />
-              This is a sample workspace, so the board is read-only.
-            </p>
-          )}
+          {readOnly && <StateMessage kind='unsupported' layout='inline' title='This is a sample workspace, so the board is read-only.' />}
 
           {fullBoard.empty && (
-            <Empty className='flex-none border'>
-              <EmptyHeader>
-                <EmptyMedia variant='icon'>
-                  <Icons.kanban />
-                </EmptyMedia>
-                <EmptyTitle>Nothing on the board yet</EmptyTitle>
-                <EmptyDescription>
+            <StateMessage
+              kind='empty'
+              title='Nothing on the board yet'
+              description={
+                <>
                   Sources become drafts. A draft becomes an exact review of text, account and time. An approved review becomes a job, and the provider confirms it. Start with one sentence.
-                </EmptyDescription>
-              </EmptyHeader>
-              {!canDraft && <p className='text-muted-foreground text-sm'>{readOnly ? 'A sample workspace is read-only.' : 'An editor in this workspace adds drafts.'}</p>}
-              {canDraft && (
-                <EmptyContent className='flex-row flex-wrap justify-center'>
-                  {/* Creating starts in the Home composer; sources live in Ideas. */}
-                  <Link href='/app' className={buttonVariants()}>
-                    Draft a post
-                  </Link>
-                  <Link href='/app/ideas' className={buttonVariants({ variant: 'outline' })}>
-                    Add a source
-                  </Link>
-                </EmptyContent>
-              )}
-            </Empty>
+                  {!canDraft && ` ${readOnly ? 'A sample workspace is read-only.' : 'An editor in this workspace adds drafts.'}`}
+                </>
+              }
+              action={
+                canDraft ? (
+                  <>
+                    {/* Creating starts in the Home composer; sources live in Ideas. */}
+                    <Link href='/app' className={buttonVariants({ variant: 'action', size: 'control' })}>
+                      Draft a post
+                    </Link>
+                    <Link href='/app/ideas' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+                      Add a source
+                    </Link>
+                  </>
+                ) : undefined
+              }
+            />
           )}
 
           {(needsYou.length > 0 || fullBoard.platforms.length > 1) && (
@@ -488,38 +481,63 @@ export function PipelineView() {
                 <span />
               )}
               {fullBoard.platforms.length > 1 && (
-                // The counts widen the tabs: on a narrow screen the list scrolls sideways instead of pushing the page wider.
-                <Tabs value={activePlatform ?? ALL} onValueChange={(value) => setPlatform(value === ALL ? null : value)} variant='pill' className='max-w-full min-w-0'>
-                  <TabsList aria-label='Filter by platform' className='scrollbar-hide relative max-w-full overflow-x-auto border'>
-                    <TabsTrigger value={ALL} className='gap-1.5 px-3 py-1' title='Drafts, reviews and jobs on every platform'>
-                      All
-                      <DigitSwap value={fullBoard.platformTotal} className='text-xs opacity-75' />
-                    </TabsTrigger>
-                    {fullBoard.platforms.map((entry) => (
-                      <TabsTrigger key={entry.platform} value={entry.platform} className='gap-1.5 px-3 py-1' title={`${entry.platform} drafts, reviews and jobs`}>
-                        <ChannelIcon platform={entry.platform} name={entry.platform} size='xs' />
-                        {entry.platform}
-                        <DigitSwap value={entry.count} className='text-xs opacity-75' />
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
+                // FIND: a persistent-lens filter with real counts; on a narrow screen it scrolls sideways instead of pushing the page wider.
+                <div className='relative scrollbar-hide max-w-full min-w-0 overflow-x-auto py-0.5'>
+                  <SegmentedControl
+                    label='Filter by platform'
+                    value={activePlatform ?? ALL}
+                    onChange={(value) => setPlatform(value === ALL ? null : value)}
+                    widths='content'
+                    options={[
+                      {
+                        value: ALL,
+                        title: 'Drafts, reviews and jobs on every platform',
+                        label: (
+                          <>
+                            All
+                            <DigitSwap value={fullBoard.platformTotal} className='text-muted-foreground text-xs' />
+                          </>
+                        )
+                      },
+                      ...fullBoard.platforms.map((entry) => ({
+                        value: entry.platform,
+                        title: `${entry.platform} drafts, reviews and jobs`,
+                        label: (
+                          <>
+                            <ChannelIcon platform={entry.platform} name={entry.platform} size='xs' />
+                            {entry.platform}
+                            <DigitSwap value={entry.count} className='text-muted-foreground text-xs' />
+                          </>
+                        )
+                      }))
+                    ]}
+                  />
+                </div>
               )}
             </div>
           )}
 
           {isMobile ? (
             <div id='pipeline-board' className='flex min-w-0 scroll-mt-4 flex-col gap-3'>
-              <Tabs value={mobileKey} onValueChange={(value) => setMobileColumn(value as ColumnKey)} variant='segment' className='max-w-full min-w-0'>
-                <TabsList aria-label='Board column' data-tour='pipeline-board' className='scrollbar-hide relative flex w-full max-w-full overflow-x-auto border'>
-                  {board.columns.map((column) => (
-                    <TabsTrigger key={column.key} value={column.key} className='w-full gap-1 px-1 py-1.5 text-xs' wrapperClassName='flex-1'>
-                      {SHORT_TITLE[column.key]}
-                      <DigitSwap value={column.items.length} className='opacity-75' />
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
+              {/* One column at a time on a phone: a tab lens over the board (DNA §10.4). */}
+              <div data-tour='pipeline-board' className='relative scrollbar-hide max-w-full min-w-0 overflow-x-auto py-0.5'>
+                <SegmentedControl
+                  label='Board column'
+                  pattern='tabs'
+                  value={mobileKey}
+                  onChange={setMobileColumn}
+                  widths='content'
+                  options={board.columns.map((column) => ({
+                    value: column.key,
+                    label: (
+                      <>
+                        {SHORT_TITLE[column.key]}
+                        <DigitSwap value={column.items.length} className='text-muted-foreground text-xs' />
+                      </>
+                    )
+                  }))}
+                />
+              </div>
               {board.columns
                 .filter((column) => column.key === mobileKey)
                 .map((column) => (

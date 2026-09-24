@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { rafiiInputGroup, rafiiSelectTrigger } from '@/components/auth/form-styles';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,6 +15,7 @@ import type { ProfileChanges } from '@/lib/api/types';
 import { usePreferences } from '@/lib/preferences';
 import { formatDateTime } from '@/lib/time';
 import { useWorkspace } from '@/lib/workspace/provider';
+import { SettingsSection } from './settings-section';
 
 /** Languages the formatting layer is exercised with. The app's own copy is English for now. */
 const LANGUAGES: { value: string; label: string }[] = [
@@ -52,6 +53,7 @@ export function zoneLabel(zone: string, at = new Date()): string {
   }
 }
 
+/** Immediate preferences (DNA §21.15): each control applies on change and confirms with a toast. */
 export function PreferencesCard() {
   const prefs = usePreferences();
   const me = useMe();
@@ -76,84 +78,81 @@ export function PreferencesCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Preferences</CardTitle>
-        <CardDescription>
-          How times and numbers read for you, in every workspace. Leave either on “this device” to follow the browser you are using.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='grid gap-6 sm:grid-cols-2'>
-        <div className='flex flex-col gap-1.5'>
-          <Label htmlFor='pref-time-zone'>Time zone</Label>
-          {me.isLoading ? (
-            <Skeleton className='h-9 w-full' />
-          ) : (
-            <Combobox
-              items={zones}
-              value={savedZone || null}
-              onValueChange={(zone) => void save({ timeZone: zone ?? '' }, zone ? `Times now follow ${zoneLabel(zone)}.` : 'Times follow this device again.')}
-              itemToStringLabel={(zone: string) => zoneLabel(zone)}
-              disabled={saving}
-            >
-              <ComboboxInput id='pref-time-zone' placeholder={`This device: ${zoneLabel(prefs.browserTimeZone)}`} />
-              <ComboboxContent>
-                <ComboboxEmpty>No time zone matches.</ComboboxEmpty>
-                <ComboboxList>{(zone: string) => <ComboboxItem key={zone} value={zone}>{zoneLabel(zone)}</ComboboxItem>}</ComboboxList>
-              </ComboboxContent>
-            </Combobox>
-          )}
-          <p className='text-muted-foreground text-xs'>
-            {savedZone
-              ? `Schedules and times are written in ${zoneLabel(savedZone)}.${savedZone !== prefs.browserTimeZone ? ` This device is on ${zoneLabel(prefs.browserTimeZone)}.` : ''}`
-              : `Following this device: ${zoneLabel(prefs.browserTimeZone)}. Set a zone if you schedule from more than one place.`}
-          </p>
-        </div>
-
-        <div className='flex flex-col gap-1.5'>
-          <Label htmlFor='pref-locale'>Language for dates and numbers</Label>
-          {me.isLoading ? (
-            <Skeleton className='h-9 w-full' />
-          ) : (
-            <Select
-              value={savedLocale || DEVICE}
-              onValueChange={(value) => {
-                const locale = value === DEVICE ? '' : (value as string);
-                void save({ locale }, locale ? 'Dates and numbers now follow that language.' : 'Dates and numbers follow this device again.');
-              }}
-            >
-              <SelectTrigger id='pref-locale' disabled={saving}>
-                <SelectValue>
-                  {savedLocale ? (LANGUAGES.find((item) => item.value === savedLocale)?.label ?? savedLocale) : `This device (${prefs.browserLocale})`}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DEVICE}>This device ({prefs.browserLocale})</SelectItem>
-                {LANGUAGES.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <p className='text-muted-foreground text-xs'>
-            Changes how dates and numbers are written, for example {formatDateTime(Date.now() / 1000)}. The app&apos;s own text stays in English for now.
-          </p>
-        </div>
-
-        {(savedZone || savedLocale) && (
-          <Button
-            variant='link'
-            size='sm'
-            className='w-fit px-0 sm:col-span-2'
+    <SettingsSection
+      id='profile-preferences'
+      title='Preferences'
+      description='How times and numbers read for you, in every workspace. Leave either on “this device” to follow the browser you are using.'
+      bodyClassName='grid gap-6 sm:grid-cols-2'
+    >
+      <div className='flex min-w-0 flex-col gap-2'>
+        <Label htmlFor='pref-time-zone'>Time zone</Label>
+        {me.isLoading ? (
+          <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)]' />
+        ) : (
+          <Combobox
+            items={zones}
+            value={savedZone || null}
+            onValueChange={(zone) => void save({ timeZone: zone ?? '' }, zone ? `Times now follow ${zoneLabel(zone)}.` : 'Times follow this device again.')}
+            itemToStringLabel={(zone: string) => zoneLabel(zone)}
             disabled={saving}
-            onClick={() => void save({ timeZone: '', locale: '' }, 'Both preferences follow this device again.')}
           >
-            Follow this device for both
-          </Button>
+            <ComboboxInput id='pref-time-zone' placeholder={`This device: ${zoneLabel(prefs.browserTimeZone)}`} className={rafiiInputGroup} style={{ height: '100%' }} />
+            <ComboboxContent className='rafii-elevated rounded-2xl bg-transparent ring-0'>
+              <ComboboxEmpty>No time zone matches.</ComboboxEmpty>
+              <ComboboxList>{(zone: string) => <ComboboxItem key={zone} value={zone}>{zoneLabel(zone)}</ComboboxItem>}</ComboboxList>
+            </ComboboxContent>
+          </Combobox>
         )}
-      </CardContent>
-    </Card>
+        <p className='text-muted-foreground text-xs leading-relaxed'>
+          {savedZone
+            ? `Schedules and times are written in ${zoneLabel(savedZone)}.${savedZone !== prefs.browserTimeZone ? ` This device is on ${zoneLabel(prefs.browserTimeZone)}.` : ''}`
+            : `Following this device: ${zoneLabel(prefs.browserTimeZone)}. Set a zone if you schedule from more than one place.`}
+        </p>
+      </div>
+
+      <div className='flex min-w-0 flex-col gap-2'>
+        <Label htmlFor='pref-locale'>Language for dates and numbers</Label>
+        {me.isLoading ? (
+          <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)]' />
+        ) : (
+          <Select
+            value={savedLocale || DEVICE}
+            onValueChange={(value) => {
+              const locale = value === DEVICE ? '' : (value as string);
+              void save({ locale }, locale ? 'Dates and numbers now follow that language.' : 'Dates and numbers follow this device again.');
+            }}
+          >
+            <SelectTrigger id='pref-locale' disabled={saving} className={rafiiSelectTrigger}>
+              <SelectValue>
+                {savedLocale ? (LANGUAGES.find((item) => item.value === savedLocale)?.label ?? savedLocale) : `This device (${prefs.browserLocale})`}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className='rafii-elevated rounded-2xl bg-transparent ring-0'>
+              <SelectItem value={DEVICE}>This device ({prefs.browserLocale})</SelectItem>
+              {LANGUAGES.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <p className='text-muted-foreground text-xs leading-relaxed'>
+          Changes how dates and numbers are written, for example {formatDateTime(Date.now() / 1000)}. The app&apos;s own text stays in English for now.
+        </p>
+      </div>
+
+      {(savedZone || savedLocale) && (
+        <Button
+          variant='quiet'
+          size='sm'
+          className='min-h-9 w-fit sm:col-span-2'
+          disabled={saving}
+          onClick={() => void save({ timeZone: '', locale: '' }, 'Both preferences follow this device again.')}
+        >
+          Follow this device for both
+        </Button>
+      )}
+    </SettingsSection>
   );
 }

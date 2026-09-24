@@ -2,25 +2,17 @@
 
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import { Switch } from '@/components/motion/switch';
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { LoadingButton } from '@/components/ui/loading-button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import { ApiError } from '@/lib/api/client';
 import { useAct, useInvalidate, useMembers, useMemory, useSnapshot } from '@/lib/api/hooks';
 import type { MemoryEgress, ResearchEgress } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatDate } from '@/lib/time';
-import { cn } from '@/lib/utils';
 import { Unavailable } from './memory-states';
 
 /** "A, B and C" / "A, B or C". */
@@ -71,16 +63,7 @@ function useConfirmedChoice() {
   };
 }
 
-function ConfirmChoice({ open, pending, title, description, confirmLabel, cancelLabel, onConfirm, onClose }: {
-  open: boolean;
-  pending: boolean;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  cancelLabel: string;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
+function ConfirmChoice({ open, pending, title, description, confirmLabel, cancelLabel, onConfirm, onClose }: { open: boolean; pending: boolean; title: string; description: string; confirmLabel: string; cancelLabel: string; onConfirm: () => void; onClose: () => void }) {
   return (
     <AlertDialog
       open={open}
@@ -88,14 +71,16 @@ function ConfirmChoice({ open, pending, title, description, confirmLabel, cancel
         if (!next && !pending) onClose();
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 md:rounded-[var(--rafii-radius-dialog)] md:p-6'>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
-          <LoadingButton loading={pending} loadingLabel='Saving the change…' onClick={onConfirm}>
+          <AlertDialogCancel variant='glass' size='control' disabled={pending}>
+            {cancelLabel}
+          </AlertDialogCancel>
+          <LoadingButton variant='action' size='control' loading={pending} loadingLabel='Saving the change…' onClick={onConfirm}>
             {confirmLabel}
           </LoadingButton>
         </AlertDialogFooter>
@@ -104,24 +89,15 @@ function ConfirmChoice({ open, pending, title, description, confirmLabel, cancel
   );
 }
 
-function AccessRow({ title, status, badge, description, note, control }: {
-  title: string;
-  status: AnimatedBadgeStatus;
-  badge: string;
-  description: ReactNode;
-  note?: string | null;
-  control?: ReactNode;
-}) {
+function AccessRow({ title, status, badge, description, note, control }: { title: string; status: AnimatedBadgeStatus; badge: string; description: ReactNode; note?: string | null; control?: ReactNode }) {
   return (
-    <div className='flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between'>
-      <div className='flex min-w-0 flex-col gap-1'>
+    <div className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4 sm:flex-row sm:items-start sm:justify-between'>
+      <div className='flex min-w-0 flex-col gap-1.5'>
         <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-sm font-semibold'>{title}</span>
-          <AnimatedBadge size='sm' status={status} contentKey={badge}>
-            {badge}
-          </AnimatedBadge>
+          <span className='text-foreground text-sm font-medium'>{title}</span>
+          <StatusChip status={status}>{badge}</StatusChip>
         </div>
-        <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>{description}</p>
+        <p className='text-muted-foreground max-w-prose text-sm leading-relaxed'>{description}</p>
         {note ? <p className='text-muted-foreground text-xs'>{note}</p> : null}
       </div>
       {control}
@@ -138,14 +114,7 @@ function CloudRow({ egress, isOwner }: { egress: MemoryEgress | undefined; isOwn
   const choice = useConfirmedChoice();
 
   if (!egress) {
-    return (
-      <AccessRow
-        title='Cloud model access'
-        status='warning'
-        badge='Unavailable'
-        description='Whether PostRiff’s cloud model may read these files could not be read, so nothing is shown as on or off.'
-      />
-    );
+    return <AccessRow title='Cloud model access' status='warning' badge='Unavailable' description='Whether PostRiff’s cloud model may read these files could not be read, so nothing is shown as on or off.' />;
   }
 
   const shared = egress.sharedFiles ?? [];
@@ -188,7 +157,7 @@ function CloudRow({ egress, isOwner }: { egress: MemoryEgress | undefined; isOwn
         status={egress.cloud ? 'success' : 'neutral'}
         badge={egress.cloud ? 'Shared' : 'Not shared'}
         description={description}
-        note={isOwner ? decidedLine ?? 'Nothing is shared until an owner turns this on.' : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
+        note={isOwner ? (decidedLine ?? 'Nothing is shared until an owner turns this on.') : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
         control={<Switch checked={egress.cloud} disabled={!isOwner || act.isPending || !snapshot.data} onCheckedChange={choice.ask} ariaLabel='Let the cloud model read your memory files' label='Allow' />}
       />
       {isOwner && (
@@ -220,21 +189,13 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
   const choice = useConfirmedChoice();
 
   if (!research) {
-    return (
-      <AccessRow
-        title='Web research'
-        status='warning'
-        badge='Unavailable'
-        description='Whether drafts may look facts up on the web could not be read, so nothing is shown as on or off.'
-      />
-    );
+    return <AccessRow title='Web research' status='warning' badge='Unavailable' description='Whether drafts may look facts up on the web could not be read, so nothing is shown as on or off.' />;
   }
 
   const onText = 'When a draft needs facts you haven’t supplied, PostRiff looks them up.';
   const offText = 'Drafts use only what you supply.';
   const processors = research.processors ?? [];
-  const disclosure =
-    processors.length > 0 ? `What is sent, and to whom: ${processors.join('; ')}. They never receive your sources, memory files or drafts.` : '';
+  const disclosure = processors.length > 0 ? `What is sent, and to whom: ${processors.join('; ')}. They never receive your sources, memory files or drafts.` : '';
 
   // No switch applies on the person's own machine (always on) or when research is off for everyone here.
   if (!research.hosted || research.enabled === false) {
@@ -275,7 +236,7 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
         status={research.web ? 'success' : 'neutral'}
         badge={research.web ? 'On' : 'Off'}
         description={`${research.web ? onText : `${offText} Turn this on and PostRiff looks up the facts a draft needs.`} ${disclosure}`}
-        note={isOwner ? decidedLine ?? 'Nothing is sent until an owner turns this on.' : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
+        note={isOwner ? (decidedLine ?? 'Nothing is sent until an owner turns this on.') : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
         control={<Switch checked={research.web} disabled={!isOwner || act.isPending || !snapshot.data} onCheckedChange={choice.ask} ariaLabel='Let PostRiff look facts up on the web' label='Allow' />}
       />
       {isOwner && (
@@ -283,11 +244,7 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
           open={choice.open}
           pending={act.isPending}
           title={choice.requested ? 'Turn on web research?' : 'Turn off web research?'}
-          description={
-            choice.requested
-              ? `${onText} ${disclosure || 'Which services receive the lookups could not be read.'}`
-              : `${offText} A draft that needed facts says that research was off, and an owner can turn it back on here.`
-          }
+          description={choice.requested ? `${onText} ${disclosure || 'Which services receive the lookups could not be read.'}` : `${offText} A draft that needed facts says that research was off, and an owner can turn it back on here.`}
           confirmLabel={choice.requested ? 'Turn on' : 'Turn off'}
           cancelLabel={choice.requested ? 'Keep it off' : 'Keep it on'}
           onConfirm={() => decide(choice.requested)}
@@ -300,33 +257,35 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
 
 /**
  * Who reads the memory files besides routes on the person's own machine: the cloud model and web research,
- * each an owner decision with its real state. A setting the API leaves out reads Unavailable, never Off.
+ * each an owner decision with its real state and consequence. A setting the API leaves out reads Unavailable, never Off.
  */
 export function AccessCard({ className }: { className?: string }) {
   const memory = useMemory();
   const isOwner = checkAccess(useWorkspaceAccess(), { permission: 'owner' });
 
   return (
-    <section data-tour='memory-access' aria-labelledby='memory-access-title' className={cn('bg-card ring-foreground/10 flex flex-col gap-3 rounded-xl p-4 ring-1', className)}>
-      <div className='flex flex-col gap-1'>
-        <h2 id='memory-access-title' className='text-sm font-semibold'>
-          Who reads these files
-        </h2>
-        <p className='text-muted-foreground max-w-prose text-xs leading-relaxed'>Writing routes on your own machine always read the files given to them. An owner decides whether anything else does.</p>
-      </div>
+    <Panel
+      material='glass'
+      data-tour='memory-access'
+      titleId='memory-access-title'
+      title='Who reads these files'
+      description='Writing routes on your own machine always read the files given to them. An owner decides whether anything else does.'
+      className={className}
+      bodyClassName='gap-2'
+    >
       {memory.data ? (
-        <div className='flex flex-col divide-y border-t pt-3'>
+        <>
           <CloudRow egress={memory.data.egress} isOwner={isOwner} />
           <ResearchRow research={memory.data.research} isOwner={isOwner} />
-        </div>
+        </>
       ) : memory.isLoading ? (
-        <div className='flex flex-col gap-2 border-t pt-3'>
-          <Skeleton className='h-16 w-full' />
-          <Skeleton className='h-16 w-full' />
+        <div className='flex flex-col gap-2' role='status' aria-label='Loading access settings'>
+          <Skeleton className='h-20 w-full rounded-[var(--rafii-radius-control)]' />
+          <Skeleton className='h-20 w-full rounded-[var(--rafii-radius-control)]' />
         </div>
       ) : (
-        <Unavailable className='border-t pt-3' message='Access settings are unavailable right now.' query={memory} />
+        <Unavailable message='Access settings are unavailable right now.' query={memory} />
       )}
-    </section>
+    </Panel>
   );
 }

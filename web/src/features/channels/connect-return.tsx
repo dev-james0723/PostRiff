@@ -6,17 +6,18 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
-import { Icons } from '@/components/icons';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StateMessage } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { keys } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { OAuthComplete } from '@/lib/api/types';
 import { takeExpectedReconnect } from '@/lib/channels/connect-expect';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
-/** Handles the provider's return (`/channels/connect?provider&state&code`) with the authenticated exchange. */
+/**
+ * Handles the provider's return (`/channels/connect?provider&state&code`) with the authenticated exchange.
+ * Only the Rafii-owned surfaces are styled here; the exchange, its query handling and redirects are untouched.
+ */
 export function ConnectReturn() {
   const params = useSearchParams();
   const router = useRouter();
@@ -62,35 +63,30 @@ export function ConnectReturn() {
       .catch((err) => setError(err instanceof ApiError ? err.message : 'The connection could not be completed.'));
   }, [api, client, params, provider, router, state, workspaceId]);
 
+  const back = (
+    <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+      Back to Channels
+    </Link>
+  );
+
   return (
-    <PageContainer pageTitle='Finishing connection' pageDescription='Confirming the account the provider returned.'>
+    <PageContainer pageEyebrow='Connections' pageTitle='Finishing connection' pageDescription='Confirming the account the provider returned.' width='reading'>
       <div className='flex max-w-xl flex-col gap-4'>
-        {!result && !error && <Skeleton className='h-24 w-full' />}
-        {error && (
-          <Alert variant='destructive'>
-            <Icons.alertCircle className='size-4' />
-            <AlertTitle>Not connected</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {result && (
-          <Alert variant={result.connected ? 'default' : 'destructive'}>
-            {result.connected ? <Icons.circleCheck className='size-4' /> : <Icons.alertCircle className='size-4' />}
-            <AlertTitle>{result.connected ? `Connected ${result.account ?? ''}` : 'Connection was not granted'}</AlertTitle>
-            <AlertDescription>
-              {result.connected
-                ? `Confirm this is the right account on the Channels page.${
-                    result.missingScopes?.length
-                      ? ` Missing scopes: ${result.missingScopes.join(', ')} — publishing stays Assisted.`
-                      : ''
-                  }`
-                : result.reason || 'Nothing was stored.'}
-            </AlertDescription>
-          </Alert>
-        )}
-        <Link href='/app/channels' className={buttonVariants({ variant: 'outline' })}>
-          Back to Channels
-        </Link>
+        {!result && !error && <StateMessage kind='loading' title='Confirming the account the provider returned…' />}
+        {error && <StateMessage kind='error' title='Not connected' description={error} action={back} />}
+        {result &&
+          (result.connected ? (
+            <StateMessage
+              kind='success'
+              title={`Connected ${result.account ?? ''}`.trim()}
+              description={`Confirm this is the right account on the Channels page.${
+                result.missingScopes?.length ? ` Missing scopes: ${result.missingScopes.join(', ')} — publishing stays Assisted.` : ''
+              }`}
+              action={back}
+            />
+          ) : (
+            <StateMessage kind='error' title='Connection was not granted' description={result.reason || 'Nothing was stored.'} action={back} />
+          ))}
       </div>
     </PageContainer>
   );

@@ -6,16 +6,16 @@ import Link from 'next/link';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatBytes, formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { copyHash, dimensionsOf, useAssetImage } from './asset-card';
+import { badgeClass, copyHash, dimensionsOf, useAssetImage } from './asset-card';
 import { imageRuleChecks } from './image-rules';
 import type { AssetUse, LibraryAsset } from './use-library';
 
@@ -56,6 +56,10 @@ function whenOf(use: AssetUse) {
   return Number.isNaN(parsed) ? `${use.timing.local} (${use.timing.timeZone})` : formatDateTime(parsed / 1000);
 }
 
+/* Elevated glass on the existing overlay primitives (DNA §12.2). */
+const SHEET_CLASS = 'rafii-elevated gap-0 border-0 bg-transparent data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-[480px]';
+const DRAWER_CLASS = 'rafii-elevated bg-transparent data-[swipe-direction=down]:rounded-t-[var(--rafii-radius-mobile-dialog)] data-[swipe-direction=down]:border-t-0 data-[swipe-axis=y]:[--drawer-content-max-height:85dvh]';
+
 function Fact({ term, children, className }: { term: string; children: ReactNode; className?: string }) {
   return (
     <div className='grid grid-cols-[7.5rem_minmax(0,1fr)] items-baseline gap-3 py-2'>
@@ -70,7 +74,7 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
     <Fact term={term}>
       <span className='flex items-start gap-1'>
         <code className='min-w-0 flex-1 font-mono text-xs break-all'>{hash}</code>
-        <Button variant='ghost' size='icon-xs' aria-label={`Copy ${term.toLowerCase()}`} onClick={() => void copyHash(hash)}>
+        <Button variant='quiet' size='icon-lg' className='-mt-2 rounded-full' aria-label={`Copy ${term.toLowerCase()}`} onClick={() => void copyHash(hash)}>
           <Icons.copy aria-hidden />
         </Button>
       </span>
@@ -78,11 +82,12 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
   );
 }
 
+/** The real image in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
 function LargeImage({ asset }: { asset: LibraryAsset }) {
   const image = useAssetImage(asset.id);
   const ratio = asset.width && asset.height ? `${asset.width} / ${asset.height}` : '1 / 1';
   return (
-    <div className='bg-muted/60 flex max-h-[40vh] items-center md:max-h-[50vh] justify-center overflow-hidden rounded-lg border'>
+    <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
       {image.data ? (
         <Image
           src={image.data}
@@ -93,7 +98,7 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
           className='h-auto max-h-[40vh] w-auto max-w-full object-contain md:max-h-[50vh]'
         />
       ) : image.isError ? (
-        <div className='text-muted-foreground flex aspect-video w-full flex-col items-center justify-center gap-2 text-sm'>
+        <div className='text-muted-foreground flex aspect-video w-full flex-col items-center justify-center gap-3 p-4 text-center text-sm'>
           <span>
             {image.errorStatus === 404
               ? 'The image file is not in private storage'
@@ -102,7 +107,7 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
                 : 'Preview unavailable'}
           </span>
           {image.canRetry && (
-            <Button size='sm' variant='outline' disabled={image.isFetching} onClick={() => void image.refetch()}>
+            <Button size='control' variant='glass' disabled={image.isFetching} onClick={() => void image.refetch()}>
               <Icons.refresh className={cn(image.isFetching && 'animate-spin')} aria-hidden />
               Retry
             </Button>
@@ -125,7 +130,7 @@ function UseRow({ use }: { use: AssetUse }) {
           {use.platform} · {use.account}
         </span>
         <span className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-          <AnimatedBadge size='sm' status={badge.status} pulse={false} title={use.state.replace(/_/g, ' ')}>
+          <AnimatedBadge size='sm' status={badge.status} pulse={false} title={use.state.replace(/_/g, ' ')} className={badgeClass(badge.status)}>
             {badge.label}
           </AnimatedBadge>
           <span className='text-muted-foreground text-xs'>
@@ -135,7 +140,7 @@ function UseRow({ use }: { use: AssetUse }) {
       </div>
       <Link
         href='/app/queue'
-        className={cn('t-learn shrink-0', buttonVariants({ variant: 'ghost', size: 'xs' }))}
+        className={cn('t-learn shrink-0', buttonVariants({ variant: 'quiet', size: 'lg' }))}
         aria-label={`Open the ${use.platform} ${use.kind === 'review' ? 'review' : 'post'} in the Queue`}
       >
         Queue
@@ -148,14 +153,14 @@ function UseRow({ use }: { use: AssetUse }) {
 function ImageRules({ asset, platforms }: { asset: LibraryAsset; platforms: string[] }) {
   const checks = imageRuleChecks(platforms, asset.width, asset.height);
   return (
-    <section aria-labelledby='asset-rules' className='flex flex-col'>
-      <h3 id='asset-rules' className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+    <section aria-labelledby='asset-rules' className='flex flex-col gap-1'>
+      <h3 id='asset-rules' className='rafii-eyebrow'>
         Image rules
       </h3>
       {checks.length === 0 ? (
         <p className='text-muted-foreground py-2 text-sm'>No accounts are connected, so there are no platform rules to check.</p>
       ) : (
-        <ul className='divide-y'>
+        <ul className='flex flex-col'>
           {checks.map((check) => (
             <li key={check.platform} className='flex items-start gap-3 py-2.5'>
               <ChannelIcon platform={check.platform} name={check.platform} size='sm' className='mt-0.5' />
@@ -164,7 +169,7 @@ function ImageRules({ asset, platforms }: { asset: LibraryAsset; platforms: stri
                 <span className={cn(check.rule ? 'text-muted-foreground text-xs' : 'text-muted-foreground')}>{check.note}</span>
               </div>
               {check.fits === false && (
-                <AnimatedBadge size='sm' status='warning' pulse={false}>
+                <AnimatedBadge size='sm' status='warning' pulse={false} className={badgeClass('warning')}>
                   outside range
                 </AnimatedBadge>
               )}
@@ -172,7 +177,7 @@ function ImageRules({ asset, platforms }: { asset: LibraryAsset; platforms: stri
           ))}
         </ul>
       )}
-      <p className='text-muted-foreground mt-1 text-xs'>Every post with an image also needs alt text and your confirmation that you may use the image.</p>
+      <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>Every post with an image also needs alt text and your confirmation that you may use the image.</p>
     </section>
   );
 }
@@ -187,22 +192,24 @@ function DetailBody({
   const dims = dimensionsOf(asset);
   const reencoded = asset.mime === 'image/jpeg' && asset.processing === 'decoded';
   return (
-    <div className='flex flex-col gap-5'>
+    <div className='flex flex-col gap-6'>
       <LargeImage asset={asset} />
 
       {publishing && (
-        <Alert>
-          <Icons.spinner className='animate-spin' aria-hidden />
-          <AlertTitle>A post using this image is still being published or checked</AlertTitle>
-          <AlertDescription>Delete it once that post has settled. The workspace refuses to delete an image while a post using it is in flight.</AlertDescription>
-        </Alert>
+        <StateMessage
+          kind='loading'
+          layout='inline'
+          title='A post using this image is still being published or checked'
+          description='Delete it once that post has settled. The workspace refuses to delete an image while a post using it is in flight.'
+        />
       )}
 
-      <section aria-labelledby='asset-facts' className='flex flex-col'>
-        <h3 id='asset-facts' className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+      {/* Provenance and rights are inspectable facts (DNA §21.9), read as quiet rows without dividers. */}
+      <section aria-labelledby='asset-facts' className='flex flex-col gap-1'>
+        <h3 id='asset-facts' className='rafii-eyebrow'>
           Provenance
         </h3>
-        <dl className='divide-y'>
+        <dl className='flex flex-col'>
           <Fact term='Dimensions'>{dims ? `${dims} px` : 'Not recorded'}</Fact>
           <Fact term='Size'>{typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : 'Not recorded'}</Fact>
           <Fact term='Format'>{reencoded ? 'JPEG, re-encoded on upload with metadata removed' : asset.mime}</Fact>
@@ -216,18 +223,18 @@ function DetailBody({
           )}
           {asset.decoder && <Fact term='Decoder'>{asset.decoder}</Fact>}
         </dl>
-        <p className='text-muted-foreground mt-1 text-xs'>
+        <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
           The stored hash names the exact bytes a post publishes; a post records it when it is prepared.
           {asset.sourceHash ? ' The source hash names the file as you uploaded it, before it was re-encoded.' : ''}
         </p>
       </section>
 
-      <section aria-labelledby='asset-uses' className='flex flex-col'>
+      <section aria-labelledby='asset-uses' className='flex flex-col gap-1'>
         <div className='flex items-center justify-between gap-2'>
-          <h3 id='asset-uses' className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+          <h3 id='asset-uses' className='rafii-eyebrow'>
             Used in
           </h3>
-          <Link href='/app/pipeline' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'xs' }))}>
+          <Link href='/app/pipeline' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'lg' }))}>
             Pipeline
             <LearnMoreChevron />
           </Link>
@@ -235,13 +242,13 @@ function DetailBody({
         {uses.length === 0 ? (
           <p className='text-muted-foreground py-2 text-sm'>Not used in a post yet.</p>
         ) : (
-          <ul className='divide-y'>
+          <ul className='flex flex-col'>
             {uses.map((use) => (
               <UseRow key={`${use.kind}-${use.id}`} use={use} />
             ))}
           </ul>
         )}
-        <p className='text-muted-foreground mt-1 text-xs'>
+        <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
           Counts posts in every state and reviews waiting for approval. The workspace keeps its 20 most recent reviews.
         </p>
       </section>
@@ -251,6 +258,7 @@ function DetailBody({
   );
 }
 
+/** One inverted commitment (Use in a post), quiet glass for the rest; Delete keeps its destructive weight (DNA §10.1). */
 function DetailActions({
   asset,
   publishing,
@@ -262,32 +270,33 @@ function DetailActions({
   return (
     <>
       {canApprove ? (
-        <p className='text-muted-foreground text-xs'>
+        <p className='text-muted-foreground text-xs leading-relaxed'>
           Use in a post opens scheduling with this image selected. Its hash starts with <code className='font-mono'>{asset.hash.slice(0, 8)}</code>.
         </p>
       ) : canEdit ? (
-        <p className='text-muted-foreground text-xs'>Preparing a post needs approve access. Keep drafting in Ideas; someone who approves posts attaches the image.</p>
+        <p className='text-muted-foreground text-xs leading-relaxed'>Preparing a post needs approve access. Keep drafting in Ideas; someone who approves posts attaches the image.</p>
       ) : null}
       <div className='flex flex-wrap gap-2'>
         {canApprove ? (
-          <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'default' }), 'flex-1 sm:flex-none')}>
+          <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'flex-1 sm:flex-none')}>
             <Icons.send aria-hidden />
             Use in a post
           </Link>
         ) : canEdit ? (
-          <Link href='/app/ideas' className={cn('t-learn flex-1 sm:flex-none', buttonVariants({ variant: 'outline' }))}>
+          <Link href='/app/ideas' className={cn('t-learn flex-1 sm:flex-none', buttonVariants({ variant: 'glass', size: 'control' }))}>
             Open Ideas
             <LearnMoreChevron />
           </Link>
         ) : null}
-        <Button variant='outline' onClick={() => void copyHash(asset.hash)}>
+        <Button variant='glass' size='control' onClick={() => void copyHash(asset.hash)}>
           <Icons.copy aria-hidden />
           Copy hash
         </Button>
         {canEdit && (
           <Button
             variant='destructive'
-            className='sm:ml-auto'
+            size='control'
+            className='rounded-[var(--rafii-radius-control)] sm:ml-auto'
             disabled={deleting || publishing}
             title={publishing ? 'A post using this image is publishing' : undefined}
             onClick={() => onDelete(asset)}
@@ -311,7 +320,7 @@ export function AssetDetail(props: AssetDetailProps) {
   if (isMobile) {
     return (
       <Drawer open={open && asset !== null} onOpenChange={onOpenChange}>
-        <DrawerContent className='data-[swipe-axis=y]:[--drawer-content-max-height:85dvh]'>
+        <DrawerContent className={DRAWER_CLASS}>
           {asset && (
             <>
               <DrawerHeader className='flex-row items-start gap-3 text-left'>
@@ -319,14 +328,14 @@ export function AssetDetail(props: AssetDetailProps) {
                   <DrawerTitle>{title}</DrawerTitle>
                   <DrawerDescription>{description}</DrawerDescription>
                 </div>
-                <DrawerClose render={<Button variant='ghost' size='icon-sm' aria-label='Close image details' />}>
+                <DrawerClose render={<Button variant='glass' size='icon-control' aria-label='Close image details' />}>
                   <Icons.close aria-hidden />
                 </DrawerClose>
               </DrawerHeader>
               <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4'>
                 <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} />
               </div>
-              <DrawerFooter className='border-t pt-4'>
+              <DrawerFooter className='pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]'>
                 <DetailActions
                   asset={asset}
                   publishing={props.publishing}
@@ -345,17 +354,20 @@ export function AssetDetail(props: AssetDetailProps) {
 
   return (
     <Sheet open={open && asset !== null} onOpenChange={onOpenChange}>
-      <SheetContent side='right' className='gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[480px]'>
+      <SheetContent side='right' showCloseButton={false} className={SHEET_CLASS}>
         {asset && (
           <>
-            <SheetHeader className='pr-12'>
+            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close image details' className='absolute top-3 right-3 z-10' />}>
+              <Icons.close aria-hidden />
+            </SheetClose>
+            <SheetHeader className='pr-16'>
               <SheetTitle>{title}</SheetTitle>
               <SheetDescription>{description}</SheetDescription>
             </SheetHeader>
             <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-4'>
               <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} />
             </div>
-            <SheetFooter className='border-t'>
+            <SheetFooter className='pt-3'>
               <DetailActions
                   asset={asset}
                   publishing={props.publishing}

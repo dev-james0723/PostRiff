@@ -5,19 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { StatefulButton, type ButtonState } from '@/components/motion/button';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -30,32 +18,20 @@ import { permissionsFor, ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/auth/permi
 import { EASE_OUT } from '@/lib/ease';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { WorkspaceRole } from '@/types';
-import {
-  APPROVAL_HOLD_NOTE,
-  ASSIGNABLE_ROLES,
-  canAssignRole,
-  FLAGS,
-  flagsOf,
-  grantRules,
-  losesApprove,
-  NO_FLAGS,
-  PERMISSION_LABELS,
-  shortId,
-  type Flags
-} from './access-model';
+import { APPROVAL_HOLD_NOTE, ASSIGNABLE_ROLES, canAssignRole, FLAGS, flagsOf, grantRules, losesApprove, NO_FLAGS, PERMISSION_LABELS, shortId, type Flags } from './access-model';
+import { SELECT_TRIGGER_CLASS, StatusChip } from './rafii-parts';
 import { useChangeError } from './use-change-error';
 
 /** How long "Saved" stays on the button before the sheet closes. */
 const SUCCESS_HOLD_MS = 1200;
 
+type SaveState = 'idle' | 'loading' | 'success' | 'error';
+
 function DiffChips({ before, after }: { before: Membership; after: Membership }) {
   const reduce = useReducedMotion();
   const was = permissionsFor(before);
   const will = permissionsFor(after);
-  const changes = [
-    ...will.filter((p) => !was.includes(p)).map((p) => ({ permission: p, added: true })),
-    ...was.filter((p) => !will.includes(p)).map((p) => ({ permission: p, added: false }))
-  ];
+  const changes = [...will.filter((p) => !was.includes(p)).map((p) => ({ permission: p, added: true })), ...was.filter((p) => !will.includes(p)).map((p) => ({ permission: p, added: false }))];
   if (changes.length === 0) {
     return <p className='text-muted-foreground text-sm'>No change to what they can do.</p>;
   }
@@ -64,40 +40,24 @@ function DiffChips({ before, after }: { before: Membership; after: Membership })
   return (
     <ul className='flex flex-wrap gap-1.5' aria-label='Permission changes'>
       {changes.map((change, index) => (
-        <motion.li
-          key={`${change.added ? 'add' : 'remove'}-${change.permission}`}
-          initial={{ opacity: 0, y: reduce ? 0 : 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: EASE_OUT, delay: reduce ? 0 : index * stagger }}
-        >
-          <AnimatedBadge size='sm' status={change.added ? 'success' : 'danger'} showIcon={false}>
-            <span className='sr-only'>{change.added ? 'Gains' : 'Loses'}</span>
-            <span aria-hidden>{change.added ? '+ ' : '− '}</span>
+        <motion.li key={`${change.added ? 'add' : 'remove'}-${change.permission}`} initial={{ opacity: 0, y: reduce ? 0 : 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: EASE_OUT, delay: reduce ? 0 : index * stagger }}>
+          <StatusChip icon={change.added ? 'add' : 'minus'}>
+            <span className='sr-only'>{change.added ? 'Gains' : 'Loses'} </span>
             {PERMISSION_LABELS[change.permission].short}
-          </AnimatedBadge>
+          </StatusChip>
         </motion.li>
       ))}
     </ul>
   );
 }
 
-function AccessForm({
-  member,
-  actor,
-  onDone,
-  onSaved
-}: {
-  member: Member;
-  actor: Membership | null;
-  onDone: () => void;
-  onSaved?: (userId: string) => void;
-}) {
+function AccessForm({ member, actor, onDone, onSaved }: { member: Member; actor: Membership | null; onDone: () => void; onSaved?: (userId: string) => void }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const reportError = useChangeError();
   const [role, setRole] = useState<WorkspaceRole>(member.role);
   const [flags, setFlags] = useState<Flags>(() => flagsOf(member));
-  const [state, setState] = useState<ButtonState>('idle');
+  const [state, setState] = useState<SaveState>('idle');
   const [confirming, setConfirming] = useState(false);
   const closeTimer = useRef<number | null>(null);
 
@@ -132,10 +92,7 @@ function AccessForm({
     setState('loading');
     try {
       await api.updateMember(workspaceId, member.userId, role, payload);
-      await Promise.all([
-        client.invalidateQueries({ queryKey: keys.members(workspaceId) }),
-        client.invalidateQueries({ queryKey: keys.audit(workspaceId) })
-      ]);
+      await Promise.all([client.invalidateQueries({ queryKey: keys.members(workspaceId) }), client.invalidateQueries({ queryKey: keys.audit(workspaceId) })]);
       setState('success');
       onSaved?.(member.userId);
       toast.success(`Access changed for ${shortId(member.userId)}`, holdsApprovals ? { description: APPROVAL_HOLD_NOTE } : undefined);
@@ -153,13 +110,13 @@ function AccessForm({
   return (
     <>
       <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4'>
-        <div className='flex flex-col gap-1.5'>
+        <div className='flex flex-col gap-2'>
           <Label htmlFor='access-role'>Role</Label>
           <Select value={role} onValueChange={(value) => edit(() => setRole(value as WorkspaceRole))}>
-            <SelectTrigger id='access-role' className='w-full' disabled={settled}>
+            <SelectTrigger id='access-role' className={SELECT_TRIGGER_CLASS} disabled={settled}>
               <SelectValue>{ROLE_LABELS[role]}</SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className='rafii-elevated rounded-[var(--rafii-radius-control)] ring-0'>
               {ASSIGNABLE_ROLES.filter((r) => r === member.role || canAssignRole(actor, r)).map((r) => (
                 <SelectItem key={r} value={r}>
                   {ROLE_LABELS[r]}
@@ -171,34 +128,26 @@ function AccessForm({
         </div>
 
         <fieldset className='flex flex-col gap-2.5'>
-          <legend className='mb-1 text-sm font-medium'>Extra grants</legend>
-          {viewer ? (
-            <p className='text-muted-foreground text-xs'>Viewers cannot carry grants. Saving as a viewer clears them.</p>
-          ) : (
-            unheld && <p className='text-muted-foreground text-xs'>Greyed-out grants are ones you do not hold, so you cannot hand them out.</p>
-          )}
+          <legend className='text-foreground mb-2 text-sm font-medium'>Extra grants</legend>
+          {viewer ? <p className='text-muted-foreground text-xs'>Viewers cannot carry grants. Saving as a viewer clears them.</p> : unheld && <p className='text-muted-foreground text-xs'>Greyed-out grants are ones you do not hold, so you cannot hand them out.</p>}
           {FLAGS.map((flag) => {
             const rule = rules[flag.key];
             const checked = payload[flag.key];
             // Turning a grant off is always allowed; turning it on needs the actor to hold it.
             const disabled = settled || viewer || (rule.cannotAdd && !checked);
             return (
-              <div key={flag.key} className='flex flex-col gap-0.5'>
+              <div key={flag.key} className='flex flex-col gap-1'>
                 <Label className='flex items-start gap-2 text-sm font-normal'>
-                  <Checkbox
-                    className='mt-0.5'
-                    checked={checked}
-                    disabled={disabled}
-                    onCheckedChange={(value) => edit(() => setFlags({ ...flags, [flag.key]: value === true }))}
-                  />
+                  <Checkbox className='mt-0.5' checked={checked} disabled={disabled} onCheckedChange={(value) => edit(() => setFlags({ ...flags, [flag.key]: value === true }))} />
                   <span className='flex flex-col gap-0.5'>
                     <span className={disabled ? 'text-muted-foreground' : undefined}>{flag.label}</span>
                     <span className='text-muted-foreground text-xs leading-snug'>{flag.explains}</span>
                   </span>
                 </Label>
                 {rule.mustRemove && (
-                  <p className='pl-6 text-xs text-amber-700 dark:text-amber-300'>
-                    You do not hold this grant, so you cannot keep it on. Turn it off to save, or ask the owner to make this change.
+                  <p className='text-foreground flex items-start gap-1.5 pl-6 text-xs' role='alert'>
+                    <Icons.warning aria-hidden className='mt-px size-3.5 shrink-0 text-foreground' />
+                    <span>You do not hold this grant, so you cannot keep it on. Turn it off to save, or ask the owner to make this change.</span>
                   </p>
                 )}
               </div>
@@ -206,8 +155,8 @@ function AccessForm({
           })}
         </fieldset>
 
-        <section className='flex flex-col gap-2' aria-labelledby='access-diff'>
-          <h3 id='access-diff' className='text-sm font-medium'>
+        <section className='rafii-quiet flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-4' aria-labelledby='access-diff'>
+          <h3 id='access-diff' className='text-foreground text-sm font-medium'>
             What changes for them
           </h3>
           <DiffChips before={member} after={{ role, ...payload }} />
@@ -215,33 +164,42 @@ function AccessForm({
         </section>
       </div>
 
-      <SheetFooter className='border-t'>
-        <p className='text-muted-foreground text-xs'>
-          Changing access needs a recent sign-in. The change is recorded in the audit log.
-        </p>
+      <SheetFooter className='rafii-panel'>
+        <p className='text-muted-foreground text-xs'>Changing access needs a recent sign-in. The change is recorded in the audit log.</p>
         <div className='flex flex-wrap justify-end gap-2'>
-          <Button variant='outline' onClick={onDone} disabled={state === 'loading'}>
+          <Button variant='glass' size='control' onClick={onDone} disabled={state === 'loading'}>
             {state === 'success' ? 'Close' : 'Cancel'}
           </Button>
-          <StatefulButton
-            state={state}
-            loadingText='Saving…'
-            successText='Saved'
-            errorText='Try again'
+          <Button
+            variant='action'
+            size='control'
             disabled={!changed || blocked.length > 0}
             aria-disabled={state === 'success' || undefined}
+            aria-busy={state === 'loading' || undefined}
             onClick={() => {
               if (state === 'success' || state === 'loading') return;
               setConfirming(true);
             }}
           >
-            Save access…
-          </StatefulButton>
+            {state === 'loading' ? (
+              <>
+                <Icons.spinner className='motion-safe:animate-spin' /> Saving…
+              </>
+            ) : state === 'success' ? (
+              <>
+                <Icons.check /> Saved
+              </>
+            ) : state === 'error' ? (
+              'Try again'
+            ) : (
+              'Save access…'
+            )}
+          </Button>
         </div>
       </SheetFooter>
 
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
+        <AlertDialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 md:rounded-[var(--rafii-radius-dialog)] md:p-6'>
           <AlertDialogHeader>
             <AlertDialogTitle>Change access for {shortId(member.userId)}?</AlertDialogTitle>
             <AlertDialogDescription>It applies right away to everything they do in this workspace.</AlertDialogDescription>
@@ -256,13 +214,18 @@ function AccessForm({
             {removed.length > 0 && <li>Grants removed: {removed.map((flag) => flag.label).join(', ')}</li>}
           </ul>
           {holdsApprovals && (
-            <p className='text-sm text-amber-700 dark:text-amber-300' data-testid='access-approval-hold'>
-              They can no longer approve. {APPROVAL_HOLD_NOTE}
+            <p className='text-foreground flex items-start gap-1.5 text-sm' data-testid='access-approval-hold'>
+              <Icons.warning aria-hidden className='mt-0.5 size-4 shrink-0 text-foreground' />
+              <span>They can no longer approve. {APPROVAL_HOLD_NOTE}</span>
             </p>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep as is</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void save()}>Change access</AlertDialogAction>
+            <AlertDialogCancel variant='glass' size='control'>
+              Keep as is
+            </AlertDialogCancel>
+            <AlertDialogAction variant='action' size='control' onClick={() => void save()}>
+              Change access
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -274,22 +237,10 @@ function AccessForm({
  * Change one member's role and extra grants. Shared by the Roles and Members pages.
  * The disabled rules mirror `permissions.py` `validate_grant`; the API decides.
  */
-export function MemberAccessSheet({
-  member,
-  actor,
-  open,
-  onOpenChange,
-  onSaved
-}: {
-  member: Member | null;
-  actor: Membership | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSaved?: (userId: string) => void;
-}) {
+export function MemberAccessSheet({ member, actor, open, onOpenChange, onSaved }: { member: Member | null; actor: Membership | null; open: boolean; onOpenChange: (open: boolean) => void; onSaved?: (userId: string) => void }) {
   return (
     <Sheet open={open && member !== null} onOpenChange={onOpenChange}>
-      <SheetContent side='right' className='gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md'>
+      <SheetContent side='right' className='rafii-elevated gap-0 rounded-l-[var(--rafii-radius-dialog)] border-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md'>
         {member && (
           <>
             <SheetHeader className='pr-12'>
@@ -299,7 +250,7 @@ export function MemberAccessSheet({
               </SheetTitle>
               <SheetDescription className='flex flex-wrap items-center gap-1.5'>
                 <span className='font-mono text-xs'>{shortId(member.userId)}</span>
-                <Badge variant='outline'>{ROLE_LABELS[member.role]}</Badge>
+                <StatusChip icon={null}>{ROLE_LABELS[member.role]}</StatusChip>
               </SheetDescription>
             </SheetHeader>
             <AccessForm key={member.userId} member={member} actor={actor} onDone={() => onOpenChange(false)} onSaved={onSaved} />

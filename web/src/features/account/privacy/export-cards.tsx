@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { StatefulButton, type ButtonState } from '@/components/motion/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
 import { downloadBlob } from '@/lib/download';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { SettingsSection } from '../settings-section';
 import { Fingerprint, type FileFingerprint } from './fingerprint';
 import { sha256Hex } from './privacy-model';
 
@@ -17,6 +17,12 @@ export interface BusyProps {
   busy: string | null;
   setBusy: (kind: string | null) => void;
 }
+
+/** The glass recipe on a secondary motion button (DNA §10.2). */
+export const GLASS_STATEFUL =
+  'rafii-glass hover:rafii-glass-selected h-12 rounded-[var(--rafii-radius-control)] border-0 bg-transparent px-4 text-sm hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent';
+/** The inverted primary on a motion button (DNA §10.1). */
+export const ACTION_STATEFUL = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-4 text-sm hover:brightness-[1.06]';
 
 const SUCCESS_HOLD_MS = 2000;
 
@@ -68,24 +74,24 @@ export function ExportCard({ busy, setBusy }: BusyProps) {
   }
 
   return (
-    <Card data-tour='privacy-export' className='min-w-0'>
-      <CardHeader>
-        <CardTitle>Export</CardTitle>
-        <CardDescription>
-          Drafts, sources, approvals, receipts and the learned-preference ledger as a zip. No access tokens and no media files.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        <p className='text-muted-foreground text-xs'>Each export adds a row to Data requests with the size and fingerprint PostRiff recorded.</p>
-        {file && (
-          <Fingerprint
-            file={file}
-            note='PostRiff records its receipt from a separate copy of the export, so this page does not claim the two match. Keep this fingerprint to show later that your file is unchanged.'
-          />
-        )}
-      </CardContent>
-      <CardFooter className='mt-auto'>
+    <SettingsSection
+      id='privacy-export'
+      title='Export'
+      description='Drafts, sources, approvals, receipts and the learned-preference ledger as a zip. No access tokens and no media files.'
+      className='h-full'
+      bodyClassName='flex-1'
+      data-tour='privacy-export'
+    >
+      <p className='text-muted-foreground text-xs leading-relaxed'>Each export adds a row to Data requests with the size and fingerprint PostRiff recorded.</p>
+      {file && (
+        <Fingerprint
+          file={file}
+          note='PostRiff records its receipt from a separate copy of the export, so this page does not claim the two match. Keep this fingerprint to show later that your file is unchanged.'
+        />
+      )}
+      <div className='mt-auto pt-1'>
         <StatefulButton
+          className={ACTION_STATEFUL}
           state={button.state}
           loadingText='Preparing…'
           successText='Downloaded'
@@ -95,8 +101,8 @@ export function ExportCard({ busy, setBusy }: BusyProps) {
         >
           Export drafts
         </StatefulButton>
-      </CardFooter>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -127,20 +133,22 @@ export function VoiceProfileCard({ busy, setBusy }: BusyProps) {
   }
 
   return (
-    <Card data-tour='privacy-voice' className='min-w-0'>
-      <CardHeader>
-        <CardTitle>Voice profile</CardTitle>
-        <CardDescription>Your approved voice package as a zip, to keep or to use in another tool.</CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        <p className='text-muted-foreground text-xs'>
-          Available once a voice package has been approved field by field. This download does not add a row to Data requests.
-        </p>
-        {file && <Fingerprint file={file} note='Keep this fingerprint to show later that your file is unchanged.' />}
-      </CardContent>
-      <CardFooter className='mt-auto'>
+    <SettingsSection
+      id='privacy-voice'
+      title='Voice profile'
+      description='Your approved voice package as a zip, to keep or to use in another tool.'
+      className='h-full'
+      bodyClassName='flex-1'
+      data-tour='privacy-voice'
+    >
+      <p className='text-muted-foreground text-xs leading-relaxed'>
+        Available once a voice package has been approved field by field. This download does not add a row to Data requests.
+      </p>
+      {file && <Fingerprint file={file} note='Keep this fingerprint to show later that your file is unchanged.' />}
+      <div className='mt-auto pt-1'>
         <StatefulButton
           variant='outline'
+          className={GLASS_STATEFUL}
           state={button.state}
           loadingText='Preparing…'
           successText='Downloaded'
@@ -150,7 +158,7 @@ export function VoiceProfileCard({ busy, setBusy }: BusyProps) {
         >
           Export voice profile
         </StatefulButton>
-      </CardFooter>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }

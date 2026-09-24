@@ -6,6 +6,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { ActionSwapIcon } from '@/components/motion/action-swap';
 import { FileTree, FileTreeFile, FileTreeFolder } from '@/components/motion/file-tree';
+import { StateMessage, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFlash } from '@/hooks/use-flash';
@@ -52,8 +53,8 @@ function MemoryFileList({ selected, onSelect }: { selected: string; onSelect: (n
   const current = files.some((f) => f.name === selected) ? selected : (grouped.given[0]?.name ?? files[0]?.name ?? null);
 
   return (
-    <div className='bg-card ring-foreground/10 flex min-w-0 flex-col gap-0.5 rounded-xl p-2 ring-1' data-tour='memory-files'>
-      <span className='text-muted-foreground px-2 py-1.5 text-xs'>Memory files</span>
+    <Surface material='quiet' padding='none' className='flex flex-col gap-0.5 p-2' data-tour='memory-files'>
+      <span className='rafii-eyebrow px-2 py-2'>Memory files</span>
       {memory.data ? (
         files.length > 0 ? (
           <FileTree
@@ -85,20 +86,20 @@ function MemoryFileList({ selected, onSelect }: { selected: string; onSelect: (n
             )}
           </FileTree>
         ) : (
-          <p className='text-muted-foreground px-2 py-1.5 text-sm'>The workspace returned no memory files.</p>
+          <StateMessage kind='empty' layout='inline' className='px-2' title='The workspace returned no memory files.' />
         )
       ) : memory.isLoading ? (
-        <div className='flex flex-col gap-2 p-2'>
-          <Skeleton className='h-9 w-full' />
-          <Skeleton className='h-9 w-full' />
-          <Skeleton className='h-9 w-full' />
+        <div className='flex flex-col gap-2 p-2' role='status' aria-label='Loading memory files'>
+          <Skeleton className='h-9 w-full rounded-[var(--rafii-radius-control)]' />
+          <Skeleton className='h-9 w-full rounded-[var(--rafii-radius-control)]' />
+          <Skeleton className='h-9 w-full rounded-[var(--rafii-radius-control)]' />
         </div>
       ) : (
         <Unavailable className='px-2 py-1.5' message='Memory files are unavailable right now.' query={memory} />
       )}
       {memory.data && !grouped.known && <p className='text-muted-foreground px-2 py-1.5 text-xs'>Which files writing routes receive is unavailable right now.</p>}
-      <p className='text-muted-foreground mt-2 border-t px-2 pt-2 text-xs leading-relaxed'>Preferences an owner accepts appear in VOICE.md under “Learned from how you edit”. Each file names its source beside it.</p>
-    </div>
+      <p className='text-muted-foreground mt-2 px-2 pt-2 pb-1 text-xs leading-relaxed'>Preferences an owner accepts appear in VOICE.md under “Learned from how you edit”. Each file names its source beside it.</p>
+    </Surface>
   );
 }
 
@@ -126,17 +127,17 @@ export function MemoryView() {
       pageDescription='Plain Markdown files behind every draft. You own them; the agent can only propose changes.'
       infoContent={infoContent}
       pageHeaderAction={
-        <Button variant='outline' data-tour='memory-export' disabled={exporting} onClick={() => void exportPackage()}>
-          <ActionSwapIcon value={exporting ? 'busy' : exported ?? 'idle'} className='size-4'>
+        <Button variant='glass' size='control' data-tour='memory-export' disabled={exporting} onClick={() => void exportPackage()}>
+          <ActionSwapIcon value={exporting ? 'busy' : (exported ?? 'idle')} className='size-4'>
             {exporting ? <Icons.spinner className='size-4 motion-safe:animate-spin' /> : exported ? <Icons.check className='size-4' /> : <Icons.download className='size-4' />}
           </ActionSwapIcon>
           Export voice package
         </Button>
       }
     >
-      <div className='flex min-w-0 flex-col gap-4'>
+      <div className='flex min-w-0 flex-col gap-4 md:gap-5'>
         <AccessCard />
-        <div className='grid min-w-0 gap-4 md:grid-cols-[18rem_minmax(0,1fr)]'>
+        <div className='grid min-w-0 gap-4 md:grid-cols-[18rem_minmax(0,1fr)] md:gap-5'>
           <MemoryFileList selected={selected} onSelect={setSelected} />
           <WhatDraftsRead selected={selected} data-tour='memory-viewer' />
         </div>

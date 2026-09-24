@@ -19,10 +19,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { useAct, useModels, useSnapshot } from '@/lib/api/hooks';
 import type { SourcePolicy } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -30,14 +28,22 @@ import { formatBytes, formatDate, formatDateTime } from '@/lib/time';
 import { retractionImpact, retractionLines } from '@/lib/sources';
 import { cn } from '@/lib/utils';
 import { useDraftHandoff } from './use-draft';
-import { factsDigest, isWeb, kindLabel, LINK_PATTERN, plural, POLICIES, toEpoch, useActError, variantsUsing, type IdeaSource, type UseState } from './use-sources';
+import { factsDigest, isWeb, kindIcon, kindLabel, LINK_PATTERN, plural, POLICIES, toEpoch, useActError, variantsUsing, type IdeaSource, type UseState } from './use-sources';
 
 const FACT_KINDS = new Set(['text', 'document', 'sample']);
 
-// Sized like the Queue's hold-to-cancel: a destructive tint for the fill and its liquid edge.
-const HOLD_CLASS = 'h-9 w-full min-w-0 bg-secondary px-4 text-secondary-foreground [--hold-radius:min(var(--radius-md),12px)]';
+/* Rafii materials on the existing motion controls (DNA §10): one inverted commitment, quiet glass for the rest. */
+const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 text-sm hover:bg-transparent hover:brightness-[1.06]';
+const GLASS = 'rafii-glass hover:rafii-glass-selected text-foreground hover:text-foreground h-11 rounded-[var(--rafii-radius-control)] px-4 text-sm hover:bg-transparent';
+const FIELD = 'rafii-field rounded-[var(--rafii-radius-control)] border-0 bg-(--rafii-surface-field) dark:bg-(--rafii-surface-field) h-12 w-full px-4 text-base data-[size=default]:h-12 md:text-sm';
+// Sized like the Queue's hold-to-cancel: a quiet fill at rest, a destructive tint for the fill and its liquid edge.
+const HOLD_CLASS = 'rafii-quiet h-11 w-full min-w-0 bg-transparent px-4 text-foreground [--hold-radius:var(--rafii-radius-control)]';
 const HOLD_FILL = 'bg-[color-mix(in_oklch,var(--destructive)_28%,var(--secondary))]';
 const HOLD_WAVE = 'text-[color-mix(in_oklch,var(--destructive)_28%,var(--secondary))]';
+/** A state that needs attention keeps its tint but loses the chip outline; a settled state is monochrome. */
+const ATTENTION_BADGE = 'h-auto border-transparent bg-transparent px-0';
+const SETTLED_BADGE = 'h-auto border-transparent bg-transparent px-0 text-foreground dark:text-foreground';
+const TEXT_LINK = 'rafii-focus text-foreground decoration-muted-foreground/60 hover:decoration-foreground inline-flex w-fit max-w-full items-center gap-1 rounded-md underline underline-offset-4';
 
 /** A StatefulButton success that settles back to idle. */
 function useFlashState() {
@@ -53,9 +59,23 @@ function useFlashState() {
 function Section({ title, children, className, ...rest }: { title: string; children: ReactNode; className?: string } & HTMLAttributes<HTMLElement>) {
   return (
     <section className={cn('flex flex-col gap-2.5', className)} {...rest}>
-      <h3 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>{title}</h3>
+      <h3 className='rafii-eyebrow'>{title}</h3>
       {children}
     </section>
+  );
+}
+
+/** A plain reminder line: information, not an alarm (DNA §22.1). */
+function Notes({ items, className }: { items: string[]; className?: string }) {
+  return (
+    <ul className={cn('text-muted-foreground flex flex-col gap-1 text-xs leading-relaxed', className)}>
+      {items.map((item) => (
+        <li key={item} className='flex gap-1.5'>
+          <Icons.info className='mt-px size-3.5 shrink-0' aria-hidden />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -73,18 +93,17 @@ export function SourceInspector({ source, useApproved }: SourceInspectorProps) {
   const blocked = variantsUsing(state, source.id).filter((v) => v.blockedByRetraction).length;
 
   return (
-    <div className='flex flex-col gap-5'>
+    <div className='flex flex-col gap-6'>
       <Header source={source} />
       {source.active ? (
         <>
           <Provenance source={source} />
-          <Separator />
           <ActiveBody key={source.id} source={source} useApproved={useApproved} canEdit={canEdit} />
         </>
       ) : (
         <Section title='Withdrawn'>
-          <p className='text-sm'>Withdrawn {formatDateTime(toEpoch(source.withdrawnAt))}. Its text and facts were removed from this workspace.</p>
-          <p className='text-muted-foreground text-sm'>
+          <p className='text-sm leading-relaxed'>Withdrawn {formatDateTime(toEpoch(source.withdrawnAt))}. Its text and facts were removed from this workspace.</p>
+          <p className='text-muted-foreground text-sm leading-relaxed'>
             {blocked > 0 ? `${plural(blocked, 'draft')} that used it ${blocked === 1 ? 'is' : 'are'} blocked until regenerated.` : 'No draft is blocked by it.'}
           </p>
           <UsedIn source={source} />
@@ -96,15 +115,17 @@ export function SourceInspector({ source, useApproved }: SourceInspectorProps) {
 
 function Header({ source }: { source: IdeaSource }) {
   const added = toEpoch(source.createdAt);
+  const Mark = Icons[kindIcon(source)];
   return (
     <div className='flex flex-col gap-1.5 pr-8'>
-      <div className='flex flex-wrap items-center gap-2'>
-        <Badge variant='secondary' className='font-normal'>
+      <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
+        <span className='inline-flex items-center gap-1.5'>
+          <Mark aria-hidden className='size-3.5' />
           {kindLabel(source)}
-        </Badge>
-        {added !== null && <span className='text-muted-foreground text-xs'>Added {formatDate(added)}</span>}
+        </span>
+        {added !== null && <span>Added {formatDate(added)}</span>}
       </div>
-      <p className='text-base leading-snug font-semibold break-words'>{source.title || kindLabel(source)}</p>
+      <p className='text-foreground text-base leading-snug font-medium break-words'>{source.title || kindLabel(source)}</p>
     </div>
   );
 }
@@ -119,7 +140,7 @@ function Provenance({ source }: { source: IdeaSource }) {
       {isWeb(source) && origin ? (
         <div className='flex flex-col gap-1 text-sm'>
           {origin.url && LINK_PATTERN.test(origin.url) ? (
-            <a href={origin.url} target='_blank' rel='noreferrer' className='text-primary inline-flex w-fit max-w-full items-center gap-1 underline-offset-2 hover:underline'>
+            <a href={origin.url} target='_blank' rel='noreferrer' className={TEXT_LINK}>
               <span className='truncate'>{origin.host || origin.url}</span>
               <Icons.externalLink className='size-3.5 shrink-0' />
             </a>
@@ -132,7 +153,7 @@ function Provenance({ source }: { source: IdeaSource }) {
         </div>
       ) : source.kind === 'link' && LINK_PATTERN.test(source.text) ? (
         <div className='flex flex-col gap-1 text-sm'>
-          <a href={source.text} target='_blank' rel='noreferrer' className='text-primary inline-flex w-fit max-w-full items-center gap-1 underline-offset-2 hover:underline'>
+          <a href={source.text} target='_blank' rel='noreferrer' className={TEXT_LINK}>
             <span className='truncate'>{source.text}</span>
             <Icons.externalLink className='size-3.5 shrink-0' />
           </a>
@@ -142,7 +163,7 @@ function Provenance({ source }: { source: IdeaSource }) {
           File <span className='font-medium'>{source.title}</span> <span className='text-muted-foreground'>· {formatBytes(bytes)} of text</span>
         </p>
       ) : source.kind === 'idea' ? (
-        <blockquote className='border-l-2 pl-3 text-sm whitespace-pre-wrap'>{source.text}</blockquote>
+        <blockquote className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3.5 py-3 text-sm leading-relaxed whitespace-pre-wrap'>{source.text}</blockquote>
       ) : source.kind === 'sample' ? (
         <p className='text-muted-foreground text-sm'>A fictional sample source.</p>
       ) : (
@@ -150,16 +171,7 @@ function Provenance({ source }: { source: IdeaSource }) {
           Pasted text <span className='text-muted-foreground'>· {formatBytes(bytes)}</span>
         </p>
       )}
-      {unknowns.length > 0 && (
-        <ul className='text-muted-foreground flex flex-col gap-1 text-xs'>
-          {unknowns.map((item) => (
-            <li key={item} className='flex gap-1.5'>
-              <Icons.info className='mt-px size-3.5 shrink-0' />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {unknowns.length > 0 && <Notes items={unknowns} />}
     </Section>
   );
 }
@@ -273,7 +285,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
       {hasFacts && (
         <Section title='Facts' data-tour='ideas-facts'>
           {source.facts.length === 0 ? (
-            <p className='text-muted-foreground text-sm'>No paragraphs were split into facts from this text, so drafts cannot use its wording.</p>
+            <p className='text-muted-foreground text-sm leading-relaxed'>No paragraphs were split into facts from this text, so drafts cannot use its wording.</p>
           ) : (
             <>
               <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -281,19 +293,20 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
                   {picked.size}/{source.facts.length} selected{dirty ? ' · not saved' : ''}
                 </p>
                 {canEdit && (
-                  <div className='flex gap-1'>
-                    <Button size='xs' variant='ghost' onClick={() => setPicked(new Set(source.facts.map((f) => f.id)))} disabled={factsAct.isPending}>
+                  <div className='-mr-2 flex gap-1'>
+                    <Button size='lg' variant='quiet' onClick={() => setPicked(new Set(source.facts.map((f) => f.id)))} disabled={factsAct.isPending}>
                       Select all
                     </Button>
-                    <Button size='xs' variant='ghost' onClick={() => setPicked(new Set())} disabled={factsAct.isPending}>
+                    <Button size='lg' variant='quiet' onClick={() => setPicked(new Set())} disabled={factsAct.isPending}>
                       None
                     </Button>
                   </div>
                 )}
               </div>
-              <ul className='flex flex-col gap-2.5'>
+              {/* Inclusion in analysis is its own checkbox per fact (DNA §10.6); public quoting is a separate decision below. */}
+              <ul className='flex flex-col gap-2'>
                 {source.facts.map((fact) => (
-                  <li key={fact.id} className='flex items-start gap-2.5'>
+                  <li key={fact.id} className='flex min-h-11 items-start gap-3 py-1'>
                     <Checkbox
                       checked={picked.has(fact.id)}
                       disabled={!canEdit || factsAct.isPending}
@@ -308,7 +321,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
                       }
                       className='mt-0.5 shrink-0'
                     />
-                    <span className='flex min-w-0 flex-col gap-0.5 text-sm'>
+                    <span className='flex min-w-0 flex-col gap-0.5 text-sm leading-relaxed'>
                       <span className='break-words'>{fact.text}</span>
                       {fact.locator && <span className='text-muted-foreground text-xs'>{fact.locator}</span>}
                     </span>
@@ -320,14 +333,13 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
               )}
               {canEdit && (
                 <StatefulButton
-                  size='sm'
-                  variant='secondary'
+                  variant='ghost'
+                  className={cn(GLASS, 'w-fit')}
                   state={factsState}
                   loadingText='Saving…'
                   successText='Saved'
                   disabled={!dirty && factsState === 'idle'}
                   onClick={saveFacts}
-                  className='w-fit'
                 >
                   {dirty ? `Save ${plural(picked.size, 'approved fact')}` : `${plural(saved.length, 'fact')} approved`}
                 </StatefulButton>
@@ -337,17 +349,17 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
         </Section>
       )}
       {!hasFacts && (
-        <p className='text-muted-foreground text-sm'>
+        <p className='text-muted-foreground text-sm leading-relaxed'>
           {source.kind === 'idea' ? 'An idea carries no facts to approve; a draft from it uses the idea itself as the brief.' : 'A link carries no facts to approve until its page is read; a draft from it names the link as the brief.'}
         </p>
       )}
 
       <Section title='How it may be used' data-tour='ideas-policy'>
         <Select value={policy ?? ''} onValueChange={(value) => updatePolicy(value as SourcePolicy, cloud)}>
-          <SelectTrigger className='h-9 w-full' aria-label='How this source may be used' disabled={!canEdit || policyAct.isPending}>
+          <SelectTrigger className={cn(FIELD, 'justify-between')} aria-label='How this source may be used' disabled={!canEdit || policyAct.isPending}>
             <SelectValue>{POLICIES.find((p) => p.id === policy)?.label ?? 'Choose how it may be used'}</SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className='rafii-elevated rounded-[var(--rafii-radius-card)] ring-0'>
             {POLICIES.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 <span className='flex flex-col'>
@@ -359,13 +371,13 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
           </SelectContent>
         </Select>
         {policy ? (
-          <p className='text-muted-foreground text-xs'>{POLICIES.find((p) => p.id === policy)?.note}</p>
+          <p className='text-muted-foreground text-xs leading-relaxed'>{POLICIES.find((p) => p.id === policy)?.note}</p>
         ) : (
-          <AnimatedBadge size='sm' status='warning' className='w-fit' contentKey='policy-needed'>
+          <AnimatedBadge size='sm' status='warning' className={cn(ATTENTION_BADGE, 'w-fit')} contentKey='policy-needed'>
             Policy needed
           </AnimatedBadge>
         )}
-        <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+        <div className='flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1'>
           <Switch
             checked={cloud}
             disabled={!canEdit || policyAct.isPending || !policy || policy === 'prohibited'}
@@ -375,31 +387,32 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
           />
           {models.isSuccess && !cloudAvailable && <span className='text-muted-foreground text-xs'>· no cloud model on this deployment</span>}
         </div>
-        <p className='text-muted-foreground text-xs'>
+        <p className='text-muted-foreground text-xs leading-relaxed'>
           {cloud ? 'A paid cloud model may read its approved facts.' : 'A paid cloud model does not read its approved facts; other writing routes can.'}
           {!hasFacts && ` Drafting from this ${source.kind === 'idea' ? 'idea' : 'link'} sends the ${source.kind === 'idea' ? 'idea' : 'link'} itself to the model you pick, whatever this switch says.`}
         </p>
       </Section>
 
       {policy === 'rewrite_approval' && (
+        // Permission to quote publicly is explicit and separate from inclusion (DNA §21.10); it is never pre-enabled.
         <Section title='Public use'>
           {!hashing ? (
             <p className='text-muted-foreground text-sm'>Public-use status is unavailable in this browser.</p>
           ) : useApproved === true ? (
-            <AnimatedBadge size='sm' status='success' className='w-fit' contentKey='use-approved'>
+            <AnimatedBadge size='sm' status='success' className={cn(SETTLED_BADGE, 'w-fit')} contentKey='use-approved'>
               Approved for the current facts
             </AnimatedBadge>
           ) : useApproved === false ? (
-            <AnimatedBadge size='sm' status='warning' pulse={drafts.length > 0} className='w-fit' contentKey='use-needed'>
+            <AnimatedBadge size='sm' status='warning' pulse={drafts.length > 0} className={cn(ATTENTION_BADGE, 'w-fit')} contentKey='use-needed'>
               Needed before a draft from it can be scheduled
             </AnimatedBadge>
           ) : null}
           {useApproved === false && (source.useApprovals ?? []).length > 0 && (
-            <p className='text-muted-foreground text-xs'>The approved facts changed since public use was last approved, so it needs approving again.</p>
+            <p className='text-muted-foreground text-xs leading-relaxed'>The approved facts changed since public use was last approved, so it needs approving again.</p>
           )}
           {canEdit && useApproved === false && (
             <>
-              <Button size='sm' variant='outline' className='w-fit' disabled={approvedFacts.length === 0 || approveAct.isPending} onClick={() => setConfirmUse(true)}>
+              <Button variant='glass' size='control' className='w-fit' disabled={approvedFacts.length === 0 || approveAct.isPending} onClick={() => setConfirmUse(true)}>
                 {`Approve public use of ${plural(approvedFacts.length, 'fact')}`}
               </Button>
               {approvedFacts.length === 0 && <p className='text-muted-foreground text-xs'>Approve at least one fact first.</p>}
@@ -407,14 +420,14 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
             </>
           )}
           <AlertDialog open={confirmUse} onOpenChange={(open) => !approveAct.isPending && setConfirmUse(open)}>
-            <AlertDialogContent className='data-[size=default]:sm:max-w-lg'>
+            <AlertDialogContent className='rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 data-[size=default]:sm:max-w-lg md:p-6'>
               <AlertDialogHeader>
                 <AlertDialogTitle>Approve public use of these facts?</AlertDialogTitle>
                 <AlertDialogDescription>
                   Drafts may publish rewritten versions of exactly these {plural(approvedFacts.length, 'fact')} from “{source.title}”. Changing the facts later needs a new approval.
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              <ol className='bg-muted/40 flex max-h-64 list-decimal flex-col gap-1.5 overflow-y-auto rounded-lg py-2 pr-3 pl-7 text-sm'>
+              <ol className='rafii-quiet flex max-h-64 list-decimal flex-col gap-1.5 overflow-y-auto rounded-[var(--rafii-radius-control)] py-2.5 pr-3 pl-8 text-sm leading-relaxed'>
                 {approvedFacts.map((fact) => (
                   <li key={fact.id} className='break-words'>
                     {fact.text}
@@ -422,8 +435,8 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
                 ))}
               </ol>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={approveAct.isPending}>Cancel</AlertDialogCancel>
-                <AlertDialogAction disabled={approveAct.isPending} onClick={() => void approveUse()}>
+                <AlertDialogCancel variant='glass' size='control' disabled={approveAct.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction variant='action' size='control' disabled={approveAct.isPending} onClick={() => void approveUse()}>
                   {approveAct.isPending ? 'Approving…' : 'Approve public use'}
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -438,24 +451,15 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
 
       {canEdit && (
         <>
-          <Separator />
           <div className='flex flex-col gap-2'>
-            <StatefulButton data-tour='ideas-draft' state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={retractAct.isPending} onClick={() => void draft.fromSource(source)} className='w-full'>
+            {/* The one dominant commitment on this surface (DNA §9.2). */}
+            <StatefulButton data-tour='ideas-draft' className={cn(ACTION, 'w-full')} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={retractAct.isPending} onClick={() => void draft.fromSource(source)}>
               Draft from this source
             </StatefulButton>
-            <p className='text-muted-foreground text-xs'>
+            <p className='text-muted-foreground text-xs leading-relaxed'>
               Opens a conversation · {draft.modelLabel} · for {draft.destinationLabel}
             </p>
-            {reminders.length > 0 && (
-              <ul className='flex flex-col gap-1 text-xs text-amber-700 dark:text-amber-400'>
-                {reminders.map((item) => (
-                  <li key={item} className='flex gap-1.5'>
-                    <Icons.info className='mt-px size-3.5 shrink-0' />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {reminders.length > 0 && <Notes items={reminders} />}
           </div>
           <div className='flex flex-col gap-1.5'>
             <HoldActionButton
@@ -475,7 +479,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
             >
               Hold to withdraw
             </HoldActionButton>
-            <p className='text-muted-foreground text-xs'>
+            <p className='text-muted-foreground text-xs leading-relaxed'>
               Removes its text and facts. {retractionCopy}
             </p>
           </div>
@@ -496,18 +500,20 @@ function UsedIn({ source }: { source: IdeaSource }) {
           <span className='font-medium'>{variant.platform}</span>
           <span className='text-muted-foreground'>· {variant.language}</span>
           {variant.blockedByRetraction ? (
-            <Badge variant='destructive' className='font-normal'>
+            <span className='text-destructive inline-flex items-center gap-1 text-xs font-medium'>
+              <Icons.warning aria-hidden className='size-3.5' />
               Blocked
-            </Badge>
+            </span>
           ) : variant.needsReview ? (
-            <Badge variant='outline' className='font-normal'>
+            <span className='text-muted-foreground inline-flex items-center gap-1 text-xs'>
+              <Icons.eye aria-hidden className='size-3.5' />
               Needs review
-            </Badge>
+            </span>
           ) : null}
         </li>
       ))}
       <li>
-        <Link href='/app/pipeline' className='text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs'>
+        <Link href='/app/pipeline' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1 rounded-md text-xs'>
           Open the pipeline <Icons.chevronRight className='size-3' />
         </Link>
       </li>

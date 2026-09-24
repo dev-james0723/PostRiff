@@ -1,43 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import { NumberTicker } from '@/components/motion/number-ticker';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Skeleton } from '@/components/ui/skeleton';
 import type { LearningSummary, Snapshot } from '@/lib/api/types';
+import { StatTile } from '../settings-section';
 import { holdingsFrom, plural } from './privacy-model';
 import { PrivacySection, Unavailable, type Refetchable } from './section';
 
-const TILE_CLASS = 'bg-card ring-foreground/10 flex min-w-0 flex-col gap-1 rounded-xl p-3 ring-1 sm:p-4';
-const linkClass = 't-learn text-foreground inline-flex items-center gap-0.5 font-medium hover:underline';
-
-/** Roll once, inside the motion budget: 0.26s per digit plus a 40ms stagger stays near 300ms for short numbers. */
-function Count({ value }: { value: number }) {
-  return <NumberTicker value={value} locale startOnView={false} duration={0.26} stagger={value >= 1000 ? 0 : 0.04} />;
-}
-
-function Tile({ label, value, hint }: { label: string; value: number | null; hint: ReactNode }) {
-  return (
-    <div className={TILE_CLASS}>
-      <span className='text-muted-foreground text-xs font-medium'>{label}</span>
-      <span className='text-2xl font-semibold tabular-nums'>
-        {value === null ? <span className='text-muted-foreground text-base font-medium'>Unavailable</span> : <Count value={value} />}
-      </span>
-      <span className='text-muted-foreground text-xs'>{hint}</span>
-    </div>
-  );
-}
-
-function TileSkeleton() {
-  return (
-    <div className={TILE_CLASS} aria-hidden>
-      <Skeleton className='h-3.5 w-20' />
-      <Skeleton className='mt-1 h-7 w-12' />
-      <Skeleton className='mt-1 h-3 w-28' />
-    </div>
-  );
-}
+const linkClass = 't-learn rafii-focus text-foreground inline-flex items-center gap-0.5 rounded-sm font-medium hover:underline';
 
 export function HoldingsSection({
   snapshot,
@@ -59,13 +29,13 @@ export function HoldingsSection({
     >
       <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5'>
         {snapshot.isPending ? (
-          Array.from({ length: 4 }, (_, index) => <TileSkeleton key={index} />)
+          Array.from({ length: 4 }, (_, index) => <StatTile key={index} label='Loading' value='' loading />)
         ) : (
           <>
-            <Tile
+            <StatTile
               label='Sources'
-              value={holdings?.sources ?? null}
-              hint={
+              value={holdings?.sources ?? 'Unavailable'}
+              footer={
                 !holdings
                   ? 'Could not be read'
                   : holdings.withdrawnSources > 0
@@ -75,10 +45,10 @@ export function HoldingsSection({
                       : 'Text, links and files you added'
               }
             />
-            <Tile
+            <StatTile
               label='Drafts'
-              value={holdings?.drafts ?? null}
-              hint={
+              value={holdings?.drafts ?? 'Unavailable'}
+              footer={
                 !holdings
                   ? 'Could not be read'
                   : holdings.blockedDrafts > 0
@@ -88,15 +58,15 @@ export function HoldingsSection({
                       : 'Kept with their revision history'
               }
             />
-            <Tile
+            <StatTile
               label='Media files'
-              value={holdings?.media ?? null}
-              hint={!holdings ? 'Could not be read' : holdings.media === 0 ? 'Nothing added yet' : 'Uploaded or generated images and video'}
+              value={holdings?.media ?? 'Unavailable'}
+              footer={!holdings ? 'Could not be read' : holdings.media === 0 ? 'Nothing added yet' : 'Uploaded or generated images and video'}
             />
-            <Tile
+            <StatTile
               label='Linked accounts'
-              value={holdings?.linkedAccounts ?? null}
-              hint={
+              value={holdings?.linkedAccounts ?? 'Unavailable'}
+              footer={
                 <Link href='/app/channels' className={linkClass}>
                   Details on Channels <LearnMoreChevron className='size-3.5' />
                 </Link>
@@ -105,12 +75,12 @@ export function HoldingsSection({
           </>
         )}
         {memory.isPending ? (
-          <TileSkeleton />
+          <StatTile label='Learned preferences' value='' loading />
         ) : (
-          <Tile
+          <StatTile
             label='Learned preferences'
-            value={learned}
-            hint={
+            value={learned ?? 'Unavailable'}
+            footer={
               learned === null
                 ? memory.error
                   ? 'Could not be read'

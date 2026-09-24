@@ -6,17 +6,13 @@ import { parseAsString, useQueryState } from 'nuqs';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { StateMessage, Surface, type StateKind } from '@/components/rafii';
+import { Button } from '@/components/ui/button';
 import { useInfobar, type InfobarContent } from '@/components/ui/infobar';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMemory, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatDate } from '@/lib/time';
-import { cn } from '@/lib/utils';
 import { CaptureCard, type CaptureCardHandle } from './capture-card';
 import { SourceInspector } from './source-inspector';
 import { SourceList } from './source-list';
@@ -24,11 +20,16 @@ import { ideaSources, useMedia, useUseApprovals } from './use-sources';
 
 interface Reminder {
   id: string;
+  /** The shared state grammar (DNA §20.1): a reminder nudges, it never blocks capture. */
+  kind: StateKind;
   title: string;
   description: string;
   href?: string;
   action?: string;
 }
+
+/** A tertiary text action (DNA §9.2): text plus an arrow, with a comfortable hit area. */
+const TEXT_LINK = 'rafii-focus text-foreground decoration-muted-foreground/60 hover:decoration-foreground inline-flex min-h-9 w-fit items-center gap-1 rounded-md text-sm font-medium underline underline-offset-4';
 
 /**
  * Ideas is the workspace's raw material: capture a thought, text, a link or a file; decide per
@@ -78,17 +79,17 @@ export function IdeasView() {
 
   const reminders: Reminder[] = [];
   if (snapshot.isSuccess && !state?.speaker?.activeRevision) {
-    reminders.push({ id: 'voice', title: 'Set up your voice first', description: 'Sources and previews work now, but drafts can only be scheduled once a voice profile is active.', href: '/app/workspace/brand', action: 'Set up your voice' });
+    reminders.push({ id: 'voice', kind: 'partial', title: 'Set up your voice first', description: 'Sources and previews work now, but drafts can only be scheduled once a voice profile is active.', href: '/app/workspace/brand', action: 'Set up your voice' });
   }
   if (memory.isSuccess && research) {
     if (research.enabled === false) {
-      reminders.push({ id: 'research', title: 'Web research is switched off on this deployment', description: 'Drafts use only the sources you add here, and links stay unverified references.' });
+      reminders.push({ id: 'research', kind: 'unsupported', title: 'Web research is switched off on this deployment', description: 'Drafts use only the sources you add here, and links stay unverified references.' });
     } else if (research.hosted && !research.web) {
-      reminders.push({ id: 'research', title: 'Web research is off for this workspace', description: 'Drafts use only the sources you add here, and links stay unverified references. An owner can turn research on under Memory.', href: '/app/workspace/memory', action: 'Open Memory' });
+      reminders.push({ id: 'research', kind: 'unsupported', title: 'Web research is off for this workspace', description: 'Drafts use only the sources you add here, and links stay unverified references. An owner can turn research on under Memory.', href: '/app/workspace/memory', action: 'Open Memory' });
     }
   }
   if (usage.isSuccess && entitlement && entitlement.writingBatchesRemaining === 0) {
-    reminders.push({ id: 'allowance', title: 'No writing batches left this period', description: `You can still capture and review sources. A paid cloud model can draft again when the allowance resets${resets ? ` on ${resets}` : ''}.`, href: '/app/account/billing', action: 'Usage & plan' });
+    reminders.push({ id: 'allowance', kind: 'partial', title: 'No writing batches left this period', description: `You can still capture and review sources. A paid cloud model can draft again when the allowance resets${resets ? ` on ${resets}` : ''}.`, href: '/app/account/billing', action: 'Usage & plan' });
   }
 
   const infoContent: InfobarContent = {
@@ -139,9 +140,10 @@ export function IdeasView() {
     setInfobarContent(JSON.parse(infoKey) as InfobarContent);
   }, [infoKey, setInfobarContent]);
 
-  const headerBadge = (
-    <Badge variant='outline' className='h-6 gap-1 px-2.5 tabular-nums'>
-      <Icons.paperclip className='hidden size-3 sm:block' />
+  // Quiet, factual counts beside the title (DNA §22.4): real numbers, or the honest loading/unavailable shape.
+  const headerCount = (
+    <span role='status' className='text-muted-foreground inline-flex min-h-11 items-center gap-2 text-sm tabular-nums'>
+      <Icons.paperclip aria-hidden className='hidden size-4 sm:block' />
       {/* Loading keeps the loaded shape, so the heading beside it does not reflow when the counts arrive. */}
       {snapshot.isLoading ? (
         '… ideas · … sources'
@@ -152,7 +154,7 @@ export function IdeasView() {
           <DigitSwap value={ideaCount} /> {ideaCount === 1 ? 'idea' : 'ideas'} · <DigitSwap value={otherCount} /> {otherCount === 1 ? 'source' : 'sources'}
         </>
       )}
-    </Badge>
+    </span>
   );
 
   return (
@@ -160,75 +162,81 @@ export function IdeasView() {
       pageTitle='Ideas'
       pageDescription='Capture a thought, paste text or add a link. Approve the facts, say how each source may be used, and draft from any of them in your voice.'
       infoContent={infoContent}
-      pageHeaderAction={headerBadge}
+      pageHeaderAction={headerCount}
     >
       {snapshot.isError ? (
-        <Alert variant='destructive'>
-          <Icons.alertCircle className='size-4' />
-          <AlertTitle>Your sources could not be loaded.</AlertTitle>
-          <AlertDescription className='flex flex-col gap-2'>
-            <span>{snapshot.error instanceof Error ? snapshot.error.message : 'The workspace did not answer.'}</span>
-            <Button size='sm' variant='outline' className='w-fit' onClick={() => void snapshot.refetch()} disabled={snapshot.isFetching}>
+        <StateMessage
+          kind='error'
+          title='Your sources could not be loaded.'
+          description={snapshot.error instanceof Error ? snapshot.error.message : 'The workspace did not answer.'}
+          action={
+            <Button variant='glass' size='control' onClick={() => void snapshot.refetch()} disabled={snapshot.isFetching}>
               {snapshot.isFetching ? 'Retrying…' : 'Retry'}
             </Button>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       ) : (
         <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]'>
           <div className='flex min-w-0 flex-col gap-4'>
-            {reminders.map((item) => (
-              <Alert key={item.id}>
-                <Icons.info className='size-4' />
-                <AlertTitle>{item.title}</AlertTitle>
-                <AlertDescription className='flex flex-col gap-2'>
-                  <span>{item.description}</span>
-                  {item.href && (
-                    <Link href={item.href} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-fit')}>
-                      {item.action}
-                    </Link>
-                  )}
-                </AlertDescription>
-              </Alert>
-            ))}
-            {canEdit ? <CaptureCard ref={capture} onSelect={select} /> : <p className='text-muted-foreground text-sm'>You need the edit permission to add sources.</p>}
+            {reminders.length > 0 && (
+              <Surface material='quiet' radius='card' padding='sm' className='flex flex-col gap-1'>
+                {reminders.map((item) => (
+                  <StateMessage
+                    key={item.id}
+                    kind={item.kind}
+                    layout='inline'
+                    title={item.title}
+                    description={item.description}
+                    action={
+                      item.href ? (
+                        <Link href={item.href} className={TEXT_LINK}>
+                          {item.action}
+                          <Icons.arrowRight aria-hidden className='size-3.5' />
+                        </Link>
+                      ) : undefined
+                    }
+                  />
+                ))}
+              </Surface>
+            )}
+            {canEdit ? <CaptureCard ref={capture} onSelect={select} /> : <StateMessage kind='permission' layout='inline' title='You need the edit permission to add sources.' description='You can still open a source and read its facts and permissions.' />}
             <SourceList selectedId={sourceId} onSelect={select} useApprovals={useApprovals} />
           </div>
 
+          {/* The inspector is the page's contextual work surface (DNA §5.2), so it is the one glass panel beside the quiet list. */}
           <aside aria-label='Source inspector' className='hidden lg:sticky lg:top-18 lg:block lg:self-start'>
-            <Card className='py-0'>
-              <CardContent className='max-h-[calc(100svh-6rem)] overflow-y-auto p-4'>
-                {/* Rendered only at lg and up, so the tour's anchors resolve to the visible inspector. */}
-                {snapshot.isLoading ? (
-                  <div className='flex flex-col gap-3 py-2' aria-busy='true' aria-label='Loading sources'>
-                    <Skeleton className='h-4 w-1/3' />
-                    <Skeleton className='h-5 w-3/4' />
-                    <Skeleton className='h-16 w-full' />
-                  </div>
-                ) : selected && isDesktop ? (
-                  <SourceInspector key={selected.id} source={selected} useApproved={useApprovals[selected.id]} />
-                ) : (
-                  <div className='text-muted-foreground flex flex-col items-center gap-2 py-10 text-center text-sm'>
-                    <Icons.listDetails className='size-5' />
-                    <p>{sources.length === 0 ? 'Once you save a source, pick it to review its facts and permissions.' : 'Pick a source to review its facts and permissions.'}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <Surface material='glass' radius='card' padding='none' className='max-h-[calc(100svh-6rem)] overflow-y-auto p-5'>
+              {/* Rendered only at lg and up, so the tour's anchors resolve to the visible inspector. */}
+              {snapshot.isLoading ? (
+                <StateMessage kind='loading' title='Loading sources' />
+              ) : selected && isDesktop ? (
+                <SourceInspector key={selected.id} source={selected} useApproved={useApprovals[selected.id]} />
+              ) : (
+                <StateMessage
+                  kind='empty'
+                  title={sources.length === 0 ? 'Once you save a source, pick it to review its facts and permissions.' : 'Pick a source to review its facts and permissions.'}
+                />
+              )}
+            </Surface>
           </aside>
         </div>
       )}
 
-      {/* Below lg the inspector opens over the page: from the right on tablets, from the bottom on phones. */}
+      {/* Below lg the inspector opens over the page: from the right on tablets, from the bottom on phones. Elevated glass (DNA §12.2). */}
       <Sheet open={isDesktop === false && selected !== null} onOpenChange={(open) => !open && void setSourceId(null)}>
         <SheetContent
           side={isPhone ? 'bottom' : 'right'}
-          className='gap-0 data-[side=bottom]:max-h-[85svh] data-[side=bottom]:rounded-t-xl data-[side=right]:w-[24rem] data-[side=right]:max-w-[calc(100vw-2rem)]'
+          showCloseButton={false}
+          className='rafii-elevated gap-0 border-0 bg-transparent data-[side=bottom]:max-h-[85svh] data-[side=bottom]:rounded-t-[var(--rafii-radius-mobile-dialog)] data-[side=bottom]:border-t-0 data-[side=right]:w-[24rem] data-[side=right]:max-w-[calc(100vw-2rem)] data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0'
         >
-          <SheetHeader className='border-b pr-12'>
+          <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close' className='absolute top-3 right-3 z-10' />}>
+            <Icons.close className='size-4' />
+          </SheetClose>
+          <SheetHeader className='pr-16'>
             <SheetTitle>Source</SheetTitle>
             <SheetDescription>Facts, how it may be used, and where it came from.</SheetDescription>
           </SheetHeader>
-          <div className='min-h-0 flex-1 overflow-y-auto p-4'>
+          <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]'>
             {sheetSource && <SourceInspector key={sheetSource.id} source={sheetSource} useApproved={useApprovals[sheetSource.id]} />}
           </div>
         </SheetContent>

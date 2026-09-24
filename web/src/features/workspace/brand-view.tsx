@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
-import { StatefulButton, type ButtonState } from '@/components/motion/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ActionSwapIcon } from '@/components/motion/action-swap';
+import { StateMessage, Surface } from '@/components/rafii';
+import { Button } from '@/components/ui/button';
 import type { InfobarContent } from '@/components/ui/infobar';
 import { Icons } from '@/components/icons';
 import { ApiError } from '@/lib/api/client';
@@ -37,7 +38,7 @@ const infoContent: InfobarContent = {
     {
       title: 'What it never does',
       description:
-        'Raffi analyses only samples you select and explicitly allow for the chosen writing route. It learns writing form, not your identity, credentials, beliefs or results. Sample facts never become current brand facts.'
+        'Rafii analyses only samples you select and explicitly allow for the chosen writing route. It learns writing form, not your identity, credentials, beliefs or results. Sample facts never become current brand facts.'
     },
     {
       title: 'Before a voice is approved',
@@ -45,8 +46,7 @@ const infoContent: InfobarContent = {
     },
     {
       title: 'When the voice changes',
-      description:
-        'Approving a new revision marks every draft for review and holds approved or scheduled posts; each needs a new approval to go out. Earlier revisions stay listed.'
+      description: 'Approving a new revision marks every draft for review and holds approved or scheduled posts; each needs a new approval to go out. Earlier revisions stay listed.'
     },
     {
       title: 'Downloading a voice package',
@@ -60,9 +60,11 @@ const infoContent: InfobarContent = {
   ]
 };
 
+type ExportState = 'idle' | 'loading' | 'success' | 'error';
+
 function ExportPackageButton() {
   const { api, workspaceId } = useWorkspaceApi();
-  const [state, setState] = useState<ButtonState>('idle');
+  const [state, setState] = useState<ExportState>('idle');
 
   // A finished state rests for a moment, then the label returns; the timer never outlives the page.
   useEffect(() => {
@@ -84,9 +86,12 @@ function ExportPackageButton() {
   }
 
   return (
-    <StatefulButton variant='outline' state={state} loadingText='Preparing…' successText='Downloaded' errorText='Try again' onClick={() => void exportPackage()}>
-      Download voice package
-    </StatefulButton>
+    <Button variant='glass' size='control' disabled={state === 'loading'} aria-busy={state === 'loading' || undefined} onClick={() => void exportPackage()}>
+      <ActionSwapIcon value={state} className='size-4'>
+        {state === 'loading' ? <Icons.spinner className='size-4 motion-safe:animate-spin' /> : state === 'success' ? <Icons.check className='size-4' /> : state === 'error' ? <Icons.warning className='size-4' /> : <Icons.download className='size-4' />}
+      </ActionSwapIcon>
+      {state === 'loading' ? 'Preparing…' : state === 'success' ? 'Downloaded' : state === 'error' ? 'Try again' : 'Download voice package'}
+    </Button>
   );
 }
 
@@ -102,7 +107,7 @@ export function BrandView() {
   const sample = state?.workspace?.sample === true;
 
   const side = (
-    <div className='flex min-w-0 flex-col gap-4'>
+    <div className='flex min-w-0 flex-col gap-4 md:gap-5'>
       <WhatDraftsRead showMemoryLink data-tour='brand-drafts-read' />
       <RevisionHistory state={state} query={snapshot} />
     </div>
@@ -115,9 +120,7 @@ export function BrandView() {
       infoContent={infoContent}
       access={canEdit}
       accessFallback={
-        <div className='text-muted-foreground max-w-sm text-center text-sm'>
-          Brand & voice is set up by owners, admins and editors. Ask one of them if the voice needs a change.
-        </div>
+        <StateMessage kind='permission' title='Brand & voice is set up by owners, admins and editors.' description='Ask one of them if the voice needs a change.' className='w-full max-w-md' />
       }
       pageHeaderAction={exportable ? <ExportPackageButton /> : undefined}
     >
@@ -126,32 +129,24 @@ export function BrandView() {
       ) : !snapshot.data ? (
         <BrandLoadError query={snapshot} />
       ) : (
-        <div className='flex min-w-0 flex-col gap-4'>
+        <div className='flex min-w-0 flex-col gap-4 md:gap-5'>
           {snapshot.isError && <BrandStaleNotice query={snapshot} updatedAt={snapshot.dataUpdatedAt} />}
           <VoiceStatusStrip state={state} isOwner={isOwner} memory={memory} />
           <VoiceSamplesCard state={state} revision={snapshot.data.revision} isOwner={isOwner} />
-          <div className='grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
+          <div className='grid gap-4 md:gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
             {status.kind === 'active' ? (
-              <div className='flex min-w-0 flex-col gap-4' data-tour='voice-setup'>
-                {status.waiting && (
-                  <ProposalReviewCard state={state} workspaceRevision={snapshot.data.revision} isOwner={isOwner} sample={sample} query={snapshot} />
-                )}
+              <div className='flex min-w-0 flex-col gap-4 md:gap-5' data-tour='voice-setup'>
+                {status.waiting && <ProposalReviewCard state={state} workspaceRevision={snapshot.data.revision} isOwner={isOwner} sample={sample} query={snapshot} />}
                 <IdentityCard state={state} query={snapshot} />
                 <VoiceCard state={state} query={snapshot} isOwner={isOwner} />
               </div>
             ) : (
               <div className='flex min-w-0 flex-col gap-3' data-tour='voice-setup'>
-                {sample && (
-                  <Alert>
-                    <Icons.lock />
-                    <AlertTitle>This sample workspace is read-only</AlertTitle>
-                    <AlertDescription>You can look through voice setup here, but nothing is saved in a sample workspace.</AlertDescription>
-                  </Alert>
-                )}
+                {sample && <StateMessage kind='permission' layout='inline' className='rafii-quiet rounded-[var(--rafii-radius-card)] px-4 py-3' title='This sample workspace is read-only' description='You can look through voice setup here, but nothing is saved in a sample workspace.' />}
                 {status.kind === 'unavailable' ? (
-                  <div className='bg-card ring-foreground/10 rounded-xl p-4 ring-1'>
+                  <Surface material='quiet'>
                     <SectionUnavailable message='The voice could not be read from this workspace, so setup is not shown.' query={snapshot} />
-                  </div>
+                  </Surface>
                 ) : (
                   <VoiceSetup />
                 )}

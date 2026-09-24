@@ -1,11 +1,11 @@
 # Calendar
 
-Month, week and day calendar laid out after the [Untitled UI calendar](https://www.untitledui.com/components/calendars) anatomy. Untitled UI's own React calendar is a PRO component (`npx untitledui@latest add calendar` answers "requires PRO access"), so this one is written here on the same libraries its docs list: `@internationalized/date` for dates and `@react-aria/i18n` for locale-aware wording. The day panel's month picker uses `react-aria-components`.
+Month, week and day calendar laid out after the [Untitled UI calendar](https://www.untitledui.com/components/calendars) anatomy, drawn on the Rafii materials (`docs/design/reference/rafii-v9/Rafii_Design_DNA_v8.md` §21.3): quiet cells, glass chips, one lens for the selected date. Untitled UI's own React calendar is a PRO component (`npx untitledui@latest add calendar` answers "requires PRO access"), so this one is written here on the same libraries its docs list: `@internationalized/date` for dates and `@react-aria/i18n` for locale-aware wording. The day panel's month picker uses `react-aria-components`.
 
 The folder mirrors Untitled UI's `components/application/calendar/` path. With a PRO licence, `npx untitledui login` and then `add calendar` would land next to these files; compare the two before replacing anything.
 
 - `calendar.tsx`: `Calendar` (header, the three views, day panel), `useCurrentTime`, `useLocalTimeZone`
-- `config.ts`: `CalendarEvent`, the nine event colours, views, layout constants (96px per hour, 30 minute minimum block, 3 chips per month cell)
+- `config.ts`: `CalendarEvent`, the six monochrome event tones (`EVENT_TONES`), views, layout constants (96px per hour, 30 minute minimum block, 3 chips per month cell)
 - `month-view.tsx`, `time-grid.tsx` (week and day), `event-button.tsx` (chip or block, with an optional details popover), `mini-calendar.tsx`
 - `utils.ts`: grid days, visible range, period paging, ISO week, events by day, overlap layout
 
@@ -20,8 +20,8 @@ const events: CalendarEvent<Post>[] = posts.map((post) => ({
   id: post.id,
   title: post.title,
   start: fromDate(new Date(post.utc), timeZone!), // an exact moment, in the zone the grid is drawn in
-  color: 'blue',
-  status: 'Scheduled', // read with the title: colour never carries meaning alone
+  tone: 'neutral', // how much light the chip catches; `event-button.tsx` adds the tone's glyph
+  status: 'Scheduled', // read with the title: the tone never carries meaning alone
   icon: <ChannelIcon platform={post.platform} size='xs' />,
   data: post
 }));
@@ -47,6 +47,7 @@ const events: CalendarEvent<Post>[] = posts.map((post) => ({
 - **Locale.** `Calendar` wraps its content in `I18nProvider` (`locale`, default `en`, matching `lib/time.ts`). Weekday names, month titles, hour labels and ranges all come from `useDateFormatter`. `firstDayOfWeek` (default `mon`) overrides the locale's week start; the "Week N" badge is ISO and only shows when weeks start on Monday.
 - **Moments on a ruler.** Week and day views place an event at its exact minute. Without `end`, a block is 30 minutes tall so the title and time stay legible; the time label, not the height, is the truth. Overlapping blocks split the column into lanes.
 - **Month density.** Up to three chips per cell; a busier day shows two plus "+N more", which opens that day. Below `md` chips become dots and the whole cell opens the day.
+- **Tones, not colours.** Rafii chrome is monochrome (DNA §4.3), so an event's state is its `status` text plus the tone's glyph (clock, spinner, warning, check, cross); `attention` catches the lens, `active` sits on glass, `failure` is the one tinted tone (`--destructive`).
 
 ## Keyboard and screen readers
 

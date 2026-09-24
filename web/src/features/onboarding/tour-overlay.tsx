@@ -396,7 +396,7 @@ export function TourOverlay() {
             animate={{ x: cut.x, y: cut.y, opacity: phase === 'waiting' ? 0.6 : 1 }}
             transition={transition}
             onClick={phase === 'hop' && rect ? openRoute : undefined}
-            className={cn('ring-primary/70 absolute rounded-xl ring-2', phase === 'hop' && rect ? 'cursor-pointer' : 'pointer-events-none')}
+            className={cn('ring-foreground/70 absolute rounded-[var(--rafii-radius-control)] ring-2', phase === 'hop' && rect ? 'cursor-pointer' : 'pointer-events-none')}
             style={{ left: 0, top: 0, width: cut.w, height: cut.h, boxShadow: '0 0 0 200vmax rgb(0 0 0 / 0.5)' }}
           />
           <p className='sr-only' aria-live='polite'>
@@ -414,25 +414,25 @@ export function TourOverlay() {
             animate={{ x: mobile ? 0 : cardPos?.x ?? MARGIN, y: mobile ? 0 : cardPos?.y ?? MARGIN, opacity: 1 }}
             transition={transition}
             className={cn(
-              'bg-popover text-popover-foreground ring-foreground/10 absolute flex flex-col gap-3 rounded-xl p-4 shadow-lg ring-1 outline-hidden',
-              mobile ? 'inset-x-3 bottom-3' : 'top-0 left-0 w-[336px]'
+              'rafii-elevated text-foreground absolute flex flex-col gap-3 rounded-[var(--rafii-radius-card)] p-5 outline-hidden',
+              mobile ? 'inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))]' : 'top-0 left-0 w-[336px]'
             )}
           >
-            <div className='text-muted-foreground flex items-center justify-between gap-2 text-[11px] font-semibold tracking-[0.08em] uppercase'>
-              <span>
+            <div className='flex items-center justify-between gap-2'>
+              <span className='rafii-eyebrow'>
                 {tour?.title} · {index + 1} of {total}
               </span>
               <button
                 type='button'
                 onClick={() => tourStore.end('dismissed')}
                 aria-label='End tour'
-                className='hover:bg-accent hover:text-accent-foreground -mr-1.5 rounded-md p-1 transition-colors'
+                className='rafii-focus hover:rafii-quiet text-muted-foreground hover:text-foreground -mr-2 -mt-1 flex size-9 items-center justify-center rounded-full transition-colors'
               >
                 <Icons.close className='size-4' />
               </button>
             </div>
             <div className='flex flex-col gap-1'>
-              <h2 id='tour-title' className='text-base leading-snug font-semibold'>
+              <h2 id='tour-title' className='text-foreground text-base leading-snug font-medium tracking-tight'>
                 {title}
               </h2>
               <p id='tour-body' className='text-muted-foreground flex items-center gap-2 text-sm leading-relaxed'>
@@ -441,21 +441,21 @@ export function TourOverlay() {
               </p>
             </div>
             <div className='flex items-center justify-between gap-2 pt-1'>
-              <button type='button' onClick={() => tourStore.end('dismissed')} className='text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline'>
+              <button type='button' onClick={() => tourStore.end('dismissed')} className='rafii-focus text-muted-foreground hover:text-foreground min-h-9 rounded-sm text-xs underline-offset-4 hover:underline'>
                 Skip tour
               </button>
               <div className='flex items-center gap-2'>
-                <Button variant='ghost' size='sm' onClick={back} disabled={index === 0}>
+                <Button variant='quiet' size='sm' className='h-9' onClick={back} disabled={index === 0}>
                   Back
                 </Button>
                 {phase === 'shown' && (
-                  <Button size='sm' onClick={advance}>
+                  <Button variant='action' size='sm' className='h-9 px-3.5' onClick={advance}>
                     {last ? 'Done' : 'Next'}
                     {!last && <Icons.chevronRight className='size-4' />}
                   </Button>
                 )}
                 {phase === 'hop' && (
-                  <Button size='sm' onClick={openRoute}>
+                  <Button variant='action' size='sm' className='h-9 px-3.5' onClick={openRoute}>
                     Open {step.stop}
                     <Icons.chevronRight className='size-4' />
                   </Button>

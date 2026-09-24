@@ -1,5 +1,5 @@
-import type { CalendarEventColor } from '@/components/application/calendar/config';
-import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import type { CalendarEventTone } from '@/components/application/calendar/config';
+import type { StatusTone } from '@/features/queue/status-chip';
 import type { Job, Review } from '@/lib/api/types';
 
 /**
@@ -13,29 +13,30 @@ export type Kind = (typeof KINDS)[number];
 
 export interface KindMeta {
   label: string;
-  color: CalendarEventColor;
-  status: AnimatedBadgeStatus;
+  /** How much light the calendar chip catches (`EVENT_TONES`); the label and glyph carry the state. */
+  tone: CalendarEventTone;
+  /** The status chip's role in details and filters; consistent with `tone` (attention ↔ warning, and so on). */
+  status: StatusTone;
 }
 
-// Nine kinds share the calendar's nine event colours. `brand` follows the workspace theme, so it goes to the
-// kind that least needs to stand out: a review that can no longer be approved and asks for nothing until the
-// draft is prepared again.
+// Monochrome by rule (DNA §4.3): a state that asks for the person's attention catches the lens, work in progress
+// sits on glass, a finished or dead entry stays quiet. Failed and expired are the only tinted ones (`--destructive`).
 export const KIND_META: Record<Kind, KindMeta> = {
-  review: { label: 'Needs approval', color: 'yellow', status: 'warning' },
-  expired: { label: 'Review expired', color: 'pink', status: 'danger' },
-  stale: { label: 'Out of date', color: 'brand', status: 'neutral' },
-  waiting: { label: 'Scheduled', color: 'blue', status: 'info' },
-  held: { label: 'Needs action', color: 'orange', status: 'warning' },
-  'in-flight': { label: 'Publishing', color: 'indigo', status: 'loading' },
-  processing: { label: 'Preparing media', color: 'indigo', status: 'info' },
-  accepted: { label: 'Accepted; checking result', color: 'indigo', status: 'info' },
-  uncertain: { label: 'Result not confirmed', color: 'orange', status: 'warning' },
-  unknown: { label: 'Unknown status', color: 'gray', status: 'warning' },
-  assisted: { label: 'Finish in the app', color: 'orange', status: 'warning' },
-  manual: { label: 'Marked completed by you', color: 'gray', status: 'neutral' },
-  verified: { label: 'Published and verified', color: 'green', status: 'success' },
-  failed: { label: 'Failed', color: 'red', status: 'danger' },
-  canceled: { label: 'Canceled', color: 'gray', status: 'neutral' }
+  review: { label: 'Needs approval', tone: 'attention', status: 'warning' },
+  expired: { label: 'Review expired', tone: 'failure', status: 'danger' },
+  stale: { label: 'Out of date', tone: 'attention', status: 'warning' },
+  waiting: { label: 'Scheduled', tone: 'neutral', status: 'info' },
+  held: { label: 'Needs action', tone: 'attention', status: 'warning' },
+  'in-flight': { label: 'Publishing', tone: 'active', status: 'loading' },
+  processing: { label: 'Preparing media', tone: 'neutral', status: 'info' },
+  accepted: { label: 'Accepted; checking result', tone: 'neutral', status: 'info' },
+  uncertain: { label: 'Result not confirmed', tone: 'attention', status: 'warning' },
+  unknown: { label: 'Unknown status', tone: 'attention', status: 'warning' },
+  assisted: { label: 'Finish in the app', tone: 'attention', status: 'warning' },
+  manual: { label: 'Marked completed by you', tone: 'quiet', status: 'neutral' },
+  verified: { label: 'Published and verified', tone: 'success', status: 'success' },
+  failed: { label: 'Failed', tone: 'failure', status: 'danger' },
+  canceled: { label: 'Canceled', tone: 'quiet', status: 'neutral' }
 };
 
 /** Job states the worker still runs at their time (`store.py` treats these as cancellable). */

@@ -13,8 +13,8 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <>
-      <PageHero eyebrow='Contact' title='We read every message.' description='Pick a topic so it reaches the right person. Replies come by email.' />
-      <Section>
+      <PageHero eyebrow='Contact' title='We read' accent='every message.' description='Pick a topic so it reaches the right person. Replies come by email.' />
+      <Section className='pt-8 sm:pt-12'>
         <Suspense fallback={null}>
           <ContactForm />
         </Suspense>

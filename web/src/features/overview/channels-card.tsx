@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { ChannelIcon } from '@/components/channel-icon';
 import { LevelBadge } from '@/components/app/level-badge';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
+import { CollectionRow, StateMessage } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import { useChannels } from '@/lib/api/hooks';
 import type { ChannelView } from '@/lib/api/types';
 import { channelBadge, expiringSoon, isConnected, nowSeconds, publishLevel, sortForAttention } from '@/lib/channels/state';
@@ -54,62 +54,63 @@ export function ChannelsCard({ className }: { className?: string }) {
   const ready = Boolean(channels.data) && !channels.isError;
 
   return (
-    <Card data-tour='overview-channels' className={className}>
-      <CardHeader>
-        <CardTitle>Channels</CardTitle>
-        <CardDescription>
+    <Panel
+      data-tour='overview-channels'
+      className={className}
+      title='Channels'
+      titleId='overview-channels-heading'
+      description={
+        <>
           What each connection can really do today.
           {ready && counts.connected > 0 && (
             <span className='text-foreground mt-1 block text-xs font-medium tabular-nums'>
               Publish: {counts.direct} Direct · {counts.assisted} Assisted · {counts.local} Local
             </span>
           )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='@container flex flex-col gap-3'>
-        {channels.isError ? (
-          <SectionUnavailable message='Channels are unavailable right now.' query={channels} />
-        ) : !channels.data ? (
-          <Skeleton className='h-24 w-full' />
-        ) : list.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>No channels connected yet.</p>
-        ) : (
-          <ul className='flex flex-col gap-2'>
-            {sortForAttention(list, now).map((channel) => {
-              const badge = channelBadge(channel, now);
-              const hint = expiryHint(channel, now);
-              return (
-                <li key={channel.id} className='flex flex-col gap-2 rounded-lg border p-3'>
-                  <div className='flex flex-col gap-2 @sm:flex-row @sm:items-center @sm:justify-between'>
-                    <div className='flex min-w-0 items-center gap-2'>
-                      <ChannelIcon platform={channel.platform} name={channel.platform} />
-                      <div className='min-w-0'>
-                        <p className='truncate text-sm font-medium'>{channel.platform}</p>
-                        <p className='text-muted-foreground truncate text-xs'>{channel.account}</p>
-                      </div>
-                    </div>
-                    <div className='flex shrink-0 flex-wrap items-center gap-1.5'>
-                      <AnimatedBadge size='sm' status={badge.status} contentKey={channel.connectionState}>
-                        {badge.label}
-                      </AnimatedBadge>
-                      <span className='text-muted-foreground text-xs'>publish</span>
-                      <LevelBadge level={channel.capabilities.publish?.level} />
-                    </div>
-                  </div>
-                  {hint && (
-                    <p className={cn('text-xs', channel.connectionState === 'token_expired' ? 'text-destructive' : 'text-muted-foreground')}>
-                      {hint}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <Link href='/app/channels' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), 'w-fit')}>
+        </>
+      }
+      footer={
+        <Link href='/app/channels' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }), '-ml-2.5 w-fit')}>
           {ready && list.length === 0 ? 'Connect a channel' : 'Manage channels'} <LearnMoreChevron />
         </Link>
-      </CardContent>
-    </Card>
+      }
+    >
+      {channels.isError ? (
+        <SectionUnavailable message='Channels are unavailable right now.' query={channels} />
+      ) : !channels.data ? (
+        <Skeleton className='h-24 w-full rounded-[var(--rafii-radius-control)]' />
+      ) : list.length === 0 ? (
+        <StateMessage kind='empty' layout='inline' title='No channels connected yet.' description='Connecting an account lets you schedule and publish.' />
+      ) : (
+        <ul className='flex flex-col gap-2'>
+          {sortForAttention(list, now).map((channel) => {
+            const badge = channelBadge(channel, now);
+            const hint = expiryHint(channel, now);
+            return (
+              <CollectionRow
+                key={channel.id}
+                as='li'
+                className='flex-wrap py-3'
+                leading={<ChannelIcon platform={channel.platform} name={channel.platform} />}
+                title={channel.platform}
+                meta={
+                  <>
+                    <span className='block truncate'>{channel.account}</span>
+                    {hint && <span className={cn('mt-0.5 block', channel.connectionState === 'token_expired' && 'text-foreground')}>{hint}</span>}
+                  </>
+                }
+                actions={
+                  <span className='flex flex-wrap items-center gap-1.5'>
+                    <StatusChip status={badge.status}>{badge.label}</StatusChip>
+                    <span className='text-muted-foreground text-xs'>publish</span>
+                    <LevelBadge level={channel.capabilities.publish?.level} />
+                  </span>
+                }
+              />
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
   );
 }

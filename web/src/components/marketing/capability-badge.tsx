@@ -1,10 +1,11 @@
 import * as React from 'react';
+import { Icons, type Icon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 /**
- * Per-channel capability levels. The colour semantics are shared across the
- * whole product (marketing, channel matrix, calendar, queue, analytics):
- *   Direct = green · Assisted = amber · Local = blue · Unsupported = grey
+ * Per-channel capability levels, shared across the product (marketing, channel matrix, inbox,
+ * connect sheet). Rafii chrome is monochrome (DNA §2.2, §4.3): the level is carried by a glyph
+ * and its text, never by an ad hoc colour, so it reads the same in both themes and on glass.
  */
 export type CapabilityLevel = 'direct' | 'assisted' | 'local' | 'unsupported';
 
@@ -27,26 +28,38 @@ export const CAPABILITY_LEVELS: Record<CapabilityLevel, { label: string; descrip
   }
 };
 
+/** One glyph per level: done by Rafii · finished by you · on your machine · not offered. */
+const LEVEL_ICONS: Record<CapabilityLevel, Icon> = {
+  direct: Icons.check,
+  assisted: Icons.userPen,
+  local: Icons.laptop,
+  unsupported: Icons.slash
+};
+
 const LEVEL_CLASSES: Record<CapabilityLevel, string> = {
-  direct:
-    'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300',
-  assisted:
-    'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300',
-  local:
-    'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300',
-  unsupported: 'border-border bg-muted text-muted-foreground'
+  direct: 'rafii-quiet text-foreground',
+  assisted: 'rafii-quiet text-foreground',
+  local: 'rafii-quiet text-foreground',
+  unsupported: 'rafii-quiet text-muted-foreground'
 };
 
+/** Monochrome tones for consumers that draw only a mark beside their own label (tables, legends). */
 const DOT_CLASSES: Record<CapabilityLevel, string> = {
-  direct: 'bg-emerald-500 dark:bg-emerald-400',
-  assisted: 'bg-amber-500 dark:bg-amber-400',
-  local: 'bg-sky-500 dark:bg-sky-400',
-  unsupported: 'bg-muted-foreground/50'
+  direct: 'bg-foreground',
+  assisted: 'bg-foreground/60',
+  local: 'bg-foreground/40',
+  unsupported: 'bg-muted-foreground/40'
 };
 
-/** Utility for consumers that need only the dot colour (tables, legends). */
+/** Utility for consumers that need only the mark (tables, legends). */
 export function capabilityDotClass(level: CapabilityLevel) {
   return DOT_CLASSES[level];
+}
+
+/** The level's glyph, for rows that carry the label themselves. */
+export function CapabilityIcon({ level, className }: { level: CapabilityLevel; className?: string }) {
+  const Glyph = LEVEL_ICONS[level];
+  return <Glyph aria-hidden className={cn('size-3.5 shrink-0', className)} />;
 }
 
 interface CapabilityBadgeProps extends React.ComponentProps<'span'> {
@@ -56,26 +69,20 @@ interface CapabilityBadgeProps extends React.ComponentProps<'span'> {
   size?: 'sm' | 'md';
 }
 
-export function CapabilityBadge({
-  level,
-  label,
-  size = 'sm',
-  className,
-  ...props
-}: CapabilityBadgeProps) {
+export function CapabilityBadge({ level, label, size = 'sm', className, ...props }: CapabilityBadgeProps) {
   const meta = CAPABILITY_LEVELS[level];
   return (
     <span
       title={meta.description}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-full border font-medium whitespace-nowrap',
-        size === 'sm' ? 'h-5 px-2 text-[11px]' : 'h-6 px-2.5 text-xs',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full font-medium whitespace-nowrap',
+        size === 'sm' ? 'h-6 px-2 text-xs' : 'h-7 px-2.5 text-[13px]',
         LEVEL_CLASSES[level],
         className
       )}
       {...props}
     >
-      <span aria-hidden className={cn('size-1.5 rounded-full', DOT_CLASSES[level])} />
+      <CapabilityIcon level={level} className={size === 'sm' ? 'size-3' : 'size-3.5'} />
       {label ?? meta.label}
     </span>
   );

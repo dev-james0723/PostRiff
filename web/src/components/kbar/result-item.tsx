@@ -3,6 +3,7 @@ import * as React from 'react';
 import { Kbd } from '@/components/ui/kbd';
 import { cn } from '@/lib/utils';
 
+/** One palette row: the active row carries the selection lens (DNA §5.2), never a hard outline. */
 const ResultItem = React.forwardRef(
   (
     {
@@ -26,14 +27,14 @@ const ResultItem = React.forwardRef(
       <div
         ref={ref}
         className={cn(
-          'relative mx-1.5 flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2.5 text-sm',
-          active && 'bg-accent text-accent-foreground'
+          'relative mx-2.5 flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm transition-colors',
+          active ? 'rafii-lens text-foreground' : 'text-foreground'
         )}
       >
-        <div className='flex items-center gap-2'>
+        <div className='flex min-w-0 items-center gap-2.5'>
           {action.icon}
-          <div className='flex flex-col'>
-            <div>
+          <div className='flex min-w-0 flex-col'>
+            <div className='truncate'>
               {ancestors.length > 0 &&
                 ancestors.map((ancestor) => (
                   <React.Fragment key={ancestor.id}>
@@ -43,13 +44,11 @@ const ResultItem = React.forwardRef(
                 ))}
               <span>{action.name}</span>
             </div>
-            {action.subtitle && (
-              <span className='text-muted-foreground text-xs'>{action.subtitle}</span>
-            )}
+            {action.subtitle && <span className='text-muted-foreground truncate text-xs'>{action.subtitle}</span>}
           </div>
         </div>
         {action.shortcut?.length ? (
-          <div className='grid grid-flow-col gap-1'>
+          <div className='grid shrink-0 grid-flow-col gap-1'>
             {action.shortcut.map((sc, i) => (
               <Kbd key={sc + i}>{sc}</Kbd>
             ))}

@@ -5,10 +5,9 @@ import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
+import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DataRequest } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
@@ -17,8 +16,8 @@ import { copyText } from './fingerprint';
 import { completedAt, diagnosticFieldLabel, diagnosticFields, exportReceipt, requestLabel, requestStatus } from './privacy-model';
 import { PrivacySection, Unavailable, type Refetchable } from './section';
 
-const linkClass = 't-learn text-foreground inline-flex items-center gap-0.5 text-sm font-medium hover:underline';
-const ROW_CLASS = 'border-b transition-colors hover:bg-muted/50';
+const linkClass = 't-learn rafii-focus text-foreground inline-flex min-h-9 items-center gap-0.5 rounded-sm text-sm font-medium hover:underline';
+const ROW_CLASS = 'border-b border-foreground/8 transition-colors last:border-0';
 
 function Details({ request }: { request: DataRequest }): ReactNode {
   switch (request.kind) {
@@ -32,7 +31,7 @@ function Details({ request }: { request: DataRequest }): ReactNode {
             <span className='inline-flex min-w-0 flex-wrap items-center gap-x-1'>
               <span className='text-muted-foreground'>Recorded fingerprint</span>
               <code className='font-mono break-all'>{sha256.slice(0, 16)}…</code>
-              <Button variant='ghost' size='icon-xs' aria-label='Copy the recorded fingerprint' onClick={() => void copyText(sha256, 'Recorded fingerprint')}>
+              <Button variant='quiet' size='icon-xs' className='size-8 rounded-full' aria-label='Copy the recorded fingerprint' onClick={() => void copyText(sha256, 'Recorded fingerprint')}>
                 <Icons.copy />
               </Button>
             </span>
@@ -77,24 +76,25 @@ export function RequestsSection({ requests }: { requests: Refetchable & { data?:
       data-tour='privacy-requests'
     >
       {requests.isPending ? (
-        <Skeleton className='h-24 w-full' />
+        <StateMessage kind='loading' title='Loading data requests' />
       ) : !requests.data ? (
         <Unavailable query={requests} fallback='Data requests could not be loaded.' />
       ) : rows.length === 0 ? (
-        <Empty className='border'>
-          <EmptyHeader>
-            <EmptyMedia variant='icon'>
-              <Icons.shieldCheck />
-            </EmptyMedia>
-            <EmptyTitle>No requests yet</EmptyTitle>
-            <EmptyDescription>Exports, diagnostics packages and retractions each add a row here with a receipt.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <StateMessage
+          kind='empty'
+          media={
+            <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
+              <Icons.shieldCheck className='size-5' />
+            </span>
+          }
+          title='No requests yet'
+          description='Exports, diagnostics packages and retractions each add a row here with a receipt.'
+        />
       ) : (
-        <div className='min-w-0 rounded-lg border'>
+        <div className='rafii-quiet min-w-0 overflow-hidden rounded-[var(--rafii-radius-card)] px-2'>
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className='border-foreground/8 hover:bg-transparent'>
                 <TableHead className='hidden sm:table-cell'>When</TableHead>
                 <TableHead>Request</TableHead>
                 <TableHead>Status</TableHead>
@@ -120,7 +120,7 @@ export function RequestsSection({ requests }: { requests: Refetchable & { data?:
                       {formatDateTime(request.requestedAt)}
                     </TableCell>
                     <TableCell className='min-w-0 align-top whitespace-normal'>
-                      <span className='font-medium'>{requestLabel(request)}</span>
+                      <span className='text-foreground font-medium'>{requestLabel(request)}</span>
                       <span className='text-muted-foreground mt-0.5 block text-xs sm:hidden'>{formatDateTime(request.requestedAt)}</span>
                       <span className='text-muted-foreground mt-0.5 block text-xs break-words md:hidden'>
                         <Details request={request} />

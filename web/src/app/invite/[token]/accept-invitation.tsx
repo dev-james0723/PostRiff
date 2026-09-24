@@ -3,11 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Icons } from '@/components/icons';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AuthSurface } from '@/components/auth/auth-form';
+import { PageHeader, StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { siteConfig } from '@/config/site';
 import { invitationLanding, verifyHref } from '@/lib/auth/navigation';
 import { ApiError } from '@/lib/api/client';
@@ -42,55 +40,56 @@ export function AcceptInvitation({ token }: { token: string }) {
   }
 
   if (auth.status === 'loading') {
-    return <Skeleton className='h-40 w-full' />;
+    return (
+      <AuthSurface>
+        <StateMessage kind='loading' title='Checking your invitation' className='bg-transparent p-0' />
+      </AuthSurface>
+    );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>You’ve been invited to a PostRiff workspace</CardTitle>
-        <CardDescription>
-          Accepting adds you as a member with the role the inviter chose. You can leave at any time.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-4'>
-        {error && (
-          <Alert variant='destructive'>
-            <Icons.alertCircle className='size-4' />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {auth.status === 'unavailable' && (
-          <Alert>
-            <AlertDescription>{auth.error ?? 'PostRiff is unavailable right now.'}</AlertDescription>
-          </Alert>
-        )}
-        {auth.status === 'mfa-required' && <Link href={verifyHref(here)} className={buttonVariants()}>Confirm two-factor to accept</Link>}
-        {auth.status === 'signed-out' && (
-          <div className='flex flex-col gap-2'>
-            <p className='text-muted-foreground text-sm'>Sign in or create an account to accept this invitation. Anyone signed in with this link can accept; the workspace records who joined.</p>
-            <Link href={`${siteConfig.links.signIn}?next=${encodeURIComponent(here)}`} className={buttonVariants()}>
-              Sign in to accept
-            </Link>
-            <Link
-              href={`${siteConfig.links.signUp}?next=${encodeURIComponent(here)}`}
-              className={buttonVariants({ variant: 'outline' })}
-            >
-              Create an account
-            </Link>
-          </div>
-        )}
-        {auth.status === 'signed-in' && !joined && (
-          <Button disabled={busy} onClick={() => void accept()}>
-            {busy ? 'Joining…' : 'Accept invitation'}
-          </Button>
-        )}
-        {joined && (
-          <p className='text-sm'>
-            Joined as <strong>{joined.role}</strong>. Taking you to the workspace…
+    <AuthSurface>
+      <PageHeader
+        title='You’ve been invited to a PostRiff workspace'
+        description='Accepting adds you as a member with the role the inviter chose. You can leave at any time.'
+      />
+      {error && <StateMessage kind='error' layout='inline' title={error} />}
+      {auth.status === 'unavailable' && <StateMessage kind='offline' layout='inline' title={auth.error ?? 'PostRiff is unavailable right now.'} />}
+      {auth.status === 'mfa-required' && (
+        <Link href={verifyHref(here)} className={buttonVariants({ variant: 'action', size: 'control' })}>
+          Confirm two-factor to accept
+        </Link>
+      )}
+      {auth.status === 'signed-out' && (
+        <div className='flex flex-col gap-3'>
+          <p className='text-muted-foreground text-sm leading-relaxed'>
+            Sign in or create an account to accept this invitation. Anyone signed in with this link can accept; the workspace records who joined.
           </p>
-        )}
-      </CardContent>
-    </Card>
+          <Link href={`${siteConfig.links.signIn}?next=${encodeURIComponent(here)}`} className={buttonVariants({ variant: 'action', size: 'control' })}>
+            Sign in to accept
+          </Link>
+          <Link href={`${siteConfig.links.signUp}?next=${encodeURIComponent(here)}`} className={buttonVariants({ variant: 'glass', size: 'control' })}>
+            Create an account
+          </Link>
+        </div>
+      )}
+      {auth.status === 'signed-in' && !joined && (
+        <Button variant='action' size='control' disabled={busy} onClick={() => void accept()}>
+          {busy ? 'Joining…' : 'Accept invitation'}
+        </Button>
+      )}
+      {joined && (
+        <StateMessage
+          kind='success'
+          layout='inline'
+          title={
+            <>
+              Joined as <strong>{joined.role}</strong>.
+            </>
+          }
+          description='Taking you to the workspace…'
+        />
+      )}
+    </AuthSurface>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import { CollectionRow } from '@/components/rafii';
 
 type State = 'checking' | 'ok' | 'degraded' | 'down';
 
@@ -11,6 +12,11 @@ interface Component {
   detail: string;
 }
 
+/**
+ * One live check of /api/health rendered as quiet collection rows (DNA §13.3, §20.1). The badge
+ * is the row's state slot: `checking` is a real in-flight request, and the result badge names the
+ * operation's actual outcome; nothing is claimed before the response arrives.
+ */
 export function StatusPanel() {
   const [components, setComponents] = useState<Component[]>([
     { name: 'Web app', state: 'ok', detail: 'You are reading it.' },
@@ -53,20 +59,24 @@ export function StatusPanel() {
 
   return (
     <div className='max-w-2xl'>
-      <ul className='divide-y rounded-xl border'>
+      <ul className='flex flex-col gap-1.5'>
         {components.map((component) => (
-          <li key={component.name} className='flex items-center justify-between gap-3 px-4 py-3'>
-            <div>
-              <p className='font-medium'>{component.name}</p>
-              <p className='text-muted-foreground text-xs'>{component.detail}</p>
-            </div>
-            <AnimatedBadge status={tone[component.state]} size='sm'>
-              {label[component.state]}
-            </AnimatedBadge>
-          </li>
+          <CollectionRow
+            key={component.name}
+            as='li'
+            title={component.name}
+            meta={component.detail}
+            state={
+              <AnimatedBadge status={tone[component.state]} size='sm'>
+                {label[component.state]}
+              </AnimatedBadge>
+            }
+          />
         ))}
       </ul>
-      <p className='text-muted-foreground mt-3 text-xs'>{checkedAt ? `Checked at ${checkedAt} from your browser.` : 'Checking…'}</p>
+      <p role='status' aria-live='polite' className='text-muted-foreground mt-3 text-xs'>
+        {checkedAt ? `Checked at ${checkedAt} from your browser.` : 'Checking…'}
+      </p>
     </div>
   );
 }

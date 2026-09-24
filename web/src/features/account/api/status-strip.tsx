@@ -1,10 +1,10 @@
 'use client';
 
-import { StatCard } from '@/components/app/stat-card';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import type { useChannels } from '@/lib/api/hooks';
 import type { ChannelView } from '@/lib/api/types';
 import { isConnected, publishLevel } from '@/lib/channels/state';
+import { StatTile } from '../settings-section';
 import type { ToolRegistryState } from './tool-registry';
 
 type ChannelsQuery = ReturnType<typeof useChannels>;
@@ -28,7 +28,7 @@ function publishBreakdown(connected: ChannelView[]) {
 }
 
 /**
- * Three tiles, each read from an API that exists today. A tile whose request failed or cannot be
+ * Three quiet tiles, each read from an API that exists today. A tile whose request failed or cannot be
  * made says Unavailable; it never turns into a zero. Columns follow the strip's own width (a
  * container query), so the tiles stay readable when the sidebars are open.
  */
@@ -48,16 +48,12 @@ export function StatusStrip({ channels, tools }: { channels: ChannelsQuery; tool
 
   return (
     <section aria-label='Access status' data-tour='api-status' className='@container'>
-      <div className='grid grid-cols-1 gap-4 @2xl:grid-cols-3'>
-        <StatCard
+      <div className='grid grid-cols-1 gap-3 @2xl:grid-cols-3'>
+        <StatTile
           label='Connected accounts'
           loading={channelsLoading}
           value={channelsFailed || !connected ? 'Unavailable' : connected.length}
-          hint={
-            !channelsFailed && notConnected > 0
-              ? `${notConnected} more listed but disconnected`
-              : undefined
-          }
+          hint={!channelsFailed && notConnected > 0 ? `${notConnected} more listed but disconnected` : undefined}
           footer={
             channelsFailed
               ? 'Accounts could not be loaded.'
@@ -68,7 +64,7 @@ export function StatusStrip({ channels, tools }: { channels: ChannelsQuery; tool
                   : undefined
           }
         />
-        <StatCard
+        <StatTile
           label='Providers that passed review'
           loading={channelsLoading}
           value={channelsFailed || reviewed === undefined ? 'Unavailable' : reviewed}
@@ -81,7 +77,7 @@ export function StatusStrip({ channels, tools }: { channels: ChannelsQuery; tool
           }
           footer={providers ? "A provider's review of PostRiff, separate from each account's levels." : undefined}
         />
-        <StatCard
+        <StatTile
           label='Tool runner'
           loading={toolsLoading}
           value={toolsFailed || !isolation ? 'Unavailable' : isolation.isolated ? 'Isolated' : 'Not isolated'}

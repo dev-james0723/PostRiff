@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemory, useModels, useRescanModels } from '@/lib/api/hooks';
@@ -47,16 +47,17 @@ const infoContent = {
 
 function NoEditAccess() {
   return (
-    <div className='flex max-w-md flex-col items-center gap-3 text-center'>
-      <Icons.lock className='text-muted-foreground size-6' />
-      <h2 className='text-lg font-semibold'>Choosing a writer needs edit access</h2>
-      <p className='text-muted-foreground text-sm'>
-        This page picks which writer drafts for you, and only people who can edit drafts start a draft. Your role in this workspace can read but not edit, so there is nothing to choose here. Ask a workspace owner if you need edit access.
-      </p>
-      <Link href='/app/account/privacy' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        Privacy &amp; data
-      </Link>
-    </div>
+    <StateMessage
+      kind='permission'
+      title='Choosing a writer needs edit access'
+      description='This page picks which writer drafts for you, and only people who can edit drafts start a draft. Your role in this workspace can read but not edit, so there is nothing to choose here. Ask a workspace owner if you need edit access.'
+      action={
+        <Link href='/app/account/privacy' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+          Privacy &amp; data
+        </Link>
+      }
+      className='w-full max-w-md'
+    />
   );
 }
 
@@ -95,29 +96,27 @@ function ModelsBody() {
       pageHeaderAction={<CheckAgainButton rescan={rescan.mutateAsync} checking={checking} disabled={loading} />}
     >
       {models.data ? (
-        <div className='-mt-2 mb-4'>
+        <div className='-mt-2'>
           <CheckedLine receivedAt={models.dataUpdatedAt / 1000} now={now} />
         </div>
       ) : null}
 
       {models.isError && (
-        <Alert variant='destructive' className='mb-4'>
-          <Icons.alertCircle />
-          <AlertTitle>The writer list could not be loaded</AlertTitle>
-          <AlertDescription className='flex flex-col items-start gap-2'>
-            <span>
-              {models.error?.message ?? 'The request failed.'}
-              {models.data ? ' The page shows the last list it received.' : ''}
-            </span>
-            <Button variant='outline' size='sm' onClick={() => void models.refetch()}>
+        <StateMessage
+          kind={models.data ? 'stale' : 'error'}
+          layout='inline'
+          title='The writer list could not be loaded'
+          description={`${models.error?.message ?? 'The request failed.'}${models.data ? ' The page shows the last list it received.' : ''}`}
+          action={
+            <Button variant='glass' size='sm' className='min-h-9' onClick={() => void models.refetch()}>
               <Icons.refresh className='size-3.5' /> Retry
             </Button>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       )}
 
-      <div className='grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
-        <div className='flex min-w-0 flex-col gap-6'>
+      <div className='grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+        <div className='flex min-w-0 flex-col gap-8'>
           <WritingNow
             loading={loading}
             error={models.isError}
@@ -131,31 +130,31 @@ function ModelsBody() {
           />
 
           <section data-tour='models-cli' className='flex flex-col gap-3' aria-labelledby='models-cli-heading'>
-            <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1'>
-              <h2 id='models-cli-heading' className='text-sm font-semibold'>
+            <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1'>
+              <h2 id='models-cli-heading' className='text-foreground text-lg font-medium tracking-tight'>
                 Local CLI{models.data ? ` (${agents.length})` : ''}
               </h2>
-              <span className='text-muted-foreground text-xs'>Found on the machine that serves the API. PostRiff never reads a CLI’s login.</span>
+              <span className='text-muted-foreground text-sm'>Found on the machine that serves the API. PostRiff never reads a CLI’s login.</span>
             </div>
             {agents.length > 0 && (
-              <p className='text-muted-foreground max-w-prose text-xs'>
+              <p className='text-muted-foreground max-w-prose px-1 text-sm leading-relaxed'>
                 Rafii applies cloud-consent checks to CLI writers too: Claude Code and Codex run on this machine but send selected context to their providers. Writing samples additionally require permission for the exact writer route. Picking one of its models makes it the writer for new drafts in this browser; every run still records which writer produced it.
               </p>
             )}
             {loading ? (
               <>
-                <Skeleton className='h-40 w-full' />
-                <Skeleton className='h-40 w-full' />
+                <Skeleton className='h-40 w-full rounded-[var(--rafii-radius-card)]' />
+                <Skeleton className='h-40 w-full rounded-[var(--rafii-radius-card)]' />
               </>
             ) : !models.data ? (
-              <p className='text-muted-foreground text-sm'>Unavailable until the writer list loads.</p>
+              <StateMessage kind='offline' layout='inline' title='Unavailable until the writer list loads.' />
             ) : agents.length === 0 ? (
               <CliEmpty hosted={hosted} />
             ) : (
               agents.map((agent) => <CliRouteCard key={agent.id} agent={agent} options={options} current={choice.model} onChoose={onChoose} checking={checking} now={now} />)
             )}
             {unlisted.length > 0 && (
-              <p className='text-muted-foreground text-xs'>
+              <p className='text-muted-foreground px-1 text-xs'>
                 The API lists {unlisted.length} CLI model{unlisted.length === 1 ? '' : 's'} without a matching CLI description: {unlisted.map((option) => option.label).join(', ')}.
               </p>
             )}
@@ -172,8 +171,8 @@ function ModelsBody() {
           />
         </div>
 
-        <div className='flex min-w-0 flex-col gap-4'>
-          {loading ? <Skeleton className='h-48 w-full' /> : <BillingCard options={options} owner={owner} />}
+        <div className='flex min-w-0 flex-col gap-8'>
+          {loading ? <Skeleton className='h-48 w-full rounded-[var(--rafii-radius-card)]' /> : <BillingCard options={options} owner={owner} />}
           <ConsentCard
             loading={memory.isLoading}
             error={memory.isError}

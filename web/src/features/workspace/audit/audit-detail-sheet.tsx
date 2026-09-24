@@ -23,40 +23,23 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Everything one event holds: the sentence, the person, the ids it points at and each detail it carries. */
-export function AuditDetailSheet({
-  event,
-  lookup,
-  now,
-  onClose
-}: {
-  event: AuditEvent | null;
-  lookup: AuditLookup;
-  now: number;
-  onClose: () => void;
-}) {
+export function AuditDetailSheet({ event, lookup, now, onClose }: { event: AuditEvent | null; lookup: AuditLookup; now: number; onClose: () => void }) {
   const isMobile = useIsMobile();
   const access = useWorkspaceAccess();
 
   return (
     <Sheet open={event !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side={isMobile ? 'bottom' : 'right'} className='data-[side=bottom]:max-h-[92dvh] data-[side=right]:sm:max-w-md'>
+      <SheetContent
+        side={isMobile ? 'bottom' : 'right'}
+        className={cn('rafii-elevated border-0 data-[side=bottom]:max-h-[92dvh] data-[side=right]:sm:max-w-md', isMobile ? 'rounded-t-[var(--rafii-radius-mobile-dialog)]' : 'rounded-l-[var(--rafii-radius-dialog)]')}
+      >
         {event && <Body event={event} lookup={lookup} now={now} canOpen={(check) => checkAccess(access, check)} />}
       </SheetContent>
     </Sheet>
   );
 }
 
-function Body({
-  event,
-  lookup,
-  now,
-  canOpen
-}: {
-  event: AuditEvent;
-  lookup: AuditLookup;
-  now: number;
-  canOpen: (check: Parameters<typeof checkAccess>[1]) => boolean;
-}) {
+function Body({ event, lookup, now, canOpen }: { event: AuditEvent; lookup: AuditLookup; now: number; canOpen: (check: Parameters<typeof checkAccess>[1]) => boolean }) {
   const described = describeAuditEvent(event, lookup);
   const person = personOf(event.actor, lookup);
   const subject = subjectLabel(event);
@@ -89,31 +72,27 @@ function Body({
           {rows.length === 0 ? (
             <span className='text-muted-foreground'>No extra details.</span>
           ) : (
-            <dl className='divide-y rounded-lg border'>
+            <dl className='rafii-quiet flex flex-col gap-1 rounded-[var(--rafii-radius-control)] p-2'>
               {rows.map((row) => (
-                <div key={row.key} className='flex flex-col gap-0.5 px-3 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4'>
+                <div key={row.key} className='flex flex-col gap-0.5 px-2 py-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4'>
                   <dt className='text-muted-foreground shrink-0 text-xs'>{row.label}</dt>
-                  <dd className='min-w-0 text-sm break-words sm:text-right'>
-                    {row.block ? <pre className='bg-muted overflow-x-auto rounded p-2 text-left text-xs'>{row.value}</pre> : row.value}
-                  </dd>
+                  <dd className='min-w-0 text-sm break-words sm:text-right'>{row.block ? <pre className='rafii-field overflow-x-auto rounded-[var(--rafii-radius-micro)] p-2 text-left text-xs'>{row.value}</pre> : row.value}</dd>
                 </div>
               ))}
             </dl>
           )}
         </Field>
         <Field label='Event kind'>
-          <code className='bg-muted rounded px-1.5 py-0.5 text-xs'>{event.kind}</code>
+          <code className='rafii-quiet rounded-[var(--rafii-radius-micro)] px-1.5 py-0.5 text-xs'>{event.kind}</code>
         </Field>
       </dl>
-      <SheetFooter className='gap-3'>
+      <SheetFooter className='rafii-panel gap-3'>
         {link && canOpen(link.access) && (
-          <Link href={link.href} className={cn('t-learn w-fit', buttonVariants({ variant: 'outline', size: 'sm' }))}>
+          <Link href={link.href} className={cn('t-learn w-fit', buttonVariants({ variant: 'glass', size: 'default' }))}>
             Open {link.label} <LearnMoreChevron />
           </Link>
         )}
-        <p className='text-muted-foreground text-xs'>
-          Events cannot be edited. They hold ids, kinds, counts and times — never post text, prompts, access tokens or email addresses.
-        </p>
+        <p className='text-muted-foreground text-xs'>Events cannot be edited. They hold ids, kinds, counts and times — never post text, prompts, access tokens or email addresses.</p>
       </SheetFooter>
     </>
   );

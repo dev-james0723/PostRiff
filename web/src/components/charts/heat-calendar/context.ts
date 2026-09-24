@@ -41,7 +41,7 @@ export function useHeatCalendarModel({
   maxCount = 14,
   values,
   endDate,
-  color = 'var(--accent)',
+  color = 'var(--foreground)',
   selection: controlledSelection,
   defaultSelection = null,
   onSelectionChange

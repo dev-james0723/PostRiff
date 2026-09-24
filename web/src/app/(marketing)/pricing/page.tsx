@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Icons } from '@/components/icons';
 import { CtaBand } from '@/components/marketing/cta-band';
 import { Faq } from '@/components/marketing/landing/sections';
 import { PageHero } from '@/components/marketing/page-hero';
+import { PlanCard } from '@/components/marketing/plan-card';
 import { Section } from '@/components/marketing/section';
+import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { TRIAL, formatPrice, plans } from '@/config/plans';
+import { TRIAL, plans } from '@/config/plans';
 import { siteConfig } from '@/config/site';
 
 export const metadata: Metadata = {
@@ -36,63 +36,40 @@ const PRICING_FAQ = [
   { q: 'Taxes?', a: 'Shown at checkout where applicable, based on your billing address.' }
 ];
 
+/** Comparison cells wrap so the three columns fit a 320px viewport without page scroll (DNA §19.3). */
+const CELL = 'px-4 py-3 align-top whitespace-normal';
+
 export default function PricingPage() {
   const anyProposed = plans.some((p) => p.status === 'proposed');
   return (
     <>
-      <PageHero eyebrow='Pricing' title='Simple pricing. No surprises.' description={`Start with a ${TRIAL.days}-day trial — ${TRIAL.connectedAccounts} connected accounts, ${TRIAL.writingBatches} writing batches, no card. Pick a plan when you are ready.`} />
-      <Section>
+      <PageHero eyebrow='Pricing' title='Simple pricing.' accent='No surprises.' description={`Start with a ${TRIAL.days}-day trial — ${TRIAL.connectedAccounts} connected accounts, ${TRIAL.writingBatches} writing batches, no card. Pick a plan when you are ready.`} />
+      <Section className='pt-8 sm:pt-12'>
         <div className='grid gap-4 md:grid-cols-3'>
           {plans.map((plan) => (
-            <Card key={plan.id} className='flex flex-col'>
-              <CardHeader>
-                <CardDescription>{plan.tagline}</CardDescription>
-                <CardTitle className='text-2xl'>{plan.name}</CardTitle>
-                <p className='text-3xl font-semibold tabular-nums'>
-                  {formatPrice(plan)} <span className='text-muted-foreground text-base font-normal'>/ {plan.interval}</span>
-                </p>
-              </CardHeader>
-              <CardContent className='flex-1'>
-                <ul className='flex flex-col gap-1.5 text-sm'>
-                  {plan.highlights.map((item) => (
-                    <li key={item} className='flex items-start gap-2'>
-                      <Icons.check className='text-primary mt-0.5 size-4 shrink-0' aria-hidden />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-              <CardFooter className='flex flex-col items-start gap-2'>
-                <Link href={`${siteConfig.links.signUp}?plan=${plan.id}`} className={buttonVariants()}>
-                  Start {TRIAL.days}-day trial
-                </Link>
-                {plan.status === 'proposed' && <p className='text-muted-foreground text-xs'>Introductory pricing — subject to change before general availability.</p>}
-              </CardFooter>
-            </Card>
+            <PlanCard key={plan.id} plan={plan} priceSize='large' />
           ))}
-          <Card className='bg-muted/40'>
-            <CardHeader>
-              <CardDescription>Before you pay</CardDescription>
-              <CardTitle className='text-2xl'>Trial</CardTitle>
-              <p className='text-3xl font-semibold'>
-                $0 <span className='text-muted-foreground text-base font-normal'>/ {TRIAL.days} days</span>
+          <Surface material='quiet' radius='card' padding='lg' className='flex flex-col gap-5'>
+            <div className='flex flex-col gap-1.5'>
+              <p className='text-muted-foreground text-sm'>Before you pay</p>
+              <h3 className='text-foreground text-2xl font-medium tracking-[-0.01em]'>Trial</h3>
+              <p className='text-foreground text-[2rem] leading-none font-medium tracking-[-0.02em] tabular-nums'>
+                $0 <span className='text-muted-foreground text-base font-normal tracking-normal'>/ {TRIAL.days} days</span>
               </p>
-            </CardHeader>
-            <CardContent>
-              <ul className='flex flex-col gap-1.5 text-sm'>
-                <li>{TRIAL.connectedAccounts} connected accounts</li>
-                <li>{TRIAL.writingBatches} AI writing batches</li>
-                <li>{TRIAL.mediaCredits} media credit</li>
-                <li>{TRIAL.storageMb} MB storage</li>
-                <li>No card. No automatic conversion.</li>
-              </ul>
-            </CardContent>
-            <CardFooter>
-              <Link href={siteConfig.links.signUp} className={buttonVariants({ variant: 'outline' })}>
+            </div>
+            <ul className='text-foreground flex flex-1 flex-col gap-2 text-sm'>
+              <li>{TRIAL.connectedAccounts} connected accounts</li>
+              <li>{TRIAL.writingBatches} AI writing batches</li>
+              <li>{TRIAL.mediaCredits} media credit</li>
+              <li>{TRIAL.storageMb} MB storage</li>
+              <li>No card. No automatic conversion.</li>
+            </ul>
+            <div>
+              <Link href={siteConfig.links.signUp} className={buttonVariants({ variant: 'glass', size: 'control' })}>
                 Start free
               </Link>
-            </CardFooter>
-          </Card>
+            </div>
+          </Surface>
         </div>
         {anyProposed && (
           <p className='text-muted-foreground mt-4 text-xs'>
@@ -102,28 +79,32 @@ export default function PricingPage() {
       </Section>
 
       <Section eyebrow='Compare' title='What each plan includes'>
-        <div className='overflow-x-auto rounded-xl border'>
+        <Surface material='quiet' radius='card' padding='none' className='overflow-hidden'>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className='w-56'>Feature</TableHead>
+              <TableRow className='hover:bg-transparent'>
+                <TableHead className={`${CELL} md:w-56`}>Feature</TableHead>
                 {plans.map((plan) => (
-                  <TableHead key={plan.id}>{plan.name}</TableHead>
+                  <TableHead key={plan.id} className={CELL}>
+                    {plan.name}
+                  </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {ROWS.map((row) => (
-                <TableRow key={row.label}>
-                  <TableCell className='font-medium'>{row.label}</TableCell>
+                <TableRow key={row.label} className='hover:bg-transparent'>
+                  <TableCell className={`${CELL} text-foreground font-medium`}>{row.label}</TableCell>
                   {plans.map((plan) => (
-                    <TableCell key={plan.id}>{row.value(plan)}</TableCell>
+                    <TableCell key={plan.id} className={CELL}>
+                      {row.value(plan)}
+                    </TableCell>
                   ))}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
+        </Surface>
       </Section>
 
       <Faq items={PRICING_FAQ} />

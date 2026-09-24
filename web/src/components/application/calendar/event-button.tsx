@@ -2,9 +2,25 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import { useDateFormatter } from '@react-aria/i18n';
+import { Icons, type Icon } from '@/components/icons';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { EVENT_COLORS, type CalendarDetailsContext, type CalendarEvent } from './config';
+import { EVENT_TONES, type CalendarDetailsContext, type CalendarEvent, type CalendarEventTone } from './config';
+
+/** The glyph that carries a tone's meaning beside the status text (DNA §4.3: never a bare grey dot). */
+export const TONE_ICONS: Record<CalendarEventTone, Icon> = {
+  quiet: Icons.circleDashed,
+  neutral: Icons.clock,
+  active: Icons.spinner,
+  attention: Icons.warning,
+  success: Icons.circleCheck,
+  failure: Icons.circleX
+};
+
+export function ToneIcon({ tone, className }: { tone: CalendarEventTone; className?: string }) {
+  const Glyph = TONE_ICONS[tone];
+  return <Glyph aria-hidden className={cn('shrink-0', tone === 'active' && 'rafii-decorative-motion animate-spin motion-reduce:animate-none', className)} />;
+}
 
 interface EventButtonProps<T> {
   event: CalendarEvent<T>;
@@ -12,7 +28,7 @@ interface EventButtonProps<T> {
   variant: 'chip' | 'block';
   timeZone: string;
   renderDetails?: (event: CalendarEvent<T>, context: CalendarDetailsContext) => ReactNode;
-  /** Narrow week columns on phones keep only the colour; the accessible name still says everything. */
+  /** Narrow week columns on phones keep only the material and glyph; the accessible name still says everything. */
   compact?: boolean;
   tabIndex?: number;
   className?: string;
@@ -34,8 +50,8 @@ export function EventButton<T>({
   const label = [event.title, event.status, time].filter(Boolean).join(', ');
 
   const classes = cn(
-    'flex min-w-0 rounded-md border text-left text-xs transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-    EVENT_COLORS[event.color].chip,
+    'rafii-focus flex min-w-0 rounded-[var(--rafii-radius-micro)] text-left text-xs transition-colors',
+    EVENT_TONES[event.tone].chip,
     variant === 'chip' ? 'h-[26px] w-full items-center gap-1.5 px-1.5' : 'flex-col overflow-hidden px-2 py-1',
     className
   );
@@ -44,14 +60,16 @@ export function EventButton<T>({
     variant === 'chip' ? (
       <>
         {event.icon}
-        <span className='min-w-0 flex-1 truncate font-semibold'>{event.title}</span>
+        <ToneIcon tone={event.tone} className='size-3' />
+        <span className='min-w-0 flex-1 truncate font-medium'>{event.title}</span>
         <span className='shrink-0 tabular-nums'>{time}</span>
       </>
     ) : (
       <span className={cn('flex min-w-0 flex-col gap-0.5', compact && 'max-sm:hidden')}>
         <span className='flex min-w-0 items-center gap-1.5'>
           {event.icon}
-          <span className='truncate font-semibold'>{event.title}</span>
+          <ToneIcon tone={event.tone} className='size-3' />
+          <span className='truncate font-medium'>{event.title}</span>
         </span>
         <span className='tabular-nums'>{time}</span>
       </span>
@@ -73,7 +91,7 @@ export function EventButton<T>({
       <PopoverTrigger data-tour='calendar-event' aria-label={label} tabIndex={tabIndex} className={classes} style={style}>
         {body}
       </PopoverTrigger>
-      <PopoverContent align='start' className='w-auto max-w-[calc(100vw-1rem)]'>
+      <PopoverContent align='start' className='rafii-elevated w-auto max-w-[calc(100vw-1rem)] rounded-[1.375rem] p-4 shadow-none ring-0'>
         {renderDetails(event, 'popover')}
       </PopoverContent>
     </Popover>

@@ -4,18 +4,10 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Separator } from '@/components/ui/separator';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -24,15 +16,7 @@ import { MetricCell } from './metric-value';
 import { PostReadings } from './post-readings';
 import type { PostRowData } from './posts-table';
 
-function Row({
-  label,
-  children,
-  mono
-}: {
-  label: string;
-  children: React.ReactNode;
-  mono?: boolean;
-}) {
+function Row({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
     <div className='grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 py-1.5'>
       <dt className='text-muted-foreground text-xs'>{label}</dt>
@@ -44,8 +28,8 @@ function Row({
 function CopyButton({ value, label }: { value: string; label: string }) {
   return (
     <Button
-      variant='ghost'
-      size='icon-xs'
+      variant='quiet'
+      size='icon-sm'
       aria-label={`Copy ${label}`}
       onClick={async () => {
         try {
@@ -61,22 +45,16 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className='rafii-eyebrow'>{children}</h3>;
+}
+
 /**
  * Everything the summary holds about one post, as it was returned: the provider's metrics with
  * their own names, the rate with its denominator, the reading time, and the publishing job's
  * text and receipt when the workspace snapshot still has that job.
  */
-export function PostSheet({
-  row,
-  families,
-  open,
-  onOpenChange
-}: {
-  row: PostRowData | null;
-  families: Record<string, string[]>;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+export function PostSheet({ row, families, open, onOpenChange }: { row: PostRowData | null; families: Record<string, string[]>; open: boolean; onOpenChange: (open: boolean) => void }) {
   const isMobile = useIsMobile();
   const post = row?.post;
   const job = row?.job ?? null;
@@ -86,47 +64,30 @@ export function PostSheet({
       <SheetContent
         side={isMobile ? 'bottom' : 'right'}
         className={cn(
-          'gap-0 overflow-y-auto data-[side=right]:sm:max-w-[30rem]',
-          isMobile && 'max-h-[85dvh] rounded-t-xl'
+          'rafii-elevated gap-0 overflow-y-auto border-0 data-[side=right]:sm:max-w-[30rem]',
+          isMobile ? 'max-h-[85dvh] rounded-t-[var(--rafii-radius-mobile-dialog)]' : 'rounded-l-[var(--rafii-radius-dialog)]'
         )}
       >
         {post && (
           <>
             <SheetHeader className='pr-12'>
               <SheetTitle className='flex flex-wrap items-center gap-2'>
-                <ChannelIcon
-                  platform={post.platform || post.provider}
-                  name={post.platform || post.provider}
-                />
+                <ChannelIcon platform={post.platform || post.provider} name={post.platform || post.provider} />
                 {providerLabel(post)}
-                {row?.connection && (
-                  <span className='text-muted-foreground font-normal'>
-                    {row.connection.account}
-                  </span>
-                )}
-                <Badge variant='outline'>{post.publishedState.replace(/_/g, ' ')}</Badge>
+                {row?.connection && <span className='text-muted-foreground font-normal'>{row.connection.account}</span>}
+                <StatusChip icon={null}>{post.publishedState.replace(/_/g, ' ')}</StatusChip>
               </SheetTitle>
               <SheetDescription>
                 {post.language || 'Language not recorded'} · {post.contentOrigin.replace(/_/g, ' ')}
               </SheetDescription>
             </SheetHeader>
-            <div className='flex flex-col gap-5 px-4 pb-4'>
-              <section className='flex flex-col gap-1.5'>
-                <h3 className='text-xs font-medium tracking-wide uppercase'>Text</h3>
-                {text ? (
-                  <p className='text-sm whitespace-pre-wrap'>{text}</p>
-                ) : (
-                  <p className='text-muted-foreground text-sm'>
-                    The text is not part of this reading. The queue shows the post as it was
-                    approved.
-                  </p>
-                )}
+            <div className='flex flex-col gap-6 px-4 pb-4'>
+              <section className='flex flex-col gap-2'>
+                <SectionTitle>Text</SectionTitle>
+                {text ? <p className='text-sm whitespace-pre-wrap'>{text}</p> : <p className='text-muted-foreground text-sm'>The text is not part of this reading. The queue shows the post as it was approved.</p>}
               </section>
-              <Separator />
-              <section className='flex flex-col gap-1.5'>
-                <h3 className='text-xs font-medium tracking-wide uppercase'>
-                  {providerLabel(post)} metrics
-                </h3>
+              <section className='rafii-quiet flex flex-col gap-2 rounded-[var(--rafii-radius-card)] p-4'>
+                <SectionTitle>{providerLabel(post)} metrics</SectionTitle>
                 <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3'>
                   {orderMetricKeys(Object.keys(post.metrics), families).map((key) => {
                     const metric = post.metrics[key];
@@ -134,9 +95,7 @@ export function PostSheet({
                       <div key={key} className='flex flex-col'>
                         <dt className='text-muted-foreground text-xs'>
                           <span className='capitalize'>{metric.nativeName}</span>
-                          {metric.unit && metric.unit !== 'count' ? (
-                            <span className='opacity-70'> · {metric.unit}</span>
-                          ) : null}
+                          {metric.unit && metric.unit !== 'count' ? <span className='opacity-70'> · {metric.unit}</span> : null}
                         </dt>
                         <dd>
                           <MetricCell metric={metric} />
@@ -149,41 +108,24 @@ export function PostSheet({
                   <dl className='mt-1 flex flex-col gap-1 text-sm'>
                     {Object.entries(post.rates).map(([key, rate]) => (
                       <div key={key} className='flex flex-wrap items-baseline gap-x-2'>
-                        <dt className='text-muted-foreground text-xs'>
-                          {key.replace(/([A-Z])/g, ' $1').toLowerCase()}
-                        </dt>
-                        <dd
-                          className={cn(
-                            'tabular-nums',
-                            rate.numerator === null || rate.denominator === null
-                              ? 'text-muted-foreground italic'
-                              : undefined
-                          )}
-                        >
-                          {rate.display}
-                        </dd>
+                        <dt className='text-muted-foreground text-xs'>{key.replace(/([A-Z])/g, ' $1').toLowerCase()}</dt>
+                        <dd className={cn('tabular-nums', rate.numerator === null || rate.denominator === null ? 'text-muted-foreground italic' : undefined)}>{rate.display}</dd>
                       </div>
                     ))}
                   </dl>
                 )}
-                <p className='text-muted-foreground text-xs'>
-                  Native names from {providerLabel(post)}; never added to another provider’s
-                  numbers.
-                </p>
+                <p className='text-muted-foreground text-xs'>Native names from {providerLabel(post)}; never added to another provider’s numbers.</p>
               </section>
-              <Separator />
-              <section className='flex flex-col gap-1.5'>
-                <h3 className='text-xs font-medium tracking-wide uppercase'>Readings</h3>
+              <section className='flex flex-col gap-2'>
+                <SectionTitle>Readings</SectionTitle>
                 <PostReadings readings={[{ observedAt: post.freshness.observedAt }]} />
                 <p className='text-muted-foreground text-xs'>
-                  Read {formatDateTime(post.freshness.observedAt)} · stored{' '}
-                  {formatDateTime(post.freshness.ingestedAt)}
+                  Read {formatDateTime(post.freshness.observedAt)} · stored {formatDateTime(post.freshness.ingestedAt)}
                 </p>
               </section>
-              <Separator />
-              <section>
-                <h3 className='text-xs font-medium tracking-wide uppercase'>Details</h3>
-                <dl className='divide-y'>
+              <section className='flex flex-col gap-2'>
+                <SectionTitle>Details</SectionTitle>
+                <dl className='flex flex-col'>
                   <Row label='Provider post id' mono>
                     <span className='inline-flex max-w-full items-center gap-1'>
                       <span className='truncate'>{post.providerPostId}</span>
@@ -191,11 +133,7 @@ export function PostSheet({
                     </span>
                   </Row>
                   <Row label='Job' mono>
-                    {post.jobId ?? (
-                      <span className='text-muted-foreground font-sans text-sm'>
-                        Not linked to a job
-                      </span>
-                    )}
+                    {post.jobId ?? <span className='text-muted-foreground font-sans text-sm'>Not linked to a job</span>}
                   </Row>
                   <Row label='Published'>
                     {job?.verification
@@ -205,9 +143,7 @@ export function PostSheet({
                         : 'The publishing job is not in this workspace snapshot'}
                   </Row>
                   <Row label='Platform'>{post.platform || post.provider}</Row>
-                  <Row label='Account'>
-                    {row?.connection?.account ?? 'Not matched to a connected account'}
-                  </Row>
+                  <Row label='Account'>{row?.connection?.account ?? 'Not matched to a connected account'}</Row>
                   {post.contentTypeId && <Row label='Content type'>{post.contentTypeId}</Row>}
                   <Row label='Definitions'>{post.definitionVersion}</Row>
                   <Row label='Observed'>{formatDateTime(post.freshness.observedAt)}</Row>
@@ -215,11 +151,8 @@ export function PostSheet({
                 </dl>
               </section>
             </div>
-            <SheetFooter className='border-t'>
-              <Link
-                href={post.jobId ? `/app/queue?job=${encodeURIComponent(post.jobId)}` : '/app/queue'}
-                className='t-learn text-primary inline-flex items-center gap-0.5 text-sm hover:underline'
-              >
+            <SheetFooter className='rafii-panel'>
+              <Link href={post.jobId ? `/app/queue?job=${encodeURIComponent(post.jobId)}` : '/app/queue'} className={cn('t-learn w-fit', buttonVariants({ variant: 'glass', size: 'default' }))}>
                 Open in Queue
                 <LearnMoreChevron />
               </Link>

@@ -5,9 +5,8 @@ import Link from 'next/link';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
+import { SegmentedControl, StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { usd } from '@/lib/api/client';
 import type { LedgerEntry } from '@/lib/api/types';
@@ -35,8 +34,8 @@ function Markers({ entry }: { entry: LedgerEntry }) {
   if (!note && !zero) return null;
   return (
     <span className='flex flex-wrap gap-1'>
-      {zero && <span className='bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[11px] font-medium'>$0 run</span>}
-      {note && <span className='bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[11px] font-medium'>{note}</span>}
+      {zero && <span className='rafii-quiet text-muted-foreground rounded-md px-1.5 py-0.5 text-[11px] font-medium'>$0 run</span>}
+      {note && <span className='rafii-quiet text-muted-foreground rounded-md px-1.5 py-0.5 text-[11px] font-medium'>{note}</span>}
     </span>
   );
 }
@@ -57,18 +56,18 @@ function rowKey(entry: LedgerEntry, index: number) {
 /** One entry per row on a narrow container: when and what first, then estimate → actual and the state. */
 function StackedRows({ entries }: { entries: LedgerEntry[] }) {
   return (
-    <ul className='divide-y rounded-lg border @3xl:hidden'>
+    <ul className='flex flex-col gap-1.5 @3xl:hidden'>
       {entries.map((entry, index) => (
-        <li key={rowKey(entry, index)} className='flex flex-col gap-1.5 p-3 text-sm'>
+        <li key={rowKey(entry, index)} className='rafii-quiet flex flex-col gap-1.5 rounded-[var(--rafii-radius-control)] p-3 text-sm'>
           <div className='flex items-baseline justify-between gap-3'>
-            <span className='font-medium'>
+            <span className='text-foreground font-medium'>
               {dimensionLabel(entry.dimension)} <span className='text-muted-foreground font-normal'>· {stepLabel(entry.kind)}</span>
             </span>
             <span className='text-muted-foreground shrink-0 text-xs'>{formatDateTime(entry.at)}</span>
           </div>
           {entry.model && <span className='text-muted-foreground truncate text-xs'>{entry.model}</span>}
           <div className='flex flex-wrap items-center justify-between gap-2'>
-            <span className='tabular-nums'>
+            <span className='text-foreground tabular-nums'>
               {usd(entry.estimatedUsdMicro)} <span className='text-muted-foreground'>estimated →</span> {usd(entry.actualUsdMicro)}{' '}
               <span className='text-muted-foreground'>actual</span>
             </span>
@@ -83,10 +82,10 @@ function StackedRows({ entries }: { entries: LedgerEntry[] }) {
 
 function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
   return (
-    <div className='hidden overflow-x-auto rounded-lg border @3xl:block'>
+    <div className='relative rafii-quiet hidden overflow-x-auto rounded-[var(--rafii-radius-card)] px-2 @3xl:block'>
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow className='border-foreground/8 hover:bg-transparent'>
             <TableHead>When</TableHead>
             <TableHead>What</TableHead>
             <TableHead>Step</TableHead>
@@ -98,7 +97,7 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
         </TableHeader>
         <TableBody>
           {entries.map((entry, index) => (
-            <TableRow key={rowKey(entry, index)}>
+            <TableRow key={rowKey(entry, index)} className='border-foreground/8 hover:bg-transparent'>
               <TableCell className='whitespace-nowrap'>{formatDateTime(entry.at)}</TableCell>
               <TableCell>
                 <div className='flex flex-col'>
@@ -139,63 +138,64 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
 
   return (
     <section className='@container flex flex-col gap-3' aria-labelledby='ledger-heading' data-tour='billing-ledger'>
-      <div>
-        <h3 id='ledger-heading' className='text-lg font-semibold'>
+      <div className='px-1'>
+        <h3 id='ledger-heading' className='text-foreground text-lg font-medium tracking-tight'>
           Recent usage
         </h3>
         <p className='text-muted-foreground text-sm'>Each run reserves an estimate, then settles to the real cost or is released if it failed.</p>
       </div>
 
       {entries.length === 0 ? (
-        <Empty className='border' data-tour='billing-ledger-empty'>
-          <EmptyHeader>
-            <EmptyMedia variant='icon'>
-              <Icons.creditCard />
-            </EmptyMedia>
-            <EmptyTitle>No usage yet</EmptyTitle>
-            <EmptyDescription>
-              Every drafting run appears here: runs with no paid model at $0, paid runs as a reservation that then settles to the real cost.
-            </EmptyDescription>
-          </EmptyHeader>
-          {canEdit && (
-            <EmptyContent>
-              <Link href='/app/ideas?new=1' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-                <Icons.sparkles className='size-4' /> Start an idea
-              </Link>
-            </EmptyContent>
-          )}
-        </Empty>
+        <div data-tour='billing-ledger-empty'>
+          <StateMessage
+            kind='empty'
+            media={
+              <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
+                <Icons.creditCard className='size-5' />
+              </span>
+            }
+            title='No usage yet'
+            description='Every drafting run appears here: runs with no paid model at $0, paid runs as a reservation that then settles to the real cost.'
+            action={
+              canEdit ? (
+                <Link href='/app/ideas?new=1' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+                  <Icons.sparkles className='size-4' /> Start an idea
+                </Link>
+              ) : undefined
+            }
+          />
+        </div>
       ) : (
         <>
+          {/* FIND / VIEW row (DNA §9.1): the filter narrows the view only; the export follows the filter. */}
           <div className='flex flex-wrap items-center justify-between gap-2'>
-            <Tabs
+            <SegmentedControl
+              label='Filter usage'
+              size='sm'
+              widths='content'
               value={filter}
-              onValueChange={(value) => {
-                setFilter(value as LedgerFilter);
+              onChange={(value) => {
+                setFilter(value);
                 setShowAll(false);
               }}
-              variant='segment'
-              className='min-w-0 max-w-full'
-            >
-              <TabsList aria-label='Filter usage' className='max-w-full overflow-x-auto border'>
-                {LEDGER_FILTERS.map((value) => (
-                  <TabsTrigger key={value} value={value} className='gap-1.5 px-3 py-1'>
+              options={LEDGER_FILTERS.map((value) => ({
+                value,
+                label: (
+                  <span className='inline-flex items-center gap-1.5'>
                     {LEDGER_FILTER_LABELS[value]}
                     <DigitSwap value={counts[value]} className='text-xs opacity-75' />
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-            <Button variant='outline' size='sm' onClick={exportCsv} disabled={filtered.length === 0}>
+                  </span>
+                )
+              }))}
+            />
+            <Button variant='glass' size='sm' className='min-h-10 px-3.5' onClick={exportCsv} disabled={filtered.length === 0}>
               <Icons.download className='size-4' />
               Export {filtered.length.toLocaleString()} {filtered.length === 1 ? 'row' : 'rows'} (CSV)
             </Button>
           </div>
 
           {filtered.length === 0 ? (
-            <p className='text-muted-foreground rounded-lg border p-4 text-sm'>
-              No {LEDGER_FILTER_LABELS[filter].toLowerCase()} entries among the latest {entries.length.toLocaleString()}.
-            </p>
+            <StateMessage kind='empty' layout='inline' title={`No ${LEDGER_FILTER_LABELS[filter].toLowerCase()} entries among the latest ${entries.length.toLocaleString()}.`} />
           ) : (
             <>
               <StackedRows entries={visible} />
@@ -203,14 +203,14 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
             </>
           )}
 
-          <div className='text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs'>
+          <div className='text-muted-foreground flex flex-wrap items-center justify-between gap-2 px-1 text-xs'>
             <span>
               {filtered.length > 0 && `Showing ${visible.length.toLocaleString()} of ${filtered.length.toLocaleString()} · `}
               {filtered.length > 0 ? 'the' : 'The'} workspace lists its latest {entries.length.toLocaleString()} {entries.length === 1 ? 'entry' : 'entries'} here
               (up to 100)
             </span>
             {filtered.length > LEDGER_PAGE && (
-              <Button variant='ghost' size='sm' onClick={() => setShowAll((value) => !value)}>
+              <Button variant='quiet' size='sm' className='min-h-9' onClick={() => setShowAll((value) => !value)}>
                 {showAll ? `Show latest ${LEDGER_PAGE}` : `Show all ${filtered.length.toLocaleString()}`}
               </Button>
             )}

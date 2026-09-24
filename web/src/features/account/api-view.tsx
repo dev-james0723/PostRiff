@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
+import { StateMessage } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
 import { useChannels } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -38,14 +39,17 @@ const infoContent = {
 
 function AccessFallback() {
   return (
-    <div className='flex max-w-md flex-col items-center gap-3 text-center'>
-      <p className='text-muted-foreground text-sm'>
-        This page is for people who manage connections in this workspace: owners, admins and members given that permission. Ask one of them, or open Channels to see what is connected.
-      </p>
-      <Link href='/app/channels' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        Open Channels
-      </Link>
-    </div>
+    <StateMessage
+      kind='permission'
+      title='This page is for people who manage connections'
+      description='Owners, admins and members given that permission can see it. Ask one of them, or open Channels to see what is connected.'
+      action={
+        <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+          Open Channels
+        </Link>
+      }
+      className='w-full max-w-md'
+    />
   );
 }
 
@@ -55,11 +59,13 @@ function ApiContent() {
   const tools = useToolRegistry();
   return (
     <div className='@container'>
-      <div className='grid grid-cols-1 gap-4 @4xl:grid-cols-3'>
+      <div className='grid grid-cols-1 gap-8 @4xl:grid-cols-3'>
         <div className='min-w-0 @4xl:col-span-3'>
           <StatusStrip channels={channels} tools={tools} />
         </div>
-        <div className='min-w-0 @4xl:col-span-3'><TokensCard /></div>
+        <div className='min-w-0 @4xl:col-span-3'>
+          <TokensCard />
+        </div>
         <div className='min-w-0 @4xl:col-span-2'>
           <AccountsCard channels={channels} />
         </div>

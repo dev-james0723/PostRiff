@@ -1,9 +1,9 @@
 'use client';
 
 import { Icons } from '@/components/icons';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StateMessage } from '@/components/rafii';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import type { SnapshotState, VoiceProfile } from '@/lib/api/types';
 import { ApprovedDate, SectionUnavailable, type Refetchable } from './brand-parts';
 import { describeChanges, reasonLabel, toneLabel, type VoiceRevision } from './voice-model';
@@ -28,21 +28,17 @@ function RevisionRow({ record, previous, active }: { record: VoiceRevision; prev
   const reason = reasonLabel(record.reason);
   const tone = toneLabel(record.profile?.tone);
   return (
-    <li className='flex min-w-0 flex-col gap-1 py-2.5 first:pt-0 last:pb-0'>
+    <li className='flex min-w-0 flex-col gap-1 py-2.5'>
       <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-        <span className='text-sm font-medium'>Revision {record.revision}</span>
-        {active && <Badge variant='secondary'>Active</Badge>}
-        {tone && <Badge variant='outline'>{tone}</Badge>}
+        <span className='text-foreground text-sm font-medium'>Revision {record.revision}</span>
+        {active && <StatusChip icon='check'>Active</StatusChip>}
+        {tone && <StatusChip icon={null}>{tone}</StatusChip>}
       </div>
       <p className='text-muted-foreground text-xs'>
         <ApprovedDate iso={record.approvedAt} />
         {reason ? ` · ${reason}` : ''}
       </p>
-      {previous ? (
-        <Changes changes={describeChanges(previous.profile, record.profile)} against={previous.revision} />
-      ) : (
-        <p className='text-muted-foreground text-xs'>First revision.</p>
-      )}
+      {previous ? <Changes changes={describeChanges(previous.profile, record.profile)} against={previous.revision} /> : <p className='text-muted-foreground text-xs'>First revision.</p>}
     </li>
   );
 }
@@ -50,11 +46,11 @@ function RevisionRow({ record, previous, active }: { record: VoiceRevision; prev
 function ProposedRow({ provisional, active }: { provisional: VoiceProfile; active: VoiceRevision | null }) {
   const tone = toneLabel(provisional.tone);
   return (
-    <li className='flex min-w-0 flex-col gap-1 py-2.5 first:pt-0'>
+    <li className='flex min-w-0 flex-col gap-1 py-2.5'>
       <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-        <span className='text-sm font-medium'>Proposed</span>
-        <Badge variant='outline'>Waiting for approval</Badge>
-        {tone && <Badge variant='outline'>{tone}</Badge>}
+        <span className='text-foreground text-sm font-medium'>Proposed</span>
+        <StatusChip icon='hourglass'>Waiting for approval</StatusChip>
+        {tone && <StatusChip icon={null}>{tone}</StatusChip>}
       </div>
       <p className='text-muted-foreground text-xs'>Not a revision until an owner approves it.</p>
       {active && <Changes changes={describeChanges(active.profile, provisional)} against={active.revision} />}
@@ -78,45 +74,46 @@ export function RevisionHistory({ state, query }: { state: SnapshotState | undef
   const folded = newestFirst.slice(VISIBLE);
 
   return (
-    <Card data-tour='brand-history' className='min-w-0'>
-      <CardHeader>
-        <CardTitle>
+    <Panel
+      data-tour='brand-history'
+      title={
+        <>
           Revisions{revisions ? <span className='text-muted-foreground font-normal'> · {revisions.length}</span> : null}
-        </CardTitle>
-        <CardDescription>Each approval adds a revision; earlier ones stay listed. A revision records the tone, observations, sample and unknowns, not the purpose or audience.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!speaker || !revisions ? (
-          <SectionUnavailable message='The revision history could not be read from this workspace.' query={query} />
-        ) : revisions.length === 0 && !speaker.provisional ? (
-          <p className='text-muted-foreground text-sm'>No approved revisions yet. The first one appears when an owner approves a voice.</p>
-        ) : (
-          <>
-            <ol className='divide-y' aria-label='Voice revisions, newest first'>
-              {speaker.provisional && <ProposedRow provisional={speaker.provisional} active={activeRecord} />}
-              {visible.map((record) => (
-                <RevisionRow key={record.revision} record={record} previous={previousOf(record)} active={record.revision === active} />
-              ))}
-            </ol>
-            {folded.length > 0 && (
-              <Collapsible className='mt-2'>
-                <CollapsibleTrigger className='group/older text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-1 rounded-sm text-xs outline-none focus-visible:ring-2'>
-                  <Icons.chevronDown aria-hidden className='size-3.5 -rotate-90 transition-transform duration-(--duration-fast) ease-(--ease-smooth-out) group-data-panel-open/older:rotate-0 motion-reduce:transition-none' />
-                  <span className='group-data-panel-open/older:hidden'>Show {folded.length} older</span>
-                  <span className='hidden group-data-panel-open/older:inline'>Hide older</span>
-                </CollapsibleTrigger>
-                <CollapsibleContent className='t-nav-panel'>
-                  <ol className='divide-y border-t pt-2.5' aria-label='Older voice revisions'>
-                    {folded.map((record) => (
-                      <RevisionRow key={record.revision} record={record} previous={previousOf(record)} active={record.revision === active} />
-                    ))}
-                  </ol>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+        </>
+      }
+      titleId='brand-history-heading'
+      description='Each approval adds a revision; earlier ones stay listed. A revision records the tone, observations, sample and unknowns, not the purpose or audience.'
+    >
+      {!speaker || !revisions ? (
+        <SectionUnavailable message='The revision history could not be read from this workspace.' query={query} />
+      ) : revisions.length === 0 && !speaker.provisional ? (
+        <StateMessage kind='empty' layout='inline' title='No approved revisions yet.' description='The first one appears when an owner approves a voice.' />
+      ) : (
+        <>
+          <ol className='flex flex-col' aria-label='Voice revisions, newest first'>
+            {speaker.provisional && <ProposedRow provisional={speaker.provisional} active={activeRecord} />}
+            {visible.map((record) => (
+              <RevisionRow key={record.revision} record={record} previous={previousOf(record)} active={record.revision === active} />
+            ))}
+          </ol>
+          {folded.length > 0 && (
+            <Collapsible>
+              <CollapsibleTrigger className='group/older rafii-focus text-muted-foreground hover:text-foreground flex min-h-11 items-center gap-1 rounded-md text-xs'>
+                <Icons.chevronDown aria-hidden className='size-3.5 -rotate-90 transition-transform duration-(--duration-fast) ease-(--ease-smooth-out) group-data-panel-open/older:rotate-0 motion-reduce:transition-none' />
+                <span className='group-data-panel-open/older:hidden'>Show {folded.length} older</span>
+                <span className='hidden group-data-panel-open/older:inline'>Hide older</span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className='t-nav-panel'>
+                <ol className='flex flex-col pt-1' aria-label='Older voice revisions'>
+                  {folded.map((record) => (
+                    <RevisionRow key={record.revision} record={record} previous={previousOf(record)} active={record.revision === active} />
+                  ))}
+                </ol>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+        </>
+      )}
+    </Panel>
   );
 }

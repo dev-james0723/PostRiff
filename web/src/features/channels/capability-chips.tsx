@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { LevelBadge, levelKey } from '@/components/app/level-badge';
-import { capabilityDotClass } from '@/components/marketing/capability-badge';
+import { CAPABILITY_LEVELS, capabilityDotClass } from '@/components/marketing/capability-badge';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Capability } from '@/lib/api/types';
@@ -10,6 +10,7 @@ import { CAPABILITY_CHIPS, LEVEL_MEANING, type CapabilityChipDef } from '@/lib/c
 import { useHoverCapable } from '@/lib/hooks/use-hover-capable';
 import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { POPOVER_ELEVATED } from './rafii-materials';
 
 const HOVER_OPEN_DELAY = 80;
 const HOVER_CLOSE_DELAY = 100;
@@ -20,12 +21,12 @@ function ChipEvidence({ chip, value }: { chip: CapabilityChipDef; value: Capabil
   return (
     <div className='flex flex-col gap-2'>
       <div className='flex items-center justify-between gap-2'>
-        <span className='font-medium'>{chip.label}</span>
+        <span className='text-foreground font-medium'>{chip.label}</span>
         <LevelBadge level={level} />
       </div>
-      <p className='text-muted-foreground text-xs'>{chip.meaning}</p>
-      <p className='text-xs'>{evidence || LEVEL_MEANING[level] || LEVEL_MEANING.Unsupported}</p>
-      <dl className='text-muted-foreground grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]'>
+      <p className='text-muted-foreground text-xs leading-relaxed'>{chip.meaning}</p>
+      <p className='text-foreground text-xs leading-relaxed'>{evidence || LEVEL_MEANING[level] || LEVEL_MEANING.Unsupported}</p>
+      <dl className='text-muted-foreground grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs'>
         <dt>Verified</dt>
         <dd>{value?.verifiedAt ? formatDateTime(value.verifiedAt) : 'Not verified yet'}</dd>
         <dt>Version</dt>
@@ -35,29 +36,30 @@ function ChipEvidence({ chip, value }: { chip: CapabilityChipDef; value: Capabil
   );
 }
 
+/** Borderless quiet chips with a visible focus ring (DNA §2.2); the whole chip is the hit target. */
 function chipClasses(level: string | undefined) {
   const key = levelKey(level);
   return cn(
-    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap',
-    'outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50',
-    key === 'unsupported'
-      ? 'border-border bg-muted text-muted-foreground hover:text-foreground'
-      : 'border-border bg-card text-foreground hover:bg-accent'
+    'rafii-focus inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium whitespace-nowrap transition-colors',
+    'bg-foreground/5 hover:bg-foreground/10',
+    key === 'unsupported' ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
   );
 }
 
+/** The verified level is carried by the dot and by the word beside it, never by colour alone (DNA §4.3). */
 function ChipFace({ chip, level }: { chip: CapabilityChipDef; level: string | undefined }) {
+  const key = levelKey(level);
   return (
     <>
-      <span aria-hidden className={cn('size-1.5 rounded-full', capabilityDotClass(levelKey(level)))} />
+      <span aria-hidden className={cn('size-1.5 rounded-full', capabilityDotClass(key))} />
       {chip.label}
-      <span className='sr-only'>: {level ?? 'Unsupported'}</span>
+      <span className='text-muted-foreground font-normal'>{CAPABILITY_LEVELS[key].label}</span>
     </>
   );
 }
 
 /**
- * Six capability chips for one account. The dot colour is the verified level; hover or
+ * Six capability chips for one account. The dot colour and the word are the verified level; hover or
  * keyboard focus opens the evidence and its verification time. Touch devices, which
  * cannot hover, get the same content in a tap-to-open popover.
  */
@@ -90,7 +92,7 @@ export function CapabilityChips({
                 >
                   <ChipFace chip={chip} level={level} />
                 </HoverCardTrigger>
-                <HoverCardContent align='start' className='w-72'>
+                <HoverCardContent align='start' className={cn(POPOVER_ELEVATED, 'w-72')}>
                   {content}
                 </HoverCardContent>
               </HoverCard>
@@ -99,7 +101,7 @@ export function CapabilityChips({
                 <PopoverTrigger aria-label={label} className={chipClasses(level)}>
                   <ChipFace chip={chip} level={level} />
                 </PopoverTrigger>
-                <PopoverContent align='start' className='w-72'>
+                <PopoverContent align='start' className={cn(POPOVER_ELEVATED, 'w-72')}>
                   {content}
                 </PopoverContent>
               </Popover>

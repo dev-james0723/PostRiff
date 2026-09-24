@@ -7,13 +7,16 @@ import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { StatefulButton } from '@/components/motion/button';
 import { DigitSwap } from '@/components/motion/digit-swap';
+import { Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { CONTROL_48, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_ACTION, STATEFUL_GLASS } from '@/features/channels/rafii-materials';
 import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
 import type { Thread } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { cn } from '@/lib/utils';
 import { InboxLevelBadge } from './level-badge';
 import { authorLabel, modelWrote, originLabel, replyStatusView, type ReplyPreview, type ReplyRecord, type SavedDraft } from './model';
 
@@ -45,6 +48,11 @@ export function permissionSentence(canEdit: boolean, canReply: boolean) {
   return 'You can read comments here; writing a reply needs the edit permission and approving one needs the reply permission.';
 }
 
+/**
+ * The reply composer is the one glass work surface of a conversation (DNA §21.5): a borderless
+ * field, quiet glass secondaries and the single inverted commitment action, "Review & approve".
+ * Text stays keyed by thread in the page, so switching comments never loses a draft.
+ */
 export function ReplyComposer({
   thread,
   accountLabel,
@@ -180,8 +188,9 @@ export function ReplyComposer({
   else if (!draft && unsaved && canEdit) draftLine = 'Not saved yet';
 
   return (
-    <div className='flex flex-col gap-2' data-tour='inbox-composer'>
-      <div className='relative'>
+    <Surface material='glass' radius='card' padding='sm' className='flex flex-col gap-3' data-tour='inbox-composer'>
+      {/* The field material sits on the wrapper so the textarea keeps its own focus and disabled behaviour. */}
+      <div className='rafii-field relative rounded-[var(--rafii-radius-control)] outline-offset-2 focus-within:outline-2 focus-within:outline-foreground'>
         <Textarea
           rows={3}
           value={text}
@@ -194,9 +203,9 @@ export function ReplyComposer({
           maxLength={REPLY_LIMIT}
           aria-label='Your reply'
           aria-describedby={`reply-limit-${thread.threadId}`}
-          className='pb-6'
+          className='min-h-24 rounded-[inherit] border-0 bg-transparent px-3.5 pt-3 pb-7 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent dark:disabled:bg-transparent'
         />
-        <span id={`reply-limit-${thread.threadId}`} className='text-muted-foreground pointer-events-none absolute right-2.5 bottom-1.5 text-[11px] tabular-nums'>
+        <span id={`reply-limit-${thread.threadId}`} className='text-muted-foreground pointer-events-none absolute right-3 bottom-2 text-xs tabular-nums'>
           <DigitSwap value={REPLY_LIMIT - text.length} />
           <span className='sr-only'> characters left</span>
         </span>
@@ -204,7 +213,7 @@ export function ReplyComposer({
       <div className='flex flex-wrap gap-2'>
         <StatefulButton
           variant='outline'
-          size='sm'
+          className={cn(STATEFUL_GLASS, CONTROL_48)}
           state={pending === 'starter' ? 'loading' : 'idle'}
           loadingText='Inserting…'
           icon={<Icons.text className='size-4' />}
@@ -215,7 +224,7 @@ export function ReplyComposer({
         </StatefulButton>
         <StatefulButton
           variant='outline'
-          size='sm'
+          className={cn(STATEFUL_GLASS, CONTROL_48)}
           state={pending === 'save' ? 'loading' : saved ? 'success' : 'idle'}
           loadingText='Saving…'
           successText='Saved'
@@ -225,7 +234,8 @@ export function ReplyComposer({
           Save draft
         </StatefulButton>
         <StatefulButton
-          size='sm'
+          variant='primary'
+          className={cn(STATEFUL_ACTION, CONTROL_48, 'sm:ml-auto')}
           state={pending === 'review' ? 'loading' : 'idle'}
           loadingText={reviewPhase === 'saving' ? 'Saving…' : 'Preparing review…'}
           disabled={!reviewEnabled}
@@ -235,7 +245,7 @@ export function ReplyComposer({
         </StatefulButton>
       </div>
       {draftLine && <p className='text-muted-foreground text-xs'>{draftLine}</p>}
-      {sentence && <p className='text-muted-foreground text-xs'>{sentence}</p>}
+      {sentence && <p className='text-muted-foreground text-xs leading-relaxed'>{sentence}</p>}
 
       <Dialog
         open={preview !== null}
@@ -243,9 +253,9 @@ export function ReplyComposer({
           if (!open && pending !== 'approve') setPreview(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className={cn(DIALOG_ELEVATED, 'sm:max-w-md')}>
           <DialogHeader>
-            <DialogTitle>Approve this reply</DialogTitle>
+            <DialogTitle className='text-xl font-medium tracking-tight'>Approve this reply</DialogTitle>
             <DialogDescription>Check the account, the comment and the exact text. This text is what gets approved.</DialogDescription>
           </DialogHeader>
           <dl className='grid gap-3 text-sm'>
@@ -264,7 +274,7 @@ export function ReplyComposer({
               <dt className='text-muted-foreground text-xs'>Reply</dt>
               <dd>
                 {approvedText !== null ? (
-                  <blockquote className='border-l-2 pl-3 break-words whitespace-pre-wrap'>{approvedText}</blockquote>
+                  <blockquote className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3.5 py-2.5 break-words whitespace-pre-wrap'>{approvedText}</blockquote>
                 ) : (
                   <span className='text-destructive'>The server did not return the reply text, so this reply cannot be approved.</span>
                 )}
@@ -284,9 +294,9 @@ export function ReplyComposer({
               The connection for {accountLabel} has no {platform} account on record, so this reply cannot be approved.
             </p>
           ) : preview?.replyLevel === 'Direct' ? (
-            <p className='text-muted-foreground text-xs'>Approving records your decision. Sending is not switched on yet, so nothing is posted to {platform} for now.</p>
+            <p className='text-muted-foreground text-xs leading-relaxed'>Approving records your decision. Sending is not switched on yet, so nothing is posted to {platform} for now.</p>
           ) : (
-            <p className='text-muted-foreground text-xs'>
+            <p className='text-muted-foreground text-xs leading-relaxed'>
               Replies are {preview?.replyLevel ?? 'Unsupported'} for {accountLabel}, so PostRiff cannot send this one.
               {permalink && (
                 <>
@@ -298,11 +308,13 @@ export function ReplyComposer({
               )}
             </p>
           )}
-          <DialogFooter>
-            <Button variant='outline' disabled={pending === 'approve'} onClick={() => setPreview(null)}>
+          <DialogFooter className={DIALOG_FOOTER_PLAIN}>
+            <Button variant='glass' size='control' disabled={pending === 'approve'} onClick={() => setPreview(null)}>
               Cancel
             </Button>
             <StatefulButton
+              variant='primary'
+              className={cn(STATEFUL_ACTION, CONTROL_48)}
               state={pending === 'approve' ? 'loading' : 'idle'}
               loadingText='Approving…'
               disabled={busy || !canReply || approvedText === null || accountMissing || preview?.replyLevel !== 'Direct'}
@@ -313,6 +325,6 @@ export function ReplyComposer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Surface>
   );
 }

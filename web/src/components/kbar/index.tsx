@@ -4,6 +4,7 @@ import { navGroups } from '@/config/nav-config';
 import { KBarAnimator, KBarPortal, KBarPositioner, KBarProvider, KBarSearch, useRegisterActions } from 'kbar';
 import { tourStore } from '@/features/onboarding/store';
 import { pageTourFor } from '@/features/onboarding/tours';
+import { Icons } from '@/components/icons';
 import { Kbd } from '@/components/ui/kbd';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMemo } from 'react';
@@ -115,15 +116,16 @@ const KBarComponent = ({ children }: { children: React.ReactNode }) => {
   return (
     <>
       <KBarPortal>
-        <KBarPositioner className='bg-black/10 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 z-99999 flex items-start! justify-center p-4! pt-[14vh]!'>
-          <KBarAnimator className='bg-popover text-popover-foreground ring-foreground/10 relative mx-auto w-full max-w-[600px] overflow-hidden rounded-xl shadow-lg ring-1'>
-            <div className='bg-popover sticky top-0 z-10 border-b'>
-              <KBarSearch className='placeholder:text-muted-foreground w-full border-none bg-transparent px-4 py-3.5 text-sm outline-hidden focus:ring-0 focus:outline-hidden' />
+        <KBarPositioner className='rafii-scrim fixed inset-0 z-99999 flex items-start! justify-center p-4! pt-[14vh]!'>
+          <KBarAnimator className='rafii-elevated text-foreground relative mx-auto w-full max-w-[600px] overflow-hidden rounded-[var(--rafii-radius-dialog)]'>
+            <div className='sticky top-0 z-10 flex items-center gap-3 px-5 pt-4 pb-3'>
+              <Icons.search aria-hidden className='text-muted-foreground size-4 shrink-0' />
+              <KBarSearch className='placeholder:text-muted-foreground min-w-0 flex-1 border-none bg-transparent py-1.5 text-base outline-hidden focus:ring-0 focus:outline-hidden md:text-sm' />
             </div>
-            <div className='h-[400px]'>
+            <div className='h-[400px] pb-1'>
               <RenderResults />
             </div>
-            <div className='text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-xs'>
+            <div className='text-muted-foreground flex items-center gap-3 px-5 pt-2 pb-3 text-xs'>
               <span className='flex items-center gap-1'>
                 <Kbd>↑</Kbd>
                 <Kbd>↓</Kbd> navigate

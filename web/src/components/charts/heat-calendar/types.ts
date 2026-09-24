@@ -18,7 +18,7 @@ export interface HeatCalendarProps {
   values?: number[][];
   /** Last UTC calendar day of the grid. Defaults to today after mount; explicit dates render identically in every timezone. */
   endDate?: Date;
-  /** The single hue. Any CSS color; magnitude maps to its strength, never to a second color. */
+  /** The single hue. Any CSS color; magnitude maps to its strength, never to a second color. Defaults to the foreground, so the grid stays grayscale in both themes (DNA §21.13). */
   color?: string;
   className?: string;
   children?: ReactNode;

@@ -12,11 +12,12 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const { token } = await params;
   return (
     <AuthProvider>
-      <div className='flex min-h-svh flex-col'>
-        <div className='mx-auto flex h-14 w-full max-w-6xl items-center px-4 sm:px-6'>
+      <div className='relative isolate flex min-h-svh flex-col'>
+        <div aria-hidden className='rafii-ambient' />
+        <div className='mx-auto flex h-16 w-full max-w-6xl items-center px-4 sm:px-6'>
           <Wordmark />
         </div>
-        <main className='flex flex-1 items-center justify-center px-4 py-10 sm:px-6'>
+        <main className='flex flex-1 items-center justify-center px-4 pt-2 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:px-6'>
           <div className='w-full max-w-md'>
             <AcceptInvitation token={token} />
           </div>
