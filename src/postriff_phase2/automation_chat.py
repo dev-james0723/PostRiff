@@ -221,6 +221,11 @@ def _ordinal(day: int) -> str:
 def describe(schedule: dict) -> str:
     """"Every Tuesday at 09:00 (Asia/Hong_Kong)" for the reply and the card."""
     at = f" at {schedule.get('localTime', '09:00')} ({schedule.get('timeZone', 'UTC')})"
+    if schedule.get("kind") == "once":
+        day = dt.date.fromisoformat(schedule["date"])
+        return f"On {day.strftime('%A')} {day.day} {day.strftime('%B')}{at}"
+    if schedule.get("slots"):
+        return "Every " + _join([f"{slot['weekday']} at {slot['localTime']}" for slot in schedule["slots"]]) + f" ({schedule.get('timeZone', 'UTC')})"
     if schedule.get("kind") == "monthly":
         days = ["the last day" if day == "last" else f"the {day}{_ordinal(day)}" for day in schedule["monthDays"]]
         return f"On {_join(days)} of every month{at}"

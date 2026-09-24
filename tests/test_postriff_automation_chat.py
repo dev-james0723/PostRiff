@@ -145,14 +145,20 @@ class ModelReadingTest(unittest.TestCase):
             "weekdays": ["Friday", "Tuesday", "Someday"], "monthDays": [3], "localTime": "25:00", "topic": " AI news ", "goal": "A short AI news post.",
             "name": "AI news", "contentTypeId": "pack.creator:article_news_commentary", "formatId": "poll", "voice": True, "assumptions": ["Twice a week: Tuesday and Friday.", 7]}}
         reading = request_model.reading(answer, self.state)
-        self.assertEqual(reading, {"action": "automation", "automation": {
+        self.assertEqual((reading["action"], reading["tier"]), ("automation", "light"))
+        # The keys older readers take (automation_chat); the full Reading is covered in test_postriff_request_model.
+        legacy = ("weekdays", "topic", "goal", "name", "contentTypeId", "voice", "assumptions")
+        self.assertEqual({key: reading["automation"][key] for key in legacy}, {
             "weekdays": ["Tuesday", "Friday"], "topic": "AI news", "goal": "A short AI news post.", "name": "AI news",
-            "contentTypeId": "pack.creator:article_news_commentary", "voice": True, "assumptions": ["Twice a week: Tuesday and Friday."]}})
-        self.assertEqual(request_model.reading({"action": "draft", "automation": {"weekdays": ["Monday"]}}, self.state), {"action": "draft"})
+            "contentTypeId": "pack.creator:article_news_commentary", "voice": True, "assumptions": ["Twice a week: Tuesday and Friday."]})
+        self.assertNotIn("localTime", reading["automation"])
+        self.assertIsNone(reading["automation"]["formatId"])
+        drafted = request_model.reading({"action": "draft", "automation": {"weekdays": ["Monday"]}}, self.state)
+        self.assertEqual((drafted["action"], drafted["automation"]), ("draft", None))
         for bad in (None, {}, {"action": "publish"}, "automation"):
             self.assertIsNone(request_model.reading(bad, self.state))
         unknown = request_model.reading({"action": "automation", "automation": {"contentTypeId": "workspace_x:unknown", "monthDays": [0, 31, "last", 31]}}, self.state)
-        self.assertEqual(unknown["automation"], {"monthDays": [31, "last"], "assumptions": []})
+        self.assertEqual((unknown["automation"]["monthDays"], unknown["automation"]["contentTypeId"], unknown["automation"]["assumptions"]), ([31, "last"], None, []))
 
     def test_prompt_carries_only_the_message_date_and_catalog(self):
         self.state["sources"] = [{"id": "src-private", "active": True, "kind": "text", "title": "Private notes", "text": "secret"}]
@@ -198,16 +204,20 @@ class ModelReadingTest(unittest.TestCase):
     def test_countdown_reading_becomes_a_countdown_automation(self):
         # Live gateway runs (2026-09-24) read "two weeks before, one week before and on the day" as monthly days
         # 4, 11 and 18, which would repeat every month after the event; a countdown has its own shape.
-        answer = {"action": "automation", "automation": {"countdown": {"eventDate": "2026-10-18", "daysBefore": [0, 14, 7, 7]}, "monthDays": [4, 11, 18], "topic": "my recital"}}
+        countdown = {"kind": "countdown", "eventDate": "2026-10-18", "daysBefore": [0, 14, 7, 7], "localTime": None}
+        answer = {"action": "automation", "automation": {"schedule": countdown, "monthDays": [4, 11, 18], "topic": "my recital"}}
         understood = request_model.reading(answer, self.state)["automation"]
+        self.assertEqual(understood["schedule"], {"kind": "countdown", "eventDate": "2026-10-18", "daysBefore": [14, 7, 0], "localTime": None})
         self.assertEqual(understood["countdown"], {"eventDate": "2026-10-18", "daysBefore": [14, 7, 0]})
         self.assertNotIn("monthDays", understood)
         for bad in ({"eventDate": "18 October", "daysBefore": [7]}, {"eventDate": "2026-10-18", "daysBefore": [120]}, {"eventDate": "2026-10-18", "daysBefore": []}):
             with self.subTest(bad=bad):
-                reading = request_model.reading({"action": "automation", "automation": {"countdown": bad, "weekdays": ["Monday"]}}, self.state)["automation"]
+                reading = request_model.reading({"action": "automation", "automation": {"schedule": {"kind": "countdown", **bad}, "weekdays": ["Monday"]}}, self.state)["automation"]
                 self.assertNotIn("countdown", reading)
                 self.assertEqual(reading["weekdays"], ["Monday"])
-        self.assertIn("countdown", request_model.schema(self.state)["properties"]["automation"]["properties"])
+        automation = request_model.schema(self.state)["properties"]["automation"]["anyOf"][0]
+        kinds = [option["properties"]["kind"]["enum"][0] for option in automation["properties"]["schedule"]["anyOf"] if option.get("type") == "object"]
+        self.assertEqual(kinds, ["once", "weekly", "monthly", "countdown"])
         self.assertTrue(request_model.CUE.search("Count down to my recital on 18 October"))
         self.assertTrue(request_model.CUE.search("幫我倒數音樂會"))
         view = automation_chat.create(self.state, "owner-1", self.now, "Count down to my recital on 18 October on LinkedIn", HK,

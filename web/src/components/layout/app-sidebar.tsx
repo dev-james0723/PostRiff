@@ -2,7 +2,7 @@
 
 import { deriveAttention } from '@/lib/attention';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Icons } from '@/components/icons';
@@ -120,7 +120,14 @@ export default function AppSidebar() {
   const { user, signOut } = useAuth();
   const groups = useFilteredNavGroups(navGroups);
   const snapshot = useSnapshot();
-  const { state: sidebarState, isMobile } = useSidebar();
+  const { state: sidebarState, isMobile, setOpen: setSidebarOpen, setOpenMobile } = useSidebar();
+  // Choosing a page closes the menu on every device: the phone sheet, and the desktop sidebar back to its icon rail.
+  const closeMenu = () => (isMobile ? setOpenMobile(false) : setSidebarOpen(false));
+  const closeAfterPick = (event: MouseEvent) => {
+    // A new-tab click (modifier key or another button) leaves the menu where it is.
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    closeMenu();
+  };
   // Icon rail: headers hide and every section stays open, otherwise the icons would vanish with it.
   const iconMode = sidebarState === 'collapsed' && !isMobile;
   const { isOpen, setOpen } = useNavGroups(activeGroupLabel(groups, pathname));
@@ -161,7 +168,7 @@ export default function AppSidebar() {
                         {item.items.map((sub) => (
                           <SidebarMenuSubItem key={sub.title}>
                             <SidebarMenuSubButton
-                              render={<Link href={sub.url} aria-label={sub.title} />}
+                              render={<Link href={sub.url} aria-label={sub.title} onClick={closeAfterPick} />}
                               isActive={isActivePath(pathname, sub.url)}
                             >
                               <span>{sub.title}</span>
@@ -174,7 +181,7 @@ export default function AppSidebar() {
                 ) : (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      render={<Link href={item.url} aria-label={counts[item.url] ? `${item.title}, ${counts[item.url]} waiting for approval` : item.title} />}
+                      render={<Link href={item.url} aria-label={counts[item.url] ? `${item.title}, ${counts[item.url]} waiting for approval` : item.title} onClick={closeAfterPick} />}
                       tooltip={item.title}
                       isActive={active}
                     >
@@ -214,15 +221,15 @@ export default function AppSidebar() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => router.push('/app/account/profile')}>
+                  <DropdownMenuItem onClick={() => { closeMenu(); router.push('/app/account/profile'); }}>
                     <Icons.account className='mr-2 h-4 w-4' />
                     Profile
                   </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => router.push('/app/account/billing')}>
+                    <DropdownMenuItem onClick={() => { closeMenu(); router.push('/app/account/billing'); }}>
                       <Icons.creditCard className='mr-2 h-4 w-4' />
                       Usage & plan
                     </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push('/app/account/privacy')}>
+                  <DropdownMenuItem onClick={() => { closeMenu(); router.push('/app/account/privacy'); }}>
                     <Icons.shieldCheck className='mr-2 h-4 w-4' />
                     Privacy & data
                   </DropdownMenuItem>

@@ -446,6 +446,13 @@
   opacity: 0.6;
   transform: rotate(15deg);
 }
+/* Behind the app the highlight is sized by the first screen, not by the page: the streaks are placed in percentages,
+   so a layer that grew and shrank with loading content moved them, and that counted as layout shift (CLS 0.6 on a
+   slow phone). */
+.rafii-ambient[data-extent='viewport'] {
+  bottom: auto;
+  height: 100svh;
+}
 
 /* Native app previews keep their own colours; only the frame belongs to Rafii (DNA §4.4, §17). */
 [data-theme='rafii'] [data-native-preview] {

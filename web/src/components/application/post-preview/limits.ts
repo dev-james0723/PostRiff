@@ -83,6 +83,8 @@ const RULES: Record<string, TextRule[]> = {
   threads: [{ field: 'text', max: 500, unit: 'characters', count: codePoints }],
   // twitter-text v3: 280 weighted characters for accounts without Premium.
   x: [{ field: 'text', max: 280, unit: 'characters by X’s count', count: xWeighted, scope: 'for accounts without Premium' }],
+  // Xiaohongshu note titles stop at 20 characters; the template shows the first line as the title (`contracts.LIMITS`).
+  xiaohongshu: [{ field: 'title', max: 20, unit: 'characters in the title', count: codePoints }],
   // app.bsky.feed.post lexicon: text maxGraphemes 300.
   bluesky: [{ field: 'text', max: 300, unit: 'characters', count: graphemes }],
   // Mastodon's default MAX_CHARS; each server can change it.

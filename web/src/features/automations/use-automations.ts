@@ -43,9 +43,10 @@ export function automationsOf(state: SnapshotState | undefined): Automation[] {
     .toSorted((a, b) => (ORDER[a.task.status] ?? 9) - (ORDER[b.task.status] ?? 9) || (b.task.updatedAt ?? b.task.createdAt ?? 0) - (a.task.updatedAt ?? a.task.createdAt ?? 0));
 }
 
-/** A countdown whose every date has passed: still `active` on the server, with no next run. */
+/** A countdown whose every date has passed, or a one-time date that has passed: still `active` on the server, with no next run. */
 export function finished(automation: Pick<Automation, 'task'>): boolean {
-  return automation.task.status === 'active' && automation.task.schedule.kind === 'countdown' && !automation.task.nextOccurrence;
+  const kind = automation.task.schedule.kind;
+  return automation.task.status === 'active' && (kind === 'countdown' || kind === 'once') && !automation.task.nextOccurrence;
 }
 
 /** Runs whose drafts nobody has opened or dismissed yet. */

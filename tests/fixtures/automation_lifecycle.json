@@ -1,0 +1,1198 @@
+{
+ "itemStates": [
+  "ready_for_review",
+  "needs_revision",
+  "approved",
+  "scheduled",
+  "publishing",
+  "published",
+  "rejected",
+  "skipped",
+  "failed",
+  "platform_disconnected",
+  "approval_expired"
+ ],
+ "runStages": [
+  "planned",
+  "researching",
+  "drafting",
+  "drafted",
+  "skipped",
+  "source_unavailable",
+  "failed"
+ ],
+ "transitions": {
+  "ready_for_review": [
+   "approved",
+   "rejected",
+   "needs_revision",
+   "approval_expired",
+   "platform_disconnected",
+   "skipped"
+  ],
+  "needs_revision": [
+   "ready_for_review",
+   "rejected",
+   "approval_expired",
+   "skipped"
+  ],
+  "approved": [
+   "scheduled",
+   "ready_for_review",
+   "approval_expired",
+   "platform_disconnected",
+   "failed",
+   "skipped"
+  ],
+  "scheduled": [
+   "publishing",
+   "published",
+   "failed",
+   "platform_disconnected",
+   "skipped"
+  ],
+  "publishing": [
+   "published",
+   "failed"
+  ],
+  "platform_disconnected": [
+   "approved",
+   "ready_for_review",
+   "approval_expired",
+   "failed",
+   "skipped"
+  ],
+  "published": [],
+  "rejected": [],
+  "approval_expired": [],
+  "failed": [],
+  "skipped": []
+ },
+ "priority": [
+  "publishing",
+  "scheduled",
+  "approved",
+  "ready_for_review",
+  "needs_revision",
+  "platform_disconnected",
+  "failed",
+  "approval_expired",
+  "published",
+  "rejected",
+  "skipped"
+ ],
+ "attention": [
+  "needs_revision",
+  "platform_disconnected",
+  "failed",
+  "approval_expired"
+ ],
+ "labels": {
+  "planned": "Planned",
+  "researching": "Researching",
+  "drafting": "Drafting",
+  "drafted": "Drafted",
+  "skipped": "Skipped",
+  "source_unavailable": "Source unavailable",
+  "failed": "Failed",
+  "ready_for_review": "Ready for review",
+  "needs_revision": "Changes requested",
+  "approved": "Approved",
+  "scheduled": "Scheduled",
+  "publishing": "Publishing",
+  "published": "Published",
+  "rejected": "Rejected",
+  "platform_disconnected": "Account disconnected",
+  "approval_expired": "Approval expired"
+ },
+ "jobItem": {
+  "approved": "scheduled",
+  "scheduled": "scheduled",
+  "claimed": "scheduled",
+  "submitting": "publishing",
+  "processing": "publishing",
+  "provider_accepted": "publishing",
+  "published": "publishing",
+  "uncertain": "publishing",
+  "verified": "published",
+  "failed": "failed",
+  "canceled": "skipped"
+ },
+ "moves": [
+  {
+   "from": "ready_for_review",
+   "to": "needs_revision",
+   "allowed": true
+  },
+  {
+   "from": "ready_for_review",
+   "to": "approved",
+   "allowed": true
+  },
+  {
+   "from": "ready_for_review",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "ready_for_review",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "ready_for_review",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "ready_for_review",
+   "to": "rejected",
+   "allowed": true
+  },
+  {
+   "from": "ready_for_review",
+   "to": "skipped",
+   "allowed": true
+  },
+  {
+   "from": "ready_for_review",
+   "to": "failed",
+   "allowed": false
+  },
+  {
+   "from": "ready_for_review",
+   "to": "platform_disconnected",
+   "allowed": true
+  },
+  {
+   "from": "ready_for_review",
+   "to": "approval_expired",
+   "allowed": true
+  },
+  {
+   "from": "needs_revision",
+   "to": "ready_for_review",
+   "allowed": true
+  },
+  {
+   "from": "needs_revision",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "needs_revision",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "needs_revision",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "needs_revision",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "needs_revision",
+   "to": "rejected",
+   "allowed": true
+  },
+  {
+   "from": "needs_revision",
+   "to": "skipped",
+   "allowed": true
+  },
+  {
+   "from": "needs_revision",
+   "to": "failed",
+   "allowed": false
+  },
+  {
+   "from": "needs_revision",
+   "to": "platform_disconnected",
+   "allowed": false
+  },
+  {
+   "from": "needs_revision",
+   "to": "approval_expired",
+   "allowed": true
+  },
+  {
+   "from": "approved",
+   "to": "ready_for_review",
+   "allowed": true
+  },
+  {
+   "from": "approved",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "approved",
+   "to": "scheduled",
+   "allowed": true
+  },
+  {
+   "from": "approved",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "approved",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "approved",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "approved",
+   "to": "skipped",
+   "allowed": true
+  },
+  {
+   "from": "approved",
+   "to": "failed",
+   "allowed": true
+  },
+  {
+   "from": "approved",
+   "to": "platform_disconnected",
+   "allowed": true
+  },
+  {
+   "from": "approved",
+   "to": "approval_expired",
+   "allowed": true
+  },
+  {
+   "from": "scheduled",
+   "to": "ready_for_review",
+   "allowed": false
+  },
+  {
+   "from": "scheduled",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "scheduled",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "scheduled",
+   "to": "publishing",
+   "allowed": true
+  },
+  {
+   "from": "scheduled",
+   "to": "published",
+   "allowed": true
+  },
+  {
+   "from": "scheduled",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "scheduled",
+   "to": "skipped",
+   "allowed": true
+  },
+  {
+   "from": "scheduled",
+   "to": "failed",
+   "allowed": true
+  },
+  {
+   "from": "scheduled",
+   "to": "platform_disconnected",
+   "allowed": true
+  },
+  {
+   "from": "scheduled",
+   "to": "approval_expired",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "ready_for_review",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "published",
+   "allowed": true
+  },
+  {
+   "from": "publishing",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "skipped",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "failed",
+   "allowed": true
+  },
+  {
+   "from": "publishing",
+   "to": "platform_disconnected",
+   "allowed": false
+  },
+  {
+   "from": "publishing",
+   "to": "approval_expired",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "ready_for_review",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "skipped",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "failed",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "platform_disconnected",
+   "allowed": false
+  },
+  {
+   "from": "published",
+   "to": "approval_expired",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "ready_for_review",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "skipped",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "failed",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "platform_disconnected",
+   "allowed": false
+  },
+  {
+   "from": "rejected",
+   "to": "approval_expired",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "ready_for_review",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "failed",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "platform_disconnected",
+   "allowed": false
+  },
+  {
+   "from": "skipped",
+   "to": "approval_expired",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "ready_for_review",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "skipped",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "platform_disconnected",
+   "allowed": false
+  },
+  {
+   "from": "failed",
+   "to": "approval_expired",
+   "allowed": false
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "ready_for_review",
+   "allowed": true
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "approved",
+   "allowed": true
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "skipped",
+   "allowed": true
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "failed",
+   "allowed": true
+  },
+  {
+   "from": "platform_disconnected",
+   "to": "approval_expired",
+   "allowed": true
+  },
+  {
+   "from": "approval_expired",
+   "to": "ready_for_review",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "needs_revision",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "approved",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "scheduled",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "publishing",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "published",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "rejected",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "skipped",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "failed",
+   "allowed": false
+  },
+  {
+   "from": "approval_expired",
+   "to": "platform_disconnected",
+   "allowed": false
+  }
+ ],
+ "status": [
+  {
+   "run": {
+    "lifecycle": "planned"
+   },
+   "status": "planned"
+  },
+  {
+   "run": {
+    "lifecycle": "researching"
+   },
+   "status": "researching"
+  },
+  {
+   "run": {
+    "lifecycle": "skipped"
+   },
+   "status": "skipped"
+  },
+  {
+   "run": {
+    "lifecycle": "source_unavailable"
+   },
+   "status": "source_unavailable"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": []
+   },
+   "status": "drafted"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "ready_for_review",
+      "publishAt": 1
+     }
+    ]
+   },
+   "status": "ready_for_review"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "ready_for_review",
+      "publishAt": null
+     }
+    ]
+   },
+   "status": "ready_for_review"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "published"
+     },
+     {
+      "state": "platform_disconnected"
+     }
+    ]
+   },
+   "status": "platform_disconnected"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "scheduled"
+     },
+     {
+      "state": "ready_for_review",
+      "publishAt": 5
+     }
+    ]
+   },
+   "status": "scheduled"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "approval_expired"
+     },
+     {
+      "state": "rejected"
+     }
+    ]
+   },
+   "status": "approval_expired"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "published"
+     },
+     {
+      "state": "published"
+     }
+    ]
+   },
+   "status": "published"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "skipped"
+     }
+    ]
+   },
+   "status": "skipped"
+  },
+  {
+   "run": {
+    "lifecycle": "failed"
+   },
+   "status": "failed"
+  }
+ ],
+ "attentionCases": [
+  {
+   "run": {
+    "lifecycle": "planned"
+   },
+   "attention": false
+  },
+  {
+   "run": {
+    "lifecycle": "researching"
+   },
+   "attention": false
+  },
+  {
+   "run": {
+    "lifecycle": "skipped"
+   },
+   "attention": false
+  },
+  {
+   "run": {
+    "lifecycle": "source_unavailable"
+   },
+   "attention": true
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": []
+   },
+   "attention": false
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "ready_for_review",
+      "publishAt": 1
+     }
+    ]
+   },
+   "attention": true
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "ready_for_review",
+      "publishAt": null
+     }
+    ]
+   },
+   "attention": false
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "published"
+     },
+     {
+      "state": "platform_disconnected"
+     }
+    ]
+   },
+   "attention": true
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "scheduled"
+     },
+     {
+      "state": "ready_for_review",
+      "publishAt": 5
+     }
+    ]
+   },
+   "attention": true
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "approval_expired"
+     },
+     {
+      "state": "rejected"
+     }
+    ]
+   },
+   "attention": true
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "published"
+     },
+     {
+      "state": "published"
+     }
+    ]
+   },
+   "attention": false
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "skipped"
+     }
+    ]
+   },
+   "attention": false
+  },
+  {
+   "run": {
+    "lifecycle": "failed"
+   },
+   "attention": true
+  }
+ ],
+ "projected": [
+  {
+   "run": {
+    "lifecycle": "planned"
+   },
+   "projected": "pending"
+  },
+  {
+   "run": {
+    "lifecycle": "researching"
+   },
+   "projected": "running"
+  },
+  {
+   "run": {
+    "lifecycle": "skipped"
+   },
+   "projected": "cancelled"
+  },
+  {
+   "run": {
+    "lifecycle": "source_unavailable"
+   },
+   "projected": "failed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": []
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "ready_for_review",
+      "publishAt": 1
+     }
+    ]
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "ready_for_review",
+      "publishAt": null
+     }
+    ]
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "published"
+     },
+     {
+      "state": "platform_disconnected"
+     }
+    ]
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "scheduled"
+     },
+     {
+      "state": "ready_for_review",
+      "publishAt": 5
+     }
+    ]
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "approval_expired"
+     },
+     {
+      "state": "rejected"
+     }
+    ]
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "published"
+     },
+     {
+      "state": "published"
+     }
+    ]
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "drafted",
+    "items": [
+     {
+      "state": "skipped"
+     }
+    ]
+   },
+   "projected": "completed"
+  },
+  {
+   "run": {
+    "lifecycle": "failed"
+   },
+   "projected": "failed"
+  }
+ ],
+ "jobCases": [
+  {
+   "job": "approved",
+   "channelReady": true,
+   "item": "scheduled"
+  },
+  {
+   "job": "approved",
+   "channelReady": false,
+   "item": "scheduled"
+  },
+  {
+   "job": "scheduled",
+   "channelReady": true,
+   "item": "scheduled"
+  },
+  {
+   "job": "scheduled",
+   "channelReady": false,
+   "item": "scheduled"
+  },
+  {
+   "job": "claimed",
+   "channelReady": true,
+   "item": "scheduled"
+  },
+  {
+   "job": "claimed",
+   "channelReady": false,
+   "item": "scheduled"
+  },
+  {
+   "job": "submitting",
+   "channelReady": true,
+   "item": "publishing"
+  },
+  {
+   "job": "submitting",
+   "channelReady": false,
+   "item": "publishing"
+  },
+  {
+   "job": "processing",
+   "channelReady": true,
+   "item": "publishing"
+  },
+  {
+   "job": "processing",
+   "channelReady": false,
+   "item": "publishing"
+  },
+  {
+   "job": "provider_accepted",
+   "channelReady": true,
+   "item": "publishing"
+  },
+  {
+   "job": "provider_accepted",
+   "channelReady": false,
+   "item": "publishing"
+  },
+  {
+   "job": "published",
+   "channelReady": true,
+   "item": "publishing"
+  },
+  {
+   "job": "published",
+   "channelReady": false,
+   "item": "publishing"
+  },
+  {
+   "job": "uncertain",
+   "channelReady": true,
+   "item": "publishing"
+  },
+  {
+   "job": "uncertain",
+   "channelReady": false,
+   "item": "publishing"
+  },
+  {
+   "job": "verified",
+   "channelReady": true,
+   "item": "published"
+  },
+  {
+   "job": "verified",
+   "channelReady": false,
+   "item": "published"
+  },
+  {
+   "job": "failed",
+   "channelReady": true,
+   "item": "failed"
+  },
+  {
+   "job": "failed",
+   "channelReady": false,
+   "item": "failed"
+  },
+  {
+   "job": "canceled",
+   "channelReady": true,
+   "item": "skipped"
+  },
+  {
+   "job": "canceled",
+   "channelReady": false,
+   "item": "skipped"
+  },
+  {
+   "job": "held",
+   "channelReady": true,
+   "item": "failed"
+  },
+  {
+   "job": "held",
+   "channelReady": false,
+   "item": "platform_disconnected"
+  },
+  {
+   "job": "mystery",
+   "channelReady": true,
+   "item": null
+  },
+  {
+   "job": "mystery",
+   "channelReady": false,
+   "item": null
+  }
+ ]
+}

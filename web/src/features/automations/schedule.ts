@@ -4,13 +4,15 @@
  * preview here follows the same rules so the builder can show the next runs before anything is saved:
  * the first local time strictly after "now" across the chosen weekdays; a skipped wall time (spring)
  * moves to the next valid minute; a repeated one (autumn) uses its first, earlier-offset instance.
+ * Raffi's chat can also save a one-time date (`kind: 'once'`) and weekly `slots` with a time each
+ * (orchestration §1); the builder shows those read-only, and the wording here describes them.
  */
 
 export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 export const WEEKDAY_SHORT: Record<Weekday, string> = { Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun' };
 
-export type ScheduleKind = 'weekly' | 'monthly' | 'countdown' | 'on_new_source' | 'on_strong_post';
+export type ScheduleKind = 'weekly' | 'monthly' | 'countdown' | 'once' | 'on_new_source' | 'on_strong_post';
 export type TriggerKind = 'on_new_source' | 'on_strong_post';
 export const SOURCE_KINDS = [
   { value: 'idea', label: 'Ideas' },
@@ -30,6 +32,10 @@ export interface ScheduleValue {
   /** Countdown: the event date (YYYY-MM-DD) and the days before it that get a run. */
   eventDate?: string;
   daysBefore?: number[];
+  /** Once: the date (YYYY-MM-DD) of the single run, at `localTime`. */
+  date?: string;
+  /** Weekly slots with a time each; when present they win over `weekdays` + `localTime` (which mirror the first). */
+  slots?: { weekday: string; localTime: string }[];
   /** Triggers: what starts a run, and at most how many runs a day. */
   sourceKinds?: string[];
   maxPerDay?: number;
@@ -39,7 +45,7 @@ export interface ScheduleValue {
   timeZone: string;
 }
 
-const KNOWN: ScheduleKind[] = ['monthly', 'countdown', 'on_new_source', 'on_strong_post'];
+const KNOWN: ScheduleKind[] = ['monthly', 'countdown', 'once', 'on_new_source', 'on_strong_post'];
 export const kindOf = (schedule: Pick<ScheduleValue, 'kind'>): ScheduleKind => (KNOWN.includes(schedule.kind as ScheduleKind) ? (schedule.kind as ScheduleKind) : 'weekly');
 export const isTrigger = (schedule: Pick<ScheduleValue, 'kind'>): boolean => schedule.kind === 'on_new_source' || schedule.kind === 'on_strong_post';
 
@@ -70,6 +76,23 @@ export function weekdaysOf(schedule: Pick<ScheduleValue, 'weekdays' | 'weekday'>
   const wanted = new Set(raw.map((day) => String(day).toLowerCase()));
   return WEEKDAYS.filter((day) => wanted.has(day.toLowerCase()));
 }
+
+/** Valid weekly slots, Monday first then by time; duplicates dropped. Empty for any other schedule. */
+export function slotsOf(schedule: Pick<ScheduleValue, 'kind' | 'slots'>): { weekday: Weekday; localTime: string }[] {
+  if (kindOf(schedule) !== 'weekly' || !Array.isArray(schedule.slots)) return [];
+  const out = new Map<string, { weekday: Weekday; localTime: string }>();
+  for (const slot of schedule.slots) {
+    const weekday = WEEKDAYS.find((day) => day.toLowerCase() === String(slot?.weekday ?? '').toLowerCase());
+    const time = parseTime(String(slot?.localTime ?? ''));
+    if (!weekday || !time) continue;
+    const localTime = `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`;
+    out.set(`${weekday} ${localTime}`, { weekday, localTime });
+  }
+  return [...out.values()].toSorted((a, b) => WEEKDAYS.indexOf(a.weekday) - WEEKDAYS.indexOf(b.weekday) || a.localTime.localeCompare(b.localTime));
+}
+
+/** Schedules the builder has no controls for (a one-time date, weekly slots with different times). */
+export const isFixedForm = (schedule: Pick<ScheduleValue, 'kind' | 'slots'>): boolean => kindOf(schedule) === 'once' || slotsOf(schedule).length > 0;
 
 export function parseTime(value: string): { hour: number; minute: number } | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
@@ -157,11 +180,26 @@ function validInstant(year: number, month: number, day: number, hour: number, mi
 
 /** The next run strictly after `afterMs`, as epoch milliseconds, or null for an incomplete or finished schedule. */
 export function nextRun(schedule: ScheduleValue, afterMs: number): number | null {
-  if (isTrigger(schedule)) return null;
-  const time = parseTime(schedule.localTime ?? '');
-  if (!time || !validTimeZone(schedule.timeZone)) return null;
-  const now = wallAt(afterMs, schedule.timeZone);
+  if (isTrigger(schedule) || !validTimeZone(schedule.timeZone)) return null;
   const kind = kindOf(schedule);
+  const slots = slotsOf(schedule);
+  if (slots.length) {
+    const now = wallAt(afterMs, schedule.timeZone);
+    const runs = slots.map((slot) => {
+      const time = parseTime(slot.localTime)!;
+      return nextForWeekday(now, WEEKDAYS.indexOf(slot.weekday), time.hour, time.minute, schedule.timeZone);
+    }).filter((run): run is number => run !== null);
+    return runs.length ? Math.min(...runs) : null;
+  }
+  const time = parseTime(schedule.localTime ?? '');
+  if (!time) return null;
+  const now = wallAt(afterMs, schedule.timeZone);
+  if (kind === 'once') {
+    const date = parseDate(schedule.date);
+    if (!date) return null;
+    const wall = { ...date, hour: time.hour, minute: time.minute, second: 0 };
+    return wallNumber(wall) > wallNumber(now) ? validInstant(date.year, date.month, date.day, time.hour, time.minute, schedule.timeZone) : null;
+  }
   if (kind === 'monthly') {
     const days = monthDaysOf(schedule);
     if (!days.length) return null;
@@ -250,6 +288,21 @@ export function countdownLabel(schedule: Pick<ScheduleValue, 'eventDate' | 'days
   return `Countdown to ${date}${parts.length ? `: ${parts.join(' and ')}` : ''}`;
 }
 
+/** "Once on Sat 3 Oct 2026". */
+export function onceLabel(schedule: Pick<ScheduleValue, 'date'>, locale?: string): string {
+  const date = parseDate(schedule.date);
+  if (!date) return 'Once (choose the date)';
+  return `Once on ${new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(date.year, date.month - 1, date.day)))}`;
+}
+
+/** "Mondays at 9:00 AM and Thursdays at 6:00 PM"; days sharing a time are grouped ("Mon and Thu at 9:00 AM"). */
+export function slotsLabel(schedule: Pick<ScheduleValue, 'kind' | 'slots'>, locale?: string): string {
+  const groups = new Map<string, Weekday[]>();
+  for (const slot of slotsOf(schedule)) groups.set(slot.localTime, [...(groups.get(slot.localTime) ?? []), slot.weekday]);
+  const parts = [...groups.entries()].map(([time, days]) => `${daysLabel({ weekdays: days })} at ${timeLabel(time, locale)}`);
+  return parts.length ? (parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]) : 'No days chosen';
+}
+
 /** "When you add an idea or a link · up to 3 a day" for triggers. */
 export function triggerLabel(schedule: ScheduleValue): string {
   const perDay = schedule.maxPerDay ?? 1;
@@ -264,6 +317,8 @@ export function triggerLabel(schedule: ScheduleValue): string {
 export function scheduleSummary(schedule: ScheduleValue, locale?: string): string {
   if (isTrigger(schedule)) return triggerLabel(schedule);
   const kind = kindOf(schedule);
+  if (slotsOf(schedule).length) return `${slotsLabel(schedule, locale)} · ${zoneLabel(schedule.timeZone)} time`;
+  if (kind === 'once') return `${onceLabel(schedule, locale)} at ${timeLabel(schedule.localTime ?? '', locale)} · ${zoneLabel(schedule.timeZone)} time`;
   const days = kind === 'monthly' ? monthDaysLabel(schedule) : kind === 'countdown' ? countdownLabel(schedule, locale) : daysLabel(schedule);
   return `${days} at ${timeLabel(schedule.localTime ?? '', locale)} · ${zoneLabel(schedule.timeZone)} time`;
 }
@@ -273,21 +328,23 @@ export function runLabel(ms: number, timeZone: string, locale?: string): string 
   return new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(ms));
 }
 
-/** Runs in an average week: one per chosen weekday. */
-export function runsPerWeek(schedule: Pick<ScheduleValue, 'weekdays' | 'weekday'>): number {
-  return weekdaysOf(schedule).length;
+/** Runs in an average week: one per chosen weekday (or per weekly slot). */
+export function runsPerWeek(schedule: Pick<ScheduleValue, 'weekdays' | 'weekday' | 'kind' | 'slots'>): number {
+  const slots = slotsOf(schedule);
+  return slots.length || weekdaysOf(schedule).length;
 }
 
 /**
  * The most runs a schedule can have, and over what: a calendar month for weekly (a month can hold five of a
  * weekday) and monthly schedules, the whole countdown for a countdown.
  */
-export function maxRuns(schedule: ScheduleValue): { runs: number; per: 'month' | 'countdown' } {
+export function maxRuns(schedule: ScheduleValue): { runs: number; per: 'month' | 'countdown' | 'once' } {
   if (isTrigger(schedule)) return { runs: (schedule.maxPerDay ?? 1) * 31, per: 'month' };
   const kind = kindOf(schedule);
   if (kind === 'monthly') return { runs: monthDaysOf(schedule).length, per: 'month' };
   if (kind === 'countdown') return { runs: daysBeforeOf(schedule).length, per: 'countdown' };
-  return { runs: weekdaysOf(schedule).length * 5, per: 'month' };
+  if (kind === 'once') return { runs: 1, per: 'once' };
+  return { runs: runsPerWeek(schedule) * 5, per: 'month' };
 }
 
 /** The budget ceiling: the per-run limit times the most runs (a month, or the whole countdown). */
@@ -298,6 +355,7 @@ export function ceilingMicro(maxCostUsdMicro: number | undefined, schedule: Sche
 export function ceilingText(maxCostUsdMicro: number | undefined, schedule: ScheduleValue): string {
   const { runs, per } = maxRuns(schedule);
   const total = usd(ceilingMicro(maxCostUsdMicro, schedule));
+  if (per === 'once') return `one run · at most ${total} in total`;
   return per === 'countdown' ? `${runs} run${runs === 1 ? '' : 's'} in total · at most ${total} for the whole countdown` : `up to ${runs} run${runs === 1 ? '' : 's'} a month · at most ${total} a month`;
 }
 
@@ -307,7 +365,7 @@ export function usd(micro: number): string {
 }
 
 /** The most an automation can spend in a week: its per-run limit times the runs a week. */
-export function weeklyCeilingMicro(maxCostUsdMicro: number | undefined, schedule: Pick<ScheduleValue, 'weekdays' | 'weekday'>): number {
+export function weeklyCeilingMicro(maxCostUsdMicro: number | undefined, schedule: Pick<ScheduleValue, 'weekdays' | 'weekday' | 'kind' | 'slots'>): number {
   return Math.max(0, maxCostUsdMicro ?? 0) * runsPerWeek(schedule);
 }
 

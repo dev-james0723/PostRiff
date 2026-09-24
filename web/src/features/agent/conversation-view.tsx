@@ -212,16 +212,29 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     };
   }
 
-  async function sendTurn() {
-    const body = text.trim();
+  /**
+   * Sends the next message. `override` is a quick reply from an automation card: it goes through exactly this path,
+   * as if typed and sent, and leaves whatever the person had typed in the composer untouched.
+   */
+  async function sendTurn(override?: string) {
+    const body = (override ?? text).trim();
     if (!body || busy || running || !choice.available) return;
+    const clear = () => {
+      // Text typed while the request was in flight is kept.
+      if (override === undefined) setText((current) => (current.trim() === body ? '' : current));
+      setCreditLimit('');
+    };
     const learningRequest = voiceLearningIntent(body);
     if (learningRequest) {
       setLearning({ ...learningRequest, workspaceId, conversationId, id: crypto.randomUUID() });
-      setText('');
+      clear();
       return; // The reviewed sample workflow is separate from draft generation.
     }
-    if (languages.selection.length === 0 || creditInvalid || (creditMode && imageRequested) || !gate.enter()) return;
+    if (languages.selection.length === 0) {
+      if (override !== undefined) toast.error('Choose at least one channel below, then send your answer again.');
+      return;
+    }
+    if (creditInvalid || (creditMode && imageRequested) || !gate.enter()) return;
     setBusy(true);
     try {
       const request = { ...turnPayload(body), imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined, idempotencyKey: crypto.randomUUID() };
@@ -237,8 +250,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       } else {
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
       }
-      setText((current) => current.trim() === body ? '' : current);
-      setCreditLimit('');
+      clear();
       setImageRequested(false);
       setVariantIndex(0);
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
@@ -340,7 +352,13 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                       {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} memory={body.memory} />}
                       {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
                       {body.memoryProposal && <ProposalCard proposal={body.memoryProposal} />}
-                      {body.automation && <ChatAutomationCard automation={body.automation} />}
+                      {body.automation && (
+                        <ChatAutomationCard
+                          automation={body.automation}
+                          // Only the latest turn can still be answered; older cards show what was decided then.
+                          onQuickReply={canEdit && message.messageId === messages.at(-1)?.messageId ? (reply) => sendTurn(reply) : undefined}
+                        />
+                      )}
                       {/* A source the live run already warned about is not listed twice; CLI runs send no such warning. */}
                       {(() => {
                         const warned = new Set(isCurrent && run ? run.events.filter((e) => e.type === 'warning.created' && e.sourceId).map((e) => e.sourceId) : []);

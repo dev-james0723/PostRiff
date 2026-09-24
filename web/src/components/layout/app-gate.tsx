@@ -21,7 +21,8 @@ function ShellSkeleton() {
           <Skeleton key={i} className='mb-2 h-9 w-full rounded-[var(--rafii-radius-control)]' />
         ))}
       </div>
-      <div className='flex flex-1 flex-col gap-4 p-4 md:p-8'>
+      {/* min-w-0: the fixed-width placeholders must not widen the column past a 320px screen. */}
+      <div className='flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-8'>
         <Skeleton className='h-8 w-48' />
         <Skeleton className='h-4 w-80 max-w-full' />
         <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>

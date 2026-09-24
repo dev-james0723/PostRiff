@@ -6,7 +6,7 @@ const {resolve}=require('node:path');
 const os=require('node:os');
 const host=()=>({platform:os.platform(),cpuCount:os.cpus().length,loadAverage:os.loadavg(),freeMemoryBytes:os.freemem(),totalMemoryBytes:os.totalmem()});
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const base='http://127.0.0.1:4439';
+const base=process.env.CONSUMER_WEB_URL||'http://127.0.0.1:4439';
 const quantile=(arr,q)=>[...arr].sort((a,b)=>a-b)[Math.ceil(arr.length*q)-1];
 // Rafii v9 Home is server-rendered, so a visible, enabled Message field is not yet usable: "ready" means React has
 // attached its handlers to that field.

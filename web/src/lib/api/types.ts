@@ -367,12 +367,22 @@ export interface RecurringDestination {
   channelId?: string;
 }
 
+/** One weekly slot: a weekday and its own local time (orchestration §1). */
+export interface ScheduleSlot {
+  weekday: string;
+  localTime: string;
+}
+
 export interface RecurringSchedule {
-  /** Absent means weekly. */
-  kind?: 'weekly' | 'monthly' | 'countdown' | string;
-  /** Weekly: one or more weekday names. Older tasks carry a single `weekday`. */
+  /** Absent means weekly. `once` runs on one date (`date` + `localTime`). */
+  kind?: 'weekly' | 'monthly' | 'countdown' | 'once' | string;
+  /** Weekly: one or more weekday names. Older tasks carry a single `weekday`. With `slots`, these mirror the first slot. */
   weekdays?: string[];
   weekday?: string;
+  /** Weekly slots, each with its own time; when present they win over `weekdays` + `localTime`. */
+  slots?: ScheduleSlot[];
+  /** Once: the date (YYYY-MM-DD) of the single run. */
+  date?: string;
   /** Monthly: days 1–31 or "last". */
   monthDays?: (number | 'last')[];
   /** Countdown: the event date (YYYY-MM-DD) and the days before it that get a run. */
@@ -387,7 +397,146 @@ export interface RecurringSchedule {
   timeZone: string;
 }
 
-/** A recurring draft-preparation task (an Automation). Drafts only; never a publish approval. */
+/* ---------- automation workflow (orchestration §1–§3, authorityVersion 3) ---------- */
+
+/** When one stage of a run happens. Weekday specs resolve to the first such local time after drafting; the rest
+ *  resolve against the anchor (the schedule's own instant). */
+export type AutomationWhen =
+  | { at: 'anchor' }
+  | { at: 'generate' }
+  | { asap: true }
+  | { minutesOffset: number }
+  | { dayOffset: number; localTime: string }
+  | { weekday: string; localTime: string };
+
+/** How drafts reach the platforms: `auto` publishes eligible drafts, `review` waits for an approval, `drafts` never publishes. */
+export type PublishPolicy = 'auto' | 'review' | 'drafts';
+
+export interface AutomationResearch {
+  query: string;
+  about: string;
+  /** Allowed publisher hosts (subdomains included); empty means any reputable publisher. */
+  domains: string[];
+  /** The person's own words ("reputable science publications"). */
+  publications: string;
+  urls: string[];
+  recencyDays: number;
+  minScore: number;
+  /** `skip` (default): no filler when nothing clears the bar. */
+  onNothing: 'skip' | 'draft_without' | string;
+  quote: { about: string } | null;
+}
+
+export interface AutomationWorkflow {
+  version: number;
+  /** null until the person chooses; such an automation cannot be activated. */
+  policy: PublishPolicy | null;
+  stages: { generate: AutomationWhen; review: AutomationWhen | null; publish: AutomationWhen | null };
+  research: AutomationResearch | null;
+  content: { task: string; instructions: string };
+  /** Per-platform adaptation the person asked for, e.g. `{X: "shorter, sharper"}`. */
+  platformNotes: Record<string, string>;
+}
+
+/** The owner's standing authority to auto-publish (set only on activation of an `auto` workflow). */
+export interface PublishAuthority {
+  grantedBy: string;
+  grantedAt: number;
+  definitionDigest: string;
+  /** Posts built on sources Raffi found may publish without a per-source review. */
+  sourceUse: boolean;
+}
+
+/** A run's generation stage (`lifecycle.RUN_STAGES`). */
+export type AutomationRunStage = 'planned' | 'researching' | 'drafting' | 'drafted' | 'skipped' | 'source_unavailable' | 'failed';
+/** One destination's state (`lifecycle.ITEM_STATES`). */
+export type AutomationItemState =
+  | 'ready_for_review'
+  | 'needs_revision'
+  | 'approved'
+  | 'scheduled'
+  | 'publishing'
+  | 'published'
+  | 'rejected'
+  | 'skipped'
+  | 'failed'
+  | 'platform_disconnected'
+  | 'approval_expired';
+
+export interface RunStages {
+  generateAt: number;
+  reviewAt: number | null;
+  publishAt: number | null;
+  /** Local ISO times in the schedule's zone. */
+  local?: { generate: string; review: string | null; publish: string | null };
+}
+
+export interface RunResearchCandidate {
+  url: string;
+  title: string;
+  host: string;
+  published?: string | null;
+  score?: number;
+  reasons?: string[];
+}
+
+export interface RunResearch {
+  query?: string;
+  domains?: string[];
+  candidates?: RunResearchCandidate[];
+  chosen: (RunResearchCandidate & { sourceId?: string | null }) | null;
+  decision: 'chosen' | 'nothing_worth' | 'unavailable' | 'skipped_by_rule' | string;
+  /** Plain-language reason for the decision. */
+  reason?: string;
+  quote?: { text: string; author: string; verified: boolean; hosts?: string[] } | null;
+}
+
+export interface RunSkill {
+  skill: string;
+  status: 'done' | 'skipped' | 'failed' | 'waiting' | string;
+  at?: number;
+  detail?: string;
+}
+
+export interface RunItemDecision {
+  decision: 'approve' | 'reject' | 'revise' | string;
+  by: string;
+  at: number;
+  note?: string;
+  variantRevision?: number;
+  textDigest?: string;
+  excludedUnknowns?: string[];
+  acknowledgedWarnings?: string[];
+  sourceUse?: { sourceId: string; factsDigest: string }[];
+}
+
+/** One destination of a run (orchestration §2). */
+export interface RunItem {
+  /** `<platform>|<channelId or ''>|<language>`. */
+  key: string;
+  platform: string;
+  channelId?: string | null;
+  account?: string;
+  language: string;
+  variantId?: string | null;
+  variantRevision?: number | null;
+  textDigest?: string | null;
+  state: AutomationItemState | string;
+  /** Plain-language reason for alternate states (held back, disconnected, failed…). */
+  reason?: string | null;
+  publishAt?: number | null;
+  capability?: { publish: boolean; reason: string };
+  decision?: RunItemDecision | null;
+  approvedVia?: 'human' | 'owner_preauthorization' | string | null;
+  reviewId?: string | null;
+  jobId?: string | null;
+  attempts?: number;
+  lastError?: string | null;
+  changedAt?: number;
+}
+
+/** A recurring draft-preparation task (an Automation). Before authority 3 it only drafts; a v3 `workflow` says
+ *  whether and when drafts publish. */
 export interface RecurringTask {
   id: string;
   campaignId: string;
@@ -399,7 +548,8 @@ export interface RecurringTask {
   maxCostUsdMicro?: number;
   pauseReason?: string;
   schedule: RecurringSchedule;
-  nextOccurrence?: { scheduledFor?: number; local: string; utc: string; offset: string };
+  /** `scheduledFor` is the next generation instant; `anchorAt` (v3) the schedule instant it belongs to. */
+  nextOccurrence?: { scheduledFor?: number; anchorAt?: number; local: string; utc: string; offset: string };
   /** Authority 2 (Automations); older tasks have one LinkedIn `destination`. */
   authorityVersion?: number;
   destinations?: RecurringDestination[];
@@ -425,6 +575,19 @@ export interface RecurringTask {
   updatedAt?: number;
   activatedBy?: string;
   activatedAt?: number;
+  /** v3: the authorized workflow (null for a drafts-only automation built in the builder). */
+  workflow?: AutomationWorkflow | null;
+  /** v3: the person's request in their words (display only). */
+  intent?: string | null;
+  publishAuthority?: PublishAuthority | null;
+  /** Epoch seconds: a pause that resumes on its own. */
+  pausedUntil?: number | null;
+  /** A deleted automation is cancelled and hidden from lists; its run history is kept. */
+  deletedAt?: number | null;
+  deletedBy?: string | null;
+  lastAnchorAt?: number | null;
+  /** v3: the local ISO time of the next publish (display only). */
+  nextPublish?: string | null;
 }
 
 export interface RecurringOccurrence {
@@ -448,6 +611,16 @@ export interface RecurringOccurrence {
   /** Set when someone opened or dismissed the drafts ("drafts ready" clears). */
   seenAt?: number;
   seenBy?: string;
+  /* v3 runs (orchestration §2); `state` above stays the projected generation state. */
+  anchorAt?: number;
+  policy?: PublishPolicy | string;
+  stages?: RunStages;
+  lifecycle?: AutomationRunStage | string;
+  research?: RunResearch | null;
+  skills?: RunSkill[];
+  items?: RunItem[];
+  history?: { at: number; event: string; detail?: string; actor?: string }[];
+  notices?: { reviewSentAt?: number | null; expiredSentAt?: number | null; disconnectedSentAt?: number | null };
 }
 
 export interface Snapshot {
@@ -584,6 +757,23 @@ export interface ChatAutomation {
   needs: { code: 'owner' | 'spend' | 'facts' | 'review' | string; text: string }[];
   /** What Rafii had to assume ("No time was named, so …"). */
   notes: string[];
+  /* Orchestration §7: every field below is optional so older messages still render as before. */
+  workflow?: AutomationWorkflow | null;
+  policy?: PublishPolicy | null;
+  /** The stages in plain words: `{step: 'generate'|'review'|'publish', when: 'Wednesday 9:00 AM', text}`. */
+  plan?: { step: string; when: string; text: string }[];
+  /** Each platform named, with whether PostRiff can publish to it and why not. */
+  platforms?: { platform: string; account?: string; canPublish: boolean; reason: string }[];
+  /** A question Rafii still needs answered; the next message (or a quick reply) answers it. */
+  pending?: { taskId: string; question: 'policy' | 'review_time' | string } | null;
+  /** Answers the person can send as their next message. */
+  quickReplies?: string[];
+  /** The latest runs with their status. */
+  runs?: { id: string; status: string; label?: string; scheduledFor?: number; anchorAt?: number; publishAt?: number | null; attention?: boolean }[];
+  /** The model tier that read the request (not shown). */
+  tier?: string;
+  /** An explain turn: what Rafii looked at to answer. */
+  explain?: { about?: string; question?: string; text?: string; lines?: string[] } | null;
 }
 
 export interface Conversation {

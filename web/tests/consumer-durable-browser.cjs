@@ -160,6 +160,8 @@ const draftsReady=page=>page.waitForFunction(()=>/ready · yours to edit/.test(d
    await sampleRow.getByRole('button',{name:'Confirm revoke',exact:true}).click();
    await page.waitForFunction(text => ![...document.querySelectorAll('p,blockquote')].some(el => el.textContent === text),sample);
    await page.reload();assert.equal(await page.getByText(sample,{exact:true}).count(),0);
+   // Measured right after the reload, while the workspace may still be loading (its skeleton once widened a 320px screen).
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal scroll on Brand');
    if(width===1440) {
     const htmlResponse=await context.request.get(base+'/app');const html=await htmlResponse.text();
     assert.match(htmlResponse.headers()['cache-control'],/no-store/);
@@ -178,7 +180,8 @@ const draftsReady=page=>page.waitForFunction(()=>/ready · yours to edit/.test(d
     const ownHeading=privatePage.locator('h1');await ownHeading.waitFor({state:'attached'});
     assert.equal((await ownHeading.textContent()).trim(),HOME_TITLE);
     const ownHtml=await privatePage.content();assert.ok(ownHtml.includes(own.workspaces[0].workspaceId));assert.equal(ownHtml.includes(wid),false);assert.equal(ownHtml.includes(title),false);
-    const forged=await other.request.get(base+'/app/account',{headers:{'x-postriff-home-render':'1'}});assert.equal((await forged.text()).includes(own.workspaces[0].workspaceId),false);
+    // A real private page other than Home (/app/account itself is a 404); the proxy overwrites the hint there.
+    const forged=await other.request.get(base+'/app/account/profile',{headers:{'x-postriff-home-render':'1'}});assert.equal(forged.status(),200);assert.equal((await forged.text()).includes(own.workspaces[0].workspaceId),false);
     await other.close();
     const anonymous=await browser.newContext();const anon=await anonymous.request.get(base+'/app');assert.equal((await anon.text()).includes(wid),false);await anonymous.close();
     results.push({privateSSR:true,noSharedCache:true,foreignSelectionRejected:true,anonymousPrivateData:false,forgedRouteHintRejected:true,serverHtmlHasOwnHome:true});

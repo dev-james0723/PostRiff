@@ -1,4 +1,7 @@
-"""Bounded recurring draft worker. Uses the existing writing pipeline, never publishing APIs."""
+"""Bounded recurring draft worker. Uses the existing writing pipeline, never publishing APIs directly.
+
+Version 3 (staged) runs go through automation_runs: research, drafting and per-destination items, then the
+advance sweep, which queues approved posts only through the Phase 2 review and approve chain (publisher.py)."""
 import copy
 from contextlib import contextmanager
 import datetime as dt
@@ -54,13 +57,26 @@ class CampaignWorker:
             if occurrence is None:
                 occurrence = campaigns.claim_occurrence(state, task['id'], task['nextOccurrence']['scheduledFor'], now)
             # Old UI activation granted no concrete writer/cost scope. Never reinterpret it as paid authority.
-            if task.get('authorityVersion') not in (1, 2) or task.get('route') == 'local-cli' or campaign['version'] != task.get('campaignVersion') or campaign.get('missingFacts'):
+            if task.get('authorityVersion') not in (1, 2, 3) or task.get('route') == 'local-cli' or campaign['version'] != task.get('campaignVersion') or campaign.get('missingFacts'):
                 occurrence.update(state='held', reason='new_preview_required')
                 task.update(status='paused', pauseReason='new_preview_required')
                 self._save(cur, workspace_id, state, actor)
                 return {'held': True}
-            if occurrence['scheduledFor'] < now - 86400 and occurrence['state'] != 'running':
+            # A staged run whose post is still ahead is drafted late instead of missed; one whose post time already
+            # passed (PostRiff was down) is skipped, never drafted just to expire.
+            publish_at = (occurrence.get('stages') or {}).get('publishAt')
+            if campaigns.is_staged(task) and occurrence['state'] == 'pending' and publish_at is not None and publish_at < now - 60:
+                occurrence.update(state='cancelled', reason='skipped', lifecycle='skipped')
+                campaigns._history(occurrence, now, 'skipped', 'PostRiff was unavailable until after this post\'s time, so the run was skipped.')
+                campaigns.refresh_next(task, now)
+                self._save(cur, workspace_id, state, actor)
+                return {'skipped': True}
+            late_ok = campaigns.is_staged(task) and (publish_at or 0) > now
+            if occurrence['scheduledFor'] < now - 86400 and occurrence['state'] != 'running' and not late_ok:
                 occurrence.update(state='missed', reason='over_24_hours_late')
+                if occurrence.get('lifecycle'):
+                    occurrence['lifecycle'] = 'skipped'
+                    campaigns._history(occurrence, now, 'missed', 'PostRiff was unavailable for more than a day at this run\'s time, so it was skipped.')
                 campaigns.refresh_next(task, now)
                 self._save(cur, workspace_id, state, actor)
                 return {'missed': True}
@@ -72,6 +88,12 @@ class CampaignWorker:
             # Accounts disconnected since activation are skipped with a note; with none left the run is held.
             kept, skipped = campaigns.connected_destinations(state, [task['destination']] if task.get('authorityVersion') == 1 else task['destinations'])
             labels = task.get('accountLabels') or {}
+            staged = campaigns.is_staged(task)
+            if staged and skipped:
+                # A staged run still drafts for a disconnected account (the draft needs no account); its post is
+                # blocked as "account disconnected" instead of silently dropped or falsely scheduled.
+                kept = kept + [{key: d[key] for key in ('platform', 'language') if key in d} for d in skipped]
+                skipped = []
             if skipped:
                 occurrence['skippedDestinations'] = [{'platform': d['platform'], 'channelId': d.get('channelId'), 'account': labels.get(d.get('channelId'), '')} for d in skipped]
             if not kept:
@@ -84,7 +106,7 @@ class CampaignWorker:
                 occurrence['conversationId'] = cur.fetchone()[0]
             occurrence.update(state='running', leaseUntil=now + 600)
             binding = {'taskId':task['id'], 'campaignId':campaign['id'], 'campaignVersion':campaign['version'], 'definitionDigest':task['definitionDigest'], 'occurrenceId':occurrence['id'], 'maxCostUsdMicro':task['maxCostUsdMicro']}
-            if task.get('authorityVersion') == 2:
+            if task.get('authorityVersion') in (2, 3):
                 binding['contentType'] = task.get('contentType')
             if skipped:
                 binding['notes'] = [f"{d['account'] or 'An account'} on {d['platform']} is no longer connected, so this run skipped it." for d in occurrence['skippedDestinations']]
@@ -113,7 +135,7 @@ class CampaignWorker:
                 if occurrence['evergreen']:
                     context['evergreen'] = {key: occurrence['evergreen'][key] for key in ('platform', 'publishedAt', 'text')}
             self._save(cur, workspace_id, state, actor)
-            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept, 'context':context, 'sources':extra_sources}
+            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept, 'context':context, 'sources':extra_sources, 'staged':staged}
 
     @staticmethod
     def _title(task, occurrence):
@@ -129,6 +151,9 @@ class CampaignWorker:
     def tick(self):
         claim = self._claim()
         if not claim or 'workspaceId' not in claim: return claim or {'idle': True}
+        if claim.get('staged'):
+            from . import automation_runs
+            return automation_runs.generate(self, claim)
         workspace_id, actor, binding = claim['workspaceId'], claim['actor'], claim['binding']
         # A private in-process capability, never a client token or an alternative HTTP authentication path.
         capability = object()
@@ -278,4 +303,13 @@ class CampaignWorker:
             if result == {'idle': True}:
                 break
             results.append(result)
-        return {'runs': results} if results else {'idle': True}
+        try:
+            # Staged automations: expire, queue and follow posts; resume pauses that ended; send notices.
+            from . import automation_runs
+            advanced = automation_runs.advance(self)
+        except Exception as error:  # a sweep failure never blocks scheduled runs
+            logging.getLogger('postriff.automations').warning(json.dumps({'event': 'advance.failed', 'error': type(error).__name__}))
+            advanced = {'error': type(error).__name__}
+        if not results and not advanced.get('workspaces') and not advanced.get('commits'):
+            return {'idle': True}
+        return {'runs': results, 'advance': advanced}

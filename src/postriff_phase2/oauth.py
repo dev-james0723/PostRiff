@@ -388,6 +388,113 @@ class OAuthService:
             self._keep_picture(workspace_id, token, connection_id, identity)
         return result
 
+    # --- worker re-verification (orchestration §5 step 2) ------------------------------
+    WORKER_REVERIFIED = "channel.reverified_by_worker"
+
+    def reverify_for_worker(self, workspace_id, connection_id):
+        """Re-verify a channel on the worker's own authority, right before an approved post is committed.
+
+        SERVER-SIDE ONLY: there is no session token and no membership check, so this must never be reachable
+        from an HTTP route. The publish worker calls it at publishAt - 30 min so the channel stays
+        "Ready for posting" (verifiedAt + 3600 >= now) until the post goes out.
+
+        Mirrors verify(): stored credential -> token_for_worker -> identity -> account drift -> live scopes, with
+        the same states (read_verified | scope_changed | scope_missing | reauthorization_required |
+        verification_unavailable). Differences, all in the worker's favour of doing no harm:
+        - It never upgrades authority. capabilityVerified and capability levels only ever go down here; only a
+          person reconnecting (complete) restores them.
+        - store.current() compares manifest scopes to channel scopes as LISTS, so when the reported set equals
+          the channel's set the stored list is kept as is (a provider reordering its scopes must not hold every
+          approved job). A different set is stored sorted and takes verify()'s downgrade path. A difference from
+          either the credential's or the channel's scopes counts as scope_changed.
+        - Provider or network failure, a credential rotated by a person mid-check, a workspace pending deletion,
+          or a provider that can only prove a subset of the stored grant (Instagram's verify_read_access proves
+          read access, never write scopes) returns verification_unavailable with the channel untouched:
+          verifiedAt is not extended and nothing is downgraded.
+        - The account picture is not refreshed (that path needs a member session).
+        Raises AlphaError 404 only for an unknown or revoked connection. Every outcome is audited with a NULL
+        (system) actor. Returns {"connectionId", "state", "ready"}; ready means read_verified and the channel is
+        "Ready for posting" now.
+        """
+        from .hosted import audit
+        with self.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT c.provider,c.provider_account_id,w.state FROM public.pr_encrypted_credentials c JOIN public.pr_workspaces w ON w.id=c.workspace_id WHERE c.workspace_id=%s AND c.connection_id=%s AND c.revoked_at IS NULL", (workspace_id, connection_id))
+                stored = cur.fetchone()
+        if not stored:
+            raise AlphaError("Connection unavailable.", 404)
+        provider_id, account_id, state = stored
+        state = json.loads(state) if isinstance(state, str) else state
+        if not any(c.get("id") == connection_id for c in state.get("phase2", {}).get("channels", [])):
+            raise AlphaError("Connection unavailable.", 404)
+
+        def unavailable(cur, reason):
+            audit(cur, workspace_id, None, self.WORKER_REVERIFIED, connection_id, {"state": "verification_unavailable", "reason": reason})
+            return {"connectionId": connection_id, "state": "verification_unavailable", "ready": False}
+
+        if state.get("accountDeletion"):
+            with self.repository.connection_factory() as db:
+                with db.cursor() as cur:
+                    return unavailable(cur, "account_deletion_pending")
+        lower_bound = False
+        try:
+            adapter = self._provider(provider_id)
+            grant = self.token_for_worker(workspace_id, connection_id)
+            identity = adapter.identity(grant["accessToken"])
+            drift = identity["providerAccountId"] != account_id
+            inspected = hasattr(adapter, "inspect_scopes")
+            reported = grant["scopes"] if inspected and not drift else []
+            if not drift and not inspected and hasattr(adapter, "verify_read_access"):
+                reported = adapter.verify_read_access(grant["accessToken"], account_id)
+                lower_bound = True
+        except (AlphaError, KeyError, TypeError, ValueError, OSError):
+            # Do not leak provider responses, and never turn a transient failure into lost authority.
+            with self.repository.connection_factory() as db:
+                with db.cursor() as cur:
+                    return unavailable(cur, "provider_unavailable")
+        reported = list(reported) if isinstance(reported, list) and all(isinstance(s, str) for s in reported) else []
+        with self.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+                locked = cur.fetchone()
+                cur.execute("SELECT access_ciphertext,key_id,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+                current = cur.fetchone()
+                if not locked or not current:
+                    raise AlphaError("Connection unavailable.", 404)
+                try:
+                    same_credential = self.vault.decrypt(current[0], current[1]) == grant["accessToken"]
+                except AlphaError:
+                    same_credential = False
+                if not same_credential:
+                    return unavailable(cur, "credential_rotated")  # a person re-authorized meanwhile; their grant wins
+                state = json.loads(locked[0]) if isinstance(locked[0], str) else locked[0]
+                if state.get("accountDeletion"):
+                    return unavailable(cur, "account_deletion_pending")
+                channel = next((c for c in state.get("phase2", {}).get("channels", []) if c.get("id") == connection_id), None)
+                if channel is None:
+                    raise AlphaError("Connection unavailable.", 404)
+                existing, credential_scopes, observed = set(channel.get("scopes") or []), set(current[2] or []), set(reported)
+                if lower_bound and observed and observed <= existing and observed <= credential_scopes and not observed == existing == credential_scopes:
+                    return unavailable(cur, "grant_not_observable")
+                changed = observed != credential_scopes or observed != existing
+                outcome = "reauthorization_required" if drift else "scope_missing" if not reported else "scope_changed" if changed else "read_verified"
+                if observed != existing:
+                    channel["scopes"] = sorted(observed)
+                channel.update(identityVerified=not drift, verifiedAt=self.clock())
+                channel["expiresAt"] = float(grant["expiresAt"]) if grant.get("expiresAt") else channel.get("expiresAt", 0)
+                if outcome != "read_verified":
+                    channel["capabilityVerified"] = False
+                    cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Permissions changed or could not be verified; reconnect and review.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND capability<>'identity'", (workspace_id, connection_id))
+                if outcome == "reauthorization_required":
+                    channel["revoked"] = True
+                if observed != credential_scopes:
+                    cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (sorted(observed), workspace_id, connection_id))
+                self.commands.engine.invalidate(state)
+                cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
+                audit(cur, workspace_id, None, self.WORKER_REVERIFIED, connection_id, {"state": outcome})
+                ready = outcome == "read_verified" and self.commands.engine.channel_state(channel) == "Ready for posting"
+        return {"connectionId": connection_id, "state": outcome, "ready": ready}
+
     def disconnect(self, workspace_id, token, connection_id):
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
