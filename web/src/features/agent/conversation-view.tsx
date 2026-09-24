@@ -34,7 +34,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
 import { keys, useConversations, useMessages, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
-import { ApiError } from '@/lib/api/client';
 import type { ChatAutomation, GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { ProposalCard } from '@/features/memory/proposal-card';
