@@ -26,6 +26,8 @@ import { DetailSheet } from './detail-sheet';
 import { EditDraftDialog } from './edit-draft-dialog';
 import type { CardActions, CardPermissions } from './pipeline-card';
 import { SetAsideDialog } from './set-aside-dialog';
+import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
+import { parseAsString, useQueryState } from 'nuqs';
 
 /** How many drafts wait to be scheduled (the Queue tab's count); set-aside drafts are not counted. */
 export function useDraftCount(): number | null {
@@ -58,7 +60,18 @@ export function DraftsPanel() {
   const [holdEpoch, setHoldEpoch] = useState(0);
 
   const board = useMemo(() => deriveBoard(state, null, now), [state, now]);
+  const focusedDraft = editing ?? scheduling ?? (opened?.kind === 'draft' ? opened.id : null);
+  useSiteAgentPageContext(focusedDraft ? { selectedEntity: { type: 'draft', id: focusedDraft }, visibleState: { view: 'drafts' } } : null);
   const drafts = board.columns.find((column) => column.key === 'drafts');
+
+  // `?draft=<id>` (a link from Rafii or elsewhere) opens that draft's details once, then leaves the address clean.
+  const [draftParam, setDraftParam] = useQueryState('draft', parseAsString);
+  useEffect(() => {
+    if (!draftParam || !state) return;
+    const card = board.columns.flatMap((column) => column.items).find((item) => item.kind === 'draft' && item.id === draftParam);
+    if (card) setOpened(card);
+    void setDraftParam(null);
+  }, [draftParam, state, board, setDraftParam]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'production' || !state) return;

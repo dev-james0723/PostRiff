@@ -171,8 +171,11 @@ class GatewayCall:
 
     def __call__(self, system, user, schema):
         cost_usd_micro = None
-        body = {"model": self.model, "temperature": 0.2, "max_tokens": 1200, "response_format": {"type": "json_object"},
+        from .model_runtime import NO_TEMPERATURE
+        body = {"model": self.model, "max_tokens": 1200, "response_format": {"type": "json_object"},
                 "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}]}
+        if self.model not in NO_TEMPERATURE:
+            body["temperature"] = 0.2
         response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
         data = response.get("body") or {}
         if response.get("status") != 200 or not isinstance(data, dict):

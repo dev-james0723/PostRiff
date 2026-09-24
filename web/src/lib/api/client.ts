@@ -42,6 +42,7 @@ import type {
   Usage,
   WorkspaceListItem
 } from './types';
+import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -232,6 +233,23 @@ export function createApi(getToken: TokenSource) {
         expectedRevision,
         ...body
       }),
+
+    /* Rafii side panel (site agent) */
+    siteAgentTurn: (w: string, body: Record<string, unknown>) => send<SiteAgentTurnResult>('POST', `${ws(w)}/site-agent/turns`, body),
+    siteAgentCompose: (w: string, runId: string) => send<SiteAgentTurnResult>('POST', `${ws(w)}/site-agent/runs/${encodeURIComponent(runId)}/compose`),
+    siteAgentCancel: (w: string, runId: string) =>
+      send<{ runId: string; status: string; note?: string }>('POST', `${ws(w)}/site-agent/runs/${encodeURIComponent(runId)}/cancel`),
+    siteAgentEvents: (w: string, runId: string, cursor = 0) =>
+      get<SiteAgentTurnResult>(`${ws(w)}/site-agent/runs/${encodeURIComponent(runId)}/events?cursor=${cursor}`),
+    siteAgentApplyProposal: (w: string, body: Record<string, unknown>) =>
+      send<{ proposal: SiteAgentProposalView; revision: number }>('POST', `${ws(w)}/site-agent/proposals/apply`, body),
+    siteAgentDismissProposal: (w: string, body: Record<string, unknown>) =>
+      send<{ proposal: SiteAgentProposalView }>('POST', `${ws(w)}/site-agent/proposals/dismiss`, body),
+    siteAgentFeedback: (w: string, body: { messageId: string; value: 'helpful' | 'not_helpful'; reason?: string | null }) =>
+      send<{ messageId: string; feedback: NonNullable<SiteAgentBody['feedback']> }>('POST', `${ws(w)}/site-agent/feedback`, body),
+    siteAgentInsights: (w: string) => get<SiteAgentInsights>(`${ws(w)}/site-agent/insights`),
+    helpCatalogue: (w: string) => get<{ snapshot: string; productVersion: string; documents: HelpDocumentSummary[] }>(`${ws(w)}/site-agent/help`),
+    helpDocument: (w: string, documentId: string) => get<HelpDocument>(`${ws(w)}/site-agent/help/${encodeURIComponent(documentId)}`),
 
     /* analytics & audience */
     analytics: (w: string) => get<Analytics>(`${ws(w)}/analytics/summary`),

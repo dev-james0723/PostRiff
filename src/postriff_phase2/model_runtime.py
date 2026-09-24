@@ -30,6 +30,9 @@ DEFAULT_PRICES = {
     "anthropic/claude-haiku-4.5": (1.0, 5.0),
     "openai/gpt-4.1-mini": (0.4, 1.6),
 }
+# Public catalogue 2026-09-20: Sonnet 5 does not accept temperature. Structured side calls send sampling only to
+# models that take it (learning_model.GatewayCall); drafting never sends it (ServerModelRuntime._call).
+NO_TEMPERATURE = frozenset({"anthropic/claude-sonnet-5"})
 MAX_CONTEXT_BYTES = 60_000
 MAX_SKILLS_BYTES = 60_000       # composed skill text (IdeasService binds it); method only, never identity or policy
 MAX_MEMORY_BYTES = 16_000       # memory files the workspace allowed a cloud model to read (memory.projection)

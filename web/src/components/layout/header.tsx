@@ -12,6 +12,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { HelpMenu } from '@/features/onboarding/help-menu';
+import { SiteAgentLauncher } from '@/features/site-agent/launcher';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +49,7 @@ export default function Header() {
           <SearchInput />
         </div>
         <SearchIconButton />
+        <SiteAgentLauncher />
         <NotificationBell />
         <HelpMenu />
         <div className='hidden sm:block'><ThemeModeToggle /></div>

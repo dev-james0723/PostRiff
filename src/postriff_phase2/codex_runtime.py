@@ -130,6 +130,67 @@ class CodexCliRuntime(ClaudeCliRuntime):
             args += ["-m", alias]
         return args + ["-"]
 
+    def prompt(self, system_prompt, user_prompt, schema, alias="default"):
+        """One structured answer for side jobs (request readings, Rafii's panel answers) in the same read-only,
+        ephemeral sandbox as a draft run. Claude's tier aliases (haiku, sonnet) mean nothing to Codex: an alias this
+        machine does not allow answers with the person's default Codex model. Raises AlphaError; never returns prose."""
+        executable = self.executable()
+        if not executable:
+            raise AlphaError("The Codex CLI is not installed on the machine that serves this workspace.", 503)
+        alias = alias if alias in allowed_models() else "default"
+        started = time.monotonic()
+        final_text, failure, finished, size = None, None, False, 0
+        with tempfile.TemporaryDirectory(prefix="postriff-codex-") as workdir:
+            os.chmod(workdir, 0o700)
+            with open(os.path.join(workdir, "schema.json"), "w", encoding="utf-8") as handle:
+                json.dump(schema, handle)
+            process = self.spawn(self.argv(executable, alias, workdir, "quick"), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=workdir, env=self.env or restricted_environment(), start_new_session=True)
+            try:
+                process.stdin.write((system_prompt + "\n\n" + user_prompt).encode("utf-8"))
+                process.stdin.close()
+            except (OSError, ValueError):
+                pass
+            for line in self._read_lines(process, started):
+                size += len(line)
+                if size > MAX_OUTPUT_BYTES:
+                    self._stop(process)
+                    raise AlphaError("Codex produced more output than allowed; the answer was discarded.", 502)
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                kind = event.get("type")
+                item = event.get("item") if isinstance(event.get("item"), dict) else {}
+                if kind == "item.completed" and item.get("type") == "agent_message" and isinstance(item.get("text"), str):
+                    final_text = item["text"]
+                elif kind == "item.completed" and item.get("type") == "error":
+                    failure = str(item.get("message") or item.get("text") or "")
+                elif kind == "error":
+                    failure = str(event.get("message", ""))
+                elif kind in ("turn.failed", "turn.completed"):
+                    failure = failure or (json.dumps(event.get("error", ""))[:400] if kind == "turn.failed" else None)
+                    finished = True
+                    break
+            self._stop(process)
+            try:
+                process.stdout.close()
+            except (OSError, ValueError):
+                pass
+        if failure:
+            code, message = classify_failure(failure)
+            raise AlphaError(message, 401 if code == "auth" else 502)
+        if not finished:
+            raise AlphaError("Codex reached the time limit or exited early; no answer was kept.", 504)
+        try:
+            value = json.loads(final_text or "")
+        except ValueError as error:
+            raise AlphaError("Codex returned no structured answer.", 502) from error
+        if not isinstance(value, dict):
+            raise AlphaError("Codex returned no structured answer.", 502)
+        return value
+
     def _execute(self, run_id, request, sink):
         executable = self.executable()
         if not executable:

@@ -1,0 +1,155 @@
+{
+ "base": "http://localhost:3190",
+ "engine": "chromium",
+ "principal": "synthetic",
+ "results": [
+  {
+   "name": "seed: workspace, LinkedIn account and a confirmed draft",
+   "ok": true
+  },
+  {
+   "name": "desktop: ⌘J / Ctrl+J opens the panel",
+   "ok": true
+  },
+  {
+   "name": "desktop: the launcher reports the panel open",
+   "ok": true
+  },
+  {
+   "name": "desktop: over the draft dialog the panel is a sheet above it, not the inert column",
+   "ok": true
+  },
+  {
+   "name": "desktop: suggestions fit the Queue page",
+   "ok": true
+  },
+  {
+   "name": "desktop: the answer reads the draft open in the dialog",
+   "ok": true
+  },
+  {
+   "name": "desktop: scheduling on an account that cannot post is refused with the app's reason, nothing prepared",
+   "ok": true
+  },
+  {
+   "name": "desktop: Escape closes only Rafii's sheet; the draft dialog stays",
+   "ok": true
+  },
+  {
+   "name": "desktop: with no dialog open, the panel docks beside the page",
+   "ok": true
+  },
+  {
+   "name": "desktop: the same conversation continues in the column",
+   "ok": true
+  },
+  {
+   "name": "desktop: over the automation builder, ⌘J shows Rafii as a sheet above it",
+   "ok": true
+  },
+  {
+   "name": "desktop: an automation change is a proposal with Apply and Dismiss",
+   "ok": true
+  },
+  {
+   "name": "desktop: nothing changes before Apply",
+   "ok": true
+  },
+  {
+   "name": "desktop: Apply changed the stored automation to Thursday 18:00",
+   "ok": true
+  },
+  {
+   "name": "desktop: the builder does not jump above Rafii's answer",
+   "ok": true
+  },
+  {
+   "name": "desktop: Escape closes only Rafii's sheet over the builder; the column is back as it was",
+   "ok": true
+  },
+  {
+   "name": "desktop: after Rafii's sheet closes, the open builder shows the applied plan",
+   "ok": true
+  },
+  {
+   "name": "desktop: after the builder closes, the docked column is usable",
+   "ok": true
+  },
+  {
+   "name": "desktop: the panel stays open across navigation",
+   "ok": true
+  },
+  {
+   "name": "desktop: the conversation survives navigation",
+   "ok": true
+  },
+  {
+   "name": "desktop: the page context follows navigation",
+   "ok": true
+  },
+  {
+   "name": "desktop: a reload restores the open panel and the conversation",
+   "ok": true
+  },
+  {
+   "name": "desktop: axe finds no serious or critical issue in the open panel",
+   "ok": true
+  },
+  {
+   "name": "desktop: nothing scrolls sideways with the panel open",
+   "ok": true
+  },
+  {
+   "name": "desktop: Escape closes the panel and focus returns to the launcher",
+   "ok": true
+  },
+  {
+   "name": "help: an article opens from the index",
+   "ok": true
+  },
+  {
+   "name": "help: \"Ask Rafii about this\" opens the panel with the question ready",
+   "ok": true
+  },
+  {
+   "name": "tablet: the launcher opens the panel as a dialog sheet",
+   "ok": true
+  },
+  {
+   "name": "tablet: page question answered for Channels",
+   "ok": true
+  },
+  {
+   "name": "tablet: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "tablet: the close button closes the sheet",
+   "ok": true
+  },
+  {
+   "name": "phone: the composer is 16px so iOS does not zoom",
+   "ok": true
+  },
+  {
+   "name": "phone: the drawer fits the screen width",
+   "ok": true
+  },
+  {
+   "name": "phone: reduced motion keeps the thinking ring still",
+   "ok": true
+  },
+  {
+   "name": "phone: the calendar question is answered from stored state",
+   "ok": true
+  },
+  {
+   "name": "phone: nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "phone: after an answer the composer is fully on screen",
+   "ok": true
+  }
+ ]
+}

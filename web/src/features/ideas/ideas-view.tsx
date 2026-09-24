@@ -17,6 +17,7 @@ import { CaptureCard, type CaptureCardHandle } from './capture-card';
 import { SourceInspector } from './source-inspector';
 import { SourceList } from './source-list';
 import { ideaSources, useMedia, useUseApprovals } from './use-sources';
+import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 interface Reminder {
   id: string;
@@ -43,6 +44,7 @@ export function IdeasView() {
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const [sourceId, setSourceId] = useQueryState('source', parseAsString);
+  useSiteAgentPageContext(sourceId ? { selectedEntity: { type: 'source', id: sourceId } } : null);
   const isDesktop = useMedia('(min-width: 1024px)');
   const isPhone = useMedia('(max-width: 767px)');
   const capture = useRef<CaptureCardHandle>(null);

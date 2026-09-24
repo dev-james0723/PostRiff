@@ -28,6 +28,8 @@ import { RunDetail, awaitingApproval, isWorkflowRun, runStatus } from './run-his
 import { ceilingMicro, ceilingText, isTrigger, runLabel, runText, scheduleSummary, statusText, usd } from './schedule';
 import { finished, monthStart, spentSince, unseen, useAutomations, type Automation } from './use-automations';
 import { policyText, researchRule, stageRules } from './workflow';
+import { AUTOMATION_CHANGED, usePanel } from '@/features/site-agent/store';
+import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 const infoContent = {
   title: 'How automations work',
@@ -65,6 +67,7 @@ export function AutomationsView() {
   const userId = me.data?.userId ?? null;
   const { snapshot, state, automations, briefs, act, busy } = useAutomations();
   const [builder, setBuilder] = useState<{ key: number; initial: BuilderInitial } | null>(null);
+  useSiteAgentPageContext(builder?.initial.taskId ? { selectedEntity: { type: 'automation', id: builder.initial.taskId }, visibleState: { editing: true } } : null);
   const [cancelling, setCancelling] = useState<Automation | null>(null);
   const [activating, setActivating] = useState<Automation | null>(null);
   const [deciding, setDeciding] = useState<DecisionTarget | null>(null);
@@ -72,6 +75,29 @@ export function AutomationsView() {
   const opened = useRef<string | null>(null);
 
   const open = (initial: BuilderInitial) => setBuilder((current) => ({ key: (current?.key ?? 0) + 1, initial }));
+
+  // Rafii applied a change to the automation open here: re-read it, so a later save can't quietly restore the old plan.
+  // It waits until Rafii's sheet above the builder is closed, so the reopened builder never covers the answer.
+  const [reread, setReread] = useState<string | null>(null);
+  const rafiiAbove = usePanel((s) => s.above);
+  const builderTask = useRef<string | null>(null);
+  useEffect(() => {
+    builderTask.current = builder?.initial.taskId ?? null;
+  }, [builder]);
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      const taskId = (event as CustomEvent<{ taskId?: string }>).detail?.taskId;
+      if (taskId && taskId === builderTask.current) setReread(taskId);
+    };
+    window.addEventListener(AUTOMATION_CHANGED, onChanged);
+    return () => window.removeEventListener(AUTOMATION_CHANGED, onChanged);
+  }, []);
+  useEffect(() => {
+    if (!reread || rafiiAbove) return;
+    const found = automations.find((item) => item.task.id === reread);
+    if (found && found.task.status !== 'cancelled' && builderTask.current === reread) open(initialFromAutomation(found, timeZone));
+    setReread(null);
+  }, [reread, rafiiAbove, automations, timeZone]);
 
   // Deep links: ?new=1 starts a blank automation, ?campaign=<id> schedules a brief, ?edit=<taskId> edits one.
   useEffect(() => {

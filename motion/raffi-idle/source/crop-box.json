@@ -1,0 +1,27 @@
+{
+ "sheet": "/Users/ouxianxing/.claude/uploads/bb4dbade-f9e2-4eb5-bf8a-9939c6e7cfba/9d6ce0b2-image.jpg",
+ "sheet_size": [
+  1536,
+  1024
+ ],
+ "crop_box_xyxy": [
+  242,
+  12,
+  658,
+  514
+ ],
+ "crop_size": [
+  416,
+  502
+ ],
+ "at2x_size": [
+  832,
+  1004
+ ],
+ "background_rgb": [
+  252.0,
+  249.0,
+  244.0
+ ],
+ "matting": "u2net_human_seg trimap (hyperframes remove-background 0.8.73) + known-background band solve"
+}

@@ -20,6 +20,7 @@ import { LearningPanel } from './learning-panel';
 import { DRAFT_GROUP_LABEL, groupMemoryFiles } from './memory-files';
 import { Unavailable } from './memory-states';
 import { WhatDraftsRead } from './what-drafts-read';
+import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 const infoContent = {
   title: 'Memory files',
@@ -106,6 +107,7 @@ function MemoryFileList({ selected, onSelect }: { selected: string; onSelect: (n
 export function MemoryView() {
   const { api, workspaceId } = useWorkspaceApi();
   const [selected, setSelected] = useState('VOICE.md');
+  useSiteAgentPageContext({ visibleState: { file: selected } });
   const [exporting, setExporting] = useState(false);
   const [exported, flashExported] = useFlash<'done'>(1800);
 

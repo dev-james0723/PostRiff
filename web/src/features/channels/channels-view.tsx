@@ -36,6 +36,7 @@ import { ChannelCard, type ChannelActivity } from './channel-card';
 import { ChannelFoldersSection } from './channel-folders-section';
 import { ChannelsSummary } from './channels-summary';
 import { ConnectSheet, type ConnectRequest } from './connect-sheet';
+import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 const PAGE_DESCRIPTION = 'Each capability is verified on its own. A connected account is not the same as a publishable one.';
 
@@ -213,6 +214,7 @@ function ChannelsPage() {
   const channels = useMemo(() => data?.channels ?? [], [data]);
   const providers = useMemo(() => data?.providers ?? [], [data]);
   const filter = parseChannelFilter(params.get('filter'));
+  useSiteAgentPageContext({ visibleState: { filter } });
   const connectedParam = params.get('connected');
 
   const [connectRequest, setConnectRequest] = useState<ConnectRequest | null>(null);

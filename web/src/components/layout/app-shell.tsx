@@ -14,11 +14,12 @@ import AppSidebar from './app-sidebar';
 import Header from './header';
 import { MobileTabBar } from './mobile-tab-bar';
 import { ShortcutsDialog } from './shortcuts-dialog';
+import { SiteAgentAbove, SiteAgentDock, SiteAgentHotkeys, SiteAgentOverlay } from '@/features/site-agent/panel';
 
 /**
  * Client shell for /app/*: session → workspace → gate → sidebar + Cmd+K +
- * header + contextual info sidebar. Server work (cookie for the sidebar
- * state, metadata) stays in `src/app/app/layout.tsx`.
+ * header + contextual info sidebar + the Rafii panel. Server work (cookie for
+ * the sidebar state, metadata) stays in `src/app/app/layout.tsx`.
  */
 export function AppShell({ defaultOpen, children, initial }: { defaultOpen: boolean; children: React.ReactNode; initial?: WorkspaceBootstrap | null }) {
   return (
@@ -44,6 +45,11 @@ export function AppShell({ defaultOpen, children, initial }: { defaultOpen: bool
                     <InfoSidebar side='right' />
                   </InfobarProvider>
                 </SidebarInset>
+                {/* Rafii, the site-wide agent: one conversation that follows the person across pages (site agent spec §11.1). */}
+                <SiteAgentDock />
+                <SiteAgentOverlay />
+                <SiteAgentAbove />
+                <SiteAgentHotkeys />
                 <MobileTabBar />
                 <ShortcutsDialog />
               </SidebarProvider>

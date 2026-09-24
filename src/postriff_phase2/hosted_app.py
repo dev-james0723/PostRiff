@@ -281,6 +281,40 @@ class HostedApplication:
                 return self._json(start_response, 200, ideas.apply(workspace_id, token, body.get("expectedRevision"), run_id, body.get("artifactHash")))
         raise AlphaError("This hosted route is unavailable.", 404)
 
+    def _site_agent(self, environ, start_response, service, token, method, parts):
+        """The Rafii side panel (site agent spec §13.1). Turns and composes are cursor-replayable runs; the SSE form of
+        run events is the Ideas route. API tokens have no site-agent scope (api_tokens.route_scope)."""
+        workspace_id, resource = parts[2], parts[4]
+        agent = service.site_agent
+        if resource == "turns" and len(parts) == 5 and method == "POST":
+            return self._json(start_response, 201, agent.turn(workspace_id, token, self._body(environ)))
+        if resource == "runs" and len(parts) == 7 and method == "POST":
+            run_id, verb = parts[5], parts[6]
+            if verb == "compose":
+                self._body(environ)
+                return self._json(start_response, 200, agent.compose(workspace_id, token, run_id))
+            if verb == "cancel":
+                self._body(environ)
+                return self._json(start_response, 200, agent.cancel(workspace_id, token, run_id))
+        if resource == "runs" and len(parts) == 7 and parts[6] == "events" and method == "GET":
+            return self._json(start_response, 200, agent.events(workspace_id, token, parts[5], self._query_int(environ, "cursor")))
+        if resource == "proposals" and len(parts) == 6 and method == "POST":
+            body = self._body(environ)
+            if parts[5] == "apply":
+                return self._json(start_response, 200, agent.apply_proposal(workspace_id, token, body))
+            if parts[5] == "dismiss":
+                return self._json(start_response, 200, agent.dismiss_proposal(workspace_id, token, body))
+        if resource == "feedback" and len(parts) == 5 and method == "POST":
+            return self._json(start_response, 200, agent.feedback(workspace_id, token, self._body(environ)))
+        if resource == "help" and method == "GET":
+            if len(parts) == 5:
+                return self._json(start_response, 200, agent.help_catalogue(workspace_id, token))
+            if len(parts) == 6:
+                return self._json(start_response, 200, agent.help_document(workspace_id, token, parts[5]))
+        if resource == "insights" and len(parts) == 5 and method == "GET":
+            return self._json(start_response, 200, agent.insights(workspace_id, token))
+        raise AlphaError("This hosted route is unavailable.", 404)
+
     def __call__(self, environ, start_response):
         request_id = uuid.uuid4().hex
         environ['postriff.request_id'] = request_id
@@ -377,6 +411,9 @@ class HostedApplication:
                 result = self.worker.tick()
                 ideas = getattr(service, 'ideas', None)
                 if ideas is not None:
+                    site_agent = getattr(service, 'site_agent', None)
+                    if site_agent is not None:
+                        result['siteAgentRecovery'] = site_agent.recover_stalled()
                     result['writingRecovery'] = ideas.recover_stalled()
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
@@ -452,6 +489,8 @@ class HostedApplication:
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "ideas":
                 return self._ideas(environ, start_response, service, token, method, parts)
+            if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "site-agent":
+                return self._site_agent(environ, start_response, service, token, method, parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":
                 body = self._body(environ)
                 if parts[4] == "checkout":
