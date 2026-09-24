@@ -62,7 +62,7 @@ jobs:
           npm install --prefix .codex/consumer-ready/vercel --no-save vercel@59.23.2 ignore@7.0.5
           python scripts/consumer_ready_check.py ci-python-artifact node scripts/consumer_ready_artifact.cjs
       - name: Offline source secret scan
-        run: python scripts/consumer_ready_check.py ci-secrets python scripts/consumer_ready_secrets.py
+        run: python scripts/consumer_ready_check.py ci-secrets python scripts/consumer_ready_secret_scan.py
       - name: Dependency audits
         run: |
           python -m pip_audit -r requirements.txt --format json --output docs/consumer-ready/evidence/ci-python-audit.json
