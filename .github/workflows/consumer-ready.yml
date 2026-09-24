@@ -39,6 +39,8 @@ jobs:
           sudo apt-get install -y postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-17
+      - name: Install ffmpeg (media decoding tests render a test image with it)
+        run: sudo apt-get install -y ffmpeg
       - name: Python domain and security contracts
         run: python scripts/consumer_ready_check.py ci-python python -m unittest discover -s tests -p 'test_*.py'
       - name: Disposable DB integration, migrations and restore
