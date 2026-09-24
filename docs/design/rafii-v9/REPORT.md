@@ -150,5 +150,14 @@ Built on top of this branch after the production deploy; **not deployed**.
 - Home speed: dialogs code-split and preloaded when idle; Vercel Analytics opt-in
   (`NEXT_PUBLIC_VERCEL_ANALYTICS=1`).
 - CI: `.github/workflows/rafii-browser.yml` runs the Rafii Playwright scenes on pull requests.
+- Home hydration fix (a4c1a80): the account menu rendered the placeholder on the server and the user
+  on the client's first render, so every signed-in Home load hit React #418 and was rebuilt in the
+  browser. Present in the deployed version (reproduced on a production build of `a6b708f`); gone with
+  the fix in three time zones.
+- CI on PR #1: the release gates pass Python, the full disposable-database suite, web contracts,
+  types, lint, the production build and the function archive after three environment fixes (ffmpeg,
+  the PostgreSQL socket directory, uv). They stop at the secret scan because
+  `scripts/consumer_ready_secrets.py` and its allowlist live on the consumer-ready branch (`a5fbc66`),
+  not here. The Rafii browser job runs the Automations and Home scenes against a production build.
 - Before deploying: the read-only production migration check in `migrations-review.md` (Automations
   need 018; 013 stays blocked on approval), then the steps in `real-world-checks.md` that need James.
