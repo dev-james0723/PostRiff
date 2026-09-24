@@ -86,13 +86,16 @@ async function home(page) {
    await french.focus();await page.keyboard.press('Enter');
    const apply=dialog.getByRole('button',{name:/^Apply/});await apply.focus();await page.keyboard.press('Enter');
    await dialog.waitFor({state:'hidden'});
-   await page.waitForFunction(()=>[...document.querySelectorAll('button[aria-haspopup="dialog"]')].some(b=>/Language/.test(b.textContent)&&/French|Français/.test(b.textContent+(b.getAttribute('aria-label')||''))),null,{timeout:15000});
+   // Only the first destination changed, so the summary names French or counts the languages ("2 languages").
+   await page.waitForFunction(()=>[...document.querySelectorAll('button[aria-haspopup="dialog"]')].some(b=>/Language/.test(b.textContent)&&/French|Français|\d+ languages/.test(b.textContent)),null,{timeout:15000});
    await languageButton.focus();await page.keyboard.press('Enter');await dialog.waitFor();
+   await dialog.getByRole('button',{name:/^Output language for .*: French/}).first().waitFor();
    await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
    await page.waitForFunction(()=>{const a=document.activeElement;return a?.getAttribute('aria-haspopup')==='dialog'&&/Language/.test(a.textContent);},null,{timeout:15000});
 
    // An automation, set up by asking Rafii (drafts only: nothing is scheduled or published).
-   const title='Autumn concert '+width;
+   // A topic with no event facts, so Rafii turns it on at once (a concert would wait for its date and venue).
+   const title='my piano practice routine '+{1440:'wide',1024:'laptop',390:'phone',320:'narrow'}[width];
    await page.getByLabel('Message',{exact:true}).fill(`Every Monday at 9am draft me a post about ${title}`);
    const answered=page.waitForResponse(r=>r.url().includes('/ideas/quick-start')&&r.request().method()==='POST',{timeout:120000});
    await page.getByRole('button',{name:/^Generate drafts/}).click();
@@ -110,7 +113,8 @@ async function home(page) {
    await nameField.fill(name+' reviewed');
    // A new brief is a new definition: it becomes version 2 and waits for the owner to activate it again.
    const brief=edit.getByLabel('What should each draft be about?');
-   await brief.fill((await brief.inputValue())+' Reviewed for the concert week.');
+   // No event words: an event (a concert) would need its date and venue before it can be activated.
+   await brief.fill((await brief.inputValue())+' Keep it short and practical.');
    await nameField.focus();await page.keyboard.press('Tab');
    assert.equal(await page.evaluate(()=>{const a=document.activeElement;return Boolean(a&&a.closest('[role="dialog"]')&&a.getAttribute('aria-label')!=='Name'&&!(a.labels&&[...a.labels].some(l=>l.textContent.trim()==='Name')));}),true,'Tab moves on inside the editor');
    await edit.getByRole('tab',{name:/Review/}).click();
@@ -172,15 +176,17 @@ async function home(page) {
     assert.equal(html.includes('Bearer dev:'),false);assert.equal(html.includes('dev:'+principal),false);
     const stranger=randomUUID(),other=await browser.newContext({javaScriptEnabled:false});
     await other.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:stranger,url:base},{name:'postriff_workspace',value:wid,url:base}]);
-    const bootstrap=await other.request.post(base+'/api/auth/verify',{headers:{Authorization:'Bearer dev:'+stranger,Origin:base},data:{plan:'studio'}});assert.ok(bootstrap.ok());
+    const bootstrap=await other.request.post(base+'/api/auth/verify',{headers:{Authorization:'Bearer dev:'+stranger,Origin:base,'X-PostRiff-Request':'founder-alpha'},data:{plan:'studio'}});assert.ok(bootstrap.ok());
     const own=await (await other.request.get(base+'/api/workspaces',{headers:{Authorization:'Bearer dev:'+stranger}})).json();
-    const privatePage=await other.newPage();await privatePage.goto(base+'/app');
-    await privatePage.getByRole('heading',{level:1,name:HOME_HEADING}).waitFor();
-    const ownHtml=await privatePage.content();assert.ok(ownHtml.includes(own.workspaces[0].workspaceId));assert.equal(ownHtml.includes(wid),false);assert.equal(ownHtml.includes(title),false);
-    const forged=await other.request.get(base+'/app/account',{headers:{'x-postriff-home-render':'1'}});assert.equal((await forged.text()).includes(own.workspaces[0].workspaceId),false);
+    // Home streams behind a Suspense boundary: without JavaScript its content stays in the hidden streamed block, so
+    // the check reads the server HTML rather than waiting for visible text.
+    const privatePage=await other.newPage();await privatePage.goto(base+'/app',{waitUntil:'load'});
+    const ownHtml=await privatePage.content();assert.match(ownHtml,/<h1[^>]*>[^<]*What.s the idea/);assert.ok(ownHtml.includes(own.workspaces[0].workspaceId));assert.equal(ownHtml.includes(wid),false);assert.equal(ownHtml.includes(title),false);
+    // A real private page other than Home (the proxy overwrites the hint, so the layout never bootstraps the workspace here).
+    const forged=await other.request.get(base+'/app/account/profile',{headers:{'x-postriff-home-render':'1'}});assert.equal(forged.status(),200);assert.equal((await forged.text()).includes(own.workspaces[0].workspaceId),false);
     await other.close();
     const anonymous=await browser.newContext();const anon=await anonymous.request.get(base+'/app');assert.equal((await anon.text()).includes(wid),false);await anonymous.close();
-    results.push({privateSSR:true,noSharedCache:true,foreignSelectionRejected:true,anonymousPrivateData:false,forgedRouteHintRejected:true,jsDisabledFirstPaint:true});
+    results.push({privateSSR:true,noSharedCache:true,foreignSelectionRejected:true,anonymousPrivateData:false,forgedRouteHintRejected:true,jsDisabledServerHtml:true});
    }
    const snap=await (await context.request.get(base+'/api/workspaces/'+wid,{headers})).json();
    const task=snap.state.raffi.campaignPlanning.recurringTasks.find(t=>t.id===taskId);
