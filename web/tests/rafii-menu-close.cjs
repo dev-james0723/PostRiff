@@ -41,6 +41,10 @@ async function context(browser, viewport, sidebarOpen) {
   return ctx;
 }
 
+// The server-rendered menu is visible before React hydrates, and a tap before then does nothing (a production build
+// paints much sooner than the dev server): act once Home is interactive, i.e. its composer accepts input.
+const interactive = (page) => page.waitForFunction(() => document.querySelector('[aria-label="Message"]')?.disabled === false, null, { timeout: 400000 });
+
 (async () => {
   const executablePath = (args.browser === 'webkit' ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
   const browser = await engine.launch({ headless: true, executablePath });
@@ -49,6 +53,7 @@ async function context(browser, viewport, sidebarOpen) {
     const phone = await context(browser, { width: 390, height: 844 }, true);
     const page = await phone.newPage();
     await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await interactive(page);
     await page.getByRole('button', { name: 'More navigation' }).click({ timeout: 120000 });
     const sheet = page.locator('[data-mobile="true"]');
     await sheet.waitFor({ state: 'visible', timeout: 30000 });
@@ -63,6 +68,7 @@ async function context(browser, viewport, sidebarOpen) {
     const desk = await context(browser, { width: 1440, height: 900 }, true);
     const dpage = await desk.newPage();
     await dpage.goto(`${base}/app`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await interactive(dpage);
     const wrapper = dpage.locator('[data-slot="sidebar"][data-state]').first();
     await wrapper.waitFor({ timeout: 120000 });
     check('desktop: the sidebar starts open', (await wrapper.getAttribute('data-state')) === 'expanded', await wrapper.getAttribute('data-state'));
