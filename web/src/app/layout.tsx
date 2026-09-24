@@ -89,7 +89,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Providers>
           </ThemeProvider>
         </NuqsAdapter>
-        <Analytics />
+        {/* Vercel Web Analytics only when the project has it enabled; otherwise its script request 404s on every page. */}
+        {process.env.NEXT_PUBLIC_VERCEL_ANALYTICS === '1' && <Analytics />}
       </body>
     </html>
   );

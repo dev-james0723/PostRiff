@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -15,7 +16,7 @@ import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, Ra
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChannelBloomDialog, toFolderAccounts } from '@/features/channels/channel-bloom';
+import { toFolderAccounts } from '@/features/channels/channel-bloom/helpers';
 import type { QuickStart } from '@/config/quick-starts';
 import { keys, useChannels, useConversations, useMe, useMemory, useMemoryProposals, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
@@ -28,17 +29,13 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { DRAFT_PLATFORMS, type DraftPlatform } from './composer';
 import { contentChoice, selectLibraryContent, type LibraryValue } from './content-choice';
-import { ContentLibraryDialog } from './content-library-dialog';
 import { ContextPocket, pocketSources } from './home/context-pocket';
-import { ExpandedIdeaDialog } from './home/expanded-idea-dialog';
 import { greetingName, QuickStartsDisclosure, StartingPoints } from './home/home-nudges';
 import { IdeaComposer } from './home/idea-composer';
 import { IdeaSplits, IdlePreview, type PreviewTarget } from './home/idea-splits';
 import { useHomeGeneration } from './home/use-home-generation';
-import { VoiceDialog, type VoiceMode } from './home/voice-dialog';
+import type { VoiceMode } from './home/voice-dialog';
 import { ImageGenerationCard } from './image-generation-card';
-import { LanguageDialog } from './language-dialog';
-import { ModelDialog } from './model-dialog';
 import { StartVoiceInterview } from './onboarding-chat';
 import { RaffiPlanner } from './raffi-planner';
 import { REASONING_LABELS } from './reasoning-map';
@@ -49,6 +46,25 @@ import { useModelChoice } from './use-model';
 import { eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
+
+/*
+ * Home's dialogs are code-split: none is needed to paint Home, so each loads when the browser is idle
+ * after hydration (or on first open, whichever comes first) and stays mounted once opened, keeping its
+ * exit transitions. The Content Library brings its artwork registry; Channel Bloom and the language and
+ * model dialogs are large too.
+ */
+const loadLibrary = () => import('./content-library-dialog');
+const loadBloom = () => import('@/features/channels/channel-bloom/channel-bloom-dialog');
+const loadLanguage = () => import('./language-dialog');
+const loadModel = () => import('./model-dialog');
+const loadVoice = () => import('./home/voice-dialog');
+const loadExpanded = () => import('./home/expanded-idea-dialog');
+const ContentLibraryDialog = dynamic(() => loadLibrary().then((m) => m.ContentLibraryDialog), { ssr: false });
+const ChannelBloomDialog = dynamic(() => loadBloom().then((m) => m.ChannelBloomDialog), { ssr: false });
+const LanguageDialog = dynamic(() => loadLanguage().then((m) => m.LanguageDialog), { ssr: false }) as typeof import('./language-dialog').LanguageDialog;
+const ModelDialog = dynamic(() => loadModel().then((m) => m.ModelDialog), { ssr: false });
+const VoiceDialog = dynamic(() => loadVoice().then((m) => m.VoiceDialog), { ssr: false });
+const ExpandedIdeaDialog = dynamic(() => loadExpanded().then((m) => m.ExpandedIdeaDialog), { ssr: false });
 
 const CREATOR_PACK = { packId: 'pack.creator', version: '1.0.0' };
 const DEFAULT_LIBRARY: LibraryValue = { editorialId: 'status_update', nativeId: 'text' };
@@ -118,6 +134,18 @@ export function HomeView() {
   const [included, setIncluded] = useState<string[]>([]);
   const [learning, setLearning] = useState<(VoiceLearningRequest & { workspaceId: string; id: string }) | null>(null);
   const [dialog, setDialog] = useState<null | 'expand' | 'context' | 'library' | 'channels' | 'platforms' | 'language' | 'model' | 'voice'>(null);
+  // A dialog mounts on its first opening and stays mounted, so closing it keeps its exit transition.
+  const opened = useRef(new Set<string>());
+  if (dialog) opened.current.add(dialog);
+  useEffect(() => {
+    const preload = () => void Promise.all([loadLibrary(), loadBloom(), loadLanguage(), loadModel(), loadVoice(), loadExpanded()]).catch(() => {});
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(preload, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(preload, 2500);
+    return () => window.clearTimeout(id);
+  }, []);
 
   /* ---- destinations: accounts (Channel Bloom) → selection items with languages ---- */
   const destinations = useDestinations(accounts);
@@ -491,14 +519,14 @@ export function HomeView() {
       </div>
 
       {/* Dialogs: each stages its own choices and applies on its primary action. */}
-      <ExpandedIdeaDialog open={dialog === 'expand'} onOpenChange={(open) => setDialog(open ? 'expand' : null)} value={text} onChange={setText} placeholder={PLACEHOLDER} />
+      {opened.current.has('expand') && <ExpandedIdeaDialog open={dialog === 'expand'} onOpenChange={(open) => setDialog(open ? 'expand' : null)} value={text} onChange={setText} placeholder={PLACEHOLDER} />}
       <ContextPocket open={dialog === 'context'} onOpenChange={(open) => setDialog(open ? 'context' : null)} sources={sources} included={included} onIncludedChange={setIncluded} revision={revision} />
-      <ContentLibraryDialog open={dialog === 'library'} onOpenChange={(open) => setDialog(open ? 'library' : null)} value={library} onApply={(value) => void applyLibrary(value)} platformsForFit={Array.from(new Set(targets.map((t) => t.platform)))} />
-      <ChannelBloomDialog open={dialog === 'channels'} onOpenChange={(open) => setDialog(open ? 'channels' : null)} accounts={accounts} folders={folders} selected={destinations.selected} context={destinations.context} onCommit={(result) => { destinations.commit({ accountIds: result.accountIds, context: result.context, platformOnly: [] }); setDialog(null); }} />
+      {opened.current.has('library') && <ContentLibraryDialog open={dialog === 'library'} onOpenChange={(open) => setDialog(open ? 'library' : null)} value={library} onApply={(value) => void applyLibrary(value)} platformsForFit={Array.from(new Set(targets.map((t) => t.platform)))} />}
+      {opened.current.has('channels') && <ChannelBloomDialog open={dialog === 'channels'} onOpenChange={(open) => setDialog(open ? 'channels' : null)} accounts={accounts} folders={folders} selected={destinations.selected} context={destinations.context} onCommit={(result) => { destinations.commit({ accountIds: result.accountIds, context: result.context, platformOnly: [] }); setDialog(null); }} />}
       <PlatformOnlyDialog open={dialog === 'platforms'} onOpenChange={(open) => setDialog(open ? 'platforms' : null)} value={destinations.platformOnly.filter(isDraftable)} onApply={(platforms) => destinations.setPlatformOnly(platforms)} />
-      <LanguageDialog open={dialog === 'language'} onOpenChange={(open) => setDialog(open ? 'language' : null)} selection={languages.selection} languages={languages} accountLabel={(item) => (item.channelId ? `${item.platform} · ${accounts.find((a) => a.id === item.channelId)?.account ?? 'account'}` : item.platform)} id={ids.language} />
-      <ModelDialog open={dialog === 'model'} onOpenChange={(open) => setDialog(open ? 'model' : null)} catalog={models.data} value={{ model: choice.model, reasoning: choice.reasoningMapping.preference }} onApply={(next) => { choice.choose(next.model); choice.setReasoningFor(next.model, next.reasoning); }} reasoningFor={choice.reasoningFor} id={ids.model} />
-      <VoiceDialog open={dialog === 'voice'} onOpenChange={(open) => setDialog(open ? 'voice' : null)} value={voiceMode} onApply={setVoiceMode} available={voiceAvailable} sampleCount={voiceSourceIds.length} voiceRevision={voiceRevision} modelLabel={choice.label} />
+      {opened.current.has('language') && <LanguageDialog open={dialog === 'language'} onOpenChange={(open) => setDialog(open ? 'language' : null)} selection={languages.selection} languages={languages} accountLabel={(item) => (item.channelId ? `${item.platform} · ${accounts.find((a) => a.id === item.channelId)?.account ?? 'account'}` : item.platform)} id={ids.language} />}
+      {opened.current.has('model') && <ModelDialog open={dialog === 'model'} onOpenChange={(open) => setDialog(open ? 'model' : null)} catalog={models.data} value={{ model: choice.model, reasoning: choice.reasoningMapping.preference }} onApply={(next) => { choice.choose(next.model); choice.setReasoningFor(next.model, next.reasoning); }} reasoningFor={choice.reasoningFor} id={ids.model} />}
+      {opened.current.has('voice') && <VoiceDialog open={dialog === 'voice'} onOpenChange={(open) => setDialog(open ? 'voice' : null)} value={voiceMode} onApply={setVoiceMode} available={voiceAvailable} sampleCount={voiceSourceIds.length} voiceRevision={voiceRevision} modelLabel={choice.label} />}
     </PageContainer>
   );
 }

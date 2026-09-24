@@ -503,7 +503,7 @@ async function library(browser) {
     await dialog.getByRole('button', { name: /^Use these choices/ }).click();
     await dialog.waitFor({ state: 'hidden' });
     mark('library applied');
-    await page.waitForTimeout(800);
+    await page.waitForFunction(() => /Behind the scenes/.test(document.querySelector('[aria-label^="Choose content type and native format"]')?.getAttribute('aria-label') ?? ''), null, { timeout: 30000 }).catch(() => {});
     const after = await pod.getAttribute('aria-label');
     check('composer shows the applied choice', /Behind the scenes/.test(after ?? '') && /Carousel/.test(after ?? ''), { before, after });
     const applied = await selection();
@@ -519,8 +519,9 @@ async function library(browser) {
     // Restore the starting choice so later runs start from the same state.
     await choose('status_update', 'text');
     await page.getByRole('dialog').getByRole('button', { name: /^Use these choices/ }).click();
-    await page.waitForTimeout(800);
-    check('restored to Status update · Text', /Status update/.test((await pod.getAttribute('aria-label')) ?? ''));
+    // The label changes once the server confirms the selection; a loaded machine can take seconds.
+    const restored = await page.waitForFunction(() => /Status update/.test(document.querySelector('[aria-label^="Choose content type and native format"]')?.getAttribute('aria-label') ?? ''), null, { timeout: 30000 }).then(() => true, () => false);
+    check('restored to Status update · Text', restored, await pod.getAttribute('aria-label'));
   } catch (error) {
     check('library scene completed', false, error.message);
     await shot(page, dir, 'zz-failure').catch(() => {});
