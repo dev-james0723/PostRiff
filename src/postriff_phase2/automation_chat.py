@@ -224,6 +224,9 @@ def describe(schedule: dict) -> str:
     if schedule.get("kind") == "monthly":
         days = ["the last day" if day == "last" else f"the {day}{_ordinal(day)}" for day in schedule["monthDays"]]
         return f"On {_join(days)} of every month{at}"
+    if schedule.get("kind") == "countdown":
+        steps = ["on the day" if day == 0 else "1 day before" if day == 1 else f"{day} days before" for day in schedule["daysBefore"]]
+        return f"Countdown to {schedule['eventDate']}: {_join(steps)}{at}"
     names = list(schedule.get("weekdays") or [])
     if len(names) == 7:
         return f"Every day{at}"
@@ -239,19 +242,25 @@ def _first_run(next_occurrence: dict | None) -> str | None:
     return f"{local.strftime('%A')} {local.day} {local.strftime('%B')} at {local.strftime('%H:%M')}"
 
 
-def _understood_schedule(understood: dict, fallback: dict, zone: str) -> dict | None:
-    """The schedule from Rafii's reading, kept only if the Automations builder accepts it."""
+def _understood_schedule(understood: dict, fallback: dict, zone: str, now: float | None = None) -> dict | None:
+    """The schedule from Rafii's reading, kept only if the Automations builder accepts it (and, for a countdown,
+    only while one of its dates is still ahead)."""
     local = understood.get("localTime") or fallback["localTime"]
-    if understood.get("weekdays"):
+    if understood.get("countdown"):
+        candidate = {"kind": "countdown", **understood["countdown"], "localTime": local, "timeZone": zone}
+    elif understood.get("weekdays"):
         candidate = {"weekdays": understood["weekdays"], "localTime": local, "timeZone": zone}
     elif understood.get("monthDays"):
         candidate = {"kind": "monthly", "monthDays": understood["monthDays"], "localTime": local, "timeZone": zone}
     else:
         return None
     try:
-        return campaigns.normalize_schedule(candidate)
+        schedule = campaigns.normalize_schedule(candidate)
     except AlphaError:
         return None
+    if schedule.get("kind") == "countdown" and now is not None and campaigns.next_occurrence(schedule, now) is None:
+        return None
+    return schedule
 
 
 def create(state: dict, actor: str, now: float, text: str, zone: str, *, destinations: list[dict], route: str, voice_route: str,
@@ -263,11 +272,13 @@ def create(state: dict, actor: str, now: float, text: str, zone: str, *, destina
     topic = understood.get("topic") or topic_of(text)
     rest = text.replace(topic, " ") if topic and topic in text else text
     schedule, notes = schedule_of(rest, zone)
-    chosen = _understood_schedule(understood, schedule, zone)
+    chosen = _understood_schedule(understood, schedule, zone, now)
     if chosen is not None:
         schedule = chosen
         # The model named the days (and perhaps the time): only its own assumptions still need saying.
         notes = [note for note in notes if "time was named" in note and not understood.get("localTime")] + list(understood.get("assumptions") or [])
+    elif understood.get("countdown"):
+        notes.append("Every countdown date has already passed, so this uses the days read from your message instead. Change the schedule in Automations if needed.")
     content = content_by_id(state, actor, now, understood["contentTypeId"], understood.get("formatId")) if understood.get("contentTypeId") else None
     content = content or content_of(state, actor, now, rest)
     phrase = _phrase(rest)

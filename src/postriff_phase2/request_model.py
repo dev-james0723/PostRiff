@@ -17,7 +17,7 @@ import math
 import re
 from zoneinfo import ZoneInfo
 
-from postriff_alpha.domain import clean
+from postriff_alpha.domain import AlphaError, clean
 
 from . import campaigns, content_types
 
@@ -29,14 +29,16 @@ TIME = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 # Words that can introduce a recurring request in English or Chinese; a message without any is drafted as usual.
 CUE = re.compile(
     r"\b(?:every|each|weekly|daily|monthly|fortnightly|bi-?weekly|twice|thrice|once\s+a|times\s+a|per\s+(?:week|month|day)"
-    r"|a\s+(?:week|month)\b|regularly|routinely|recurring|automat\w*|keep\s+(?:posting|my|sharing)|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays)"
-    r"|逢|每|定期|自動|自动",
+    r"|a\s+(?:week|month)\b|regularly|routinely|recurring|automat\w*|keep\s+(?:posting|my|sharing)|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays"
+    r"|count\s*down)"
+    r"|逢|每|定期|自動|自动|倒數|倒数",
     re.I)
 
 SYSTEM_PROMPT = """You read one message a person typed to Rafii, an assistant that drafts social media posts, and decide what they want.
 - "automation": they want Rafii to prepare drafts again and again on a schedule (for example "every Tuesday", "twice a week", "each month", "keep my LinkedIn going with AI news", "逢星期二", "每月"). Only a request for future, recurring drafts counts.
 - "draft": anything else, including one post about a recurring thing ("write my weekly recap") or a message that only describes a habit ("I practise every day, write about it").
-For an automation, fill "automation": weekdays (or monthDays for a monthly schedule; use "last" for the last day), localTime only if a time is named (24-hour HH:MM), the topic, one sentence describing each draft (goal), a short name, contentTypeId and formatId only when the message asks for that kind of post (choose from the lists given), voice true when they ask for their own voice or style, and every assumption you had to make (for "twice a week" pick two well-spaced weekdays and say so). Use the person's words for the topic. Never invent facts, dates, accounts or channels. Answer with JSON only."""
+For an automation, fill "automation": weekdays (or monthDays for a monthly schedule; use "last" for the last day), localTime only if a time is named (24-hour HH:MM), the topic, one sentence describing each draft (goal), a short name, contentTypeId and formatId only when the message asks for that kind of post (choose from the lists given), voice true when they ask for their own voice or style, and every assumption you had to make (for "twice a week" pick two well-spaced weekdays and say so). Use the person's words for the topic. Never invent facts, dates, accounts or channels. Answer with JSON only.
+- A countdown to one dated event ("two weeks before, one week before and on the day", "倒數") is not a weekly or monthly schedule: fill "countdown" instead of weekdays or monthDays, with eventDate (YYYY-MM-DD, worked out from the message and "now") and daysBefore (whole days before the event; 0 is the day itself). Leave countdown out when the message names no date."""
 
 
 def offered(state: dict) -> list[dict]:
@@ -57,6 +59,10 @@ def schema(state: dict) -> dict:
                 "weekdays": {"type": "array", "maxItems": 7, "items": {"type": "string", "enum": list(campaigns.WEEKDAY_NAMES)}},
                 "monthDays": {"type": "array", "maxItems": campaigns.MAX_MONTH_DAYS, "items": {"anyOf": [{"type": "integer", "minimum": 1, "maximum": 31}, {"type": "string", "enum": ["last"]}]}},
                 "localTime": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+                "countdown": {"type": "object", "additionalProperties": False, "required": ["eventDate", "daysBefore"], "properties": {
+                    "eventDate": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                    "daysBefore": {"type": "array", "minItems": 1, "maxItems": campaigns.MAX_COUNTDOWN_STEPS,
+                                   "items": {"type": "integer", "minimum": 0, "maximum": campaigns.MAX_COUNTDOWN_DAYS}}}},
                 "topic": {"type": "string", "maxLength": 160},
                 "goal": {"type": "string", "maxLength": 600},
                 "name": {"type": "string", "maxLength": 80},
@@ -111,7 +117,17 @@ def reading(answer, state: dict) -> dict | None:
     out = {}
     weekdays = [day for day in campaigns.WEEKDAY_NAMES if day in (raw.get("weekdays") or [])]
     month_days = [day for day in (raw.get("monthDays") or []) if day == "last" or (type(day) is int and 1 <= day <= 31)][:campaigns.MAX_MONTH_DAYS]
-    if weekdays:
+    countdown = raw.get("countdown") if isinstance(raw.get("countdown"), dict) else None
+    if countdown is not None:
+        try:
+            event, days_before = campaigns.countdown_of(countdown)
+            countdown = {"eventDate": event.isoformat(), "daysBefore": days_before}
+        except AlphaError:
+            countdown = None
+    if countdown:
+        # A countdown runs before one event; days of the week or month would repeat after it.
+        out["countdown"] = countdown
+    elif weekdays:
         out["weekdays"] = weekdays
     elif month_days:
         out["monthDays"] = list(dict.fromkeys(month_days))
