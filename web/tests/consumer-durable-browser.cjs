@@ -108,6 +108,9 @@ async function home(page) {
    const edit=page.getByRole('dialog',{name:/automation/i}).first();
    const nameField=edit.getByLabel('Name',{exact:true});await nameField.waitFor();
    await nameField.fill(name+' reviewed');
+   // A new brief is a new definition: it becomes version 2 and waits for the owner to activate it again.
+   const brief=edit.getByLabel('What should each draft be about?');
+   await brief.fill((await brief.inputValue())+' Reviewed for the concert week.');
    await nameField.focus();await page.keyboard.press('Tab');
    assert.equal(await page.evaluate(()=>{const a=document.activeElement;return Boolean(a&&a.closest('[role="dialog"]')&&a.getAttribute('aria-label')!=='Name'&&!(a.labels&&[...a.labels].some(l=>l.textContent.trim()==='Name')));}),true,'Tab moves on inside the editor');
    await edit.getByRole('tab',{name:/Review/}).click();
