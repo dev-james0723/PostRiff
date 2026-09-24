@@ -43,5 +43,8 @@ desktop/artifacts/
 /web/AGENTS.md
 /web/CLAUDE.md
 
-# Keep the existing local credential-setup helper out of source control.
-/scripts/consumer_ready_secrets.py
+# scripts/consumer_ready_secrets.py is the offline secret scanner the release gates run (CI): it is source, not a
+# credential helper, and must stay tracked.
+
+# Local release-gate evidence (CI uploads it as an artifact)
+docs/consumer-ready/evidence/
