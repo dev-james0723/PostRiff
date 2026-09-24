@@ -81,7 +81,8 @@ async function home(page) {
    await destination.focus();await page.keyboard.press('Enter');
    const search=dialog.getByRole('combobox',{name:'Search languages or regions',exact:true});
    await search.waitFor();await search.fill('French');
-   const french=dialog.getByRole('option',{name:/^French/}).first();await french.waitFor();
+   // Options read native name first ("Français (France)"), then the English name.
+   const french=dialog.getByRole('option',{name:/French/}).first();await french.waitFor();
    await french.focus();await page.keyboard.press('Enter');
    const apply=dialog.getByRole('button',{name:/^Apply/});await apply.focus();await page.keyboard.press('Enter');
    await dialog.waitFor({state:'hidden'});
