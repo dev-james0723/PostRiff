@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from urllib.parse import quote, urlencode, urlparse
 
 from postriff_alpha.domain import AlphaError
+
+from .provider_candidates import little_plain
 from .providers import GRAPH_VERSION
 
 PAGE_LIMIT = 25
@@ -94,7 +96,7 @@ def fetch_page(adapter, access_token, account_id, cursor=None, limit=PAGE_LIMIT)
         if not isinstance(row, dict):
             continue
         post_id = _text(row.get('id'), 300)
-        text = _text(row.get('caption') if adapter.id == 'instagram' else row.get('commentary'))
+        text = _text(row.get('caption') if adapter.id == 'instagram' else little_plain(row.get('commentary')))
         if not post_id or not text or post_id in seen:
             continue
         if adapter.id == 'linkedin' and (row.get('author') != account_id or row.get('lifecycleState') != 'PUBLISHED' or row.get('reshareContext')):

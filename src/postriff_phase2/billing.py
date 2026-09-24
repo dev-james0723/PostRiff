@@ -8,9 +8,12 @@ status is 'proposed' until an explicit commercial decision.
 import hashlib
 import hmac
 import json
+import os
 import time
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
+from .credit_meter import POLICY_VERSION
+from .credit_wallet import CreditBook, project_credit_wallet
 
 USD = 1_000_000  # micro-dollars
 # Candidate ceilings from improvement SPEC §6 — "待價格與品質評估修正的候選上限", flagged 'candidate' in data.
@@ -27,6 +30,10 @@ def _window_start_sql(kind):
 
 class Ledger:
     """All methods take an open cursor inside the caller's transaction (workspace row locked)."""
+
+    def __init__(self, credits_enabled=False, clock=time.time):
+        self._credit_book = CreditBook(clock)
+        self.credits = self._credit_book if credits_enabled else None
 
     def _budget(self, cur, scope, kind):
         spec = CANDIDATE_BUDGETS["global" if scope == "global" else "workspace"]
@@ -51,14 +58,17 @@ class Ledger:
         cur.execute("SELECT extract(epoch from t.expires_at) FROM public.pr_trials t WHERE t.workspace_id=%s", (workspace_id,))
         trial = cur.fetchone()
         resets = float(trial[0]) if trial and trial[0] else None
-        cur.execute("INSERT INTO public.pr_entitlements(workspace_id,plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,resets_at,source) VALUES(%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),'trial')", (workspace_id, terms_id, ent["writingBatches"], ent["mediaCredits"], ent["connectedAccounts"], ent["members"], ent["storageMb"], resets))
+        # A concurrent first use may insert the same row; the loser waits, then re-reads the winner's row.
+        cur.execute("INSERT INTO public.pr_entitlements(workspace_id,plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,resets_at,source) VALUES(%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),'trial') ON CONFLICT(workspace_id) DO NOTHING", (workspace_id, terms_id, ent["writingBatches"], ent["mediaCredits"], ent["connectedAccounts"], ent["members"], ent["storageMb"], resets))
         cur.execute("INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,status,current_period_end) VALUES(%s,%s,'trial',to_timestamp(%s)) ON CONFLICT(workspace_id) DO NOTHING", (workspace_id, terms_id, resets))
         return self.ensure_entitlement(cur, workspace_id, plan)
 
-    def reserve(self, cur, workspace_id, member_id, dimension, estimated_usd_micro, idempotency_key, *, charge_batch, provider="", model="", run_id=None, job_id=None, meta=None):
+    def reserve(self, cur, workspace_id, member_id, dimension, estimated_usd_micro, idempotency_key, *, charge_batch, provider="", model="", run_id=None, job_id=None, meta=None, credit_authority=None):
         """Lock budgets → check ceilings and entitlement → insert reservation → return it. Same key returns the same row."""
         if dimension not in ("text_model", "image_generation", "tool", "storage", "action") or type(estimated_usd_micro) is not int or estimated_usd_micro < 0:
             raise AlphaError("Invalid usage reservation.", 400)
+        if self.credits:
+            cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
         fingerprint = digest({"dimension": dimension, "estimate": estimated_usd_micro, "chargeBatch": charge_batch, "provider": provider, "model": model})
         cur.execute("SELECT id::text,reservation_id::text,meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, idempotency_key))
         existing = cur.fetchone()
@@ -67,11 +77,18 @@ class Ledger:
                 raise AlphaError("This usage key belongs to a different operation.", 409)
             return {"reservationId": existing[1] or existing[0], "duplicate": True}
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
+        if self.credits is None and (charge_batch or estimated_usd_micro > 0):
+            cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
+            plan_policy = cur.fetchone()
+            if plan_policy and plan_policy[0]:
+                raise AlphaError("Credit billing is paused; no provider request was made.", 503)
+        credit = self.credits.prepare(cur, workspace_id, member_id, estimated_usd_micro, model, provider, credit_authority) if self.credits and (charge_batch or estimated_usd_micro > 0) else None
+        if credit: charge_batch = False
         cur.execute("SELECT count(*) FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND r.charge_batch AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id AND s.cost_state IN ('actual','released'))", (workspace_id,))
         pending_batches = cur.fetchone()[0]
         if charge_batch and entitlement["writingBatchesRemaining"] <= pending_batches:
             raise AlphaError("No writing allowance left in this plan. Drafts, exports and reviews remain available; overage is not charged silently.", 402)
-        if dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
+        if not credit and dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
             raise AlphaError("No media credits left in this plan.", 402)
         ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
         gl_budget = self._budget(cur, "global", "day")
@@ -80,8 +97,9 @@ class Ledger:
                 raise AlphaError(f"The {scope} spending budget has not been approved; no provider call was made.", 402)
             if budget["spent"] + budget["reserved"] + estimated_usd_micro > budget["stop"]:
                 raise AlphaError(f"The {scope} spending stop-line would be exceeded; this request is refused before any provider call.", 402)
-        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**(meta or {}), "fingerprint": fingerprint})))
+        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**{k:v for k,v in (meta or {}).items() if k != "credits"}, "fingerprint": fingerprint, **({"credits":credit} if credit else {})})))
         reservation_id = cur.fetchone()[0]
+        if credit: self.credits.claim(cur, workspace_id, reservation_id, credit)
         cur.execute("UPDATE public.pr_usage_ledger SET reservation_id=id WHERE id::text=%s", (reservation_id,))
         for scope in (f"workspace:{workspace_id}", "global"):
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=reserved_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimated_usd_micro, scope))
@@ -93,6 +111,15 @@ class Ledger:
         unknown → reservation kept and cost booked as estimated_unknown until reconciled."""
         if outcome not in ("completed", "failed", "unknown"):
             raise AlphaError("Invalid settlement outcome.", 400)
+        if actual_usd_micro is not None and (type(actual_usd_micro) is not int or actual_usd_micro < 0):
+            raise AlphaError("Invalid actual usage amount.", 400)
+        cur.execute("SELECT meta FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'", (workspace_id, reservation_id))
+        original = cur.fetchone()
+        uses_credits = bool(original and original[0].get("credits"))
+        if uses_credits:
+            cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+            if actual_usd_micro is None:
+                outcome = "unknown"
         cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("pr_ledger:" + str(reservation_id),))
         # A release or known settlement is terminal for the reservation, even if
         # another caller supplies a different outcome/idempotency key.
@@ -113,8 +140,9 @@ class Ledger:
             cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key) VALUES(%s,%s,%s,%s,%s,'settle',%s,%s,%s,%s,NULL,'estimated_unknown',%s,%s)", (workspace_id, member_id, run_id, job_id, reservation_id, dimension, provider, model, estimate, charge_batch, key))
             return {"reservationId": reservation_id, "state": "estimated_unknown", "note": "Reservation retained until provider usage is reconciled; cost is not recorded as zero."}
         actual = int(actual_usd_micro or 0)
+        credit = self._credit_book.settlement(cur, workspace_id, reservation_id, outcome, actual) if uses_credits else None
         kind = "settle" if outcome == "completed" else "release"
-        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key))
+        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({"credits":credit} if credit else {})))
         for scope in (f"workspace:{workspace_id}", "global"):
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=greatest(reserved_usd_micro-%s,0),spent_usd_micro=spent_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimate, actual, scope))
         if outcome == "completed" and charge_batch:
@@ -122,8 +150,43 @@ class Ledger:
             cur.execute(f"UPDATE public.pr_entitlements SET {column}=greatest({column}-1,0),version=version+1,updated_at=now() WHERE workspace_id=%s", (workspace_id,))
         return {"reservationId": reservation_id, "state": "actual" if outcome == "completed" else "released", "actualUsdMicro": actual}
 
+    def unknown_reservations(self, cur, workspace_id=None, limit=100):
+        """Reservations still waiting for provider usage: settled as unknown, never finalized."""
+        cur.execute(
+            "SELECT u.workspace_id::text,u.reservation_id::text,u.run_id::text,u.provider,u.model,u.estimated_usd_micro,extract(epoch from u.at),"
+            "(SELECT r.status FROM public.pr_agent_runs r WHERE r.id=u.run_id) "
+            "FROM public.pr_usage_ledger u WHERE u.cost_state='estimated_unknown' AND (%s::uuid IS NULL OR u.workspace_id=%s::uuid) "
+            "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=u.workspace_id AND t.reservation_id=u.reservation_id AND t.cost_state IN ('actual','released')) "
+            "ORDER BY u.at LIMIT %s", (workspace_id, workspace_id, int(limit)))
+        return [{"workspaceId": r[0], "reservationId": r[1], "runId": r[2], "provider": r[3], "model": r[4], "estimatedUsdMicro": r[5], "since": float(r[6]), "runStatus": r[7]} for r in cur.fetchall()]
+
+    def reconcile_unknown(self, cur, workspace_id, reservation_id, outcome, actual_usd_micro, *, operator, evidence):
+        """Finalize one unknown reservation from provider evidence, once. `failed` never charges the customer;
+        `completed` charges the actual cost within the amount they approved. Both book the provider cost."""
+        if outcome not in ("completed", "failed"):
+            raise AlphaError("Reconcile to completed or failed.", 400)
+        if type(actual_usd_micro) is not int or actual_usd_micro < 0:
+            raise AlphaError("Record the actual provider cost in micro-dollars.", 400)
+        if not isinstance(operator, str) or not operator.strip() or not isinstance(evidence, str) or not evidence.strip():
+            raise AlphaError("Name the operator and the provider evidence (for example a gateway request id).", 400)
+        cur.execute("SELECT 1 FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND cost_state='estimated_unknown'", (workspace_id, reservation_id))
+        if not cur.fetchone():
+            raise AlphaError("This reservation is not waiting for reconciliation.", 409)
+        cur.execute("SELECT 1 FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND cost_state IN ('actual','released')", (workspace_id, reservation_id))
+        if cur.fetchone():
+            raise AlphaError("This reservation is not waiting for reconciliation.", 409)
+        result = self.settle(cur, workspace_id, reservation_id, outcome, actual_usd_micro, idempotency_key=f"reconcile:{reservation_id}")
+        cur.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,subject,meta) VALUES(%s,NULL,'usage.reconciled',%s,%s::jsonb)",
+                    (workspace_id, str(reservation_id)[:200], json.dumps({"outcome": outcome, "actualUsdMicro": actual_usd_micro, "operator": operator.strip()[:80], "evidence": evidence.strip()[:200]})))
+        return result
+
     def usage_view(self, cur, workspace_id):
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
+        credits = None
+        if self.credits and self.credits.policy(cur, workspace_id):
+            wallet = self.credits.view(cur, workspace_id)
+            credits = {k:v for k,v in wallet.items() if k != "lots"}
+            credits.update(mode="credits", quoteType="spending_limit", textOnly=True)
         cur.execute("SELECT s.plan_terms_id,s.provider,s.status,extract(epoch from s.current_period_end),s.cancel_at_period_end,extract(epoch from s.grace_until),p.plan,p.label,p.price_cents,p.currency,p.status,p.version FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
         sub = cur.fetchone()
         cur.execute("SELECT kind,dimension,cost_state,estimated_usd_micro,actual_usd_micro,extract(epoch from at),provider,model,charge_batch,reservation_id::text,run_id::text,job_id::text FROM public.pr_usage_ledger WHERE workspace_id=%s ORDER BY at DESC LIMIT 100", (workspace_id,))
@@ -133,6 +196,7 @@ class Ledger:
         terms = [{"id": r[0], "plan": r[1], "version": r[2], "label": r[3], "priceCents": r[4], "currency": r[5], "status": r[6], "entitlements": r[7], "priceLabel": "proposed" if r[6] != "active" else "active"} for r in cur.fetchall()]
         return {
             "entitlement": entitlement,
+            "credits": credits,
             "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": sub[7], "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
             "budget": {"windowKind": ws_budget["windowKind"], "spentUsdMicro": ws_budget["spent"], "reservedUsdMicro": ws_budget["reserved"], "warnUsdMicro": ws_budget["warn"], "stopUsdMicro": ws_budget["stop"], "status": ws_budget["status"]},
             "overage": "stop",
@@ -153,6 +217,9 @@ class FixturePaymentProvider:
         return hmac.new(self.secret, body, hashlib.sha256).hexdigest()
 
     def parse_webhook(self, signature, body):
+        # The secret above is published; a hosted deployment must never accept a fixture-signed payment.
+        if os.environ.get("VERCEL") == "1":
+            raise AlphaError("Fixture payments are not available on a hosted deployment.", 503)
         if not isinstance(body, (bytes, bytearray)) or not isinstance(signature, str) or not hmac.compare_digest(self.sign(body), signature):
             raise AlphaError("Webhook signature rejected.", 401)
         try:
@@ -221,6 +288,9 @@ class Billing:
                     cur.execute("INSERT INTO public.pr_subscriptions(workspace_id,plan_terms_id,provider,provider_customer_id,provider_subscription_id,status,current_period_end,cancel_at_period_end,grace_until,last_event_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s,to_timestamp(%s),to_timestamp(%s)) ON CONFLICT(workspace_id) DO UPDATE SET plan_terms_id=coalesce(excluded.plan_terms_id,public.pr_subscriptions.plan_terms_id),provider=excluded.provider,provider_customer_id=coalesce(excluded.provider_customer_id,public.pr_subscriptions.provider_customer_id),provider_subscription_id=coalesce(excluded.provider_subscription_id,public.pr_subscriptions.provider_subscription_id),status=excluded.status,current_period_end=coalesce(excluded.current_period_end,public.pr_subscriptions.current_period_end),cancel_at_period_end=excluded.cancel_at_period_end,grace_until=excluded.grace_until,last_event_at=excluded.last_event_at,updated_at=now()", (event["workspaceId"], terms_id or "trial-v1", self.provider.id, event.get("customerId"), event.get("subscriptionId"), status, event.get("currentPeriodEnd"), bool(event.get("cancelAtPeriodEnd")), grace, float(event["createdAt"])))
                     if terms_id and status == "active":
                         self._reconcile_entitlement(cur, event["workspaceId"], terms_id, terms[0], event.get("currentPeriodEnd"))
+        # A verified paid plan invoice grants its period's credits even when its status update is stale.
+        if event.get("stripeType") == "invoice.paid" and event.get("workspaceId") and outcome in ("applied", "stale"):
+            self._grant_period_credits(cur, event)
         cur.execute("INSERT INTO public.pr_billing_events(provider,event_id,kind,event_at,payload_digest,outcome) VALUES(%s,%s,%s,to_timestamp(%s),%s,%s)", (self.provider.id, event["id"], kind, float(event["createdAt"]), payload_digest, outcome))
         if outcome == "applied" and self.on_applied is not None:
             try:
@@ -228,6 +298,37 @@ class Billing:
             except Exception:  # noqa: BLE001 — a notification failure must never fail the webhook
                 pass
         return {"eventId": event["id"], "outcome": outcome, "status": status, "type": kind, "workspaceId": event.get("workspaceId") or None}
+
+    def _grant_period_credits(self, cur, event):
+        """Candidate monthly-credit policy (FINAL-07): subscription_create and subscription_cycle invoices grant
+        the plan's monthlyCredits once per invoice id, expiring at the period end. Other invoices are recorded
+        with a note and grant nothing. Legacy plans without a credit policy are untouched."""
+        cur.execute("SELECT to_regclass('public.pr_credit_subscription_grants') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            return None
+        terms_id, invoice_id = event.get("planTermsId"), event.get("invoiceId")
+        if not terms_id or not invoice_id or not event.get("invoicePaid") or event.get("amountPaid") is None or not event.get("currency"):
+            return None
+        cur.execute("SELECT entitlements FROM public.pr_plan_terms WHERE id=%s", (terms_id,))
+        row = cur.fetchone()
+        ent = row[0] if row and isinstance(row[0], dict) else {}
+        if ent.get("creditPolicy") != POLICY_VERSION or type(ent.get("monthlyCredits")) is not int or ent["monthlyCredits"] <= 0:
+            return None
+        reason = event.get("billingReason") or ""
+        grants = reason in ("subscription_create", "subscription_cycle")
+        note = "" if grants else f"{reason or 'unknown'} invoice: no automatic credits (policy pending)"[:200]
+        cur.execute("INSERT INTO public.pr_credit_subscription_grants(invoice_id,workspace_id,subscription_id,plan_terms_id,billing_reason,period_start,period_end,amount_cents,currency,payment_intent_id,millicredits,livemode,note) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(invoice_id) DO NOTHING RETURNING invoice_id",
+                    (invoice_id, event["workspaceId"], event.get("subscriptionId"), terms_id, reason, event.get("periodStart"), event.get("currentPeriodEnd"), event["amountPaid"], event["currency"], event.get("paymentIntentId"), ent["monthlyCredits"] * 1000 if grants else 0, bool(getattr(self.provider, "live", False)), note))
+        if not cur.fetchone() or not grants:
+            return None
+        try:
+            granted = self.ledger._credit_book.grant(cur, event["workspaceId"], None, "subscription-invoice:" + invoice_id, ent["monthlyCredits"] * 1000, event.get("currentPeriodEnd"), source="verified-stripe-invoice")
+        except AlphaError as error:
+            # The workspace is not on active credit terms: keep the paid invoice on record for review.
+            cur.execute("UPDATE public.pr_credit_subscription_grants SET note=%s WHERE invoice_id=%s", (f"not granted: {error}"[:200], invoice_id))
+            return None
+        cur.execute("UPDATE public.pr_credit_subscription_grants SET grant_id=%s WHERE invoice_id=%s", (granted["entryId"], invoice_id))
+        return granted
 
     def availability(self, cur, workspace_id):
         """'billing' block for the usage view: mounted provider and whether checkout/portal can be offered.

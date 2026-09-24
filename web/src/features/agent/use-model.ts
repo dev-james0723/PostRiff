@@ -42,11 +42,18 @@ function readPreferences(): Record<string, ReasoningLevel> {
 
 /**
  * Which model writes the next turn, and how hard it should think. The model is remembered per
- * browser and falls back to the first qualified model when the remembered one is unavailable
- * (signed out CLI, other host). The reasoning preference is remembered per model id
+ * browser. New users prefer a configured cloud writer. An unavailable saved writer stays selected
+ * until the person explicitly chooses another; no silent paid fallback. The reasoning preference is remembered per model id
  * (`postriff-agent-reasoning`); `reasoning` is always an option id the chosen route accepts
  * (see `reasoning-map.ts`), so the composer keeps sending exactly what the API lists.
  */
+export function resolveModelChoice(options: readonly ModelOption[], stored: string | null): string {
+  // A remembered unavailable writer is an explicit choice, never permission to substitute another.
+  if (stored) return stored;
+  const cloud = options.find((m) => m.qualified && m.costClass === 'paid' && (!m.route || m.route === 'managed'));
+  return (cloud ?? options.find((m) => m.qualified && m.id === FIXTURE_MODEL) ?? options.find((m) => m.qualified))?.id ?? FIXTURE_MODEL;
+}
+
 export function useModelChoice(catalog: ModelCatalog | undefined) {
   const [stored, setStored] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<Record<string, ReasoningLevel>>({});
@@ -60,10 +67,7 @@ export function useModelChoice(catalog: ModelCatalog | undefined) {
   }, []);
 
   const options = useMemo(() => catalog?.models ?? [], [catalog]);
-  const model = useMemo(() => {
-    const wanted = options.find((m) => m.id === stored && m.qualified);
-    return (wanted ?? options.find((m) => m.qualified) ?? options[0])?.id ?? FIXTURE_MODEL;
-  }, [options, stored]);
+  const model = useMemo(() => resolveModelChoice(options, stored), [options, stored]);
 
   const choose = useCallback((id: string) => {
     setStored(id);
@@ -102,6 +106,7 @@ export function useModelChoice(catalog: ModelCatalog | undefined) {
   const reasoning = reasoningMapping.effective ?? 'quick';
   return {
     model,
+    available: Boolean(option?.qualified),
     option,
     options,
     choose,

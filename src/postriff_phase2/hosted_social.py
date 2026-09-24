@@ -7,7 +7,7 @@
 """
 from urllib.parse import quote, urlencode
 from postriff_alpha.domain import AlphaError
-from .provider_candidates import LinkedInCandidate
+from .provider_candidates import LinkedInCandidate, little_plain
 from .providers import GRAPH_VERSION, http_transport
 
 LINKEDIN_VERSION = "202609"  # official versioning + Posts API docs checked 2026-09-20; live account validation pending
@@ -183,7 +183,7 @@ class HostedSocial:
                     return _uncertain("LinkedIn read scope unavailable; verify the exact post manually")
                 response = self.transport("GET", "https://api.linkedin.com/rest/posts/" + quote(reference, safe=""), headers={"Linkedin-Version": LINKEDIN_VERSION, "X-Restli-Protocol-Version": "2.0.0", "Authorization": "Bearer " + token})
                 body = response.get("body", {})
-                if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISHED" and body.get("commentary") == manifest["payload"]["text"]:
+                if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISHED" and little_plain(body.get("commentary") or "") == manifest["payload"]["text"]:
                     return {"state": "verified", "reference": reference, "confirmed": "LinkedIn reports the exact post as PUBLISHED", "verification": "provider_lookup"}
                 if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISH_FAILED":
                     return {"state": "failed", "confirmed": "LinkedIn reports PUBLISH_FAILED"}

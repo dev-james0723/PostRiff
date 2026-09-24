@@ -567,7 +567,7 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             "route": clean(payload.get("route", "local-cli"), 120), "contextSourceIds": list(dict.fromkeys(payload.get("sourceIds") or []))[:50],
             "nextOccurrence": preview, "createdBy": actor, "createdAt": now,
             "authorityVersion": 1, "campaignVersion": campaign['version'], "maxCostUsdMicro": max_cost,
-            "destination": {"platform": "LinkedIn", "language": payload.get('language', 'en')},
+            "destination": _recurring_destination(state, payload),
         }
         task["definitionDigest"] = definition_digest(task)
         root["recurringTasks"].append(task)
@@ -647,6 +647,29 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             if occurrence['taskId'] == task['id'] and occurrence['state'] in ('pending', 'running'):
                 occurrence.update(state='cancelled', reason='authority_revoked')
     return {"taskId": task["id"], "status": task["status"], "nextOccurrence": task.get("nextOccurrence")}
+
+
+def _recurring_destination(state: dict, payload: dict) -> dict:
+    """The one confirmed destination of a recurring task: a platform, or one connected account, and a language."""
+    raw = payload.get("destination")
+    if raw is None:
+        return {"platform": "LinkedIn", "language": payload.get("language", "en")}  # the earlier fixed default
+    from .agent_runtime import PLATFORMS
+    from . import locales
+    if not isinstance(raw, dict) or raw.get("platform") not in PLATFORMS:
+        raise AlphaError("Choose a platform recurring drafts can be written for.", 400)
+    language = locales.canonical(raw.get("language"))
+    if not language:
+        raise AlphaError("Choose the language recurring drafts are written in.", 400)
+    destination = {"platform": raw["platform"], "language": language}
+    channel_id = raw.get("channelId")
+    if channel_id is not None:
+        channels = (state.get("phase2") or {}).get("channels") or []
+        account = next((c for c in channels if isinstance(c, dict) and c.get("id") == channel_id), None)
+        if not account or account.get("platform") != raw["platform"] or account.get("revoked"):
+            raise AlphaError("Choose a connected account on that platform.", 409)
+        destination["channelId"] = channel_id
+    return destination
 
 
 def claim_occurrence(state: dict, task_id: str, scheduled_for: float, now: float) -> dict:

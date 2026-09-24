@@ -86,7 +86,7 @@ export function IdlePreview({ targets, idea, timeZone, speaker }: { targets: Pre
       <PreviewDock items={dock} activeKey={activeKey} onChange={setActive} label='Explore the destination previews' className='w-full max-w-[440px]' />
       <PreviewDeck items={items} activeKey={activeKey} onChange={setActive} scale={0.59} tools={false} label='Destination previews' className='w-full' />
       <div className='flex w-full max-w-[320px] items-center justify-between gap-3 text-left'>
-        <p className='text-muted-foreground text-xs leading-relaxed'>Swipe left or right, or tap a destination. An illustrative layout: no account is contacted and nothing is published.</p>
+        <p className='text-muted-foreground text-xs leading-relaxed'>Swipe or tap a destination. An illustrative layout; no account is contacted.</p>
         <Button variant='glass' size='icon-control' className='shrink-0' aria-label='Expand iPhone preview' onClick={() => setExpanded(true)}>
           <Icons.arrowUpRight />
         </Button>

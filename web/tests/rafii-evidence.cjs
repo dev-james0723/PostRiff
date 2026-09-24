@@ -85,6 +85,12 @@ const TOURS_SEEN = JSON.stringify({ completed: {}, dismissed: Object.fromEntries
 /** Seen signed out: auth, invitation and marketing surfaces (a signed-in visit to /auth redirects to the app). */
 const SIGNED_OUT = new Set(['auth-sign-in', 'auth-sign-up', 'auth-reset', 'auth-verify', 'invite', 'marketing', 'pricing', 'marketing-channels', 'docs', 'docs-article', 'channel-detail', 'changelog', 'contact', 'data-deletion', 'privacy-page', 'security-page', 'status-page', 'terms', 'channels-forwarder']);
 const runAxe = !args['no-axe'];
+/**
+ * Off-origin requests the test aborts on purpose and why. Empty: the app should make none locally
+ * (Vercel Web Analytics renders only on Vercel, see ROOT-CAUSE.md). Add entries only with a reason.
+ */
+const EXPECTED_BLOCKED = [];
+const blockedByPage = new WeakMap();
 const axeSource = runAxe ? fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8') : null;
 
 (async () => {
@@ -108,7 +114,16 @@ const axeSource = runAxe ? fs.readFileSync(require.resolve('axe-core/axe.min.js'
             localStorage.setItem('postriff-onboarding', tours);
           }, { id: principal, theme, signedIn, tours: TOURS_SEEN });
           // The browser reaches only the harness origin (the harness itself must run with POSTRIFF_RESEARCH=0).
-          await context.route('**/*', (route) => (new URL(route.request().url()).origin === new URL(base).origin ? route.continue() : route.abort()));
+          // Every aborted request is recorded by origin + pathname; only a named, explained entry may be expected.
+          await context.route('**/*', (route) => {
+            const request = route.request();
+            const url = new URL(request.url());
+            if (url.origin === new URL(base).origin) return route.continue();
+            let owner = null;
+            try { owner = request.frame().page(); } catch { /* service-worker requests have no frame */ }
+            if (owner) (blockedByPage.get(owner) ?? blockedByPage.set(owner, []).get(owner)).push({ origin: url.origin, pathname: url.pathname, type: request.resourceType() });
+            return route.abort();
+          });
           contexts[signedIn ? 'in' : 'out'] = context;
         }
         for (const slug of routes) {
@@ -116,8 +131,22 @@ const axeSource = runAxe ? fs.readFileSync(require.resolve('axe-core/axe.min.js'
           const page = await context.newPage();
           const errors = [];
           page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-          page.on('console', (m) => m.type() === 'error' && !/net::ERR_FAILED/.test(m.text()) && errors.push(`console: ${m.text().slice(0, 300)}`));
-          const capture = { route: slug, path: ROUTES[slug], viewport: `${width}x${height}`, theme, signedIn: !SIGNED_OUT.has(slug), errors, overflow: null, axe: null, file: null };
+          const expected = [];
+          page.on('requestfailed', (r) => {
+            const url = new URL(r.url());
+            if (url.origin === new URL(base).origin) errors.push(`requestfailed: ${r.method()} ${url.pathname} ${r.failure()?.errorText ?? ''}`);
+          });
+          page.on('console', (m) => {
+            if (m.type() !== 'error') return;
+            // A failed load names its resource in location().url: explain it only when this test aborted
+            // that exact off-origin request and it is on the named expected list.
+            const source = m.location()?.url ? new URL(m.location().url, base) : null;
+            const aborted = source && (blockedByPage.get(page) ?? []).some((b) => b.origin === source.origin && b.pathname === source.pathname);
+            const allowed = aborted && EXPECTED_BLOCKED.find((e) => e.origin === source.origin && source.pathname.startsWith(e.pathPrefix));
+            if (/net::ERR_FAILED/.test(m.text()) && allowed) expected.push({ url: `${source.origin}${source.pathname}`, reason: allowed.reason });
+            else errors.push(`console: ${m.text().slice(0, 300)}${source && source.origin !== new URL(base).origin ? ` [${source.origin}${source.pathname}]` : ''}`);
+          });
+          const capture = { route: slug, path: ROUTES[slug], viewport: `${width}x${height}`, theme, signedIn: !SIGNED_OUT.has(slug), errors, expected, blocked: [], overflow: null, axe: null, file: null };
           try {
             await page.goto(base + ROUTES[slug], { waitUntil: 'networkidle', timeout: 60000 });
             // Enter the dev workspace if the gate is showing (first visit per principal).
@@ -143,6 +172,10 @@ const axeSource = runAxe ? fs.readFileSync(require.resolve('axe-core/axe.min.js'
             }
           } catch (error) {
             capture.errors.push(`capture: ${error.message}`);
+          }
+          capture.blocked = blockedByPage.get(page) ?? [];
+          for (const b of capture.blocked) {
+            if (!EXPECTED_BLOCKED.some((e) => e.origin === b.origin && b.pathname.startsWith(e.pathPrefix))) errors.push(`blocked off-origin request: ${b.type} ${b.origin}${b.pathname}`);
           }
           summary.captures.push(capture);
           await page.close();

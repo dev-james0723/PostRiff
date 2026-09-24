@@ -12,7 +12,7 @@ import ssl
 import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, build_opener
+from urllib.request import HTTPSHandler, Request, build_opener
 
 from postriff_alpha.domain import AlphaError
 from .providers import _NoRedirect
@@ -23,11 +23,16 @@ MAX_DOWNLOAD = 2 * 1024 * 1024
 SIDE = 200
 
 
+def picture_opener():
+    """No redirects; certificate and host name verification through the handler's own TLS context."""
+    return build_opener(_NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+
+
 def fetch_image(url):
     """Bounded HTTPS GET: 10 s timeout, no redirects, 2 MB cap. Returns (status, content type, bytes)."""
     request = Request(url, headers={"Accept": "image/jpeg,image/png,image/webp"}, method="GET")
     try:
-        with build_opener(_NoRedirect()).open(request, timeout=10, context=ssl.create_default_context()) as response:
+        with picture_opener().open(request, timeout=10) as response:
             return response.status, response.headers.get("Content-Type", ""), response.read(MAX_DOWNLOAD + 1)
     except HTTPError as error:
         return error.code, "", b""

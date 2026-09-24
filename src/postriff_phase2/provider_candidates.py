@@ -13,6 +13,33 @@ from postriff_alpha.domain import AlphaError
 from .contracts import digest
 
 
+
+# LinkedIn commentary is `little` text: these characters are reserved and must be backslash-escaped to stay
+# plain text (official little-text format; the Posts API stores commentary this way).
+_LITTLE_RESERVED = frozenset('\\|{}@[]()<>#*_~')
+_LITTLE_ESCAPE = re.compile(r'\\([\\|{}@\[\]()<>#*_~])')
+_LITTLE_HASHTAG = re.compile(r'\{hashtag\|\\?[#＃]\|([^}]*)\}')
+
+
+def little_text(text):
+    """The approved caption as `little` text, so LinkedIn shows exactly its characters. A '#' that starts a
+    word stays a hashtag element, which LinkedIn renders with the same characters."""
+    out = []
+    for index, char in enumerate(text):
+        if char == '#' and index + 1 < len(text) and text[index + 1].isalnum():
+            out.append(char)
+        elif char in _LITTLE_RESERVED:
+            out.append('\\' + char)
+        else:
+            out.append(char)
+    return ''.join(out)
+
+
+def little_plain(text):
+    """What a reader sees for stored `little` commentary: hashtag templates as '#tag', escapes removed."""
+    return _LITTLE_ESCAPE.sub(r'\1', _LITTLE_HASHTAG.sub(lambda m: '#' + m.group(1), text or ''))
+
+
 class AuthorizedTransport:
     def __init__(self, send, authorization_lookup):
         self.send, self.authorization_lookup = send, authorization_lookup
@@ -95,7 +122,7 @@ class LinkedInCandidate:
     def prepare(self, manifest, member_urn, media_urn=None):
         if manifest["platform"] != "LinkedIn" or manifest["operation"] != "member_post" or not re.fullmatch(r"urn:li:person:[A-Za-z0-9_-]+",member_urn):
             raise AlphaError("A verified exact LinkedIn member identity is required.")
-        body={"author":member_urn,"commentary":manifest["payload"]["text"],"visibility":"PUBLIC","distribution":{"feedDistribution":"MAIN_FEED","targetEntities":[],"thirdPartyDistributionChannels":[]},"lifecycleState":"PUBLISHED","isReshareDisabledByAuthor":False}
+        body={"author":member_urn,"commentary":little_text(manifest["payload"]["text"]),"visibility":"PUBLIC","distribution":{"feedDistribution":"MAIN_FEED","targetEntities":[],"thirdPartyDistributionChannels":[]},"lifecycleState":"PUBLISHED","isReshareDisabledByAuthor":False}
         if manifest["media"]:
             if not media_urn or not media_urn.startswith('urn:li:image:'):
                 raise AlphaError("Upload and verify the immutable image rendition before preparing this post.")

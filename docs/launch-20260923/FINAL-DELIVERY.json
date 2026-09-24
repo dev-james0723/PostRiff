@@ -1,0 +1,233 @@
+{
+ "generatedAt": "2026-09-24",
+ "sourceSnapshot": {
+  "repo": "/Users/ouxianxing/Documents/James-Au-Studio",
+  "branch": "consumer-saas",
+  "head": "468811b73d28b4389f931519827c05d0e6c8abfb",
+  "manifestSha256": "05f8a7ddf549f084da4412177fb534e71c768577655e02e00de5f18e6589d8e1",
+  "manifestTool": "docs/launch-20260923/evidence/final/snapshot.py (src, tests, migrations, scripts, web/src, web/tests, web/public + build inputs; 1,190 files)",
+  "equalsCandidateReleaseSnapshot": {
+   "repo": "/Users/ouxianxing/Documents/James-Au-Studio-launch-20260923",
+   "branch": "codex/launch-audit-20260923",
+   "head": "468811b73d28b4389f931519827c05d0e6c8abfb",
+   "manifestSha256": "d9573b5e1635d406ccd78a00eff5f451beb5cbdc0dbeb36af6a167e7550f8016",
+   "onlyDifference": "web/tsconfig.json (dev dist-dir includes, excluded from promotion)"
+  },
+  "uncommitted": true
+ },
+ "codeImplemented": [
+  "FINAL-01 entitlement race fix (POST 500) and Analytics request removal (superseded by canonical opt-in)",
+  "FINAL-02 account-bound approval, idempotent quick start and turns with request fingerprints, keyed resend after lost responses, run references for refreshed drafts, all written destinations listed",
+  "FINAL-03 P0 copy pass (Home, Conversation, Channels, Brand, Queue; Billing unchanged) with before/after measurement; readable source-exclusion reasons",
+  "FINAL-04 providerOptions.gateway.only on drafting, voice analysis, images and learning extraction; serving provider and gateway cost recorded; outside-provider answers refused; price table version recorded; CLI steps hidden for hosted users; no paid substitution copy",
+  "FINAL-05 server estimate and ceiling before approval, deep ceiling fix, failure settlement by dispatch/known cost, unknown-usage reconciliation tool, exact micro-USD rounding",
+  "FINAL-06 top-up order lifecycle, durable review inbox, disputes, debt repayment, live/test key mode, notices after commit, fixture provider refused on Vercel",
+  "FINAL-07 monthly subscription credits from invoice.paid once per invoice, expiry, refund/dispute take-back",
+  "FINAL-08 campaign destinations and worker credit authority (merged into canonical Automations), suggestion evidence rules, last-checked time, cooldown",
+  "FINAL-09 LinkedIn little-text escaping and plain read-back, Threads 5-link limit at review, capability matrix",
+  "FINAL-10 secret scan, dev-backdoor review, read-only ops health report, cost table, legal fact list"
+ ],
+ "localAcceptance": "LOCAL_VERIFIED on release snapshot r6 (all suites exit 0; journeys and route matrix clean except named errors)",
+ "canonicalIntegrated": "YES in the canonical working tree only: 128 files (62 updated, 66 created) with pre-image checks at 2026-09-24T08:54:30Z; no stage, commit, push or merge (FINAL-MERGE-MANIFEST.json)",
+ "liveModelVerification": "NOT_RUN",
+ "stripeSyntheticVerification": "LOCAL_VERIFIED (synthetic signed events on disposable PostgreSQL; synthetic top-up in the browser journey)",
+ "stripeSandboxVerification": "NOT_RUN",
+ "monthlyCreditIssuance": {
+  "local": "LOCAL_VERIFIED (synthetic invoice.paid)",
+  "live": "NOT_RUN",
+  "plansActivated": false
+ },
+ "livePublishingVerification": "NOT_RUN",
+ "productionDeployment": "NOT_RUN",
+ "tests": [
+  {
+   "suite": "python unittest",
+   "where": "candidate release snapshot r6",
+   "snapshot": "d9573b5e1635d406ccd78a00eff5f451beb5cbdc0dbeb36af6a167e7550f8016",
+   "command": "PYTHONPATH=src:tests PYTHONDONTWRITEBYTECODE=1 /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'",
+   "exit": 0,
+   "tests": 689,
+   "result": "OK",
+   "skipped": 0,
+   "log": "launch-20260923/evidence/final/r6/python.log"
+  },
+  {
+   "suite": "typescript tsc --noEmit --incremental false",
+   "where": "candidate release snapshot r6",
+   "snapshot": "d9573b5e1635d406ccd78a00eff5f451beb5cbdc0dbeb36af6a167e7550f8016",
+   "command": "/opt/homebrew/opt/node@24/bin/node node_modules/typescript/bin/tsc --noEmit --incremental false",
+   "exit": 0,
+   "diagnostics": 0,
+   "log": "launch-20260923/evidence/final/r6/tsc.log"
+  },
+  {
+   "suite": "oxlint (npm run lint)",
+   "where": "candidate release snapshot r6",
+   "snapshot": "d9573b5e1635d406ccd78a00eff5f451beb5cbdc0dbeb36af6a167e7550f8016",
+   "command": "PATH=/opt/homebrew/opt/node@24/bin:$PATH npm --prefix web run lint",
+   "exit": 0,
+   "warnings": 0,
+   "errors": 0,
+   "log": "launch-20260923/evidence/final/r6/lint.log"
+  },
+  {
+   "suite": "node --test (web/tests + web/src *.test.cjs/.mjs, 31 files)",
+   "where": "candidate release snapshot r6",
+   "snapshot": "d9573b5e1635d406ccd78a00eff5f451beb5cbdc0dbeb36af6a167e7550f8016",
+   "command": "NODE=/opt/homebrew/opt/node@24/bin/node /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python /private/tmp/claude-501/-Users-ouxianxing-Documents-James-Au-Studio/4b9a3e7c-54b4-41be-82a3-e1ce5bd28bd7/scratchpad/final/node_tests.py",
+   "exit": 0,
+   "tests": 135,
+   "pass": 135,
+   "fail": 0,
+   "skipped": 0,
+   "log": "launch-20260923/evidence/final/r6/node.log"
+  },
+  {
+   "suite": "disposable PostgreSQL scripts (launch_acceptance_db.py)",
+   "where": "candidate release snapshot r6",
+   "snapshot": "d9573b5e1635d406ccd78a00eff5f451beb5cbdc0dbeb36af6a167e7550f8016",
+   "command": "POSTRIFF_VALIDATION_OUT=/Users/ouxianxing/Documents/James-Au-Studio-launch-20260923/docs/launch-20260923/evidence/final/r6/db-suite /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/launch_acceptance_db.py",
+   "exit": 0,
+   "scripts": 47,
+   "passed": 47,
+   "failed": [],
+   "sourceUnchanged": true,
+   "log": "launch-20260923/evidence/final/r6/db-suite.log"
+  },
+  {
+   "suite": "python unittest",
+   "where": "canonical after promotion",
+   "snapshot": "05f8a7ddf549f084da4412177fb534e71c768577655e02e00de5f18e6589d8e1",
+   "command": "PYTHONPATH=src:tests PYTHONDONTWRITEBYTECODE=1 /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'",
+   "exit": 0,
+   "tests": 689,
+   "result": "OK",
+   "skipped": 0,
+   "log": "launch-20260923/evidence/final/r7-canonical/python.log"
+  },
+  {
+   "suite": "typescript tsc --noEmit --incremental false",
+   "where": "canonical after promotion",
+   "snapshot": "05f8a7ddf549f084da4412177fb534e71c768577655e02e00de5f18e6589d8e1",
+   "command": "/opt/homebrew/opt/node@24/bin/node node_modules/typescript/bin/tsc --noEmit --incremental false",
+   "exit": 0,
+   "diagnostics": 0,
+   "log": "launch-20260923/evidence/final/r7-canonical/tsc.log"
+  },
+  {
+   "suite": "oxlint (npm run lint)",
+   "where": "canonical after promotion",
+   "snapshot": "05f8a7ddf549f084da4412177fb534e71c768577655e02e00de5f18e6589d8e1",
+   "command": "PATH=/opt/homebrew/opt/node@24/bin:$PATH npm --prefix web run lint",
+   "exit": 0,
+   "warnings": 0,
+   "errors": 0,
+   "log": "launch-20260923/evidence/final/r7-canonical/lint.log"
+  },
+  {
+   "suite": "node --test (web/tests + web/src *.test.cjs/.mjs, 31 files)",
+   "where": "canonical after promotion",
+   "snapshot": "05f8a7ddf549f084da4412177fb534e71c768577655e02e00de5f18e6589d8e1",
+   "command": "NODE=/opt/homebrew/opt/node@24/bin/node /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python /private/tmp/claude-501/-Users-ouxianxing-Documents-James-Au-Studio/4b9a3e7c-54b4-41be-82a3-e1ce5bd28bd7/scratchpad/final/node_tests.py",
+   "exit": 0,
+   "tests": 135,
+   "pass": 135,
+   "fail": 0,
+   "skipped": 0,
+   "log": "launch-20260923/evidence/final/r7-canonical/node.log"
+  },
+  {
+   "suite": "disposable PostgreSQL scripts (launch_acceptance_db.py)",
+   "where": "canonical after promotion",
+   "snapshot": "05f8a7ddf549f084da4412177fb534e71c768577655e02e00de5f18e6589d8e1",
+   "command": "POSTRIFF_VALIDATION_OUT=/Users/ouxianxing/Documents/James-Au-Studio/docs/launch-20260923/evidence/final-canonical-db-suite /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/launch_acceptance_db.py",
+   "exit": 0,
+   "scripts": 47,
+   "passed": 47,
+   "failed": [],
+   "sourceUnchanged": true,
+   "log": "launch-20260923/evidence/final/r7-canonical/db-suite.log"
+  },
+  {
+   "suite": "production build (npm run build, isolated copy, CI env)",
+   "where": "candidate release snapshot r6",
+   "exit": 0,
+   "bundler": "Next.js 16.3.5 Turbopack",
+   "warnings": 0,
+   "log": "launch-20260923/evidence/final/r6/build.log"
+  },
+  {
+   "suite": "browser journey, legacy allowance (launch-journey.cjs)",
+   "where": "r6 production build + dev harness",
+   "exit": 0,
+   "steps": [
+    "explicit brief save/reload and expanded editor share text; permissions are not restored",
+    "two connected accounts generate distinct identity-bound variants",
+    "save, edit, reload preserves one-account edit without any publishing job",
+    "custom recurring schedule saved as a draft automation stays unactivated; suggestion snooze persists"
+   ],
+   "pageErrors": 0,
+   "failedRequests": 0,
+   "criticalOrSeriousAxe": 0
+  },
+  {
+   "suite": "browser journey, credits (launch-journey.cjs, RAFII_TEST_CREDITS=1)",
+   "where": "r6 production build + dev harness --credit-fixture",
+   "exit": 0,
+   "steps": [
+    "explicit brief save/reload and expanded editor share text; permissions are not restored",
+    "two connected accounts generate distinct identity-bound variants",
+    "real credit quote, reserve and settlement: 50 to 47 credits, with zero held",
+    "save, edit, reload preserves one-account edit without any publishing job",
+    "conversation follow-up uses its own approved quote: 47 to 44 credits",
+    "top-up UI, synthetic signed payment and replay: exactly 1000 credits added once, never before payment"
+   ],
+   "pageErrors": 0,
+   "failedRequests": 0,
+   "criticalOrSeriousAxe": 0
+  },
+  {
+   "suite": "route matrix (rafii-evidence.cjs)",
+   "where": "r6 production build, Chrome",
+   "exit": 0,
+   "captures": 352,
+   "routes": 44,
+   "viewports": [
+    "390x844",
+    "768x1024",
+    "1024x768",
+    "1440x1000"
+   ],
+   "themes": [
+    "light",
+    "dark"
+   ],
+   "horizontalOverflow": 0,
+   "axeViolations": 0,
+   "namedErrors": {
+    "500 /app/account/api (harness lacks migration 016_api_tokens)": 16,
+    "404 not-found route (expected)": 8,
+    "net::ERR_ABORTED Next.js router prefetches (_rsc, next-router-prefetch: 1)": 6295
+   },
+   "unexplainedErrors": 0
+  }
+ ],
+ "authorizedExternalActionsPerformed": [],
+ "knownGaps": [
+  "No live gateway call: whether each route honours gateway.only and where routing/cost metadata appears is unverified (images route especially)",
+  "Budgets default to candidate: paid drafting answers 402 until an operator approves caps; production budget rows not inspected",
+  "Default price table not checked against the gateway price list; research is not metered",
+  "Voice analysis rounds with ceil; credit mode for voice, images and learning not reviewed end to end; kill-switch UX; 10,000-row read cap; no Unknown-state UI",
+  "charge.refund* events not handled separately; Stripe API version not pinned; financial records cascade-deleted with a workspace; 2025+ invoice shape unverified live",
+  "Threads counts emojis as UTF-8 bytes (our limit counts characters); Instagram width >1440 and 50-vs-100 daily limit unverified; LinkedIn image posts not implemented; escaped LinkedIn text can exceed 3,000",
+  "No rate limits on drafting, research or uploads; no CSP/HSTS configured in the app",
+  "Legal facts open: entity, jurisdiction, mailbox, data regions, retention, credit-pack/renewal terms; LEGAL_REVIEW_STATUS stays draft",
+  "Dev harness lacks migration 016_api_tokens (500 on /app/account/api in local evidence)",
+  "Browser matrix Chromium only; no WebKit, 200% zoom, slow network or real-phone pass",
+  "Home content library shortening left as an owner decision (v9 look)"
+ ],
+ "requiredDecisions": [
+  "FINAL-AUTHORIZATION.md items 1-11: live model qualification (cap US$3), budget approval caps, Stripe Sandbox, commercial terms, legal facts, live publishing check, platform reviews, email test, production migrations 013/020/021/022, commit/PR, deployment"
+ ],
+ "nextExecutableStep": "Owner reviews FINAL-AUTHORIZATION.md; with approval, commit the promoted files on a branch by path (other sessions share the checkout) and run the live model qualification capped at US$3."
+}

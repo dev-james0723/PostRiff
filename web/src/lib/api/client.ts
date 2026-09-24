@@ -36,6 +36,7 @@ import type {
   ProviderView,
   ResearchEgress,
   Run,
+  CreditEstimate,
   SecurityEvent,
   SessionInfo,
   Snapshot,
@@ -62,6 +63,8 @@ export class ApiError extends Error {
 export type TokenSource = () => Promise<string | null>;
 
 const ws = (id: string) => `/api/workspaces/${encodeURIComponent(id)}`;
+/** A drafting request that has not answered by then is treated as a lost response and resent with its key. */
+const DRAFT_TIMEOUT_MS = 150_000;
 
 async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -94,9 +97,9 @@ export function createApi(getToken: TokenSource) {
     return parse<T>(await fetch(path, { headers: await headers(auth), cache: 'no-store' }));
   }
 
-  async function send<T>(method: string, path: string, body: unknown = {}): Promise<T> {
+  async function send<T>(method: string, path: string, body: unknown = {}, timeoutMs?: number): Promise<T> {
     return parse<T>(
-      await fetch(path, { method, headers: await headers(), body: JSON.stringify(body) })
+      await fetch(path, { method, headers: await headers(), body: JSON.stringify(body), ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}) })
     );
   }
 
@@ -205,6 +208,9 @@ export function createApi(getToken: TokenSource) {
         `${ws(w)}/channels/${encodeURIComponent(id)}`
       ),
 
+    creditPacks: (w: string) => get<{ available: boolean; packs: { id: string; label: string; amountCents: number; currency: string; milliCredits: number }[] }>(`${ws(w)}/billing/credit-packs`),
+    creditCheckout: (w: string, packId: string, requestId: string) => send<{ orderId: string; url: string }>('POST', `${ws(w)}/billing/credit-checkout`, { packId, requestId }),
+
     /* ideas */
     conversations: (w: string) => get<{ conversations: Conversation[] }>(`${ws(w)}/ideas/conversations`),
     createConversation: (w: string, title: string) =>
@@ -214,7 +220,7 @@ export function createApi(getToken: TokenSource) {
     messages: (w: string, id: string) =>
       get<Conversation & { messages: Message[] }>(`${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/messages`),
     turn: (w: string, id: string, body: Record<string, unknown>) =>
-      send<Run>('POST', `${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/turns`, body),
+      send<Run>('POST', `${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/turns`, body, DRAFT_TIMEOUT_MS),
     attach: (w: string, id: string, body: Record<string, unknown>) =>
       send<Record<string, unknown>>('POST', `${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/attachments`, body),
     runEvents: (w: string, runId: string, cursor = 0) =>
@@ -227,11 +233,15 @@ export function createApi(getToken: TokenSource) {
         `${ws(w)}/ideas/runs/${encodeURIComponent(runId)}/apply`,
         { expectedRevision, artifactHash }
       ),
+    creditEstimate: (w: string, body: Record<string, unknown>) =>
+      send<CreditEstimate>('POST', `${ws(w)}/ideas/credit-estimates`, body),
+    creditQuote: (w: string, body: Record<string, unknown>) =>
+      send<{ quoteId: string; maxMilliCredits: number; expiresAt: number; kind: "spending_limit" }>("POST", `${ws(w)}/ideas/credit-quotes`, body),
     quickStart: (w: string, expectedRevision: number, body: Record<string, unknown>) =>
       send<Run & { sourceId: string | null; sourcePolicy: string | null; revision: number }>('POST', `${ws(w)}/ideas/quick-start`, {
         expectedRevision,
         ...body
-      }),
+      }, DRAFT_TIMEOUT_MS),
 
     /* analytics & audience */
     analytics: (w: string) => get<Analytics>(`${ws(w)}/analytics/summary`),

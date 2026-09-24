@@ -54,6 +54,17 @@ export interface AuthContextValue {
 }
 
 const DEV_PRINCIPAL_KEY = 'postriff-dev-principal';
+
+/** Unsent briefs and chosen destinations stay in this tab only while someone is signed in. */
+function clearDraftStorage() {
+  try {
+    for (const key of Object.keys(window.sessionStorage)) {
+      if (key.startsWith('rafii.brief.') || key.startsWith('rafii.destinations.')) window.sessionStorage.removeItem(key);
+    }
+  } catch {
+    /* storage unavailable: nothing was kept */
+  }
+}
 const DEV_COOKIE = 'postriff_dev';
 
 export function readDevPrincipal(): string | null {
@@ -220,6 +231,7 @@ export function AuthProvider({ children, initial }: { children: ReactNode; initi
     } catch {
       /* the server session may already be gone */
     }
+    clearDraftStorage();
     if (mode === 'dev') {
       devSignOut();
     } else if (supabaseRef.current) {

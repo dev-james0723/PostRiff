@@ -712,20 +712,20 @@ export const PAGE_TOURS: Tour[] = [
         body: 'The writer your drafts use right now in this browser, and who pays for it.'
       },
       {
-        id: 'cli',
-        route: '/app/account/models',
-        stop: 'Models & providers',
-        target: ['[data-tour="models-cli"]', '[data-tour="models-empty"]'],
-        title: 'Writers you already pay for',
-        body: 'A coding assistant signed in on the machine that serves PostRiff can write drafts, paid by its own subscription.'
-      },
-      {
         id: 'managed',
         route: '/app/account/models',
         stop: 'Models & providers',
         target: ['[data-tour="models-managed"]'],
         title: 'PostRiff writers',
         body: 'A managed model that uses writing batches, and a free preview that never calls a model.'
+      },
+      {
+        id: 'cli',
+        route: '/app/account/models',
+        stop: 'Models & providers',
+        target: ['[data-tour="models-cli"]', '[data-tour="models-empty"]'],
+        title: 'Writers you already pay for',
+        body: 'Optional, for a self-hosted PostRiff: a coding assistant signed in on the machine that serves it can write drafts, paid by its own subscription.'
       },
       {
         id: 'consent',

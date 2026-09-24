@@ -35,3 +35,6 @@ next-env.d.ts
 
 # Isolated Codex verification builds (keep Tailwind out of compiled caches)
 /.next-codex-*/
+
+# Any other POSTRIFF_DIST_DIR build output (for example .next-finish, .next-model-selector)
+/.next-*/

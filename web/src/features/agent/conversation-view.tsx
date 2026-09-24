@@ -1,4 +1,10 @@
 'use client';
+import { previewAccount } from './composer-accounts';
+import { createSubmissionGate } from './submission-gate';
+import { creditRequestFor, submitConversationTurn } from './credit-turn';
+import { useCreditEstimate } from './use-credit-estimate';
+import { parseCreditLimit } from './credit-limit';
+import { CreditLimitField } from './credit-limit-field';
 
 import { eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
@@ -27,7 +33,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
-import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
+import { keys, useConversations, useMessages, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { ChatAutomation, GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
@@ -107,7 +113,7 @@ function StreamCaret() {
   );
 }
 
-export function ConversationView({ conversationId }: { conversationId: string }) {
+function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const access = useWorkspaceAccess();
@@ -116,6 +122,10 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const conversations = useConversations();
   const thread = useMessages(conversationId);
   const models = useModels();
+  const usage = useUsage();
+  const [creditLimit, setCreditLimit] = useState('');
+  const [gate] = useState(createSubmissionGate);
+  useEffect(() => { gate.activate(); return () => gate.dispose(); }, [gate]);
   const composer = useRef<HTMLTextAreaElement>(null);
 
   const messages = useMemo(() => thread.data?.messages ?? [], [thread.data]);
@@ -151,8 +161,11 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const state = snapshot.data?.state;
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const choice = useModelChoice(models.data);
+  const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
+  const maximum = parseCreditLimit(creditLimit);
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
   const voiceAvailable = voiceSourceIds.length > 0;
+  // One chip per platform; the composer expands it into one row per selected account (accountLabel).
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
     return { platform, account: account?.account, state: account?.displayState };
@@ -160,8 +173,14 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
   const runModelLabel = run ? shortLabel(runOption, run.model) : choice.label;
   const timeZone = useTimeZone();
+  /** The follow-up body the server receives (and a credit estimate describes), minus key and image. */
+  const turnPayload = (body: string) => ({ text: body, destinations: languages.destinations, model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone });
+  const estimateRequest = creditRequestFor(turnPayload(text.trim()));
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !imageRequested, { operation: 'turn', conversationId, request: estimateRequest });
+  const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
+  const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
   const imageCapability = models.data?.imageGeneration;
-  const running = run?.status === 'running';
+  const running = ['running', 'queued'].includes(run?.status ?? '');
   const streamed = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'message.delta').map((e) => e.text ?? '').join(''), [run?.events]);
   const stage = useMemo(() => (run?.events ?? []).filter((e) => e.type === 'progress.updated').at(-1)?.stage ?? null, [run?.events]);
   const firstEventAt = run?.events[0]?.at;
@@ -183,40 +202,32 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   // A draft as its app would show it: the connected account (or the workspace's speaker) and the planned time if any.
   function draftFor(variant: RunVariant) {
-    const sameAccount = (d: { platform: string; language: string; channelId?: string }) => d.platform === variant.platform && d.language === variant.language && (!variant.channelId || !d.channelId || d.channelId === variant.channelId);
-    const planned = plan?.destinations.find(sameAccount)?.localTime;
-    const channel = (variant.channelId ? channels.find((c) => c.id === variant.channelId) : undefined) ?? channels.find((c) => c.platform === variant.platform);
+    const planned = plan?.destinations.find((d) => d.platform === variant.platform && d.language === variant.language && (d.channelId ?? null) === (variant.channelId ?? null))?.localTime;
+    const channel = previewAccount(channels, variant);
     return {
       platform: variant.platform,
       text: variant.text,
-      account: variant.account ?? channel?.account ?? state?.speaker?.label ?? 'You',
-      channelId: variant.channelId ?? channel?.id,
+      account: variant.account ?? channel?.account ?? state?.speaker?.label ?? 'Draft preview',
+      channelId: variant.channelId,
       publishAt: planned ? localTimeToDate(planned) : null
     };
   }
 
   async function sendTurn() {
     const body = text.trim();
-    if (!body || busy) return;
+    if (!body || busy || running || !choice.available) return;
     const learningRequest = voiceLearningIntent(body);
     if (learningRequest) {
       setLearning({ ...learningRequest, workspaceId, conversationId, id: crypto.randomUUID() });
       setText('');
       return; // The reviewed sample workflow is separate from draft generation.
     }
-    if (languages.selection.length === 0) return;
+    if (languages.selection.length === 0 || creditInvalid || (creditMode && imageRequested) || !gate.enter()) return;
     setBusy(true);
     try {
-      const result = await api.turn(workspaceId, conversationId, {
-        text: body,
-        destinations: languages.destinations,
-        model: choice.model,
-        reasoning: choice.reasoning,
-        voiceMode,
-        voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
-        imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
-        timeZone
-      });
+      const request = { ...turnPayload(body), imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined, idempotencyKey: crypto.randomUUID() };
+      const result = await submitConversationTurn({ api, workspaceId, conversationId, request, maxMilliCredits: creditMode ? maximum : null, isCurrent: gate.alive });
+      if (!result || !gate.alive()) return;
       if (result.status === 'memory') {
         // A standing instruction opened no run; the reply carries a proposal for the Memory page and this thread.
         void client.invalidateQueries({ queryKey: keys.memoryProposals(workspaceId) });
@@ -227,15 +238,17 @@ export function ConversationView({ conversationId }: { conversationId: string })
       } else {
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
       }
-      setText('');
+      setText((current) => current.trim() === body ? '' : current);
+      setCreditLimit('');
       setImageRequested(false);
       setVariantIndex(0);
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
       await client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The message could not be sent.');
+      if (gate.alive()) toast.error(err instanceof Error ? err.message : 'The message could not be sent.');
     } finally {
-      setBusy(false);
+      gate.leave();
+      if (gate.alive()) setBusy(false);
     }
   }
 
@@ -329,13 +342,18 @@ export function ConversationView({ conversationId }: { conversationId: string })
                       {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
                       {body.memoryProposal && <ProposalCard proposal={body.memoryProposal} />}
                       {body.automation && <ChatAutomationCard automation={body.automation} />}
-                      {body.excluded && body.excluded.length > 0 && (
-                        <ul className='text-muted-foreground text-xs'>
-                          {body.excluded.map((item) => (
-                            <li key={item.id}>Source excluded — {item.reason.replace(/_/g, ' ')}</li>
-                          ))}
-                        </ul>
-                      )}
+                      {/* A source the live run already warned about is not listed twice; CLI runs send no such warning. */}
+                      {(() => {
+                        const warned = new Set(isCurrent && run ? run.events.filter((e) => e.type === 'warning.created' && e.sourceId).map((e) => e.sourceId) : []);
+                        const excluded = (body.excluded ?? []).filter((item) => !warned.has(item.id));
+                        return excluded.length > 0 ? (
+                          <ul className='text-muted-foreground text-xs'>
+                            {excluded.map((item) => (
+                              <li key={item.id}>{exclusionText(item.reason)}</li>
+                            ))}
+                          </ul>
+                        ) : null;
+                      })()}
                       {isCurrent && run ? (
                         <>
                           {running && (
@@ -411,6 +429,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
           {learning?.workspaceId === workspaceId && learning.conversationId === conversationId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
 
+          {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} />}
           {messages.at(-1)?.body.intent === 'onboarding' ? (
             <OnboardingAnswer key={messages.at(-1)!.messageId} message={messages.at(-1)!} conversationId={conversationId} canEdit={canEdit} />
           ) : canEdit ? (
@@ -419,7 +438,8 @@ export function ConversationView({ conversationId }: { conversationId: string })
               value={text}
               onChange={setText}
               onSubmit={() => void sendTurn()}
-              busy={busy}
+              busy={busy || running}
+              submitDisabled={creditInvalid || (creditMode && imageRequested)}
               compact
               placeholder={imageRequested ? 'Describe the image you want to generate…' : 'Ask for another angle, a shorter version, or a different time…'}
               chips={chips}
@@ -435,7 +455,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
               voiceAvailable={voiceAvailable}
               imageGeneration={{
                 enabled: imageRequested,
-                available: Boolean(imageCapability?.available),
+                available: !creditMode && Boolean(imageCapability?.available),
                 detail: imageCapability?.detail ?? 'Checking the managed image route…',
                 onChange: setImageRequested
               }}
@@ -500,4 +520,22 @@ export function ConversationView({ conversationId }: { conversationId: string })
       </div>
     </PageContainer>
   );
+}
+
+
+/** Mirrors `source_policy.EXCLUSION_REASONS`: why a source was left out, in words a person can act on. */
+const EXCLUSION_TEXT: Record<string, string> = {
+  retracted: 'it was retracted',
+  policy_review_required: 'its use needs review first',
+  prohibited: 'its use policy does not allow this',
+  egress_consent_required: 'cloud sharing is off for it (allow it on the Memory page)',
+  internal_reference_excluded_from_public_draft: 'internal references stay out of public drafts'
+};
+
+function exclusionText(reason: string) {
+  return `A source was left out: ${EXCLUSION_TEXT[reason] ?? reason.replace(/_/g, ' ')}.`;
+}
+export function ConversationView({ conversationId }: { conversationId: string }) {
+  const { workspaceId } = useWorkspaceApi();
+  return <ConversationWorkspace key={`${workspaceId}:${conversationId}`} conversationId={conversationId} />;
 }

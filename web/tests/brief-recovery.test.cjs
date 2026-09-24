@@ -1,0 +1,6 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
+function load(){const file=path.resolve(__dirname,'../src/features/agent/brief-recovery.ts');assert.ok(fs.existsSync(file),'brief recovery contract missing');const m=new Module(file);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,file);return m.exports;}
+test('brief recovery restores text only in the same user and workspace',()=>{const c=load(),raw=c.encodeBrief('user','workspace','Private idea.');assert.equal(c.decodeBrief(raw,'user','workspace'),'Private idea.');assert.equal(c.decodeBrief(raw,'other','workspace'),null);assert.equal(c.decodeBrief(raw,'user','other'),null);});
+test('damaged or oversized storage cannot replace current input',()=>{const c=load();for(const raw of ['',null,'[]','not json','x'.repeat(100001)])assert.equal(c.decodeBrief(raw,'u','w'),null);assert.throws(()=>c.encodeBrief('u','w','x'.repeat(20001)));});
+test('a saved brief does not carry public quotation or model permissions',()=>{const raw=JSON.parse(load().encodeBrief('u','w','A thought'));assert.deepEqual(Object.keys(raw).sort(),['owner','text','version','workspace']);});

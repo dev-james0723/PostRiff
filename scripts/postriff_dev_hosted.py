@@ -207,6 +207,7 @@ def start_postgres(port=PORT_PG):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=4331)
+    parser.add_argument("--credit-fixture", action="store_true", help="synthetic credit funding and model, disposable database only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
@@ -224,6 +225,9 @@ def main():
     # here lets invitations addressed to it show up on the profile. Nothing is ever sent (NullTransport).
     dev_assets = DevAssets()
     service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid")
+    if args.credit_fixture:
+        from launch_credit_fixture import configure
+        configure(service, connection)
     social = HostedSocial(service.oauth, providers, dev_assets, transport=transport)
 
     def on_verified(cur, workspace_id, job):

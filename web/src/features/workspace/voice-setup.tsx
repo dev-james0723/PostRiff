@@ -157,7 +157,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <Panel material='glass' title='Set up your voice' titleId='voice-setup-heading' description='Two minutes to guide how future drafts sound. You can review and schedule drafts before setting this up.' bodyClassName='gap-6'>
+    <Panel material='glass' title='Set up your voice' titleId='voice-setup-heading' description='Two minutes to guide how future drafts sound.' bodyClassName='gap-6'>
       <fieldset className='flex flex-col gap-2'>
         <legend className='text-foreground mb-2 text-sm font-medium'>1. What are you building?</legend>
         <RadioGroup value={mode} onValueChange={(value) => setMode(value as BrandMode)} className='grid gap-2 sm:grid-cols-2'>

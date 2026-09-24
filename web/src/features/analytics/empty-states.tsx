@@ -102,7 +102,7 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
     <StateMessage
       kind='stale'
       title='Waiting for the first reading'
-      description={`${waiting === 1 ? 'One verified post has' : `${waiting} verified posts have`} no reading yet. Readings are not scheduled yet, so there is no time to show; the numbers appear here once the provider has been asked.`}
+      description={`${waiting === 1 ? 'One verified post has' : `${waiting} verified posts have`} no reading yet. Readings are not collected automatically yet, so there is no time to show.`}
       action={<NextStep href='/app/queue'>See the verified posts</NextStep>}
     />
   );

@@ -5,6 +5,7 @@ It initializes lazily so build and health checks do not require credentials.
 import hmac
 import logging
 import json
+import re
 import os
 import ssl
 import time
@@ -99,7 +100,7 @@ def ideas_runtime_from_environment(values):
     key = values.get("AI_GATEWAY_API_KEY")
     if not key:
         return None
-    from .model_runtime import DEFAULT_MODEL, ServerModelRuntime
+    from .model_runtime import DEFAULT_MODEL, ServerModelRuntime, provider_map
     model = values.get("POSTRIFF_MODEL_ID") or DEFAULT_MODEL
     models = [m.strip() for m in (values.get("POSTRIFF_MODEL_IDS") or "").split(",") if m.strip()] or [model]
     prices = None
@@ -109,7 +110,8 @@ def ideas_runtime_from_environment(values):
         except (ValueError, TypeError, IndexError) as error:
             raise ValueError("POSTRIFF_MODEL_PRICES must be a JSON object of model → [input, output] USD per million tokens.") from error
     endpoint = values.get("AI_GATEWAY_ENDPOINT") or None
-    return ServerModelRuntime(key, model=model, models=models, prices=prices, **({"endpoint": endpoint} if endpoint else {}))
+    allowed = provider_map(values) or None
+    return ServerModelRuntime(key, model=model, models=models, prices=prices, allowed_providers=allowed, **({"endpoint": endpoint} if endpoint else {}))
 
 
 def billing_from_environment(values):
@@ -147,13 +149,21 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values))
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1")
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
     worker = PostgresWorker(database, social=social, on_verified=service.audience.on_post_verified)
     return service, worker, {"projectUrl": project_url, "publishableKey": publishable, "provider": "supabase", "flow": "pkce"}
+
+
+_ID_SEGMENT = re.compile(r"^(?:[0-9a-fA-F-]{16,}|\d+|[A-Za-z0-9_-]{24,})$")
+
+
+def route_pattern(path):
+    """The request path with identifiers masked, for correlating failures without logging who or what."""
+    return "/".join(":id" if _ID_SEGMENT.match(part) else part for part in (path or "/").split("/"))[:160]
 
 
 class HostedApplication:
@@ -236,6 +246,10 @@ class HostedApplication:
         """Architecture §21 Ideas routes. Events are cursor-replayable; SSE replays stored events then closes."""
         workspace_id, resource = parts[2], parts[4]
         ideas = service.ideas
+        if resource == "credit-quotes" and len(parts) == 5 and method == "POST":
+            return self._json(start_response, 201, ideas.credit_requests.issue(workspace_id, token, self._body(environ)))
+        if resource == "credit-estimates" and len(parts) == 5 and method == "POST":
+            return self._json(start_response, 200, ideas.credit_requests.estimate(workspace_id, token, self._body(environ)))
         if resource == "quick-start" and len(parts) == 5 and method == "POST":
             body = self._body(environ)
             return self._json(start_response, 201, ideas.quick_start(workspace_id, token, body.get("expectedRevision"), body))
@@ -301,7 +315,8 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api'
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+            **environ.get('postriff.failure', {})
             }))
 
     def _handle(self, environ, start_response):
@@ -450,8 +465,12 @@ class HostedApplication:
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "ideas":
                 return self._ideas(environ, start_response, service, token, method, parts)
+            if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
+                return self._json(start_response, 200, service.billing_credit_packs(parts[2], token))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":
                 body = self._body(environ)
+                if parts[4] == "credit-checkout":
+                    return self._json(start_response, 201, service.billing_credit_checkout(parts[2], token, body.get("packId"), body.get("requestId")))
                 if parts[4] == "checkout":
                     return self._json(start_response, 201, service.billing_checkout(parts[2], token, body.get("planTermsId"), body.get("successPath"), body.get("cancelPath")))
                 if parts[4] == "portal":
@@ -576,8 +595,10 @@ class HostedApplication:
             raise AlphaError("This hosted route is unavailable.", 404)
         except AlphaError as error:
             return self._json(start_response, error.status, {"error": str(error), "code": error.code})
-        except Exception:
-            # Exception text/tracebacks may contain third-party payloads or credentials.
+        except Exception as error:
+            # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
+            # route pattern with identifiers masked are kept for correlation.
+            environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
             return self._json(start_response, 500, {"error": "The hosted service could not complete this request. Saved state remains authoritative.", "code": "internal_error"})
 
 

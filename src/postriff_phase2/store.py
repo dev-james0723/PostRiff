@@ -4,6 +4,7 @@ import copy
 import hashlib
 import io
 import json
+import re
 import time
 import zipfile
 from postriff_alpha.domain import Store, AlphaError, uid, clean
@@ -354,6 +355,8 @@ class Phase2Store(Store):
         if blockers:
             raise AlphaError(blockers[0]["message"], 409)
         c = find(data["channels"], p.get("channelId"))
+        if v.get("channelId") and v["channelId"] != c["id"]:
+            raise AlphaError("This draft was written for another account. Schedule it to that account, or draft again for this one.", 409)
         if not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock():
             raise AlphaError("Trial expired. Export remains available; scheduling is held.")
         if self.channel_state(c) != "Ready for posting":
@@ -371,6 +374,9 @@ class Phase2Store(Store):
         text = v["text"]
         if not text.strip() or len(text) > LIMITS[c["platform"]]["characters"]:
             raise AlphaError("The content exceeds this destination's versioned text limit.")
+        # Threads rejects a post with more than 5 links (official posts guide, from 2025-12-22).
+        if c["platform"] == "Threads" and len(re.findall(r"https?://", text)) > 5:
+            raise AlphaError("Threads accepts at most 5 links in one post. Remove some links, then schedule it again.", 409)
         acknowledged = p.get("acknowledgedWarnings", [])
         if sorted(acknowledged) != sorted(v["warnings"]):
             raise AlphaError("Acknowledge every displayed draft warning.")

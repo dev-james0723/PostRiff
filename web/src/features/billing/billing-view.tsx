@@ -11,6 +11,8 @@ import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { relativeTime } from '@/lib/time';
 import { Allowances } from './allowances';
+import { CreditBalance } from './credit-balance';
+import { CreditPacks } from './credit-packs';
 import { PAGE, infoContent } from './billing-copy';
 import { Ledger } from './ledger';
 import { GLASS_STATEFUL, LifecycleAlert } from './lifecycle-alert';
@@ -113,10 +115,11 @@ export function BillingView() {
 
           <div className='grid gap-4 lg:grid-cols-3'>
             <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
-            <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />
+            {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
           </div>
 
           <Plans usage={data} isOwner={isOwner} redirect={redirect} />
+          {data.credits && isOwner && <CreditPacks />}
 
           {isOwner ? (
             <Ledger entries={data.ledger} canEdit={canEdit} />

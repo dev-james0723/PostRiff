@@ -64,7 +64,7 @@ export function ProposalReviewCard({ state, workspaceRevision, isOwner, sample, 
       await act.mutateAsync({ revision: workspaceRevision, action: 'profile_decide', payload: { decision: 'approve', note: note.trim() } });
       setOpen(false);
       setApproveState('idle');
-      toast.success(`${next ? `Revision ${next}` : 'The proposed revision'} is active. New drafts are written with it.`);
+      toast.success(`${next ? `Revision ${next}` : 'The proposed revision'} is active. Drafts use it when you choose Writing like me.`);
     } catch (err) {
       setApproveState('error');
       if (err instanceof ApiError && err.status === 409) {
@@ -131,7 +131,7 @@ export function ProposalReviewCard({ state, workspaceRevision, isOwner, sample, 
               <AlertDialogHeader>
                 <AlertDialogTitle>Approve {nextName}?</AlertDialogTitle>
                 <AlertDialogDescription render={<div />} className='flex flex-col gap-2'>
-                  <span>New drafts are written with it.</span>
+                  <span>Drafts use it when you choose Writing like me.</span>
                   {impactSentences(counts.drafts, counts.bound).map((line) => (
                     <span key={line}>{line}</span>
                   ))}

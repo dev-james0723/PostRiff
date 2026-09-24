@@ -148,6 +148,9 @@ class CampaignWorker:
         repository.transaction = transaction
         ideas = copy.copy(self.service.ideas)
         ideas.repository = repository
+        # Credit checks must read through the same worker-bound repository, not the service's original one.
+        from .credit_requests import CreditRequests
+        ideas.credit_requests = CreditRequests(ideas)
         ideas.recurring_binding = binding
         task, campaign, occurrence = claim['task'], claim['campaign'], claim['occurrence']
         result = None
