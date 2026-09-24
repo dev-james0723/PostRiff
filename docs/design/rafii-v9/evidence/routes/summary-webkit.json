@@ -1,0 +1,2609 @@
+{
+  "base": "http://localhost:3100",
+  "browser": "webkit",
+  "principal": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+  "startedAt": "2026-09-24T03:39:57.222Z",
+  "captures": [
+    {
+      "route": "home",
+      "path": "/app",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/home/390x844-dark.png"
+    },
+    {
+      "route": "overview",
+      "path": "/app/overview",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/overview/390x844-dark.png"
+    },
+    {
+      "route": "ideas",
+      "path": "/app/ideas",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/ideas/390x844-dark.png"
+    },
+    {
+      "route": "calendar",
+      "path": "/app/calendar",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/calendar/390x844-dark.png"
+    },
+    {
+      "route": "pipeline",
+      "path": "/app/pipeline",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pipeline/390x844-dark.png"
+    },
+    {
+      "route": "library",
+      "path": "/app/library",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/library/390x844-dark.png"
+    },
+    {
+      "route": "channels",
+      "path": "/app/channels",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels/390x844-dark.png"
+    },
+    {
+      "route": "queue",
+      "path": "/app/queue",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/queue/390x844-dark.png"
+    },
+    {
+      "route": "analytics",
+      "path": "/app/analytics",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/analytics/390x844-dark.png"
+    },
+    {
+      "route": "inbox",
+      "path": "/app/inbox",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/inbox/390x844-dark.png"
+    },
+    {
+      "route": "workspace-brand",
+      "path": "/app/workspace/brand",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-brand/390x844-dark.png"
+    },
+    {
+      "route": "workspace-memory",
+      "path": "/app/workspace/memory",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-memory/390x844-dark.png"
+    },
+    {
+      "route": "workspace-members",
+      "path": "/app/workspace/members",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-members/390x844-dark.png"
+    },
+    {
+      "route": "workspace-roles",
+      "path": "/app/workspace/roles",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-roles/390x844-dark.png"
+    },
+    {
+      "route": "workspace-audit",
+      "path": "/app/workspace/audit",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-audit/390x844-dark.png"
+    },
+    {
+      "route": "account-profile",
+      "path": "/app/account/profile",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-profile/390x844-dark.png"
+    },
+    {
+      "route": "account-notifications",
+      "path": "/app/account/notifications",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-notifications/390x844-dark.png"
+    },
+    {
+      "route": "account-billing",
+      "path": "/app/account/billing",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-billing/390x844-dark.png"
+    },
+    {
+      "route": "account-privacy",
+      "path": "/app/account/privacy",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-privacy/390x844-dark.png"
+    },
+    {
+      "route": "account-models",
+      "path": "/app/account/models",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-models/390x844-dark.png"
+    },
+    {
+      "route": "account-api",
+      "path": "/app/account/api",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+      ],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-api/390x844-dark.png"
+    },
+    {
+      "route": "auth-sign-in",
+      "path": "/auth/sign-in",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-in/390x844-dark.png"
+    },
+    {
+      "route": "auth-sign-up",
+      "path": "/auth/sign-up",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-up/390x844-dark.png"
+    },
+    {
+      "route": "auth-reset",
+      "path": "/auth/reset",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-reset/390x844-dark.png"
+    },
+    {
+      "route": "auth-verify",
+      "path": "/auth/verify",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-verify/390x844-dark.png"
+    },
+    {
+      "route": "channels-connect",
+      "path": "/app/channels/connect",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-connect/390x844-dark.png"
+    },
+    {
+      "route": "not-found",
+      "path": "/app/this-route-does-not-exist",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/not-found/390x844-dark.png"
+    },
+    {
+      "route": "marketing",
+      "path": "/",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing/390x844-dark.png"
+    },
+    {
+      "route": "pricing",
+      "path": "/pricing",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pricing/390x844-dark.png"
+    },
+    {
+      "route": "marketing-channels",
+      "path": "/channels",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing-channels/390x844-dark.png"
+    },
+    {
+      "route": "docs",
+      "path": "/docs",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs/390x844-dark.png"
+    },
+    {
+      "route": "docs-article",
+      "path": "/docs/getting-started",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs-article/390x844-dark.png"
+    },
+    {
+      "route": "channel-detail",
+      "path": "/channels/linkedin",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channel-detail/390x844-dark.png"
+    },
+    {
+      "route": "changelog",
+      "path": "/changelog",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/changelog/390x844-dark.png"
+    },
+    {
+      "route": "contact",
+      "path": "/contact",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/contact/390x844-dark.png"
+    },
+    {
+      "route": "data-deletion",
+      "path": "/data-deletion",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/data-deletion/390x844-dark.png"
+    },
+    {
+      "route": "privacy-page",
+      "path": "/privacy",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/privacy-page/390x844-dark.png"
+    },
+    {
+      "route": "security-page",
+      "path": "/security",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/security-page/390x844-dark.png"
+    },
+    {
+      "route": "status-page",
+      "path": "/status",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/status-page/390x844-dark.png"
+    },
+    {
+      "route": "terms",
+      "path": "/terms",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/terms/390x844-dark.png"
+    },
+    {
+      "route": "channels-forwarder",
+      "path": "/channels/connect",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-forwarder/390x844-dark.png"
+    },
+    {
+      "route": "invite",
+      "path": "/invite/evidence-not-a-real-token",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/invite/390x844-dark.png"
+    },
+    {
+      "route": "conversation",
+      "path": "/app/agent/9e13e590-984b-480d-af86-7dd8daa38f13",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/conversation/390x844-dark.png"
+    },
+    {
+      "route": "home",
+      "path": "/app",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/home/1440x1000-dark.png"
+    },
+    {
+      "route": "overview",
+      "path": "/app/overview",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/overview/1440x1000-dark.png"
+    },
+    {
+      "route": "ideas",
+      "path": "/app/ideas",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/ideas/1440x1000-dark.png"
+    },
+    {
+      "route": "calendar",
+      "path": "/app/calendar",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/calendar/1440x1000-dark.png"
+    },
+    {
+      "route": "pipeline",
+      "path": "/app/pipeline",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pipeline/1440x1000-dark.png"
+    },
+    {
+      "route": "library",
+      "path": "/app/library",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/library/1440x1000-dark.png"
+    },
+    {
+      "route": "channels",
+      "path": "/app/channels",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels/1440x1000-dark.png"
+    },
+    {
+      "route": "queue",
+      "path": "/app/queue",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/queue/1440x1000-dark.png"
+    },
+    {
+      "route": "analytics",
+      "path": "/app/analytics",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/analytics/1440x1000-dark.png"
+    },
+    {
+      "route": "inbox",
+      "path": "/app/inbox",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/inbox/1440x1000-dark.png"
+    },
+    {
+      "route": "workspace-brand",
+      "path": "/app/workspace/brand",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-brand/1440x1000-dark.png"
+    },
+    {
+      "route": "workspace-memory",
+      "path": "/app/workspace/memory",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-memory/1440x1000-dark.png"
+    },
+    {
+      "route": "workspace-members",
+      "path": "/app/workspace/members",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-members/1440x1000-dark.png"
+    },
+    {
+      "route": "workspace-roles",
+      "path": "/app/workspace/roles",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-roles/1440x1000-dark.png"
+    },
+    {
+      "route": "workspace-audit",
+      "path": "/app/workspace/audit",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-audit/1440x1000-dark.png"
+    },
+    {
+      "route": "account-profile",
+      "path": "/app/account/profile",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-profile/1440x1000-dark.png"
+    },
+    {
+      "route": "account-notifications",
+      "path": "/app/account/notifications",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-notifications/1440x1000-dark.png"
+    },
+    {
+      "route": "account-billing",
+      "path": "/app/account/billing",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-billing/1440x1000-dark.png"
+    },
+    {
+      "route": "account-privacy",
+      "path": "/app/account/privacy",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-privacy/1440x1000-dark.png"
+    },
+    {
+      "route": "account-models",
+      "path": "/app/account/models",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-models/1440x1000-dark.png"
+    },
+    {
+      "route": "account-api",
+      "path": "/app/account/api",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+      ],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-api/1440x1000-dark.png"
+    },
+    {
+      "route": "auth-sign-in",
+      "path": "/auth/sign-in",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-in/1440x1000-dark.png"
+    },
+    {
+      "route": "auth-sign-up",
+      "path": "/auth/sign-up",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-up/1440x1000-dark.png"
+    },
+    {
+      "route": "auth-reset",
+      "path": "/auth/reset",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-reset/1440x1000-dark.png"
+    },
+    {
+      "route": "auth-verify",
+      "path": "/auth/verify",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-verify/1440x1000-dark.png"
+    },
+    {
+      "route": "channels-connect",
+      "path": "/app/channels/connect",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-connect/1440x1000-dark.png"
+    },
+    {
+      "route": "not-found",
+      "path": "/app/this-route-does-not-exist",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/not-found/1440x1000-dark.png"
+    },
+    {
+      "route": "marketing",
+      "path": "/",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing/1440x1000-dark.png"
+    },
+    {
+      "route": "pricing",
+      "path": "/pricing",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pricing/1440x1000-dark.png"
+    },
+    {
+      "route": "marketing-channels",
+      "path": "/channels",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing-channels/1440x1000-dark.png"
+    },
+    {
+      "route": "docs",
+      "path": "/docs",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs/1440x1000-dark.png"
+    },
+    {
+      "route": "docs-article",
+      "path": "/docs/getting-started",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs-article/1440x1000-dark.png"
+    },
+    {
+      "route": "channel-detail",
+      "path": "/channels/linkedin",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channel-detail/1440x1000-dark.png"
+    },
+    {
+      "route": "changelog",
+      "path": "/changelog",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/changelog/1440x1000-dark.png"
+    },
+    {
+      "route": "contact",
+      "path": "/contact",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/contact/1440x1000-dark.png"
+    },
+    {
+      "route": "data-deletion",
+      "path": "/data-deletion",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/data-deletion/1440x1000-dark.png"
+    },
+    {
+      "route": "privacy-page",
+      "path": "/privacy",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/privacy-page/1440x1000-dark.png"
+    },
+    {
+      "route": "security-page",
+      "path": "/security",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/security-page/1440x1000-dark.png"
+    },
+    {
+      "route": "status-page",
+      "path": "/status",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/status-page/1440x1000-dark.png"
+    },
+    {
+      "route": "terms",
+      "path": "/terms",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/terms/1440x1000-dark.png"
+    },
+    {
+      "route": "channels-forwarder",
+      "path": "/channels/connect",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-forwarder/1440x1000-dark.png"
+    },
+    {
+      "route": "invite",
+      "path": "/invite/evidence-not-a-real-token",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/invite/1440x1000-dark.png"
+    },
+    {
+      "route": "conversation",
+      "path": "/app/agent/9e13e590-984b-480d-af86-7dd8daa38f13",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/conversation/1440x1000-dark.png"
+    },
+    {
+      "route": "home",
+      "path": "/app",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/home/390x844-light.png"
+    },
+    {
+      "route": "overview",
+      "path": "/app/overview",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/overview/390x844-light.png"
+    },
+    {
+      "route": "ideas",
+      "path": "/app/ideas",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/ideas/390x844-light.png"
+    },
+    {
+      "route": "calendar",
+      "path": "/app/calendar",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/calendar/390x844-light.png"
+    },
+    {
+      "route": "pipeline",
+      "path": "/app/pipeline",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pipeline/390x844-light.png"
+    },
+    {
+      "route": "library",
+      "path": "/app/library",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/library/390x844-light.png"
+    },
+    {
+      "route": "channels",
+      "path": "/app/channels",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels/390x844-light.png"
+    },
+    {
+      "route": "queue",
+      "path": "/app/queue",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/queue/390x844-light.png"
+    },
+    {
+      "route": "analytics",
+      "path": "/app/analytics",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/analytics/390x844-light.png"
+    },
+    {
+      "route": "inbox",
+      "path": "/app/inbox",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/inbox/390x844-light.png"
+    },
+    {
+      "route": "workspace-brand",
+      "path": "/app/workspace/brand",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-brand/390x844-light.png"
+    },
+    {
+      "route": "workspace-memory",
+      "path": "/app/workspace/memory",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-memory/390x844-light.png"
+    },
+    {
+      "route": "workspace-members",
+      "path": "/app/workspace/members",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-members/390x844-light.png"
+    },
+    {
+      "route": "workspace-roles",
+      "path": "/app/workspace/roles",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-roles/390x844-light.png"
+    },
+    {
+      "route": "workspace-audit",
+      "path": "/app/workspace/audit",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-audit/390x844-light.png"
+    },
+    {
+      "route": "account-profile",
+      "path": "/app/account/profile",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-profile/390x844-light.png"
+    },
+    {
+      "route": "account-notifications",
+      "path": "/app/account/notifications",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-notifications/390x844-light.png"
+    },
+    {
+      "route": "account-billing",
+      "path": "/app/account/billing",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-billing/390x844-light.png"
+    },
+    {
+      "route": "account-privacy",
+      "path": "/app/account/privacy",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-privacy/390x844-light.png"
+    },
+    {
+      "route": "account-models",
+      "path": "/app/account/models",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-models/390x844-light.png"
+    },
+    {
+      "route": "account-api",
+      "path": "/app/account/api",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+      ],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-api/390x844-light.png"
+    },
+    {
+      "route": "auth-sign-in",
+      "path": "/auth/sign-in",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-in/390x844-light.png"
+    },
+    {
+      "route": "auth-sign-up",
+      "path": "/auth/sign-up",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-up/390x844-light.png"
+    },
+    {
+      "route": "auth-reset",
+      "path": "/auth/reset",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-reset/390x844-light.png"
+    },
+    {
+      "route": "auth-verify",
+      "path": "/auth/verify",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-verify/390x844-light.png"
+    },
+    {
+      "route": "channels-connect",
+      "path": "/app/channels/connect",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-connect/390x844-light.png"
+    },
+    {
+      "route": "not-found",
+      "path": "/app/this-route-does-not-exist",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/not-found/390x844-light.png"
+    },
+    {
+      "route": "marketing",
+      "path": "/",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing/390x844-light.png"
+    },
+    {
+      "route": "pricing",
+      "path": "/pricing",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pricing/390x844-light.png"
+    },
+    {
+      "route": "marketing-channels",
+      "path": "/channels",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing-channels/390x844-light.png"
+    },
+    {
+      "route": "docs",
+      "path": "/docs",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs/390x844-light.png"
+    },
+    {
+      "route": "docs-article",
+      "path": "/docs/getting-started",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs-article/390x844-light.png"
+    },
+    {
+      "route": "channel-detail",
+      "path": "/channels/linkedin",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channel-detail/390x844-light.png"
+    },
+    {
+      "route": "changelog",
+      "path": "/changelog",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/changelog/390x844-light.png"
+    },
+    {
+      "route": "contact",
+      "path": "/contact",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/contact/390x844-light.png"
+    },
+    {
+      "route": "data-deletion",
+      "path": "/data-deletion",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/data-deletion/390x844-light.png"
+    },
+    {
+      "route": "privacy-page",
+      "path": "/privacy",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/privacy-page/390x844-light.png"
+    },
+    {
+      "route": "security-page",
+      "path": "/security",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/security-page/390x844-light.png"
+    },
+    {
+      "route": "status-page",
+      "path": "/status",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/status-page/390x844-light.png"
+    },
+    {
+      "route": "terms",
+      "path": "/terms",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/terms/390x844-light.png"
+    },
+    {
+      "route": "channels-forwarder",
+      "path": "/channels/connect",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-forwarder/390x844-light.png"
+    },
+    {
+      "route": "invite",
+      "path": "/invite/evidence-not-a-real-token",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/invite/390x844-light.png"
+    },
+    {
+      "route": "conversation",
+      "path": "/app/agent/9e13e590-984b-480d-af86-7dd8daa38f13",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/conversation/390x844-light.png"
+    },
+    {
+      "route": "home",
+      "path": "/app",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/home/1440x1000-light.png"
+    },
+    {
+      "route": "overview",
+      "path": "/app/overview",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/overview/1440x1000-light.png"
+    },
+    {
+      "route": "ideas",
+      "path": "/app/ideas",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/ideas/1440x1000-light.png"
+    },
+    {
+      "route": "calendar",
+      "path": "/app/calendar",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/calendar/1440x1000-light.png"
+    },
+    {
+      "route": "pipeline",
+      "path": "/app/pipeline",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pipeline/1440x1000-light.png"
+    },
+    {
+      "route": "library",
+      "path": "/app/library",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/library/1440x1000-light.png"
+    },
+    {
+      "route": "channels",
+      "path": "/app/channels",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels/1440x1000-light.png"
+    },
+    {
+      "route": "queue",
+      "path": "/app/queue",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/queue/1440x1000-light.png"
+    },
+    {
+      "route": "analytics",
+      "path": "/app/analytics",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/analytics/1440x1000-light.png"
+    },
+    {
+      "route": "inbox",
+      "path": "/app/inbox",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/inbox/1440x1000-light.png"
+    },
+    {
+      "route": "workspace-brand",
+      "path": "/app/workspace/brand",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-brand/1440x1000-light.png"
+    },
+    {
+      "route": "workspace-memory",
+      "path": "/app/workspace/memory",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-memory/1440x1000-light.png"
+    },
+    {
+      "route": "workspace-members",
+      "path": "/app/workspace/members",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-members/1440x1000-light.png"
+    },
+    {
+      "route": "workspace-roles",
+      "path": "/app/workspace/roles",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-roles/1440x1000-light.png"
+    },
+    {
+      "route": "workspace-audit",
+      "path": "/app/workspace/audit",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/workspace-audit/1440x1000-light.png"
+    },
+    {
+      "route": "account-profile",
+      "path": "/app/account/profile",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-profile/1440x1000-light.png"
+    },
+    {
+      "route": "account-notifications",
+      "path": "/app/account/notifications",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-notifications/1440x1000-light.png"
+    },
+    {
+      "route": "account-billing",
+      "path": "/app/account/billing",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-billing/1440x1000-light.png"
+    },
+    {
+      "route": "account-privacy",
+      "path": "/app/account/privacy",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-privacy/1440x1000-light.png"
+    },
+    {
+      "route": "account-models",
+      "path": "/app/account/models",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-models/1440x1000-light.png"
+    },
+    {
+      "route": "account-api",
+      "path": "/app/account/api",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "console: Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+      ],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/account-api/1440x1000-light.png"
+    },
+    {
+      "route": "auth-sign-in",
+      "path": "/auth/sign-in",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-in/1440x1000-light.png"
+    },
+    {
+      "route": "auth-sign-up",
+      "path": "/auth/sign-up",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-sign-up/1440x1000-light.png"
+    },
+    {
+      "route": "auth-reset",
+      "path": "/auth/reset",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-reset/1440x1000-light.png"
+    },
+    {
+      "route": "auth-verify",
+      "path": "/auth/verify",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/auth-verify/1440x1000-light.png"
+    },
+    {
+      "route": "channels-connect",
+      "path": "/app/channels/connect",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-connect/1440x1000-light.png"
+    },
+    {
+      "route": "not-found",
+      "path": "/app/this-route-does-not-exist",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/not-found/1440x1000-light.png"
+    },
+    {
+      "route": "marketing",
+      "path": "/",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing/1440x1000-light.png"
+    },
+    {
+      "route": "pricing",
+      "path": "/pricing",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/pricing/1440x1000-light.png"
+    },
+    {
+      "route": "marketing-channels",
+      "path": "/channels",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/marketing-channels/1440x1000-light.png"
+    },
+    {
+      "route": "docs",
+      "path": "/docs",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs/1440x1000-light.png"
+    },
+    {
+      "route": "docs-article",
+      "path": "/docs/getting-started",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/docs-article/1440x1000-light.png"
+    },
+    {
+      "route": "channel-detail",
+      "path": "/channels/linkedin",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channel-detail/1440x1000-light.png"
+    },
+    {
+      "route": "changelog",
+      "path": "/changelog",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/changelog/1440x1000-light.png"
+    },
+    {
+      "route": "contact",
+      "path": "/contact",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/contact/1440x1000-light.png"
+    },
+    {
+      "route": "data-deletion",
+      "path": "/data-deletion",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/data-deletion/1440x1000-light.png"
+    },
+    {
+      "route": "privacy-page",
+      "path": "/privacy",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/privacy-page/1440x1000-light.png"
+    },
+    {
+      "route": "security-page",
+      "path": "/security",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/security-page/1440x1000-light.png"
+    },
+    {
+      "route": "status-page",
+      "path": "/status",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/status-page/1440x1000-light.png"
+    },
+    {
+      "route": "terms",
+      "path": "/terms",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/terms/1440x1000-light.png"
+    },
+    {
+      "route": "channels-forwarder",
+      "path": "/channels/connect",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/channels-forwarder/1440x1000-light.png"
+    },
+    {
+      "route": "invite",
+      "path": "/invite/evidence-not-a-real-token",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": false,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/invite/1440x1000-light.png"
+    },
+    {
+      "route": "conversation",
+      "path": "/app/agent/9e13e590-984b-480d-af86-7dd8daa38f13",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/conversation/1440x1000-light.png"
+    }
+  ],
+  "finishedAt": "2026-09-24T03:49:45.804Z"
+}

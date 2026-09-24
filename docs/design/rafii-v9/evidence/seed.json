@@ -1,0 +1,68 @@
+{
+  "base": "http://localhost:3100",
+  "principal": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+  "workspaceId": "619c305e-e8c8-45c4-b629-4136a54fa417",
+  "connections": 2,
+  "channels": [
+    {
+      "id": "abaad27ed4e69ff561db13790efff006",
+      "platform": "LinkedIn",
+      "account": "Dev Member"
+    },
+    {
+      "id": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+      "platform": "LinkedIn",
+      "account": "Dev Member Two"
+    }
+  ],
+  "folders": [
+    {
+      "id": "aba13094-cf68-4362-a24a-f806850e6575",
+      "name": "Festival",
+      "pinned": true,
+      "symbol": "music",
+      "createdAt": 1790215637.4291992,
+      "createdBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+      "updatedAt": 1790215637.4291992,
+      "updatedBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+      "accountIds": [
+        "abaad27ed4e69ff561db13790efff006",
+        "51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
+      ]
+    },
+    {
+      "id": "5c80d5d2-4155-43d9-a9c4-bc9c6013d437",
+      "name": "Personal",
+      "symbol": "heart",
+      "pinned": true,
+      "accountIds": [
+        "abaad27ed4e69ff561db13790efff006"
+      ],
+      "createdAt": 1790215637.4895082,
+      "createdBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+      "updatedAt": 1790215637.4895082,
+      "updatedBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c"
+    }
+  ],
+  "conversationId": "9e13e590-984b-480d-af86-7dd8daa38f13",
+  "runId": "faa8398a-bc4e-48df-9911-ab634e2bac52",
+  "runStatus": "completed",
+  "variants": [
+    {
+      "platform": "LinkedIn",
+      "language": "en-US",
+      "channelId": "abaad27ed4e69ff561db13790efff006",
+      "account": "Dev Member"
+    },
+    {
+      "platform": "LinkedIn",
+      "language": "en-US",
+      "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+      "account": "Dev Member Two"
+    },
+    {
+      "platform": "Threads",
+      "language": "en-GB"
+    }
+  ]
+}

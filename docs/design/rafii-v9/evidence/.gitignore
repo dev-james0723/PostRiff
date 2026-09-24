@@ -1,0 +1,4 @@
+# Rafii v9 browser evidence: screenshots and screen recordings stay on disk (regenerate with
+# web/tests/rafii-evidence.cjs and web/tests/rafii-workflow.cjs); the JSON reports and logs are tracked.
+*.png
+*.webm

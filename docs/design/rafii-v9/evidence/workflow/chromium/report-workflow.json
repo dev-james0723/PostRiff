@@ -1,0 +1,289 @@
+{
+  "base": "http://localhost:3100",
+  "browser": "chromium",
+  "principal": "67134587-418d-4c6b-bffb-5170eb5c9e86",
+  "workspaceId": "90d4d378-787c-43dd-9728-f5cb42efe3bb",
+  "startedAt": "2026-09-24T01:46:57.142Z",
+  "scenes": [
+    {
+      "name": "workflow",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "Home heading",
+          "ok": true
+        },
+        {
+          "name": "model is the deterministic preview fixture",
+          "ok": true,
+          "detail": "Model\nDeterministic preview"
+        },
+        {
+          "name": "folder inspector unfolds (aria-expanded)",
+          "ok": true
+        },
+        {
+          "name": "overlapping folders select each account once",
+          "ok": true,
+          "detail": "Done, 2 accounts selected"
+        },
+        {
+          "name": "composer shows the folder selection",
+          "ok": false,
+          "detail": "2 folders\n2 drafts"
+        },
+        {
+          "name": "composer counts two accounts",
+          "ok": true,
+          "detail": "Choose channels, 2 accounts selected"
+        },
+        {
+          "name": "idle deck names both accounts on one app",
+          "ok": true,
+          "detail": [
+            "Preview Dev Member on iPhone",
+            "Preview Dev Member Two on iPhone"
+          ]
+        },
+        {
+          "name": "language dialog lists each account separately",
+          "ok": true
+        },
+        {
+          "name": "language summary shows per-destination languages",
+          "ok": true,
+          "detail": "Language\nPer destination · 2 languages"
+        },
+        {
+          "name": "fixture route shows its real reasoning options",
+          "ok": false,
+          "detail": 0
+        },
+        {
+          "name": "fixture model still selected after browsing providers",
+          "ok": true,
+          "detail": "Model\nDeterministic preview"
+        },
+        {
+          "name": "Generate is enabled with two account destinations",
+          "ok": true
+        },
+        {
+          "name": "one draft per account (2 of 2 ready)",
+          "ok": true,
+          "detail": "2 of 2 ready · yours to edit"
+        },
+        {
+          "name": "results keep each account as its own draft",
+          "ok": true,
+          "detail": [
+            "LinkedIn · Dev Member, ready",
+            "LinkedIn · Dev Member Two, ready"
+          ]
+        },
+        {
+          "name": "swipe moves to the other draft",
+          "ok": true,
+          "detail": {
+            "before": "LinkedIn · Dev Member, ready",
+            "after": "LinkedIn · Dev Member Two, ready"
+          }
+        },
+        {
+          "name": "edited caption is marked unsaved",
+          "ok": true
+        },
+        {
+          "name": "one edited caption recorded",
+          "ok": true
+        },
+        {
+          "name": "server holds exactly one draft per account for the run",
+          "ok": true,
+          "detail": [
+            {
+              "id": "7f0e434396154cdebb2429bde713dbab",
+              "platform": "LinkedIn",
+              "language": "en-US",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false
+            },
+            {
+              "id": "e415128ae2be4a9abc3efa07bb4c72fc",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 2,
+              "edited": true
+            }
+          ]
+        },
+        {
+          "name": "each account kept its own language (second account en-GB, first unchanged)",
+          "ok": true,
+          "detail": [
+            {
+              "id": "7f0e434396154cdebb2429bde713dbab",
+              "platform": "LinkedIn",
+              "language": "en-US",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false
+            },
+            {
+              "id": "e415128ae2be4a9abc3efa07bb4c72fc",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 2,
+              "edited": true
+            }
+          ]
+        },
+        {
+          "name": "the edited caption persisted as a new revision",
+          "ok": true,
+          "detail": [
+            {
+              "id": "7f0e434396154cdebb2429bde713dbab",
+              "platform": "LinkedIn",
+              "language": "en-US",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false
+            },
+            {
+              "id": "e415128ae2be4a9abc3efa07bb4c72fc",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 2,
+              "edited": true
+            }
+          ]
+        },
+        {
+          "name": "conversation tabs name each account",
+          "ok": true,
+          "detail": [
+            "LinkedIn\nDev Member\n🇺🇸\nEnglish (US)",
+            "LinkedIn\nDev Member Two\n🇬🇧\nEnglish (UK)"
+          ]
+        }
+      ],
+      "marks": [
+        {
+          "label": "Home loaded",
+          "atSeconds": 9.9
+        },
+        {
+          "label": "Channel Bloom open",
+          "atSeconds": 11
+        },
+        {
+          "label": "Festival folder unfolds",
+          "atSeconds": 11.6
+        },
+        {
+          "label": "Festival folder folds",
+          "atSeconds": 12.9
+        },
+        {
+          "label": "destinations committed",
+          "atSeconds": 15.6
+        },
+        {
+          "label": "language dialog open",
+          "atSeconds": 17
+        },
+        {
+          "label": "language catalogue discloses",
+          "atSeconds": 17.3
+        },
+        {
+          "label": "languages applied",
+          "atSeconds": 20
+        },
+        {
+          "label": "model dialog open",
+          "atSeconds": 20.7
+        },
+        {
+          "label": "provider swap 1",
+          "atSeconds": 21.8
+        },
+        {
+          "label": "provider swap 0",
+          "atSeconds": 22.7
+        },
+        {
+          "label": "generate",
+          "atSeconds": 25.7
+        },
+        {
+          "label": "drafts ready",
+          "atSeconds": 37.1
+        },
+        {
+          "label": "phone swipe",
+          "atSeconds": 38.6
+        },
+        {
+          "label": "save as drafts",
+          "atSeconds": 40.2
+        },
+        {
+          "label": "conversation view",
+          "atSeconds": 58.3
+        }
+      ],
+      "errors": [
+        "console: Failed to load resource: net::ERR_FAILED"
+      ],
+      "screenshots": [
+        "workflow/chromium/workflow/01-home-idle.png",
+        "workflow/chromium/workflow/02-channel-bloom.png",
+        "workflow/chromium/workflow/03-folder-inspector.png",
+        "workflow/chromium/workflow/04-folders-selected.png",
+        "workflow/chromium/workflow/05-idle-deck-two-accounts.png",
+        "workflow/chromium/workflow/06-language-per-account.png",
+        "workflow/chromium/workflow/07-model-dialog.png",
+        "workflow/chromium/workflow/08-results.png",
+        "workflow/chromium/workflow/09-after-swipe.png",
+        "workflow/chromium/workflow/10-saved.png",
+        "workflow/chromium/workflow/11-conversation.png"
+      ],
+      "video": "workflow/chromium/workflow/workflow.webm",
+      "t0": 1790214417443,
+      "saved": [
+        {
+          "id": "7f0e434396154cdebb2429bde713dbab",
+          "platform": "LinkedIn",
+          "language": "en-US",
+          "channelId": "abaad27ed4e69ff561db13790efff006",
+          "revision": 1,
+          "edited": false
+        },
+        {
+          "id": "e415128ae2be4a9abc3efa07bb4c72fc",
+          "platform": "LinkedIn",
+          "language": "en-GB",
+          "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+          "revision": 2,
+          "edited": true
+        }
+      ],
+      "conversationId": "65f4d10c-2d1f-4918-8e94-af03115530e5",
+      "durationSeconds": 58.9
+    }
+  ],
+  "finishedAt": "2026-09-24T01:47:56.454Z",
+  "summary": {
+    "checks": 21,
+    "failed": 2,
+    "pageErrors": 1
+  }
+}

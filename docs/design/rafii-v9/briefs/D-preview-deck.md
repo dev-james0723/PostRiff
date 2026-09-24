@@ -1,0 +1,20 @@
+# Stream D — Native preview deck (phone slide/crossfade, swipe, expanded preview)
+
+Read first: `docs/design/rafii-v9/contracts.md`; prompt §9; DNA v8 §17, §18.3, §19.5. Prototype: extract the source zip → `src/phone-motion.js` (deck poses: active `translateX(0) rotateY(0) scale(1)` opacity 1; left `translateX(-65%) rotateY(14deg) scale(.83)` opacity .2; right mirrored; exit; 560ms `cubic-bezier(.22,.78,.22,1)`; keyed items, cancellation, inert outgoing layers, z-order, scroll preservation), `src/swipe.js` (pointer arbitration: axis lock after 10px, 1.3 ratio, accept ≥42px or ≥26px fast, multi-touch blocks, click suppression 300ms, `--swipe-offset` ≤22px drag feedback), `src/refinement.css` (`.phone-stage`, `.phone-scene`, dock lens 520ms), `src/phone-previews.css` (dock buttons), `src/index.html` (`#preview-idle`, `#phone-dialog`), `src/app.js` (`renderDock`, `moveDockLens`, `renderShowcase`, `renderExpanded`, `stepPreview`, `wirePhonePreviews`). Production truth: `web/src/components/application/post-preview/*` (README, `PostPreview`, `DraftPreview`, `ManifestPreview`, `PhoneFrame` 393×852 scaled, templates per channel slug, `preview-tools.tsx`, `usePreviewSetting`, guides/limits). Do not replace templates with screenshots; the deck composes the real `PostPreview`.
+
+## Files you own
+- `web/src/components/application/post-preview/preview-deck.tsx` (new): `PreviewDeck({ items: DeckItem[], activeKey, onChange(key), scale?, tools?, label })` where `DeckItem = { key: string; post: PreviewPost; caption?: ReactNode }`. Renders the active phone (real `PostPreview`, `tools` per prop) plus up to two inert neighbours (`aria-hidden`, `inert`, blurred, `pointer-events:none`) with the prototype poses; switching animates all layers with WAAPI (560ms), keeps the outgoing layer until the animation ends, cancels on rapid switches so the last request wins, reduced motion → instant swap. Caption edits (the same key, new post text) update the active phone without a transition. Removing a key cleans its node. Unique ids: the `PostPreview` templates are React, so mount only what is on stage.
+- `web/src/components/application/post-preview/use-swipe.ts` (new): pointer-events hook mirroring swipe.js: horizontal swipe changes item, vertical scrolling stays native (`touch-action: pan-y pinch-zoom`), small/diagonal/multi-touch/cancelled gestures do nothing, a completed swipe suppresses the following click, drag feedback via `--swipe-offset` (≤22px, only when motion allowed), `dragstart` prevented.
+- `web/src/components/application/post-preview/preview-dock.tsx` (new): the channel dock: `role='group'` of `aria-pressed` buttons (channel icon + short name + optional status dot for pending/error), one gliding lens (520ms; `rafii-lens`), arrow/Home/End keys move and select, equal-width grid up to 6 per row, wraps beyond.
+- `web/src/components/application/post-preview/expanded-preview-dialog.tsx` (new): "{Channel} <em>on iPhone.</em>" `RafiiDialogContent size='lg'` with the dock, the deck at a larger scale, prev/next buttons, caption "Illustrative layout, not a published post", Tab cycling inside.
+- `web/src/components/application/post-preview/preview-deck.test.cjs`: pure helpers (neighbour resolution for 1/2/n items, direction choice, swipe acceptance thresholds) in `preview-deck-core.ts` (new, framework-free) with tests.
+
+## Rules
+- Previewing an app never changes destinations: the deck only reports `onChange(key)`.
+- Show the real account name/picture through the existing `DraftPreview`/`PreviewPost` inputs; sample text only when the caller passes it (the Home stream passes the typed idea or an honest sample marked as such).
+- Video/unsupported formats: templates already draw the "missing media"/script notes; do not fake controls.
+- Keyboard: dock buttons are the non-gesture path; the stage itself is not focusable.
+- Performance: `will-change` only during a transition (`data-transition='switching'`), neighbours use `contain: layout style`.
+- typecheck + lint green.
+
+Report back: file list, exact props, what is not verified.

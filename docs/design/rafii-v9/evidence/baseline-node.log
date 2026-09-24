@@ -1,0 +1,70 @@
+(node:83766) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/ouxianxing/Documents/James-Au-Studio/web/src/lib/locales/core.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/ouxianxing/Documents/James-Au-Studio/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ search finds a language by nickname, native name, region, script or accent-free spelling (96.692083ms)
+✔ canonical reads old values, aliases and names, and refuses what is not a language (0.999459ms)
+✔ languages named in the message pair with channels like the server does (7.367458ms)
+✔ redirects reject external paths, URL parser tricks and verification loops (2.058916ms)
+✔ invite destination follows actual role and live permission flags (0.296666ms)
+✔ preview build refuses production identity or cross-deployment API (3.037458ms)
+(node:83769) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/ouxianxing/Documents/James-Au-Studio/web/src/lib/api/media.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/ouxianxing/Documents/James-Au-Studio/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Media cache lifetime assertions passed
+✔ tests/media-cache.test.mjs (526.231458ms)
+(node:83770) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/ouxianxing/Documents/James-Au-Studio/web/src/features/calendar/calendar-kinds.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/ouxianxing/Documents/James-Au-Studio/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ held has an honest calendar state (1.071917ms)
+✔ uncertain has an honest calendar state (0.07625ms)
+✔ future-state has an honest calendar state (0.057ms)
+✔ scheduled has an honest calendar state (0.053584ms)
+✔ provider_accepted has an honest calendar state (0.056625ms)
+✔ processing has an honest calendar state (0.8455ms)
+✔ verified has an honest calendar state (0.140791ms)
+✔ submitting has an honest calendar state (0.133667ms)
+✔ uncertain never spins as Publishing (0.316458ms)
+✔ app opening and manual completion remain distinct from API verification (0.228958ms)
+(node:83771) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/ouxianxing/Documents/James-Au-Studio/web/src/lib/channels/publishing-support.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/ouxianxing/Documents/James-Au-Studio/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ LinkedIn shows actual hosted formats and external gate (34.668917ms)
+✔ Threads shows actual hosted formats and external gate (2.648792ms)
+✔ Instagram shows actual hosted formats and external gate (0.27975ms)
+✔ unknown connector does not imply Direct publishing (0.29375ms)
+✔ receipt shows persisted container, reference, verified link and provenance (212.219334ms)
+✔ unverified or unsafe URL is never a verified publication link (49.936667ms)
+✔ actual PostgreSQL snapshot reaches the UI without losing receipt fields (22.581792ms)
+(node:83773) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/ouxianxing/Documents/James-Au-Studio/web/src/lib/jobs.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/ouxianxing/Documents/James-Au-Studio/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Shared job behavior assertions passed
+API error compatibility assertions passed
+✔ tests/shared-contracts.test.mjs (642.820666ms)
+✔ append keeps selected older pages and deduplicates imported post identities (3.417417ms)
+✔ foreign accounts, broken cursor chains, duplicate cursors and unbounded previews fail (0.356333ms)
+✔ coverage describes the loaded date range and never says all posts (24.119208ms)
+✔ only selected verified unexpired posts can form a bounded retention request (0.373417ms)
+✔ Ask Rafii recognizes explicit own-writing analysis without treating it as a draft (1.280583ms)
+✔ manual setup does not silently preselect warm as a learned tone (1.589334ms)
+✔ both chat entry points intercept learning before drafting or publishing (9.584ms)
+✔ error export removes content, identities, credentials, breadcrumbs and URL queries (1.321541ms)
+✔ stack metadata cannot carry credentials, user paths or free-form exception types (0.295917ms)
+✔ changing writer never transfers exact sample consent to a different cloud model or CLI (3.930042ms)
+✔ bootstrap origin uses configured HTTPS or explicitly local loopback; rejects host tricks (1.810292ms)
+✔ bootstrap authenticates fixed reads without cache or redirect; foreign selection cannot select a workspace (57.76725ms)
+✔ bootstrap refuses failed identity, missing memberships, enforced MFA and unavailable transport (8.0595ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1340.369875
+node exit 0

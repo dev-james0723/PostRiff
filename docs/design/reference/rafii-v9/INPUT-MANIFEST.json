@@ -1,0 +1,46 @@
+{
+  "prepared": "2026-09-23",
+  "purpose": "Reference handoff for an existing-project implementation; not a production completion report.",
+  "files": [
+    {
+      "path": "Rafii_Design_DNA_v8.md",
+      "bytes": 119649,
+      "sha256": "4a2739d71c064c90fc0878ae38ab64b56145dd0d929e40fa37dd2cea40ae873d"
+    },
+    {
+      "path": "Rafii_Design_DNA_v9_Addendum.md",
+      "bytes": 7204,
+      "sha256": "8efca5920948773b116c02d88263eb8d8b708fd2d9f4129c965e72ab9d27aca2"
+    },
+    {
+      "path": "Rafii_V9_Production_Integration_Agent_Prompt.md",
+      "bytes": 33153,
+      "sha256": "032be256915574f6743d1c971aeb44cef15339adbec1ded95b0754e5e43d5d8c"
+    },
+    {
+      "path": "START-HERE.md",
+      "bytes": 2809,
+      "sha256": "cb615bee252acd45272d0e7bb7413351f917974ca12294afbed3f8fe10b0d72c"
+    },
+    {
+      "path": "rafii-prototype-v9-preview.png",
+      "bytes": 243941,
+      "sha256": "0da6164878f28ec1ee850117082ec43aeb198869c4f2e9c21c7470284f9bb67d"
+    },
+    {
+      "path": "rafii-prototype-v9-source.zip",
+      "bytes": 4012077,
+      "sha256": "285f85ffeb9f04cb9f5d70b29eaab237ccb5d7db336f932d3ad83c9e767bb2fa"
+    },
+    {
+      "path": "rafii-prototype-v9.html",
+      "bytes": 832472,
+      "sha256": "9fa6c351bdf9dc5a2486f05c23813d7d0ce6ce1de05cea94e3d098479b6a3e39"
+    },
+    {
+      "path": "rafii-v9-validation.md",
+      "bytes": 5295,
+      "sha256": "c83c6e5a90d003fb33586618fe35b756e2fa184c3647460481d757ecdd217f11"
+    }
+  ]
+}
