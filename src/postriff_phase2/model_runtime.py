@@ -25,13 +25,18 @@ from .voice_sources import bounded_style_directives
 
 DEFAULT_ENDPOINT = "https://ai-gateway.vercel.sh/v1/chat/completions"
 DEFAULT_MODEL = "anthropic/claude-sonnet-5"
-# Conservative USD per 1M tokens (input, output) for the estimate; the provider-reported usage settles the ledger.
-# Not checked against the gateway price list; a cost computed from this table records the version it used.
-DEFAULT_PRICES_VERSION = "defaults-2026-09-23"
+# USD per 1M tokens (input, output) for the estimate; the provider-reported usage settles the ledger. Checked
+# against the AI Gateway's public price list (/v1/models) on 2026-09-24; a cost computed from this table records
+# the version it used. A price here does not offer a model: POSTRIFF_MODEL_IDS decides what can be chosen.
+DEFAULT_PRICES_VERSION = "gateway-list-2026-09-24"
 DEFAULT_PRICES = {
     "anthropic/claude-sonnet-5": (2.0, 10.0),
+    "anthropic/claude-opus-5.5": (4.0, 20.0),
     "anthropic/claude-haiku-4.5": (1.0, 5.0),
+    "openai/gpt-6-sol": (2.0, 10.0),
     "openai/gpt-4.1-mini": (0.4, 1.6),
+    "google/gemini-3.1-pro-preview": (2.0, 12.0),
+    "google/gemini-2.5-flash": (0.3, 2.5),
 }
 MAX_CONTEXT_BYTES = 60_000
 MAX_SKILLS_BYTES = 60_000       # composed skill text (IdeasService binds it); method only, never identity or policy

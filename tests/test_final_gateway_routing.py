@@ -66,7 +66,7 @@ class GatewayRouting(unittest.TestCase):
         self.assertEqual(usage['priceBasis'], {'version': 'configured', 'inputUsdPerMTok': 2, 'outputUsdPerMTok': 10})
         transport = Recording([reply()])
         default = ServerModelRuntime('key', model='anthropic/claude-sonnet-5', models=['anthropic/claude-sonnet-5'], transport=transport)
-        self.assertEqual(run(default)['usage']['priceBasis']['version'], 'defaults-2026-09-23')
+        self.assertEqual(run(default)['usage']['priceBasis']['version'], 'gateway-list-2026-09-24')
         rt, _ = runtime([reply('anthropic', '0.0045')])
         self.assertNotIn('priceBasis', run(rt)['usage'], 'a gateway-reported cost needs no price table')
 

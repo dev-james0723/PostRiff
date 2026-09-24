@@ -8,6 +8,10 @@ const host=()=>({platform:os.platform(),cpuCount:os.cpus().length,loadAverage:os
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base='http://127.0.0.1:4439';
 const quantile=(arr,q)=>[...arr].sort((a,b)=>a-b)[Math.ceil(arr.length*q)-1];
+// Rafii v9 Home is server-rendered, so a visible, enabled Message field is not yet usable: "ready" means React has
+// attached its handlers to that field.
+// The slow profile only waits for it before reading LCP/CLS, so it gets longer; the thresholds below are unchanged.
+const homeReady=(page,timeout=30000)=>page.waitForFunction(()=>{const el=document.querySelector('textarea[aria-label="Message"]');return !!el&&el.disabled===false&&Object.keys(el).some(k=>k.startsWith('__reactProps'));},null,{timeout});
 (async()=>{
  const hostBefore=host();
  const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
@@ -17,9 +21,9 @@ const quantile=(arr,q)=>[...arr].sort((a,b)=>a-b)[Math.ceil(arr.length*q)-1];
   await context.addInitScript(id=>{localStorage.setItem('postriff-dev-principal',id);localStorage.setItem('postriff-onboarding:'+id,JSON.stringify({completed:{},dismissed:{welcome:1},nudged:{}}));},id);
   await context.route('**/*',r=>new URL(r.request().url()).origin===base?r.continue():r.abort());
   const page=await context.newPage();
-  await page.goto(base+'/app');await page.getByRole('heading',{name:'Campaign planner',exact:true}).waitFor();
+  await page.goto(base+'/app');await homeReady(page);
   const warm=[];
-  for(let i=0;i<20;i++) {const start=performance.now();await page.reload();await page.getByLabel('Campaign goal',{exact:true}).waitFor();await page.waitForFunction(()=>document.querySelector('[aria-label="Message"]')?.disabled===false);warm.push(performance.now()-start);}
+  for(let i=0;i<20;i++) {const start=performance.now();await page.reload();await homeReady(page);warm.push(performance.now()-start);}
   const headers={Authorization:'Bearer dev:'+id,Origin:base};
   const spaces=await (await context.request.get(base+'/api/workspaces',{headers})).json();
   const wid=spaces.workspaces[0].workspaceId;const reads=[];let index=0;
@@ -32,7 +36,7 @@ const quantile=(arr,q)=>[...arr].sort((a,b)=>a-b)[Math.ceil(arr.length*q)-1];
   await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:150,downloadThroughput:1_600_000/8,uploadThroughput:750_000/8,connectionType:'cellular4g'});
   await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
   const slow=[];
-  for(let i=0;i<5;i++){await page.reload();await page.getByLabel('Campaign goal',{exact:true}).waitFor();await page.waitForFunction(()=>document.querySelector('[aria-label="Message"]')?.disabled===false);await page.waitForTimeout(1000);slow.push(await page.evaluate(()=>({...window.__consumerVitals,navigation:performance.getEntriesByType("navigation")[0]?.toJSON(),scripts:[...document.scripts].map(s=>s.src.replace(location.origin,"")),resources:performance.getEntriesByType("resource").map(r=>({url:r.name.replace(location.origin,""),bytes:r.encodedBodySize,initiator:r.initiatorType,start:r.startTime,end:r.responseEnd})).sort((a,b)=>b.bytes-a.bytes)})));}
+  for(let i=0;i<5;i++){await page.reload({timeout:120000});await homeReady(page,90000);await page.waitForTimeout(1000);slow.push(await page.evaluate(()=>({...window.__consumerVitals,navigation:performance.getEntriesByType("navigation")[0]?.toJSON(),scripts:[...document.scripts].map(s=>s.src.replace(location.origin,"")),resources:performance.getEntriesByType("resource").map(r=>({url:r.name.replace(location.origin,""),bytes:r.encodedBodySize,initiator:r.initiatorType,start:r.startTime,end:r.responseEnd})).sort((a,b)=>b.bytes-a.bytes)})));}
   const metrics={hostBefore,hostAfter:host(),execution:'local production Next/API/PostgreSQL; synthetic identity; no paid or social calls',browser:browser.version(),warm:{samples:20,milliseconds:warm,p95:quantile(warm,.95)},reads:{concurrency:20,samples:reads.length,milliseconds:reads,p95:quantile(reads,.95),foreignStatus:foreign.status()},slow:{viewport:'390x844',cache:'disabled',latencyMs:150,downloadMbps:1.6,uploadMbps:.75,cpuSlowdown:4,samples:slow,lcpP75:quantile(slow.map(s=>s.lcp),.75),clsMax:Math.max(...slow.map(s=>s.cls))},fieldINP:'AWAITING_EXTERNAL'};
   const failures=[];if(metrics.warm.p95>3000)failures.push('warm p95 exceeds 3 seconds');if(metrics.reads.p95>1000)failures.push('read p95 exceeds 1 second');if(metrics.slow.lcpP75>2500 || metrics.slow.lcpP75===0)failures.push('slow LCP p75 exceeds 2.5 seconds or unavailable');if(metrics.slow.clsMax>.1)failures.push('CLS exceeds .1');
   writeFileSync(resolve(__dirname,'../../docs/consumer-ready/evidence/browser-performance-metrics.json'),JSON.stringify({...metrics,failures,status:failures.length?'FAIL':'PASS'},null,2));

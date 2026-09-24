@@ -114,14 +114,32 @@ def ideas_runtime_from_environment(values):
     return ServerModelRuntime(key, model=model, models=models, prices=prices, allowed_providers=allowed, **({"endpoint": endpoint} if endpoint else {}))
 
 
+# Real charges need the merchant's own legal facts on record. None is ever inferred, and a "[to be confirmed]"
+# placeholder counts as missing (web/src/config/legal.ts carries the same placeholders on the legal pages).
+LEGAL_FACTS = ("POSTRIFF_LEGAL_ENTITY", "POSTRIFF_LEGAL_ADDRESS", "POSTRIFF_GOVERNING_LAW")
+
+
+def live_charges_missing(values):
+    """What still blocks live-mode charges: each legal fact not recorded, and the explicit
+    POSTRIFF_LIVE_CHARGES_ENABLED=1 switch. Stripe test-mode keys never charge and are not gated."""
+    missing = [name for name in LEGAL_FACTS if not (values.get(name) or "").strip() or "[" in (values.get(name) or "")]
+    if values.get("POSTRIFF_LIVE_CHARGES_ENABLED") != "1":
+        missing.append("POSTRIFF_LIVE_CHARGES_ENABLED")
+    return missing
+
+
 def billing_from_environment(values):
     """Stripe mounts only with both secrets; otherwise billing is disabled (never the public-secret fixture).
+    A live-mode key additionally needs live_charges_missing() to be empty; until then nothing can be bought.
     Email mounts with Resend when RESEND_API_KEY is set, which then requires EMAIL_FROM and the public base URL."""
     from .billing import DisabledPaymentProvider
-    from .billing_stripe import StripePaymentProvider
+    from .billing_stripe import StripePaymentProvider, key_mode
     from .email import Mailer, NullTransport, ResendTransport
     stripe_key, stripe_secret = values.get("STRIPE_SECRET_KEY"), values.get("STRIPE_WEBHOOK_SECRET")
-    provider = StripePaymentProvider(stripe_key, stripe_secret) if stripe_key and stripe_secret else DisabledPaymentProvider()
+    if stripe_key and stripe_secret and key_mode(stripe_key) and live_charges_missing(values):
+        provider = DisabledPaymentProvider("Real charges are off until the merchant's legal details are recorded.")
+    else:
+        provider = StripePaymentProvider(stripe_key, stripe_secret) if stripe_key and stripe_secret else DisabledPaymentProvider()
     resend_key = values.get("RESEND_API_KEY")
     base_url = values.get("POSTRIFF_PUBLIC_BASE_URL")
     if resend_key:

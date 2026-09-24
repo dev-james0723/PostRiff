@@ -23,6 +23,56 @@ CANDIDATE_BUDGETS = {
 }
 DEFAULT_RESERVE_TEXT = USD // 2  # $0.50 per batch (SPEC §6)
 
+# Launch budget policies (provider cost in USD, not customer prices). An operator turns one on per deployment with
+# POSTRIFF_BUDGET_POLICY=<id>: its budgets are approved with these caps, and the per-person and per-request limits
+# apply. Without a policy every budget stays 'candidate' and paid requests are refused (402), as before. A budget an
+# owner approved with other caps keeps them. Basis: docs/launch-20260923/BUDGET-AND-PRICING.md.
+BUDGET_POLICIES = {
+    # While real charges are off (no revenue), every paid call is the operator's cost: keep the month under US$100.
+    "launch-2026-09-24": {
+        "global": {"window_kind": "day", "warn": 5 * USD, "stop": 10 * USD},
+        "global-month": {"window_kind": "month", "warn": 60 * USD, "stop": 100 * USD},
+        "workspace": {"window_kind": "month", "warn": 6 * USD, "stop": 10 * USD},
+        "personDayStop": 3 * USD,    # one person, all workspaces, rolling 24 hours
+        "requestMax": 1 * USD,       # one reservation's worst case
+    },
+    # Once live charges are on: a workspace can use its plan's monthly credits (8,000 credits ≈ US$27 of provider cost).
+    "paid-2026-09-24": {
+        "global": {"window_kind": "day", "warn": 25 * USD, "stop": 50 * USD},
+        "global-month": {"window_kind": "month", "warn": 300 * USD, "stop": 500 * USD},
+        "workspace": {"window_kind": "month", "warn": 30 * USD, "stop": 40 * USD},
+        "personDayStop": 5 * USD,
+        "requestMax": 2 * USD,
+    },
+}
+
+
+def active_budget_policy():
+    """The operator-selected policy, or None. An unknown id refuses paid work rather than guessing."""
+    name = os.environ.get("POSTRIFF_BUDGET_POLICY")
+    if not name:
+        return None
+    if name not in BUDGET_POLICIES:
+        raise AlphaError("Paid AI requests are off: POSTRIFF_BUDGET_POLICY names no known policy.", 503)
+    return {"id": name, **BUDGET_POLICIES[name]}
+
+
+def ai_paused():
+    """Operator kill switch for everything that costs provider money (POSTRIFF_AI_PAUSED=1)."""
+    return os.environ.get("POSTRIFF_AI_PAUSED") == "1"
+
+
+def _budget_key(scope):
+    return scope if scope in ("global", "global-month") else "workspace"
+
+
+def _stop_message(scope, stop):
+    if scope == "workspace":
+        return (f"This workspace has reached its AI spending limit for this month (US${stop / USD:.2f} of provider cost). "
+                "Nothing was sent or charged. Drafts, edits and publishing still work; new AI drafts resume next month or when the limit is raised.")
+    period = "today (UTC)" if scope == "global" else "this month"
+    return f"Rafii has reached its AI safety limit for {period}. Nothing was sent or charged; new AI drafts resume when the period ends."
+
 
 def _window_start_sql(kind):
     return "date_trunc('day', now())" if kind == "day" else "date_trunc('month', now())"
@@ -35,9 +85,12 @@ class Ledger:
         self._credit_book = CreditBook(clock)
         self.credits = self._credit_book if credits_enabled else None
 
-    def _budget(self, cur, scope, kind):
-        spec = CANDIDATE_BUDGETS["global" if scope == "global" else "workspace"]
-        cur.execute(f"INSERT INTO public.pr_budgets(scope,window_kind,window_start,warn_usd_micro,stop_usd_micro) VALUES(%s,%s,{_window_start_sql(spec['window_kind'])},%s,%s) ON CONFLICT(scope) DO NOTHING", (scope, spec["window_kind"], spec["warn"], spec["stop"]))
+    def _budget(self, cur, scope, kind=None, policy=None):
+        spec = (policy or {}).get(_budget_key(scope)) or CANDIDATE_BUDGETS[_budget_key(scope)]
+        cur.execute(f"INSERT INTO public.pr_budgets(scope,window_kind,window_start,warn_usd_micro,stop_usd_micro,status) VALUES(%s,%s,{_window_start_sql(spec['window_kind'])},%s,%s,%s) ON CONFLICT(scope) DO NOTHING", (scope, spec["window_kind"], spec["warn"], spec["stop"], "approved" if policy else "candidate"))
+        if policy:
+            # The policy approves a budget still waiting for a decision, with the policy's caps; one already approved keeps its caps.
+            cur.execute("UPDATE public.pr_budgets SET status='approved',window_kind=%s,warn_usd_micro=%s,stop_usd_micro=%s,updated_at=now() WHERE scope=%s AND status='candidate'", (spec["window_kind"], spec["warn"], spec["stop"], scope))
         cur.execute("SELECT window_kind,window_start,warn_usd_micro,stop_usd_micro,spent_usd_micro,reserved_usd_micro,status FROM public.pr_budgets WHERE scope=%s FOR UPDATE", (scope,))
         row = cur.fetchone()
         # Outstanding/unknown reservations survive a calendar boundary.
@@ -46,6 +99,15 @@ class Ledger:
             cur.execute("SELECT window_kind,window_start,warn_usd_micro,stop_usd_micro,spent_usd_micro,reserved_usd_micro,status FROM public.pr_budgets WHERE scope=%s", (scope,))
             row = cur.fetchone()
         return {"windowKind": row[0], "warn": row[2], "stop": row[3], "spent": row[4], "reserved": row[5], "status": row[6]}
+
+    @staticmethod
+    def _person_day(cur, member_id):
+        """Provider cost one person started in the last 24 hours, across workspaces: actual where known, else the hold."""
+        cur.execute(
+            "SELECT coalesce(sum(coalesce((SELECT s.actual_usd_micro FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id "
+            "AND s.reservation_id=r.id AND s.cost_state IN ('actual','released') LIMIT 1), r.estimated_usd_micro)),0) "
+            "FROM public.pr_usage_ledger r WHERE r.member_id=%s AND r.kind='reserve' AND r.at > now() - interval '24 hours'", (member_id,))
+        return int(cur.fetchone()[0])
 
     def ensure_entitlement(self, cur, workspace_id, plan):
         cur.execute("SELECT plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,extract(epoch from resets_at),source,version FROM public.pr_entitlements WHERE workspace_id=%s FOR UPDATE", (workspace_id,))
@@ -76,6 +138,12 @@ class Ledger:
             if (existing[2] or {}).get("fingerprint") != fingerprint:
                 raise AlphaError("This usage key belongs to a different operation.", 409)
             return {"reservationId": existing[1] or existing[0], "duplicate": True}
+        policy = active_budget_policy() if estimated_usd_micro > 0 else None
+        if estimated_usd_micro > 0 and ai_paused():
+            raise AlphaError("AI requests that cost money are paused by the operator. Nothing was sent or charged; drafts, edits and publishing still work.", 503)
+        if policy and estimated_usd_micro > policy["requestMax"]:
+            raise AlphaError(f"This request could cost up to US${estimated_usd_micro / USD:.2f} of provider time, over the US${policy['requestMax'] / USD:.2f} "
+                             "limit for one request. Nothing was sent; select fewer sources, a lighter model or quicker reasoning.", 402)
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
         if self.credits is None and (charge_batch or estimated_usd_micro > 0):
             cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
@@ -90,20 +158,30 @@ class Ledger:
             raise AlphaError("No writing allowance left in this plan. Drafts, exports and reviews remain available; overage is not charged silently.", 402)
         if not credit and dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
             raise AlphaError("No media credits left in this plan.", 402)
-        ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
-        gl_budget = self._budget(cur, "global", "day")
-        for scope, budget in (("workspace", ws_budget), ("global", gl_budget)):
+        if policy and member_id:
+            used = self._person_day(cur, member_id)
+            if used + estimated_usd_micro > policy["personDayStop"]:
+                raise AlphaError(f"You have reached the AI spending limit for one person over 24 hours (US${policy['personDayStop'] / USD:.2f} of provider cost). "
+                                 "Nothing was sent or charged; it frees up as the day's earlier requests age out. Drafts, edits and publishing still work.", 402)
+        scopes = [("workspace", f"workspace:{workspace_id}", "month"), ("global", "global", "day")] + ([("global-month", "global-month", "month")] if policy else [])
+        budgets = [(label, scope, self._budget(cur, scope, kind, policy)) for label, scope, kind in scopes]
+        for label, _, budget in budgets:
             if estimated_usd_micro > 0 and budget['status'] != 'approved':
-                raise AlphaError(f"The {scope} spending budget has not been approved; no provider call was made.", 402)
+                raise AlphaError("Paid AI drafting is not switched on for this deployment yet: its spending budget has not been approved. Nothing was sent or charged.", 402)
             if budget["spent"] + budget["reserved"] + estimated_usd_micro > budget["stop"]:
-                raise AlphaError(f"The {scope} spending stop-line would be exceeded; this request is refused before any provider call.", 402)
-        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**{k:v for k,v in (meta or {}).items() if k != "credits"}, "fingerprint": fingerprint, **({"credits":credit} if credit else {})})))
+                raise AlphaError(_stop_message(label, budget["stop"]), 402)
+        charged = [scope for _, scope, _ in budgets]
+        cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**{k:v for k,v in (meta or {}).items() if k not in ("credits", "budgetScopes")}, "fingerprint": fingerprint, "budgetScopes": charged, **({"credits":credit} if credit else {})})))
         reservation_id = cur.fetchone()[0]
         if credit: self.credits.claim(cur, workspace_id, reservation_id, credit)
         cur.execute("UPDATE public.pr_usage_ledger SET reservation_id=id WHERE id::text=%s", (reservation_id,))
-        for scope in (f"workspace:{workspace_id}", "global"):
+        for scope in charged:
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=reserved_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimated_usd_micro, scope))
-        warnings = [f"{scope} budget past its warning line" for scope, b in (("workspace", ws_budget), ("global", gl_budget)) if b["spent"] + b["reserved"] + estimated_usd_micro > b["warn"]]
+        warnings = [f"{label} budget past its warning line" for label, _, b in budgets if b["spent"] + b["reserved"] + estimated_usd_micro > b["warn"]]
+        crossed = [label for label, _, b in budgets if b["spent"] + b["reserved"] <= b["warn"] < b["spent"] + b["reserved"] + estimated_usd_micro]
+        if crossed:
+            # Operators' signal in the function logs (no workspace or person identifiers): a warning line was just crossed.
+            print(json.dumps({"event": "budget.warning_crossed", "scopes": crossed, "policy": (policy or {}).get("id")}), flush=True)
         return {"reservationId": reservation_id, "duplicate": False, "warnings": warnings, "entitlement": entitlement}
 
     def settle(self, cur, workspace_id, reservation_id, outcome, actual_usd_micro=None, idempotency_key=None):
@@ -143,7 +221,9 @@ class Ledger:
         credit = self._credit_book.settlement(cur, workspace_id, reservation_id, outcome, actual) if uses_credits else None
         kind = "settle" if outcome == "completed" else "release"
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,reservation_id,kind,dimension,provider,model,estimated_usd_micro,actual_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", (workspace_id, member_id, run_id, job_id, reservation_id, kind, dimension, provider, model, estimate, actual, "actual" if outcome == "completed" else "released", charge_batch, key, json.dumps({"credits":credit} if credit else {})))
-        for scope in (f"workspace:{workspace_id}", "global"):
+        # Exactly the budgets this reservation held (older reservations predate the record: workspace and global).
+        scopes = ((original[0] or {}).get("budgetScopes") if original else None) or [f"workspace:{workspace_id}", "global"]
+        for scope in scopes:
             cur.execute("UPDATE public.pr_budgets SET reserved_usd_micro=greatest(reserved_usd_micro-%s,0),spent_usd_micro=spent_usd_micro+%s,updated_at=now() WHERE scope=%s", (estimate, actual, scope))
         if outcome == "completed" and charge_batch:
             column = "media_credits_remaining" if dimension == "image_generation" else "writing_batches_remaining"
@@ -237,8 +317,11 @@ class DisabledPaymentProvider:
     The fixture provider is never the production default: its secret is public."""
     id = "disabled"
 
+    def __init__(self, reason="Billing is not configured for this deployment."):
+        self.reason = reason
+
     def parse_webhook(self, signature, body):
-        raise AlphaError("Billing is not configured for this deployment.", 503)
+        raise AlphaError(self.reason, 503)
 
 
 

@@ -144,6 +144,29 @@ class DisabledProvider(unittest.TestCase):
         with self.assertRaises(ValueError):
             billing_from_environment({"RESEND_API_KEY": "re"})
 
+    def test_live_charges_stay_off_until_the_merchant_legal_facts_are_recorded(self):
+        from postriff_phase2.hosted_app import billing_from_environment, live_charges_missing
+        # Placeholders with the live/test prefixes the gate reads, not credentials.
+        live_mode_key, test_mode_key, hook = "sk_live_" + "config_example", "sk_test_" + "config_example", "w" + "h"
+        live = {"STRIPE_SECRET_KEY": live_mode_key, "STRIPE_WEBHOOK_SECRET": hook}
+        facts = {"POSTRIFF_LEGAL_ENTITY": "Example Studio Limited", "POSTRIFF_LEGAL_ADDRESS": "1 Example Road, Example City", "POSTRIFF_GOVERNING_LAW": "Example law"}
+        provider, _ = billing_from_environment(live)
+        self.assertEqual(provider.id, "disabled")
+        with self.assertRaises(AlphaError) as refused:
+            provider.parse_webhook("t=1,v1=x", b"{}")
+        self.assertIn("legal details", str(refused.exception))
+        self.assertEqual(live_charges_missing(live), ["POSTRIFF_LEGAL_ENTITY", "POSTRIFF_LEGAL_ADDRESS", "POSTRIFF_GOVERNING_LAW", "POSTRIFF_LIVE_CHARGES_ENABLED"])
+        # The switch alone, or a placeholder, is not enough.
+        self.assertEqual(billing_from_environment({**live, "POSTRIFF_LIVE_CHARGES_ENABLED": "1"})[0].id, "disabled")
+        placeholder = {**live, **facts, "POSTRIFF_GOVERNING_LAW": "[Jurisdiction — to be confirmed by counsel]", "POSTRIFF_LIVE_CHARGES_ENABLED": "1"}
+        self.assertEqual(live_charges_missing(placeholder), ["POSTRIFF_GOVERNING_LAW"])
+        self.assertEqual(billing_from_environment(placeholder)[0].id, "disabled")
+        provider, _ = billing_from_environment({**live, **facts, "POSTRIFF_LIVE_CHARGES_ENABLED": "1"})
+        self.assertEqual((provider.id, provider.live), ("stripe", True))
+        # Test-mode keys never charge, so they are not gated.
+        provider, _ = billing_from_environment({"STRIPE_SECRET_KEY": test_mode_key, "STRIPE_WEBHOOK_SECRET": hook})
+        self.assertEqual((provider.id, provider.live), ("stripe", False))
+
 
 if __name__ == "__main__":
     unittest.main()
