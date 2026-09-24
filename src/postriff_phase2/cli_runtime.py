@@ -18,7 +18,7 @@ import threading
 import time
 
 from postriff_alpha.domain import AlphaError
-from .agent_runtime import AgentRuntime, safe_event
+from .agent_runtime import AgentRuntime, safe_event, identity_fields
 from .contracts import LIMITS, digest
 from . import locale_lint, locales
 from .text_measure import measure
@@ -171,7 +171,7 @@ def normalize_output(structured, request, author="Claude Code", prose=None):
         if unknown_ids:
             warnings.append(f"Cited ids that match no approved source were dropped: {', '.join(unknown_ids[:5])}. Check the claims they supported.")
         variants.append({
-            "platform": destination["platform"], "language": destination["language"], "text": text,
+            "platform": destination["platform"], "language": destination["language"], **identity_fields(destination), "text": text,
             "sourceIds": source_ids,
             "unknowns": [str(u)[:300] for u in match.get("unknowns", []) if isinstance(u, str) and u.strip()][:10],
             "warnings": warnings, "candidateOnly": bool(request["context"].get("candidateOnly")),
@@ -327,7 +327,7 @@ class ClaudeCliRuntime(AgentRuntime):
         payload = {
             "idea": request.get("idea", ""), "tone": request.get("tone", "warm"),
             "styleDirectives": bounded_style_directives(request.get("styleDirectives")),
-            "destinations": [{"platform": d["platform"], "languageId": locales.canonical(d["language"]) or d["language"], "language": locales.prompt_name(d["language"]), "characterLimit": PLATFORM_LIMITS.get(d["platform"])} for d in request["destinations"]],
+            "destinations": [{"platform": d["platform"], "languageId": locales.canonical(d["language"]) or d["language"], "language": locales.prompt_name(d["language"]), "characterLimit": PLATFORM_LIMITS.get(d["platform"]), **({"account": d["account"]} if d.get("account") else {})} for d in request["destinations"]],
             "approvedSources": sources,
             "candidateOnly": bool(request["context"].get("candidateOnly")),
         }

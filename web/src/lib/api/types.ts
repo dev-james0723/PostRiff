@@ -146,6 +146,8 @@ export interface SnapshotVariant {
   id: string;
   platform: string;
   language: string;
+  /** The connection this draft was written for; absent on platform-level drafts. */
+  channelId?: string;
   text: string;
   revision: number;
   voiceRevision: number | null;
@@ -237,6 +239,20 @@ export interface SnapshotSource {
   cleanupStatus?: string;
 }
 
+/** A saved account group (Rafii v9 Channel Bloom): a batch-selection shortcut keyed by connection ids. */
+export interface ChannelFolder {
+  id: string;
+  name: string;
+  symbol: 'folder' | 'spark' | 'music' | 'briefcase' | 'heart' | 'globe' | string;
+  pinned: boolean;
+  /** `Phase2State.channels[].id` values; a removed connection stays listed so the person can see it. */
+  accountIds: string[];
+  createdAt?: number;
+  createdBy?: string;
+  updatedAt?: number;
+  updatedBy?: string;
+}
+
 export interface Phase2State {
   execution: string;
   trial: Trial;
@@ -244,6 +260,8 @@ export interface Phase2State {
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
+  /** Absent on workspaces that never saved a folder. Changed only through `p2_folder_save|delete|move`. */
+  channelFolders?: ChannelFolder[];
 }
 
 export interface VoiceProfile {
@@ -359,6 +377,9 @@ export interface SafeEvent {
 export interface RunVariant {
   platform: string;
   language: string;
+  /** Account identity carried from the destination (v9 §4); absent for platform-level requests. */
+  channelId?: string;
+  account?: string;
   text: string;
   sourceIds: string[];
   unknowns: string[];
@@ -380,8 +401,16 @@ export interface GeneratedImage {
 export interface SchedulePlanDestination {
   platform: string;
   language: string;
+  channelId?: string;
   localTime: string | null;
   assumed: boolean;
+}
+
+/** One drafting destination as the composer sends it: an account when one is selected, else a platform. */
+export interface Destination {
+  platform: string;
+  language: LocaleTag;
+  channelId?: string;
 }
 
 export interface SchedulePlan {

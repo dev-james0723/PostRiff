@@ -18,12 +18,26 @@ DEFAULT_REQUEST_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"pl
 
 
 def check_destinations(destinations):
+    """Every destination is a supported platform with a known language; the key that must be unique is
+    (platform, language, account): two accounts on one platform are two destinations, the same account
+    in the same language twice is a client error."""
     seen = set()
     for d in destinations:
         platform, tag = d.get("platform"), locales.canonical(d.get("language"))
-        if platform not in PLATFORMS or tag is None or (platform, tag) in seen:
+        channel_id = d.get("channelId") if isinstance(d.get("channelId"), str) else None
+        if platform not in PLATFORMS or tag is None or (platform, tag, channel_id) in seen:
             raise AlphaError("Choose supported destinations.", 400)
-        seen.add((platform, tag))
+        seen.add((platform, tag, channel_id))
+
+
+def identity_fields(destination):
+    """The account identity a variant carries forward from its destination (never credentials)."""
+    out = {}
+    if isinstance(destination.get("channelId"), str) and destination["channelId"]:
+        out["channelId"] = destination["channelId"]
+    if isinstance(destination.get("account"), str) and destination["account"]:
+        out["account"] = destination["account"]
+    return out
 
 # Phase-3 adapter kinds → safe families. Never forwarded raw.
 TRANSLATION = {"waiting": "progress.updated", "running": "progress.updated", "text": "message.delta", "completed": "run.completed", "interrupted": "run.cancelled", "expired": "run.failed", "revoked": "run.failed", "failed": "run.failed", "permission_denied": "warning.created", "uncertain": "warning.created", "applied": "artifact.created"}

@@ -11,6 +11,8 @@ import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from postriff_alpha.domain import AlphaError
+
 from . import locales
 
 INTENTS = ("draft", "schedule", "publish_now", "research", "memory")
@@ -299,7 +301,8 @@ def _slot(slot):
 
 
 def resolve_destinations(parsed, requested, language=None, default=(), settings=None):
-    """One destination per (channel, language) pair, so a channel can be drafted in several languages.
+    """One destination per (account, language) pair, so a channel can be drafted in several languages
+    and two accounts on the same platform stay two destinations.
 
     Channels: channels named in the message win over the composer's selection, except a channel named
     only to set its language ("Threads in British English"), which joins the selection instead of
@@ -307,6 +310,11 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
     every channel, else the composer's languages for it, else the request's top-level language (older
     clients), else what the workspace remembers for the channel (`settings`: state or a callable
     returning it; see `locales.languages_for`). A family name ("Chinese") keeps a pick already in it.
+
+    Accounts: a requested destination may carry `channelId` (a connection id). The pair
+    (platform, channelId) is the destination key; the same account requested twice collapses to one,
+    and a platform named in the message keeps every account the composer selected for it. Requests
+    without `channelId` (older clients, message-only channels) resolve at platform level as before.
     """
     fallback = locales.canonical(language)
     remembered = {}
@@ -322,8 +330,9 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
     for item in requested if isinstance(requested, list) else []:
         if not isinstance(item, dict) or not isinstance(item.get("platform"), str) or not item["platform"]:
             continue
+        channel_id = item["channelId"] if isinstance(item.get("channelId"), str) and item.get("channelId") else None
         tag = locales.canonical(item.get("language"))
-        tags = chosen.setdefault(item["platform"], [])
+        tags = chosen.setdefault((item["platform"], channel_id), [])
         for candidate in ([tag] if tag else starting(item["platform"])):
             if candidate not in tags:
                 tags.append(candidate)
@@ -332,19 +341,23 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
     named = [d["platform"] for d in parsed["destinations"] if d["supported"]]
     selecting = [platform for platform in named if platform not in paired]
     if selecting:
-        selection = {platform: chosen.get(platform) or starting(platform) for platform in selecting + [p for p in named if p in paired]}
+        selection = {}
+        for platform in selecting + [p for p in named if p in paired]:
+            keys = [key for key in chosen if key[0] == platform] or [(platform, None)]
+            for key in keys:
+                selection[key] = chosen.get(key) or starting(platform)
     else:
         selection = dict(chosen)
         if not selection:
             for item in default:
                 tag = locales.canonical(item.get("language"))
-                tags = selection.setdefault(item["platform"], [])
+                tags = selection.setdefault((item["platform"], None), [])
                 for candidate in ([tag] if tag else starting(item["platform"])):
                     if candidate not in tags:
                         tags.append(candidate)
         for platform in named:
-            if platform not in selection:
-                selection[platform] = starting(platform)
+            if not any(key[0] == platform for key in selection):
+                selection[(platform, None)] = starting(platform)
     everyone, per_channel = None, {}
     for pair in languages:
         if pair["platforms"]:
@@ -353,12 +366,34 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
         else:
             everyone = pair
     destinations = []
-    for platform, tags in selection.items():
+    for (platform, channel_id), tags in selection.items():
         pair = per_channel.get(platform) or everyone
         if pair:
             tags = locales.apply_named(tags, pair["tags"], pair["said"])
-        destinations.extend({"platform": platform, "language": tag} for tag in dict.fromkeys(tags))
+        for tag in dict.fromkeys(tags):
+            destination = {"platform": platform, "language": tag}
+            if channel_id:
+                destination["channelId"] = channel_id
+            destinations.append(destination)
     return destinations
+
+
+def bind_accounts(destinations, state):
+    """Attach the account label of each destination's connection and refuse ids this workspace does
+    not hold. The check runs inside the workspace transaction so a just-disconnected account cannot
+    become a destination; platform-only destinations pass through unchanged."""
+    channels = {c.get("id"): c for c in (state.get("phase2") or {}).get("channels", []) if isinstance(c, dict)}
+    bound = []
+    for destination in destinations:
+        channel_id = destination.get("channelId")
+        if not channel_id:
+            bound.append(dict(destination))
+            continue
+        channel = channels.get(channel_id)
+        if channel is None or channel.get("revoked") or channel.get("platform") != destination["platform"]:
+            raise AlphaError("One selected account is no longer connected to this workspace. Choose your destinations again.", 409)
+        bound.append({**destination, "account": channel.get("account", "")})
+    return bound
 
 
 def build_plan(parsed, destinations):
@@ -370,7 +405,10 @@ def build_plan(parsed, destinations):
         slot = match or (spare.pop(0) if spare else None)
         if slot is None and parsed["unattachedTimes"]:
             slot = parsed["unattachedTimes"][-1]
-        rows.append({"platform": destination["platform"], "language": destination["language"], "localTime": slot["localTime"] if slot else None, "assumed": bool(slot and slot["assumed"])})
+        row = {"platform": destination["platform"], "language": destination["language"], "localTime": slot["localTime"] if slot else None, "assumed": bool(slot and slot["assumed"])}
+        if destination.get("channelId"):
+            row["channelId"] = destination["channelId"]
+        rows.append(row)
     if not any(row["localTime"] for row in rows):
         return None
     return {"kind": "schedule", "intent": parsed["intent"], "timeZone": parsed["timeZone"], "destinations": rows, "unsupported": list(parsed["unsupported"]), "warnings": list(parsed["warnings"])}

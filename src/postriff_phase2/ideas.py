@@ -24,6 +24,14 @@ MAX_EVENTS = 2000
 DEFAULT_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
 
 
+
+def same_slot(variant, candidate):
+    """A draft refreshes in place only when it is the same account (or platform-level draft) in the
+    same language: two accounts on one platform never overwrite each other's drafts."""
+    return (variant.get("platform") == candidate.get("platform") and locales.same(variant.get("language"), candidate.get("language"))
+            and (variant.get("channelId") or None) == (candidate.get("channelId") or None))
+
+
 class RunSink:
     """Completion channel for asynchronous runtimes (a local CLI now, a paired device later).
 
@@ -618,6 +626,8 @@ class IdeasService:
             self._conversation(cur, workspace_id, conversation_id)
             state = self._state(row)
             stamp(state)
+            # Account identity is verified against this workspace's connections inside the transaction (v9 §4).
+            destinations = intent.bind_accounts(destinations, state)
             source_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("active") and s.get("kind") != "voice_sample"][:20]
             source_ids = [source_id for source_id in source_ids if not any(s.get("id") == source_id and s.get("kind") == "voice_sample" for s in state.get("sources", []))]
             source_ids = list(dict.fromkeys(list(source_ids) + research_ids))
@@ -842,14 +852,14 @@ class IdeasService:
             # is still unscheduled in the same platform/language slot is refreshed in place.
             committed = {job["manifest"]["variantId"] for job in state.get("phase2", {}).get("jobs", []) if job.get("state") not in ("canceled", "failed")}
             for candidate in artifact["variants"]:
-                drafts = [v for v in state["variants"] if v["platform"] == candidate["platform"] and locales.same(v["language"], candidate["language"]) and v["id"] not in committed]
+                drafts = [v for v in state["variants"] if same_slot(v, candidate) and v["id"] not in committed]
                 old = drafts[-1] if drafts else None
                 values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if old:
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
                 else:
-                    state["variants"].append({**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}})
+                    state["variants"].append({**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}})
             return state
 
         saved = self.repository.command(workspace_id, token, revision, command)
@@ -878,12 +888,30 @@ class IdeasService:
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
 
+        # Optional extra workspace sources to read alongside the pasted idea (Rafii v9 Context Pocket).
+        # Only ids the workspace holds as active, non-voice sources are accepted; anything else is refused.
+        extra_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else []
+        extra_ids = list(dict.fromkeys(item for item in extra_ids if isinstance(item, str) and item))[:20]
+
+        chosen = {}
+
         def command(state, actor):
+            usable = {s.get("id") for s in state.get("sources", []) if s.get("active") and s.get("kind") != "voice_sample"}
+            if any(item not in usable for item in extra_ids):
+                raise AlphaError("One of the chosen sources is not usable in this workspace. Review your sources and try again.", 409)
             kind = "idea" if (own and text and len(text) <= 500 and "\n" not in text) else ("text" if text else "link")
-            self.commands(state, actor, "source", {"kind": kind, "text": text or url, "title": clean(payload.get("title", "Pasted source" if text else "Link"), 200)})
-            source = state["sources"][-1]
+            # Drafting the same idea again (Rafii v9 "Generate again") reuses its active source instead of
+            # refusing it as a duplicate. The fingerprint is the one the `source` command stores.
+            fingerprint = hashlib.sha256((kind + clean(text or url, 20000)).encode()).hexdigest()
+            source = next((s for s in state.get("sources", []) if s.get("active") and s.get("fingerprint") == fingerprint), None)
+            if source is None:
+                self.commands(state, actor, "source", {"kind": kind, "text": text or url, "title": clean(payload.get("title", "Pasted source" if text else "Link"), 200)})
+                source = state["sources"][-1]
+            chosen["id"] = source["id"]
             stamp(state)
-            if own:
+            # Own writing is quotable. A reused source is re-approved only when this changes its policy, so
+            # drafts from the earlier run are not marked stale; an existing policy is never downgraded here.
+            if own and source.get("sourcePolicy") != "public_quote":
                 source["sourcePolicy"] = "public_quote"
                 self.commands(state, actor, "approve_source", {"sourceId": source["id"], "factIds": [f["id"] for f in source["facts"]]})
             if payload.get("audience"):
@@ -893,7 +921,7 @@ class IdeasService:
             return state
 
         saved = self.repository.command(workspace_id, token, revision, command)
-        source = saved["state"]["sources"][-1]
+        source = next(s for s in saved["state"]["sources"] if s["id"] == chosen["id"])
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
-        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration")})
+        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"], *extra_ids], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration")})
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}

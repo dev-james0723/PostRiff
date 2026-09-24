@@ -13,7 +13,7 @@ from .contracts import PLANS, LIMITS, SCENARIOS, FixtureImages, FixtureSocial, d
 from .media import decode_upload
 from .content_types import apply_content_action, content_preflight, ensure_content_state, projection as content_projection
 from .outcomes import normalize_result, unknown
-from . import learning_signals as signals, locales, source_policy
+from . import learning_signals as signals, locales, source_policy, channel_folders
 
 TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("processing", "submitting", "provider_accepted", "published", "uncertain")
@@ -185,6 +185,8 @@ class Phase2Store(Store):
         data, now = s["phase2"], self.clock()
         learning.ensure(s, now)
         if apply_content_action(s, action, p, device["user_id"], now):
+            return
+        if channel_folders.apply_action(s, action, p, device["user_id"], now):
             return
         if action == "plan":
             if p.get("plan") not in PLANS:

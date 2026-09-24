@@ -16,7 +16,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from postriff_alpha.domain import AlphaError, clean
-from .agent_runtime import AgentRuntime, DEFAULT_REQUEST_DESTINATIONS, PLATFORMS, REASONING, check_destinations, safe_event
+from .agent_runtime import AgentRuntime, DEFAULT_REQUEST_DESTINATIONS, PLATFORMS, REASONING, check_destinations, identity_fields, safe_event
 from .contracts import LIMITS, digest
 from . import locale_lint, locales
 from .text_measure import over_by
@@ -169,7 +169,7 @@ class ServerModelRuntime(AgentRuntime):
             "voice": {k: v for k, v in (request.get("voice") or {}).items() if k in ("observations", "note")},
             "approvedFacts": facts,
             "destinations": [{"platform": d["platform"], "language": locales.prompt_name(d["language"]), "languageId": locales.canonical(d["language"]) or d["language"],
-                              "characterLimit": LIMITS.get(d["platform"], {}).get("characters", 2000)} for d in destinations],
+                              "characterLimit": LIMITS.get(d["platform"], {}).get("characters", 2000), **({"account": d["account"]} if d.get("account") else {})} for d in destinations],
         }
 
     @staticmethod
@@ -344,7 +344,7 @@ class ServerModelRuntime(AgentRuntime):
             source_ids, unknown_ids = resolve_source_ids(item.get("sourceIds", []), context)
             if unknown_ids:
                 warnings.append(f"Cited ids that match no approved source were dropped: {', '.join(unknown_ids[:5])}. Check the claims they supported.")
-            variants.append({"platform": d["platform"], "language": d["language"], "text": text,
+            variants.append({"platform": d["platform"], "language": d["language"], **identity_fields(d), "text": text,
                              "sourceIds": source_ids,
                              "unknowns": [clean(str(u), 300) for u in item.get("unknowns", []) if isinstance(u, str)][:8],
                              "warnings": warnings})

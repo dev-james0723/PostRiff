@@ -126,7 +126,11 @@ class DevProvider:
         return {"accessToken": f"dev-{self.id}-access-{code}", "refreshToken": f"dev-{self.id}-refresh", "expiresIn": 3600, "scopes": None}
 
     def identity(self, access_token):
-        return {"providerAccountId": "urn:li:person:devmember" if self.id == "linkedin" else "17841400000000", "handle": "Dev Member" if self.id == "linkedin" else "@dev_creator", "accountType": "member" if self.id == "linkedin" else "profile"}
+        # A token minted from the consent page's "second account" choice identifies a different account.
+        second = str(access_token).endswith("-good-code-2")
+        if self.id == "linkedin":
+            return {"providerAccountId": "urn:li:person:devmember2" if second else "urn:li:person:devmember", "handle": "Dev Member Two" if second else "Dev Member", "accountType": "member"}
+        return {"providerAccountId": "17841400000000002" if second else "17841400000000", "handle": "@dev_creator_two" if second else "@dev_creator", "accountType": "profile"}
 
     def refresh(self, refresh_token):
         return {"accessToken": f"dev-{self.id}-access-refreshed", "refreshToken": refresh_token, "expiresIn": 3600}
@@ -242,8 +246,12 @@ def main():
             if environ["REQUEST_METHOD"] == "POST":
                 length = int(environ.get("CONTENT_LENGTH") or 0)
                 form = {k: v[0] for k, v in parse_qs(environ["wsgi.input"].read(length).decode()).items()}
-                allow = form.get("decision") == "allow"
-                target = form["redirect"] + "?" + urlencode({"state": form["state"], **({"code": "good-code"} if allow else {"error": "access_denied"})})
+                decision = form.get("decision")
+                allow = decision in ("allow", "allow-second")
+                # "Allow as a second account" lets the local harness hold two distinct accounts on one
+                # platform (Rafii v9 folder evidence). The code suffix flows into the opaque dev token.
+                code = "good-code-2" if decision == "allow-second" else "good-code"
+                target = form["redirect"] + "?" + urlencode({"state": form["state"], **({"code": code} if allow else {"error": "access_denied"})})
                 start_response("302 Found", [("Location", target), ("Content-Length", "0")])
                 return [b""]
             html = f"""<!doctype html><meta charset=utf-8><title>DEV consent</title><body style="font-family:Avenir Next,sans-serif;background:#f8f7f2;color:#292f2b;padding:48px;max-width:560px;margin:auto">
@@ -252,6 +260,7 @@ def main():
 <p>Requested scopes: <code>{q.get('scope','')}</code></p>
 <form method=post><input type=hidden name=redirect value="{q.get('redirect','')}"><input type=hidden name=state value="{q.get('state','')}">
 <button name=decision value=allow style="padding:12px 20px;background:#284e3a;color:#fff;border:0;border-radius:8px;font-size:16px">Allow</button>
+<button name=decision value=allow-second style="padding:12px 20px;background:#3b4a6b;color:#fff;border:0;border-radius:8px;font-size:16px;margin-left:12px">Allow as a second account</button>
 <button name=decision value=deny style="padding:12px 20px;background:transparent;border:1px solid #dedfd4;border-radius:8px;font-size:16px;margin-left:12px">Deny</button></form></body>"""
             raw = html.encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(raw)))])
