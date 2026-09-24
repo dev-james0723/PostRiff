@@ -104,7 +104,7 @@ export const TEMPLATES: AutomationTemplate[] = [
   {
     id: 'evergreen',
     title: 'Evergreen reshare',
-    description: 'Every two weeks, a fresh take on an older post that worked.',
+    description: 'Every Wednesday, a fresh take on an older post that worked.',
     icon: 'refresh',
     name: 'Evergreen reshare',
     goal: 'Give an earlier post a fresh take for today: the same core idea, new wording and a current example. Never copy the old text.',

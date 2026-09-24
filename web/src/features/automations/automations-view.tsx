@@ -262,7 +262,7 @@ export function AutomationsView() {
           <RafiiDialogBody>
             <p className='text-muted-foreground text-sm'>{cancelling ? scheduleSummary(cancelling.task.schedule) : ''}</p>
           </RafiiDialogBody>
-          <RafiiDialogFooter className='flex justify-end gap-2'>
+          <RafiiDialogFooter className='flex-row flex-wrap justify-end gap-2'>
             <Button variant='quiet' size='control' onClick={() => setCancelling(null)}>
               Keep it
             </Button>

@@ -1,0 +1,638 @@
+{
+  "base": "http://localhost:3100",
+  "browser": "chromium",
+  "workspaceId": "44f94ff6-66c8-42b8-9f19-a5e300752e99",
+  "startedAt": "2026-09-24T07:02:39.411Z",
+  "scenes": [
+    {
+      "name": "build-and-run",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "no automation with this name yet",
+          "ok": true
+        },
+        {
+          "name": "content type chip shows the Library choice",
+          "ok": true
+        },
+        {
+          "name": "axe clean: builder: what",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "schedule preview names the day, time and zone",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nRepeats\nWeekly\nMonthly\nCountdown\nNew idea\nStrong post\nOn these days\nMon\nTue\nWed\nThu\nFri\nSat\nSun\nWeekdays\nEvery day\nOnce a week\nAt\nTime zone\nAmerica/New York\nAfrica/Abidjan\nAfrica/Accra\nAfrica/Addis Ababa\nAfrica/Algiers\nAfrica/Asmera\nAfric"
+        },
+        {
+          "name": "preview lists the first run and the viewer’s own time",
+          "ok": true
+        },
+        {
+          "name": "destination listed: Dev Member",
+          "ok": true
+        },
+        {
+          "name": "destination listed: Dev Member Two",
+          "ok": true
+        },
+        {
+          "name": "three drafts each run (two accounts, one with two languages)",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\n\nEach account gets its own draft in each of its languages. Two accounts on one app get two drafts.\n\nChoose accounts or folders\n\nFrom Festival\n\nDev Member\nLinkedIn\n🌐 English\n🇭🇰 繁體中文（香港）\nLanguage\nDev Member Two\nLinkedIn\n🌐 English\nLanguage\n\n3 drafts each run\n\nBack\nNext"
+        },
+        {
+          "name": "folder label kept for display",
+          "ok": true
+        },
+        {
+          "name": "budget shows the per-run limit and the monthly ceiling",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nWriter\nDeterministic preview\nClaude Code · your default model\nClaude Code · Fable\nClaude Code · Opus\nClaude Code · Sonnet\nClaude Code · Haiku\nCodex CLI · your default model\n\nRuns without sending the brief to a cloud provider.\n\nCost limit per run (USD)\n\nThis writer has no per-run charge.\n\nReasoning\nQuick\nStandard\nDeep\nBUDGET\n\nUp to $0.00 a run · up to 5 runs a month · at most $0.00 a month.\n\nCharges come from your workspace credits, the same as drafting on Home.\n\nWhat\nWeekly practice tip pwqu\nOne practical practice tip for adult piano students. Share it on Instagram at 8pm tomorrow.\nBehind the scenes · Carousel · brief only\nEdit wh"
+        },
+        {
+          "name": "nothing blocks saving",
+          "ok": true
+        },
+        {
+          "name": "axe clean: builder: review",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "saved and active on the server",
+          "ok": true,
+          "detail": {
+            "status": "active",
+            "authority": 2
+          }
+        },
+        {
+          "name": "schedule: today in Hong Kong at the chosen minute",
+          "ok": true,
+          "detail": {
+            "timeZone": "Asia/Hong_Kong",
+            "weekdays": [
+              "Thursday"
+            ],
+            "localTime": "15:11"
+          }
+        },
+        {
+          "name": "three destinations: both accounts, the first in two languages",
+          "ok": true,
+          "detail": {
+            "destinations": [
+              {
+                "language": "en",
+                "platform": "LinkedIn",
+                "channelId": "abaad27ed4e69ff561db13790efff006"
+              },
+              {
+                "language": "zh-Hant-HK",
+                "platform": "LinkedIn",
+                "channelId": "abaad27ed4e69ff561db13790efff006"
+              },
+              {
+                "language": "en",
+                "platform": "LinkedIn",
+                "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
+              }
+            ],
+            "expected": [
+              "LinkedIn|en|abaad27ed4e69ff561db13790efff006",
+              "LinkedIn|zh-Hant-HK|abaad27ed4e69ff561db13790efff006",
+              "LinkedIn|en|51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
+            ]
+          }
+        },
+        {
+          "name": "content type recorded on the automation",
+          "ok": true,
+          "detail": {
+            "formatId": "carousel",
+            "contentTypeId": "pack.creator:building_in_public",
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "fixture writer, quick, $0 limit",
+          "ok": true
+        },
+        {
+          "name": "Home content selection untouched by the automation",
+          "ok": true
+        },
+        {
+          "name": "card shows Active and the next run",
+          "ok": true
+        },
+        {
+          "name": "axe clean: hub with an automation",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "first run is within minutes (today, not next week)",
+          "ok": true,
+          "detail": {
+            "utc": "2026-09-24T07:11:00+00:00",
+            "fold": 0,
+            "local": "2026-09-24T15:11:00+08:00",
+            "offset": "+0800",
+            "scheduledFor": 1790233860
+          }
+        },
+        {
+          "name": "harness cron ran the automation",
+          "ok": true,
+          "detail": {
+            "runs": [
+              {
+                "state": "completed",
+                "occurrenceId": "9c081fbc8f1f41d4a800a7927e522476"
+              }
+            ]
+          }
+        },
+        {
+          "name": "one completed run with a conversation",
+          "ok": true,
+          "detail": [
+            {
+              "id": "9c081fbc8f1f41d4a800a7927e522476",
+              "runId": "fd7d3c20-223e-4a07-b9c6-bdcbb50b6b37",
+              "state": "completed",
+              "taskId": "66ef630c21da4a769bfa78eb96abcc02",
+              "authority": "draft_preparation_only",
+              "createdAt": 1790233865.224604,
+              "draftCount": 3,
+              "leaseUntil": 1790234465.224604,
+              "completedAt": 1790233866.341898,
+              "taskVersion": 1,
+              "costUsdMicro": 0,
+              "scheduledFor": 1790233860,
+              "conversationId": "2f2245b3-2eff-4caa-9128-7ae22f815f99",
+              "idempotencyKey": "5982cb44b5b9f68cef00e7be23711783ebf16f5770919dc3cce2a7f3eb5bd46e"
+            }
+          ]
+        },
+        {
+          "name": "drafts only for the chosen accounts (brief named Instagram)",
+          "ok": true,
+          "detail": [
+            {
+              "account": "Dev Member",
+              "language": "en",
+              "platform": "LinkedIn",
+              "channelId": "abaad27ed4e69ff561db13790efff006"
+            },
+            {
+              "account": "Dev Member",
+              "language": "zh-Hant-HK",
+              "platform": "LinkedIn",
+              "channelId": "abaad27ed4e69ff561db13790efff006"
+            },
+            {
+              "account": "Dev Member Two",
+              "language": "en",
+              "platform": "LinkedIn",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
+            }
+          ]
+        },
+        {
+          "name": "no schedule plan from the time in the brief",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "conversation titled with the automation name",
+          "ok": true,
+          "detail": "Weekly practice tip pwqu · Thu 24 Sep"
+        },
+        {
+          "name": "a second tick does not repeat the run",
+          "ok": true,
+          "detail": {
+            "idle": true
+          }
+        },
+        {
+          "name": "run records its draft count and cost",
+          "ok": true,
+          "detail": {
+            "draftCount": 3,
+            "cost": 0
+          }
+        },
+        {
+          "name": "Home attention lists the ready automation drafts",
+          "ok": true
+        },
+        {
+          "name": "card shows the last run as Drafts ready",
+          "ok": true,
+          "detail": "Weekly practice tip pwqu\n\nThursdays at 3:11 PM · Hong Kong time\n\n1 new\nActive\nWHERE\nFestival · 🌐 English, 🇭🇰 繁體中文（香港）\nWHAT\nBehind the scenes · Carousel\nWRITER\nDeterministic preview · Quick · up to $0.00 a run\n$0.00 spent this month\nNEXT RUN\nThu, Oct 1, 3:11 PM\nup to 5 runs a month · at most $0.00 a month\n\nLast run\nDrafts ready\nThu, Sep 24, 3:11 PM\n\nReview latest drafts\nEdit\nPause\nCancel automation\nEmail me when its drafts are ready\nRun history (1)"
+        },
+        {
+          "name": "card shows 1 new run and this month’s spend",
+          "ok": true,
+          "detail": "Weekly practice tip pwqu\n\nThursdays at 3:11 PM · Hong Kong time\n\n1 new\nActive\nWHERE\nFestival · 🌐 English, 🇭🇰 繁體中文（香港）\nWHAT\nBehind the scenes · Carousel\nWRITER\nDeterministic preview · Quick · up to $0.00 a run\n$0.00 spent this month\nNEXT RUN\nThu, Oct 1, 3:11 PM\nup to 5 runs a month · at most $0.00 a month\n\nLast run\nDrafts ready\nThu, Sep 24, 3:11 PM\n\nReview latest drafts\nEdit\nPause\nCancel automation\nEmail me when its drafts are ready\nRun history (1)"
+        },
+        {
+          "name": "email opt-in recorded for this member only",
+          "ok": true,
+          "detail": [
+            "d6d9972b-a529-4572-8c5c-82965a042353"
+          ]
+        },
+        {
+          "name": "conversation shows drafts for both accounts",
+          "ok": true,
+          "detail": "Toggle Sidebar\nHome\nChat\nConversation\nAll quiet\nCreate\nSearch...\n⌘\nK\n3\nToggle theme\nAppearance\nRafii\nT T\nCONVERSATIONS\nNew\nWeekly practice tip pwqu · Thu 24 Sep\nSep 24, 2026\nOne thing piano practice taught me about creating: consisten\nSep 24, 2026\nCONVERSATION\nWeekly practice tip pwqu · Thu 24 Sep\nDeterministic preview\nOpen Queue\nPrepare one draft for each destination, for review, using these campaign details as data: {\"goal\": \"One practical practice tip for adult piano students. Share it on Instagram at 8pm tomorrow.\", \"audience\": \"Adult beginners and parents of young students\", \"facts\": {}}\n"
+        },
+        {
+          "name": "opening the drafts marked the run as seen",
+          "ok": true
+        },
+        {
+          "name": "the new-drafts chip is gone after review",
+          "ok": true
+        },
+        {
+          "name": "edit warns that saving returns it to draft",
+          "ok": true
+        },
+        {
+          "name": "edited definition is a draft, version 2, no activation",
+          "ok": true,
+          "detail": {
+            "status": "draft",
+            "version": 2
+          }
+        },
+        {
+          "name": "card shows Draft and Activate",
+          "ok": true
+        },
+        {
+          "name": "activated again",
+          "ok": true
+        },
+        {
+          "name": "paused",
+          "ok": true
+        },
+        {
+          "name": "resumed",
+          "ok": true
+        },
+        {
+          "name": "Home panel lists the automation",
+          "ok": true
+        },
+        {
+          "name": "cancelled on the server",
+          "ok": true
+        },
+        {
+          "name": "cancelled automation leaves the active list",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js",
+        "https://va.vercel-scripts.com/v1/script.debug.js",
+        "https://va.vercel-scripts.com/v1/script.debug.js",
+        "https://va.vercel-scripts.com/v1/script.debug.js",
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "automations/chromium/build-and-run/01-hub-before.png",
+        "automations/chromium/build-and-run/02-builder-what.png",
+        "automations/chromium/build-and-run/03-builder-when.png",
+        "automations/chromium/build-and-run/04-builder-where.png",
+        "automations/chromium/build-and-run/05-builder-review.png",
+        "automations/chromium/build-and-run/06-hub-active.png",
+        "automations/chromium/build-and-run/07-run-history.png",
+        "automations/chromium/build-and-run/08-drafts.png",
+        "automations/chromium/build-and-run/09-home-panel.png",
+        "automations/chromium/build-and-run/10-cancel-confirm.png",
+        "automations/chromium/build-and-run/11-hub-after-cancel.png"
+      ],
+      "axe": [
+        {
+          "label": "builder: what",
+          "violations": []
+        },
+        {
+          "label": "builder: review",
+          "violations": []
+        },
+        {
+          "label": "hub with an automation",
+          "violations": []
+        }
+      ],
+      "video": "automations/chromium/build-and-run/build-and-run.webm",
+      "t0": 1790233361238,
+      "durationSeconds": 678.3
+    },
+    {
+      "name": "templates",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "Event countdown: template fills the name",
+          "ok": true
+        },
+        {
+          "name": "countdown: schedule type selected",
+          "ok": true
+        },
+        {
+          "name": "countdown: 14 days before and on the day pressed",
+          "ok": true
+        },
+        {
+          "name": "countdown: preview lists the first run",
+          "ok": true
+        },
+        {
+          "name": "countdown budget counts the whole countdown",
+          "ok": true
+        },
+        {
+          "name": "countdown saved: kind, days and event date as the date fact",
+          "ok": true,
+          "detail": {
+            "schedule": {
+              "kind": "countdown",
+              "timeZone": "Asia/Hong_Kong",
+              "eventDate": "2026-10-14",
+              "localTime": "10:00",
+              "daysBefore": [
+                14,
+                7,
+                1,
+                0
+              ]
+            },
+            "facts": {
+              "date": "2026-10-14",
+              "venue": "City Hall"
+            }
+          }
+        },
+        {
+          "name": "countdown content type from the template",
+          "ok": true,
+          "detail": {
+            "formatId": "short_text",
+            "contentTypeId": "postriff:promote",
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "Monthly recap: template fills the name",
+          "ok": true
+        },
+        {
+          "name": "recap: published posts included",
+          "ok": true
+        },
+        {
+          "name": "recap: monthly on the last day",
+          "ok": true
+        },
+        {
+          "name": "recap saved: monthly last day, reads 31 days of published posts",
+          "ok": true,
+          "detail": {
+            "schedule": {
+              "kind": "monthly",
+              "timeZone": "America/New_York",
+              "localTime": "17:00",
+              "monthDays": [
+                "last"
+              ]
+            },
+            "include": {
+              "recentPostsDays": 31
+            }
+          }
+        },
+        {
+          "name": "recap content type from the template",
+          "ok": true,
+          "detail": {
+            "formatId": "short_text",
+            "contentTypeId": "postriff:update",
+            "contentTypeVersion": "1.0.0"
+          }
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "automations/chromium/templates/01-countdown-when.png",
+        "automations/chromium/templates/02-recap-when.png",
+        "automations/chromium/templates/03-hub-with-templates.png"
+      ],
+      "axe": [],
+      "video": "automations/chromium/templates/templates.webm",
+      "t0": 1790234039880,
+      "durationSeconds": 33.6
+    },
+    {
+      "name": "triggers",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "trigger: New idea selected",
+          "ok": true
+        },
+        {
+          "name": "trigger: ideas, notes and links start a run; documents do not",
+          "ok": true
+        },
+        {
+          "name": "trigger: no time to pick",
+          "ok": true
+        },
+        {
+          "name": "trigger: summary names the daily limit",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nRepeats\nWeekly\nMonthly\nCountdown\nNew idea\nStrong post\nStart a run when I add\nIdeas\nNotes\nLinks\nDocuments\n\nEach new item runs once and is read as the run’s source. Items added before the automation is activated are not included. Recordings"
+        },
+        {
+          "name": "trigger saved and active, watching from activation",
+          "ok": true,
+          "detail": {
+            "schedule": {
+              "kind": "on_new_source",
+              "timeZone": "America/New_York",
+              "maxPerDay": 3,
+              "sourceKinds": [
+                "idea",
+                "text",
+                "link"
+              ]
+            },
+            "status": "active",
+            "watchFrom": 1790234092.5984771
+          }
+        },
+        {
+          "name": "trigger card waits for something new",
+          "ok": true
+        },
+        {
+          "name": "cron scanned Ideas and ran the new idea once",
+          "ok": true,
+          "detail": {
+            "runs": [
+              {
+                "state": "completed",
+                "occurrenceId": "7eceb799dba44f81a0e39716e3cbe0eb"
+              }
+            ]
+          }
+        },
+        {
+          "name": "the run carries the new idea as its event",
+          "ok": true,
+          "detail": [
+            {
+              "id": "7eceb799dba44f81a0e39716e3cbe0eb",
+              "event": {
+                "id": "source:685df3e5462b41748c0d9cd05c984a9e",
+                "kind": "new_source",
+                "title": "Practice with a metronome",
+                "sourceId": "685df3e5462b41748c0d9cd05c984a9e"
+              },
+              "runId": "66b2bf61-6005-4074-abf6-a72a7e547097",
+              "state": "completed",
+              "taskId": "bed0c8a564924722ad05f21b1c60866b",
+              "authority": "draft_preparation_only",
+              "createdAt": 1790234095.924078,
+              "draftCount": 1,
+              "leaseUntil": 1790234695.924078,
+              "completedAt": 1790234096.42162,
+              "taskVersion": 1,
+              "costUsdMicro": 0,
+              "scheduledFor": 1790234095.882154,
+              "conversationId": "80ccd658-65e3-409f-8b24-b09f105c6eca",
+              "idempotencyKey": "6dc0ca116384c8eb9539dbc0a73ff660f9d552582e933dcbb1e7c531683b3591"
+            }
+          ]
+        },
+        {
+          "name": "the same idea never runs twice",
+          "ok": true,
+          "detail": {
+            "idle": true
+          }
+        },
+        {
+          "name": "run history names the idea that started it",
+          "ok": true,
+          "detail": "New idea to drafts\n\nWhen you add a new idea, note or link to Ideas · up to 3 runs a day\n\n1 new\nActive\nWHERE\nPersonal · 🌐 English\nWHAT\nEducational explainer · Text\nWRITER\nDeterministic preview · Quick · up to $0.00 a run\n$0.00 spent this month\nNEXT RUN\nWaiting for something new in Ideas\nup to 93 runs a month · at most $0.00 a month\n\nLast run\nDrafts ready\nThu, Sep 24, 3:14 AM\n\nReview latest drafts\nEdit\nPause\nCancel automation\nEmail me when its drafts are ready\nRun history (1)\nThu, Sep 24, 3:14 AM"
+        },
+        {
+          "name": "evergreen: option ticked by the template",
+          "ok": true
+        },
+        {
+          "name": "evergreen: 60 days minimum age",
+          "ok": true
+        },
+        {
+          "name": "evergreen saved in the definition",
+          "ok": true,
+          "detail": {
+            "include": {
+              "evergreen": {
+                "minAgeDays": 60
+              }
+            },
+            "schedule": {
+              "timeZone": "America/New_York",
+              "weekdays": [
+                "Wednesday"
+              ],
+              "localTime": "10:00"
+            }
+          }
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js",
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "automations/chromium/triggers/01-trigger-when.png",
+        "automations/chromium/triggers/02-trigger-run-history.png"
+      ],
+      "axe": [],
+      "video": "automations/chromium/triggers/triggers.webm",
+      "t0": 1790234074321,
+      "durationSeconds": 39.2
+    },
+    {
+      "name": "phone",
+      "viewport": "390x844",
+      "theme": "light",
+      "checks": [
+        {
+          "name": "hub fits a 390px phone",
+          "ok": true,
+          "detail": 0
+        },
+        {
+          "name": "builder field text is 16px on phones (no zoom)",
+          "ok": true
+        },
+        {
+          "name": "weekday toggles are at least 44px tall",
+          "ok": true,
+          "detail": {
+            "x": 125.140625,
+            "y": 341,
+            "width": 42.5625,
+            "height": 44
+          }
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "automations/chromium/phone/01-hub.png",
+        "automations/chromium/phone/02-builder-what.png",
+        "automations/chromium/phone/03-builder-when.png"
+      ],
+      "axe": [],
+      "video": "automations/chromium/phone/phone.webm",
+      "t0": 1790234114401,
+      "durationSeconds": 16.1
+    }
+  ],
+  "finishedAt": "2026-09-24T07:15:30.560Z",
+  "summary": {
+    "checks": 72,
+    "failed": 0,
+    "pageErrors": 0
+  }
+}

@@ -439,7 +439,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                 {!savedTaskId && !initial.campaignId && (
                   <fieldset className='flex flex-col gap-2'>
                     <legend className={cn(LABEL, 'mb-1')}>Start from a template (optional)</legend>
-                    <div className='grid gap-2 sm:grid-cols-3'>
+                    <div className='grid grid-cols-2 gap-2 sm:grid-cols-3'>
                       {TEMPLATES.map((template) => {
                         const Icon = Icons[template.icon];
                         const on = templateId === template.id;
@@ -449,7 +449,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                               <Icon className='size-4' />
                               {template.title}
                             </span>
-                            <span className='text-muted-foreground text-xs leading-snug'>{template.description}</span>
+                            <span className='text-muted-foreground hidden text-xs leading-snug sm:block'>{template.description}</span>
                           </button>
                         );
                       })}
@@ -458,20 +458,20 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </fieldset>
                 )}
                 <Field label='Name' htmlFor='automation-name' hint='Shown on the Automations page and as the title of each run’s conversation.'>
-                  <Input id='automation-name' value={name} onChange={(e) => setName(e.target.value)} placeholder='Weekly practice tip' maxLength={120} className={FIELD} />
+                  <Input id='automation-name' value={name} onChange={(e) => setName(e.target.value)} placeholder='Weekly tip' maxLength={120} className={FIELD} />
                 </Field>
                 <Field label='What should each draft be about?' htmlFor='automation-goal' hint='This brief is sent to the writer each run. Names of apps, times or instructions inside it are treated as text, never as settings.'>
-                  <Textarea id='automation-goal' value={goal} onChange={(e) => setGoal(e.target.value)} placeholder='One practical practice tip for adult piano students, drawn from this week’s lessons.' maxLength={1200} className='rafii-field min-h-24 rounded-[var(--rafii-radius-control)] px-3.5 py-3 text-base md:text-sm' />
+                  <Textarea id='automation-goal' value={goal} onChange={(e) => setGoal(e.target.value)} placeholder='One practical tip for my audience, drawn from this week’s work.' maxLength={1200} className='rafii-field min-h-24 rounded-[var(--rafii-radius-control)] px-3.5 py-3 text-base md:text-sm' />
                 </Field>
                 <Field label='Who is it for?' htmlFor='automation-audience'>
-                  <Input id='automation-audience' value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Adult beginners and parents of young students' maxLength={800} className={FIELD} />
+                  <Input id='automation-audience' value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Beginners who follow my work, and the people who support them' maxLength={800} className={FIELD} />
                 </Field>
                 <div className='grid gap-3 sm:grid-cols-2'>
                   <Field label='Event date' htmlFor='automation-date' hint={missing.includes('date') ? 'Needed before an event automation can be activated.' : 'Only for event briefs.'}>
-                    <Input id='automation-date' value={date} onChange={(e) => setDate(e.target.value)} placeholder='18 April 2026, 7:30 pm' maxLength={400} className={FIELD} />
+                    <Input id='automation-date' value={date} onChange={(e) => setDate(e.target.value)} placeholder='18 April, 7:30 pm' maxLength={400} className={FIELD} />
                   </Field>
                   <Field label='Venue' htmlFor='automation-venue' hint={missing.includes('venue') ? 'Needed before an event automation can be activated.' : 'Only for event briefs.'}>
-                    <Input id='automation-venue' value={venue} onChange={(e) => setVenue(e.target.value)} placeholder='City Hall Recital Hall' maxLength={400} className={FIELD} />
+                    <Input id='automation-venue' value={venue} onChange={(e) => setVenue(e.target.value)} placeholder='Venue name and city' maxLength={400} className={FIELD} />
                   </Field>
                 </div>
                 <div className='flex flex-col gap-2'>
@@ -857,7 +857,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
               </p>
             )}
           </RafiiDialogBody>
-          <RafiiDialogFooter className='flex flex-wrap items-center justify-between gap-2'>
+          <RafiiDialogFooter className='flex-row flex-wrap items-center justify-between gap-2'>
             <Button variant='quiet' size='control' disabled={saving} onClick={() => (stepIndex === 0 ? onOpenChange(false) : setStep(STEPS[stepIndex - 1].value))}>
               {stepIndex === 0 ? 'Cancel' : 'Back'}
             </Button>

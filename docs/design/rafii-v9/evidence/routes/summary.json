@@ -1,7 +1,7 @@
 {
   "base": "http://localhost:3100",
   "browser": "chromium",
-  "principal": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+  "principal": "d6d9972b-a529-4572-8c5c-82965a042353",
   "startedAt": "2026-09-24T03:12:13.923Z",
   "captures": [
     {
@@ -10410,13 +10410,257 @@
       },
       "axe": [],
       "file": "routes/invite/1920x1080-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "320x740",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 320,
+        "innerWidth": 320,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/320x740-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "375x812",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 375,
+        "innerWidth": 375,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/375x812-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/390x844-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "430x932",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 430,
+        "innerWidth": 430,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/430x932-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "768x1024",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/768x1024-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1024x768",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1024,
+        "innerWidth": 1024,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1024x768-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1440x1000-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1920x1080",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1920,
+        "innerWidth": 1920,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1920x1080-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "320x740",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 320,
+        "innerWidth": 320,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/320x740-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "375x812",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 375,
+        "innerWidth": 375,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/375x812-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/390x844-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "430x932",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 430,
+        "innerWidth": 430,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/430x932-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "768x1024",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/768x1024-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1024x768",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1024,
+        "innerWidth": 1024,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1024x768-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1440x1000-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1920x1080",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1920,
+        "innerWidth": 1920,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1920x1080-light.png"
     }
   ],
-  "finishedAt": "2026-09-24T04:07:21.511Z",
+  "finishedAt": "2026-09-24T07:33:21.765Z",
   "mergedRuns": [
     {
       "at": "2026-09-24T04:07:21.514Z",
       "captures": 240
+    },
+    {
+      "at": "2026-09-24T07:33:21.771Z",
+      "captures": 16
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "base": "http://localhost:3100",
-  "principal": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
-  "workspaceId": "619c305e-e8c8-45c4-b629-4136a54fa417",
+  "principal": "d6d9972b-a529-4572-8c5c-82965a042353",
+  "workspaceId": "44f94ff6-66c8-42b8-9f19-a5e300752e99",
   "connections": 2,
   "channels": [
     {
@@ -17,35 +17,35 @@
   ],
   "folders": [
     {
-      "id": "aba13094-cf68-4362-a24a-f806850e6575",
+      "id": "6bc8a234-2eb9-4147-90c8-057da8a94894",
       "name": "Festival",
       "pinned": true,
       "symbol": "music",
-      "createdAt": 1790215637.4291992,
-      "createdBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
-      "updatedAt": 1790215637.4291992,
-      "updatedBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+      "createdAt": 1790233356.058115,
+      "createdBy": "d6d9972b-a529-4572-8c5c-82965a042353",
+      "updatedAt": 1790233356.058115,
+      "updatedBy": "d6d9972b-a529-4572-8c5c-82965a042353",
       "accountIds": [
         "abaad27ed4e69ff561db13790efff006",
         "51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
       ]
     },
     {
-      "id": "5c80d5d2-4155-43d9-a9c4-bc9c6013d437",
+      "id": "6fc69a15-32cc-42f5-9277-744707f763b0",
       "name": "Personal",
       "symbol": "heart",
       "pinned": true,
       "accountIds": [
         "abaad27ed4e69ff561db13790efff006"
       ],
-      "createdAt": 1790215637.4895082,
-      "createdBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
-      "updatedAt": 1790215637.4895082,
-      "updatedBy": "bae2c4da-36ad-460e-ad00-fcecba27bc7c"
+      "createdAt": 1790233356.15816,
+      "createdBy": "d6d9972b-a529-4572-8c5c-82965a042353",
+      "updatedAt": 1790233356.15816,
+      "updatedBy": "d6d9972b-a529-4572-8c5c-82965a042353"
     }
   ],
-  "conversationId": "9e13e590-984b-480d-af86-7dd8daa38f13",
-  "runId": "faa8398a-bc4e-48df-9911-ab634e2bac52",
+  "conversationId": "8ee5d941-098a-49ed-861a-92f3bc199843",
+  "runId": "2bd6ac69-ef6d-4f88-a294-8febaf83ea08",
   "runStatus": "completed",
   "variants": [
     {

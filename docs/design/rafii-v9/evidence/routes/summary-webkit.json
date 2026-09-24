@@ -1,7 +1,7 @@
 {
   "base": "http://localhost:3100",
   "browser": "webkit",
-  "principal": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+  "principal": "d6d9972b-a529-4572-8c5c-82965a042353",
   "startedAt": "2026-09-24T03:39:57.222Z",
   "captures": [
     {
@@ -2603,7 +2603,73 @@
       },
       "axe": [],
       "file": "routes/conversation/1440x1000-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "390x844",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/390x844-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1440x1000-dark.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "390x844",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/390x844-light.png"
+    },
+    {
+      "route": "automations",
+      "path": "/app/automations",
+      "viewport": "1440x1000",
+      "theme": "light",
+      "signedIn": true,
+      "errors": [],
+      "overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontal": false
+      },
+      "axe": [],
+      "file": "routes/automations/1440x1000-light.png"
     }
   ],
-  "finishedAt": "2026-09-24T03:49:45.804Z"
+  "finishedAt": "2026-09-24T07:34:20.451Z",
+  "mergedRuns": [
+    {
+      "at": "2026-09-24T07:34:20.481Z",
+      "captures": 4
+    }
+  ]
 }

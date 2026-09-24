@@ -1,9 +1,9 @@
 {
   "base": "http://localhost:3100",
   "browser": "chromium",
-  "principal": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
-  "workspaceId": "619c305e-e8c8-45c4-b629-4136a54fa417",
-  "startedAt": "2026-09-24T03:48:31.027Z",
+  "principal": "d6d9972b-a529-4572-8c5c-82965a042353",
+  "workspaceId": "44f94ff6-66c8-42b8-9f19-a5e300752e99",
+  "startedAt": "2026-09-24T07:22:28.757Z",
   "scenes": [
     {
       "name": "content-library",
@@ -28,19 +28,19 @@
           "ok": true,
           "detail": {
             "formatId": "carousel",
-            "changedAt": 1790221722.879244,
+            "changedAt": 1790234573.703344,
             "pillarIds": [],
             "contentTypeId": "pack.creator:building_in_public",
             "transformation": {
               "to": "pack.creator:building_in_public",
-              "from": "unclassified",
+              "from": "postriff:update",
               "preservedSourceIds": [
-                "1d6e3ce64b524b7f86cb7dd4c8066328",
-                "5cada4408fdb468cb40bd3545c871200"
+                "fef7812256bc423bae5c4bbec9252bbd",
+                "685df3e5462b41748c0d9cd05c984a9e",
+                "8ef0dc3db48e413bae5196aea4c78f45"
               ],
               "preservedVariantIds": [
-                "f0df8920f5654b9d8b5f3e03577c3dd1",
-                "9839a2ce0fbe4ba3922a8d6f2c942ddb"
+                "83303aec21454dc29f41c42df1d1070b"
               ]
             },
             "contentTypeVersion": "1.0.0"
@@ -59,19 +59,19 @@
           "ok": true,
           "detail": {
             "formatId": "carousel",
-            "changedAt": 1790221722.879244,
+            "changedAt": 1790234573.703344,
             "pillarIds": [],
             "contentTypeId": "pack.creator:building_in_public",
             "transformation": {
               "to": "pack.creator:building_in_public",
-              "from": "unclassified",
+              "from": "postriff:update",
               "preservedSourceIds": [
-                "1d6e3ce64b524b7f86cb7dd4c8066328",
-                "5cada4408fdb468cb40bd3545c871200"
+                "fef7812256bc423bae5c4bbec9252bbd",
+                "685df3e5462b41748c0d9cd05c984a9e",
+                "8ef0dc3db48e413bae5196aea4c78f45"
               ],
               "preservedVariantIds": [
-                "f0df8920f5654b9d8b5f3e03577c3dd1",
-                "9839a2ce0fbe4ba3922a8d6f2c942ddb"
+                "83303aec21454dc29f41c42df1d1070b"
               ]
             },
             "contentTypeVersion": "1.0.0"
@@ -79,44 +79,43 @@
         },
         {
           "name": "restored to Status update · Text",
-          "ok": true
+          "ok": true,
+          "detail": "Choose content type and native format, Status update · Text"
         }
       ],
       "marks": [
         {
           "label": "native formats tab (crossfade)",
-          "atSeconds": 8.1
+          "atSeconds": 16.3
         },
         {
           "label": "library staged",
-          "atSeconds": 9.2
+          "atSeconds": 17.5
         },
         {
           "label": "library applied",
-          "atSeconds": 10.3
+          "atSeconds": 19
         },
         {
           "label": "native formats tab (crossfade)",
-          "atSeconds": 13.2
+          "atSeconds": 22
         },
         {
           "label": "native formats tab (crossfade)",
-          "atSeconds": 17.2
+          "atSeconds": 29.1
         }
       ],
       "errors": [],
-      "blocked": [
-        "https://va.vercel-scripts.com/v1/script.debug.js"
-      ],
+      "blocked": [],
       "screenshots": [
         "workflow/chromium/content-library/01-library-staged.png"
       ],
       "video": "workflow/chromium/content-library/content-library.webm",
-      "t0": 1790221712897,
-      "durationSeconds": 19.7
+      "t0": 1790234555046,
+      "durationSeconds": 31.9
     }
   ],
-  "finishedAt": "2026-09-24T03:48:52.736Z",
+  "finishedAt": "2026-09-24T07:23:07.214Z",
   "summary": {
     "checks": 6,
     "failed": 0,
