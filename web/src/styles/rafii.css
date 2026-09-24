@@ -51,6 +51,9 @@
   --rafii-text-secondary: #626262;
   --rafii-text-tertiary: #777777;
   --rafii-panel-rgb: 245 245 245;
+  /* Panel fills follow --rafii-panel-rgb, so the dark block only swaps the triplet. */
+  --rafii-panel: rgb(var(--rafii-panel-rgb) / 0.7);
+  --rafii-panel-solid: rgb(var(--rafii-panel-rgb) / 0.97);
   --rafii-highlight-rgb: 0 0 0;
   --rafii-action-bg: #000000;
   --rafii-action-fg: #ffffff;
@@ -313,10 +316,11 @@
   color: var(--foreground);
 }
 
-/* Translucent navigation panel (rail, mobile bar, sticky headers). */
+/* Translucent navigation panel (rail, mobile bar, sticky headers). A theme without the Rafii
+   tokens gets its own background here, never a fixed light grey that turns dark mode's bars light. */
 @utility rafii-panel {
   border: 0;
-  background: rgb(var(--rafii-panel-rgb, 245 245 245) / 0.7);
+  background: var(--rafii-panel, color-mix(in oklab, var(--background) 70%, transparent));
   backdrop-filter: blur(28px);
 }
 
@@ -379,7 +383,7 @@
     background: var(--rafii-surface-solid-fallback, var(--popover));
   }
   .rafii-panel {
-    background: rgb(var(--rafii-panel-rgb, 245 245 245) / 0.97);
+    background: var(--rafii-panel-solid, var(--background));
   }
 }
 

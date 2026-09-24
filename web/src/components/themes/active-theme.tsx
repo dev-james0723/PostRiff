@@ -1,15 +1,17 @@
 'use client';
 
-import { ReactNode, createContext, useContext, useEffect, useState } from 'react';
+import { ReactNode, createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-import { DEFAULT_THEME } from './theme.config';
+import { DEFAULT_THEME, THEME_COOKIE } from './theme.config';
 
-const COOKIE_NAME = 'active_theme';
+// Earlier versions wrote every visitor's theme to this cookie on each visit, including the starter
+// default nobody picked, which kept returning visitors on that old theme after the default changed.
+const LEGACY_COOKIE = 'active_theme';
 
-function setThemeCookie(theme: string) {
+function writeCookie(name: string, value: string, maxAge: number) {
   if (typeof window === 'undefined') return;
 
-  document.cookie = `${COOKIE_NAME}=${theme}; path=/; max-age=31536000; SameSite=Lax; ${window.location.protocol === 'https:' ? 'Secure;' : ''}`;
+  document.cookie = `${name}=${value}; path=/; max-age=${maxAge}; SameSite=Lax; ${window.location.protocol === 'https:' ? 'Secure;' : ''}`;
 }
 
 type ThemeContextType = {
@@ -27,31 +29,34 @@ export function ActiveThemeProvider({
   initialTheme?: string;
 }) {
   const themeToUse = initialTheme || DEFAULT_THEME;
-  const [activeTheme, setActiveTheme] = useState<string>(themeToUse);
+  const [activeTheme, setActiveThemeState] = useState<string>(themeToUse);
+
+  // Remembered only once the person picks a theme, so a later default still reaches everyone else.
+  const setActiveTheme = useCallback((theme: string) => {
+    writeCookie(THEME_COOKIE, theme, 31536000);
+    setActiveThemeState(theme);
+  }, []);
 
   useEffect(() => {
-    // Only update if theme has changed
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    if (currentTheme !== activeTheme) {
-      setThemeCookie(activeTheme);
+    if (document.cookie.split('; ').some((c) => c.startsWith(`${LEGACY_COOKIE}=`))) writeCookie(LEGACY_COOKIE, '', 0);
+  }, []);
 
-      // Remove existing data-theme attribute
-      document.documentElement.removeAttribute('data-theme');
+  useEffect(() => {
+    if (document.documentElement.getAttribute('data-theme') === activeTheme) return;
 
-      // Remove any theme classes from body (cleanup)
-      Array.from(document.body.classList)
-        .filter((className) => className.startsWith('theme-'))
-        .forEach((className) => {
-          document.body.classList.remove(className);
-        });
+    // Remove existing data-theme attribute
+    document.documentElement.removeAttribute('data-theme');
 
-      // Set data-theme on html element
-      if (activeTheme) {
-        document.documentElement.setAttribute('data-theme', activeTheme);
-      }
-    } else {
-      // Still update cookie in case it's missing
-      setThemeCookie(activeTheme);
+    // Remove any theme classes from body (cleanup)
+    Array.from(document.body.classList)
+      .filter((className) => className.startsWith('theme-'))
+      .forEach((className) => {
+        document.body.classList.remove(className);
+      });
+
+    // Set data-theme on html element
+    if (activeTheme) {
+      document.documentElement.setAttribute('data-theme', activeTheme);
     }
   }, [activeTheme]);
 
