@@ -3,9 +3,8 @@
 import Link from 'next/link';
 import { TodoList, type TodoItem } from '@/components/agents/todo-list';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import { useChannels, useSnapshot } from '@/lib/api/hooks';
 import { cn } from '@/lib/utils';
 
@@ -20,12 +19,12 @@ interface Step {
 
 /**
  * First-run checklist: voice → channel → draft → first approval. Every step reads real workspace
- * state (nothing is ticked by a click) and the card disappears once all four are done.
+ * state (nothing is ticked by a click) and the panel disappears once all four are done.
  */
 export function GettingStarted() {
   const snapshot = useSnapshot();
   const channels = useChannels();
-  // An unread workspace or channel list is not "not done yet", so the card waits for both rather than guessing.
+  // An unread workspace or channel list is not "not done yet", so the panel waits for both rather than guessing.
   if (!snapshot.data || snapshot.isError || !channels.data || channels.isError) return null;
   const state = snapshot.data.state;
   const sample = state.workspace?.sample === true;
@@ -33,7 +32,7 @@ export function GettingStarted() {
     { id: 'voice', title: 'Set your voice', detail: 'What you are building, who it is for, and a tone.', action: 'Set up', href: '/app/workspace/brand', done: Boolean(state.speaker?.activeRevision) },
     { id: 'channel', title: 'Connect a channel', detail: 'Any account you own; each shows how it can publish.', action: 'Connect', href: '/app/channels', done: channels.data.channels.length > 0 },
     { id: 'draft', title: 'Draft your first post', detail: 'Start from a sentence or a link in Ideas.', action: 'Draft', href: '/app/ideas', done: (state.variants ?? []).length > 0 },
-    { id: 'approve', title: 'Approve and schedule it', detail: 'Pick the account and time, then approve the exact text.', action: 'Approve', href: '/app/pipeline', done: (state.phase2?.jobs.length ?? 0) > 0 }
+    { id: 'approve', title: 'Approve and schedule it', detail: 'Pick the account and time, then approve the exact text.', action: 'Approve', href: '/app/queue?view=drafts', done: (state.phase2?.jobs.length ?? 0) > 0 }
   ];
   const done = steps.filter((s) => s.done).length;
   if (done === steps.length) return null;
@@ -67,23 +66,26 @@ export function GettingStarted() {
   });
 
   return (
-    <Card data-testid='getting-started' data-tour='getting-started'>
-      <CardHeader>
-        <CardTitle className='flex items-center justify-between gap-3 text-base'>
-          <span className='flex items-center gap-2'>
-            Get set up
-            {sample && <Badge variant='outline'>Sample · read-only</Badge>}
-          </span>
-          <span className='text-muted-foreground inline-flex items-center gap-1 text-xs font-normal tabular-nums'>
-            <DigitSwap value={done} /> of {steps.length} done
-          </span>
-        </CardTitle>
-        <CardDescription>Four steps from a blank workspace to your first scheduled post.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {/* The card header already names the checklist and counts it, so the list's own header stays short. */}
-        <TodoList title='Steps' ariaLabel='Setup steps' items={items} defaultOpen collapseOnComplete={false} spinActive={false} className='rounded-xl' />
-      </CardContent>
-    </Card>
+    <Panel
+      material='glass'
+      data-testid='getting-started'
+      data-tour='getting-started'
+      title={
+        <span className='flex flex-wrap items-center gap-2'>
+          Get set up
+          {sample && <StatusChip icon='lock'>Sample · read-only</StatusChip>}
+        </span>
+      }
+      titleId='getting-started-heading'
+      description='Four steps from a blank workspace to your first scheduled post.'
+      actions={
+        <span className='text-muted-foreground inline-flex items-center gap-1 text-xs tabular-nums'>
+          <DigitSwap value={done} /> of {steps.length} done
+        </span>
+      }
+    >
+      {/* The panel header already names the checklist and counts it, so the list's own header stays short. */}
+      <TodoList title='Steps' ariaLabel='Setup steps' items={items} defaultOpen collapseOnComplete={false} spinActive={false} className='rafii-quiet rounded-[var(--rafii-radius-card)] border-0' />
+    </Panel>
   );
 }

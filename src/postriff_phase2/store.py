@@ -13,7 +13,7 @@ from .contracts import PLANS, LIMITS, SCENARIOS, FixtureImages, FixtureSocial, d
 from .media import decode_upload
 from .content_types import apply_content_action, content_preflight, ensure_content_state, projection as content_projection
 from .outcomes import normalize_result, unknown
-from . import learning_signals as signals, locales, source_policy
+from . import learning_signals as signals, locales, source_policy, channel_folders
 
 TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("processing", "submitting", "provider_accepted", "published", "uncertain")
@@ -186,6 +186,8 @@ class Phase2Store(Store):
         learning.ensure(s, now)
         if apply_content_action(s, action, p, device["user_id"], now):
             return
+        if channel_folders.apply_action(s, action, p, device["user_id"], now):
+            return
         if action == "plan":
             if p.get("plan") not in PLANS:
                 raise AlphaError("Business is unavailable; choose Studio or Assist.")
@@ -262,7 +264,9 @@ class Phase2Store(Store):
             asset.update({"deleted": True, "data": ""})
         elif action == "channel_add":
             platform = p.get("platform")
-            if platform not in LIMITS:
+            # A fixture account only where a publishing connector exists (DAILY_LIMITS = LinkedIn, Instagram, Threads,
+            # as in hosted_social). X and Xiaohongshu are in LIMITS for drafting only, never simulated publishing.
+            if platform not in LIMITS or platform not in DAILY_LIMITS:
                 raise AlphaError("Use native drafting/export for this channel.")
             data["channels"].append({"id": uid(), "platform": platform, "account": f"Fictional {platform} account {len(data['channels'])+1}", "accountType": "member" if platform == "LinkedIn" else "professional", "language": locales.canonical(p.get("language")), "configured": True, "identityVerified": False, "capabilityVerified": False, "scopes": [], "verifiedAt": 0, "expiresAt": now+86400, "revoked": False, "capabilityVersion": 0, "qualification": "implemented_with_fixtures", "evidenceSource": "synthetic", "scenario": "success"})
         elif action == "channel_verify":

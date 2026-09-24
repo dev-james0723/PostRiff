@@ -11,9 +11,11 @@ import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from postriff_alpha.domain import AlphaError
+
 from . import locales
 
-INTENTS = ("draft", "schedule", "publish_now", "research", "memory")
+INTENTS = ("draft", "schedule", "publish_now", "research", "memory", "automation")
 
 
 def is_memory_instruction(text):
@@ -28,7 +30,7 @@ PLATFORM_ALIASES = (
     ("LinkedIn", ("linkedin", "領英", "领英")),
     ("Threads", ("threads",)),
     ("Facebook", ("facebook", "fb", "面書", "臉書", "脸书")),
-    ("X", ("twitter", "x.com", "推特")),
+    ("X", ("twitter", "x.com", "推特")),  # a bare "X" is read in context: see mark_platform_x
     ("TikTok", ("tiktok",)),
     ("YouTube", ("youtube",)),
     ("Xiaohongshu", ("xiaohongshu", "rednote", "xhs", "小紅書", "小红书")),
@@ -45,6 +47,46 @@ PLATFORM_ALIASES = (
     ("Snapchat", ("snapchat",)),
     ("Discord", ("discord",)),
 )
+
+# A bare capital "X" names the platform only where it reads as one: after a preposition or list joiner
+# ("on X", "to X", "for X", "LinkedIn, and X", "Threads & X", "LinkedIn同X"), paired with Twitter ("X/Twitter",
+# "X (Twitter)", "Twitter/X"), or opening a sentence as the first item of a platform list ("X and LinkedIn at 9").
+# Inside a word or a name it stays a letter: "X-ray", "10x", "SpaceX", "Series X", "Malcolm X", "X光". The aliases
+# above never include the bare letter, so every other reader of PLATFORM_ALIASES is unaffected.
+_BARE_X = re.compile(r"(?<![A-Za-z0-9_\-])X(?![A-Za-z0-9_\-]|光|射|線|线)")
+_X_BEFORE = re.compile(r"(?:(?<![A-Za-z0-9_])(?:on|to|for|and|or|via)|[,&、，同和及與与跟去到喺在]|(?:twitter|推特)\s*[/(（])\s*$", re.I)
+_X_AFTER = re.compile(r"^\s*[/(（]\s*(?:twitter|推特)", re.I)
+_X_OPENS = re.compile(r"(?:^|[.!?:;。！？：；\n])\s*$")
+_X_LIST_JOIN = re.compile(r"^\s*(?:[,，、&/]|(?:and|or)(?![A-Za-z0-9_])|同|和|及)\s*", re.I)
+# Stands in for a bare "X" read as the platform. One character, so offsets and clause splits are unchanged.
+X_MARK = "\ue000"
+
+
+def _opens_with_platform(text):
+    lowered = text.lower()
+    for platform, aliases in PLATFORM_ALIASES:
+        for alias in aliases:
+            if alias.isascii() and re.match(re.escape(alias) + r"(?![a-z0-9])", lowered):
+                return True
+            if not alias.isascii() and text.startswith(alias):
+                return True
+    return False
+
+
+def mark_platform_x(text):
+    """`text` with each bare "X" that reads as the platform replaced by X_MARK (same length, same clauses)."""
+    if not isinstance(text, str) or "X" not in text:
+        return text
+    chars = list(text)
+    for match in _BARE_X.finditer(text):
+        index = match.start()
+        before, after = text[:index], text[index + 1:]
+        joined = _X_LIST_JOIN.match(after)
+        if (_X_BEFORE.search(before) or _X_AFTER.match(after)
+                or (_X_OPENS.search(before) and joined and _opens_with_platform(after[joined.end():]))):
+            chars[index] = X_MARK
+    return "".join(chars)
+
 
 _CJK = re.compile(r"[一-鿿]")
 _SPLIT = re.compile(r"[、，,;；。！!？?\n]+|\s+(?:and|then)\s+|同埋|然後|然后|跟住|之後|之后")
@@ -77,6 +119,36 @@ _RESEARCH = re.compile(r"\bresearch\b|調研|调研|搵(?:下|吓|一下)?(?:資
 _MEMORY = re.compile(r"^\s*(?:please\s+|唔該\s*|請\s*)?(?:(?:always|never|stop|don'?t|do not)\b|remember(?:\s*[:,]|\s+(?:that|to|no|not|never|always|don'?t|do not)\b)|no\s+(?:more\s+)?(?:hashtags?|emojis?|bullets?|lists?|exclamation|calls? to action|cta)\b)|\b(?:from now on|going forward|in (?:the )?future)\b|以後|以后|今後|今后|從今|从今|記住|记住|記得|记得|下次(?:開始|开始)?|唔好再|不要再|永遠|永远|一律", re.I)
 _MEMORY_ONCE = re.compile(r"\b(?:this post|this one|this time|just this|for now|today only|this draft|never mind)\b|今次|呢篇|這篇|这篇|呢次|這次|这次|今篇|呢個\s*post|這個\s*post|这个\s*post", re.I)
 MEMORY_MAX_CHARS = 240
+# A request to keep preparing drafts on a schedule ("every Tuesday, draft …", "逢星期二幫我寫…"), or one that asks for an
+# automation outright, becomes an automation (automation_chat), never a one-off draft or plan. "About automation" is a
+# topic, a one-off "weekly recap" is a draft, and a recurrence that describes the person's own habit ("I practise every
+# day, write a post about it") is context, not a request.
+_AUTOMATE = re.compile(
+    r"\b(?:set\s*up|setup|create|make|add|start|build)\s+(?:an?\s+|my\s+|the\s+)?(?:new\s+)?automations?\b"
+    r"|\ban?\s+automations?\s+(?:that|to|for|of|which|so)\b"
+    r"|\bautomate\s+(?:this|it|that|the|my|a|an|drafting|writing|posting|these)\b"
+    r"|(?:設定|设定|建立|開|开|整)(?:一個|一个|個|个)?(?:自動化|自动化)|定期(?:幫我|帮我|寫|写|出|發|发)",
+    re.I)
+_WEEKDAY_WORD = r"(?:mon|tues?|wednes|wed|thurs?|fri|satur|sat|sun)(?:day)?"
+_RECUR = re.compile(
+    rf"\b(?:every|each)\s+(?:other\s+|second\s+)?(?:{_WEEKDAY_WORD}|day|weekday|weekend|week|month|morning|evening|night)s?\b"
+    r"|\bon\s+(?:mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays|weekdays|weekends)\b"
+    r"|(?:逢|每(?:個|个|一)?)\s*(?:星期|禮拜|礼拜|週|周)[一二三四五六日天]|每(?:週|周|星期|個星期|个星期|月|個月|个月)"
+    r"|每(?:日|天)(?:都|早上|朝早|晚上)?(?:幫我|帮我|寫|写|出|發|发|準備|准备)",
+    re.I)
+_REQUEST = re.compile(r"\b(?:draft|drafting|write|writing|prepare|create|make|post|publish|share|send|generate|give me|set\s*up|schedule|remind me)\b|幫我|帮我|寫|写|出|發|发|準備|准备|草擬|草拟", re.I)
+_HABIT = re.compile(r"^\s*(?:i|i'm|i am|we|we're|we are|my|our)\b|^\s*(?:我|我哋|我們|我们)(?!.*(?:幫|帮))", re.I)
+_CLAUSE = re.compile(r"[.;!?\n。！？；]+|,\s*|，")
+
+
+def is_automation_request(text):
+    """A request to prepare drafts on a recurring schedule, or to set up an automation (see _AUTOMATE / _RECUR)."""
+    text = text if isinstance(text, str) else ""
+    if _AUTOMATE.search(text):
+        return True
+    if not _REQUEST.search(text):
+        return False
+    return any(_RECUR.search(clause) and not _HABIT.search(clause) for clause in _CLAUSE.split(text) if clause)
 _ZH_WEEKDAYS = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
 _EN_WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 _EN_MONTHS = {name: index + 1 for index, name in enumerate(_MONTHS.split("|"))}
@@ -104,6 +176,7 @@ def _platform_mentions(segment):
 
 
 def _platform_positions(segment):
+    segment = mark_platform_x(segment)
     lowered = segment.lower()
     found = []
     for platform, aliases in PLATFORM_ALIASES:
@@ -116,6 +189,8 @@ def _platform_positions(segment):
                 index = match.start() if match else -1
             if index >= 0 and (best is None or index < best):
                 best = index
+        if platform == "X" and X_MARK in segment and (best is None or segment.index(X_MARK) < best):
+            best = segment.index(X_MARK)
         if best is not None:
             found.append((best, platform))
     return sorted(found)
@@ -229,8 +304,11 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
     supported_set = set(supported) if supported else None
     destinations, unattached, warnings = [], [], []
     carry_day = None
-    for segment in (s for s in _SPLIT.split(text) if s and s.strip()):
-        platforms = _platform_mentions(segment)
+    # Platform names are read on the whole message first, so "…, LinkedIn, and X" keeps the list context that
+    # tells the platform X from the letter; the marked text splits into the same clauses as the original.
+    marked = mark_platform_x(text)
+    for segment, named in ((s, m) for s, m in zip(_SPLIT.split(text), _SPLIT.split(marked)) if s and s.strip()):
+        platforms = _platform_mentions(named)
         day, day_label = _explicit_day(segment, today)
         if day is None and day_label is not None:
             warnings.append(f"“{day_label}” is not a valid date; that time was ignored.")
@@ -268,7 +346,9 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
             warnings.append(f"“{destination['label']}” had already passed today, so {destination['platform']} moved to tomorrow.")
     unsupported = [d["platform"] for d in destinations if not d["supported"]]
     has_times = any(d["localTime"] for d in destinations) or bool(unattached)
-    if _PUBLISH_NOW.search(text):
+    if is_automation_request(text):
+        intent = "automation"
+    elif _PUBLISH_NOW.search(text):
         intent = "publish_now"
     elif has_times:
         intent = "schedule"
@@ -282,7 +362,7 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
         "intent": intent,
         "language": detect_language(text),
         # Languages named as instructions, each paired with the channels named in its clause ([] = every channel).
-        "languages": locales.pair_with_channels(text, _platform_positions),
+        "languages": locales.pair_with_channels(marked, _platform_positions),
         "timeZone": zone,
         "destinations": [{k: d[k] for k in ("platform", "supported", "localTime", "assumed")} for d in destinations],
         "unattachedTimes": [{"localTime": t["localTime"], "assumed": t["assumed"]} for t in unattached],
@@ -299,7 +379,8 @@ def _slot(slot):
 
 
 def resolve_destinations(parsed, requested, language=None, default=(), settings=None):
-    """One destination per (channel, language) pair, so a channel can be drafted in several languages.
+    """One destination per (account, language) pair, so a channel can be drafted in several languages
+    and two accounts on the same platform stay two destinations.
 
     Channels: channels named in the message win over the composer's selection, except a channel named
     only to set its language ("Threads in British English"), which joins the selection instead of
@@ -307,6 +388,11 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
     every channel, else the composer's languages for it, else the request's top-level language (older
     clients), else what the workspace remembers for the channel (`settings`: state or a callable
     returning it; see `locales.languages_for`). A family name ("Chinese") keeps a pick already in it.
+
+    Accounts: a requested destination may carry `channelId` (a connection id). The pair
+    (platform, channelId) is the destination key; the same account requested twice collapses to one,
+    and a platform named in the message keeps every account the composer selected for it. Requests
+    without `channelId` (older clients, message-only channels) resolve at platform level as before.
     """
     fallback = locales.canonical(language)
     remembered = {}
@@ -322,8 +408,9 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
     for item in requested if isinstance(requested, list) else []:
         if not isinstance(item, dict) or not isinstance(item.get("platform"), str) or not item["platform"]:
             continue
+        channel_id = item["channelId"] if isinstance(item.get("channelId"), str) and item.get("channelId") else None
         tag = locales.canonical(item.get("language"))
-        tags = chosen.setdefault(item["platform"], [])
+        tags = chosen.setdefault((item["platform"], channel_id), [])
         for candidate in ([tag] if tag else starting(item["platform"])):
             if candidate not in tags:
                 tags.append(candidate)
@@ -332,19 +419,23 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
     named = [d["platform"] for d in parsed["destinations"] if d["supported"]]
     selecting = [platform for platform in named if platform not in paired]
     if selecting:
-        selection = {platform: chosen.get(platform) or starting(platform) for platform in selecting + [p for p in named if p in paired]}
+        selection = {}
+        for platform in selecting + [p for p in named if p in paired]:
+            keys = [key for key in chosen if key[0] == platform] or [(platform, None)]
+            for key in keys:
+                selection[key] = chosen.get(key) or starting(platform)
     else:
         selection = dict(chosen)
         if not selection:
             for item in default:
                 tag = locales.canonical(item.get("language"))
-                tags = selection.setdefault(item["platform"], [])
+                tags = selection.setdefault((item["platform"], None), [])
                 for candidate in ([tag] if tag else starting(item["platform"])):
                     if candidate not in tags:
                         tags.append(candidate)
         for platform in named:
-            if platform not in selection:
-                selection[platform] = starting(platform)
+            if not any(key[0] == platform for key in selection):
+                selection[(platform, None)] = starting(platform)
     everyone, per_channel = None, {}
     for pair in languages:
         if pair["platforms"]:
@@ -353,12 +444,34 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
         else:
             everyone = pair
     destinations = []
-    for platform, tags in selection.items():
+    for (platform, channel_id), tags in selection.items():
         pair = per_channel.get(platform) or everyone
         if pair:
             tags = locales.apply_named(tags, pair["tags"], pair["said"])
-        destinations.extend({"platform": platform, "language": tag} for tag in dict.fromkeys(tags))
+        for tag in dict.fromkeys(tags):
+            destination = {"platform": platform, "language": tag}
+            if channel_id:
+                destination["channelId"] = channel_id
+            destinations.append(destination)
     return destinations
+
+
+def bind_accounts(destinations, state):
+    """Attach the account label of each destination's connection and refuse ids this workspace does
+    not hold. The check runs inside the workspace transaction so a just-disconnected account cannot
+    become a destination; platform-only destinations pass through unchanged."""
+    channels = {c.get("id"): c for c in (state.get("phase2") or {}).get("channels", []) if isinstance(c, dict)}
+    bound = []
+    for destination in destinations:
+        channel_id = destination.get("channelId")
+        if not channel_id:
+            bound.append(dict(destination))
+            continue
+        channel = channels.get(channel_id)
+        if channel is None or channel.get("revoked") or channel.get("platform") != destination["platform"]:
+            raise AlphaError("One selected account is no longer connected to this workspace. Choose your destinations again.", 409)
+        bound.append({**destination, "account": channel.get("account", "")})
+    return bound
 
 
 def build_plan(parsed, destinations):
@@ -370,7 +483,10 @@ def build_plan(parsed, destinations):
         slot = match or (spare.pop(0) if spare else None)
         if slot is None and parsed["unattachedTimes"]:
             slot = parsed["unattachedTimes"][-1]
-        rows.append({"platform": destination["platform"], "language": destination["language"], "localTime": slot["localTime"] if slot else None, "assumed": bool(slot and slot["assumed"])})
+        row = {"platform": destination["platform"], "language": destination["language"], "localTime": slot["localTime"] if slot else None, "assumed": bool(slot and slot["assumed"])}
+        if destination.get("channelId"):
+            row["channelId"] = destination["channelId"]
+        rows.append(row)
     if not any(row["localTime"] for row in rows):
         return None
     return {"kind": "schedule", "intent": parsed["intent"], "timeZone": parsed["timeZone"], "destinations": rows, "unsupported": list(parsed["unsupported"]), "warnings": list(parsed["warnings"])}

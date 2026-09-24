@@ -184,3 +184,24 @@ export function hostOf(url: string) {
     return null;
   }
 }
+
+/* ---------- row marks ---------- */
+
+/** The compact semantic mark for a source row (DNA §21.10): a paper/document icon family, never a decorative miniature. */
+export type KindIconName = 'bolt' | 'text' | 'page' | 'link' | 'sparkles' | 'externalLink';
+
+export function kindIcon(source: IdeaSource): KindIconName {
+  if (isWeb(source)) return 'externalLink';
+  switch (source.kind) {
+    case 'idea':
+      return 'bolt';
+    case 'document':
+      return 'page';
+    case 'link':
+      return 'link';
+    case 'sample':
+      return 'sparkles';
+    default:
+      return 'text';
+  }
+}

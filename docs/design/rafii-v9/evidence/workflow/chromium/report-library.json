@@ -1,0 +1,124 @@
+{
+  "base": "http://localhost:3100",
+  "browser": "chromium",
+  "principal": "d6d9972b-a529-4572-8c5c-82965a042353",
+  "workspaceId": "44f94ff6-66c8-42b8-9f19-a5e300752e99",
+  "startedAt": "2026-09-24T07:22:28.757Z",
+  "scenes": [
+    {
+      "name": "content-library",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "footer shows the staged editorial type and native format",
+          "ok": true
+        },
+        {
+          "name": "composer shows the applied choice",
+          "ok": true,
+          "detail": {
+            "before": "Choose content type and native format, Status update · Text",
+            "after": "Choose content type and native format, Behind the scenes · Carousel"
+          }
+        },
+        {
+          "name": "server records the mapped content type and format",
+          "ok": true,
+          "detail": {
+            "formatId": "carousel",
+            "changedAt": 1790234573.703344,
+            "pillarIds": [],
+            "contentTypeId": "pack.creator:building_in_public",
+            "transformation": {
+              "to": "pack.creator:building_in_public",
+              "from": "postriff:update",
+              "preservedSourceIds": [
+                "fef7812256bc423bae5c4bbec9252bbd",
+                "685df3e5462b41748c0d9cd05c984a9e",
+                "8ef0dc3db48e413bae5196aea4c78f45"
+              ],
+              "preservedVariantIds": [
+                "83303aec21454dc29f41c42df1d1070b"
+              ]
+            },
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "Escape discards staged choices",
+          "ok": true,
+          "detail": {
+            "after": "Choose content type and native format, Behind the scenes · Carousel",
+            "escaped": "Choose content type and native format, Behind the scenes · Carousel"
+          }
+        },
+        {
+          "name": "server selection unchanged after Escape",
+          "ok": true,
+          "detail": {
+            "formatId": "carousel",
+            "changedAt": 1790234573.703344,
+            "pillarIds": [],
+            "contentTypeId": "pack.creator:building_in_public",
+            "transformation": {
+              "to": "pack.creator:building_in_public",
+              "from": "postriff:update",
+              "preservedSourceIds": [
+                "fef7812256bc423bae5c4bbec9252bbd",
+                "685df3e5462b41748c0d9cd05c984a9e",
+                "8ef0dc3db48e413bae5196aea4c78f45"
+              ],
+              "preservedVariantIds": [
+                "83303aec21454dc29f41c42df1d1070b"
+              ]
+            },
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "restored to Status update · Text",
+          "ok": true,
+          "detail": "Choose content type and native format, Status update · Text"
+        }
+      ],
+      "marks": [
+        {
+          "label": "native formats tab (crossfade)",
+          "atSeconds": 16.3
+        },
+        {
+          "label": "library staged",
+          "atSeconds": 17.5
+        },
+        {
+          "label": "library applied",
+          "atSeconds": 19
+        },
+        {
+          "label": "native formats tab (crossfade)",
+          "atSeconds": 22
+        },
+        {
+          "label": "native formats tab (crossfade)",
+          "atSeconds": 29.1
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "workflow/chromium/content-library/01-library-staged.png"
+      ],
+      "video": "workflow/chromium/content-library/content-library.webm",
+      "t0": 1790234555046,
+      "durationSeconds": 31.9
+    }
+  ],
+  "finishedAt": "2026-09-24T07:23:07.214Z",
+  "summary": {
+    "checks": 6,
+    "failed": 0,
+    "pageErrors": 0
+  }
+}

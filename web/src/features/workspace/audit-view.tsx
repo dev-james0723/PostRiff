@@ -5,28 +5,15 @@ import { parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
 import { Icons } from '@/components/icons';
 import PageContainer from '@/components/layout/page-container';
 import { ActionSwapIcon } from '@/components/motion/action-swap';
+import { PageHeader, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
-import { InfoButton } from '@/components/ui/info-button';
 import type { InfobarContent } from '@/components/ui/infobar';
 import { useAudit, useChannels, useMe, useMembers, useInvitations } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatNumber } from '@/lib/time';
 import { AuditDetailSheet } from './audit/audit-detail-sheet';
 import { AuditFilters, type ActorOption } from './audit/audit-filters';
-import {
-  AUDIT_API_LIMIT,
-  FAMILIES,
-  actorKey,
-  dayLabel,
-  eventKey,
-  familyOf,
-  groupByDay,
-  inFamily,
-  personOf,
-  providersBySubject,
-  type AuditLookup,
-  type Family
-} from './audit/audit-model';
+import { AUDIT_API_LIMIT, FAMILIES, actorKey, dayLabel, eventKey, familyOf, groupByDay, inFamily, personOf, providersBySubject, type AuditLookup, type Family } from './audit/audit-model';
 import { AuditRow } from './audit/audit-row';
 import { AuditCoverage, AuditEmpty, AuditFilterEmpty, AuditListSkeleton, AuditLoadError } from './audit/audit-states';
 
@@ -119,9 +106,7 @@ export function AuditView() {
       const entry = counts.get(actorKey(event.actor));
       if (entry) entry.count += 1;
     }
-    return [...counts.entries()]
-      .map(([value, { actor, count }]) => ({ value, count, person: personOf(actor, lookup) }))
-      .toSorted((a, b) => Number(b.person.kind === 'you') - Number(a.person.kind === 'you') || b.count - a.count);
+    return [...counts.entries()].map(([value, { actor, count }]) => ({ value, count, person: personOf(actor, lookup) })).toSorted((a, b) => Number(b.person.kind === 'you') - Number(a.person.kind === 'you') || b.count - a.count);
   }, [events, byFamily, lookup, loaded]);
 
   // Rows on screen when the log first loaded stay still; rows a refresh brings in slide in.
@@ -171,33 +156,35 @@ export function AuditView() {
           const headingId = `audit-day-${group.key}`;
           return (
             <section key={group.key} aria-labelledby={headingId} className='flex flex-col gap-2'>
-              <h3 id={headingId} className='flex flex-wrap items-baseline gap-x-2 text-sm font-medium'>
+              <h2 id={headingId} className='text-foreground flex flex-wrap items-baseline gap-x-2 text-sm font-medium'>
                 {label.lead && <span>{label.lead}</span>}
                 <span className={label.lead ? 'text-muted-foreground font-normal' : undefined}>{label.full}</span>
                 <span className='text-muted-foreground text-xs font-normal tabular-nums'>
                   {formatNumber(group.events.length)} event{group.events.length === 1 ? '' : 's'}
                 </span>
-              </h3>
-              <ol className='divide-y overflow-hidden rounded-lg border'>
-                {group.events.map((event) => {
-                  const key = eventKey(event, indexOf.get(event) ?? 0);
-                  const order = freshKeys.get(key);
-                  const tour = first;
-                  first = false;
-                  return (
-                    <AuditRow
-                      key={key}
-                      event={event}
-                      lookup={lookup}
-                      now={now}
-                      tour={tour}
-                      // Only the first two new rows stagger (40ms), so the whole entrance stays under 300ms.
-                      enterDelay={order === undefined ? null : Math.min(order, 1) * 0.04}
-                      onOpen={() => void setParams({ event: event.id ?? null })}
-                    />
-                  );
-                })}
-              </ol>
+              </h2>
+              <Surface material='quiet' padding='none' className='p-1'>
+                <ol className='flex flex-col gap-0.5'>
+                  {group.events.map((event) => {
+                    const key = eventKey(event, indexOf.get(event) ?? 0);
+                    const order = freshKeys.get(key);
+                    const tour = first;
+                    first = false;
+                    return (
+                      <AuditRow
+                        key={key}
+                        event={event}
+                        lookup={lookup}
+                        now={now}
+                        tour={tour}
+                        // Only the first two new rows stagger (40ms), so the whole entrance stays under 300ms.
+                        enterDelay={order === undefined ? null : Math.min(order, 1) * 0.04}
+                        onOpen={() => void setParams({ event: event.id ?? null })}
+                      />
+                    );
+                  })}
+                </ol>
+              </Surface>
             </section>
           );
         })}
@@ -207,22 +194,21 @@ export function AuditView() {
 
   return (
     <PageContainer access={canManageMembers}>
-      <div className='mb-4 flex items-start justify-between gap-4'>
-        <div className='min-w-0' data-tour='audit-title'>
-          <div className='flex items-center gap-2'>
-            <h2 className='text-3xl font-bold tracking-tight'>Audit log</h2>
-            <div className='pt-1'>
-              <InfoButton content={infoContent} data-tour='audit-info' />
-            </div>
-          </div>
-          <p className='text-muted-foreground text-sm'>Who did what in this workspace, newest first. Never the content itself.</p>
-        </div>
-        <Button variant='outline' size='sm' className='shrink-0' onClick={refresh} disabled={!loaded && !audit.isError} aria-label='Refresh the audit log'>
-          <ActionSwapIcon value={audit.isFetching ? 'busy' : 'idle'} className='size-3.5'>
-            {audit.isFetching ? <Icons.spinner className='size-3.5 animate-spin' /> : <Icons.refresh className='size-3.5' />}
-          </ActionSwapIcon>
-          <span className='hidden sm:inline'>Refresh</span>
-        </Button>
+      {/* The tour anchors the page on `audit-title`; the shared header carries the title, help and the one utility. */}
+      <div data-tour='audit-title' className='min-w-0'>
+        <PageHeader
+          title='Audit log'
+          description='Who did what in this workspace, newest first. Never the content itself.'
+          infoContent={infoContent}
+          actions={
+            <Button variant='glass' size='control' onClick={refresh} disabled={!loaded && !audit.isError} aria-label='Refresh the audit log'>
+              <ActionSwapIcon value={audit.isFetching ? 'busy' : 'idle'} className='size-4'>
+                {audit.isFetching ? <Icons.spinner className='size-4 animate-spin motion-reduce:animate-none' /> : <Icons.refresh className='size-4' />}
+              </ActionSwapIcon>
+              Refresh
+            </Button>
+          }
+        />
       </div>
 
       <div className='flex min-w-0 flex-col gap-4'>
@@ -239,9 +225,7 @@ export function AuditView() {
           />
         ) : null}
         {loaded && events.length > 0 && <AuditCoverage loaded={events.length} oldest={events[events.length - 1].at} showing={shown.length} />}
-        {loaded && audit.isError && (
-          <AuditLoadError error={audit.error} hasData updatedAt={audit.dataUpdatedAt} onRetry={() => audit.refetch()} />
-        )}
+        {loaded && audit.isError && <AuditLoadError error={audit.error} hasData updatedAt={audit.dataUpdatedAt} onRetry={() => audit.refetch()} />}
         {loaded && lookupsFailed && (
           <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs'>
             {members.isError && channels.isError
@@ -249,7 +233,7 @@ export function AuditView() {
               : members.isError
                 ? 'Member names and roles could not be read, so people show as the start of their id.'
                 : 'Channel names could not be read, so some channel rows name only the provider.'}
-            <Button variant='link' size='xs' className='h-auto px-0' onClick={refresh}>
+            <Button variant='link' size='xs' className='text-foreground h-auto px-0' onClick={refresh}>
               Try again
             </Button>
           </p>

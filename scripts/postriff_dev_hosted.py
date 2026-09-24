@@ -11,6 +11,9 @@ Usage:  python scripts/postriff_dev_hosted.py [--port 4331]
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import io
 import json
 import mimetypes
 import os
@@ -23,12 +26,13 @@ import time
 import uuid
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode
-from wsgiref.simple_server import WSGIRequestHandler, make_server
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
+from socketserver import ThreadingMixIn
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 os.environ.setdefault("LC_ALL", "C")
-PG = Path("/opt/homebrew/opt/postgresql@17/bin")
+PG = Path(__import__("os").environ.get("POSTRIFF_PG_BIN", "/opt/homebrew/opt/postgresql@17/bin"))
 PORT_PG = 55441
 
 from postriff_alpha.domain import AlphaError  # noqa: E402
@@ -122,7 +126,11 @@ class DevProvider:
         return {"accessToken": f"dev-{self.id}-access-{code}", "refreshToken": f"dev-{self.id}-refresh", "expiresIn": 3600, "scopes": None}
 
     def identity(self, access_token):
-        return {"providerAccountId": "urn:li:person:devmember" if self.id == "linkedin" else "17841400000000", "handle": "Dev Member" if self.id == "linkedin" else "@dev_creator", "accountType": "member" if self.id == "linkedin" else "profile"}
+        # A token minted from the consent page's "second account" choice identifies a different account.
+        second = str(access_token).endswith("-good-code-2")
+        if self.id == "linkedin":
+            return {"providerAccountId": "urn:li:person:devmember2" if second else "urn:li:person:devmember", "handle": "Dev Member Two" if second else "Dev Member", "accountType": "member"}
+        return {"providerAccountId": "17841400000000002" if second else "17841400000000", "handle": "@dev_creator_two" if second else "@dev_creator", "accountType": "profile"}
 
     def refresh(self, refresh_token):
         return {"accessToken": f"dev-{self.id}-access-refreshed", "refreshToken": refresh_token, "expiresIn": 3600}
@@ -131,13 +139,59 @@ class DevProvider:
         return True
 
 
-class DevStorage:
-    def signed_url(self, wid, kind, name, ttl):
+class DevAssets:
+    """In-memory private media boundary for the synthetic harness."""
+    def __init__(self):
+        self.objects = {}
+        self.storage = self
+
+    def signed_url(self, wid, kind, name, ttl=300):
         return f"https://dev.invalid/{wid}/{kind}/{name}"
 
+    def stage_upload(self, workspace_id, payload):
+        from postriff_phase2.media import decode_upload
+        asset = decode_upload(payload, decoder="pillow")
+        raw = base64.b64decode(asset.pop("data"), validate=True)
+        object_name = f"{asset['id']}-{asset['hash']}.jpg"
+        self.objects[(workspace_id, "media", object_name)] = raw
+        asset.update({"storagePath": f"{workspace_id}/media/{object_name}", "objectName": object_name, "execution": "dev-synthetic-memory"})
+        return asset
 
-class DevAssets:
-    storage = DevStorage()
+    def get(self, workspace_id, category, object_name):
+        raw = self.objects.get((workspace_id, category, object_name))
+        if raw is None:
+            raise AlphaError("This private media object is unavailable.", 404)
+        return raw
+
+    def remove(self, workspace_id, asset):
+        self.objects.pop((workspace_id, "media", asset.get("objectName")), None)
+
+
+class DevImageRuntime:
+    """Clearly labelled fixture used only to exercise the complete local UI flow."""
+    provider = "dev-synthetic"
+    model = "dev-synthetic-image"
+    cost_class = "none"
+    estimate_usd_micro = 0
+
+    def generate(self, prompt, *, count=1, emit=lambda _event: None):
+        from PIL import Image, ImageDraw
+        if count != 1:
+            raise AlphaError("The local preview creates one image at a time.")
+        emit({"type": "progress.updated", "stage": "image_generation", "percent": 25})
+        digest = hashlib.sha256(prompt.encode()).digest()
+        image = Image.new("RGB", (1024, 1024), (246, 241, 230))
+        draw = ImageDraw.Draw(image)
+        palette = [(25, 45, 63), (196, 84, 55), (83, 122, 103), (226, 177, 74)]
+        for index in range(11):
+            color = palette[digest[index] % len(palette)]
+            inset = 45 + index * 38
+            draw.rounded_rectangle((inset, inset, 1024 - inset, 1024 - inset), radius=70, outline=color, width=22)
+        draw.ellipse((330, 330, 694, 694), fill=palette[digest[12] % len(palette)])
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        emit({"type": "progress.updated", "stage": "image_generation", "percent": 75})
+        return {"images": [output.getvalue()], "usage": {"provenance": "fixture", "modelRequests": 0, "costUsd": 0, "model": self.model, "provider": self.provider}}
 
 
 def start_postgres(port=PORT_PG):
@@ -168,8 +222,9 @@ def main():
     # redirects to the loopback callback itself, so the placeholder host is never contacted.
     # The web app labels a dev identity `dev-<first 8 of the uuid>@postriff.invalid`; the same address
     # here lets invitations addressed to it show up on the profile. Nothing is ever sent (NullTransport).
-    service = HostedWorkspaceService(connection, verifier, DevAssets(), vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid")
-    social = HostedSocial(service.oauth, providers, DevAssets(), transport=transport)
+    dev_assets = DevAssets()
+    service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid")
+    social = HostedSocial(service.oauth, providers, dev_assets, transport=transport)
 
     def on_verified(cur, workspace_id, job):
         manifest = job["manifest"]
@@ -191,8 +246,12 @@ def main():
             if environ["REQUEST_METHOD"] == "POST":
                 length = int(environ.get("CONTENT_LENGTH") or 0)
                 form = {k: v[0] for k, v in parse_qs(environ["wsgi.input"].read(length).decode()).items()}
-                allow = form.get("decision") == "allow"
-                target = form["redirect"] + "?" + urlencode({"state": form["state"], **({"code": "good-code"} if allow else {"error": "access_denied"})})
+                decision = form.get("decision")
+                allow = decision in ("allow", "allow-second")
+                # "Allow as a second account" lets the local harness hold two distinct accounts on one
+                # platform (Rafii v9 folder evidence). The code suffix flows into the opaque dev token.
+                code = "good-code-2" if decision == "allow-second" else "good-code"
+                target = form["redirect"] + "?" + urlencode({"state": form["state"], **({"code": code} if allow else {"error": "access_denied"})})
                 start_response("302 Found", [("Location", target), ("Content-Length", "0")])
                 return [b""]
             html = f"""<!doctype html><meta charset=utf-8><title>DEV consent</title><body style="font-family:Avenir Next,sans-serif;background:#f8f7f2;color:#292f2b;padding:48px;max-width:560px;margin:auto">
@@ -201,6 +260,7 @@ def main():
 <p>Requested scopes: <code>{q.get('scope','')}</code></p>
 <form method=post><input type=hidden name=redirect value="{q.get('redirect','')}"><input type=hidden name=state value="{q.get('state','')}">
 <button name=decision value=allow style="padding:12px 20px;background:#284e3a;color:#fff;border:0;border-radius:8px;font-size:16px">Allow</button>
+<button name=decision value=allow-second style="padding:12px 20px;background:#3b4a6b;color:#fff;border:0;border-radius:8px;font-size:16px;margin-left:12px">Allow as a second account</button>
 <button name=decision value=deny style="padding:12px 20px;background:transparent;border:1px solid #dedfd4;border-radius:8px;font-size:16px;margin-left:12px">Deny</button></form></body>"""
             raw = html.encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(raw)))])
@@ -229,7 +289,12 @@ def main():
         def log_message(self, *_):
             pass
 
-    server = make_server("127.0.0.1", args.port, application, handler_class=Quiet)
+    class LocalConcurrentServer(ThreadingMixIn, WSGIServer):
+        # Test concurrent application/DB requests instead of overflowing wsgiref's backlog of five.
+        # This remains a loopback-only synthetic harness, not a production HTTP server.
+        daemon_threads = True
+        request_queue_size = 64
+    server = make_server("127.0.0.1", args.port, application, server_class=LocalConcurrentServer, handler_class=Quiet)
     print(f"PostRiff DEV hosted harness: {base} | disposable PostgreSQL {dsn} | providers: dev-synthetic | identity: dev", flush=True)
     import signal
 

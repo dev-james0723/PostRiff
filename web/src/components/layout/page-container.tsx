@@ -1,8 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Heading } from '../ui/heading';
+import { PageHeader } from '@/components/rafii/page-header';
+import { StateMessage } from '@/components/rafii/state-message';
 import { useInfobar, type InfobarContent } from '@/components/ui/infobar';
+import { cn } from '@/lib/utils';
 
 /**
  * Publishes a page's help content to the right-hand info sidebar. Pages with a title do this through
@@ -21,19 +23,13 @@ function PublishInfo({ content }: { content: InfobarContent }) {
 
 function PageSkeleton() {
   return (
-    <div
-      role='status'
-      aria-label='Loading page'
-      className='flex flex-1 animate-pulse flex-col gap-4 p-4 md:px-6'
-    >
-      <div className='flex items-center justify-between'>
-        <div>
-          <div className='bg-muted mb-2 h-8 w-48 rounded' />
-          <div className='bg-muted h-4 w-96 rounded' />
-        </div>
+    <div role='status' aria-label='Loading page' className='flex flex-1 flex-col gap-4'>
+      <div className='flex flex-col gap-2'>
+        <div className='bg-muted h-8 w-48 animate-pulse rounded-lg motion-reduce:animate-none' />
+        <div className='bg-muted h-4 w-80 max-w-full animate-pulse rounded motion-reduce:animate-none' />
       </div>
-      <div className='bg-muted mt-6 h-40 w-full rounded-lg' />
-      <div className='bg-muted h-40 w-full rounded-lg' />
+      <div className='rafii-quiet mt-4 h-40 w-full rounded-[var(--rafii-radius-card)]' />
+      <div className='rafii-quiet h-40 w-full rounded-[var(--rafii-radius-card)]' />
     </div>
   );
 }
@@ -45,47 +41,46 @@ export default function PageContainer({
   accessFallback,
   pageTitle,
   pageDescription,
+  pageEyebrow,
+  pageAccent,
   infoContent,
-  pageHeaderAction
+  pageHeaderAction,
+  density = 'functional',
+  width = 'full',
+  className
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   isLoading?: boolean;
   access?: boolean;
   accessFallback?: React.ReactNode;
   pageTitle?: string;
   pageDescription?: string;
+  /** Short tracked label above the title. */
+  pageEyebrow?: string;
+  /** Serif-italic phrase appended to the title (one short phrase, DNA §6.4). */
+  pageAccent?: string;
   infoContent?: InfobarContent;
   pageHeaderAction?: React.ReactNode;
+  density?: 'functional' | 'creative';
+  /** `reading` narrows long forms and settings to a comfortable measure; `full` keeps dense tools wide. */
+  width?: 'full' | 'reading';
+  className?: string;
 }) {
   if (!access) {
     return (
-      <div role='status' className='flex flex-1 items-center justify-center p-4 md:px-6'>
-        {accessFallback ?? (
-          <div className='text-muted-foreground text-center text-lg'>
-            You do not have access to this page.
-          </div>
-        )}
+      <div className='flex flex-1 items-center justify-center p-4 md:px-6'>
+        {accessFallback ?? <StateMessage kind='permission' title='You do not have access to this page.' description='Ask a workspace owner or admin for the permission this page needs.' className='w-full max-w-md' />}
       </div>
     );
   }
 
   const content = isLoading ? <PageSkeleton /> : children;
-
   const hasHeader = pageTitle || pageHeaderAction;
 
   return (
-    <div className='flex min-w-0 flex-1 flex-col px-4 pt-2 pb-4 md:px-6 md:pt-4'>
+    <div className={cn('flex min-w-0 flex-1 flex-col gap-5 px-4 pt-3 pb-6 md:px-8 md:pt-5 lg:px-10', width === 'reading' && 'mx-auto w-full max-w-4xl', className)}>
       {!hasHeader && infoContent && <PublishInfo content={infoContent} />}
-      {hasHeader && (
-        <div className='mb-4 flex items-start justify-between gap-4'>
-          <Heading
-            title={pageTitle ?? ''}
-            description={pageDescription ?? ''}
-            infoContent={infoContent}
-          />
-          {pageHeaderAction && <div className='shrink-0'>{pageHeaderAction}</div>}
-        </div>
-      )}
+      {hasHeader && <PageHeader eyebrow={pageEyebrow} title={pageTitle ?? ''} accent={pageAccent} description={pageDescription} infoContent={infoContent} actions={pageHeaderAction} density={density} />}
       {content}
     </div>
   );

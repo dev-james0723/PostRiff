@@ -1,11 +1,11 @@
 'use client';
 
-import type { CSSProperties } from 'react';
 import Link from 'next/link';
+import { StateMessage } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Panel } from '@/features/workspace/rafii-parts';
 import { useAudit, useChannels, useMe, useMembers } from '@/lib/api/hooks';
 import type { AuditEvent, ChannelView, Member, ProviderView } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -136,57 +136,50 @@ export function RecentActivity({ className }: { className?: string }) {
   const memberList = members.data?.members ?? [];
 
   return (
-    <Card data-tour='overview-activity' className={className}>
-      <CardHeader>
-        <CardTitle>Recent activity</CardTitle>
-        <CardDescription>Content-free audit trail of what happened in this workspace.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!canOpenLog ? (
-          <p className='text-muted-foreground text-sm'>Workspace activity is visible to admins and owners.</p>
-        ) : audit.isError ? (
-          <SectionUnavailable message='Activity is unavailable right now.' query={audit} />
-        ) : !audit.data ? (
-          <Skeleton className='h-32 w-full' />
-        ) : events.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>No activity recorded yet.</p>
-        ) : (
-          <ul className='divide-y'>
-            {events.slice(0, SHOWN).map((event, index) => {
-              const subject = subjectOf(event, lookups);
-              const actor = actorOf(event, me.data?.userId, memberList);
-              const detail = [subject, actor].filter(Boolean).join(' · ');
-              return (
-                <li
-                  key={event.id ?? `${event.kind}-${event.at}-${index}`}
-                  // First paint only: a line that is already on screen keeps its key and does not replay.
-                  className='t-stagger-line flex items-start justify-between gap-3 py-2 text-sm'
-                  style={{ '--stagger-i': index } as CSSProperties}
-                >
-                  <div className='min-w-0'>
-                    <p className='font-medium'>{kindLabel(event)}</p>
-                    {detail && <p className='text-muted-foreground truncate text-xs'>{detail}</p>}
-                  </div>
-                  <time
-                    dateTime={new Date(event.at * 1000).toISOString()}
-                    title={formatDateTime(event.at)}
-                    className='text-muted-foreground shrink-0 pt-0.5 text-xs whitespace-nowrap'
-                  >
-                    {relativeTime(event.at, now)}
-                  </time>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {canOpenLog ? (
-          <Link href='/app/workspace/audit' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }), 'mt-2 w-fit')}>
+    <Panel
+      data-tour='overview-activity'
+      className={className}
+      title='Recent activity'
+      titleId='overview-recent-activity-heading'
+      description='Content-free audit trail of what happened in this workspace.'
+      footer={
+        canOpenLog ? (
+          <Link href='/app/workspace/audit' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }), '-ml-2.5 w-fit')}>
             Full audit log <LearnMoreChevron />
           </Link>
         ) : (
-          <p className='text-muted-foreground mt-2 text-xs'>The full log is open to admins; ask one if you need it.</p>
-        )}
-      </CardContent>
-    </Card>
+          'The full log is open to admins; ask one if you need it.'
+        )
+      }
+    >
+      {!canOpenLog ? (
+        <StateMessage kind='permission' layout='inline' title='Workspace activity is visible to admins and owners.' />
+      ) : audit.isError ? (
+        <SectionUnavailable message='Activity is unavailable right now.' query={audit} />
+      ) : !audit.data ? (
+        <Skeleton className='h-32 w-full rounded-[var(--rafii-radius-control)]' />
+      ) : events.length === 0 ? (
+        <StateMessage kind='empty' layout='inline' title='No activity recorded yet.' description='The log fills as people join, channels connect and choices are saved.' />
+      ) : (
+        <ul className='flex flex-col gap-1'>
+          {events.slice(0, SHOWN).map((event, index) => {
+            const subject = subjectOf(event, lookups);
+            const actor = actorOf(event, me.data?.userId, memberList);
+            const detail = [subject, actor].filter(Boolean).join(' · ');
+            return (
+              <li key={event.id ?? `${event.kind}-${event.at}-${index}`} className='flex items-start justify-between gap-3 py-2 text-sm'>
+                <div className='min-w-0'>
+                  <p className='text-foreground font-medium'>{kindLabel(event)}</p>
+                  {detail && <p className='text-muted-foreground truncate text-xs'>{detail}</p>}
+                </div>
+                <time dateTime={new Date(event.at * 1000).toISOString()} title={formatDateTime(event.at)} className='text-muted-foreground shrink-0 pt-0.5 text-xs whitespace-nowrap'>
+                  {relativeTime(event.at, now)}
+                </time>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
   );
 }

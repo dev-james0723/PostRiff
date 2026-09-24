@@ -1,7 +1,6 @@
 'use client';
 
 import { Icons } from '@/components/icons';
-import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 function humanize(key: string) {
@@ -14,19 +13,16 @@ export function RulesCollapsible({ rules }: { rules: Record<string, string> }) {
   const entries = Object.entries(rules);
   if (entries.length === 0) return null;
   return (
-    <Collapsible render={<Card className='gap-0 py-0' />}>
-      <CollapsibleTrigger className='group/rules hover:bg-muted/50 flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50'>
+    <Collapsible render={<div className='rafii-quiet rounded-[var(--rafii-radius-card)]' />}>
+      <CollapsibleTrigger className='group/rules rafii-focus text-foreground flex min-h-12 w-full items-center justify-between gap-2 rounded-[var(--rafii-radius-card)] px-5 py-3 text-left text-sm font-medium'>
         How to read these numbers
-        <Icons.chevronDown
-          aria-hidden
-          className='text-muted-foreground size-4 transition-transform duration-(--duration-fast) ease-(--ease-smooth-out) group-data-panel-open/rules:rotate-180 motion-reduce:transition-none'
-        />
+        <Icons.chevronDown aria-hidden className='text-muted-foreground size-4 transition-transform duration-(--duration-fast) ease-(--ease-smooth-out) group-data-panel-open/rules:rotate-180 motion-reduce:transition-none' />
       </CollapsibleTrigger>
       <CollapsibleContent className='t-nav-panel'>
-        <ul className='flex flex-col gap-2 px-4 pb-4 text-sm'>
+        <ul className='flex flex-col gap-2 px-5 pb-5 text-sm'>
           {entries.map(([key, value]) => (
             <li key={key}>
-              <span className='font-medium'>{humanize(key)}</span>
+              <span className='text-foreground font-medium'>{humanize(key)}</span>
               <span className='text-muted-foreground'> — {value}</span>
             </li>
           ))}

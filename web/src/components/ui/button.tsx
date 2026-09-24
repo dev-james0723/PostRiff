@@ -17,7 +17,11 @@ const buttonVariants = cva(
           'hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50',
         destructive:
           'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
-        link: 'text-primary underline-offset-4 hover:underline'
+        link: 'text-primary underline-offset-4 hover:underline',
+        /* Rafii materials (styles/rafii.css): quiet glass secondary, inverted action, text-only tertiary. */
+        glass: 'rafii-glass hover:rafii-glass-selected aria-expanded:rafii-glass-selected data-popup-open:rafii-glass-selected rounded-[var(--rafii-radius-control)]',
+        action: 'rafii-action rounded-[var(--rafii-radius-control)] hover:brightness-[1.06] active:brightness-100',
+        quiet: 'text-muted-foreground hover:text-foreground hover:rafii-quiet rounded-[var(--rafii-radius-control)]'
       },
       size: {
         default:
@@ -30,7 +34,11 @@ const buttonVariants = cva(
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         'icon-sm':
           'size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg',
-        'icon-lg': 'size-9'
+        'icon-lg': 'size-9',
+        /* Rafii control heights (DNA §10): 48px standard, 56px hero, 44px round icon target. */
+        control: "h-12 gap-2 px-4 text-sm [&_svg:not([class*='size-'])]:size-4",
+        hero: "h-14 gap-3 rounded-[1.0625rem] px-5 text-[15px] font-semibold [&_svg:not([class*='size-'])]:size-5",
+        'icon-control': 'size-11 rounded-full'
       }
     },
     defaultVariants: {

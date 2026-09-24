@@ -2,6 +2,7 @@
 
 import { toast } from 'sonner';
 import { ChannelIcon } from '@/components/channel-icon';
+import { Icons } from '@/components/icons';
 import { StatefulButton } from '@/components/motion/button';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -69,21 +70,21 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
 
   return (
     <Dialog open={open} onOpenChange={(next) => !act.isPending && onOpenChange(next)}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className='text-lg font-medium tracking-tight'>
             Approve {count} exact post{count === 1 ? '' : 's'}
           </DialogTitle>
           <DialogDescription>
             Each one is approved with exactly this text, media, account and time. All or nothing: if one cannot be approved, none are.
           </DialogDescription>
         </DialogHeader>
-        <ul className='flex max-h-[50dvh] flex-col divide-y overflow-y-auto rounded-lg border text-sm'>
+        <ul className='rafii-quiet flex max-h-[50dvh] flex-col gap-0.5 overflow-y-auto rounded-[var(--rafii-radius-control)] p-1.5 text-sm'>
           {reviews.map((review) => {
             const { manifest } = review;
             const passed = (epochOf(manifest.timing.utc) ?? Infinity) < nowSeconds;
             return (
-              <li key={review.id} className='flex flex-col gap-0.5 px-3 py-2'>
+              <li key={review.id} className='flex flex-col gap-0.5 rounded-[var(--rafii-radius-micro)] px-3 py-2'>
                 <span className='flex min-w-0 items-center gap-2'>
                   <ChannelIcon platform={manifest.platform} name={manifest.platform} size='xs' />
                   <span className='truncate'>
@@ -95,27 +96,35 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
                     {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone})
                   </span>
                   <span className='font-mono'>{review.digest.slice(0, 8)}…</span>
-                  {passed && <span className='text-amber-700 dark:text-amber-300'>time passed · publishes at the next worker run</span>}
+                  {passed && (
+                    <span className='inline-flex items-center gap-1'>
+                      <Icons.warning aria-hidden className='size-3' />
+                      time passed · publishes at the next worker run
+                    </span>
+                  )}
                 </span>
               </li>
             );
           })}
         </ul>
         <DialogFooter>
-          <Button variant='outline' disabled={act.isPending} onClick={() => onOpenChange(false)}>
+          <Button variant='glass' size='control' disabled={act.isPending} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <StatefulButton
-            state={act.isPending ? 'loading' : (outcome?.state ?? 'idle')}
-            loadingText='Approving…'
-            successText={outcome?.state === 'success' ? outcome.label : 'Scheduled'}
-            errorText='Try again'
-            disabled={count === 0}
-            aria-disabled={outcome?.state === 'success' || undefined}
-            onClick={approve}
-          >
-            Approve {count}
-          </StatefulButton>
+          {/* The shared stateful button keeps its loading/success/error roll; the wrapper gives it the 48px commit height (DNA §10.1). */}
+          <span className='inline-flex [&_button]:h-12 [&_button]:rounded-[var(--rafii-radius-control)] [&_button]:px-4'>
+            <StatefulButton
+              state={act.isPending ? 'loading' : (outcome?.state ?? 'idle')}
+              loadingText='Approving…'
+              successText={outcome?.state === 'success' ? outcome.label : 'Scheduled'}
+              errorText='Try again'
+              disabled={count === 0}
+              aria-disabled={outcome?.state === 'success' || undefined}
+              onClick={approve}
+            >
+              Approve {count}
+            </StatefulButton>
+          </span>
         </DialogFooter>
       </DialogContent>
     </Dialog>

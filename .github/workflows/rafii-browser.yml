@@ -1,0 +1,91 @@
+name: Rafii browser scenes
+# Real-input Playwright scenes for Home and Automations against the local dev harness (disposable
+# PostgreSQL, synthetic providers, research off). Drafting uses the fixture writer only; nothing is
+# scheduled or published and no external network is reached from the pages under test.
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'src/postriff_phase2/**'
+      - 'scripts/postriff_dev_hosted.py'
+      - '.github/workflows/rafii-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rafii-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scenes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      # consumer_ready_web.py builds and serves the web app on 4439 against an API on 4438.
+      RAFII_WEB_URL: http://127.0.0.1:4439
+      RAFII_API_URL: http://127.0.0.1:4438
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and test tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+      - name: Install PostgreSQL 17 using its signed official repository
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          # The scripts start their own disposable server; its socket directory must be writable by the runner.
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Build the web app for the local harness
+        run: |
+          python scripts/consumer_ready_web.py --prepare npm ci
+          python scripts/consumer_ready_web.py npm run build
+      - name: Start the dev harness and the web app
+        run: |
+          POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4439 nohup python scripts/postriff_dev_hosted.py --port 4438 --pg-port 55479 > harness.log 2>&1 &
+          nohup python scripts/consumer_ready_web.py npm run start -- -p 4439 -H 127.0.0.1 > web.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -sf http://127.0.0.1:4438/api/health > /dev/null && curl -sf -o /dev/null http://127.0.0.1:4439/; then echo ready; exit 0; fi
+            sleep 2
+          done
+          echo "harness or web app did not start"; tail -n 50 harness.log web.log; cat /tmp/postriff-dev-pg-*/postgres.log 2>/dev/null | tail -n 20; exit 1
+      - name: Install Chromium for Playwright
+        run: npx --prefix web playwright install --with-deps chromium
+      - name: Seed the synthetic workspace
+        run: node web/tests/rafii-seed.cjs
+      - name: Automations scenes (build, edit, activate, pause, resume, cancel, templates, phone)
+        # --no-run skips waiting for a scheduled minute; the worker run itself is covered by
+        # tests/phase2/postgres_consumer_campaign_worker.py in the release gates.
+        run: node web/tests/rafii-automations.cjs --no-run
+      - name: Home scenes (drafting with the fixture writer, Content Library, Queue → Drafts)
+        run: node web/tests/rafii-workflow.cjs --only=workflow,library,drafts
+      - name: Theme bars (header and phone tab bar match light and dark under any stored theme)
+        run: node web/tests/rafii-theme-bars.cjs
+      - name: Keep the evidence for this commit
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rafii-browser-${{ github.sha }}
+          path: |
+            docs/design/rafii-v9/evidence/automations/
+            docs/design/rafii-v9/evidence/workflow/
+            docs/design/rafii-v9/evidence/theme-bars/
+            harness.log
+            web.log
+          retention-days: 14

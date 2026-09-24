@@ -12,25 +12,25 @@ import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { JobCancelHold } from '@/components/jobs/job-cancel-hold';
+import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Separator } from '@/components/ui/separator';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { SnapshotState } from '@/lib/api/types';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { COLUMN_META, findCard, findSuccessor, FOOTER_WORDS, toEpoch, type Board, type BoardCard, type PipelineSource } from './board';
 import { isCancellable } from './job-state';
-import { canSetAside, cardBadge, copyText, REVISION_ORIGIN, scheduleGate, type CardActions, type CardPermissions } from './pipeline-card';
+import { badgeClass, canSetAside, cardBadge, copyText, REVISION_ORIGIN, scheduleGate, type CardActions, type CardPermissions } from './pipeline-card';
 import { reasonLabel } from './set-aside-dialog';
 
 const KIND_LABEL: Record<BoardCard['kind'], string> = { source: 'Source', draft: 'Draft', review: 'Review', job: 'Publishing job' };
 
 function Section({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className={cn('flex flex-col gap-1.5', className)}>
-      <h3 className='text-xs font-medium tracking-wide uppercase'>{title}</h3>
+    <section className={cn('flex flex-col gap-2', className)}>
+      <h3 className='rafii-eyebrow'>{title}</h3>
       {children}
     </section>
   );
@@ -55,11 +55,12 @@ function When({ at }: { at: number | null }) {
   );
 }
 
+/** The draft's own words at a reading size (DNA §21.2): regular 15px, never the display italic. */
 function TextBlock({ text }: { text: string }) {
-  return <p className='text-sm break-words whitespace-pre-wrap'>{text}</p>;
+  return <p className='text-[15px] leading-relaxed break-words whitespace-pre-wrap'>{text}</p>;
 }
 
-const linkClass = 't-learn text-foreground inline-flex items-center gap-0.5 text-sm font-medium hover:underline';
+const linkClass = 't-learn rafii-focus text-foreground inline-flex min-h-9 items-center gap-0.5 rounded-md text-sm font-medium hover:underline';
 
 function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: Board; state: SnapshotState | undefined; onShow: (card: BoardCard) => void }) {
   const variant = card.variant;
@@ -78,7 +79,6 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
         <DraftPreview platform={variant.platform} text={card.body} account={channel?.account ?? state?.speaker?.label ?? variant.platform} channelId={channel?.id} scale={0.5} className='self-center' />
         {!channel && <p className='text-muted-foreground text-xs'>No {variant.platform} channel is connected, so the preview uses the workspace’s name.</p>}
       </Section>
-      <Separator />
       {variant.proposedUpdate ? (
         <>
           <Section title='Proposed update'>
@@ -123,7 +123,7 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
         <Section title='Warnings and unknowns'>
           <ul className='flex list-disc flex-col gap-1 pl-4 text-sm'>
             {variant.warnings.map((warning) => (
-              <li key={`w-${warning}`} className='text-amber-600 dark:text-amber-400'>
+              <li key={`w-${warning}`} className='text-foreground'>
                 {warning}
               </li>
             ))}
@@ -151,7 +151,6 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
           </ul>
         )}
       </Section>
-      <Separator />
       <Section title='Revision history'>
         {revisions.length === 0 ? (
           <p className='text-muted-foreground text-sm'>No revisions recorded.</p>
@@ -160,7 +159,7 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
             {revisions.map((revision) => {
               const at = toEpoch(revision.at);
               return (
-                <li key={`${revision.revision}-${revision.origin}`} className='border-l-2 pl-3'>
+                <li key={`${revision.revision}-${revision.origin}`} className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3 py-2'>
                   <p className='text-sm'>
                     <span className='font-medium'>{REVISION_ORIGIN[revision.origin] ?? revision.origin.replace(/-/g, ' ')}</span>
                     <span className='text-muted-foreground'>
@@ -181,11 +180,9 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
           <ul className='flex flex-col gap-2'>
             {feedback.map((entry) => (
               <li key={entry.id} className='flex flex-col gap-1'>
-                <span className='flex flex-wrap gap-1'>
+                <span className='text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5 text-xs font-medium'>
                   {entry.reasons.map((reason) => (
-                    <span key={reason} className='bg-muted rounded-full px-2 py-0.5 text-xs'>
-                      {reasonLabel(reason)}
-                    </span>
+                    <span key={reason}>{reasonLabel(reason)}</span>
                   ))}
                 </span>
                 {entry.note && <span className='text-sm'>{entry.note}</span>}
@@ -210,10 +207,9 @@ function ManifestDetails({ card, board, onShow }: { card: BoardCard; board: Boar
       <Section title='Preview'>
         <ManifestPreview manifest={manifest} scale={0.5} className='self-center' />
       </Section>
-      <Separator />
       <Section title={`Exact text · revision ${manifest.contentRevision}`}>
         <TextBlock text={manifest.payload.text} />
-        {manifest.voiceRevision === null && <p className='text-xs text-amber-700 dark:text-amber-300'>This draft has no approved voice profile. Review its wording carefully before approving.</p>}
+        {manifest.voiceRevision === null && <p className='text-foreground text-xs font-medium'>This draft has no approved voice profile. Review its wording carefully before approving.</p>}
         {draft && (
           <Button variant='link' size='sm' className='h-auto self-start p-0' onClick={() => onShow(draft)}>
             Open the draft it came from
@@ -234,7 +230,7 @@ function ReviewDetails({ card, permissions }: { card: BoardCard; permissions: Ca
   const expired = card.footer;
   return (
     <Section title='Review'>
-      <dl className='divide-y'>
+      <dl className='flex flex-col'>
         <Row label='Account'>
           {manifest.platform} · {manifest.account}
         </Row>
@@ -285,7 +281,7 @@ function SourceDetails({ card }: { card: BoardCard }) {
         <TextBlock text={source.text} />
       </Section>
       <Section title='Details'>
-        <dl className='divide-y'>
+        <dl className='flex flex-col'>
           <Row label='Kind'>{source.kind}</Row>
           <Row label='Visibility'>{source.visibility.replace(/-/g, ' ')}</Row>
           {source.sourcePolicy && <Row label='Use'>{source.sourcePolicy.replace(/_/g, ' ')}</Row>}
@@ -302,7 +298,7 @@ function SourceDetails({ card }: { card: BoardCard }) {
             {facts.map((fact) => (
               <li key={fact.id} className='flex items-start gap-2'>
                 {fact.approved ? (
-                  <Icons.check className='mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400' aria-label='Approved' />
+                  <Icons.check className='text-foreground mt-0.5 size-4 shrink-0' aria-label='Approved' />
                 ) : (
                   <Icons.circleDashed className='text-muted-foreground mt-0.5 size-4 shrink-0' aria-label='Not approved' />
                 )}
@@ -319,6 +315,10 @@ function SourceDetails({ card }: { card: BoardCard }) {
   );
 }
 
+/**
+ * The sheet's action row (DNA §9.2): one inverted commitment for the draft's next step, quiet glass for the
+ * alternative, text-weight utilities for the rest.
+ */
 function SheetActions({ card, permissions, actions, cancelPending, holdEpoch }: { card: BoardCard; permissions: CardPermissions; actions: CardActions; cancelPending: boolean; holdEpoch: number }) {
   const { canEdit, canApprove, readOnly } = permissions;
   const variant = card.variant;
@@ -331,18 +331,19 @@ function SheetActions({ card, permissions, actions, cancelPending, holdEpoch }: 
     );
   }
   if (!readOnly && card.kind === 'draft' && card.draft && variant) {
+    const gate = scheduleGate(card, permissions);
+    const schedulable = card.draft.schedulable && gate.allowed;
     if (canEdit) {
       buttons.push(
-        <Button key='edit' variant={card.draft.setAside ? 'default' : 'outline'} size='sm' onClick={() => actions.edit(variant.id)}>
+        <Button key='edit' variant={schedulable ? 'glass' : 'action'} size='control' onClick={() => actions.edit(variant.id)}>
           <Icons.edit data-icon='inline-start' />
           {card.draft.setAside ? 'Edit to restore' : 'Edit'}
         </Button>
       );
     }
-    const gate = scheduleGate(card, permissions);
-    if (card.draft.schedulable && gate.allowed) {
+    if (schedulable) {
       buttons.push(
-        <Button key='schedule' size='sm' onClick={() => actions.schedule(variant.id)}>
+        <Button key='schedule' variant='action' size='control' onClick={() => actions.schedule(variant.id)}>
           <Icons.calendarEvent data-icon='inline-start' />
           Schedule…
         </Button>
@@ -357,7 +358,7 @@ function SheetActions({ card, permissions, actions, cancelPending, holdEpoch }: 
     }
     if (canSetAside(card, permissions)) {
       buttons.push(
-        <Button key='aside' variant='ghost' size='sm' onClick={() => actions.setAside(variant.id)}>
+        <Button key='aside' variant='quiet' size='control' onClick={() => actions.setAside(variant.id)}>
           <Icons.eyeOff data-icon='inline-start' />
           Set aside…
         </Button>
@@ -373,7 +374,7 @@ function SheetActions({ card, permissions, actions, cancelPending, holdEpoch }: 
     }
   }
   buttons.push(
-    <Button key='copy' variant='ghost' size='sm' onClick={() => void copyText(card.body)}>
+    <Button key='copy' variant='quiet' size='control' onClick={() => void copyText(card.body)}>
       <Icons.copy data-icon='inline-start' />
       Copy text
     </Button>
@@ -429,19 +430,27 @@ export function DetailSheet({
 
   return (
     <Sheet open={opened !== null} onOpenChange={(open) => !open && onClose()}>
+      {/* Elevated glass (DNA §12.2): a bottom sheet on phones, a side panel above. */}
       <SheetContent
         side={isMobile ? 'bottom' : 'right'}
         finalFocus={returnFocus ? () => returnFocus() ?? true : undefined}
-        className={cn('gap-0 overflow-y-auto sm:max-w-[32rem]', isMobile && 'max-h-[85dvh] rounded-t-xl')}
+        showCloseButton={false}
+        className={cn(
+          'rafii-elevated gap-0 overflow-y-auto border-0 bg-transparent data-[side=right]:sm:max-w-[32rem] data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0',
+          isMobile && 'max-h-[85dvh] rounded-t-[var(--rafii-radius-mobile-dialog)] data-[side=bottom]:border-t-0'
+        )}
       >
         {card && (
           <>
-            <SheetHeader className='pr-12'>
+            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close' className='absolute top-3 right-3 z-10' />}>
+              <Icons.close className='size-4' />
+            </SheetClose>
+            <SheetHeader className='pr-16'>
               <SheetTitle className='flex flex-wrap items-center gap-2'>
                 {card.platform ? <ChannelIcon platform={card.platform} name={card.platform} /> : <Icons.page className='text-muted-foreground size-5' aria-hidden />}
                 <span className='min-w-0 break-words'>{card.title}</span>
                 {badge && (
-                  <AnimatedBadge size='sm' status={badge.status} pulse={badge.pulse} title={badge.title} contentKey={badge.label}>
+                  <AnimatedBadge size='sm' status={badge.status} pulse={badge.pulse} title={badge.title} contentKey={badge.label} className={badgeClass(badge.status)}>
                     {badge.label}
                   </AnimatedBadge>
                 )}
@@ -452,23 +461,28 @@ export function DetailSheet({
                   .join(' · ')}
               </SheetDescription>
             </SheetHeader>
-            <div className='flex flex-col gap-5 px-4 pb-4'>
+            <div className='flex flex-col gap-6 px-4 pb-4'>
               {!current ? (
-                <div className='flex flex-col gap-3 rounded-lg border border-dashed p-4' role='status'>
-                  <p className='font-medium'>{successor ? 'This item moved' : 'This item is gone from the board'}</p>
-                  <p className='text-muted-foreground text-sm'>
-                    {successor
-                      ? `It is now in ${COLUMN_META[successor.column].title}${successor.footer ? ` (${FOOTER_WORDS[successor.column]})` : ''}, as the ${KIND_LABEL[successor.kind].toLowerCase()}.`
-                      : card.kind === 'source'
-                        ? 'The source is no longer active, so it is off the board.'
-                        : 'This item is no longer in the workspace.'}
-                  </p>
-                  {successor && (
-                    <Button size='sm' className='self-start' onClick={() => onShow(successor)}>
-                      Show it
-                    </Button>
-                  )}
-                  <Separator />
+                <div className='flex flex-col gap-3'>
+                  {/* Stale is a state, not an error (DNA §20.1): say where the item went and offer the way there. */}
+                  <StateMessage
+                    kind='stale'
+                    title={successor ? 'This item moved' : 'This item is gone from the board'}
+                    description={
+                      successor
+                        ? `It is now in ${COLUMN_META[successor.column].title}${successor.footer ? ` (${FOOTER_WORDS[successor.column]})` : ''}, as the ${KIND_LABEL[successor.kind].toLowerCase()}.`
+                        : card.kind === 'source'
+                          ? 'The source is no longer active, so it is off the board.'
+                          : 'This item is no longer in the workspace.'
+                    }
+                    action={
+                      successor ? (
+                        <Button variant='action' size='control' onClick={() => onShow(successor)}>
+                          Show it
+                        </Button>
+                      ) : undefined
+                    }
+                  />
                   <p className='text-muted-foreground text-xs'>As it was when you opened it:</p>
                   <p className='text-muted-foreground line-clamp-6 text-sm whitespace-pre-wrap'>{card.body}</p>
                 </div>
@@ -476,7 +490,7 @@ export function DetailSheet({
                 <>
                   <SheetActions card={current} permissions={permissions} actions={actions} cancelPending={cancelPending} holdEpoch={holdEpoch} />
                   {/* A job's instruction is part of its receipt below; a draft's warning or failed job reads first. */}
-                  {current.tag && current.kind === 'draft' && <p className='text-sm text-amber-600 dark:text-amber-400'>{current.tag}</p>}
+                  {current.tag && current.kind === 'draft' && <p className='text-foreground text-sm font-medium'>{current.tag}</p>}
                   {current.kind === 'draft' && <DraftDetails card={current} board={board} state={state} onShow={onShow} />}
                   {(current.kind === 'review' || current.kind === 'job') && <ManifestDetails card={current} board={board} onShow={onShow} />}
                   {current.kind === 'review' && <ReviewDetails card={current} permissions={permissions} />}
@@ -485,7 +499,7 @@ export function DetailSheet({
               )}
             </div>
             {column && current && (
-              <SheetFooter className='border-t'>
+              <SheetFooter className='pb-[max(1rem,env(safe-area-inset-bottom))]'>
                 <Link href={column.href} className={linkClass}>
                   {column.cta} <LearnMoreChevron />
                 </Link>

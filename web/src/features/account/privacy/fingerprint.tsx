@@ -28,24 +28,24 @@ export async function copyText(text: string, what: string) {
  */
 export function Fingerprint({ file, note }: { file: FileFingerprint; note: string }) {
   return (
-    <div className='bg-muted/40 flex min-w-0 flex-col gap-1.5 rounded-lg border p-3' aria-live='polite'>
+    <div className='rafii-glass flex min-w-0 flex-col gap-1.5 rounded-[var(--rafii-radius-control)] p-3' aria-live='polite'>
       <div className='flex items-center justify-between gap-2'>
-        <span className='text-xs font-medium'>Your file&apos;s fingerprint</span>
+        <span className='text-foreground text-xs font-medium'>Your file&apos;s fingerprint</span>
         {file.sha256 && (
-          <Button variant='ghost' size='icon-xs' aria-label='Copy the fingerprint' onClick={() => void copyText(file.sha256 as string, 'Fingerprint')}>
+          <Button variant='quiet' size='icon-sm' className='size-9 rounded-full' aria-label='Copy the fingerprint' onClick={() => void copyText(file.sha256 as string, 'Fingerprint')}>
             <Icons.copy />
           </Button>
         )}
       </div>
       {file.sha256 ? (
-        <code className='font-mono text-xs leading-relaxed break-all'>{groupHex(file.sha256)}</code>
+        <code className='text-foreground font-mono text-xs leading-relaxed break-all'>{groupHex(file.sha256)}</code>
       ) : (
         <p className='text-muted-foreground text-xs'>This browser could not compute a fingerprint for this file.</p>
       )}
       <span className='text-muted-foreground text-xs'>
         SHA-256 · {file.filename} · {formatBytes(file.bytes)}
       </span>
-      <p className='text-muted-foreground text-xs'>{note}</p>
+      <p className='text-muted-foreground text-xs leading-relaxed'>{note}</p>
     </div>
   );
 }

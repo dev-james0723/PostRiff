@@ -1,0 +1,113 @@
+{
+  "base": "http://localhost:3140",
+  "browser": "webkit",
+  "workspaceId": "af4a4b03-977b-4531-a2a7-8d4d867e9447",
+  "startedAt": "2026-09-24T14:07:52.960Z",
+  "scenes": [
+    {
+      "name": "chat",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "Rafii reads it as an automation, not one draft",
+          "ok": true,
+          "detail": {
+            "status": "automation",
+            "runId": null
+          }
+        },
+        {
+          "name": "the reply says what will happen and when",
+          "ok": true,
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇬🇧 English (UK)"
+        },
+        {
+          "name": "an owner request with the fixture writer is on",
+          "ok": true,
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Scien"
+        },
+        {
+          "name": "voice and kind of post understood",
+          "ok": true,
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇬🇧 English (UK)"
+        },
+        {
+          "name": "saved with the builder checks: Tuesday 09:00, your voice, news type, active",
+          "ok": true,
+          "detail": {
+            "status": "active",
+            "schedule": {
+              "timeZone": "America/New_York",
+              "weekdays": [
+                "Tuesday"
+              ],
+              "localTime": "09:00"
+            },
+            "voiceMode": "personalized",
+            "contentType": {
+              "formatId": null,
+              "contentTypeId": "pack.creator:article_news_commentary",
+              "contentTypeVersion": "1.0.0"
+            }
+          }
+        },
+        {
+          "name": "nothing drafted, scheduled or published",
+          "ok": true
+        },
+        {
+          "name": "the composer is cleared for the next idea",
+          "ok": true
+        },
+        {
+          "name": "axe clean: Home with the automation reply",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "the reply card fits a 390px phone",
+          "ok": true,
+          "detail": 0
+        },
+        {
+          "name": "the hub lists it",
+          "ok": true,
+          "detail": "AI for Science · News article post"
+        },
+        {
+          "name": "the conversation shows the request and the reply",
+          "ok": true
+        },
+        {
+          "name": "Undo cancels it",
+          "ok": true,
+          "detail": "cancelled"
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "automations/webkit/chat/01-home-reply.png",
+        "automations/webkit/chat/02-home-reply-phone.png",
+        "automations/webkit/chat/03-hub.png",
+        "automations/webkit/chat/04-conversation-undone.png"
+      ],
+      "axe": [
+        {
+          "label": "Home with the automation reply",
+          "violations": []
+        }
+      ],
+      "video": "automations/webkit/chat/chat.webm",
+      "t0": 1790258874616,
+      "durationSeconds": 11.1
+    }
+  ],
+  "finishedAt": "2026-09-24T14:08:05.751Z",
+  "summary": {
+    "checks": 12,
+    "failed": 0,
+    "pageErrors": 0
+  }
+}

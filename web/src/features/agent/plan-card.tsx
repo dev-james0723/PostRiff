@@ -11,6 +11,7 @@ import { LevelBadge } from '@/components/app/level-badge';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import { StatefulButton } from '@/components/motion/button';
 import { Checkbox } from '@/components/motion/checkbox';
+import { Surface } from '@/components/rafii';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -144,7 +145,9 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
     setRows(
       plan.destinations.map((d) => {
         const candidates = channels.filter((c) => c.platform === d.platform);
-        const ready = candidates.find((c) => c.displayState === READY) ?? candidates[0];
+        // The row names its account when the draft was written for one; otherwise the ready account on that platform.
+        const named = d.channelId ? candidates.find((c) => c.id === d.channelId) : undefined;
+        const ready = named ?? candidates.find((c) => c.displayState === READY) ?? candidates[0];
         return { include: Boolean(ready && d.localTime), localTime: d.localTime ?? '', channelId: ready?.id ?? '', assetId: '', alt: '' };
       })
     );
@@ -241,16 +244,19 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
   }
 
   return (
-    <div className='bg-card ring-foreground/10 flex flex-col overflow-hidden rounded-xl ring-1'>
-      <div className='flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3'>
-        <span className='flex items-center gap-2 text-sm font-semibold'>
-          <Icons.calendar className='size-4' />
-          Schedule plan · {plan.destinations.length} post{plan.destinations.length === 1 ? '' : 's'}
+    <Surface material='glass' padding='none' className='flex flex-col overflow-hidden' data-tour='plan-card'>
+      <div className='flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-3'>
+        <span className='flex flex-col gap-1'>
+          <span className='rafii-eyebrow'>Schedule plan</span>
+          <span className='text-foreground flex items-center gap-2 text-base'>
+            <Icons.calendar className='size-4' />
+            {plan.destinations.length} post{plan.destinations.length === 1 ? '' : 's'}, <em className='rafii-serif'>each its own job.</em>
+          </span>
         </span>
-        <span className='text-muted-foreground text-xs'>{timeZone} · each row becomes its own job in the Queue</span>
+        <span className='text-muted-foreground text-xs'>{timeZone} · nothing publishes until you approve</span>
       </div>
 
-      <div className='flex flex-col divide-y'>
+      <div className='divide-border/60 flex flex-col divide-y'>
         {plan.destinations.map((d, index) => {
           const row = rows[index];
           if (!row) return null;
@@ -261,7 +267,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
             return (
               <RowReveal key={`${d.platform}-${index}`} index={index} className='flex flex-wrap items-center justify-between gap-3 px-4 py-3'>
                 <div className='flex items-center gap-3'>
-                  <Icons.circleCheck className='size-4 text-emerald-500' />
+                  <Icons.circleCheck className='text-foreground size-4' />
                   <div className='flex flex-col gap-0.5'>
                     <span className='flex flex-wrap items-center gap-2 text-sm font-medium'>
                       {d.platform}
@@ -273,7 +279,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                     <span className='text-muted-foreground text-xs'>{describeWhen(job.manifest.timing.local)}</span>
                   </div>
                 </div>
-                <Link href='/app/queue' className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
+                <Link href='/app/queue' className={buttonVariants({ size: 'control', variant: 'quiet' })}>
                   Open in Queue
                 </Link>
               </RowReveal>
@@ -285,20 +291,23 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                 <Checkbox className='mt-0.5' checked={row.include} disabled={Boolean(blocker) || Boolean(done)} onCheckedChange={(v) => update(index, { include: v })} aria-label={`Include ${d.platform}`} />
                 <div className='flex min-w-0 flex-col gap-1'>
                   <span className='flex flex-wrap items-center gap-2 text-sm font-medium'>
-                    <Destination platform={d.platform} language={d.language} />
+                    <Destination platform={d.platform} language={d.language} account={candidates.find((c) => c.id === row.channelId)?.account} />
                     {candidates.length > 0 ? <LevelBadge level='Assisted' /> : <LevelBadge level='Unsupported' label='Not connected' />}
                   </span>
                   {blocker ? (
-                    <span className='text-xs text-amber-700 dark:text-amber-300'>
-                      {blocker}
-                      {blocker.startsWith('No ') && (
-                        <>
-                          {' · '}
-                          <Link href='/app/channels' className='underline underline-offset-2'>
-                            connect
-                          </Link>
-                        </>
-                      )}
+                    <span className='text-foreground inline-flex items-start gap-1.5 text-xs'>
+                      <Icons.info aria-hidden className='mt-0.5 size-3.5 shrink-0' />
+                      <span>
+                        {blocker}
+                        {blocker.startsWith('No ') && (
+                          <>
+                            {' · '}
+                            <Link href='/app/channels' className='underline underline-offset-2'>
+                              connect
+                            </Link>
+                          </>
+                        )}
+                      </span>
                     </span>
                   ) : (
                     <span className='text-muted-foreground text-xs'>{describeWhen(row.localTime)}{d.assumed ? ' · time assumed from your message' : ''}</span>
@@ -360,7 +369,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
       </div>
 
       {(plan.unsupported.length > 0 || plan.warnings.length > 0) && (
-        <ul className='text-muted-foreground flex flex-col gap-1 border-t px-4 py-2 text-xs'>
+        <ul className='text-muted-foreground border-border/60 flex flex-col gap-1 border-t px-4 py-2 text-xs'>
           {plan.unsupported.map((platform) => (
             <li key={platform} className='flex items-start gap-2'>
               <Icons.info className='mt-0.5 size-3.5 shrink-0' />
@@ -369,27 +378,27 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
           ))}
           {plan.warnings.map((warning, i) => (
             <li key={i} className='flex items-start gap-2'>
-              <Icons.warning className='mt-0.5 size-3.5 shrink-0 text-amber-500' />
+              <Icons.warning className='mt-0.5 size-3.5 shrink-0' />
               {warning}
             </li>
           ))}
         </ul>
       )}
 
-      <div className='bg-background/60 flex flex-col gap-3 border-t px-4 py-3'>
+      <div className='rafii-quiet flex flex-col gap-3 rounded-none px-4 py-3'>
         {done ? (
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <span className='flex items-center gap-2 text-sm'>
               {/* transitions.dev success check: it celebrates an approval made in this view; a reload shows it at rest. */}
-              <SuccessCheck animate={justApproved !== null} className='size-4 text-emerald-500' />
+              <SuccessCheck animate={justApproved !== null} className='text-foreground size-4' />
               {done.jobs} post{done.jobs === 1 ? '' : 's'} approved and waiting for their time.
               {count > 0 && <span className='text-muted-foreground'> {count} row{count === 1 ? '' : 's'} still unscheduled.</span>}
             </span>
             <div className='flex gap-2'>
-              <Link href='/app/queue' className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+              <Link href='/app/queue' className={buttonVariants({ size: 'control', variant: 'glass' })}>
                 Open Queue
               </Link>
-              <Link href='/app/calendar' className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+              <Link href='/app/calendar' className={buttonVariants({ size: 'control', variant: 'glass' })}>
                 Open Calendar
               </Link>
             </div>
@@ -397,7 +406,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
         ) : !voiceActive ? (
           <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
             <span>Scheduling needs an active voice profile, so every post is checked against whose words it carries.</span>
-            <Link href='/app/workspace/brand' className={buttonVariants({ size: 'sm' })}>
+            <Link href='/app/workspace/brand' className={buttonVariants({ size: 'control', variant: 'action' })}>
               Set up your voice
             </Link>
           </div>
@@ -450,6 +459,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                 <StatefulButton
                   variant='outline'
                   size='sm'
+                  className='rafii-glass min-h-11 rounded-[var(--rafii-radius-control)] border-0 px-4'
                   state={saving ? 'loading' : 'idle'}
                   loadingText='Saving…'
                   disabled={Boolean(progress) || holding || run.status === 'applied' || !run.artifactHash}
@@ -461,6 +471,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                   <StatefulButton
                     variant='primary'
                     size='sm'
+                    className='min-h-11 rounded-[var(--rafii-radius-control)] px-4'
                     state={approval?.outcome === 'running' ? 'loading' : holding ? 'success' : 'idle'}
                     loadingText='Approving…'
                     successText='Scheduled'
@@ -477,6 +488,6 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
           </>
         )}
       </div>
-    </div>
+    </Surface>
   );
 }

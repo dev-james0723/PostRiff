@@ -5,6 +5,7 @@ AgentRuntime against a policy projection only; artifacts are candidates until an
 `apply`, which re-checks the projection so stale candidates are never applied silently.
 """
 import copy
+import base64
 import hashlib
 import json
 from postriff_alpha import learning
@@ -18,9 +19,19 @@ from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
 from . import content_types, intent, locales, memory, research, voice_sources
 
+VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
+
 MAX_TEXT = 6000
 MAX_EVENTS = 2000
 DEFAULT_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
+
+
+
+def same_slot(variant, candidate):
+    """A draft refreshes in place only when it is the same account (or platform-level draft) in the
+    same language: two accounts on one platform never overwrite each other's drafts."""
+    return (variant.get("platform") == candidate.get("platform") and locales.same(variant.get("language"), candidate.get("language"))
+            and (variant.get("channelId") or None) == (candidate.get("channelId") or None))
 
 
 class RunSink:
@@ -59,13 +70,16 @@ class RunSink:
         with self._open() as db, db.cursor() as cur:
             self.service._lock_run_events(cur, self.workspace_id, self.run_id)
             if not self._running(cur, lock=True):
+                # Cancellation wins for content; late provider usage still settles
+                # once so a cancelled billable request is never recorded as free.
+                self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed" if usage.get("costUsd") is not None else "unknown", int(usage["costUsd"] * 1_000_000) if usage.get("costUsd") is not None else None)
                 return False
             try:
                 self.service._finish(cur, self.workspace_id, self.conversation_id, self.run_id, artifact, usage, self.outcome)
             except AlphaError as error:
                 self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.failed", message=str(error)))
                 cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (self.run_id,))
-                self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed", 0)
+                self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed" if usage.get("costUsd") is not None else "unknown", int(usage["costUsd"] * 1_000_000) if usage.get("costUsd") is not None else None)
                 self.service._settle_message(cur, self.workspace_id, self.conversation_id, self.run_id, {"text": str(error), "runId": self.run_id, "failed": True, "intent": self.outcome["parsed"]["intent"], "destinations": self.outcome["destinations"], "plan": None, "model": self.outcome["model"]})
                 return True
             self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.completed", usage={k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "cliCostUsd", "billing") if k in usage}))
@@ -78,13 +92,13 @@ class RunSink:
                 return False
             self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.failed", message=message))
             cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (self.run_id,))
-            self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed", 0)
+            self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "unknown" if self.outcome.get("paid") else "failed", None if self.outcome.get("paid") else 0)
             self.service._settle_message(cur, self.workspace_id, self.conversation_id, self.run_id, {"text": message, "runId": self.run_id, "failed": True, "intent": self.outcome["parsed"]["intent"], "destinations": self.outcome["destinations"], "plan": None, "model": self.outcome["model"]})
             return True
 
 
 class IdeasService:
-    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None, skill_library=None, researcher=None):
+    def __init__(self, repository, commands, runtime=None, clock=None, ledger=None, runtimes=None, skill_library=None, researcher=None, image_runtime=None, assets=None):
         from .billing import Ledger
         self.repository = repository
         self.commands = commands
@@ -101,6 +115,10 @@ class IdeasService:
                     runtimes.append(cli(clock=self.clock))
         self.runtimes = list(runtimes)
         self.skills = skill_library or SkillLibrary()
+        # Image generation is deliberately separate from every writing runtime. Selecting a hosted
+        # model, Claude CLI, Codex CLI, or the fixture writer never changes this media route.
+        self.image_runtime = image_runtime
+        self.assets = assets
         # The hosted service sets this to its HostedLearning; without it a memory instruction is answered but not kept.
         self.learning = None
         # Web research runs before drafting when a turn needs facts the workspace lacks (research.py); False disables it.
@@ -111,11 +129,24 @@ class IdeasService:
         """Every model a client may name in a turn, with the agent (CLI) behind each route."""
         models, agents = [], []
         for runtime in self.runtimes:
-            models.extend({**model, "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
+            models.extend({**model, "voiceAnalysisAvailable": callable(getattr(runtime, 'analyze_voice', None)), "provider": runtime.provider, "egress": getattr(runtime, "provider_class", "local"), "voiceRoute": (f"cloud:{runtime.provider}:{model['id']}" if getattr(runtime, "provider_class", "local") == "cloud" else "local-cli"), "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
             info = runtime.describe()
             if info:
                 agents.append(info)
-        return {"models": models, "reasoning": self.runtime.list_supported_reasoning(), "agents": agents}
+        image_available = self.image_runtime is not None and self.assets is not None
+        return {
+            "models": models,
+            "reasoning": self.runtime.list_supported_reasoning(),
+            "agents": agents,
+            "imageGeneration": {
+                "available": image_available,
+                "model": self.image_runtime.model if self.image_runtime is not None else None,
+                "provider": self.image_runtime.provider if self.image_runtime is not None else None,
+                "costClass": "paid",
+                "independentOfWritingModel": True,
+                "detail": "Uses one managed media credit and the approved image budget, independently of the selected writing model or local CLI." if image_available else "Configure the managed image route and private media storage to generate images in chat.",
+            },
+        }
 
     def rescan_models(self, workspace_id, token):
         """An editor may refresh installation and sign-in probes; no model generation runs."""
@@ -130,6 +161,19 @@ class IdeasService:
                 if isinstance(runtime, ClaudeCliRuntime):
                     runtime.detect(force=True)
             return self.model_catalog()
+
+    @staticmethod
+    def _automation_selection(state, chosen):
+        """(selection, preflight rule ids, note) for an automation's own content type. None = general writing.
+        A type that is no longer offered falls back to general writing with a note, never a failed run."""
+        general = {"contentTypeId": "unclassified", "contentTypeVersion": None, "formatId": None}
+        if not chosen:
+            return general, (), None
+        try:
+            item = content_types.definition(state, chosen["contentTypeId"], chosen.get("contentTypeVersion"))
+        except (AlphaError, KeyError, TypeError):
+            return general, (), "This automation's content type is no longer available, so these drafts use general writing. Edit the automation to choose another type."
+        return {"contentTypeId": item["id"], "contentTypeVersion": item["version"], "formatId": chosen.get("formatId")}, tuple(item.get("preflightRuleIds", ())), None
 
     def _select_runtime(self, model_id):
         if not model_id:
@@ -148,6 +192,267 @@ class IdeasService:
             state = self._state(row)
             learned = {**(self.learning.summary(state) if self.learning else learning.summary(state)), "pendingProposals": len(pending_proposals(cur, workspace_id))}
             return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned}
+
+    def _read_request(self, workspace_id, token, text, zone, runtime):
+        """Rafii's model reading of a message that may create, change or ask about an automation or a scheduled post
+        (request_model); None when no model may read it or its answer is unusable, so the deterministic reading decides.
+        A short, plain request goes to the light model; several stages, conditions, sources, platforms or an edit go to
+        the strong one (request_model.tier; never shown to the person). A managed call's cost is reserved before the
+        message leaves and settled after; a stop-line skips the reading, never the request."""
+        from . import automation_edit, request_model, workflow_parse
+        reservation = None
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self._member(row), "edit")
+            state = self._state(row)
+            automations = automation_edit.summaries(state)
+            # Changing an existing automation's plan is reasoning work (spec §12): it goes to the strong model.
+            editing = bool(automations) and (bool(request_model._EDIT.search(text)) or workflow_parse.names_automation(text, [a["name"] for a in automations]))
+            tier = request_model.tier(text, editing=editing)
+            call = request_model.call_for(runtime, getattr(self, "understanding", None), tier)
+            if call is None:
+                return None
+            user = request_model.user_prompt(text, zone, self.clock(), state, automations=automations or None)
+            if not getattr(call, "local", False):
+                cur.execute("SAVEPOINT understanding_reserve")
+                try:
+                    reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", request_model.price_quote_micro(state, user, tier), f"understanding:{uid()}",
+                                                      charge_batch=False, provider="understanding", model=getattr(call, "model", "") or "")
+                    cur.execute("RELEASE SAVEPOINT understanding_reserve")
+                except AlphaError:
+                    cur.execute("ROLLBACK TO SAVEPOINT understanding_reserve")
+                    return None
+        answer, actual = None, None
+        try:
+            result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state, tier))
+            actual = getattr(result, "cost_usd_micro", None)
+            answer = request_model.reading(result, state, tier, text=text)
+        except Exception:  # noqa: BLE001 — a failed reading never blocks the request; the deterministic reading decides
+            answer = None
+        if reservation is not None:
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                self.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if actual is not None else "unknown", actual)
+        return answer
+
+    def _understand(self, workspace_id, token, text, zone, runtime, parsed):
+        """(parsed, reading): the model's decision wins over the deterministic one where a model may read."""
+        from . import automation_edit, request_model, workflow_parse
+        wanted = bool(text) and request_model.wants_reading(text)
+        if text and not wanted:
+            # A message that names one of the person's automations ("the Gramophone one") may be changing it.
+            names = [item["name"] for item in automation_edit.summaries(self.repository.get(workspace_id, token)["state"])]
+            wanted = workflow_parse.names_automation(text, names)
+        understood = self._read_request(workspace_id, token, text, zone, runtime) if wanted else None
+        if understood and understood["action"] == "draft" and parsed["intent"] == "automation":
+            parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
+        if understood and understood["action"] == "automation":
+            parsed = {**parsed, "intent": "automation"}
+        return parsed, understood
+
+    def _automation_turn(self, workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, revision=None, understood=None):
+        """A request to keep preparing drafts on a schedule: no run, no model, no charge. It becomes an automation with
+        the Automations builder's checks (automation_chat); an owner's request is turned on when nothing is left for the
+        owner to decide. The reply carries it as a card. Drafts only: nothing here schedules or publishes a post."""
+        from . import automation_chat
+        zone = intent.safe_zone(payload.get("timeZone"))
+        now = self.clock()
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            member = self._member(row)
+            require(member, "edit")
+            self._conversation(cur, workspace_id, conversation_id)
+            current = row[0]
+        provider_class = getattr(runtime, "provider_class", "local")
+        voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
+        # Attached references (Rafii v9 Context Pocket) are read on every run; voice samples never count as sources.
+        source_ids = [item for item in dict.fromkeys(payload.get("sourceIds") or []) if isinstance(item, str) and item][:20]
+        outcome, failure = {}, None
+
+        def command(state, actor):
+            outcome["view"] = automation_chat.create(
+                state, actor, now, text, zone, destinations=destinations, route=model_id, voice_route=voice_route,
+                reasoning=payload.get("reasoning", "quick"), paid=runtime.cost_class == "paid",
+                voice=payload.get("voiceMode") == "personalized", source_ids=source_ids, owner=member.allows("owner"), understood=understood)
+            return state
+
+        try:
+            saved = self.repository.command(workspace_id, token, current if revision is None else revision, command)
+            current = saved["revision"]
+        except AlphaError as error:
+            if getattr(error, "code", None) == "workspace_revision_conflict":
+                raise
+            failure = str(error)
+        view = outcome.get("view") if failure is None else None
+        reply = automation_chat.reply(view, failure)
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), "edit")
+            self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": "automation"})
+            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None})
+        return {"runId": None, "conversationId": conversation_id, "status": "automation", "artifactHash": None, "artifact": None,
+                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": payload.get("reasoning", "quick"),
+                "events": [], "cursor": 0, "automation": view, "reply": reply, "messageId": message["messageId"], "revision": current}
+
+    def _conversation_automation(self, workspace_id, token, conversation_id):
+        """The automation this conversation is about and Rafii's open question, from the latest assistant replies."""
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            cur.execute("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s AND role='assistant' ORDER BY seq DESC LIMIT 6", (conversation_id, workspace_id))
+            rows = [row[0] for row in cur.fetchall()]
+        latest = rows[0] if rows else {}
+        card = next(((body or {}).get("automation") for body in rows if isinstance((body or {}).get("automation"), dict)), None) or {}
+        pending = (latest or {}).get("automation", {}).get("pending") if isinstance((latest or {}).get("automation"), dict) else None
+        return {"taskId": card.get("taskId"), "pending": pending}
+
+    def _publishing_context(self):
+        service = getattr(self, "service_ref", None)
+        providers = getattr(getattr(service, "oauth", None), "providers", None) or {}
+        return providers, bool(getattr(service, "publishing_live", False))
+
+    def _may_orchestrate(self, workspace_id, token, text, parsed, reading):
+        """Whether a Home message could be an automation request, an edit or a question about one (cheap checks only)."""
+        from . import automation_edit, workflow_parse
+        if (reading or {}).get("action") in ("automation", "edit", "explain") or parsed["intent"] == "automation" or workflow_parse.is_scheduled_post(text) or workflow_parse.is_recurring_request(text):
+            return True
+        if (workflow_parse.is_edit(text) or workflow_parse.is_explain(text)) and not workflow_parse.is_drafting_request(text):
+            state = self.repository.get(workspace_id, token)["state"]
+            names = [item["name"] for item in automation_edit.summaries(state)]
+            return bool(names) and workflow_parse.refers_to_automation(text, names, False)
+        return False
+
+    def _orchestration_turn(self, workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload):
+        """Route a chat message that answers Rafii's question, changes or asks about an automation, or asks for a staged
+        automation (publishing, stages, research, a one-time post). None leaves it to the drafting or drafts-automation path."""
+        from . import automation_edit, automation_plan, workflow_parse
+        zone = intent.safe_zone(payload.get("timeZone"))
+        now = self.clock()
+        context = self._conversation_automation(workspace_id, token, conversation_id)
+        state = self.repository.get(workspace_id, token)["state"]
+        has_automations = bool(automation_edit.live_tasks(state))
+        pending = context.get("pending")
+        if pending and pending.get("taskId") and not workflow_parse.is_drafting_request(text) and len(text.split()) <= 14 and any(t["id"] == pending["taskId"] for t in automation_edit.live_tasks(state)):
+            task = next(t for t in automation_edit.live_tasks(state) if t["id"] == pending["taskId"])
+            if pending.get("question") == "policy":
+                policy = automation_plan.answer_policy(text)
+                if policy:
+                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "policy": policy}, reading)
+            elif pending.get("question") == "review_time":
+                try:
+                    spec = automation_plan.answer_review_time(text, task["schedule"])
+                except AlphaError:
+                    spec = None
+                if spec:
+                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "generate": spec}, reading)
+        action = (reading or {}).get("action")
+        if len({d.get("localTime") for d in parsed.get("destinations") or [] if d.get("localTime")}) > 1 and not intent._RECUR.search(text):
+            # Different times for different channels in one message: the per-channel scheduling plan handles it.
+            return None
+        if action is None:
+            # Without a model reading, a message is about an automation only when it names one (or says
+            # "automation"), or points at the one this conversation is about; a request to write something now is
+            # always drafted ("pause before the chorus — write a post about that").
+            names = [item["name"] for item in automation_edit.summaries(state)]
+            about = has_automations and not workflow_parse.is_drafting_request(text) and workflow_parse.refers_to_automation(text, names, bool(context.get("taskId")))
+            if about and workflow_parse.is_explain(text):
+                action = "explain"
+            elif about and workflow_parse.is_edit(text) and not intent.is_automation_request(text):
+                action = "edit"
+            elif parsed["intent"] == "automation" or workflow_parse.is_scheduled_post(text) or workflow_parse.is_recurring_request(text):
+                action = "automation"
+        if action == "explain" and has_automations:
+            explain = (reading or {}).get("explain") or workflow_parse.read_explain(text)
+            return self._orchestrate(workspace_id, token, conversation_id, text, "explain", runtime, model_id, payload, {"explain": explain, "taskId": context.get("taskId")}, reading)
+        if action == "edit" and has_automations:
+            edit = (reading or {}).get("edit") or workflow_parse.read_edit(text, now, zone)
+            if edit.get("changes"):
+                return self._orchestrate(workspace_id, token, conversation_id, text, "edit", runtime, model_id, payload, {"edit": edit, "taskId": context.get("taskId")}, reading)
+        if action == "automation":
+            automation = (reading or {}).get("automation") if (reading or {}).get("action") == "automation" else None
+            automation = automation or workflow_parse.read_automation(text, now, zone)
+            if automation.get("schedule") and automation_plan.needs_workflow(automation, text):
+                return self._orchestrate(workspace_id, token, conversation_id, text, "create", runtime, model_id, payload, {"automation": automation, "destinations": destinations}, reading)
+        return None
+
+    def _orchestrate(self, workspace_id, token, conversation_id, text, kind, runtime, model_id, payload, detail, reading):
+        """Create, answer, edit or explain an automation in one workspace command, then record both turns."""
+        from . import automation_edit, automation_explain, automation_plan, campaigns, workflow_parse
+        zone = intent.safe_zone(payload.get("timeZone"))
+        now = self.clock()
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            member = self._member(row)
+            require(member, "edit" if kind != "explain" else "read")
+            self._conversation(cur, workspace_id, conversation_id)
+            current = row[0]
+        provider_class = getattr(runtime, "provider_class", "local")
+        voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
+        source_ids = [item for item in dict.fromkeys(payload.get("sourceIds") or []) if isinstance(item, str) and item][:20]
+        providers, live = self._publishing_context()
+        tier = (reading or {}).get("tier")
+        owner, paid = member.allows("owner"), runtime.cost_class == "paid"
+        outcome, failure = {}, None
+
+        def command(state, actor):
+            if kind == "create":
+                automation = detail["automation"]
+                built, question, notes = automation_plan.build(state, actor, now, text, zone, automation, destinations=detail["destinations"], route=model_id,
+                                                               reasoning=payload.get("reasoning", "quick"), voice=payload.get("voiceMode") == "personalized",
+                                                               voice_route=voice_route, source_ids=source_ids)
+                saved = campaigns.apply_action(state, "raffi_recurrence_save", built, actor, now)
+                explicit = built["workflow"].get("policy") == "auto" and workflow_parse.explicit_auto(text)
+                grant = {"confirmed": True, "sourceUse": bool(built["workflow"].get("research"))} if explicit else None
+                needs = automation_plan.activate(state, saved["taskId"], actor, now, owner=owner, paid=paid, question=question, grant=grant)
+                outcome["view"] = automation_plan.card(state, saved["taskId"], needs, notes, question=question, providers=providers, live=live, tier=tier)
+                if question:
+                    outcome["view"]["pending"].update(stages=(automation.get("stages") or {}), timeRole=automation.get("timeRole"))
+            elif kind == "answer":
+                pending = detail["pending"]
+                task = next(t for t in campaigns._root(state)["recurringTasks"] if t["id"] == pending["taskId"])
+                built = automation_edit._payload(state, task)
+                workflow = built["workflow"] or {}
+                given = {"policy": detail.get("policy") or workflow.get("policy"), "stages": pending.get("stages") or {}, "timeRole": pending.get("timeRole") or "publish"}
+                stages, question = automation_plan.stages_for(given, built["schedule"], given["policy"])
+                if detail.get("generate"):
+                    stages, question = {**stages, "generate": detail["generate"], "review": {"at": "generate"}}, None
+                workflow.update(policy=given["policy"], stages=stages)
+                built["workflow"] = workflow
+                campaigns.apply_action(state, "raffi_recurrence_save", built, actor, now)
+                # "Publish automatically" (the button or the owner's explicit words) is the standing authority.
+                grant = {"confirmed": True, "sourceUse": bool(workflow.get("research"))} if given["policy"] == "auto" and detail.get("policy") == "auto" else None
+                needs = automation_plan.activate(state, task["id"], actor, now, owner=owner, paid=paid, question=question, grant=grant)
+                outcome["view"] = automation_plan.card(state, task["id"], needs, [], question=question, providers=providers, live=live, tier=tier)
+                if question:
+                    outcome["view"]["pending"].update(stages=pending.get("stages") or {}, timeRole=pending.get("timeRole"))
+            elif kind == "edit":
+                result = automation_edit.apply(state, actor, now, detail["edit"], conversation_task_id=detail.get("taskId"), owner=owner, paid=paid, zone=zone)
+                outcome["edit"] = result
+                if "view" in result:
+                    result["view"] = automation_plan.card(state, result["task"], result["view"].get("needs") or [], [], providers=providers, live=live, tier=tier)
+            return state
+
+        if kind == "explain":
+            snapshot = self.repository.get(workspace_id, token)
+            explained = automation_explain.answer(snapshot["state"], text, detail["explain"], conversation_task_id=detail.get("taskId"), now=now)
+            view, reply = None, explained["text"]
+            body_extra = {"explain": {k: explained.get(k) for k in ("lines", "about", "taskId", "occurrenceId")}}
+        else:
+            try:
+                saved = self.repository.command(workspace_id, token, current, command)
+                current = saved["revision"]
+            except AlphaError as error:
+                if getattr(error, "code", None) == "workspace_revision_conflict":
+                    raise
+                failure = str(error)
+            body_extra = {}
+            if kind == "edit" and failure is None:
+                result = outcome["edit"]
+                view = result.get("view")
+                reply = automation_edit.reply(result)
+            else:
+                view = outcome.get("view") if failure is None else None
+                reply = automation_plan.reply(view, failure) if kind != "edit" else f"I couldn't change that: {failure}"
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), "edit" if kind != "explain" else "read")
+            self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": "automation"})
+            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": [], "plan": None, "model": model_id, "runId": None, "understanding": tier, **body_extra})
+        return {"runId": None, "conversationId": conversation_id, "status": "automation", "artifactHash": None, "artifact": None,
+                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": payload.get("reasoning", "quick"),
+                "events": [], "cursor": 0, "automation": view, "reply": reply, "messageId": message["messageId"], "revision": current, **body_extra}
 
     def _memory_turn(self, workspace_id, token, conversation_id, text, parsed, destinations, model_id):
         """A standing instruction about how to write: no run, no model, no charge. The instruction becomes a
@@ -253,10 +558,9 @@ class IdeasService:
     @staticmethod
     def _lock_run_events(cur, workspace_id, run_id):
         """One event writer per run at a time, in a fixed order so a background sink and a request
-        never deadlock: first the foreign-key share lock on the workspace row (a request transaction
-        holds that row FOR UPDATE, which blocks the key-share lock every event insert needs), then the
+        never deadlock: first the workspace update lock (matching request transactions), then the
         per-run advisory lock, and only after both any FOR UPDATE on the run row itself."""
-        cur.execute("SELECT 1 FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE", (workspace_id,))
+        cur.execute("SELECT 1 FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
         cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("pr_agent_events:" + run_id,))
 
     def _insert_event(self, cur, workspace_id, run_id, event):
@@ -278,6 +582,28 @@ class IdeasService:
         if not state_row:
             raise AlphaError("Workspace unavailable.", 404)
         current_state = json.loads(state_row[0]) if isinstance(state_row[0], str) else state_row[0]
+        if outcome.get('recurringBinding'):
+            from .campaign_worker import validate
+            validate(current_state, outcome['recurringBinding'])
+        if outcome.get("actor"):
+            cur.execute("SELECT m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL", (workspace_id, outcome['actor']))
+            member = cur.fetchone()
+            if not member:
+                raise AlphaError("Workspace access was revoked while writing.", 403)
+            require(self._member((None, None, *member)), "owner" if outcome.get('recurringBinding') else "edit")
+        if outcome.get('apiTokenId'):
+            cur.execute("SELECT scopes FROM public.pr_api_tokens WHERE id::text=%s AND workspace_id=%s AND created_by=%s AND revoked_at IS NULL AND expires_at>to_timestamp(%s) FOR SHARE", (outcome['apiTokenId'], workspace_id, outcome['actor'], self.clock()))
+            grant = cur.fetchone()
+            if not grant or 'draft' not in grant[0]:
+                raise AlphaError('The API token was revoked or expired while writing.', 403)
+        if outcome.get('sessionId'):
+            cur.execute("SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s", (outcome['actor'], outcome['sessionId']))
+            if cur.fetchone():
+                raise AlphaError('The session was revoked while writing.', 403)
+        previous = outcome['context']
+        current = project_context(current_state, previous['operation'], previous['providerClass'], [s['id'] for s in previous['sources']])
+        if current['sources'] != previous['sources']:
+            raise AlphaError("Selected sources or their permissions changed while writing. Review a new candidate.", 409)
         voice_sources.validate_bindings(current_state, outcome.get("voiceContext") or {})
         cost_known = "costUsd" in usage and usage.get("costUsd") is not None
         settlement = self.ledger.settle(
@@ -314,7 +640,7 @@ class IdeasService:
         else:
             cur.execute("UPDATE public.pr_conversations SET updated_at=now() WHERE id::text=%s", (conversation_id,))
 
-    def _research(self, workspace_id, token, payload, text, parsed):
+    def _research(self, workspace_id, token, payload, text, parsed, key, conversation_id):
         """Step ①b: when the turn needs facts the workspace does not hold, look them up on the web before
         drafting (design §11 Phase 5). Runs outside the run's transaction because it is network I/O; the
         pages become ordinary third-party sources (use still needs the person's approval to publish) with
@@ -337,14 +663,30 @@ class IdeasService:
         own_method = "tested_steps" in (content_types.selected_rule_ids(state) or ())
         if not research.needs_research(message, parsed["intent"], has_facts) or (own_method and not explicit):
             return [], None
+        request_digest = digest({'message':message, 'intent':parsed['intent'], 'conversationId':conversation_id, 'sourceIds':selected})
+        # Persist the claim before external I/O. A crashed/uncertain lookup cannot replay its key.
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), 'edit')
+            self._conversation(cur, workspace_id, conversation_id)
+            if not research.allowed(self._state(row)):
+                return [], research.off_record(research.query_for(message))
+            cur.execute("SELECT request_digest,status,result FROM public.pr_research_requests WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id,key))
+            prior = cur.fetchone()
+            if prior:
+                if prior[0] != request_digest:
+                    raise AlphaError('This request key belongs to different research.',409)
+                if prior[1] != 'completed':
+                    raise AlphaError('Research for this request is pending or interrupted. It will not repeat automatically.',409)
+                return prior[2].get('sourceIds',[]), prior[2]
+            cur.execute("INSERT INTO public.pr_research_requests(workspace_id,idempotency_key,request_digest,status) VALUES(%s,%s,%s,'pending')", (workspace_id,key,request_digest))
         result = self.researcher.run(message, parsed["intent"])
         record = research.summary(result)
         record["sourceIds"] = []
-        if not result["pages"]:
-            return [], record
         added = []
 
         def command(state, actor):
+            if not research.allowed(state):
+                raise AlphaError('Web research permission changed. The result was discarded.',409)
             for page in result["pages"]:
                 body, title = research.source_body(page), research.source_title(page)
                 fingerprint = hashlib.sha256(("text" + clean(body, 20000)).encode()).hexdigest()
@@ -362,42 +704,225 @@ class IdeasService:
                     added.append(source["id"])
             return state
 
+        def save_record(cur, state, actor):
+            record['sourceIds'] = added
+            cur.execute("UPDATE public.pr_research_requests SET status='completed',result=%s::jsonb WHERE workspace_id=%s AND idempotency_key=%s AND status='pending'", (json.dumps(record),workspace_id,key))
+
         try:
-            self.repository.command(workspace_id, token, snapshot["revision"], command)
+            self.repository.command(workspace_id, token, snapshot["revision"], command, after=save_record)
         except AlphaError as error:
             if error.status != 409:
                 raise
-            self.repository.command(workspace_id, token, self.repository.get(workspace_id, token)["revision"], command)
+            self.repository.command(workspace_id, token, self.repository.get(workspace_id, token)["revision"], command, after=save_record)
         record["sourceIds"] = added
         return added, record
+
+    @staticmethod
+    def _wants_image(payload):
+        request = payload.get("imageGeneration")
+        return request is True or isinstance(request, dict) and request.get("enabled") is True
+
+    def _fail_image_run(self, workspace_id, token, conversation_id, run_id, reservation_id, message, *, usage=None, uncertain=False):
+        """Persist a failed media run once; a possibly billed request is never recorded as free."""
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            self._lock_run_events(cur, workspace_id, run_id)
+            cur.execute("SELECT status FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
+            row = cur.fetchone()
+            if not row or row[0] != "running":
+                return
+            cost = (usage or {}).get("costUsd")
+            known = type(cost) in (int, float) and cost >= 0
+            self.ledger.settle(
+                cur,
+                workspace_id,
+                reservation_id,
+                "failed" if known or not uncertain else "unknown",
+                int(cost * 1_000_000) if known else 0 if not uncertain else None,
+            )
+            self._insert_event(cur, workspace_id, run_id, safe_event("run.failed", message=message))
+            cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (run_id,))
+            self._settle_message(cur, workspace_id, conversation_id, run_id, {"text": message, "runId": run_id, "failed": True, "pending": False, "intent": "image_generation", "images": []})
+
+    def _image_turn(self, workspace_id, token, conversation_id, payload, text, selected_model):
+        """Generate and privately store one image without delegating the capability to the writer."""
+        if self.image_runtime is None:
+            raise AlphaError("Image generation is not configured for this deployment.", 503, code="image_generation_not_configured")
+        if self.assets is None:
+            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
+        request = payload.get("imageGeneration")
+        if request is not True and (not isinstance(request, dict) or set(request) - {"enabled", "count"}):
+            raise AlphaError("Choose a supported image-generation request.", 400)
+        count = request.get("count", 1) if isinstance(request, dict) else 1
+        if count != 1:
+            raise AlphaError("This chat generates one reviewable image candidate at a time.", 400)
+        prompt = clean(text or payload.get("intentText", ""), 4000)
+        if not prompt:
+            raise AlphaError("Describe the image you want to generate.", 400)
+        key = clean(payload.get("idempotencyKey", ""), 100) or uid()
+
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self._member(row), "edit")
+            self._conversation(cur, workspace_id, conversation_id)
+            state = self._state(row)
+            stamp(state)
+            context = project_context(state, "draft", "cloud", [])
+            from .api_tokens import is_api_token
+            if is_api_token(token):
+                grant = self.repository.api_tokens.validate(cur, token, workspace_id)
+                if "draft" not in grant["scopes"]:
+                    raise AlphaError("This API token does not allow drafting.", 403)
+            cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
+            prior = cur.fetchone()
+            if prior:
+                return self._events_for(cur, workspace_id, prior[0], 0)
+            self._append_message(cur, workspace_id, conversation_id, "user", {"text": prompt, "sourceIds": [], "intent": "image_generation"})
+            cur.execute(
+                "INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) VALUES(%s,%s,%s,'running',%s,'quick',%s,%s,%s) RETURNING id::text",
+                (conversation_id, workspace_id, principal, selected_model, digest(context), context["policyEpoch"], key),
+            )
+            run_id = cur.fetchone()[0]
+            reservation = self.ledger.reserve(
+                cur,
+                workspace_id,
+                principal,
+                "image_generation",
+                self.image_runtime.estimate_usd_micro,
+                f"image:{run_id}",
+                charge_batch=True,
+                provider=self.image_runtime.provider,
+                model=self.image_runtime.model,
+                run_id=run_id,
+            )
+            self._insert_event(cur, workspace_id, run_id, safe_event("run.started", model=selected_model, imageModel=self.image_runtime.model, reasoning="image"))
+            self._insert_event(cur, workspace_id, run_id, safe_event("progress.updated", stage="image_generation", percent=5))
+            cur.execute(
+                "UPDATE public.pr_agent_runs SET usage=%s::jsonb WHERE id::text=%s",
+                (json.dumps({"provenance": "pending", "reservationId": reservation["reservationId"], "imageModel": self.image_runtime.model}), run_id),
+            )
+            self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": "", "pending": True, "runId": run_id, "intent": "image_generation", "images": [], "model": selected_model}, run_id)
+
+        staged = None
+        result = None
+        queued_events = []
+        try:
+            result = self.image_runtime.generate(prompt, count=1, emit=queued_events.append)
+            raw = result["images"][0]
+            staged = self.assets.stage_upload(workspace_id, {"data": base64.b64encode(raw).decode()})
+            public_asset = {key: staged.get(key) for key in ("id", "hash", "mime", "width", "height", "bytes")}
+            public_asset["alt"] = clean(prompt, 300)
+            artifact = {"variants": [], "images": [public_asset], "imageModel": self.image_runtime.model}
+            artifact_hash = digest(artifact)
+
+            def add_asset(state, actor):
+                return self.commands.add_asset(state, actor, staged)
+
+            def finish(cur, _state, _principal):
+                self._lock_run_events(cur, workspace_id, run_id)
+                cur.execute("SELECT status FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
+                row = cur.fetchone()
+                if not row or row[0] != "running":
+                    raise AlphaError("This image run is no longer active.", 409)
+                for event in queued_events:
+                    self._insert_event(cur, workspace_id, run_id, event)
+                self._insert_event(cur, workspace_id, run_id, safe_event("artifact.created", artifactHash=artifact_hash, images=1))
+                cost = result["usage"].get("costUsd")
+                known = type(cost) in (int, float) and cost >= 0
+                settlement = self.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if known else "unknown", int(cost * 1_000_000) if known else None)
+                usage = {**result["usage"], "billing": settlement.get("state"), "ledgerCostState": settlement.get("state"), "selectedWritingModel": selected_model}
+                cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact), artifact_hash, json.dumps(usage), run_id))
+                self._settle_message(cur, workspace_id, conversation_id, run_id, {"text": "Generated one private image candidate for review.", "runId": run_id, "artifactHash": artifact_hash, "intent": "image_generation", "images": artifact["images"], "model": selected_model})
+                self._insert_event(cur, workspace_id, run_id, safe_event("run.completed", usage={"provenance": usage["provenance"], "modelRequests": 1, "costUsd": cost, "billing": settlement.get("state")}))
+
+            # The asset metadata and completed run commit together. A concurrent workspace edit is
+            # retried against the current revision; the provider call is never repeated.
+            for attempt in range(2):
+                snapshot = self.repository.get(workspace_id, token)
+                try:
+                    self.repository.command(
+                        workspace_id,
+                        token,
+                        snapshot["revision"],
+                        add_asset,
+                        audit_event=lambda _state: ("media.generated", public_asset["id"], {"model": self.image_runtime.model}),
+                        after=finish,
+                    )
+                    break
+                except AlphaError as error:
+                    if error.status != 409 or attempt:
+                        raise
+            # Ownership has moved to workspace state; later response-shaping failures must not
+            # delete bytes that now back a committed asset.
+            staged = None
+            return self.events(workspace_id, token, run_id)
+        except Exception as error:
+            if staged is not None:
+                try:
+                    self.assets.remove(workspace_id, staged)
+                except Exception:
+                    pass
+            from .image_runtime import ImageGenerationError
+            uncertain = isinstance(error, ImageGenerationError) and error.uncertain or result is not None
+            self._fail_image_run(workspace_id, token, conversation_id, run_id, reservation["reservationId"], str(error), usage=(result or {}).get("usage"), uncertain=uncertain)
+            raise
 
     def turn(self, workspace_id, token, conversation_id, payload):
         text = clean(payload.get("text", ""), MAX_TEXT)
         reasoning = payload.get("reasoning", "quick")
         key = clean(payload.get("idempotencyKey", ""), 100) or uid()
         runtime = self._select_runtime(payload.get("model"))
+        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
+        if self._wants_image(payload):
+            return self._image_turn(workspace_id, token, conversation_id, {**payload, "idempotencyKey": key}, text, model_id)
         if isinstance(runtime, ClaudeCliRuntime):
             reasoning = runtime.effort(reasoning)
         elif reasoning not in ("quick", "standard", "deep"):
             raise AlphaError("Choose a reasoning level supported by this writer.", 400)
-        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
         # Step ① of the agent pipeline: channels and times named in the message become the
         # destinations and a candidate plan. Parsed text never gains any authority of its own.
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text or clean(payload.get("intentText", ""), MAX_TEXT), self.clock(), zone, runtime.supported_platforms() or None)
+        recurring = getattr(self, 'recurring_binding', None)
+        if recurring:
+            # An automation drafts exactly the destinations its owner activated. Channels, languages, times or
+            # instructions inside its brief are data: they never re-route, schedule or become memory.
+            parsed = {**parsed, "intent": "draft", "languages": [], "destinations": [], "unattachedTimes": [], "unsupported": [], "warnings": [], "hasTimes": False}
+        understood = reading = None
+        if text and not recurring:
+            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+            understood = (reading or {}).get("automation")
+        elif parsed["intent"] == "automation":
+            # Quick start already decided to draft this message now.
+            parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
         # Each (channel, language) pair is one destination; the workspace's remembered languages fill any channel the request left open.
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
         plan = intent.build_plan(parsed, destinations)
+        if text and not recurring:
+            # Staged automations, answers to Rafii's questions, edits and "why?" questions (orchestration §7).
+            routed = self._orchestration_turn(workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload)
+            if routed is not None:
+                return routed
+        if parsed["intent"] == "automation" and text and not recurring:
+            return self._automation_turn(workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, understood=understood)
         if parsed["intent"] == "memory" and text:
             return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id)
-        research_ids, researched = self._research(workspace_id, token, payload, text, parsed)
+        # A completed or in-flight writing run must not repeat research on HTTP replay.
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), 'edit')
+            self._conversation(cur, workspace_id, conversation_id)
+            cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id,key))
+            prior = cur.fetchone()
+            if prior:
+                return self._events_for(cur, workspace_id, prior[0], 0)
+        research_ids, researched = self._research(workspace_id, token, payload, text, parsed, key, conversation_id)
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
             self._conversation(cur, workspace_id, conversation_id)
             state = self._state(row)
             stamp(state)
+            # Account identity is verified against this workspace's connections inside the transaction (v9 §4).
+            destinations = intent.bind_accounts(destinations, state)
             source_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("active") and s.get("kind") != "voice_sample"][:20]
             source_ids = [source_id for source_id in source_ids if not any(s.get("id") == source_id and s.get("kind") == "voice_sample" for s in state.get("sources", []))]
             source_ids = list(dict.fromkeys(list(source_ids) + research_ids))
@@ -412,22 +937,40 @@ class IdeasService:
                 self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": parsed["intent"]})
             idea = text or state.get("brief", {}).get("idea", "")
             selection = ((state.get("contentSystem") or {}).get("selection") or {})
+            rule_ids = content_types.selected_rule_ids(state)
+            automation_notes = list((recurring or {}).get("notes") or [])
+            if recurring and "contentType" in recurring:
+                # An automation writes with the content type that was activated, not whatever Home has selected now.
+                selection, rule_ids, note = self._automation_selection(state, recurring["contentType"])
+                automation_notes += [note] if note else []
             content_type_id = selection.get("contentTypeId")
             # A how-to that names no steps still drafts; the person gets a reminder next to it, never a block.
-            reminders = [content_types.TUTORIAL_REMINDER] if content_types.missing_tutorial_input(content_types.selected_rule_ids(state), idea, context) else []
+            reminders = [content_types.TUTORIAL_REMINDER] if content_types.missing_tutorial_input(rule_ids, idea, context) else []
+            reminders += automation_notes
             # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
             # Memory files follow the route: a cloud route reads them only with the workspace's consent (memory.projection).
             # Learned preferences arrive as the slice that applies to these destinations (design §5.7), recorded on the run.
-            shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None)
             voice_mode = payload.get("voiceMode", "neutral")
             if voice_mode not in ("neutral", "personalized"):
                 raise AlphaError("Choose neutral or personalized writing.")
             voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
+            voice_projection = None
             if voice_mode == "personalized":
                 requested_voice = payload.get("voiceSourceIds") if isinstance(payload.get("voiceSourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("kind") == "voice_sample" and s.get("active") and s.get("selected")]
-                voice_projection = voice_sources.retrieve(state, requested_voice, "generation", voice_route, query=idea)
-                if not voice_projection["samples"]:
-                    raise AlphaError("Select and allow at least one writing sample for this writer route.", 409)
+                try:
+                    voice_projection = voice_sources.retrieve(state, requested_voice, "generation", voice_route, query=idea)
+                except AlphaError:
+                    if not recurring:
+                        raise
+                if not (voice_projection or {}).get("samples"):
+                    if not recurring:
+                        raise AlphaError("Select and allow at least one writing sample for this writer route.", 409)
+                    # An automation keeps preparing drafts when its writing samples are gone or not allowed for this
+                    # writer; this draft is neutral and says so, never a failed run.
+                    voice_mode, voice_projection = "neutral", None
+                    reminders.append(VOICE_FALLBACK_NOTE)
+            shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
+            if voice_projection:
                 voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
                 style_directives = voice_sources.style_directives(voice_projection)
             else:
@@ -445,8 +988,23 @@ class IdeasService:
             run_id = cur.fetchone()[0]
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
-            reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", 500_000 if paid else 0, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context}
+            estimate = __import__('math').ceil(runtime.price_quote(request, model_id) * 1_000_000) if paid and hasattr(runtime, 'price_quote') else 500_000 if paid else 0
+            if recurring and estimate > recurring['maxCostUsdMicro']:
+                raise AlphaError('This writer exceeds the confirmed per-occurrence cost limit.', 402)
+            reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
+            from .api_tokens import is_api_token
+            if is_api_token(token):
+                grant = self.repository.api_tokens.validate(cur, token, workspace_id)
+                if 'draft' not in grant['scopes']:
+                    raise AlphaError('This API token does not allow drafting.', 403)
+                outcome['apiTokenId'] = grant['tokenId']
+            elif not recurring:
+                session_id = getattr(self.repository.verify_session, 'session_id', None)
+                if session_id:
+                    outcome['sessionId'] = session_id(token, principal)
+            if recurring:
+                outcome['recurringBinding'] = recurring
 
             def emit(event):
                 self._insert_event(cur, workspace_id, run_id, event)
@@ -462,7 +1020,7 @@ class IdeasService:
             if plan:
                 context_events.append(safe_event("action.proposed", action="schedule_plan", destinations=len(plan["destinations"]), timeZone=plan["timeZone"]))
 
-            if runtime.asynchronous:
+            if runtime.asynchronous or paid:
                 emit(safe_event("run.started", model=model_id, reasoning="quick", contextDigest=digest(context)))
                 for pending in context_events:
                     emit(pending)
@@ -492,7 +1050,19 @@ class IdeasService:
         if dispatch:
             # Only after the run row is committed can a background thread or device see it.
             runtime, run_id, request, sink = dispatch
-            runtime.dispatch(run_id, request, sink)
+            if runtime.asynchronous:
+                runtime.dispatch(run_id, request, sink)
+            else:
+                # Persist the idempotency key and reservation before any billable I/O.
+                # The request stays synchronous on hosted functions; no background thread
+                # can be frozen after the HTTP response. An interrupted run is never retried.
+                try:
+                    result = runtime.start_turn(request, sink.emit)
+                    sink.complete(result["artifact"], result["usage"])
+                except Exception:
+                    sink.fail("The writer did not finish. Usage may be pending; this run will not retry automatically.")
+                    raise AlphaError("The writer did not finish. Check this run before starting another request.", 502)
+                response = self.events(workspace_id, token, run_id)
         return response
 
     @staticmethod
@@ -527,6 +1097,24 @@ class IdeasService:
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             return self._events_for(cur, workspace_id, run_id, cursor)
 
+    def recover_stalled(self, max_runs=25):
+        """Bounded cron recovery: hold uncertain spend, never repeat provider I/O."""
+        recovered = 0
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT w.id::text FROM public.pr_workspaces w WHERE EXISTS (SELECT 1 FROM public.pr_agent_runs r WHERE r.workspace_id=w.id AND r.status='running' AND r.updated_at<to_timestamp(%s)) ORDER BY w.id FOR UPDATE SKIP LOCKED LIMIT %s", (self.clock()-600, max_runs))
+            for (wid,) in cur.fetchall():
+                cur.execute("SELECT id::text,conversation_id::text,usage FROM public.pr_agent_runs WHERE workspace_id=%s AND status='running' AND updated_at<to_timestamp(%s) ORDER BY created_at LIMIT %s", (wid, self.clock()-600, max_runs-recovered))
+                for run_id, cid, usage in cur.fetchall():
+                    self._lock_run_events(cur, wid, run_id)
+                    reservation = (usage or {}).get('reservationId')
+                    if reservation:
+                        self.ledger.settle(cur, wid, reservation, 'unknown')
+                    self._insert_event(cur, wid, run_id, safe_event('run.failed', message='Writer interrupted; usage needs reconciliation. No automatic retry.'))
+                    cur.execute("UPDATE public.pr_agent_runs SET status='failed',updated_at=now() WHERE id::text=%s", (run_id,))
+                    self._settle_message(cur, wid, cid, run_id, {'text':'Writer interrupted. Review usage before starting another request.','runId':run_id,'failed':True,'pending':False})
+                    recovered += 1
+        return {'recovered': recovered, 'providerRequests': 0}
+
     def cancel(self, workspace_id, token, run_id):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             require(self._member(row), "edit")
@@ -536,14 +1124,20 @@ class IdeasService:
             if not run:
                 raise AlphaError("Run unavailable.", 404)
             if run[0] == "running":
+                cur.execute("SELECT id::text,estimated_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND run_id::text=%s AND kind='reserve'", (workspace_id, run_id))
+                reservation = cur.fetchone()
+                if reservation:
+                    self.ledger.settle(cur, workspace_id, reservation[0], 'unknown' if reservation[1] else 'failed', None if reservation[1] else 0)
                 self._insert_event(cur, workspace_id, run_id, safe_event("run.cancelled", message="Cancelled. Partial text retained; no automatic retry."))
                 cur.execute("UPDATE public.pr_agent_runs SET status='cancelled',updated_at=now() WHERE id::text=%s", (run_id,))
                 cur.execute("UPDATE public.pr_messages SET body=body || '{\"pending\": false, \"cancelled\": true, \"text\": \"Cancelled before the draft finished.\"}'::jsonb WHERE workspace_id=%s AND run_id::text=%s AND role='assistant' AND (body->>'pending')='true'", (workspace_id, run_id))
                 return {"runId": run_id, "status": "cancelled"}
             return {"runId": run_id, "status": run[0], "note": "Already finished; nothing to cancel."}
 
-    def apply(self, workspace_id, token, revision, run_id, artifact_hash):
-        """Turn a completed candidate into reviewable workspace variants. Never publishes."""
+    def apply(self, workspace_id, token, revision, run_id, artifact_hash, separate=False, tag=None):
+        """Turn a completed candidate into reviewable workspace variants. Never publishes. `separate` (an automation
+        run) always adds new variants instead of refreshing an earlier unscheduled draft, so each run keeps its own
+        drafts; `tag` records which automation run they belong to."""
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             require(self._member(row), "edit")
             cur.execute("SELECT status,artifact,artifact_hash,policy_epoch,context_digest,model FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
@@ -571,21 +1165,28 @@ class IdeasService:
             # record of what went out; a new candidate never becomes an "update" to it. Only a draft that
             # is still unscheduled in the same platform/language slot is refreshed in place.
             committed = {job["manifest"]["variantId"] for job in state.get("phase2", {}).get("jobs", []) if job.get("state") not in ("canceled", "failed")}
+            created.clear()
             for candidate in artifact["variants"]:
-                drafts = [v for v in state["variants"] if v["platform"] == candidate["platform"] and locales.same(v["language"], candidate["language"]) and v["id"] not in committed]
+                drafts = [] if separate else [v for v in state["variants"] if same_slot(v, candidate) and v["id"] not in committed]
                 old = drafts[-1] if drafts else None
                 values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if old:
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
+                    created.append({"platform": candidate["platform"], "language": candidate["language"], "channelId": candidate.get("channelId"), "variantId": old["id"]})
                 else:
-                    state["variants"].append({**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}})
+                    variant = {**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}}
+                    if tag:
+                        variant["automation"] = dict(tag)
+                    state["variants"].append(variant)
+                    created.append({"platform": candidate["platform"], "language": candidate["language"], "channelId": candidate.get("channelId"), "variantId": variant["id"]})
             return state
 
+        created = []
         saved = self.repository.command(workspace_id, token, revision, command)
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             cur.execute("UPDATE public.pr_agent_runs SET status='applied',updated_at=now() WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
-        return {"runId": run_id, "status": "applied", "revision": saved["revision"], "variants": len(artifact["variants"])}
+        return {"runId": run_id, "status": "applied", "revision": saved["revision"], "variants": len(artifact["variants"]), "variantIds": list(created)}
 
     # --- source-first activation --------------------------------------------------
     def quick_start(self, workspace_id, token, revision, payload):
@@ -604,16 +1205,56 @@ class IdeasService:
             raise AlphaError("Choose a reasoning level supported by this writer.", 400)
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
+        parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+        understood = (reading or {}).get("automation")
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
+        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
+        if text and self._may_orchestrate(workspace_id, token, text, parsed, reading):
+            # Home is the primary place to create, change or ask about automations (orchestration §7).
+            conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))
+            routed = self._orchestration_turn(workspace_id, token, conversation["conversationId"], text, parsed, reading, destinations, runtime, model_id, {**payload, "timeZone": zone})
+            if routed is not None:
+                return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **routed}
+            if parsed["intent"] == "automation":
+                run = self._automation_turn(workspace_id, token, conversation["conversationId"], text, destinations, runtime, model_id,
+                                            {**payload, "timeZone": zone}, understood=understood)
+                return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **run}
+            # Not an automation after all: drop the empty conversation; the draft gets its own below.
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                cur.execute("DELETE FROM public.pr_conversations c WHERE c.id::text=%s AND c.workspace_id=%s AND NOT EXISTS (SELECT 1 FROM public.pr_messages m WHERE m.conversation_id=c.id)", (conversation["conversationId"], workspace_id))
+
+        if parsed["intent"] == "automation" and text:
+            conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))
+            run = self._automation_turn(workspace_id, token, conversation["conversationId"], text, destinations, runtime,
+                                        model_id, {**payload, "timeZone": zone}, revision=revision, understood=understood)
+            return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **run}
+
+        # Optional extra workspace sources to read alongside the pasted idea (Rafii v9 Context Pocket).
+        # Only ids the workspace holds as active, non-voice sources are accepted; anything else is refused.
+        extra_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else []
+        extra_ids = list(dict.fromkeys(item for item in extra_ids if isinstance(item, str) and item))[:20]
+
+        chosen = {}
 
         def command(state, actor):
+            usable = {s.get("id") for s in state.get("sources", []) if s.get("active") and s.get("kind") != "voice_sample"}
+            if any(item not in usable for item in extra_ids):
+                raise AlphaError("One of the chosen sources is not usable in this workspace. Review your sources and try again.", 409)
             kind = "idea" if (own and text and len(text) <= 500 and "\n" not in text) else ("text" if text else "link")
-            self.commands(state, actor, "source", {"kind": kind, "text": text or url, "title": clean(payload.get("title", "Pasted source" if text else "Link"), 200)})
-            source = state["sources"][-1]
+            # Drafting the same idea again (Rafii v9 "Generate again") reuses its active source instead of
+            # refusing it as a duplicate. The fingerprint is the one the `source` command stores.
+            fingerprint = hashlib.sha256((kind + clean(text or url, 20000)).encode()).hexdigest()
+            source = next((s for s in state.get("sources", []) if s.get("active") and s.get("fingerprint") == fingerprint), None)
+            if source is None:
+                self.commands(state, actor, "source", {"kind": kind, "text": text or url, "title": clean(payload.get("title", "Pasted source" if text else "Link"), 200)})
+                source = state["sources"][-1]
+            chosen["id"] = source["id"]
             stamp(state)
-            if own:
+            # Own writing is quotable. A reused source is re-approved only when this changes its policy, so
+            # drafts from the earlier run are not marked stale; an existing policy is never downgraded here.
+            if own and source.get("sourcePolicy") != "public_quote":
                 source["sourcePolicy"] = "public_quote"
                 self.commands(state, actor, "approve_source", {"sourceId": source["id"], "factIds": [f["id"] for f in source["facts"]]})
             if payload.get("audience"):
@@ -623,7 +1264,7 @@ class IdeasService:
             return state
 
         saved = self.repository.command(workspace_id, token, revision, command)
-        source = saved["state"]["sources"][-1]
+        source = next(s for s in saved["state"]["sources"] if s["id"] == chosen["id"])
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
-        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"]], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds")})
+        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": [source["id"], *extra_ids], "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration")})
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}

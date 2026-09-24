@@ -71,8 +71,8 @@ class Requests(unittest.TestCase):
         self.assertNotIn("secret-key", json.dumps(events) + json.dumps(result))
         self.assertEqual([v["language"] for v in result["artifact"]["variants"]], ["English", "繁體中文"])
         usage = result["usage"]
-        # 2000 in @ $3/M + 500 out @ $15/M = 0.006 + 0.0075
-        self.assertEqual((usage["modelRequests"], usage["promptTokens"], usage["completionTokens"], usage["costUsd"], usage["provenance"]), (1, 2000, 500, 0.0135, "estimated_from_tokens"))
+        # Public catalogue 2026-09-20: 2000 in @ $2/M + 500 out @ $10/M.
+        self.assertEqual((usage["modelRequests"], usage["promptTokens"], usage["completionTokens"], usage["costUsd"], usage["provenance"]), (1, 2000, 500, 0.009, "estimated_from_tokens"))
 
     def test_gateway_reported_cost_wins(self):
         transport = Recording([completion(GOOD, {"prompt_tokens": 10, "completion_tokens": 10, "cost": 0.0042})])

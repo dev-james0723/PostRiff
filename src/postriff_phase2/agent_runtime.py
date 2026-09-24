@@ -12,18 +12,34 @@ from . import locale_lint, locales
 SAFE_EVENTS = ("run.started", "progress.updated", "source.added", "artifact.created", "message.delta", "message.completed", "warning.created", "action.proposed", "run.completed", "run.failed", "run.cancelled")
 REASONING = ("quick", "standard", "deep")
 # Platforms every drafting route can write for. Any language PostRiff knows (locales.is_valid) goes with any of them,
-# and a platform may appear several times in one request, once per language.
-PLATFORMS = ("LinkedIn", "Instagram", "Threads", "Xiaohongshu")
+# and a platform may appear several times in one request, once per language. Draftable is not publishable: X and
+# Xiaohongshu have no hosted publisher (hosted_social maps LinkedIn, Threads and Instagram only), so their drafts are
+# for review, copy and export, and the capability check reports them as having no publishing route.
+PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu")
 DEFAULT_REQUEST_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
 
 
 def check_destinations(destinations):
+    """Every destination is a supported platform with a known language; the key that must be unique is
+    (platform, language, account): two accounts on one platform are two destinations, the same account
+    in the same language twice is a client error."""
     seen = set()
     for d in destinations:
         platform, tag = d.get("platform"), locales.canonical(d.get("language"))
-        if platform not in PLATFORMS or tag is None or (platform, tag) in seen:
+        channel_id = d.get("channelId") if isinstance(d.get("channelId"), str) else None
+        if platform not in PLATFORMS or tag is None or (platform, tag, channel_id) in seen:
             raise AlphaError("Choose supported destinations.", 400)
-        seen.add((platform, tag))
+        seen.add((platform, tag, channel_id))
+
+
+def identity_fields(destination):
+    """The account identity a variant carries forward from its destination (never credentials)."""
+    out = {}
+    if isinstance(destination.get("channelId"), str) and destination["channelId"]:
+        out["channelId"] = destination["channelId"]
+    if isinstance(destination.get("account"), str) and destination["account"]:
+        out["account"] = destination["account"]
+    return out
 
 # Phase-3 adapter kinds → safe families. Never forwarded raw.
 TRANSLATION = {"waiting": "progress.updated", "running": "progress.updated", "text": "message.delta", "completed": "run.completed", "interrupted": "run.cancelled", "expired": "run.failed", "revoked": "run.failed", "failed": "run.failed", "permission_denied": "warning.created", "uncertain": "warning.created", "applied": "artifact.created"}

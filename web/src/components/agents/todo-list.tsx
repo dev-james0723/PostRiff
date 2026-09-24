@@ -65,7 +65,7 @@ function TodoHeaderIcon({ complete }: { complete: boolean }) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             transition={reduce ? { duration: 0 } : SPRING_SWAP}
-            className='absolute size-5.5 overflow-visible text-emerald-500'
+            className='text-foreground absolute size-5.5 overflow-visible'
           >
             <circle cx='12' cy='12' r='9' fill='currentColor' />
             <motion.path
@@ -118,7 +118,7 @@ function TodoStatusIcon({
       className={cn(
         'mx-0.5 size-5 shrink-0 overflow-visible text-muted-foreground',
         status === 'in-progress' && 'text-foreground',
-        status === 'cancelled' && 'text-rose-600 dark:text-rose-400'
+        status === 'cancelled' && 'text-destructive'
       )}
     >
       <motion.circle
@@ -268,7 +268,7 @@ export function TodoList({
         <span
           className={cn(
             'shrink-0 text-xs font-medium tabular-nums text-muted-foreground',
-            allComplete && 'text-emerald-600 dark:text-emerald-400'
+            allComplete && 'text-foreground'
           )}
         >
           <span className='sr-only'>

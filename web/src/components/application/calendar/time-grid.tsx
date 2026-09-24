@@ -25,6 +25,10 @@ interface TimeGridProps<T> {
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
+/* The ruler's hour and column rules are structure, not chrome: one faint line derived from the text colour. */
+const RULER_STYLE = { '--rule': 'color-mix(in oklch, var(--foreground) 9%, transparent)' } as CSSProperties;
+
+/** One quiet reading surface (DNA §5.2) holding the day headers and the scrolling ruler. */
 export function TimeGrid<T>({
   days,
   focusedDate,
@@ -65,9 +69,14 @@ export function TimeGrid<T>({
   }, [periodKey]);
 
   return (
-    <div className={cn('flex min-w-0 flex-col [--gutter:3.5rem] md:[--gutter:4.5rem]', className)}>
-      <div className='grid border-b' style={columns}>
-        <div data-tour='calendar-zone' className='text-muted-foreground flex items-end justify-end px-2 pb-2 text-[10px] font-medium'>{zone}</div>
+    <div
+      className={cn('rafii-quiet flex min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] [--gutter:3.5rem] md:[--gutter:4.5rem]', className)}
+      style={RULER_STYLE}
+    >
+      <div className='grid px-1 pt-1' style={columns}>
+        <div data-tour='calendar-zone' className='text-muted-foreground flex items-end justify-end px-2 pb-2 text-xs font-medium'>
+          {zone}
+        </div>
         {days.map((day) => {
           const today = isToday(day, timeZone);
           const selected = compact && day.compare(focusedDate) === 0;
@@ -76,9 +85,9 @@ export function TimeGrid<T>({
               <span className='text-muted-foreground text-xs font-medium'>{weekdayShort.format(day.toDate(timeZone))}</span>
               <span
                 className={cn(
-                  'flex size-7 items-center justify-center rounded-full text-sm font-semibold',
-                  today && 'bg-primary text-primary-foreground',
-                  selected && !today && 'bg-muted'
+                  'flex size-7 items-center justify-center rounded-full text-sm font-medium',
+                  today && 'rafii-action',
+                  selected && !today && 'rafii-lens'
                 )}
               >
                 {day.day}
@@ -92,7 +101,7 @@ export function TimeGrid<T>({
               type='button'
               aria-label={`${fullDate.format(day.toDate(timeZone))}${today ? ', today' : ''}, ${countLabel(count)}`}
               onClick={() => onOpenDay(day)}
-              className='hover:bg-accent/60 flex min-w-0 flex-col items-center gap-1 py-2 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset sm:flex-row sm:justify-center sm:gap-2'
+              className='rafii-focus hover:bg-foreground/5 flex min-w-0 flex-col items-center gap-1 rounded-[0.625rem] py-2 transition-colors sm:flex-row sm:justify-center sm:gap-2'
             >
               {content}
             </button>
@@ -106,11 +115,11 @@ export function TimeGrid<T>({
 
       <div ref={scrollRef} className='relative h-[28rem] overflow-y-auto overscroll-contain md:h-[36rem]'>
         <div className='relative grid' style={{ ...columns, height: 24 * HOUR_HEIGHT }}>
-          <div aria-hidden className='relative border-r'>
+          <div aria-hidden className='relative' style={{ boxShadow: 'inset -1px 0 0 var(--rule)' }}>
             {HOURS.slice(1).map((hour) => (
               <span
                 key={hour}
-                className='text-muted-foreground absolute right-2 -translate-y-1/2 text-[11px] whitespace-nowrap tabular-nums'
+                className='text-muted-foreground absolute right-2 -translate-y-1/2 text-xs whitespace-nowrap tabular-nums'
                 style={{ top: hour * HOUR_HEIGHT }}
               >
                 {hourLabel.format(new Date(2000, 0, 1, hour))}
@@ -118,13 +127,14 @@ export function TimeGrid<T>({
             ))}
           </div>
 
-          {days.map((day) => (
+          {days.map((day, index) => (
             <div
               key={day.toString()}
-              className='relative border-r last:border-r-0'
+              className='relative'
               style={{
-                backgroundImage: 'linear-gradient(to bottom, var(--border) 1px, transparent 1px)',
-                backgroundSize: `100% ${HOUR_HEIGHT}px`
+                backgroundImage: 'linear-gradient(to bottom, var(--rule) 1px, transparent 1px)',
+                backgroundSize: `100% ${HOUR_HEIGHT}px`,
+                boxShadow: index < days.length - 1 ? 'inset -1px 0 0 var(--rule)' : undefined
               }}
             >
               {layoutDay(byDay.get(day.toString()) ?? [], HOUR_HEIGHT, MIN_EVENT_MINUTES).map(
@@ -152,15 +162,15 @@ export function TimeGrid<T>({
           {currentTime && nowColumn !== -1 && (
             <>
               <div aria-hidden className='pointer-events-none absolute right-0 left-(--gutter) z-20' style={{ top: nowTop }}>
-                <div className='bg-primary h-0.5 -translate-y-1/2' />
+                <div className='bg-foreground h-0.5 -translate-y-1/2' />
                 <span
-                  className='bg-primary absolute top-0 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full'
+                  className='bg-foreground absolute top-0 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full'
                   style={{ left: `${(nowColumn / days.length) * 100}%` }}
                 />
               </div>
               <span
                 aria-hidden
-                className='bg-primary text-primary-foreground pointer-events-none absolute z-20 -translate-y-1/2 rounded px-1 text-[10px] leading-4 font-semibold whitespace-nowrap tabular-nums'
+                className='bg-foreground text-background pointer-events-none absolute z-20 -translate-y-1/2 rounded-[0.375rem] px-1.5 text-[11px] leading-4 font-semibold whitespace-nowrap tabular-nums'
                 style={{ top: nowTop, right: 'calc(100% - var(--gutter) + 4px)' }}
               >
                 {timeLabel.format(currentTime.toDate())}

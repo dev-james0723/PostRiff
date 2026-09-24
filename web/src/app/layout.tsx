@@ -1,7 +1,7 @@
 import Providers from '@/components/layout/providers';
 import { Toaster } from '@/components/ui/sonner';
-import { fontVariables } from '@/components/themes/font.config';
-import { DEFAULT_THEME, THEMES } from '@/components/themes/theme.config';
+import { fontVariables, uiFontFamily } from '@/components/themes/font.config';
+import { DEFAULT_THEME, THEME_COOKIE, THEMES } from '@/components/themes/theme.config';
 import ThemeProvider from '@/components/themes/theme-provider';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
@@ -14,7 +14,7 @@ import '../styles/globals.css';
 
 const META_THEME_COLORS = {
   light: '#ffffff',
-  dark: '#09090b'
+  dark: '#000000'
 };
 
 export const metadata: Metadata = {
@@ -47,7 +47,7 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
-  const activeThemeValue = cookieStore.get('active_theme')?.value;
+  const activeThemeValue = cookieStore.get(THEME_COOKIE)?.value;
   const isValidTheme = THEMES.some((t) => t.value === activeThemeValue);
   const themeToApply = isValidTheme ? activeThemeValue! : DEFAULT_THEME;
 
@@ -65,6 +65,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             `
           }}
         />
+        {/* The next/font Geist face for the Rafii theme (styles/rafii.css re-applies it after the theme layer resets --font-sans). */}
+        <style dangerouslySetInnerHTML={{ __html: `:root{--font-rafii-ui:${uiFontFamily}}` }} />
       </head>
       <body
         className={cn(
@@ -87,7 +89,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Providers>
           </ThemeProvider>
         </NuqsAdapter>
-        <Analytics />
+        {/* Vercel Web Analytics only when the project has it enabled; otherwise its script request 404s on every page. */}
+        {process.env.NEXT_PUBLIC_VERCEL_ANALYTICS === '1' && <Analytics />}
       </body>
     </html>
   );

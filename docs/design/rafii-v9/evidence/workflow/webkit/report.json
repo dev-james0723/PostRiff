@@ -1,0 +1,627 @@
+{
+  "base": "http://localhost:3100",
+  "browser": "webkit",
+  "principal": "bae2c4da-36ad-460e-ad00-fcecba27bc7c",
+  "workspaceId": "619c305e-e8c8-45c4-b629-4136a54fa417",
+  "startedAt": "2026-09-24T03:10:08.494Z",
+  "scenes": [
+    {
+      "name": "workflow",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "Home heading",
+          "ok": true
+        },
+        {
+          "name": "model is the deterministic preview fixture",
+          "ok": true,
+          "detail": "Model\nDeterministic preview"
+        },
+        {
+          "name": "folder inspector unfolds (aria-expanded)",
+          "ok": true
+        },
+        {
+          "name": "overlapping folders select each account once",
+          "ok": true,
+          "detail": "Done, 2 accounts selected"
+        },
+        {
+          "name": "composer summarises the folder selection",
+          "ok": true,
+          "detail": "2 folders\n2 drafts"
+        },
+        {
+          "name": "composer counts two accounts",
+          "ok": true,
+          "detail": "Choose channels, 2 accounts selected"
+        },
+        {
+          "name": "idle deck names both accounts on one app",
+          "ok": true,
+          "detail": [
+            "Preview Dev Member on iPhone",
+            "Preview Dev Member Two on iPhone"
+          ]
+        },
+        {
+          "name": "language dialog lists each account separately",
+          "ok": true
+        },
+        {
+          "name": "language summary shows per-destination languages",
+          "ok": true,
+          "detail": "Language\nPer destination · 2 languages"
+        },
+        {
+          "name": "reasoning shows the route’s real options or an honest “not applied”",
+          "ok": true,
+          "detail": {
+            "applied": 0,
+            "notApplied": 4
+          }
+        },
+        {
+          "name": "fixture model still selected after browsing providers",
+          "ok": true,
+          "detail": "Model\nDeterministic preview"
+        },
+        {
+          "name": "Generate is enabled with two account destinations",
+          "ok": true
+        },
+        {
+          "name": "one draft per account (2 of 2 ready)",
+          "ok": true,
+          "detail": "2 of 2 ready · yours to edit"
+        },
+        {
+          "name": "results keep each account as its own draft",
+          "ok": true,
+          "detail": [
+            "LinkedIn · Dev Member, ready",
+            "LinkedIn · Dev Member Two, ready"
+          ]
+        },
+        {
+          "name": "swipe moves to the other draft",
+          "ok": true,
+          "detail": {
+            "before": "LinkedIn · Dev Member, ready",
+            "after": "LinkedIn · Dev Member Two, ready"
+          }
+        },
+        {
+          "name": "edited caption is marked unsaved",
+          "ok": true
+        },
+        {
+          "name": "one edited caption recorded",
+          "ok": true
+        },
+        {
+          "name": "the drafting request succeeded",
+          "ok": true,
+          "detail": {
+            "status": 201,
+            "runId": "32a0472b-7932-49cf-96d5-e9fc2191d91c",
+            "conversationId": "f7cfb77c-31cf-479d-8fbe-009723a5fe6f",
+            "error": null
+          }
+        },
+        {
+          "name": "server holds exactly one draft per account for the run",
+          "ok": true,
+          "detail": [
+            {
+              "id": "ada947ba8eaa4fe5a5528cf7dbe1bdc8",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false,
+              "createdByRun": false,
+              "proposedUpdateFromRun": true
+            },
+            {
+              "id": "9839a2ce0fbe4ba3922a8d6f2c942ddb",
+              "platform": "LinkedIn",
+              "language": "en-AU",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 3,
+              "edited": true,
+              "createdByRun": false,
+              "proposedUpdateFromRun": false
+            }
+          ]
+        },
+        {
+          "name": "each account kept its own language (second account en-AU, first unchanged)",
+          "ok": true,
+          "detail": [
+            {
+              "id": "ada947ba8eaa4fe5a5528cf7dbe1bdc8",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false,
+              "createdByRun": false,
+              "proposedUpdateFromRun": true
+            },
+            {
+              "id": "9839a2ce0fbe4ba3922a8d6f2c942ddb",
+              "platform": "LinkedIn",
+              "language": "en-AU",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 3,
+              "edited": true,
+              "createdByRun": false,
+              "proposedUpdateFromRun": false
+            }
+          ]
+        },
+        {
+          "name": "the edited caption persisted as a new revision",
+          "ok": true,
+          "detail": [
+            {
+              "id": "ada947ba8eaa4fe5a5528cf7dbe1bdc8",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false,
+              "createdByRun": false,
+              "proposedUpdateFromRun": true
+            },
+            {
+              "id": "9839a2ce0fbe4ba3922a8d6f2c942ddb",
+              "platform": "LinkedIn",
+              "language": "en-AU",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 3,
+              "edited": true,
+              "createdByRun": false,
+              "proposedUpdateFromRun": false
+            }
+          ]
+        },
+        {
+          "name": "conversation tabs name each account",
+          "ok": true,
+          "detail": [
+            "LinkedIn\nDev Member\n🇬🇧\nEnglish (UK)",
+            "LinkedIn\nDev Member Two\n🇦🇺\nEnglish (Australia)"
+          ]
+        }
+      ],
+      "marks": [
+        {
+          "label": "Home loaded",
+          "atSeconds": 11.5
+        },
+        {
+          "label": "Channel Bloom open",
+          "atSeconds": 13.1
+        },
+        {
+          "label": "Festival folder unfolds",
+          "atSeconds": 14.2
+        },
+        {
+          "label": "Festival folder folds",
+          "atSeconds": 16
+        },
+        {
+          "label": "destinations committed",
+          "atSeconds": 18.7
+        },
+        {
+          "label": "language dialog open",
+          "atSeconds": 20.3
+        },
+        {
+          "label": "language catalogue discloses",
+          "atSeconds": 20.6
+        },
+        {
+          "label": "languages applied",
+          "atSeconds": 23.6
+        },
+        {
+          "label": "model dialog open",
+          "atSeconds": 24.3
+        },
+        {
+          "label": "provider swap 1",
+          "atSeconds": 25.3
+        },
+        {
+          "label": "provider swap 0",
+          "atSeconds": 26.1
+        },
+        {
+          "label": "generate",
+          "atSeconds": 29.1
+        },
+        {
+          "label": "drafts ready",
+          "atSeconds": 29.7
+        },
+        {
+          "label": "phone swipe",
+          "atSeconds": 31.5
+        },
+        {
+          "label": "save as drafts",
+          "atSeconds": 33.6
+        },
+        {
+          "label": "conversation view",
+          "atSeconds": 38.9
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "workflow/webkit/workflow/01-home-idle.png",
+        "workflow/webkit/workflow/02-channel-bloom.png",
+        "workflow/webkit/workflow/03-folder-inspector.png",
+        "workflow/webkit/workflow/04-folders-selected.png",
+        "workflow/webkit/workflow/05-idle-deck-two-accounts.png",
+        "workflow/webkit/workflow/06-language-per-account.png",
+        "workflow/webkit/workflow/07-model-dialog.png",
+        "workflow/webkit/workflow/08-results.png",
+        "workflow/webkit/workflow/09-after-swipe.png",
+        "workflow/webkit/workflow/10-saved.png",
+        "workflow/webkit/workflow/11-conversation.png"
+      ],
+      "video": "workflow/webkit/workflow/workflow.webm",
+      "t0": 1790219411272,
+      "language": {
+        "firstShows": "Output language for LinkedIn · Dev Member: English (United Kingdom). Change",
+        "secondChosen": "en-AU"
+      },
+      "quickStart": {
+        "status": 201,
+        "runId": "32a0472b-7932-49cf-96d5-e9fc2191d91c",
+        "conversationId": "f7cfb77c-31cf-479d-8fbe-009723a5fe6f",
+        "error": null
+      },
+      "saved": [
+        {
+          "id": "ada947ba8eaa4fe5a5528cf7dbe1bdc8",
+          "platform": "LinkedIn",
+          "language": "en-GB",
+          "channelId": "abaad27ed4e69ff561db13790efff006",
+          "revision": 1,
+          "edited": false,
+          "createdByRun": false,
+          "proposedUpdateFromRun": true
+        },
+        {
+          "id": "9839a2ce0fbe4ba3922a8d6f2c942ddb",
+          "platform": "LinkedIn",
+          "language": "en-AU",
+          "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+          "revision": 3,
+          "edited": true,
+          "createdByRun": false,
+          "proposedUpdateFromRun": false
+        }
+      ],
+      "conversationId": "f7cfb77c-31cf-479d-8fbe-009723a5fe6f",
+      "durationSeconds": 39.5
+    },
+    {
+      "name": "motion-provider-swap-reasoning",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "Cancel keeps the fixture model",
+          "ok": true,
+          "detail": "Model\nDeterministic preview"
+        }
+      ],
+      "marks": [
+        {
+          "label": "provider tab 1",
+          "atSeconds": 4.8
+        },
+        {
+          "label": "provider tab 0",
+          "atSeconds": 5.6
+        },
+        {
+          "label": "provider tab 1",
+          "atSeconds": 6.4
+        },
+        {
+          "label": "provider tab 0",
+          "atSeconds": 7.2
+        },
+        {
+          "label": "reasoning sends medium",
+          "atSeconds": 8.7
+        },
+        {
+          "label": "reasoning sends high",
+          "atSeconds": 9.3
+        },
+        {
+          "label": "reasoning sends xhigh",
+          "atSeconds": 9.9
+        },
+        {
+          "label": "reasoning sends max",
+          "atSeconds": 10.5
+        },
+        {
+          "label": "reasoning sends low",
+          "atSeconds": 11.2
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "workflow/webkit/motion-provider-swap-reasoning/reasoning-bars.png"
+      ],
+      "video": "workflow/webkit/motion-provider-swap-reasoning/motion-provider-swap-reasoning.webm",
+      "t0": 1790219451056,
+      "durationSeconds": 12.9
+    },
+    {
+      "name": "motion-language-disclosure",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "first Escape closes only the catalogue",
+          "ok": true
+        },
+        {
+          "name": "shared switch expands its content",
+          "ok": true
+        }
+      ],
+      "marks": [
+        {
+          "label": "catalogue discloses",
+          "atSeconds": 5
+        },
+        {
+          "label": "catalogue closes (Escape)",
+          "atSeconds": 7.5
+        },
+        {
+          "label": "shared language discloses",
+          "atSeconds": 8.3
+        },
+        {
+          "label": "shared language folds",
+          "atSeconds": 9.9
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "workflow/webkit/motion-language-disclosure/catalogue-search.png",
+        "workflow/webkit/motion-language-disclosure/shared-language.png"
+      ],
+      "video": "workflow/webkit/motion-language-disclosure/motion-language-disclosure.webm",
+      "t0": 1790219464312,
+      "durationSeconds": 12.2
+    },
+    {
+      "name": "motion-folder-unfold",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "folder inspector unfolds (aria-expanded)",
+          "ok": true
+        },
+        {
+          "name": "overlapping folders select each account once",
+          "ok": true,
+          "detail": "Done, 2 accounts selected"
+        }
+      ],
+      "marks": [
+        {
+          "label": "Channel Bloom open",
+          "atSeconds": 4.5
+        },
+        {
+          "label": "Festival folder unfolds",
+          "atSeconds": 5
+        },
+        {
+          "label": "Festival folder folds",
+          "atSeconds": 6.9
+        },
+        {
+          "label": "destinations committed",
+          "atSeconds": 10
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "workflow/webkit/motion-folder-unfold/02-channel-bloom.png",
+        "workflow/webkit/motion-folder-unfold/03-folder-inspector.png",
+        "workflow/webkit/motion-folder-unfold/04-folders-selected.png"
+      ],
+      "video": "workflow/webkit/motion-folder-unfold/motion-folder-unfold.webm",
+      "t0": 1790219476947,
+      "durationSeconds": 10.5
+    },
+    {
+      "name": "motion-phone-swipe",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "rapid switches settle on the last request",
+          "ok": true
+        },
+        {
+          "name": "no stale layers after interrupts",
+          "ok": true,
+          "detail": 2
+        },
+        {
+          "name": "focus returns to the expand button",
+          "ok": true
+        }
+      ],
+      "marks": [
+        {
+          "label": "swipe left",
+          "atSeconds": 11.9
+        },
+        {
+          "label": "swipe right",
+          "atSeconds": 13.5
+        },
+        {
+          "label": "swipe left",
+          "atSeconds": 15.1
+        },
+        {
+          "label": "dock tap",
+          "atSeconds": 16.2
+        },
+        {
+          "label": "dock arrow key",
+          "atSeconds": 17.1
+        },
+        {
+          "label": "expanded preview",
+          "atSeconds": 20.2
+        }
+      ],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "workflow/webkit/motion-phone-swipe/expanded-preview.png"
+      ],
+      "video": "workflow/webkit/motion-phone-swipe/motion-phone-swipe.webm",
+      "t0": 1790219487845,
+      "durationSeconds": 22.7
+    },
+    {
+      "name": "reduced-motion",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": true,
+      "checks": [
+        {
+          "name": "reduced-motion preference is visible to the page",
+          "ok": true
+        },
+        {
+          "name": "deck switch runs no spatial animation",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "deck switch still changes the active phone",
+          "ok": true
+        },
+        {
+          "name": "folder inspector opens without a spatial animation",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "folder inspector is open",
+          "ok": true
+        }
+      ],
+      "marks": [],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "workflow/webkit/reduced-motion/reduced-inspector.png"
+      ],
+      "video": "workflow/webkit/reduced-motion/reduced-motion.webm",
+      "t0": 1790219510891,
+      "durationSeconds": 7
+    },
+    {
+      "name": "mobile-390",
+      "viewport": "390x844",
+      "theme": "light",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "no horizontal scroll at 390px",
+          "ok": true,
+          "detail": 0
+        },
+        {
+          "name": "composer text is at least 16px (no iOS zoom)",
+          "ok": true,
+          "detail": 25
+        },
+        {
+          "name": "mobile navigation does not cover the primary action",
+          "ok": true,
+          "detail": {
+            "overlap": false
+          }
+        },
+        {
+          "name": "Channel Bloom search is 16px on phones",
+          "ok": true
+        },
+        {
+          "name": "no horizontal scroll with the sheet open",
+          "ok": true,
+          "detail": 0
+        }
+      ],
+      "marks": [],
+      "errors": [],
+      "blocked": [
+        "https://va.vercel-scripts.com/v1/script.debug.js"
+      ],
+      "screenshots": [
+        "workflow/webkit/mobile-390/01-home.png",
+        "workflow/webkit/mobile-390/02-generate-visible.png",
+        "workflow/webkit/mobile-390/03-channel-bloom-sheet.png"
+      ],
+      "video": "workflow/webkit/mobile-390/mobile-390.webm",
+      "t0": 1790219518285,
+      "durationSeconds": 9.6
+    }
+  ],
+  "finishedAt": "2026-09-24T03:12:07.976Z",
+  "summary": {
+    "checks": 40,
+    "failed": 0,
+    "pageErrors": 0
+  }
+}

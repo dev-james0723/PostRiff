@@ -39,6 +39,11 @@ ACTION_CLASSES = {
     "voice_sample_grant": "owner",
     "raffi_recurrence_activate": "owner", "raffi_recurrence_pause": "owner",
     "raffi_recurrence_resume": "owner", "raffi_recurrence_cancel": "owner",
+    # Deciding on an automation's drafted post is a publication decision, like approving in Queue; the worker
+    # commits an approved post as the person who approved it (publisher.commit), under the same class.
+    "raffi_run_decide": "approve", "raffi_run_commit": "approve",
+    # Any member may ask for their own "drafts ready" email; it changes nothing that is drafted.
+    "raffi_recurrence_watch": "read",
     "refresh": "read", "p2_refresh": "read",
 }
 

@@ -1,8 +1,6 @@
-import type { Metadata } from 'next';
-import { PipelineView } from '@/features/pipeline/pipeline-view';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Pipeline' };
-
+/** The Pipeline board folded into Queue (Rafii v9): its drafts live under Queue → Drafts. */
 export default function Page() {
-  return <PipelineView />;
+  redirect('/app/queue?view=drafts');
 }

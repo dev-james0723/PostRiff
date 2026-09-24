@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 
 from . import locales
+from .contracts import LIMITS
 
 # Simplified-only / Traditional-only pairs in common use. Characters valid in both scripts (后, 里, 台, 只…) are left out.
 _PAIRS = ("这這 们們 说說 时時 为為 个個 来來 会會 发發 对對 过過 还還 没沒 样樣 实實 经經 动動 进進 开開 关關 问問 间間 现現 学學 长長 "
@@ -77,4 +78,9 @@ def reminders(text, language, platform=None):
         warnings.append("Prices shown to consumers in Japan must include tax (税込); check the price before posting.")
     if platform == "Xiaohongshu" and _OFF_PLATFORM.search(text):
         warnings.append("Xiaohongshu limits posts that send people off the platform (WeChat IDs, phone numbers); a post that does can be hidden.")
+    # A note's first line is its title (the preview shows it that way); Xiaohongshu cuts titles at 20 characters.
+    title_limit = (LIMITS.get(platform) or {}).get("title")
+    title = text.strip().split("\n", 1)[0].strip() if text.strip() else ""
+    if title_limit and len(title) > title_limit:
+        warnings.append(f"The first line is this {platform} note's title: {len(title)} characters, over the {title_limit}-character title limit. Shorten it before posting.")
     return warnings

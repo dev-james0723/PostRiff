@@ -11,6 +11,10 @@ import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { languageLabel, textAttributes } from '@/lib/locales';
 
+/* Elevated glass dialog on the existing primitive (DNA §12.2); the editor is a readable, regular 15–16px surface (DNA §21.2). */
+const DIALOG = 'rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 sm:max-w-xl md:p-6';
+const EDITOR = 'rafii-field min-h-48 rounded-[var(--rafii-radius-control)] border-0 bg-(--rafii-surface-field) dark:bg-(--rafii-surface-field) px-4 py-3 text-base leading-relaxed md:text-[15px] [unicode-bidi:plaintext]';
+
 /**
  * Edit a draft's text in place (`variant_edit`). The edit bumps the variant revision, so any
  * earlier review of it is void — the Schedule step always re-reads the exact text.
@@ -36,7 +40,7 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-xl'>
+      <DialogContent className={DIALOG}>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
@@ -46,19 +50,19 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
         </DialogHeader>
         {variant ? (
           <>
-            <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => setText(e.target.value)} rows={12} className='min-h-48 text-sm [unicode-bidi:plaintext]' aria-label='Draft text' autoFocus />
+            <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => setText(e.target.value)} rows={12} className={EDITOR} aria-label='Draft text' autoFocus />
             {notes.map((note, index) => <p key={index} className={note.tone === 'problem' ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>{note.text}</p>)}
-            {notes.length === 0 && <p className='text-muted-foreground text-xs'>{Array.from(text).length} characters</p>}
+            {notes.length === 0 && <p className='text-muted-foreground text-xs tabular-nums'>{Array.from(text).length} characters</p>}
 
           </>
         ) : (
           <p className='text-muted-foreground text-sm'>This draft is no longer in the workspace.</p>
         )}
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)} disabled={act.isPending}>
+          <Button variant='glass' size='control' onClick={() => onOpenChange(false)} disabled={act.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => void save()} disabled={!variant || !dirty || !text.trim() || act.isPending}>
+          <Button variant='action' size='control' onClick={() => void save()} disabled={!variant || !dirty || !text.trim() || act.isPending}>
             {act.isPending ? 'Saving…' : 'Save draft'}
           </Button>
         </DialogFooter>

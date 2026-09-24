@@ -36,6 +36,8 @@ export interface ConnectCapabilityDef {
 
 /** The choices in the Connect sheet; a provider only lists the ones it offers. */
 export const CONNECT_CAPABILITY_OPTIONS: readonly ConnectCapabilityDef[] = [
+  { key: 'identity', label: 'Connect account', description: 'Verify this account without requesting permission to publish.' },
+  { key: 'posts_read', label: 'Read my posts for voice learning', description: 'Browse your own posts, then choose samples and separately approve AI analysis. No publishing permission is requested.' },
   { key: 'publish', label: 'Publish', description: 'Post to this account after you approve each post.' },
   { key: 'analytics', label: 'Analytics', description: 'Read reach and engagement for this account.' },
   { key: 'comments_read', label: 'Comments', description: 'Read comments and replies on this account.' },

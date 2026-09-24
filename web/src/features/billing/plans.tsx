@@ -3,15 +3,15 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { StatefulButton } from '@/components/motion/button';
+import { StateMessage, Surface } from '@/components/rafii';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { SuccessCheck } from '@/components/ui/success-check';
 import { cents } from '@/lib/api/client';
 import type { PlanTerms, Usage } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
-import { cn } from '@/lib/utils';
 import { CONFIRM, PLAN_ALLOWANCES, PRICE_STATUS, providerNote } from './billing-copy';
 import { allowanceTotal, humanize, latestTermsPerPlan, planOffer, type PlanOffer } from './billing-model';
+import { ACTION_STATEFUL } from './lifecycle-alert';
 import type { BillingRedirect } from './use-billing-redirect';
 import type { ConfirmPhase } from './use-checkout-return';
 
@@ -52,12 +52,12 @@ export function CheckoutConfirmation({ phase }: { phase: ConfirmPhase }) {
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0, transition: { duration: reduce ? 0 : 0.25, ease: EASE_OUT } }}
             exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.15, ease: EASE_OUT } }}
-            className='bg-card flex flex-col gap-2 rounded-lg border p-3 text-sm sm:flex-row sm:items-center'
+            className='rafii-glass flex flex-col gap-2 rounded-[var(--rafii-radius-card)] p-4 text-sm sm:flex-row sm:items-center'
           >
             <AnimatedBadge status={view.status} contentKey={view.status} className='self-start sm:self-auto'>
               {view.title}
             </AnimatedBadge>
-            {phase === 'confirmed' && <SuccessCheck className='size-4 text-emerald-600 dark:text-emerald-400' />}
+            {phase === 'confirmed' && <SuccessCheck className='text-foreground size-4' />}
             <span className='text-muted-foreground text-xs'>{view.hint}</span>
           </motion.div>
         )}
@@ -73,14 +73,14 @@ export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boo
 
   return (
     <section id='plans' className='flex scroll-mt-4 flex-col gap-3' aria-labelledby='plans-heading' data-tour='billing-plans'>
-      <div>
-        <h3 id='plans-heading' className='text-lg font-semibold'>
+      <div className='px-1'>
+        <h3 id='plans-heading' className='text-foreground text-lg font-medium tracking-tight'>
           Plans
         </h3>
         {note && <p className='text-muted-foreground text-sm'>{note}</p>}
       </div>
       {plans.length === 0 ? (
-        <p className='text-muted-foreground rounded-lg border p-4 text-sm'>No plans are published on this deployment yet.</p>
+        <StateMessage kind='empty' layout='inline' title='No plans are published on this deployment yet.' />
       ) : (
         <div className='grid gap-4 md:grid-cols-2'>
           {plans.map((terms) => {
@@ -94,33 +94,32 @@ export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boo
             const current = terms.id === currentId;
             const error = redirect.errorFor(terms.id);
             return (
-              <Card key={terms.id} className={cn(current && 'ring-primary ring-2')}>
-                <CardHeader>
+              <Surface key={terms.id} material={current ? 'selected' : 'quiet'} radius='card' padding='md' className='flex flex-col gap-4'>
+                <div className='flex flex-col gap-2'>
                   {(current || terms.status !== 'active') && (
-                    <CardDescription className='flex flex-wrap items-center gap-2'>
+                    <div className='flex flex-wrap items-center gap-2'>
                       {current && <Badge>Current</Badge>}
-                      {terms.status !== 'active' && <Badge variant='outline'>{PRICE_STATUS[terms.status] ?? humanize(terms.status)}</Badge>}
-                    </CardDescription>
+                      {terms.status !== 'active' && <Badge variant='secondary'>{PRICE_STATUS[terms.status] ?? humanize(terms.status)}</Badge>}
+                    </div>
                   )}
-                  <CardTitle className='flex flex-wrap items-baseline gap-x-2 text-2xl'>
-                    <span>{terms.label}</span>
+                  <h4 className='flex flex-wrap items-baseline gap-x-2 text-2xl font-medium tracking-tight'>
+                    <span className='text-foreground'>{terms.label}</span>
                     <span className='text-muted-foreground text-base font-normal'>{cents(terms.priceCents, terms.currency)} / month</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className='grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm'>
-                    {PLAN_ALLOWANCES.map((item) => (
-                      <div key={item.key} className='contents'>
-                        <dt className='text-muted-foreground'>{item.label}</dt>
-                        <dd className='text-right tabular-nums'>{allowanceValue(terms, item.key, item.unit)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </CardContent>
-                <CardFooter className='mt-auto flex flex-col items-start gap-2'>
+                  </h4>
+                </div>
+                <dl className='grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm'>
+                  {PLAN_ALLOWANCES.map((item) => (
+                    <div key={item.key} className='contents'>
+                      <dt className='text-muted-foreground'>{item.label}</dt>
+                      <dd className='text-foreground text-right tabular-nums'>{allowanceValue(terms, item.key, item.unit)}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className='mt-auto flex flex-col items-start gap-2 pt-1'>
                   {offer === 'checkout' ? (
                     <>
                       <StatefulButton
+                        className={ACTION_STATEFUL}
                         state={redirect.stateFor(terms.id)}
                         disabled={redirect.busy}
                         loadingText='Opening checkout…'
@@ -138,8 +137,8 @@ export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boo
                   ) : (
                     <span className='text-muted-foreground text-xs'>{OFFER_TEXT[offer]}</span>
                   )}
-                </CardFooter>
-              </Card>
+                </div>
+              </Surface>
             );
           })}
         </div>

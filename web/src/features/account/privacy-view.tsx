@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
+import { StateMessage } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
 import { useDataRequests, useMemory, usePrivacyNotice, useSnapshot } from '@/lib/api/hooks';
@@ -60,12 +61,16 @@ export function PrivacyView() {
   if (workspaceGone(snapshot.error)) {
     return (
       <PageContainer pageTitle='Privacy & data' pageDescription='What PostRiff holds, where it goes, and what you can do about it.'>
-        <div role='status' className='flex flex-col items-start gap-3'>
-          <p className='text-muted-foreground text-sm'>{(snapshot.error as ApiError).message}</p>
-          <Link href='/app' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Back to Home
-          </Link>
-        </div>
+        <StateMessage
+          kind='permission'
+          title={(snapshot.error as ApiError).message}
+          action={
+            <Link href='/app' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+              Back to Home
+            </Link>
+          }
+          className='max-w-md'
+        />
       </PageContainer>
     );
   }
@@ -76,7 +81,7 @@ export function PrivacyView() {
       pageDescription='What PostRiff holds, where it goes, and what you can do about it.'
       infoContent={infoContent}
     >
-      <div className='flex min-w-0 flex-col gap-8'>
+      <div className='flex min-w-0 flex-col gap-10'>
         <HoldingsSection snapshot={snapshot} memory={memory} />
 
         <WhereItGoesSection memory={memory} notice={notice} canEdit={canEdit} />

@@ -1,5 +1,6 @@
 'use client';
 
+import { rafiiMenu } from '@/components/auth/form-styles';
 import { Icons } from '@/components/icons';
 import {
   DropdownMenu,
@@ -20,6 +21,7 @@ function shortId(id: string) {
   return id.slice(0, 8);
 }
 
+/** The rail's workspace lens (DNA §8.2): the current workspace and role, a glass menu to switch. */
 export function WorkspaceSwitcher() {
   const { isMobile, state } = useSidebar();
   const { workspaces, workspaceId, membership, switchTo } = useWorkspace();
@@ -35,11 +37,11 @@ export function WorkspaceSwitcher() {
             render={
               <SidebarMenuButton
                 size='lg'
-                className='data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground'
+                className='data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground rounded-[var(--rafii-radius-control)]'
               />
             }
           >
-            <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg'>
+            <div className='rafii-action flex aspect-square size-8 shrink-0 items-center justify-center rounded-[0.625rem]'>
               <Icons.workspace className='size-4' />
             </div>
             <div
@@ -61,13 +63,13 @@ export function WorkspaceSwitcher() {
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className='w-(--anchor-width) min-w-56 rounded-lg'
+            className={cn(rafiiMenu, 'w-(--anchor-width) min-w-60 p-1.5')}
             align='start'
             side={isMobile ? 'bottom' : 'right'}
             sideOffset={4}
           >
             <DropdownMenuGroup>
-              <DropdownMenuLabel className='text-muted-foreground text-xs'>Workspaces</DropdownMenuLabel>
+              <DropdownMenuLabel className='rafii-eyebrow px-2 py-1.5'>Workspaces</DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuGroup>
               {workspaces.map((item) => {
@@ -76,9 +78,9 @@ export function WorkspaceSwitcher() {
                   <DropdownMenuItem
                     key={item.workspaceId}
                     onClick={() => switchTo(item.workspaceId)}
-                    className='gap-2 p-2'
+                    className={cn('min-h-10 gap-2 rounded-[0.625rem] p-2', active && 'rafii-lens')}
                   >
-                    <div className='flex size-6 items-center justify-center overflow-hidden rounded-md border'>
+                    <div className='rafii-quiet flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md'>
                       <Icons.workspace className='size-3.5 shrink-0' />
                     </div>
                     <span className='flex-1 truncate'>
@@ -90,9 +92,9 @@ export function WorkspaceSwitcher() {
                 );
               })}
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className='bg-transparent' />
             <DropdownMenuGroup>
-              <DropdownMenuLabel className='text-muted-foreground text-xs font-normal'>
+              <DropdownMenuLabel className='text-muted-foreground px-2 pt-0 pb-1.5 text-xs font-normal'>
                 You join other workspaces by invitation.
               </DropdownMenuLabel>
             </DropdownMenuGroup>

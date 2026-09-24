@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
+import { rafiiDialog, rafiiDialogFooter, rafiiInput, rafiiMenu } from '@/components/auth/form-styles';
 import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
+import { CollectionRow, StateMessage, Surface } from '@/components/rafii';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import {
   AlertDialog,
@@ -20,13 +22,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -53,6 +52,7 @@ import {
 import { PasskeysCard } from './passkeys-card';
 import { PreferencesCard } from './preferences-card';
 import { SecurityCard } from './security-card';
+import { SettingsSection } from './settings-section';
 
 const infoContent = {
   title: 'What lives here',
@@ -74,6 +74,8 @@ const infoContent = {
     }
   ]
 };
+
+const DIALOG_TITLE = 'text-foreground text-xl font-medium tracking-tight';
 
 function message(err: unknown, fallback: string) {
   return err instanceof ApiError || err instanceof Error ? err.message : fallback;
@@ -131,30 +133,25 @@ function EmailChangeDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent>
-        <form onSubmit={submit} className='flex flex-col gap-4'>
-          <DialogHeader>
-            <DialogTitle>Change sign-in email</DialogTitle>
-            <DialogDescription>
+      <DialogContent className={rafiiDialog}>
+        <form onSubmit={submit} className='flex flex-col gap-5'>
+          <DialogHeader className='gap-1.5 pr-8'>
+            <DialogTitle className={DIALOG_TITLE}>Change sign-in email</DialogTitle>
+            <DialogDescription className='leading-relaxed'>
               A confirmation link goes to the new address{current ? ` and to ${current}` : ''}. Your sign-in email changes only after the links are
               opened; until then everything keeps working as it does now.
             </DialogDescription>
           </DialogHeader>
-          {error && (
-            <Alert variant='destructive'>
-              <Icons.alertCircle className='size-4' />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <div className='flex flex-col gap-1.5'>
+          {error && <StateMessage kind='error' layout='inline' title={error} />}
+          <div className='flex flex-col gap-2'>
             <Label htmlFor='new-email'>New email address</Label>
-            <Input id='new-email' type='email' autoComplete='email' required value={email} onChange={(event) => setEmail(event.target.value)} />
+            <Input id='new-email' type='email' autoComplete='email' required value={email} onChange={(event) => setEmail(event.target.value)} className={rafiiInput} />
           </div>
-          <DialogFooter>
-            <Button type='button' variant='ghost' disabled={busy} onClick={() => onOpenChange(false)}>
+          <DialogFooter className={rafiiDialogFooter}>
+            <Button type='button' variant='quiet' size='control' disabled={busy} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type='submit' disabled={busy || !email.includes('@')}>
+            <Button type='submit' variant='action' size='control' disabled={busy || !email.includes('@')}>
               {busy ? 'Sending…' : pending ? 'Resend confirmation' : 'Send confirmation'}
             </Button>
           </DialogFooter>
@@ -164,6 +161,7 @@ function EmailChangeDialog({
   );
 }
 
+/** The page's identity block on the one glass surface: who you are, in every workspace. */
 function IdentityCard() {
   const auth = useAuth();
   const me = useMe();
@@ -203,117 +201,117 @@ function IdentityCard() {
   const since = auth.user?.createdAt ? formatDate(Date.parse(auth.user.createdAt) / 1000) : null;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className='flex items-start justify-between gap-2'>
-          <div className='flex flex-col gap-1.5'>
-            <CardTitle>Identity</CardTitle>
-            <CardDescription>Who you are, in every workspace.</CardDescription>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant='ghost' size='icon' aria-label='More about this account' />}>
-              <Icons.dots className='size-4' />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end'>
-              <DropdownMenuItem
+    <SettingsSection
+      id='profile-identity'
+      title='Identity'
+      description='Who you are, in every workspace.'
+      material='glass'
+      action={
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant='quiet' size='icon-control' aria-label='More about this account' />}>
+            <Icons.dots className='size-4' />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' className={cn(rafiiMenu, 'min-w-60 p-1.5')}>
+            <DropdownMenuItem
+              className='min-h-10 rounded-[0.625rem]'
+              onClick={() => {
+                void navigator.clipboard.writeText(auth.user?.id ?? '').then(() => toast.success('User ID copied.'));
+              }}
+            >
+              <Icons.copy className='mr-2 size-4' />
+              Copy user ID (for support)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
+      bodyClassName='gap-5'
+    >
+      <div className='flex items-start gap-4'>
+        <UserAvatarProfile
+          className='size-14 rounded-[var(--rafii-radius-control)]'
+          user={{ name: displayName || auth.user?.name, email: auth.user?.email, imageUrl: auth.user?.imageUrl }}
+        />
+        <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+          {editing ? (
+            <form onSubmit={save} className='flex flex-wrap items-end gap-2'>
+              <div className='flex min-w-0 flex-1 flex-col gap-2'>
+                <Label htmlFor='display-name'>Display name</Label>
+                <Input id='display-name' value={draft} maxLength={80} autoFocus onChange={(event) => setDraft(event.target.value)} className={rafiiInput} />
+              </div>
+              <Button type='submit' variant='action' size='control' disabled={busy}>
+                {busy ? 'Saving…' : 'Save'}
+              </Button>
+              <Button type='button' variant='quiet' size='control' disabled={busy} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </form>
+          ) : (
+            <div className='flex flex-wrap items-center gap-2'>
+              {me.isLoading ? (
+                <Skeleton className='h-6 w-32' />
+              ) : (
+                <span className={cn('text-foreground truncate text-lg font-medium tracking-tight', !displayName && 'text-muted-foreground font-normal')}>
+                  {displayName || 'Add your name'}
+                </span>
+              )}
+              <Button
+                variant='quiet'
+                size='sm'
+                className='min-h-9'
+                aria-label='Edit display name'
                 onClick={() => {
-                  void navigator.clipboard.writeText(auth.user?.id ?? '').then(() => toast.success('User ID copied.'));
+                  setDraft(displayName);
+                  setEditing(true);
                 }}
               >
-                <Icons.copy className='mr-2 size-4' />
-                Copy user ID (for support)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-5'>
-        <div className='flex items-start gap-3'>
-          <UserAvatarProfile
-            className='size-14 rounded-lg'
-            user={{ name: displayName || auth.user?.name, email: auth.user?.email, imageUrl: auth.user?.imageUrl }}
-          />
-          <div className='flex min-w-0 flex-1 flex-col gap-1'>
-            {editing ? (
-              <form onSubmit={save} className='flex flex-wrap items-end gap-2'>
-                <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-                  <Label htmlFor='display-name'>Display name</Label>
-                  <Input id='display-name' value={draft} maxLength={80} autoFocus onChange={(event) => setDraft(event.target.value)} />
-                </div>
-                <Button type='submit' size='sm' disabled={busy}>
-                  {busy ? 'Saving…' : 'Save'}
-                </Button>
-                <Button type='button' size='sm' variant='ghost' disabled={busy} onClick={() => setEditing(false)}>
-                  Cancel
-                </Button>
-              </form>
-            ) : (
-              <div className='flex flex-wrap items-center gap-2'>
-                {me.isLoading ? (
-                  <Skeleton className='h-6 w-32' />
-                ) : (
-                  <span className={cn('truncate text-lg font-semibold', !displayName && 'text-muted-foreground font-normal')}>
-                    {displayName || 'Add your name'}
-                  </span>
-                )}
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  aria-label='Edit display name'
-                  onClick={() => {
-                    setDraft(displayName);
-                    setEditing(true);
-                  }}
-                >
-                  <Icons.edit className='size-4' />
-                  Edit
-                </Button>
-                {dev && <Badge variant='secondary'>Dev identity</Badge>}
-              </div>
-            )}
-            <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-sm'>
-              <span className='truncate'>{auth.user?.email}</span>
-              {!dev &&
-                (auth.user?.emailVerified ? (
-                  <Badge variant='outline' className='gap-1'>
-                    <Icons.check className='size-3' aria-hidden />
-                    Verified
-                  </Badge>
-                ) : (
-                  <Badge variant='secondary'>Unverified</Badge>
-                ))}
-              {!dev && auth.supabase && (
-                <Button variant='link' size='sm' className='h-auto px-0' onClick={() => setChangingEmail(true)}>
-                  Change
-                </Button>
-              )}
+                <Icons.edit className='size-4' />
+                Edit
+              </Button>
+              {dev && <Badge variant='secondary'>Dev identity</Badge>}
             </div>
-            {!dev && auth.user?.pendingEmail && (
-              <p className='text-muted-foreground text-xs'>
-                Changing to <span className='text-foreground font-medium'>{auth.user.pendingEmail}</span> — open the confirmation links sent to
-                both addresses.{' '}
-                <Button variant='link' size='sm' className='h-auto px-0 text-xs' onClick={() => setChangingEmail(true)}>
-                  Resend
-                </Button>
-              </p>
+          )}
+          <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-sm'>
+            <span className='truncate'>{auth.user?.email}</span>
+            {!dev &&
+              (auth.user?.emailVerified ? (
+                <Badge variant='secondary' className='gap-1'>
+                  <Icons.check className='size-3' aria-hidden />
+                  Verified
+                </Badge>
+              ) : (
+                <Badge variant='secondary'>Unverified</Badge>
+              ))}
+            {!dev && auth.supabase && (
+              <Button variant='quiet' size='sm' className='text-foreground h-auto min-h-9 px-2 underline underline-offset-4' onClick={() => setChangingEmail(true)}>
+                Change
+              </Button>
             )}
           </div>
-        </div>
-        {!dev && (
-          <EmailChangeDialog open={changingEmail} onOpenChange={setChangingEmail} current={auth.user?.email} pending={auth.user?.pendingEmail} />
-        )}
-        <dl className='grid grid-cols-[7rem_1fr] gap-y-1.5 text-sm'>
-          <dt className='text-muted-foreground'>Sign-in</dt>
-          <dd>{method}</dd>
-          {since && (
-            <>
-              <dt className='text-muted-foreground'>Member since</dt>
-              <dd>{since}</dd>
-            </>
+          {!dev && auth.user?.pendingEmail && (
+            <p className='text-muted-foreground text-xs leading-relaxed'>
+              Changing to <span className='text-foreground font-medium'>{auth.user.pendingEmail}</span> — open the confirmation links sent to
+              both addresses.{' '}
+              <Button variant='quiet' size='sm' className='text-foreground h-auto min-h-8 px-1.5 text-xs underline underline-offset-4' onClick={() => setChangingEmail(true)}>
+                Resend
+              </Button>
+            </p>
           )}
-        </dl>
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+      {!dev && (
+        <EmailChangeDialog open={changingEmail} onOpenChange={setChangingEmail} current={auth.user?.email} pending={auth.user?.pendingEmail} />
+      )}
+      <dl className='grid grid-cols-[7rem_1fr] gap-y-1.5 text-sm'>
+        <dt className='text-muted-foreground'>Sign-in</dt>
+        <dd className='text-foreground'>{method}</dd>
+        {since && (
+          <>
+            <dt className='text-muted-foreground'>Member since</dt>
+            <dd className='text-foreground'>{since}</dd>
+          </>
+        )}
+      </dl>
+    </SettingsSection>
   );
 }
 
@@ -339,93 +337,99 @@ function ChannelsCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Connected channels</CardTitle>
-        <CardDescription>
-          Every account PostRiff can reach, in every workspace you belong to. Connecting and disconnecting happen on each workspace&apos;s Channels page.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-4'>
-        {channels.isLoading ? (
-          <Skeleton className='h-24 w-full' />
-        ) : channels.isError ? (
-          <Alert variant='destructive'>
-            <Icons.alertCircle className='size-4' />
-            <AlertDescription className='flex items-center justify-between gap-2'>
-              Channels could not be loaded.
-              <Button size='sm' variant='outline' onClick={() => void channels.refetch()}>
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : groups.length === 0 ? (
-          <Empty className='border py-8'>
-            <EmptyHeader>
-              <EmptyMedia variant='icon'>
-                <Icons.broadcast />
-              </EmptyMedia>
-              <EmptyTitle>No channels connected</EmptyTitle>
-              <EmptyDescription>
-                {canConnectHere ? 'Connect an account to start publishing.' : 'An owner or admin connects accounts for this workspace.'}
-              </EmptyDescription>
-            </EmptyHeader>
-            {canConnectHere && (
-              <Link href='/app/channels' className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+    <SettingsSection
+      id='profile-channels'
+      title='Connected channels'
+      description='Every account PostRiff can reach, in every workspace you belong to. Connecting and disconnecting happen on each workspace’s Channels page.'
+      material='none'
+      bodyClassName='gap-5'
+    >
+      {channels.isLoading ? (
+        <StateMessage kind='loading' title='Loading your channels' />
+      ) : channels.isError ? (
+        <StateMessage
+          kind='error'
+          title='Channels could not be loaded.'
+          action={
+            <Button size='sm' variant='glass' className='min-h-9' onClick={() => void channels.refetch()}>
+              Retry
+            </Button>
+          }
+        />
+      ) : groups.length === 0 ? (
+        <StateMessage
+          kind='empty'
+          media={
+            <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
+              <Icons.broadcast className='size-5' />
+            </span>
+          }
+          title='No channels connected'
+          description={canConnectHere ? 'Connect an account to start publishing.' : 'An owner or admin connects accounts for this workspace.'}
+          action={
+            canConnectHere ? (
+              <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
                 Open channels
               </Link>
-            )}
-          </Empty>
-        ) : (
-          groups.map((group) => (
-            <section key={group.workspaceId} aria-label={group.workspaceName} className='flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-sm font-medium'>
-                <Icons.workspace className='text-muted-foreground size-4' aria-hidden />
-                {group.workspaceName}
-                {group.workspaceId === workspaceId && <Badge variant='outline'>Current</Badge>}
-              </div>
-              <ul className='divide-y rounded-lg border'>
-                {group.channels.map((channel) => {
-                  const badge = channelBadge(channel);
-                  const reconnect = needsReconnect(channel);
-                  return (
-                    <li key={channel.id} className='flex flex-wrap items-center gap-3 px-3 py-2.5'>
-                      <ChannelIcon platform={channel.platform} name={channel.platform} />
-                      <div className='min-w-0 flex-1'>
-                        <div className='truncate text-sm font-medium'>{channel.account || channel.platform}</div>
-                        <div className='text-muted-foreground text-xs'>
-                          {channel.platform}
-                          {connectedLine(channel, auth.user?.id)}
-                          {channel.expiresAt && badge.status === 'success' ? ` · valid until ${formatDate(channel.expiresAt)}` : ''}
-                        </div>
-                      </div>
+            ) : undefined
+          }
+        />
+      ) : (
+        groups.map((group) => (
+          <section key={group.workspaceId} aria-label={group.workspaceName} className='flex flex-col gap-2'>
+            <div className='text-foreground flex items-center gap-2 px-1 text-sm font-medium'>
+              <Icons.workspace className='text-muted-foreground size-4' aria-hidden />
+              {group.workspaceName}
+              {group.workspaceId === workspaceId && <Badge variant='secondary'>Current</Badge>}
+            </div>
+            <ul className='flex flex-col gap-1.5'>
+              {group.channels.map((channel) => {
+                const badge = channelBadge(channel);
+                const reconnect = needsReconnect(channel);
+                return (
+                  <CollectionRow
+                    key={channel.id}
+                    as='li'
+                    className='flex-wrap'
+                    leading={<ChannelIcon platform={channel.platform} name={channel.platform} />}
+                    title={channel.account || channel.platform}
+                    meta={
+                      <>
+                        {channel.platform}
+                        {connectedLine(channel, auth.user?.id)}
+                        {channel.expiresAt && badge.status === 'success' ? ` · valid until ${formatDate(channel.expiresAt)}` : ''}
+                      </>
+                    }
+                    state={
                       <AnimatedBadge status={badge.status} size='sm'>
                         {badge.label}
                       </AnimatedBadge>
-                      <Button variant={reconnect ? 'default' : 'ghost'} size='sm' onClick={() => open(channel.workspaceId)}>
+                    }
+                    actions={
+                      <Button variant={reconnect ? 'action' : 'quiet'} size='sm' className='min-h-9' onClick={() => open(channel.workspaceId)}>
                         {reconnect ? 'Reconnect' : 'Open'}
                         <Icons.arrowRight className='size-4' aria-hidden />
                       </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))
-        )}
-      </CardContent>
-    </Card>
+                    }
+                  />
+                );
+              })}
+            </ul>
+          </section>
+        ))
+      )}
+    </SettingsSection>
   );
 }
 
 function Tier({ label, count, note }: { label: string; count: number; note: string }) {
   return (
-    <div className='bg-muted/40 flex flex-col gap-0.5 rounded-md px-3 py-2'>
+    <div className='flex min-w-0 flex-col gap-0.5'>
       <div className='flex items-baseline justify-between gap-2'>
-        <span className='text-sm font-medium'>{label}</span>
-        <span className='text-lg font-semibold tabular-nums'>{count}</span>
+        <span className='text-foreground text-sm font-medium'>{label}</span>
+        <span className='text-foreground text-lg font-semibold tabular-nums'>{count}</span>
       </div>
-      <span className='text-muted-foreground text-xs'>{note}</span>
+      <span className='text-muted-foreground text-xs leading-relaxed'>{note}</span>
     </div>
   );
 }
@@ -474,18 +478,18 @@ function PendingInvitations() {
   }
 
   return (
-    <section aria-label='Invitations waiting for you' className='border-primary/30 bg-primary/5 flex flex-col gap-2 rounded-lg border p-4'>
-      <div className='flex items-center gap-2 text-sm font-medium'>
-        <Icons.send className='text-primary size-4' aria-hidden />
+    <Surface as='section' material='glass' radius='card' padding='md' aria-label='Invitations waiting for you' className='flex flex-col gap-3'>
+      <div className='text-foreground flex items-center gap-2 text-sm font-medium'>
+        <Icons.send className='text-muted-foreground size-4' aria-hidden />
         Invitations waiting for you
       </div>
-      <ul className='divide-y'>
+      <ul className='flex flex-col gap-3'>
         {list.map((invitation) => {
           const role = invitation.role as WorkspaceRole;
           return (
-            <li key={invitation.invitationId} className='flex flex-wrap items-center justify-between gap-3 py-2'>
+            <li key={invitation.invitationId} className='flex flex-wrap items-center justify-between gap-3'>
               <div className='min-w-0'>
-                <div className='truncate text-sm font-medium'>{invitation.workspaceName}</div>
+                <div className='text-foreground truncate text-sm font-medium'>{invitation.workspaceName}</div>
                 <div className='text-muted-foreground text-xs'>
                   {ROLE_LABELS[role] ?? invitation.role} · {ROLE_DESCRIPTIONS[role] ?? ''}
                 </div>
@@ -494,10 +498,10 @@ function PendingInvitations() {
                 </div>
               </div>
               <div className='flex gap-2'>
-                <Button size='sm' disabled={busy !== null} onClick={() => void accept(invitation)}>
+                <Button variant='action' size='sm' className='min-h-10 px-3.5' disabled={busy !== null} onClick={() => void accept(invitation)}>
                   {busy === invitation.invitationId ? 'Joining…' : 'Accept'}
                 </Button>
-                <Button size='sm' variant='ghost' disabled={busy !== null} onClick={() => setDeclining(invitation)}>
+                <Button variant='quiet' size='sm' className='min-h-10 px-3.5' disabled={busy !== null} onClick={() => setDeclining(invitation)}>
                   Decline
                 </Button>
               </div>
@@ -506,20 +510,20 @@ function PendingInvitations() {
         })}
       </ul>
       <AlertDialog open={declining !== null} onOpenChange={(open) => !open && setDeclining(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className={rafiiDialog}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Decline the invitation to {declining?.workspaceName}?</AlertDialogTitle>
-            <AlertDialogDescription>The link stops working. A workspace admin can invite you again later.</AlertDialogDescription>
+            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Decline the invitation to {declining?.workspaceName}?</AlertDialogTitle>
+            <AlertDialogDescription className='leading-relaxed'>The link stops working. A workspace admin can invite you again later.</AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep it</AlertDialogCancel>
-            <AlertDialogAction disabled={busy !== null} onClick={() => declining && void decline(declining)}>
+          <AlertDialogFooter className={rafiiDialogFooter}>
+            <AlertDialogCancel variant='quiet' size='control'>Keep it</AlertDialogCancel>
+            <AlertDialogAction variant='action' size='control' disabled={busy !== null} onClick={() => declining && void decline(declining)}>
               Decline
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </Surface>
   );
 }
 
@@ -556,12 +560,12 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
   }
 
   return (
-    <div className='flex flex-col gap-4 rounded-lg border p-4'>
-      <div className='flex flex-wrap items-start justify-between gap-2'>
+    <Surface material={current ? 'selected' : 'quiet'} radius='card' padding='md' className='flex flex-col gap-5'>
+      <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='flex min-w-0 flex-col gap-1'>
           <div className='flex flex-wrap items-center gap-2'>
-            <span className='truncate font-medium'>{item.name}</span>
-            {current && <Badge variant='outline'>Current</Badge>}
+            <span className='text-foreground truncate text-base font-medium'>{item.name}</span>
+            {current && <Badge variant='secondary'>Current</Badge>}
             <Badge variant='secondary'>{planLabel(item)}</Badge>
           </div>
           <div className='text-muted-foreground text-xs'>
@@ -570,12 +574,12 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
         </div>
         <div className='flex flex-wrap gap-2'>
           {!current && (
-            <Button size='sm' variant='outline' onClick={() => switchTo(item.workspaceId)}>
+            <Button size='sm' variant='glass' className='min-h-10 px-3.5' onClick={() => switchTo(item.workspaceId)}>
               Switch
             </Button>
           )}
           {isStaff(role) && (
-            <Button size='sm' variant='outline' onClick={() => go('/app/workspace/members')}>
+            <Button size='sm' variant='glass' className='min-h-10 px-3.5' onClick={() => go('/app/workspace/members')}>
               <Icons.teams className='size-4' aria-hidden />
               Manage members
             </Button>
@@ -583,7 +587,7 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
         </div>
       </div>
 
-      <div className='grid gap-2 sm:grid-cols-3'>
+      <div className='grid gap-4 sm:grid-cols-3'>
         <Tier label='Owner' count={tiers.owners} note='Billing, deletion, member roles' />
         <Tier label='Staff' count={tiers.staff} note='Owner and admins: members, roles, connections' />
         <Tier label='Members' count={tiers.members} note='Editors, approvers and viewers' />
@@ -592,17 +596,17 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
       <div className='flex flex-col gap-0.5 text-sm'>
         <div>
           <span className='text-muted-foreground'>Your role: </span>
-          <span className='font-medium'>{ROLE_LABELS[role]}</span>
+          <span className='text-foreground font-medium'>{ROLE_LABELS[role]}</span>
           {grants.length > 0 && <span className='text-muted-foreground'> · can also {grants.join(', ')}</span>}
         </div>
-        <p className='text-muted-foreground text-xs'>{ROLE_DESCRIPTIONS[role]}</p>
+        <p className='text-muted-foreground text-xs leading-relaxed'>{ROLE_DESCRIPTIONS[role]}</p>
       </div>
 
-      <div className='flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs'>
+      <div className='flex flex-wrap items-center justify-between gap-2 text-xs'>
         {canLeave(role) ? (
           <>
             <span className='text-muted-foreground'>Leaving removes your access. Drafts you wrote stay in the workspace.</span>
-            <Button size='sm' variant='ghost' className='text-destructive' disabled={busy} onClick={() => setConfirmLeave(true)}>
+            <Button size='sm' variant='quiet' className='text-destructive min-h-9' disabled={busy} onClick={() => setConfirmLeave(true)}>
               Leave workspace
             </Button>
           </>
@@ -612,47 +616,45 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
       </div>
 
       <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
-        <AlertDialogContent>
+        <AlertDialogContent className={rafiiDialog}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave {item.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Leave {item.name}?</AlertDialogTitle>
+            <AlertDialogDescription className='leading-relaxed'>
               You lose access immediately and can only return by invitation. Nothing you wrote is deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Stay</AlertDialogCancel>
-            <AlertDialogAction disabled={busy} onClick={() => void leave()}>
+          <AlertDialogFooter className={rafiiDialogFooter}>
+            <AlertDialogCancel variant='quiet' size='control'>Stay</AlertDialogCancel>
+            <AlertDialogAction variant='action' size='control' disabled={busy} onClick={() => void leave()}>
               {busy ? 'Leaving…' : 'Leave'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Surface>
   );
 }
 
 function WorkspacesCard() {
   const { workspaces, workspaceId, status } = useWorkspace();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Workspaces &amp; access</CardTitle>
-        <CardDescription>
-          Each workspace has one owner, staff who run it (the owner and admins) and members who do the content work. Your role sets what you can do in each.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        <PendingInvitations />
-        {status !== 'ready' ? (
-          <Skeleton className='h-40 w-full' />
-        ) : (
-          workspaces.map((item) => <WorkspaceRow key={item.workspaceId} item={item} current={item.workspaceId === workspaceId} />)
-        )}
-      </CardContent>
-    </Card>
+    <SettingsSection
+      id='profile-workspaces'
+      title='Workspaces & access'
+      description='Each workspace has one owner, staff who run it (the owner and admins) and members who do the content work. Your role sets what you can do in each.'
+      material='none'
+    >
+      <PendingInvitations />
+      {status !== 'ready' ? (
+        <StateMessage kind='loading' title='Loading your workspaces' />
+      ) : (
+        workspaces.map((item) => <WorkspaceRow key={item.workspaceId} item={item} current={item.workspaceId === workspaceId} />)
+      )}
+    </SettingsSection>
   );
 }
 
+/** Account-level actions in their own, clearly named lower section (DNA §21.15). */
 function AccountActions() {
   const auth = useAuth();
   const router = useRouter();
@@ -665,49 +667,44 @@ function AccountActions() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Account</CardTitle>
-        <CardDescription>Signing out ends the session on this device only; other devices stay signed in unless you revoke them above.</CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-wrap items-center gap-3'>
-        <Button
-          variant='destructive'
-          className='bg-destructive hover:bg-destructive/90 dark:bg-destructive dark:hover:bg-destructive/90 text-white'
-          disabled={busy}
-          onClick={() => setConfirm(true)}
-        >
-          <Icons.logout className='size-4' aria-hidden />
-          {busy ? 'Signing out…' : 'Sign out'}
-        </Button>
-        <Link href='/app/account/privacy' className={cn(buttonVariants({ variant: 'ghost' }), 'text-muted-foreground')}>
-          Delete account
-          <Icons.arrowRight className='size-4' aria-hidden />
-        </Link>
-        <AlertDialog open={confirm} onOpenChange={setConfirm}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Sign out on this device?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Your drafts, schedule and settings stay exactly where they are. You will need to sign in again here; other devices are not affected.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Stay signed in</AlertDialogCancel>
-              <AlertDialogAction
-                className='bg-destructive hover:bg-destructive/90 text-white'
-                onClick={() => {
-                  setConfirm(false);
-                  signOut();
-                }}
-              >
-                Sign out
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </CardContent>
-    </Card>
+    <SettingsSection
+      id='profile-account'
+      title='Account'
+      description='Signing out ends the session on this device only; other devices stay signed in unless you revoke them above.'
+      bodyClassName='flex-row flex-wrap items-center gap-3'
+    >
+      <Button variant='glass' size='control' disabled={busy} onClick={() => setConfirm(true)}>
+        <Icons.logout className='size-4' aria-hidden />
+        {busy ? 'Signing out…' : 'Sign out'}
+      </Button>
+      <Link href='/app/account/privacy' className={cn(buttonVariants({ variant: 'quiet', size: 'control' }), 'text-muted-foreground')}>
+        Delete account
+        <Icons.arrowRight className='size-4' aria-hidden />
+      </Link>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent className={rafiiDialog}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Sign out on this device?</AlertDialogTitle>
+            <AlertDialogDescription className='leading-relaxed'>
+              Your drafts, schedule and settings stay exactly where they are. You will need to sign in again here; other devices are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className={rafiiDialogFooter}>
+            <AlertDialogCancel variant='quiet' size='control'>Stay signed in</AlertDialogCancel>
+            <AlertDialogAction
+              variant='action'
+              size='control'
+              onClick={() => {
+                setConfirm(false);
+                signOut();
+              }}
+            >
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SettingsSection>
   );
 }
 
@@ -718,22 +715,22 @@ export function ProfileView() {
       pageDescription='Your identity, how your account is secured, and what you can reach.'
       infoContent={infoContent}
     >
-      <div className='grid gap-4 lg:grid-cols-2'>
-        <div className='flex flex-col gap-4'>
+      <div className='grid gap-8 lg:grid-cols-2'>
+        <div className='flex min-w-0 flex-col gap-8'>
           <IdentityCard />
           <PreferencesCard />
         </div>
-        <div className='flex flex-col gap-4'>
+        <div className='flex min-w-0 flex-col gap-8'>
           <SecurityCard />
           <PasskeysCard />
         </div>
-        <div className='lg:col-span-2'>
+        <div className='min-w-0 lg:col-span-2'>
           <ChannelsCard />
         </div>
-        <div className='lg:col-span-2'>
+        <div className='min-w-0 lg:col-span-2'>
           <WorkspacesCard />
         </div>
-        <div className='lg:col-span-2'>
+        <div className='min-w-0 lg:col-span-2'>
           <AccountActions />
         </div>
       </div>

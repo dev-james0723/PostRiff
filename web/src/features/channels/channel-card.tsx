@@ -1,14 +1,13 @@
 'use client';
 
-import { forwardRef, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { Icons } from '@/components/icons';
+import { Icons, type Icon } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { StatefulButton } from '@/components/motion/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StateMessage, Surface, type StateKind } from '@/components/rafii';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +19,6 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SuccessCheck } from '@/components/ui/success-check';
 import { useFlash } from '@/hooks/use-flash';
@@ -29,13 +27,16 @@ import { useChangeError } from '@/lib/auth/use-sign-in-again';
 import { ApiError } from '@/lib/api/client';
 import type { ChannelView, ProviderView } from '@/lib/api/types';
 import {
+  ATTENTION_STATES,
   attentionSentence,
   channelBadge,
+  disconnectedByCustomer,
   expiringSoon,
   needsAttention,
   nowSeconds,
   reconnectCapability,
-  VERIFIED_STATES
+  VERIFIED_STATES,
+  type ChannelBadge
 } from '@/lib/channels/state';
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -43,6 +44,7 @@ import { cn } from '@/lib/utils';
 import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import type { ConnectRequest } from './connect-sheet';
+import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
 /** Jobs for this account, counted from the workspace snapshot by the page. */
 export interface ChannelActivity {
@@ -64,6 +66,44 @@ export interface ChannelCardProps {
   onReconnect: (request: ConnectRequest) => void;
 }
 
+/**
+ * Connected, expiring, expired or revoked, missing permission, identity-only, disconnected and
+ * unknown each get their own mark (DNA §20.2, §21.6); the words come from `channelBadge`.
+ */
+function connectionIcon(channel: ChannelView, expiring: boolean): Icon {
+  if (VERIFIED_STATES.has(channel.connectionState)) return expiring ? Icons.clock : Icons.check;
+  if (disconnectedByCustomer(channel)) return Icons.circleDashed;
+  switch (channel.connectionState) {
+    case 'token_expired':
+    case 'reauthorization_required':
+      return Icons.warning;
+    case 'scope_missing':
+      return Icons.lock;
+    case 'identity_known':
+      return Icons.user;
+    default:
+      return Icons.circleDashed;
+  }
+}
+
+/** Monochrome connection state: icon + text on a quiet capsule (DNA §4.3). */
+function ConnectionStatus({ channel, badge, expiring }: { channel: ChannelView; badge: ChannelBadge; expiring: boolean }) {
+  const Icon = connectionIcon(channel, expiring);
+  return (
+    <span className='rafii-quiet text-foreground inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium whitespace-nowrap'>
+      <Icon className='size-3.5' aria-hidden />
+      {badge.label}
+    </span>
+  );
+}
+
+/** Which state grammar the attention band uses: a permission gap, a lapsed grant, or a warning ahead of time. */
+function attentionKind(channel: ChannelView, expiring: boolean): StateKind {
+  if (channel.connectionState === 'scope_missing') return 'permission';
+  if (ATTENTION_STATES.has(channel.connectionState)) return 'error';
+  return expiring ? 'stale' : 'partial';
+}
+
 function DisconnectButton({
   platform,
   account,
@@ -78,20 +118,24 @@ function DisconnectButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant='outline' size='sm' disabled={disabled} className='text-destructive' onClick={() => setOpen(true)}>
+      <Button variant='quiet' disabled={disabled} className={cn(CONTROL_44, 'text-destructive hover:text-destructive')} onClick={() => setOpen(true)}>
         Disconnect
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className={DIALOG_ELEVATED}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Disconnect {platform}?</AlertDialogTitle>
+            <AlertDialogTitle className='text-xl font-medium tracking-tight'>Disconnect {platform}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {account}: stored tokens are wiped and revoked remotely where supported. Approved jobs for this account will be held until you reconnect.
+              {account}: stored tokens are wiped and revoked remotely where supported. Officially imported writing samples for this connection are revoked and their retained text is removed; dependent Writing DNA is invalidated. Manual samples remain. Approved jobs for this account will be held until you reconnect.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
+          <AlertDialogFooter className={DIALOG_FOOTER_PLAIN}>
+            <AlertDialogCancel variant='glass' size='control'>
+              Keep
+            </AlertDialogCancel>
             <AlertDialogAction
+              variant='action'
+              size='control'
               onClick={() => {
                 setOpen(false);
                 void onConfirm();
@@ -111,14 +155,14 @@ function ScopesList({ scopes }: { scopes: string[] }) {
   if (scopes.length === 0) return <span>no scopes</span>;
   return (
     <Collapsible open={open} onOpenChange={setOpen} className='inline'>
-      <CollapsibleTrigger className='inline-flex items-center gap-0.5 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm outline-none'>
+      <CollapsibleTrigger className='rafii-focus inline-flex min-h-6 items-center gap-0.5 rounded-sm underline-offset-2 hover:underline'>
         {scopes.length} {scopes.length === 1 ? 'scope' : 'scopes'}
         <Icons.chevronDown className={cn('size-3 transition-transform', open && 'rotate-180')} />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <ul className='mt-1.5 flex flex-wrap gap-1'>
           {scopes.map((scope) => (
-            <li key={scope} className='bg-muted rounded px-1.5 py-0.5 font-mono text-[11px]'>
+            <li key={scope} className='rafii-field rounded-md px-1.5 py-0.5 font-mono text-xs'>
               {scope}
             </li>
           ))}
@@ -129,14 +173,13 @@ function ScopesList({ scopes }: { scopes: string[] }) {
 }
 
 /**
- * One account on one platform: who it is, the level PostRiff verified for each capability, when
+ * One account on one platform (DNA §21.6): who it is first — account name, then platform and
+ * account type — the connection state, the level PostRiff verified for each capability, when
  * access ends and what to do about it. Every value on the card is the API's; nothing is derived
- * into a blended "ready".
+ * into a blended "ready". Glass marks it as the page's work surface; Reconnect and Manage stay
+ * secondary because Connect channel is the page's one primary action.
  */
-export const ChannelCard = forwardRef<HTMLDivElement, ChannelCardProps>(function ChannelCard(
-  { channel, provider, canManage, activity, highlight = false, tour = false, onReconnect },
-  ref
-) {
+export function ChannelCard({ channel, provider, canManage, activity, highlight = false, tour = false, onReconnect }: ChannelCardProps) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -202,109 +245,125 @@ export const ChannelCard = forwardRef<HTMLDivElement, ChannelCardProps>(function
   }
 
   return (
-    <Card
-      ref={ref}
+    <Surface
+      material='glass'
+      radius='card'
+      padding='md'
       id={`channel-${channel.id}`}
       data-tour={tour ? 'channel-card' : undefined}
       data-attention={attention ? 'true' : undefined}
-      className={cn(
-        'h-full scroll-mt-24',
-        attention && 'shadow-[inset_3px_0_0_0_var(--color-amber-500)] dark:shadow-[inset_3px_0_0_0_var(--color-amber-400)]'
-      )}
+      className='flex h-full scroll-mt-24 flex-col gap-4'
     >
-      <CardHeader>
-        <div className='flex flex-wrap items-start justify-between gap-2'>
+      <header className='flex flex-wrap items-start justify-between gap-3'>
+        <div className='flex min-w-0 items-center gap-3'>
+          <ChannelIcon platform={channel.platform} name={channel.platform} size='md' />
           <div className='min-w-0'>
-            <CardTitle className='flex items-center gap-2'>
-              <ChannelIcon platform={channel.platform} name={channel.platform} />
-              <span className='truncate'>{channel.platform}</span>
-              {highlight && <SuccessCheck className='size-5 text-emerald-600 dark:text-emerald-400' />}
-            </CardTitle>
-            <CardDescription className='truncate'>
-              {channel.account} · {channel.accountType || 'account'}
-            </CardDescription>
+            <p className='text-foreground truncate text-base font-medium'>{channel.account}</p>
+            <p className='text-muted-foreground truncate text-sm'>
+              {channel.platform} · {channel.accountType || 'account'}
+            </p>
           </div>
-          <AnimatedBadge size='sm' status={badge.status} contentKey={`${channel.connectionState}:${expiring ? 'expiring' : 'steady'}`}>
-            {badge.label}
-          </AnimatedBadge>
+          {highlight && <SuccessCheck className='text-foreground size-5 shrink-0' />}
         </div>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-4'>
-        {attention && sentence && (
-          <Alert className='border-amber-500/40 bg-amber-500/5 text-amber-900 dark:text-amber-100'>
-            <Icons.warning className='size-4 text-amber-600 dark:text-amber-400' />
-            <AlertTitle>Needs attention</AlertTitle>
-            <AlertDescription className='text-amber-900/90 dark:text-amber-100/90'>
-              <div className='flex flex-col items-start gap-2'>
-                <span>{sentence}</span>
-                {canManage && provider && (
-                  <Button size='sm' onClick={reconnect}>
-                    <Icons.refresh className='size-3.5' />
-                    Reconnect
-                  </Button>
-                )}
-                {canManage && !provider && (
-                  <span className='text-xs'>This provider is not configured on this deployment, so it cannot be reconnected here.</span>
-                )}
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
+        <ConnectionStatus channel={channel} badge={badge} expiring={expiring} />
+      </header>
 
-        <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />
+      {attention && sentence && (
+        <StateMessage
+          kind={attentionKind(channel, expiring)}
+          layout='inline'
+          title='Needs attention'
+          description={sentence}
+          action={
+            canManage && provider ? (
+              <Button variant='glass' size='control' onClick={reconnect}>
+                <Icons.refresh className='size-4' />
+                Reconnect
+              </Button>
+            ) : canManage && !provider ? (
+              <span className='text-muted-foreground text-xs'>This provider is not configured on this deployment, so it cannot be reconnected here.</span>
+            ) : undefined
+          }
+          className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3'
+        />
+      )}
 
-        {/* A div, not a p: the scopes list expands a block inside this row. */}
-        <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
-          {channel.expiresAt ? (
-            <span className={cn((expiring || expired) && 'text-amber-700 dark:text-amber-300')}>
-              {expired
-                ? `Access expired ${relativeTime(channel.expiresAt)} (${formatDate(channel.expiresAt)})`
-                : `Access until ${formatDate(channel.expiresAt)} · ${relativeTime(channel.expiresAt)}`}
-            </span>
-          ) : (
-            <span>No expiry reported</span>
+      <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />
+      {channel.socialReadiness && (
+        <div className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Independent social permissions'>
+          <p>
+            {channel.socialReadiness.history === 'HISTORICAL_IMPORT_AVAILABLE'
+              ? 'Historical import available for the last verified grant. Each retrieval rechecks access.'
+              : channel.socialReadiness.connection === 'CONNECTED' && channel.platform === 'LinkedIn'
+                ? 'LinkedIn is connected, but LinkedIn has not granted this app permission to import your historical posts.'
+                : 'Historical import is not currently available. Verify or reconnect this account.'}
+          </p>
+          <p>
+            {channel.socialReadiness.publishing === 'PUBLISHING_AVAILABLE'
+              ? 'Publishing permission is available. Every post still needs your explicit approval.'
+              : channel.socialReadiness.publishing === 'PUBLISHING_AWAITING_PROVIDER_REVIEW'
+                ? 'Publishing awaits confirmed platform review.'
+                : 'Publishing permission is unavailable for this connection.'}
+          </p>
+          {channel.socialReadiness.history !== 'HISTORICAL_IMPORT_AVAILABLE' && (
+            <Link href='/app/workspace/brand#manual-writing-samples' className='rafii-focus text-foreground w-fit rounded-sm underline underline-offset-2'>
+              Import writing samples manually
+            </Link>
           )}
-          <span aria-hidden>·</span>
-          <span>{identityVerifiedAt ? `Verified ${relativeTime(identityVerifiedAt)}` : 'Not verified yet'}</span>
-          <span aria-hidden>·</span>
-          <span>Evidence: {channel.evidenceSource.replace(/_/g, ' ')}</span>
-          <span aria-hidden>·</span>
-          <ScopesList scopes={channel.scopes} />
         </div>
+      )}
 
-        {activityTotal > 0 && activity && (
-          <Link
-            href={`/app/queue?channel=${encodeURIComponent(channel.id)}`}
-            className='text-muted-foreground hover:text-foreground w-fit text-xs underline-offset-2 hover:underline'
+      {/* A div, not a p: the scopes list expands a block inside this row. */}
+      <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
+        {channel.expiresAt ? (
+          <span className={cn((expiring || expired) && 'text-foreground font-medium')}>
+            {expired
+              ? `Access expired ${relativeTime(channel.expiresAt)} (${formatDate(channel.expiresAt)})`
+              : `Access until ${formatDate(channel.expiresAt)} · ${relativeTime(channel.expiresAt)}`}
+          </span>
+        ) : (
+          <span>No expiry reported</span>
+        )}
+        <span aria-hidden>·</span>
+        <span>{identityVerifiedAt ? `Verified ${relativeTime(identityVerifiedAt)}` : 'Not verified yet'}</span>
+        <span aria-hidden>·</span>
+        <span>Evidence: {channel.evidenceSource.replace(/_/g, ' ')}</span>
+        <span aria-hidden>·</span>
+        <ScopesList scopes={channel.scopes} />
+      </div>
+
+      {activityTotal > 0 && activity && (
+        <Link
+          href={`/app/queue?channel=${encodeURIComponent(channel.id)}`}
+          className='rafii-focus text-muted-foreground hover:text-foreground w-fit rounded-sm text-xs underline-offset-2 hover:underline'
+        >
+          {activity.scheduled} scheduled · {activity.held} held · {activity.published} published
+        </Link>
+      )}
+
+      <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
+        {canManage && (
+          <StatefulButton
+            variant='outline'
+            className={cn(STATEFUL_GLASS, CONTROL_44)}
+            state={verifying ? 'loading' : (verifyOutcome?.state ?? 'idle')}
+            loadingText='Verifying…'
+            successText={verifyOutcome?.label ?? 'Verified'}
+            errorText={verifyOutcome?.label ?? 'Try again'}
+            disabled={busy}
+            onClick={() => void verify()}
           >
-            {activity.scheduled} scheduled · {activity.held} held · {activity.published} published
-          </Link>
+            Re-verify
+          </StatefulButton>
         )}
-
-        <div className='flex flex-wrap gap-2' data-tour={tour ? 'channel-actions' : undefined}>
-          {canManage && (
-            <StatefulButton
-              variant='outline'
-              size='sm'
-              state={verifying ? 'loading' : (verifyOutcome?.state ?? 'idle')}
-              loadingText='Verifying…'
-              successText={verifyOutcome?.label ?? 'Verified'}
-              errorText={verifyOutcome?.label ?? 'Try again'}
-              disabled={busy}
-              onClick={() => void verify()}
-            >
-              Re-verify
-            </StatefulButton>
-          )}
-          {/* History is read-only, so every member may open it; manage actions stay behind manage_connections. */}
-          <Button variant='outline' size='sm' onClick={() => setHistoryOpen(true)}>
-            <Icons.history className='size-3.5' />
-            History
-          </Button>
-          {canManage && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
-        </div>
-      </CardContent>
+        {/* History is read-only, so every member may open it; manage actions stay behind manage_connections. */}
+        <Button variant='quiet' className={CONTROL_44} onClick={() => setHistoryOpen(true)}>
+          <Icons.history className='size-4' />
+          History
+        </Button>
+        {canManage && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
+      </div>
       <ChannelHistorySheet channel={channel} open={historyOpen} onOpenChange={setHistoryOpen} />
-    </Card>
+    </Surface>
   );
-});
+}

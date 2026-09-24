@@ -38,7 +38,7 @@ function Thumb({ asset, className }: { asset: Asset; className?: string }) {
     enabled: nearView && Boolean(workspaceId)
   });
   return (
-    <span ref={ref} className={cn('bg-muted relative block overflow-hidden', className)}>
+    <span ref={ref} className={cn('rafii-quiet relative block overflow-hidden', className)}>
       {image.data ? (
         <Image src={image.data} alt='' width={160} height={160} unoptimized className='size-full object-cover' />
       ) : image.isError ? (
@@ -65,6 +65,15 @@ export interface AssetPickerProps {
   noneLabel?: string;
 }
 
+/** A tile's selected state sits in a predictable corner, outside the image's meaningful content (DNA §21.9). */
+function SelectedMark() {
+  return (
+    <span aria-hidden className='bg-foreground text-background absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full'>
+      <Icons.check className='size-3' />
+    </span>
+  );
+}
+
 export function AssetPicker({ assets, value, onValueChange, id, disabled, className, noneLabel = 'No image', ...props }: AssetPickerProps) {
   const [open, setOpen] = useState(false);
   const live = assets.filter((asset) => !asset.deleted);
@@ -81,17 +90,17 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
         id={id}
         disabled={disabled}
         aria-label={props['aria-label']}
-        render={<Button variant='outline' className={cn('h-10 w-full min-w-0 justify-start gap-2 px-2', className)} />}
+        render={<Button variant='glass' size='control' className={cn('w-full min-w-0 justify-start gap-2.5 px-3', className)} />}
       >
         {selected ? (
           <>
-            <Thumb asset={selected} className='size-7 shrink-0 rounded-md' />
+            <Thumb asset={selected} className='size-8 shrink-0 rounded-[var(--rafii-radius-micro)]' />
             <span className='min-w-0 flex-1 truncate text-left'>{describe(selected) || 'Image'}</span>
             <code className='text-muted-foreground hidden font-mono text-xs sm:inline'>{selected.hash.slice(0, 8)}</code>
           </>
         ) : (
           <>
-            <span className='bg-muted text-muted-foreground grid size-7 shrink-0 place-items-center rounded-md'>
+            <span className='rafii-quiet text-muted-foreground grid size-8 shrink-0 place-items-center rounded-[var(--rafii-radius-micro)]'>
               <Icons.media className='size-4' aria-hidden />
             </span>
             <span className='text-muted-foreground min-w-0 flex-1 truncate text-left'>{noneLabel}</span>
@@ -99,7 +108,7 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
         )}
         <Icons.chevronDown className='text-muted-foreground size-4 shrink-0' aria-hidden />
       </PopoverTrigger>
-      <PopoverContent align='start' className='w-[min(22rem,calc(100vw-2rem))]'>
+      <PopoverContent align='start' className='rafii-elevated w-[min(22rem,calc(100vw-1.5rem))] gap-3 rounded-[1.375rem] p-4 ring-0'>
         <PopoverHeader>
           <PopoverTitle>Choose an image</PopoverTitle>
           <PopoverDescription>
@@ -112,12 +121,13 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
             aria-pressed={value === ''}
             onClick={() => choose('')}
             className={cn(
-              'bg-muted text-muted-foreground focus-visible:ring-ring/50 flex aspect-square flex-col items-center justify-center gap-1 rounded-md border text-xs outline-none focus-visible:ring-3',
-              value === '' && 'ring-primary ring-2'
+              'rafii-focus text-muted-foreground relative flex aspect-square flex-col items-center justify-center gap-1 rounded-[var(--rafii-radius-control)] text-xs transition-colors',
+              value === '' ? 'rafii-glass-selected text-foreground' : 'rafii-quiet hover:text-foreground'
             )}
           >
             <Icons.circleX className='size-4' aria-hidden />
             {noneLabel}
+            {value === '' && <SelectedMark />}
           </button>
           {live.map((asset) => {
             const active = asset.id === value;
@@ -131,22 +141,18 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
                 title={details || undefined}
                 onClick={() => choose(asset.id)}
                 className={cn(
-                  'focus-visible:ring-ring/50 relative aspect-square overflow-hidden rounded-md border outline-none focus-visible:ring-3',
-                  active && 'ring-primary ring-2'
+                  'rafii-focus relative aspect-square overflow-hidden rounded-[var(--rafii-radius-control)]',
+                  active && 'ring-foreground ring-offset-background ring-2 ring-offset-2'
                 )}
               >
                 <Thumb asset={asset} className='size-full' />
-                {active && (
-                  <span className='bg-primary text-primary-foreground absolute top-1 right-1 grid size-4 place-items-center rounded-full'>
-                    <Icons.check className='size-3' aria-hidden />
-                  </span>
-                )}
+                {active && <SelectedMark />}
               </button>
             );
           })}
         </div>
         {live.length === 0 && (
-          <Link href='/app/library' className='text-primary text-xs underline-offset-4 hover:underline'>
+          <Link href='/app/library' className='rafii-focus text-foreground inline-flex min-h-9 w-fit items-center rounded-md text-xs underline underline-offset-4'>
             Upload images in the Library
           </Link>
         )}

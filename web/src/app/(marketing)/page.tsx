@@ -6,8 +6,8 @@ import { ProductPreview } from '@/components/marketing/landing/product-preview';
 import { ChannelMatrix, DesignPartners, Faq, Honesty, HowItWorks, PricingSummary } from '@/components/marketing/landing/sections';
 import { siteConfig } from '@/config/site';
 
-const TITLE = 'PostRiff — Your ideas, on every platform, in your voice';
-const DESCRIPTION = 'One idea, 30+ platforms including 小紅書 and B站. PostRiff rewrites it per platform in your voice, and nothing publishes until you approve.';
+const TITLE = 'Rafii — Your AI teammate for social media';
+const DESCRIPTION = siteConfig.description;
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },

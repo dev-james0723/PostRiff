@@ -5,8 +5,30 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 function Table({ className, ...props }: React.ComponentProps<'table'>) {
+  // A table wider than its container scrolls sideways; keyboard users must be able to reach that scroll
+  // (WCAG 2.1.1), so the container becomes a focusable, labelled region only while it actually overflows.
+  const container = React.useRef<HTMLDivElement>(null);
+  const [scrollable, setScrollable] = React.useState(false);
+  React.useEffect(() => {
+    const node = container.current;
+    if (!node) return;
+    const check = () => setScrollable(node.scrollWidth > node.clientWidth + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(node);
+    if (node.firstElementChild) observer.observe(node.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div data-slot='table-container' className='relative w-full overflow-x-auto'>
+    <div
+      ref={container}
+      data-slot='table-container'
+      className='rafii-focus relative w-full overflow-x-auto'
+      // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be keyboard-reachable
+      tabIndex={scrollable ? 0 : undefined}
+      role={scrollable ? 'region' : undefined}
+      aria-label={scrollable ? (props['aria-label'] ?? 'Table, scrolls sideways') : undefined}
+    >
       <table
         data-slot='table'
         className={cn('w-full caption-bottom text-sm', className)}

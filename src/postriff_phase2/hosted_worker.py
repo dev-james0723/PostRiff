@@ -39,6 +39,7 @@ class PostgresWorker:
     def _approved(self, cur, workspace_id, state, job):
         from .billing import require_publishing
         try:
+            if state.get('accountDeletion'): return False
             require_publishing(cur, workspace_id, self.clock())
             manifest = job['manifest']
             channel = find(state['phase2']['channels'], manifest['channelId'])
@@ -58,7 +59,7 @@ class PostgresWorker:
                 cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
                 if not cur.fetchone()[0]:
                     return None
-                cur.execute("SELECT id::text,revision,state FROM public.pr_workspaces WHERE state ? 'phase2' ORDER BY id FOR UPDATE SKIP LOCKED")
+                cur.execute("SELECT id::text,revision,state FROM public.pr_workspaces WHERE state ? 'phase2' AND NOT state ? 'accountDeletion' ORDER BY id FOR UPDATE SKIP LOCKED")
                 for workspace_id, revision, raw_state in cur.fetchall():
                     state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
                     original = json.dumps(state, sort_keys=True)

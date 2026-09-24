@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion, useInView, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
+import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -34,6 +34,14 @@ const STORAGE_NOT_CONFIGURED = /media storage is not configured/i;
 
 export function saysStorageNotConfigured(failure: { status: number; message: string; code?: string } | null | undefined) {
   return failure?.status === 503 && (failure.code === 'media_storage_not_configured' || (!failure.code && STORAGE_NOT_CONFIGURED.test(failure.message)));
+}
+
+/**
+ * The status badge without its coloured chip (DNA §4.3): a quiet monochrome capsule whose words carry the state.
+ * A warning or failure keeps its tint but loses the outline. The badge's icon-and-text roll stays.
+ */
+export function badgeClass(status: AnimatedBadgeStatus) {
+  return status === 'warning' || status === 'danger' ? 'border-transparent' : 'border-transparent bg-foreground/[0.06] text-foreground dark:text-foreground';
 }
 
 /**
@@ -84,8 +92,6 @@ interface AssetCardProps {
   asset: LibraryAsset;
   uses: AssetUse[];
   publishing: boolean;
-  /** Seconds before the card fades in; the page caps the stagger at the first eight cards. */
-  delay: number;
   first: boolean;
   canEdit: boolean;
   /** Preparing a post (`p2_review`) needs approve permission, so only approvers are sent to the Queue. */
@@ -99,11 +105,14 @@ interface AssetCardProps {
   onPreviewLoaded?: () => void;
 }
 
+/**
+ * Gallery card anatomy (DNA §13.2, §21.9): the real image in its own colours on top, quiet neutral
+ * metadata below, the usage state as monochrome text. Broken media says so instead of rendering a blank.
+ */
 export function AssetCard({
   asset,
   uses,
   publishing,
-  delay,
   first,
   canEdit,
   canApprove,
@@ -140,17 +149,17 @@ export function AssetCard({
           data-tour={first ? 'library-card' : undefined}
           aria-busy={deleting || undefined}
           layout={reduce ? false : 'position'}
-          initial={reduce ? false : { opacity: 0, scale: 0.96 }}
-          animate={{ opacity: deleting ? 0.55 : 1, scale: 1, transition: { duration: 0.28, ease: EASE_OUT, delay } }}
-          exit={reduce ? { opacity: 0, transition: { duration: 0.15 } } : { opacity: 0, scale: 0.94, transition: { duration: 0.2, ease: EASE_OUT } }}
+          initial={reduce ? false : { opacity: 0, scale: 0.98 }}
+          animate={{ opacity: deleting ? 0.55 : 1, scale: 1, transition: { duration: 0.24, ease: EASE_OUT } }}
+          exit={reduce ? { opacity: 0, transition: { duration: 0.15 } } : { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_OUT } }}
           transition={{ layout: SPRING_LAYOUT }}
-          className='bg-card relative flex min-w-0 flex-col overflow-hidden rounded-lg border'
+          className='bg-card text-card-foreground relative flex min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]'
         >
           <button
             type='button'
             onClick={onOpen}
             aria-label={label}
-            className='focus-visible:ring-ring/50 flex min-w-0 flex-col text-left outline-none focus-visible:ring-3'
+            className='focus-visible:ring-ring/50 flex min-w-0 flex-col rounded-[var(--rafii-radius-card)] text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
@@ -159,8 +168,8 @@ export function AssetCard({
               ) : image.isError ? (
                 <div
                   className={cn(
-                    'bg-muted text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-1 p-2 text-center text-xs',
-                    image.canRetry && 'pb-10'
+                    'rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-1 p-2 text-center text-xs',
+                    image.canRetry && 'pb-12'
                   )}
                 >
                   <Icons.media className='size-5' aria-hidden />
@@ -170,13 +179,13 @@ export function AssetCard({
                 <Skeleton className='aspect-square w-full rounded-none' />
               )}
             </TiltCard>
-            <span className='flex min-w-0 flex-col items-start gap-1.5 p-2'>
+            <span className='flex min-w-0 flex-col items-start gap-1.5 p-2.5'>
               <AnimatedBadge
                 size='sm'
                 status={publishing ? 'loading' : 'neutral'}
                 showIcon={count > 0}
                 icon={publishing || count === 0 ? undefined : <Icons.check className='size-3' />}
-                className={cn(count > 0 && !publishing && 'text-foreground')}
+                className={cn(badgeClass(publishing ? 'loading' : 'neutral'), count === 0 && !publishing && 'text-muted-foreground dark:text-muted-foreground')}
                 title={publishing ? 'A post using this image is publishing now' : undefined}
               >
                 {usageLabel(count)}
@@ -190,8 +199,8 @@ export function AssetCard({
             // Outside the open button (a button cannot hold another), laid over the square image area.
             <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-end justify-center pb-3'>
               <Button
-                size='xs'
-                variant='secondary'
+                size='lg'
+                variant='glass'
                 className='pointer-events-auto'
                 aria-label='Retry loading this preview'
                 disabled={image.isFetching}
@@ -203,7 +212,7 @@ export function AssetCard({
             </div>
           )}
           {deleting && (
-            <span className='bg-background/80 absolute top-2 right-2 grid size-6 place-items-center rounded-full' aria-hidden>
+            <span className='rafii-elevated absolute top-2 right-2 grid size-7 place-items-center rounded-full' aria-hidden>
               <Icons.spinner className='size-3.5 animate-spin' />
             </span>
           )}

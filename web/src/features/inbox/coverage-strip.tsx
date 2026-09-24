@@ -5,15 +5,16 @@ import type { ReactNode } from 'react';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { levelKey } from '@/components/app/level-badge';
-import { Button } from '@/components/ui/button';
+import { StateMessage, Surface } from '@/components/rafii';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Skeleton } from '@/components/ui/skeleton';
+import { POPOVER_ELEVATED } from '@/features/channels/rafii-materials';
 import { ApiError } from '@/lib/api/client';
 import type { Capability, ChannelView, ProviderView } from '@/lib/api/types';
 import { CAPABILITY_CHIPS } from '@/lib/channels/capabilities';
-import { channelBadge, isVerified } from '@/lib/channels/state';
+import { channelBadge, isVerified, type ChannelBadge } from '@/lib/channels/state';
 import { useHoverCapable } from '@/lib/hooks/use-hover-capable';
 import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,17 @@ import { commentsReadFor, evidenceSentence, providerFor } from './model';
 
 /** The two capabilities the Inbox depends on, in the Channels page's words. */
 const INBOX_CAPABILITIES = CAPABILITY_CHIPS.filter((chip) => chip.key === 'comments_read' || chip.key === 'reply');
+
+/** A connection state as monochrome icon + text (DNA §4.3): the words carry the state, not a colour. */
+export function ConnectionNote({ badge, className }: { badge: ChannelBadge; className?: string }) {
+  const Icon = badge.status === 'warning' ? Icons.warning : badge.status === 'success' ? Icons.check : Icons.circleDashed;
+  return (
+    <span className={cn('text-muted-foreground inline-flex items-center gap-1 text-xs', className)}>
+      <Icon className='size-3.5 shrink-0' aria-hidden />
+      {badge.label}
+    </span>
+  );
+}
 
 function Evidence({
   label,
@@ -37,14 +49,12 @@ function Evidence({
   return (
     <div className='flex flex-col gap-2 text-left'>
       <div className='flex items-center justify-between gap-2'>
-        <span className='font-medium'>{label}</span>
+        <span className='text-foreground font-medium'>{label}</span>
         <InboxLevelBadge level={capability?.level ?? 'Unsupported'} />
       </div>
-      <p className='text-muted-foreground text-xs'>{meaning}</p>
-      <p className='text-xs'>{sentence}</p>
-      <p className='text-muted-foreground text-[11px]'>
-        Verified: {capability?.verifiedAt ? formatDateTime(capability.verifiedAt) : 'not verified yet'}
-      </p>
+      <p className='text-muted-foreground text-xs leading-relaxed'>{meaning}</p>
+      <p className='text-foreground text-xs leading-relaxed'>{sentence}</p>
+      <p className='text-muted-foreground text-xs'>Verified: {capability?.verifiedAt ? formatDateTime(capability.verifiedAt) : 'not verified yet'}</p>
     </div>
   );
 }
@@ -66,9 +76,9 @@ function LevelChip({
   const sentence = evidenceSentence(capability, provider?.capabilities[chip.key], channel.platform);
   const ariaLabel = `${chip.label} for ${channel.account}: ${level}. Show evidence`;
   const triggerClass = cn(
-    'inline-flex h-7 items-center gap-1.5 rounded-full border px-2 text-xs font-medium whitespace-nowrap outline-none transition-colors',
-    'focus-visible:ring-ring/50 focus-visible:ring-2',
-    levelKey(level) === 'unsupported' ? 'bg-muted text-muted-foreground hover:text-foreground' : 'bg-card hover:bg-accent'
+    'rafii-focus inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium whitespace-nowrap transition-colors',
+    'bg-foreground/5 hover:bg-foreground/10',
+    levelKey(level) === 'unsupported' ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
   );
   const face: ReactNode = (
     <>
@@ -82,7 +92,7 @@ function LevelChip({
       <HoverCardTrigger render={<button type='button' aria-label={ariaLabel} />} delay={80} closeDelay={100} className={triggerClass}>
         {face}
       </HoverCardTrigger>
-      <HoverCardContent align='start' className='w-72'>
+      <HoverCardContent align='start' className={cn(POPOVER_ELEVATED, 'w-72')}>
         {content}
       </HoverCardContent>
     </HoverCard>
@@ -91,7 +101,7 @@ function LevelChip({
       <PopoverTrigger aria-label={ariaLabel} className={triggerClass}>
         {face}
       </PopoverTrigger>
-      <PopoverContent align='start' className='w-72'>
+      <PopoverContent align='start' className={cn(POPOVER_ELEVATED, 'w-72')}>
         {content}
       </PopoverContent>
     </Popover>
@@ -118,38 +128,40 @@ export function CoverageStrip({
   const canHover = useHoverCapable();
   let body: ReactNode;
   if (isPending) {
-    body = (
-      <>
-        <Skeleton className='h-10 w-72 max-w-full rounded-lg' />
-        <Skeleton className='h-10 w-60 max-w-full rounded-lg' />
-      </>
-    );
+    body = <StateMessage kind='loading' layout='inline' title='Loading accounts…' />;
   } else if (!channels) {
     body = (
-      <div role='alert' className='text-muted-foreground flex flex-wrap items-center gap-2 text-sm'>
-        <Icons.warning className='size-4 text-amber-600 dark:text-amber-400' />
-        <span>Account coverage unavailable{error instanceof ApiError ? `: ${error.message}` : '.'}</span>
-        <Button variant='outline' size='sm' onClick={onRetry}>
-          <Icons.refresh className='size-3.5' />
-          Retry
-        </Button>
-      </div>
+      <StateMessage
+        kind='error'
+        layout='inline'
+        title={`Account coverage unavailable${error instanceof ApiError ? `: ${error.message}` : '.'}`}
+        action={
+          <Button variant='glass' size='control' onClick={onRetry}>
+            <Icons.refresh className='size-4' />
+            Retry
+          </Button>
+        }
+      />
     );
   } else if (channels.length === 0) {
     body = (
-      <p className='text-muted-foreground text-sm'>
-        No account is connected yet.{' '}
-        <Link href='/app/channels' className='text-foreground underline underline-offset-2'>
-          Connect an account
-        </Link>
-      </p>
+      <StateMessage
+        kind='empty'
+        layout='inline'
+        title='No account is connected yet.'
+        action={
+          <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+            Connect an account
+          </Link>
+        }
+      />
     );
   } else {
     body = channels.map((channel) => {
       const provider = providerFor(channel.platform, providers);
       const badge = isVerified(channel) ? null : channelBadge(channel);
       return (
-        <li key={channel.id} className='bg-card flex max-w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border px-2.5 py-1.5'>
+        <Surface as='li' key={channel.id} material='quiet' radius='control' padding='none' className='flex max-w-full min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 px-3 py-2'>
           <span className='flex min-w-0 items-center gap-1.5 text-sm font-medium'>
             <ChannelIcon platform={channel.platform} name={channel.platform} size='xs' />
             <span className='truncate'>{channel.account}</span>
@@ -160,13 +172,11 @@ export function CoverageStrip({
               <LevelChip key={chip.key} channel={channel} chip={chip} provider={provider} canHover={canHover} />
             ))}
           </span>
-          {badge && (
-            <span className={cn('text-xs', badge.status === 'warning' ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground')}>{badge.label}</span>
-          )}
+          {badge && <ConnectionNote badge={badge} />}
           {channel.capabilities.comments_read?.level === 'Direct' && !commentsReadFor(channel.platform, providers) && (
             <span className='text-muted-foreground text-xs'>{channel.platform} comments are not read in this release</span>
           )}
-        </li>
+        </Surface>
       );
     });
   }
@@ -174,19 +184,18 @@ export function CoverageStrip({
   return (
     <section aria-label='Accounts that feed this inbox' data-tour='inbox-coverage' className='flex flex-col gap-2'>
       <div className='flex items-center justify-between gap-2'>
-        <h2 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>Accounts feeding this inbox</h2>
+        <h2 className='rafii-eyebrow'>Accounts feeding this inbox</h2>
         {channels && channels.length > 0 && (
-          <Link href='/app/channels' className='t-learn text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 text-xs'>
+          <Link
+            href='/app/channels'
+            className='t-learn rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-8 items-center gap-0.5 rounded-md text-xs'
+          >
             Manage channels
             <LearnMoreChevron />
           </Link>
         )}
       </div>
-      {isPending || !channels || channels.length === 0 ? (
-        <div className='flex flex-wrap gap-2'>{body}</div>
-      ) : (
-        <ul className='flex flex-wrap gap-2'>{body}</ul>
-      )}
+      {isPending || !channels || channels.length === 0 ? <div className='flex flex-wrap gap-2'>{body}</div> : <ul className='flex flex-wrap gap-2'>{body}</ul>}
     </section>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import type { WorkspaceBootstrap } from '@/lib/workspace/bootstrap';
 import { Suspense } from 'react';
 import KBar from '@/components/kbar';
 import { InfoSidebar } from '@/components/layout/info-sidebar';
@@ -19,10 +20,10 @@ import { ShortcutsDialog } from './shortcuts-dialog';
  * header + contextual info sidebar. Server work (cookie for the sidebar
  * state, metadata) stays in `src/app/app/layout.tsx`.
  */
-export function AppShell({ defaultOpen, children }: { defaultOpen: boolean; children: React.ReactNode }) {
+export function AppShell({ defaultOpen, children, initial }: { defaultOpen: boolean; children: React.ReactNode; initial?: WorkspaceBootstrap | null }) {
   return (
-    <AuthProvider>
-      <WorkspaceProvider>
+    <AuthProvider initial={initial}>
+      <WorkspaceProvider initial={initial}>
         <Suspense fallback={null}>
           <AppGate>
             <PreferencesProvider>
@@ -35,7 +36,8 @@ export function AppShell({ defaultOpen, children }: { defaultOpen: boolean; chil
                   Skip to content
                 </a>
                 <AppSidebar />
-                <SidebarInset id='main-content' tabIndex={-1} className='min-w-0 scroll-mt-16 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0'>
+                <SidebarInset id='main-content' tabIndex={-1} className='relative isolate min-w-0 scroll-mt-16 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0'>
+                  <div aria-hidden data-extent='viewport' className='rafii-ambient' />
                   <Header />
                   <InfobarProvider defaultOpen={false}>
                     {children}

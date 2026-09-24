@@ -6,8 +6,7 @@ import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { StatefulButton, type ButtonState } from '@/components/motion/button';
 import { Checkbox } from '@/components/motion/checkbox';
-import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SegmentedControl, Surface } from '@/components/rafii';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,6 +14,7 @@ import { keys, useAct, useSnapshot, useUsage } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Snapshot } from '@/lib/api/types';
 import { formatBytes } from '@/lib/time';
+import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useDraftHandoff } from './use-draft';
 import { hostOf, ideaSources, LINK_PATTERN, plural, useActError } from './use-sources';
@@ -32,6 +32,14 @@ const KINDS: { id: Kind; label: string; icon: keyof typeof Icons }[] = [
 const MAX_FILE_BYTES = 20000;
 const IDEA_LIMIT = 500;
 const TEXT_LIMIT = 20000;
+
+/* Borderless Rafii text entry (DNA §11.1): 16px on phones, the field fill, the control radius. */
+const FIELD = 'rafii-field rounded-[var(--rafii-radius-control)] border-0 bg-(--rafii-surface-field) dark:bg-(--rafii-surface-field) px-4 text-base md:text-sm';
+const FIELD_INPUT = cn(FIELD, 'h-12');
+const FIELD_AREA = cn(FIELD, 'py-3 leading-relaxed');
+/* The one dominant commitment action, and its quiet-glass secondary (DNA §10.1–10.2), on the motion buttons. */
+const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 text-sm hover:bg-transparent hover:brightness-[1.06]';
+const GLASS = 'rafii-glass hover:rafii-glass-selected text-foreground hover:text-foreground h-12 rounded-[var(--rafii-radius-control)] px-5 text-sm hover:bg-transparent';
 
 interface LoadedFile {
   name: string;
@@ -225,29 +233,37 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
   const batches = usage.isLoading ? '…' : usage.isError || !usage.data ? 'Unavailable' : String(usage.data.entitlement.writingBatchesRemaining);
 
   return (
-    <Card data-tour='ideas-capture'>
-      <CardHeader className='gap-3'>
+    // The page's work surface (DNA §5.2, §21.10): one glass panel, its WHAT control, the entry field and one commitment.
+    <Surface as='section' material='glass' radius='card' padding='lg' data-tour='ideas-capture' aria-labelledby='ideas-capture-title' className='flex flex-col gap-4'>
+      <div className='flex flex-col gap-3'>
         <div className='flex flex-col gap-1'>
-          <CardTitle className='text-base'>Capture</CardTitle>
-          <CardDescription>Saving keeps it here. Nothing is drafted, sent to a model or published until you ask.</CardDescription>
+          <h2 id='ideas-capture-title' className='text-foreground text-base font-medium'>
+            Capture
+          </h2>
+          <p className='text-muted-foreground text-sm leading-relaxed'>Saving keeps it here. Nothing is drafted, sent to a model or published until you ask.</p>
         </div>
-        <div className='scrollbar-hide -mx-1 overflow-x-auto px-1'>
-          <Tabs value={kind} onValueChange={(value) => setKind(value as Kind)} variant='pill'>
-            <TabsList aria-label='What to capture' className='bg-muted/60 w-max'>
-              {KINDS.map((item) => {
-                const Icon = Icons[item.icon];
-                return (
-                  <TabsTrigger key={item.id} value={item.id} className='h-8 gap-1 px-2.5 py-0 text-xs sm:gap-1.5 sm:px-3 sm:text-sm'>
-                    <Icon className='size-3.5' />
+        <div className='relative scrollbar-hide -mx-1 overflow-x-auto px-1 py-0.5'>
+          <SegmentedControl
+            label='What to capture'
+            value={kind}
+            onChange={setKind}
+            widths='content'
+            options={KINDS.map((item) => {
+              const Icon = Icons[item.icon];
+              return {
+                value: item.id,
+                label: (
+                  <>
+                    <Icon aria-hidden className='size-4' />
                     {item.label}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </Tabs>
+                  </>
+                )
+              };
+            })}
+          />
         </div>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
+      </div>
+      <div className='flex flex-col gap-3'>
         {kind === 'idea' && (
           <Textarea
             ref={textRef}
@@ -258,7 +274,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
             maxLength={IDEA_LIMIT}
             aria-label='Your idea'
             placeholder='e.g. The thing I keep noticing about first-time customers…'
-            className='max-h-48'
+            className={cn(FIELD_AREA, 'max-h-48')}
           />
         )}
         {kind === 'text' && (
@@ -272,14 +288,14 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
               maxLength={TEXT_LIMIT}
               aria-label='Text to keep'
               placeholder='Paste notes, an article excerpt or a transcript. Each paragraph becomes a fact you can approve.'
-              className='max-h-72'
+              className={cn(FIELD_AREA, 'max-h-72')}
             />
-            <Input value={pastedTitle} onChange={(event) => setPastedTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional) · Pasted source' />
+            <Input value={pastedTitle} onChange={(event) => setPastedTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional) · Pasted source' className={FIELD_INPUT} />
           </>
         )}
         {kind === 'link' && (
           <>
-            <div className='flex flex-col gap-1'>
+            <div className='flex flex-col gap-1.5'>
               <Input
                 ref={urlRef}
                 type='url'
@@ -291,12 +307,13 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
                 aria-label='Link'
                 aria-invalid={linkInvalid || undefined}
                 placeholder='https://…'
+                className={FIELD_INPUT}
               />
               <p className={linkInvalid ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>
                 {linkInvalid ? 'Use a full http or https address.' : 'Saved as an unverified reference: the page itself is not read when you save.'}
               </p>
             </div>
-            <Input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional) · the site name' />
+            <Input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional) · the site name' className={FIELD_INPUT} />
           </>
         )}
         {kind === 'file' && (
@@ -311,7 +328,10 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
               aria-label='File to add'
               accept='.txt,.md,text/plain,text/markdown'
               onChange={(event) => void readFile(event)}
-              className='file:bg-muted file:text-foreground text-muted-foreground w-full min-w-0 text-sm file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-1.5 file:text-sm file:font-medium'
+              className={cn(
+                FIELD,
+                'rafii-focus text-muted-foreground flex min-h-12 w-full min-w-0 items-center py-2 text-sm file:mr-3 file:rounded-[var(--rafii-radius-micro)] file:border-0 file:bg-foreground/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground'
+              )}
             />
             {file && (
               <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs'>
@@ -324,29 +344,31 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
           </div>
         )}
 
+        {/* An explicit permission checkbox with its own label (DNA §10.6): quoting is never pre-enabled for text that is not yours. */}
         {ownApplies && (
           <Checkbox
             checked={own}
             onCheckedChange={setOwn}
+            className='min-h-11'
             label={kind === 'idea' ? 'My own words (may be quoted publicly)' : 'My own writing (quotable, every paragraph approved)'}
           />
         )}
 
         <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
-          <p className='text-muted-foreground text-xs sm:max-w-sm'>
+          <p className='text-muted-foreground min-w-0 text-xs leading-relaxed sm:max-w-sm'>
             Draft now opens a conversation · {draft.modelLabel} · for {draft.destinationLabel} · {batches === 'Unavailable' ? 'writing allowance unavailable' : `${batches} writing batches left`}
           </p>
-          <div className='flex flex-wrap items-center gap-2'>
-            <StatefulButton variant='outline' state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={!ready || !body || saveState === 'loading'} onClick={() => void draftNow()}>
+          <div className='flex flex-wrap items-center gap-2 sm:shrink-0'>
+            <StatefulButton variant='ghost' className={GLASS} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={!ready || !body || saveState === 'loading'} onClick={() => void draftNow()}>
               Draft now
             </StatefulButton>
-            <StatefulButton state={saveState} loadingText='Saving…' successText='Saved' disabled={!ready || (!body && saveState === 'idle') || draft.busy} onClick={() => void save()}>
+            <StatefulButton className={ACTION} state={saveState} loadingText='Saving…' successText='Saved' disabled={!ready || (!body && saveState === 'idle') || draft.busy} onClick={() => void save()}>
               Save to ideas
             </StatefulButton>
           </div>
         </div>
-        <p className='text-muted-foreground -mt-1 hidden text-[11px] sm:block'>⌘↵ saves</p>
-      </CardContent>
-    </Card>
+        <p className='text-muted-foreground -mt-1 hidden text-xs sm:block'>⌘↵ saves</p>
+      </div>
+    </Surface>
   );
 });

@@ -13,7 +13,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const doc = docBySlug(slug);
-  return doc ? { title: doc.title, description: doc.summary, openGraph: { title: `${doc.title} · PostRiff Docs`, url: `/docs/${doc.slug}` } } : {};
+  return doc ? { title: doc.title, description: doc.summary, openGraph: { title: `${doc.title} · Rafii Docs`, url: `/docs/${doc.slug}` } } : {};
 }
 
 export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -23,18 +23,18 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
   return (
     <>
       <PageHero eyebrow='Docs' title={doc.title} description={doc.summary} />
-      <Section>
+      <Section className='pt-8 sm:pt-12'>
         <article className='flex max-w-3xl flex-col gap-8'>
           {doc.sections.map((section) => (
             <section key={section.heading}>
-              <h2 className='mb-2 text-xl font-semibold'>{section.heading}</h2>
+              <h2 className='text-foreground mb-2 text-xl font-medium tracking-[-0.01em]'>{section.heading}</h2>
               {section.paragraphs.map((paragraph) => (
-                <p key={paragraph} className='text-muted-foreground mb-3 text-pretty'>
+                <p key={paragraph} className='text-muted-foreground mb-3 text-base leading-relaxed text-pretty'>
                   {paragraph}
                 </p>
               ))}
               {section.bullets && (
-                <ul className='text-muted-foreground list-disc pl-5'>
+                <ul className='text-muted-foreground list-disc pl-5 text-base leading-relaxed'>
                   {section.bullets.map((bullet) => (
                     <li key={bullet}>{bullet}</li>
                   ))}
@@ -42,9 +42,11 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
               )}
             </section>
           ))}
-          <Link href='/docs' className={buttonVariants({ variant: 'outline' })}>
-            All docs
-          </Link>
+          <div>
+            <Link href='/docs' className={buttonVariants({ variant: 'glass', size: 'control' })}>
+              All docs
+            </Link>
+          </div>
         </article>
       </Section>
     </>

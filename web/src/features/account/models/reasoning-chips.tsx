@@ -6,7 +6,8 @@ const LEVEL_NAME: Record<string, string> = { quick: 'Quick', standard: 'Standard
 
 /**
  * Reasoning levels one route reports, rendered only when the API sends them for that route.
- * Spans throughout, because it can sit inside a radio option's label.
+ * Spans throughout, because it can sit inside a radio option's label. Monochrome: an unavailable
+ * level says so in words (DNA §22.3), not in colour.
  */
 export function ReasoningChips({ levels }: { levels: ReasoningLevel[] }) {
   return (
@@ -14,7 +15,7 @@ export function ReasoningChips({ levels }: { levels: ReasoningLevel[] }) {
       <span className='text-foreground text-sm font-medium'>Reasoning levels</span>
       {levels.map((level) => (
         <span key={level.id} className='flex flex-wrap items-center gap-2 text-sm'>
-          <Badge variant='outline' className={cn(!level.available && 'text-muted-foreground border-dashed')}>
+          <Badge variant='secondary' className={cn(!level.available && 'text-muted-foreground border-dashed')}>
             {LEVEL_NAME[level.id] ?? level.id}
             {level.available ? '' : ' · not available'}
           </Badge>

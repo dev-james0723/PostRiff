@@ -1,4 +1,5 @@
 import { KBarResults, useMatches } from 'kbar';
+import { StateMessage } from '@/components/rafii';
 import ResultItem from './result-item';
 
 export default function RenderResults() {
@@ -6,8 +7,8 @@ export default function RenderResults() {
 
   if (!results.length) {
     return (
-      <div className='text-muted-foreground flex h-full items-center justify-center px-4 text-center text-sm'>
-        No results found.
+      <div className='flex h-full items-center justify-center px-5 text-center'>
+        <StateMessage kind='empty' layout='inline' title='No results found.' />
       </div>
     );
   }
@@ -17,9 +18,7 @@ export default function RenderResults() {
       items={results}
       onRender={({ item, active }) =>
         typeof item === 'string' ? (
-          <div className='text-muted-foreground px-4 pt-3 pb-1 text-xs font-medium tracking-wider uppercase'>
-            {item}
-          </div>
+          <div className='rafii-eyebrow px-5 pt-3 pb-1.5'>{item}</div>
         ) : (
           <ResultItem action={item} active={active} currentRootActionId={rootActionId ?? ''} />
         )

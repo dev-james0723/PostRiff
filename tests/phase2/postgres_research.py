@@ -152,3 +152,47 @@ try:
 finally:
     del os.environ["POSTRIFF_HOSTED"]
 print(f"postgres_research: {checks + 1}/{checks + 1} checks passed")
+
+# Dispatch claim is visible outside the transaction; concurrent and HTTP replays do not call twice.
+request={'text':'Research the latest model release','sourceIds':[], 'idempotencyKey':'durable-research-fixture'}
+class ConcurrentResearcher(FakeResearcher):
+    def run(self,text,intent='draft'):
+        with connection() as db:
+            assert db.execute('SELECT status FROM public.pr_research_requests WHERE workspace_id=%s AND idempotency_key=%s',(wid,request['idempotencyKey'])).fetchone()[0]=='pending'
+        try: ideas.turn(wid,'one',cid,request)
+        except AlphaError as error: assert error.status==409
+        else: raise AssertionError('concurrent research replay dispatched')
+        return super().run(text,intent)
+concurrent=ConcurrentResearcher();ideas.researcher=concurrent
+run=ideas.turn(wid,'one',cid,request)
+assert ideas.turn(wid,'one',cid,request)['runId']==run['runId'] and len(concurrent.calls)==1
+
+# A crash after dispatch is not retried with the same key, even after a process restart.
+class Interrupted(BaseException): pass
+class CrashResearcher(FakeResearcher):
+    def run(self,text,intent='draft'):
+        self.calls.append(text);raise Interrupted()
+crashed=CrashResearcher();ideas.researcher=crashed
+crash_request={**request,'idempotencyKey':'crashed-research-fixture'}
+try: ideas.turn(wid,'one',cid,crash_request)
+except Interrupted: pass
+else: raise AssertionError('interrupted research hidden')
+try: ideas.turn(wid,'one',cid,crash_request)
+except AlphaError as error: assert error.status==409
+else: raise AssertionError('interrupted research repeated')
+assert len(crashed.calls)==1
+
+# Consent changes during lookup discard the returned pages and leave a non-replayable claim.
+os.environ['POSTRIFF_HOSTED']='1'
+class RevokingResearcher(FakeResearcher):
+    def run(self,text,intent='draft'):
+        service.mutate(wid,'one',service.get(wid,'one')['revision'],'research_egress',{'web':False,'confirmed':True})
+        return super().run(text,intent)
+ideas.researcher=RevokingResearcher()
+before=service.get(wid,'one')['state']['sources']
+try: ideas.turn(wid,'one',cid,{**request,'idempotencyKey':'revoked-research-fixture'})
+except AlphaError as error: assert error.status==409
+else: raise AssertionError('revoked research accepted')
+assert service.get(wid,'one')['state']['sources']==before
+del os.environ['POSTRIFF_HOSTED']
+print('PASS durable research: committed claim, concurrent/replay/crash no duplicate I/O, revoked consent discards pages')

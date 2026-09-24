@@ -1,0 +1,13 @@
+.................................................................................{"event": "cron.completed", "requestId": "b3006b1e11134949862d5fbab009bab5", "status": "unavailable", "notificationDelivery": "not_configured"}
+......................./Users/ouxianxing/Documents/James-Au-Studio/src/postriff_phase2/cli_runtime.py:405: ResourceWarning: unclosed file <_io.BufferedReader name=6>
+  sink.fail(str(error))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+....................{"event": "request.completed", "requestId": "6117563fa7f74a1387ed8f204e7ba4b8", "method": "POST", "status": 503, "durationMs": 4.55, "route": "api"}
+...................................................................................................................................................................................................{"event": "cron.completed", "requestId": "1809e873839e4eefa62fe46dec09c8ea", "status": "unavailable", "notificationDelivery": "not_configured"}
+........................................................................................................................................................................................................{"event": "request.completed", "requestId": "0121996419a34c938acf9f6ba96bcdbe", "method": "GET", "status": 503, "durationMs": 0.33, "route": "api"}
+..........................................................
+----------------------------------------------------------------------
+Ran 577 tests in 23.551s
+
+OK
+python exit 0

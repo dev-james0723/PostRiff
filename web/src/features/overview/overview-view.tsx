@@ -5,27 +5,26 @@ import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import { StatCard } from '@/components/app/stat-card';
+import { StateMessage } from '@/components/rafii';
 import { GettingStarted } from './getting-started';
 import { HeatCalendar } from '@/components/charts/heat-calendar';
 import { addDays, GAP, mondayOf, PITCH, startOfDay } from '@/components/charts/heat-calendar/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Panel, StatTile, StatusChip } from '@/features/workspace/rafii-parts';
 import { useChannels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import type { Job } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
 import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { deriveAttention, type AttentionSource } from '@/lib/attention';
+import { deriveAttention, type AttentionItem, type AttentionSource } from '@/lib/attention';
 import { ChannelsCard, publishCounts } from './channels-card';
 import { NextUp } from './next-up';
 import { RecentActivity } from './recent-activity';
 import { RetryButton, type Refetchable } from './retry';
+import { whoCanAct } from './who-can-act';
 
 import { WAITING as PRE_FLIGHT, IN_FLIGHT, DONE } from '@/lib/jobs';
 
@@ -71,7 +70,7 @@ const MAX_WEEKS = 26;
 
 /**
  * Provider-confirmed posts per UTC day, dated by the verification receipt (or the job's last event)
- * and bucketed against the calendar's own grid start. As many weeks as fit the card at full cell
+ * and bucketed against the calendar's own grid start. As many weeks as fit the panel at full cell
  * size, up to half a year. `jobs` is null when the snapshot could not be read.
  */
 function PublishingActivity({ jobs, pending, className }: { jobs: Job[] | null; pending: boolean; className?: string }) {
@@ -114,36 +113,28 @@ function PublishingActivity({ jobs, pending, className }: { jobs: Job[] | null; 
   const unavailable = !pending && jobs === null;
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>Publishing activity</CardTitle>
-        <CardDescription>
-          {!activity
-            ? 'Posts the provider confirmed, by day.'
-            : activity.total === 0
-              ? 'Posts the provider confirmed, by day. None in this range yet; each confirmed post fills its day.'
-              : `Posts the provider confirmed, by day: ${activity.total} in this range. Hover a day; click two days to total the span.`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div ref={measureRef} className='w-full'>
-          {unavailable ? (
-            <p className='text-muted-foreground text-sm'>Publishing activity is unavailable right now.</p>
-          ) : !activity ? (
-            <Skeleton className='h-44 w-full' />
-          ) : (
-            <HeatCalendar
-              unit='posts'
-              weeks={activity.weeks}
-              maxCount={activity.maxCount}
-              values={activity.values}
-              endDate={activity.end}
-              color='var(--primary)'
-            />
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <Panel
+      className={className}
+      title='Publishing activity'
+      titleId='overview-activity-heading'
+      description={
+        !activity
+          ? 'Posts the provider confirmed, by day.'
+          : activity.total === 0
+            ? 'Posts the provider confirmed, by day. None in this range yet; each confirmed post fills its day.'
+            : `Posts the provider confirmed, by day: ${activity.total} in this range. Hover a day; click two days to total the span.`
+      }
+    >
+      <div ref={measureRef} className='w-full'>
+        {unavailable ? (
+          <StateMessage kind='error' layout='inline' title='Publishing activity is unavailable right now.' />
+        ) : !activity ? (
+          <Skeleton className='h-44 w-full rounded-[var(--rafii-radius-control)]' />
+        ) : (
+          <HeatCalendar unit='posts' weeks={activity.weeks} maxCount={activity.maxCount} values={activity.values} endDate={activity.end} color='var(--foreground)' />
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -154,6 +145,36 @@ function unavailableStat(message: string, query: Refetchable) {
     hint: <span className='text-muted-foreground font-normal'>{message}</span>,
     footer: <RetryButton queries={[query]} />
   };
+}
+
+/** One attention item as an object: what, why, who can act, and its one action (DNA §21.17). */
+function AttentionRow({ item, canAct }: { item: AttentionItem; canAct: boolean | null }) {
+  const who = whoCanAct(item);
+  return (
+    <div role='listitem' data-attention-id={item.id} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4'>
+      <div className='flex items-start gap-3'>
+        <span aria-hidden className={cn('mt-0.5 flex shrink-0 items-center', item.tone === 'warning' ? 'text-foreground' : 'text-muted-foreground')}>
+          {item.tone === 'warning' ? <Icons.warning className='size-4' /> : <Icons.info className='size-4' />}
+        </span>
+        <div className='flex min-w-0 flex-1 flex-col gap-1'>
+          <p className='text-foreground text-sm font-medium text-balance'>
+            {item.tone === 'warning' && <span className='sr-only'>Needs attention: </span>}
+            {item.title}
+          </p>
+          <p className='text-muted-foreground text-sm leading-relaxed text-pretty'>{item.description}</p>
+          {who && (
+            <p className='text-muted-foreground text-xs'>
+              Needs {who.label}
+              {canAct === null ? '' : canAct ? ' · you can do this' : ' · ask an owner or admin'}
+            </p>
+          )}
+        </div>
+      </div>
+      <Link href={item.href} className={cn(buttonVariants({ variant: 'glass', size: 'default' }), 'w-fit')}>
+        {item.action}
+      </Link>
+    </div>
+  );
 }
 
 export function OverviewView() {
@@ -183,11 +204,9 @@ export function OverviewView() {
   const subscription = usage.data?.subscription;
 
   const attention = deriveAttention({ snapshot, channels, usage, now });
-  const failedQueries = [
-    snapshot.isError ? snapshot : null,
-    channels.isError ? channels : null,
-    usage.isError ? usage : null
-  ].filter((query): query is NonNullable<typeof query> => query !== null);
+  const failedQueries = [snapshot.isError ? snapshot : null, channels.isError ? channels : null, usage.isError ? usage : null].filter(
+    (query): query is NonNullable<typeof query> => query !== null
+  );
 
   const canEdit = checkAccess(access, { permission: 'edit' });
   // Sample workspaces refuse every change on the API (`hosted.py`), so creation says so up front.
@@ -218,9 +237,7 @@ export function OverviewView() {
     ? unavailableStat('Could not read channels', channels)
     : {
         value: counts.connected,
-        hint: counts.connected
-          ? `${counts.direct} Direct · ${counts.assisted} Assisted · ${counts.local} Local`
-          : 'Connect an account to schedule',
+        hint: counts.connected ? `${counts.direct} Direct · ${counts.assisted} Assisted · ${counts.local} Local` : 'Connect an account to schedule',
         footer: entitlement ? `Plan allows ${entitlement.connectedAccounts}` : undefined
       };
 
@@ -228,7 +245,7 @@ export function OverviewView() {
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button focusableWhenDisabled disabled className='aria-disabled:opacity-50'>
+          <Button variant='action' size='control' focusableWhenDisabled disabled className='aria-disabled:opacity-50'>
             <Icons.sparkles className='size-4' /> New idea
           </Button>
         }
@@ -236,7 +253,7 @@ export function OverviewView() {
       <TooltipContent>Sample workspace is read-only</TooltipContent>
     </Tooltip>
   ) : (
-    <Link href='/app/ideas?new=1' data-tour='overview-new-idea' className={buttonVariants()}>
+    <Link href='/app/ideas?new=1' data-tour='overview-new-idea' className={buttonVariants({ variant: 'action', size: 'control' })}>
       <Icons.sparkles className='size-4' /> New idea
     </Link>
   );
@@ -248,101 +265,66 @@ export function OverviewView() {
   const move = reduce ? { duration: 0 } : { opacity: { duration: 0.2, ease: EASE_OUT }, y: SPRING_LAYOUT, layout: SPRING_LAYOUT };
 
   return (
-    <PageContainer
-      pageTitle='Overview'
-      pageDescription='What is scheduled, what needs you, and how much of your plan is left.'
-      infoContent={infoContent}
-      pageHeaderAction={newIdea}
-    >
-      <div className='flex flex-1 flex-col gap-4'>
+    <PageContainer pageTitle='Overview' pageDescription='What is scheduled, what needs you, and how much of your plan is left.' infoContent={infoContent} pageHeaderAction={newIdea}>
+      <div className='flex flex-1 flex-col gap-4 md:gap-5'>
         <GettingStarted />
-        <div data-tour='overview-stats' className='*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4'>
-          <StatCard label='Scheduled' loading={snapshot.isPending} {...scheduledStat} />
-          <StatCard label='Published · 30 days' loading={snapshot.isPending} {...publishedStat} />
-          <StatCard
+        <div data-tour='overview-stats' className='grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-4'>
+          <StatTile label='Scheduled' loading={snapshot.isPending} {...scheduledStat} />
+          <StatTile label='Published · 30 days' loading={snapshot.isPending} {...publishedStat} />
+          <StatTile
             label='Writing batches left'
             loading={usage.isPending}
-            badge={!usage.isError && subscription ? subscription.label : undefined}
+            badge={!usage.isError && subscription ? <StatusChip icon={null}>{subscription.label}</StatusChip> : undefined}
             {...batchesStat}
           />
-          <StatCard label='Connected channels' loading={channels.isPending} {...channelsStat} />
+          <StatTile label='Connected channels' loading={channels.isPending} {...channelsStat} />
         </div>
 
-        <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
+        <div className='grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-7'>
           <NextUp className='lg:col-span-4' />
 
-          <Card data-tour='overview-attention' className='lg:col-span-3'>
-            <CardHeader>
-              <CardTitle>Needs your attention</CardTitle>
-              <CardDescription>Things only you can decide. Empty is good.</CardDescription>
-            </CardHeader>
-            <CardContent className='relative flex flex-col gap-3'>
-              {attentionPending ? (
-                <>
-                  <Skeleton className='h-16 w-full' />
-                  <Skeleton className='h-16 w-full' />
-                </>
-              ) : (
-                // Entries arriving or resolved while the page is open slide in and out; the rest glide into place.
+          <Panel data-tour='overview-attention' className='lg:col-span-3' title='Needs your attention' titleId='overview-attention-heading' description='Things only you can decide. Empty is good.'>
+            {attentionPending ? (
+              <StateMessage kind='loading' title='Checking what needs you…' />
+            ) : (
+              // Entries arriving or resolved while the page is open slide in and out; the rest glide into place.
+              <div role='list' aria-label='Needs your attention' className='relative flex flex-col gap-2'>
                 <AnimatePresence initial={false} mode='popLayout'>
                   {allClear ? (
-                    <motion.div
-                      key='all-clear'
-                      initial={reduce ? false : { opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={reduce ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT }}
-                    >
-                      <Empty className='border-0 py-8'>
-                        <EmptyHeader>
-                          <EmptyMedia variant='icon'>
-                            <Icons.circleCheck />
-                          </EmptyMedia>
-                          <EmptyTitle>All clear</EmptyTitle>
-                          <EmptyDescription>No approvals waiting and every connection is healthy.</EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
+                    <motion.div key='all-clear' role='listitem' initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reduce ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT }}>
+                      <StateMessage kind='success' title='All clear' description='No approvals waiting and every connection is healthy.' />
                     </motion.div>
                   ) : (
                     [
                       attention.unavailable.length > 0 && (
-                        <motion.div key='unavailable' layout={reduce ? false : 'position'} initial={enter} animate={{ opacity: 1, y: 0 }} exit={exit} transition={move}>
-                          <Alert variant='destructive' data-attention-id='unavailable'>
-                            <Icons.warning className='size-4' />
-                            <AlertTitle>Could not read part of the workspace</AlertTitle>
-                            <AlertDescription className='flex flex-col gap-2'>
-                              <span>Some reminders may be missing: {listOf(attention.unavailable.map((source) => SOURCE_NAMES[source]))} could not be read.</span>
-                              <RetryButton queries={failedQueries} />
-                            </AlertDescription>
-                          </Alert>
+                        <motion.div key='unavailable' role='listitem' layout={reduce ? false : 'position'} initial={enter} animate={{ opacity: 1, y: 0 }} exit={exit} transition={move}>
+                          <div data-attention-id='unavailable' className='rafii-quiet rounded-[var(--rafii-radius-control)] px-4 py-3'>
+                            <StateMessage
+                              kind='partial'
+                              layout='inline'
+                              title='Could not read part of the workspace'
+                              description={`Some reminders may be missing: ${listOf(attention.unavailable.map((source) => SOURCE_NAMES[source]))} could not be read.`}
+                              action={<RetryButton queries={failedQueries} />}
+                            />
+                          </div>
                         </motion.div>
                       ),
-                      ...attention.items.map((item) => (
-                        <motion.div key={item.id} layout={reduce ? false : 'position'} initial={enter} animate={{ opacity: 1, y: 0 }} exit={exit} transition={move}>
-                          <Alert variant={item.tone === 'warning' ? 'destructive' : 'default'} data-attention-id={item.id}>
-                            {item.tone === 'warning' ? <Icons.warning className='size-4' /> : <Icons.info className='size-4' />}
-                            <AlertTitle>{item.title}</AlertTitle>
-                            <AlertDescription className='flex flex-col gap-2'>
-                              <span>{item.description}</span>
-                              <Link href={item.href} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-fit')}>
-                                {item.action}
-                              </Link>
-                            </AlertDescription>
-                          </Alert>
-                        </motion.div>
-                      ))
+                      ...attention.items.map((item) => {
+                        const who = whoCanAct(item);
+                        return (
+                          <motion.div key={item.id} layout={reduce ? false : 'position'} initial={enter} animate={{ opacity: 1, y: 0 }} exit={exit} transition={move}>
+                            <AttentionRow item={item} canAct={who ? checkAccess(access, { permission: who.permission }) : null} />
+                          </motion.div>
+                        );
+                      })
                     ]
                   )}
                 </AnimatePresence>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </Panel>
 
-          <PublishingActivity
-            className='lg:col-span-4'
-            jobs={snapshot.data && !snapshot.isError ? jobs : null}
-            pending={snapshot.isPending}
-          />
+          <PublishingActivity className='lg:col-span-4' jobs={snapshot.data && !snapshot.isError ? jobs : null} pending={snapshot.isPending} />
 
           <ChannelsCard className='lg:col-span-3' />
 

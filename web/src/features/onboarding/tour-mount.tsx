@@ -5,10 +5,11 @@ import { usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/session';
 import { tourStore, useTourStore } from './store';
-import { TourOverlay } from './tour-overlay';
+import dynamic from 'next/dynamic';
+const TourOverlay = dynamic(() => import('./tour-overlay').then((m) => m.TourOverlay), { ssr: false });
 import { pageTourFor, WELCOME_TOUR } from './tours';
 import { useTourContext } from './use-tour-context';
-import { WelcomeDialog } from './welcome-dialog';
+const WelcomeDialog = dynamic(() => import('./welcome-dialog').then((m) => m.WelcomeDialog), { ssr: false });
 
 /**
  * Everything onboarding mounts from the app template: the first-run welcome, the one-time
@@ -64,12 +65,12 @@ export function TourMount() {
 
   return (
     <>
-      <WelcomeDialog
+      {showWelcome && <WelcomeDialog
         open={showWelcome}
         onStart={() => tourStore.start('welcome')}
         onDismiss={() => tourStore.dismissWithoutStarting('welcome')}
-      />
-      <TourOverlay />
+      />}
+      {active && <TourOverlay />}
     </>
   );
 }

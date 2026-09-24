@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -11,8 +11,7 @@ import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import { StatefulButton } from '@/components/motion/button';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { Tabs, TabsList, TabsTrigger } from '@/components/motion/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ActiveFilters, FilterPanel, FilterSelect, SegmentedControl, StateMessage, Surface, Workbar } from '@/components/rafii';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,10 +23,7 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
 import { keys, useAct, useUsage } from '@/lib/api/hooks';
@@ -37,7 +33,7 @@ import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { AssetCard, saysStorageNotConfigured } from './asset-card';
+import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
 import { AssetDetail } from './asset-detail';
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibrarySort } from './use-library';
 import { useUploadQueue, type UploadItem, type UploadProgress, type UploadStatus } from './use-upload-queue';
@@ -77,10 +73,10 @@ const SORT_LABELS: Record<LibrarySort, string> = {
   largest: 'Largest first'
 };
 
-/** The stagger covers the first eight cards (35 ms apart, 280 ms at most); later cards arrive with the eighth. */
-const STAGGER = 0.035;
-const STAGGER_CAP = 8;
 const SKELETON_KEYS = Array.from({ length: 12 }, (_, index) => `skeleton-${index}`);
+
+/* The one inverted commitment (Upload assets, DNA §21.9) on the motion button. */
+const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 text-sm hover:bg-transparent hover:brightness-[1.06]';
 
 function rejectionMessage({ file, errors }: FileRejection) {
   const code = errors[0]?.code;
@@ -90,6 +86,7 @@ function rejectionMessage({ file, errors }: FileRejection) {
   return `${file.name} was not added: ${errors[0]?.message ?? 'it cannot be uploaded'}.`;
 }
 
+/** Waiting, reading, sending, uploaded, failed and not sent stay distinct states (DNA §21.9), in words. */
 const UPLOAD_BADGE: Record<UploadStatus, { status: AnimatedBadgeStatus; label: string }> = {
   waiting: { status: 'neutral', label: 'waiting' },
   reading: { status: 'loading', label: 'reading' },
@@ -107,22 +104,22 @@ function uploadingText(progress: UploadProgress | null) {
 function UploadTray({ items, progress, onDismiss }: { items: UploadItem[]; progress: UploadProgress | null; onDismiss: () => void }) {
   const done = items.filter((item) => item.status === 'done').length;
   return (
-    <section aria-labelledby='library-uploads' className='bg-card rounded-lg border'>
-      <div className='flex items-center justify-between gap-2 border-b px-3 py-2'>
+    <Surface as='section' material='quiet' radius='card' padding='none' aria-labelledby='library-uploads'>
+      <div className='flex min-h-12 items-center justify-between gap-2 px-4 py-1.5'>
         <h3 id='library-uploads' aria-live='polite' className='text-sm font-medium'>
           {progress ? uploadingText(progress) : `${done} of ${items.length} uploaded`}
         </h3>
         {!progress && (
-          <Button variant='ghost' size='xs' onClick={onDismiss}>
+          <Button variant='quiet' size='lg' onClick={onDismiss}>
             Dismiss
           </Button>
         )}
       </div>
-      <ul className='max-h-60 divide-y overflow-y-auto'>
+      <ul className='flex max-h-60 flex-col gap-0.5 overflow-y-auto px-2 pb-2'>
         {items.map((item) => {
           const badge = UPLOAD_BADGE[item.status];
           return (
-            <li key={item.key} className='flex items-center gap-3 px-3 py-2'>
+            <li key={item.key} className='flex min-h-11 items-center gap-3 rounded-[var(--rafii-radius-control)] px-2 py-1.5'>
               <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
                 <span className='truncate text-sm'>{item.name}</span>
                 <span className={cn('text-xs', item.status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}>
@@ -130,28 +127,29 @@ function UploadTray({ items, progress, onDismiss }: { items: UploadItem[]; progr
                   {item.message ? ` · ${item.message}` : ''}
                 </span>
               </div>
-              <AnimatedBadge size='sm' status={badge.status} showIcon={item.status !== 'waiting' && item.status !== 'skipped'}>
+              <AnimatedBadge size='sm' status={badge.status} showIcon={item.status !== 'waiting' && item.status !== 'skipped'} className={badgeClass(badge.status)}>
                 {badge.label}
               </AnimatedBadge>
             </li>
           );
         })}
       </ul>
-    </section>
+    </Surface>
   );
 }
 
+/** Loading keeps the loaded geometry (DNA §20.1): the workbar's shape, then the grid. */
 function LibrarySkeleton() {
   return (
-    <div className='flex flex-col gap-4' aria-busy='true' aria-label='Loading the library'>
-      <div className='flex flex-wrap items-center gap-2'>
-        <Skeleton className='h-8 w-full md:w-64' />
-        <Skeleton className='h-9 w-full sm:w-56' />
-        <Skeleton className='h-7 w-44 sm:ml-auto' />
+    <div className='flex flex-col gap-4' role='status' aria-busy='true' aria-label='Loading the library'>
+      <div className='flex flex-col gap-2 md:flex-row md:items-center'>
+        <Skeleton className='h-11 w-full rounded-[var(--rafii-radius-control)] md:flex-1' />
+        <Skeleton className='h-11 w-full rounded-[var(--rafii-radius-segment)] md:w-64' />
+        <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)] md:w-28' />
       </div>
       <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6'>
         {SKELETON_KEYS.map((key) => (
-          <Skeleton key={key} className='aspect-square w-full rounded-lg' />
+          <Skeleton key={key} className='aspect-[4/5] w-full rounded-[var(--rafii-radius-card)]' />
         ))}
       </div>
     </div>
@@ -180,7 +178,6 @@ export function LibraryView() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<LibraryAsset | null>(null);
   const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [revealed, setRevealed] = useState(false);
   /**
    * A preview request was answered "Private media storage is not configured." The latest answer wins: a preview
    * that loads afterwards clears it. Other 503s (storage briefly unreachable, a restart) keep Retry on the card instead.
@@ -188,13 +185,6 @@ export function LibraryView() {
   const [mediaStorageMissing, setMediaStorageMissing] = useState(false);
   const markStorageMissing = useCallback(() => setMediaStorageMissing(true), []);
   const markPreviewLoaded = useCallback(() => setMediaStorageMissing(false), []);
-
-  // Once the first cards have staggered in, later arrivals (an upload, a filter change) enter without delay.
-  useEffect(() => {
-    if (revealed || assets.length === 0) return;
-    const timer = setTimeout(() => setRevealed(true), 600);
-    return () => clearTimeout(timer);
-  }, [assets.length, revealed]);
 
   const { getRootProps, getInputProps, isDragActive, isDragReject, open: openPicker } = useDropzone({
     accept: ACCEPTED_TYPES,
@@ -216,6 +206,11 @@ export function LibraryView() {
   const storageMb = usage.data?.entitlement?.storageMb;
   const uploadStorageMissing = saysStorageNotConfigured(upload.blocker);
   const storageMissing = mediaStorageMissing || uploadStorageMissing;
+
+  // The sort is a display choice inside the labelled Filters panel; the default is not a narrowing (DNA §10.5).
+  const defaultSort: LibrarySort = library.hasTimestamps ? 'newest' : 'stored';
+  const sortActive = library.sort !== defaultSort ? 1 : 0;
+  const sortOptions = [...(library.hasTimestamps ? [{ value: 'newest', label: SORT_LABELS.newest }] : []), { value: 'stored', label: SORT_LABELS.stored }, { value: 'largest', label: SORT_LABELS.largest }];
 
   function openDetail(asset: LibraryAsset) {
     setDetail(asset);
@@ -246,6 +241,7 @@ export function LibraryView() {
   const uploadButton = canEdit ? (
     <StatefulButton
       data-tour='library-upload'
+      className={ACTION}
       state={upload.buttonState}
       icon={<Icons.upload className='size-4' />}
       loadingText={uploadingText(upload.progress)}
@@ -264,130 +260,119 @@ export function LibraryView() {
     content = <LibrarySkeleton />;
   } else if (snapshot.isError && !snapshot.data) {
     content = (
-      <Alert variant='destructive'>
-        <Icons.alertCircle aria-hidden />
-        <AlertTitle>Could not load the library</AlertTitle>
-        <AlertDescription className='flex flex-col items-start gap-2'>
-          <span>{snapshot.error instanceof Error ? snapshot.error.message : 'The workspace did not respond.'}</span>
-          <Button size='sm' variant='outline' disabled={snapshot.isFetching} onClick={() => void snapshot.refetch()}>
+      <StateMessage
+        kind='error'
+        title='Could not load the library'
+        description={snapshot.error instanceof Error ? snapshot.error.message : 'The workspace did not respond.'}
+        action={
+          <Button variant='glass' size='control' disabled={snapshot.isFetching} onClick={() => void snapshot.refetch()}>
             <Icons.refresh className={cn(snapshot.isFetching && 'animate-spin')} aria-hidden />
             Retry
           </Button>
-        </AlertDescription>
-      </Alert>
+        }
+      />
     );
   } else if (assets.length === 0) {
     content = (
       <motion.div
         key='empty'
+        data-tour='library-empty'
         initial={reduce ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.2, ease: EASE_OUT }}
         className='flex flex-1 flex-col'
       >
-        <Empty className='border' data-tour='library-empty'>
-          <EmptyHeader>
-            <EmptyMedia variant='icon'>
-              <Icons.media />
-            </EmptyMedia>
-            <EmptyTitle>No images yet</EmptyTitle>
-            <EmptyDescription>
-              Upload JPEG or PNG, up to 8 MB and 320–4096 px per side. Each image is fully decoded, stripped of metadata and stored with its hash.
-              Attach it when you prepare a post from a draft.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            {canEdit ? (
-              <>
-                <Button onClick={openPicker} disabled={library.revision === null}>
-                  <Icons.upload aria-hidden />
-                  Upload images
-                </Button>
-                <span className='text-muted-foreground text-xs'>or drop files anywhere on this page</span>
-              </>
-            ) : (
-              <span className='text-muted-foreground text-xs'>Ask a workspace editor to add images.</span>
-            )}
-            <Link href='/app/ideas' className={cn('t-learn', buttonVariants({ variant: 'ghost', size: 'sm' }))}>
-              Open Ideas
-              <LearnMoreChevron />
-            </Link>
-          </EmptyContent>
-        </Empty>
+        <StateMessage
+          kind='empty'
+          media={
+            <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-full'>
+              <Icons.media className='size-5' />
+            </span>
+          }
+          title='No images yet'
+          description='Upload JPEG or PNG, up to 8 MB and 320–4096 px per side. Each image is fully decoded, stripped of metadata and stored with its hash. Attach it when you prepare a post from a draft.'
+          action={
+            <>
+              {canEdit ? (
+                <>
+                  <Button variant='action' size='control' onClick={openPicker} disabled={library.revision === null}>
+                    <Icons.upload aria-hidden />
+                    Upload images
+                  </Button>
+                  <span className='text-muted-foreground self-center text-xs'>or drop files anywhere on this page</span>
+                </>
+              ) : (
+                <span className='text-muted-foreground self-center text-xs'>Ask a workspace editor to add images.</span>
+              )}
+              <Link href='/app/ideas' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'control' }))}>
+                Open Ideas
+                <LearnMoreChevron />
+              </Link>
+            </>
+          }
+        />
       </motion.div>
     );
   } else {
     const normalizedQuery = query.trim();
     content = (
       <div className='flex flex-col gap-4'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <InputGroup className='w-full md:w-64'>
-            <InputGroupAddon>
-              <Icons.search aria-hidden />
-            </InputGroupAddon>
-            <InputGroupInput
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder='Hash or size, e.g. 1080x1350'
-              aria-label='Search images by hash prefix or dimensions'
-              spellCheck={false}
-            />
-            {query && (
-              <InputGroupAddon align='inline-end'>
-                <InputGroupButton size='icon-xs' aria-label='Clear search' onClick={() => setQuery('')}>
-                  <Icons.close aria-hidden />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
-          <Tabs value={filter} onValueChange={(value) => setFilter(value as LibraryFilter)} variant='segment' className='w-full sm:w-auto'>
-            <TabsList aria-label='Filter images by use' data-tour='library-filter' className='flex w-full border sm:inline-flex sm:w-auto'>
-              {FILTERS.map((option) => (
-                <TabsTrigger key={option.value} value={option.value} wrapperClassName='flex-1 sm:flex-none' className='w-full gap-1.5'>
-                  {option.label}
-                  <DigitSwap value={counts[option.value]} className='text-xs opacity-75' />
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <div className='flex w-full flex-wrap items-center justify-between gap-2 sm:ml-auto sm:w-auto sm:justify-end'>
-            <Select value={library.sort} onValueChange={(value) => setSort(value as LibrarySort)}>
-              <SelectTrigger size='sm' aria-label='Sort images'>
-                <SelectValue>{SORT_LABELS[library.sort]}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {library.hasTimestamps && <SelectItem value='newest'>{SORT_LABELS.newest}</SelectItem>}
-                <SelectItem value='stored'>{SORT_LABELS.stored}</SelectItem>
-                <SelectItem value='largest'>{SORT_LABELS.largest}</SelectItem>
-              </SelectContent>
-            </Select>
-            <span data-tour='library-stats' className='text-muted-foreground inline-flex items-center gap-1 text-sm tabular-nums'>
+        {/* WHAT (use filter) → FIND (search) → VIEW (sort, inside Filters); the Gallery is the one representation this collection has. */}
+        <Workbar
+          search={query}
+          onSearch={setQuery}
+          searchPlaceholder='Hash or size, e.g. 1080x1350'
+          searchLabel='Search images by hash prefix or dimensions'
+          tabs={
+            <div data-tour='library-filter' className='sm:w-fit'>
+              <SegmentedControl
+                label='Filter images by use'
+                value={filter}
+                onChange={setFilter}
+                options={FILTERS.map((option) => ({
+                  value: option.value,
+                  label: (
+                    <>
+                      {option.label}
+                      <DigitSwap value={counts[option.value]} className='text-muted-foreground text-xs' />
+                    </>
+                  )
+                }))}
+              />
+            </div>
+          }
+          filters={
+            <FilterPanel count={sortActive} onClear={() => setSort(defaultSort)}>
+              <FilterSelect id='library-sort' label='Sort' value={library.sort} onChange={(value) => setSort(value as LibrarySort)} options={sortOptions} />
+            </FilterPanel>
+          }
+          count={
+            <span data-tour='library-stats' className='inline-flex items-center gap-1'>
               <DigitSwap value={totals.count} />
               <span>{totals.count === 1 ? 'image' : 'images'} ·</span>
               <span>{formatBytes(totals.bytes)}</span>
               {totals.unknownBytes > 0 && <span>({totals.unknownBytes} without a size)</span>}
             </span>
-          </div>
-        </div>
+          }
+          summary={<ActiveFilters count={sortActive} summary={SORT_LABELS[library.sort]} onClear={() => setSort(defaultSort)} clearLabel='Reset sort' />}
+        />
 
         {visible.length === 0 ? (
-          <Empty className='border py-10'>
-            <EmptyHeader>
-              <EmptyTitle>
-                {normalizedQuery
-                  ? `No image matches “${normalizedQuery}”`
-                  : filter === 'unused'
-                    ? 'Every image is used in a post'
-                    : 'No image is used in a post yet'}
-              </EmptyTitle>
-              <EmptyDescription>
-                {normalizedQuery ? 'Search matches the start of a hash, or dimensions such as 1080x1350.' : 'Switch to All to see every image.'}
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
+          // No matches is not an empty library (DNA §13.5): say what can be cleared.
+          <StateMessage
+            kind='empty'
+            title={
+              normalizedQuery
+                ? `No image matches “${normalizedQuery}”`
+                : filter === 'unused'
+                  ? 'Every image is used in a post'
+                  : 'No image is used in a post yet'
+            }
+            description={normalizedQuery ? 'Search matches the start of a hash, or dimensions such as 1080x1350.' : 'Switch to All to see every image.'}
+            action={
               <Button
-                variant='ghost'
-                size='sm'
+                variant='glass'
+                size='control'
                 onClick={() => {
                   if (normalizedQuery) setQuery('');
                   else setFilter('all');
@@ -395,8 +380,8 @@ export function LibraryView() {
               >
                 {normalizedQuery ? 'Clear search' : 'Show all'}
               </Button>
-            </EmptyContent>
-          </Empty>
+            }
+          />
         ) : (
           <div role='list' aria-label='Images' className='grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6'>
             <AnimatePresence>
@@ -406,7 +391,6 @@ export function LibraryView() {
                   asset={asset}
                   uses={library.usesOf(asset.id)}
                   publishing={library.isPublishing(asset.id)}
-                  delay={revealed || reduce ? 0 : Math.min(index, STAGGER_CAP) * STAGGER}
                   first={index === 0}
                   canEdit={canEdit}
                   canApprove={canApprove}
@@ -421,7 +405,7 @@ export function LibraryView() {
           </div>
         )}
 
-        <div className='text-muted-foreground flex flex-col gap-1 text-xs'>
+        <div className='text-muted-foreground flex flex-col gap-1 text-xs leading-relaxed'>
           {!library.hasTimestamps && (
             <p>Images appear in the order the workspace returns them. Upload times are not recorded yet, so newest first is not offered.</p>
           )}
@@ -442,26 +426,19 @@ export function LibraryView() {
       <div {...getRootProps({ className: 'relative flex min-w-0 flex-1 flex-col gap-4' })}>
         <input {...getInputProps({ 'aria-label': 'Choose JPEG or PNG images to upload' })} />
 
+        {/* Unsupported, offline and refused are different states (DNA §20.1), each with its own reason. */}
         {storageMissing ? (
-          <Alert variant='destructive'>
-            <Icons.alertCircle aria-hidden />
-            <AlertTitle>Private media storage is not configured for this deployment</AlertTitle>
-            <AlertDescription>
-              {uploadStorageMissing && upload.blocker ? upload.blocker.message : 'Image previews could not load for this reason.'} Images
-              cannot be uploaded, previewed or deleted until it is.
-            </AlertDescription>
-          </Alert>
+          <StateMessage
+            kind='unsupported'
+            title='Private media storage is not configured for this deployment'
+            description={`${uploadStorageMissing && upload.blocker ? upload.blocker.message : 'Image previews could not load for this reason.'} Images cannot be uploaded, previewed or deleted until it is.`}
+          />
         ) : upload.blocker ? (
-          <Alert variant='destructive'>
-            <Icons.alertCircle aria-hidden />
-            <AlertTitle>
-              {upload.blocker.status === 503 ? 'Uploads stopped because the workspace was unavailable' : 'The workspace refused the upload'}
-            </AlertTitle>
-            <AlertDescription>
-              {upload.blocker.message}
-              {upload.blocker.status === 503 ? ' Files that were not sent can be uploaded again.' : ''}
-            </AlertDescription>
-          </Alert>
+          <StateMessage
+            kind={upload.blocker.status === 503 ? 'offline' : 'error'}
+            title={upload.blocker.status === 503 ? 'Uploads stopped because the workspace was unavailable' : 'The workspace refused the upload'}
+            description={`${upload.blocker.message}${upload.blocker.status === 503 ? ' Files that were not sent can be uploaded again.' : ''}`}
+          />
         ) : null}
 
         <AnimatePresence initial={false}>
@@ -488,8 +465,8 @@ export function LibraryView() {
               animate={{ opacity: 1, transition: { duration: 0.15, ease: EASE_OUT } }}
               exit={{ opacity: 0, transition: { duration: 0.08, ease: EASE_OUT } }}
               className={cn(
-                'bg-background/85 pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-sm font-medium',
-                isDragReject ? 'border-destructive text-destructive' : 'border-primary text-foreground'
+                'rafii-elevated pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-[var(--rafii-radius-card)] text-sm font-medium outline-2 outline-dashed -outline-offset-[12px]',
+                isDragReject ? 'outline-destructive text-destructive' : 'outline-foreground/50 text-foreground'
               )}
             >
               <Icons.upload className='size-6' />
@@ -514,7 +491,7 @@ export function LibraryView() {
       />
 
       <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className='rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 md:p-6'>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this image?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -526,9 +503,11 @@ export function LibraryView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
+            <AlertDialogCancel variant='glass' size='control'>Keep</AlertDialogCancel>
             <AlertDialogAction
               variant='destructive'
+              size='control'
+              className='rounded-[var(--rafii-radius-control)]'
               onClick={() => {
                 if (pendingDelete) void remove(pendingDelete);
                 setPendingDelete(null);

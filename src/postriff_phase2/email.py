@@ -39,6 +39,17 @@ def _date(epoch):
         return "soon"
 
 
+
+# Automation notices (orchestration): subject, first paragraph, button label. Silence never approves, so the review
+# notice says plainly that nothing is published without the person.
+AUTOMATION_NOTICES = {
+    "review_ready": ("Ready for your approval: {name}", "Your automation “{name}” prepared posts that need your approval. Nothing is published unless you approve it before its publish time.", "Review and approve"),
+    "approval_expired": ("Not published: {name}", "A post from your automation “{name}” reached its publish time without an approval, so it was not published. The draft is kept.", "See the draft"),
+    "platform_disconnected": ("Reconnect an account: {name}", "Your automation “{name}” couldn't publish because an account is disconnected. The draft is kept; reconnect the account to publish.", "Open the automation"),
+    "publish_failed": ("Couldn't publish: {name}", "A post from your automation “{name}” couldn't be published. The approved draft is kept.", "Open the automation"),
+    "run_skipped": ("Skipped this time: {name}", "Your automation “{name}” skipped this run.", "Open the automation"),
+}
+
 class NullTransport:
     """Fixture transport: records every message in `.sent` and delivers nothing."""
 
@@ -128,6 +139,19 @@ class Mailer:
                     [f"Someone signed in to your {b} account from {device} on {_date(ctx.get('at'))}.",
                      "If this was you, there is nothing to do. If it wasn’t, open your profile, sign out every other session and turn on two-factor authentication."],
                     "Review where you are signed in", ctx.get("profile_url"))
+        if kind == "drafts_ready":
+            name = _clean(ctx.get("automation_name"), 80) or "Your automation"
+            count = max(1, int(ctx.get("count") or 1))
+            drafts = f"{count} draft{'' if count == 1 else 's'}"
+            return (f"{drafts} ready for review: {name}",
+                    [f"Your automation “{name}” prepared {drafts} for your review.",
+                     "Nothing was scheduled or published. Open the drafts to edit, approve or discard them."],
+                    "Review drafts", ctx.get("review_url"))
+        if kind in AUTOMATION_NOTICES:
+            name = _clean(ctx.get("automation_name"), 80) or "Your automation"
+            detail = _clean(ctx.get("detail"), 400)
+            subject, lead, label = AUTOMATION_NOTICES[kind]
+            return (subject.format(name=name), [lead.format(name=name), *([detail] if detail else [])], label, ctx.get("review_url"))
         raise AlphaError("Unknown email kind.", 500)
 
     def render(self, kind, **ctx):
@@ -188,6 +212,15 @@ class Mailer:
 
     def subscription_activated(self, to, plan_label, billing_url):
         return self._deliver("subscription_activated", to, plan_label=plan_label, billing_url=billing_url)
+
+    def automation_notice(self, to, kind, automation_name, detail, review_url):
+        """An automation needs the person: posts waiting for approval, an approval that expired, or an account that
+        was disconnected before a post's time. Deduped per run and person in pr_notifications by the worker."""
+        return self._deliver(kind, to, automation_name=automation_name, detail=detail, review_url=review_url)
+
+    def drafts_ready(self, to, automation_name, count, review_url):
+        """Opt-in: an automation prepared drafts (`CampaignWorker._notify`); one per run and person."""
+        return self._deliver("drafts_ready", to, automation_name=automation_name, count=count, review_url=review_url)
 
     def new_device(self, to, device_label, at, profile_url):
         """Opt-in alert the first time a session is seen (hosted `_alert_new_device`)."""

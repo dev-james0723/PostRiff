@@ -19,6 +19,7 @@ import {
 
 import { cn } from '@/lib/utils';
 
+// Only the default UI face competes for first-paint bandwidth. Other themes load on use.
 const fontSans = Geist({
   subsets: ['latin'],
   variable: '--font-sans'
@@ -26,81 +27,103 @@ const fontSans = Geist({
 
 const fontMono = Geist_Mono({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-mono'
 });
 
 const fontGoogleSansFlex = Google_Sans_Flex({
   subsets: ['latin'],
-  variable: '--font-google-sans-flex'
+  preload: false,
+  variable: '--font-google-sans-flex',
+  // next/font has no metrics for this family, so it cannot size-adjust a fallback (it warned on every
+  // compile); name the fallback explicitly instead.
+  adjustFontFallback: false,
+  fallback: ['system-ui', 'sans-serif']
 });
 
 const fontSourceCodePro = Source_Code_Pro({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-source-code-pro'
 });
 
 const fontInstrument = Instrument_Sans({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-instrument'
 });
 
 const fontNotoMono = Noto_Sans_Mono({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-noto-mono'
 });
 
 const fontMullish = Mulish({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-mullish'
 });
 
 const fontInter = Inter({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-inter'
 });
 
 const fontArchitectsDaughter = Architects_Daughter({
   subsets: ['latin'],
+  preload: false,
   weight: '400',
   variable: '--font-architects-daughter'
 });
 
 const fontDMSans = DM_Sans({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-dm-sans'
 });
 
 const fontFiraCode = Fira_Code({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-fira-code'
 });
 
 const fontOutfit = Outfit({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-outfit'
 });
 
 const fontSpaceMono = Space_Mono({
   subsets: ['latin'],
+  preload: false,
   weight: ['400', '700'],
   variable: '--font-space-mono'
 });
 
 const fontJetBrainsMono = JetBrains_Mono({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-jetbrains-mono'
 });
 
 const fontMerriweather = Merriweather({
   subsets: ['latin'],
+  preload: false,
   weight: ['300', '400', '700'],
   variable: '--font-merriweather'
 });
 
 const fontPlayfairDisplay = Playfair_Display({
   subsets: ['latin'],
+  preload: false,
   variable: '--font-playfair-display'
 });
+
+/** The next/font Geist face, re-applied under the Rafii theme (styles/rafii.css) after the theme layer resets `--font-sans`. */
+export const uiFontFamily = fontSans.style.fontFamily;
 
 export const fontVariables = cn(
   fontSans.variable,

@@ -5,7 +5,9 @@ import Image from 'next/image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
+import { rafiiDialog, rafiiDialogFooter, rafiiIconWell } from '@/components/auth/form-styles';
 import { Icons } from '@/components/icons';
+import { CollectionRow, StateMessage } from '@/components/rafii';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,14 +18,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { keys, useMe, useSecurityEvents, useSessions } from '@/lib/api/hooks';
@@ -45,10 +44,12 @@ import { useAuth } from '@/lib/auth/session';
 import { formatDate, formatDateTime, relativeTime } from '@/lib/time';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
+import { SettingsGroup, SettingsSection } from './settings-section';
 
 const FACTORS_KEY = ['mfa-factors'] as const;
 
 const KIND_LABEL: Record<FactorKind, string> = { totp: 'Authenticator app', webauthn: 'Passkey · Face ID / Touch ID' };
+const DIALOG_TITLE = 'text-foreground text-xl font-medium tracking-tight';
 
 function message(err: unknown, fallback: string) {
   return err instanceof ApiError || err instanceof Error ? err.message : fallback;
@@ -124,30 +125,25 @@ function StepUpDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !busy && close()}>
-      <DialogContent>
+      <DialogContent className={rafiiDialog}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
             if (client) void confirm(() => verifyTotp(client, code));
           }}
-          className='flex flex-col gap-4'
+          className='flex flex-col gap-5'
         >
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
+          <DialogHeader className='gap-1.5 pr-8'>
+            <DialogTitle className={DIALOG_TITLE}>{title}</DialogTitle>
+            <DialogDescription className='leading-relaxed'>{description}</DialogDescription>
           </DialogHeader>
-          {error && (
-            <Alert variant='destructive'>
-              <Icons.alertCircle className='size-4' />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          {error && <StateMessage kind='error' layout='inline' title={error} />}
           {showCode ? (
-            <div className='flex flex-col gap-1.5'>
+            <div className='flex flex-col gap-2'>
               <Label htmlFor='step-up-code'>Code from your authenticator app</Label>
               <CodeInput id='step-up-code' value={code} onChange={setCode} />
               {hasPasskey && (
-                <Button type='button' variant='link' className='w-fit px-0' disabled={busy} onClick={() => setMode('passkey')}>
+                <Button type='button' variant='quiet' size='sm' className='min-h-9 w-fit' disabled={busy} onClick={() => setMode('passkey')}>
                   Use Face ID / Touch ID instead
                 </Button>
               )}
@@ -156,7 +152,8 @@ function StepUpDialog({
             <div className='flex flex-col gap-2'>
               <Button
                 type='button'
-                variant='outline'
+                variant='glass'
+                size='control'
                 disabled={busy}
                 onClick={() => {
                   if (client) void confirm(() => verifyPasskey(client));
@@ -166,18 +163,18 @@ function StepUpDialog({
                 {busy ? 'Waiting for your device…' : 'Confirm with Face ID / Touch ID'}
               </Button>
               {hasCode && (
-                <Button type='button' variant='link' className='w-fit px-0' disabled={busy} onClick={() => setMode('code')}>
+                <Button type='button' variant='quiet' size='sm' className='min-h-9 w-fit' disabled={busy} onClick={() => setMode('code')}>
                   Use a code from my authenticator app instead
                 </Button>
               )}
             </div>
           )}
-          <DialogFooter>
-            <Button type='button' variant='ghost' disabled={busy} onClick={close}>
+          <DialogFooter className={rafiiDialogFooter}>
+            <Button type='button' variant='quiet' size='control' disabled={busy} onClick={close}>
               Cancel
             </Button>
             {showCode && (
-              <Button type='submit' variant={destructive ? 'destructive' : 'default'} disabled={busy || code.trim().length < 6}>
+              <Button type='submit' variant={destructive ? 'destructive' : 'action'} size='control' disabled={busy || code.trim().length < 6}>
                 {busy ? 'Verifying…' : actionLabel}
               </Button>
             )}
@@ -250,20 +247,15 @@ function AuthenticatorDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !busy && close(false)}>
-      <DialogContent>
-        <form onSubmit={submit} className='flex flex-col gap-4'>
-          <DialogHeader>
-            <DialogTitle>Set up an authenticator app</DialogTitle>
-            <DialogDescription>
+      <DialogContent className={rafiiDialog}>
+        <form onSubmit={submit} className='flex flex-col gap-5'>
+          <DialogHeader className='gap-1.5 pr-8'>
+            <DialogTitle className={DIALOG_TITLE}>Set up an authenticator app</DialogTitle>
+            <DialogDescription className='leading-relaxed'>
               Scan the code with Google Authenticator, 1Password, Authy or any TOTP app, then enter the 6-digit code it shows.
             </DialogDescription>
           </DialogHeader>
-          {error && (
-            <Alert variant='destructive'>
-              <Icons.alertCircle className='size-4' />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          {error && <StateMessage kind='error' layout='inline' title={error} />}
           {enrolment ? (
             <div className='flex flex-col gap-4 sm:flex-row sm:items-start'>
               {/* Supabase returns the QR as an SVG data URI; nothing to optimise, so the loader is skipped. */}
@@ -273,16 +265,16 @@ function AuthenticatorDialog({
                 width={176}
                 height={176}
                 unoptimized
-                className='size-44 shrink-0 rounded-md border bg-white p-2'
+                className='rafii-paper size-44 shrink-0 rounded-[var(--rafii-radius-control)] bg-white p-2'
               />
               <div className='flex min-w-0 flex-col gap-2 text-sm'>
                 <span className='text-muted-foreground'>Cannot scan? Enter this key by hand:</span>
-                <code className='bg-muted rounded px-2 py-1 text-xs break-all'>{enrolment.secret}</code>
+                <code className='rafii-quiet rounded-[var(--rafii-radius-micro)] px-2 py-1.5 text-xs break-all'>{enrolment.secret}</code>
                 <Button
                   type='button'
                   size='sm'
-                  variant='outline'
-                  className='w-fit'
+                  variant='glass'
+                  className='min-h-9 w-fit'
                   onClick={() => {
                     void navigator.clipboard.writeText(enrolment.secret).then(() => toast.success('Key copied.'));
                   }}
@@ -293,17 +285,17 @@ function AuthenticatorDialog({
               </div>
             </div>
           ) : (
-            <Skeleton className='h-44 w-full' />
+            <StateMessage kind='loading' title='Preparing your enrolment' />
           )}
-          <div className='flex flex-col gap-1.5'>
+          <div className='flex flex-col gap-2'>
             <Label htmlFor='enrol-code'>Code from the app</Label>
             <CodeInput id='enrol-code' value={code} onChange={setCode} />
           </div>
-          <DialogFooter>
-            <Button type='button' variant='ghost' disabled={busy} onClick={() => close(false)}>
+          <DialogFooter className={rafiiDialogFooter}>
+            <Button type='button' variant='quiet' size='control' disabled={busy} onClick={() => close(false)}>
               Cancel
             </Button>
-            <Button type='submit' disabled={busy || !enrolment || code.trim().length < 6}>
+            <Button type='submit' variant='action' size='control' disabled={busy || !enrolment || code.trim().length < 6}>
               {busy ? 'Verifying…' : 'Verify and turn on'}
             </Button>
           </DialogFooter>
@@ -351,25 +343,20 @@ function PasskeyDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !busy && close()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Set up Face ID / Touch ID</DialogTitle>
-          <DialogDescription>
+      <DialogContent className={cn(rafiiDialog, 'gap-5')}>
+        <DialogHeader className='gap-1.5 pr-8'>
+          <DialogTitle className={DIALOG_TITLE}>Set up Face ID / Touch ID</DialogTitle>
+          <DialogDescription className='leading-relaxed'>
             Your device will ask you to confirm with Face ID, Touch ID, Windows Hello or a security key. PostRiff keeps only a public key; the
             biometric never leaves your device. Passkeys saved to iCloud Keychain or Google Password Manager also work on your other devices.
           </DialogDescription>
         </DialogHeader>
-        {error && (
-          <Alert variant='destructive'>
-            <Icons.alertCircle className='size-4' />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        <DialogFooter>
-          <Button type='button' variant='ghost' disabled={busy} onClick={close}>
+        {error && <StateMessage kind='error' layout='inline' title={error} />}
+        <DialogFooter className={rafiiDialogFooter}>
+          <Button type='button' variant='quiet' size='control' disabled={busy} onClick={close}>
             Cancel
           </Button>
-          <Button type='button' disabled={busy} onClick={() => void start()}>
+          <Button type='button' variant='action' size='control' disabled={busy} onClick={() => void start()}>
             <Icons.key className='size-4' aria-hidden />
             {busy ? 'Waiting for your device…' : 'Continue'}
           </Button>
@@ -379,7 +366,7 @@ function PasskeyDialog({
   );
 }
 
-/** "How do you want to confirm sign-ins?" — one card per method; a passkey needs WebAuthn in this browser. */
+/** "How do you want to confirm sign-ins?" — one row per method; a passkey needs WebAuthn in this browser. */
 function MethodChooser({
   open,
   onOpenChange,
@@ -409,10 +396,10 @@ function MethodChooser({
   ];
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{backup ? 'Add a backup method' : 'How do you want to confirm sign-ins?'}</DialogTitle>
-          <DialogDescription>
+      <DialogContent className={cn(rafiiDialog, 'gap-5')}>
+        <DialogHeader className='gap-1.5 pr-8'>
+          <DialogTitle className={DIALOG_TITLE}>{backup ? 'Add a backup method' : 'How do you want to confirm sign-ins?'}</DialogTitle>
+          <DialogDescription className='leading-relaxed'>
             {backup
               ? 'A second method keeps you signed in if you lose the first. There are no recovery codes.'
               : 'Every sign-in will ask for this after your email or Google account. You can add a backup afterwards.'}
@@ -426,13 +413,13 @@ function MethodChooser({
               disabled={option.disabled}
               onClick={() => onChoose(option.kind)}
               className={cn(
-                'hover:bg-accent focus-visible:ring-ring flex items-center gap-3 rounded-lg border p-3 text-left transition-colors outline-none focus-visible:ring-2',
-                option.disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent'
+                'rafii-quiet rafii-focus hover:rafii-glass-selected flex min-h-14 items-center gap-3 rounded-[var(--rafii-radius-control)] p-3 text-left transition-colors',
+                option.disabled && 'cursor-not-allowed opacity-60 hover:rafii-quiet'
               )}
             >
-              <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md'>{option.icon}</span>
+              <span className={rafiiIconWell}>{option.icon}</span>
               <span className='flex min-w-0 flex-col'>
-                <span className='text-sm font-medium'>{option.title}</span>
+                <span className='text-foreground text-sm font-medium'>{option.title}</span>
                 <span className='text-muted-foreground text-xs'>{option.note}</span>
               </span>
               <Icons.chevronRight className='text-muted-foreground ml-auto size-4' aria-hidden />
@@ -510,66 +497,62 @@ function TwoFactor() {
       : 'Confirm every sign-in with Face ID / Touch ID or an authenticator app. Once on, the API refuses any session that has not shown one.';
 
   return (
-    <div className='flex flex-col gap-4'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
-        <div className='flex min-w-0 flex-col gap-1'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <Icons.shieldCheck className='text-muted-foreground size-4' aria-hidden />
-            <span className='font-medium'>Two-factor authentication</span>
-            {me.isLoading ? (
-              <Skeleton className='h-5 w-10' />
-            ) : (
-              <Badge variant={enforced ? 'default' : 'outline'}>{enforced ? 'On' : 'Off'}</Badge>
-            )}
-          </div>
-          {me.isLoading ? <Skeleton className='h-4 w-64' /> : <p className='text-muted-foreground text-sm'>{explanation}</p>}
-        </div>
-        {enforced ? (
-          <Button variant='outline' disabled={!available} onClick={() => setTurningOff(true)}>
+    <SettingsGroup
+      icon={<Icons.shieldCheck className='size-4' />}
+      title={
+        <span className='flex flex-wrap items-center gap-2'>
+          Two-factor authentication
+          {me.isLoading ? <Skeleton className='h-5 w-10' /> : <Badge variant={enforced ? 'default' : 'secondary'}>{enforced ? 'On' : 'Off'}</Badge>}
+        </span>
+      }
+      description={me.isLoading ? <Skeleton className='h-4 w-64 max-w-full' /> : explanation}
+      action={
+        enforced ? (
+          <Button variant='glass' size='control' disabled={!available} onClick={() => setTurningOff(true)}>
             Turn off
           </Button>
         ) : (
-          <Button disabled={!available || me.isLoading} onClick={() => setChoosing(true)}>
+          <Button variant='action' size='control' disabled={!available || me.isLoading} onClick={() => setChoosing(true)}>
             Turn on
           </Button>
-        )}
-      </div>
-
+        )
+      }
+    >
       {available && enforced && (
-        <div className='rounded-lg border'>
+        <div className='flex flex-col gap-3'>
           {factors.isLoading ? (
-            <Skeleton className='m-3 h-10' />
+            <StateMessage kind='loading' title='Loading your methods' className='bg-transparent p-0' />
           ) : (
-            <ul className='divide-y'>
+            <ul className='flex flex-col gap-1.5'>
               {verified.map((factor) => (
-                <li key={factor.id} className='flex items-center justify-between gap-3 px-3 py-2 text-sm'>
-                  <div className='flex min-w-0 items-center gap-3'>
-                    <span className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-md'>
+                <CollectionRow
+                  key={factor.id}
+                  as='li'
+                  className='rafii-glass'
+                  leading={
+                    <span className={rafiiIconWell}>
                       {factor.kind === 'webauthn' ? <Icons.key className='size-4' aria-hidden /> : <Icons.phone className='size-4' aria-hidden />}
                     </span>
-                    <div className='min-w-0'>
-                      <div className='truncate font-medium'>{factor.name}</div>
-                      <div className='text-muted-foreground text-xs'>
-                        {KIND_LABEL[factor.kind]} · added {formatDate(Date.parse(factor.createdAt) / 1000)}
-                      </div>
-                    </div>
-                  </div>
-                  {verified.length > 1 ? (
-                    <Button variant='ghost' size='sm' onClick={() => setRemoving(factor)}>
-                      Remove
-                    </Button>
-                  ) : (
-                    <span className='text-muted-foreground text-xs'>Your only method</span>
-                  )}
-                </li>
+                  }
+                  title={factor.name}
+                  meta={`${KIND_LABEL[factor.kind]} · added ${formatDate(Date.parse(factor.createdAt) / 1000)}`}
+                  state={verified.length > 1 ? undefined : 'Your only method'}
+                  actions={
+                    verified.length > 1 ? (
+                      <Button variant='quiet' size='sm' className='min-h-9' onClick={() => setRemoving(factor)}>
+                        Remove
+                      </Button>
+                    ) : undefined
+                  }
+                />
               ))}
             </ul>
           )}
-          <div className='flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2'>
-            <p className='text-muted-foreground text-xs'>
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <p className='text-muted-foreground max-w-[52ch] text-xs leading-relaxed'>
               This account has no recovery codes. A second method — a passkey on another device, or an authenticator app — is your backup.
             </p>
-            <Button size='sm' variant='outline' onClick={() => setChoosing(true)}>
+            <Button size='sm' variant='glass' className='min-h-10 px-3.5' onClick={() => setChoosing(true)}>
               <Icons.add className='size-4' />
               Add backup method
             </Button>
@@ -618,7 +601,17 @@ function TwoFactor() {
         factors={verified}
         action={() => (removing ? removeFactor(removing) : Promise.resolve())}
       />
-    </div>
+    </SettingsGroup>
+  );
+}
+
+/** The two session marks: which row is this browser, and which have been revoked. */
+function SessionBadges({ session }: { session: { current: boolean; revoked: boolean } }) {
+  return (
+    <>
+      {session.current && <Badge variant='secondary'>this device</Badge>}
+      {session.revoked && <Badge variant='secondary'>revoked</Badge>}
+    </>
   );
 }
 
@@ -660,82 +653,101 @@ function Sessions() {
   }
 
   return (
-    <div className='flex flex-col gap-3'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
-        <div className='flex flex-col gap-1'>
-          <div className='flex items-center gap-2'>
-            <Icons.laptop className='text-muted-foreground size-4' aria-hidden />
-            <span className='font-medium'>Where you are signed in</span>
-          </div>
-          <p className='text-muted-foreground text-sm'>Every browser or device that used this account. Revoke any you do not recognise.</p>
-        </div>
-        <Button variant='outline' disabled={others === 0 || busy !== null} onClick={() => setConfirmOthers(true)}>
+    <SettingsGroup
+      icon={<Icons.laptop className='size-4' />}
+      title='Where you are signed in'
+      description='Every browser or device that used this account. Revoke any you do not recognise.'
+      action={
+        <Button variant='glass' size='control' disabled={others === 0 || busy !== null} onClick={() => setConfirmOthers(true)}>
           Sign out all other sessions
         </Button>
-      </div>
+      }
+    >
       {sessions.isLoading ? (
-        <Skeleton className='h-24 w-full' />
+        <StateMessage kind='loading' title='Loading your sessions' className='bg-transparent p-0' />
       ) : sessions.isError ? (
-        <Alert variant='destructive'>
-          <Icons.alertCircle className='size-4' />
-          <AlertDescription className='flex items-center justify-between gap-2'>
-            Sessions could not be loaded.
-            <Button size='sm' variant='outline' onClick={() => void sessions.refetch()}>
+        <StateMessage
+          kind='error'
+          layout='inline'
+          title='Sessions could not be loaded.'
+          action={
+            <Button size='sm' variant='glass' className='min-h-9' onClick={() => void sessions.refetch()}>
               Retry
             </Button>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       ) : (
-        <div className='overflow-x-auto rounded-lg border'>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Device</TableHead>
-                <TableHead>Last seen</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.map((session) => (
-                <TableRow key={session.sessionId}>
-                  <TableCell>
+        <>
+          {/* Phones: one row per session (DNA §19.3); the table returns from md up. */}
+          <ul className='flex flex-col gap-1.5 md:hidden'>
+            {list.map((session) => (
+              <CollectionRow
+                key={session.sessionId}
+                as='li'
+                className='rafii-glass flex-wrap'
+                title={
+                  <span className='flex flex-wrap items-center gap-2'>
                     {session.client || 'Unknown device'}
-                    {session.current && (
-                      <Badge variant='outline' className='ml-2'>
-                        this device
-                      </Badge>
-                    )}
-                    {session.revoked && (
-                      <Badge variant='secondary' className='ml-2'>
-                        revoked
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className='text-muted-foreground text-xs'>{relativeTime(session.lastSeen)}</TableCell>
-                  <TableCell className='text-right'>
-                    {!session.current && !session.revoked && (
-                      <Button variant='ghost' size='sm' disabled={busy !== null} onClick={() => void revoke(session.sessionId)}>
-                        Revoke
-                      </Button>
-                    )}
-                  </TableCell>
+                    <SessionBadges session={session} />
+                  </span>
+                }
+                meta={`Last seen ${relativeTime(session.lastSeen)}`}
+                actions={
+                  !session.current && !session.revoked ? (
+                    <Button variant='quiet' size='sm' className='min-h-9' disabled={busy !== null} onClick={() => void revoke(session.sessionId)}>
+                      Revoke
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ))}
+          </ul>
+          <div className='relative rafii-glass hidden overflow-x-auto rounded-[var(--rafii-radius-card)] px-2 md:block'>
+            <Table>
+              <TableHeader>
+                <TableRow className='hover:bg-transparent'>
+                  <TableHead>Device</TableHead>
+                  <TableHead>Last seen</TableHead>
+                  <TableHead />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {list.map((session) => (
+                  <TableRow key={session.sessionId} className='hover:bg-transparent'>
+                    <TableCell>
+                      <span className='inline-flex flex-wrap items-center gap-2'>
+                        {session.client || 'Unknown device'}
+                        <SessionBadges session={session} />
+                      </span>
+                    </TableCell>
+                    <TableCell className='text-muted-foreground text-xs'>{relativeTime(session.lastSeen)}</TableCell>
+                    <TableCell className='text-right'>
+                      {!session.current && !session.revoked && (
+                        <Button variant='quiet' size='sm' className='min-h-9' disabled={busy !== null} onClick={() => void revoke(session.sessionId)}>
+                          Revoke
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
       <AlertDialog open={confirmOthers} onOpenChange={setConfirmOthers}>
-        <AlertDialogContent>
+        <AlertDialogContent className={rafiiDialog}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sign out every other session?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Sign out every other session?</AlertDialogTitle>
+            <AlertDialogDescription className='leading-relaxed'>
               {others === 1 ? '1 other device' : `${others} other devices`} will be signed out. This device stays signed in. A recent sign-in is required; if yours is older, sign in again first.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep them</AlertDialogCancel>
+          <AlertDialogFooter className={rafiiDialogFooter}>
+            <AlertDialogCancel variant='quiet' size='control'>Keep them</AlertDialogCancel>
             <AlertDialogAction
+              variant='action'
+              size='control'
               onClick={() => {
                 setConfirmOthers(false);
                 void revokeOthers();
@@ -746,7 +758,7 @@ function Sessions() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SettingsGroup>
   );
 }
 
@@ -760,38 +772,36 @@ function SecurityActivity() {
   const shown = expanded ? list : list.slice(0, ACTIVITY_PREVIEW);
 
   return (
-    <div className='flex flex-col gap-3'>
-      <div className='flex flex-col gap-1'>
-        <div className='flex items-center gap-2'>
-          <Icons.history className='text-muted-foreground size-4' aria-hidden />
-          <span className='font-medium'>Recent security activity</span>
-        </div>
-        <p className='text-muted-foreground text-sm'>
-          Sign-ins, two-factor changes, revoked sessions and changes to your memberships. What happens to content lives in each workspace&apos;s
-          audit log.
-        </p>
-      </div>
+    <SettingsGroup
+      icon={<Icons.history className='size-4' />}
+      title='Recent security activity'
+      description='Sign-ins, two-factor changes, revoked sessions and changes to your memberships. What happens to content lives in each workspace’s audit log.'
+    >
       {events.isLoading ? (
-        <Skeleton className='h-24 w-full' />
+        <StateMessage kind='loading' title='Loading your account history' className='bg-transparent p-0' />
       ) : events.isError ? (
-        <Alert variant='destructive'>
-          <Icons.alertCircle className='size-4' />
-          <AlertDescription className='flex items-center justify-between gap-2'>
-            Activity could not be loaded.
-            <Button size='sm' variant='outline' onClick={() => void events.refetch()}>
+        <StateMessage
+          kind='error'
+          layout='inline'
+          title='Activity could not be loaded.'
+          action={
+            <Button size='sm' variant='glass' className='min-h-9' onClick={() => void events.refetch()}>
               Retry
             </Button>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       ) : list.length === 0 ? (
-        <p className='text-muted-foreground text-sm'>Nothing recorded yet.</p>
+        <StateMessage kind='empty' layout='inline' title='Nothing recorded yet.' />
       ) : (
-        <ol className='divide-y rounded-lg border'>
+        <ol className='rafii-glass flex flex-col rounded-[var(--rafii-radius-card)] px-4 py-1'>
           {shown.map((event) => {
             const described = describeSecurityEvent(event);
             return (
-              <li key={event.id} className='flex items-center justify-between gap-3 px-3 py-2 text-sm'>
-                <span className={cn(described.tone === 'warning' && 'text-amber-600 dark:text-amber-400')}>{described.label}</span>
+              <li key={event.id} className='flex min-h-11 items-center justify-between gap-3 py-2 text-sm'>
+                <span className='text-foreground flex min-w-0 items-center gap-2'>
+                  {described.tone === 'warning' && <Icons.warning className='text-muted-foreground size-4 shrink-0' aria-label='Worth a second look' />}
+                  <span className='min-w-0'>{described.label}</span>
+                </span>
                 <time
                   dateTime={new Date(event.at * 1000).toISOString()}
                   title={formatDateTime(event.at)}
@@ -805,28 +815,21 @@ function SecurityActivity() {
         </ol>
       )}
       {list.length > ACTIVITY_PREVIEW && (
-        <Button variant='ghost' size='sm' className='w-fit' onClick={() => setExpanded((value) => !value)}>
+        <Button variant='quiet' size='sm' className='min-h-9 w-fit' onClick={() => setExpanded((value) => !value)}>
           {expanded ? 'Show fewer' : `Show all ${list.length}`}
         </Button>
       )}
-    </div>
+    </SettingsGroup>
   );
 }
 
+/** One quiet settings surface with three groups; spacing, not rules, separates them (DNA §5.5). */
 export function SecurityCard() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Security</CardTitle>
-        <CardDescription>How this account is protected, where it is signed in, and what has happened to it.</CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-5'>
-        <TwoFactor />
-        <Separator />
-        <Sessions />
-        <Separator />
-        <SecurityActivity />
-      </CardContent>
-    </Card>
+    <SettingsSection id='profile-security' title='Security' description='How this account is protected, where it is signed in, and what has happened to it.' bodyClassName='gap-8'>
+      <TwoFactor />
+      <Sessions />
+      <SecurityActivity />
+    </SettingsSection>
   );
 }

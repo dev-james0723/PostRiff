@@ -2,11 +2,12 @@
 
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { StatefulButton } from '@/components/motion/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Surface } from '@/components/rafii';
 import { cents } from '@/lib/api/client';
 import type { Usage } from '@/lib/api/types';
 import { lifecycleLabel, timelineText } from './billing-copy';
 import { isTrial, lifecycleTone, planTimeline } from './billing-model';
+import { ACTION_STATEFUL } from './lifecycle-alert';
 import { PORTAL, type BillingRedirect } from './use-billing-redirect';
 
 function exportText(available: boolean | undefined) {
@@ -14,7 +15,7 @@ function exportText(available: boolean | undefined) {
   return available ? 'Drafts stay exportable' : 'Export not available';
 }
 
-/** Which plan, what it costs, and the next date that changes something. */
+/** Which plan, what it costs, and the next date that changes something: the page's contextual glass surface (DNA §21.18). */
 export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOwner: boolean; redirect: BillingRedirect; now: number }) {
   const sub = usage.subscription;
   const status = usage.lifecycle?.status;
@@ -23,17 +24,17 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
   const portalError = redirect.errorFor(PORTAL);
 
   return (
-    <Card className='lg:col-span-1' data-tour='billing-plan'>
-      <CardHeader>
-        <CardDescription>Current plan</CardDescription>
-        <CardTitle className='flex flex-wrap items-center gap-2 text-2xl'>
-          <span>{sub?.label ?? 'Plan unavailable'}</span>
+    <Surface material='glass' radius='card' padding='md' className='flex flex-col gap-4 lg:col-span-1' data-tour='billing-plan'>
+      <div className='flex flex-col gap-2'>
+        <span className='rafii-eyebrow'>Current plan</span>
+        <h2 className='flex flex-wrap items-center gap-2 text-2xl font-medium tracking-tight'>
+          <span className='text-foreground'>{sub?.label ?? 'Plan unavailable'}</span>
           <AnimatedBadge status={lifecycleTone(status)} size='sm' contentKey={status ?? 'unknown'}>
             {lifecycleLabel(status)}
           </AnimatedBadge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className='text-muted-foreground flex flex-col gap-1 text-sm'>
+        </h2>
+      </div>
+      <div className='text-muted-foreground flex flex-col gap-1 text-sm'>
         {!sub ? (
           <span>Price unavailable</span>
         ) : trial ? (
@@ -46,8 +47,8 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
         )}
         <span className='text-foreground'>{timelineText(planTimeline(usage, now))}</span>
         <span>{exportText(usage.lifecycle?.exportAvailable)}</span>
-      </CardContent>
-      <CardFooter className='flex flex-col items-start gap-2'>
+      </div>
+      <div className='mt-auto flex flex-col items-start gap-2 pt-1'>
         {!isOwner ? (
           <span className='text-muted-foreground text-xs'>Plan changes are made by the workspace owner.</span>
         ) : !billing ? (
@@ -56,6 +57,7 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
           <>
             <StatefulButton
               data-tour='billing-manage'
+              className={ACTION_STATEFUL}
               state={redirect.stateFor(PORTAL)}
               disabled={redirect.busy}
               loadingText='Opening portal…'
@@ -75,7 +77,7 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
         ) : (
           <span className='text-muted-foreground text-xs'>Payment method, invoices and cancellation appear here after your first subscription.</span>
         )}
-      </CardFooter>
-    </Card>
+      </div>
+    </Surface>
   );
 }

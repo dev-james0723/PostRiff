@@ -5,15 +5,15 @@ import { StatusPanel } from './status-panel';
 
 export const metadata: Metadata = {
   title: 'Status',
-  description: 'Live status of the PostRiff web app, API, authentication and publishing workers.',
-  openGraph: { title: 'Status · PostRiff', url: '/status' }
+  description: 'Live status of the Rafii web app, API, authentication and publishing workers.',
+  openGraph: { title: 'Status · Rafii', url: '/status' }
 };
 
 export default function StatusPage() {
   return (
     <>
-      <PageHero eyebrow='Status' title='Is PostRiff up?' description='Checked live from this page. No historical uptime figures are shown until we have enough real history to be honest about.' />
-      <Section>
+      <PageHero eyebrow='Status' title='Is Rafii up?' description='Checked live from this page. No historical uptime figures are shown until we have enough real history to be honest about.' />
+      <Section className='pt-8 sm:pt-12'>
         <StatusPanel />
       </Section>
     </>

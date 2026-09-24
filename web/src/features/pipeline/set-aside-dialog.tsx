@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChannelIcon } from '@/components/channel-icon';
 import { StatefulButton } from '@/components/motion/button';
+import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -31,6 +32,11 @@ export const SET_ASIDE_REASONS: { id: string; label: string }[] = [
 export const reasonLabel = (id: string) => SET_ASIDE_REASONS.find((r) => r.id === id)?.label ?? id.replace(/_/g, ' ');
 
 const NOTE_LIMIT = 200;
+
+/* Elevated glass dialog on the existing primitive (DNA §12.2); borderless field; one inverted commitment. */
+const DIALOG = 'rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 sm:max-w-md md:p-6';
+const FIELD = 'rafii-field rounded-[var(--rafii-radius-control)] border-0 bg-(--rafii-surface-field) dark:bg-(--rafii-surface-field) px-4 py-3 text-base leading-relaxed md:text-sm';
+const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 text-sm hover:bg-transparent hover:brightness-[1.06]';
 
 /**
  * "Don't use this draft" without deleting it (`p2_variant_feedback`). The draft moves to the "Set aside" group
@@ -80,7 +86,7 @@ export function SetAsideDialog({ variantId, open, onOpenChange }: { variantId: s
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className={DIALOG}>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
@@ -95,24 +101,27 @@ export function SetAsideDialog({ variantId, open, onOpenChange }: { variantId: s
           <p className='text-muted-foreground text-sm'>This draft is no longer in the workspace.</p>
         ) : (
           <div className='flex flex-col gap-4'>
-            <p className='bg-muted/50 text-muted-foreground line-clamp-4 rounded-md px-3 py-2 text-xs whitespace-pre-wrap'>{variant.proposedUpdate?.text ?? variant.text}</p>
+            <p className='rafii-quiet text-muted-foreground line-clamp-4 rounded-[var(--rafii-radius-control)] px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap'>{variant.proposedUpdate?.text ?? variant.text}</p>
             {blocking && (
-              <p className='text-xs text-amber-600 dark:text-amber-400' role='status'>
-                A job for this draft is {stateWords(blocking.state)}. Cancel it in the Queue first; a draft that is scheduled or published cannot be set aside.
-              </p>
+              <StateMessage
+                kind='unsupported'
+                layout='inline'
+                title={`A job for this draft is ${stateWords(blocking.state)}.`}
+                description='Cancel it in the Queue first; a draft that is scheduled or published cannot be set aside.'
+              />
             )}
-            <fieldset className='flex flex-col gap-2'>
+            <fieldset className='flex flex-col gap-1'>
               <legend className='mb-1 text-sm font-medium'>Why not this one?</legend>
               {SET_ASIDE_REASONS.map((reason) => (
-                <Label key={reason.id} className='flex items-center gap-2 text-sm font-normal'>
+                <Label key={reason.id} className='flex min-h-11 items-center gap-3 text-sm font-normal'>
                   <Checkbox checked={reasons.includes(reason.id)} onCheckedChange={(checked) => toggle(reason.id, checked === true)} />
                   {reason.label}
                 </Label>
               ))}
             </fieldset>
-            <div className='flex flex-col gap-1.5'>
+            <div className='flex flex-col gap-2'>
               <Label htmlFor='set-aside-note'>Note (optional)</Label>
-              <Textarea id='set-aside-note' value={note} onChange={(e) => setNote(e.target.value.slice(0, NOTE_LIMIT))} maxLength={NOTE_LIMIT} rows={2} className='text-sm' />
+              <Textarea id='set-aside-note' value={note} onChange={(e) => setNote(e.target.value.slice(0, NOTE_LIMIT))} maxLength={NOTE_LIMIT} rows={2} className={FIELD} />
               <p className='text-muted-foreground text-xs tabular-nums'>
                 {note.length} / {NOTE_LIMIT}
               </p>
@@ -120,10 +129,11 @@ export function SetAsideDialog({ variantId, open, onOpenChange }: { variantId: s
           </div>
         )}
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)} disabled={act.isPending}>
+          <Button variant='glass' size='control' onClick={() => onOpenChange(false)} disabled={act.isPending}>
             Cancel
           </Button>
           <StatefulButton
+            className={ACTION}
             state={act.isPending ? 'loading' : (outcome ?? 'idle')}
             loadingText='Setting aside…'
             successText='Set aside'

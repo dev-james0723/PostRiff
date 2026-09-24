@@ -7,8 +7,8 @@ import { RETENTION, RIGHTS, SUBPROCESSORS } from '@/content/legal-shared';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'What PostRiff collects, why, how long it is kept, and the rights you have over it.',
-  openGraph: { title: 'Privacy Policy · PostRiff', url: '/privacy' }
+  description: 'What Rafii collects, why, how long it is kept, and the rights you have over it.',
+  openGraph: { title: 'Privacy Policy · Rafii', url: '/privacy' }
 };
 
 const sections = [
@@ -32,12 +32,12 @@ export default function PrivacyPage() {
     <LegalLayout
       eyebrow='Legal'
       title='Privacy Policy'
-      intro='PostRiff turns your ideas into posts for the platforms you connect. This policy explains, in plain language, what we hold about you and what we do with it.'
+      intro='Rafii turns your ideas into posts for the platforms you connect. This policy explains, in plain language, what we hold about you and what we do with it.'
       sections={sections}
     >
       <h2 id='who'>1. Who we are</h2>
       <p>
-        PostRiff (“we”, “us”) operates the service at {siteConfig.url}. [Legal entity name, registered address and registration number — to be confirmed by counsel.] We are the controller of the account and workspace data described below.
+        Rafii (“we”, “us”) operates the service at {siteConfig.url}. [Legal entity name, registered address and registration number — to be confirmed by counsel.] We are the controller of the account and workspace data described below.
       </p>
 
       <h2 id='collect'>2. What we collect</h2>
@@ -47,12 +47,12 @@ export default function PrivacyPage() {
       <p>Sources you paste or upload, the drafts generated from them, your edits, approvals, scheduling times, media you upload, and the receipts produced when a post is published. This content belongs to you.</p>
       <h3>Connected-account data</h3>
       <p>
-        When you connect a social account through its official login, we receive an access token, the account’s identity (id and handle), and — only for capabilities you enable — the ids of posts published through PostRiff, their native metrics, and comments on those posts. Tokens are encrypted at the application layer before storage and are decrypted only inside the publishing worker.
+        When you connect a social account through its official login, we receive an access token, the account’s identity (id and handle), and — only for capabilities you enable — the ids of posts published through Rafii, their native metrics, and comments on those posts. Tokens are encrypted at the application layer before storage and are decrypted only by authorized server operations for the enabled capability.
       </p>
       <h3>Billing data</h3>
       <p>If you subscribe, Stripe processes your payment. We store your Stripe customer and subscription identifiers and the plan you chose. Card numbers never reach our systems.</p>
       <h3>Operational data</h3>
-      <p>Request logs with timestamps, IP-derived throttling counters, session identifiers and a content-free audit trail of actions in your workspace (for example “invitation.created”). Logs never contain prompts, post bodies, tokens or files.</p>
+      <p>Request logs with timestamps, IP-derived throttling counters, session identifiers and a content-free audit trail of actions in your workspace (for example “invitation.created”). Application audit events omit prompts, post bodies, tokens and files. Hosting and error-tracking configuration still requires verification before public launch.</p>
 
       <h2 id='use'>3. How we use it</h2>
       <ul>
@@ -65,7 +65,7 @@ export default function PrivacyPage() {
 
       <h2 id='ai'>4. AI processing</h2>
       <p>
-        Drafts are produced only from sources you select and approve. Today the drafting runtime is a deterministic preview that makes no external model request. When a model provider is contracted, sending a source to it will require your explicit per-source consent, will be metered to your workspace, and will be listed under Subprocessors. We do not use your content to train models, and our contracts with providers will prohibit training on it.
+        The deterministic preview makes no model request. When a configured cloud writer is selected, your instruction and permitted source context are sent to that writer through the configured model route. A local CLI can also send data to its cloud provider. Sources require the applicable egress consent; writing samples require separate purpose and exact writer-route permission. Only bounded style observations are used for sample-based drafting. Workspace memory reaches a cloud writer only when its owner allows it. Paid routes use a workspace reservation and record reported or estimated usage; unknown usage remains reserved until reconciled. Provider contracts, data retention and processing regions require review before a paid beta.
       </p>
       <p>
         Web research is off for every hosted workspace until its owner turns it on. When it is on and a draft needs facts you have not supplied, we send a search query derived from your message to Exa and fetch the public pages it finds through Jina Reader; a link you paste is fetched the same way. Your sources, memory files and drafts are never sent, facts found this way are marked in the draft for you to check, and turning research off stops it immediately. Both services are listed under Subprocessors.
@@ -73,7 +73,7 @@ export default function PrivacyPage() {
 
       <h2 id='platforms'>5. Connected platforms</h2>
       <p>
-        PostRiff connects to LinkedIn, Threads, Instagram and other platforms only through your own authorisation, requesting the minimum permissions for the capability you enable. Data received from a platform (account identity, post ids, metrics, comments) is used solely to provide the service to you — showing your results, letting you reply, and reconciling publications. It is not sold, shared with third parties, or combined across customers. When you disconnect an account, the stored token is wiped and revoked with the platform where supported, and platform data for that account stops being collected. Your use of each platform remains subject to that platform’s own terms and privacy policy.
+        Rafii connects to LinkedIn, Threads, Instagram and other platforms only through your own authorisation, requesting the minimum permissions for the capability you enable. Data received from a platform (account identity, post ids, metrics, comments) is used solely to provide the service to you — showing your results, letting you reply, and reconciling publications. It is not sold, shared with third parties, or combined across customers. When you disconnect an account, the stored token is wiped and revoked with the platform where supported, and platform data for that account stops being collected. Your use of each platform remains subject to that platform’s own terms and privacy policy.
       </p>
 
       <h2 id='retention'>6. Retention</h2>
@@ -135,7 +135,7 @@ export default function PrivacyPage() {
 
       <h2 id='transfers'>9. International transfers</h2>
       <p>
-        Our database, storage and authentication run in Supabase’s us-east-1 region; API functions run on Vercel. If you are outside the United States your data is transferred there. [Transfer mechanism (for example Standard Contractual Clauses) — to be confirmed by counsel.]
+        Database, storage and authentication use the configured Supabase project; API functions run on Vercel. Actual processing regions and any international transfers must be confirmed for the release environment. [Transfer mechanism (for example Standard Contractual Clauses) — to be confirmed by counsel.]
       </p>
 
       <h2 id='security'>10. Security</h2>
@@ -148,7 +148,7 @@ export default function PrivacyPage() {
       </p>
 
       <h2 id='children'>11. Children</h2>
-      <p>PostRiff is not directed at anyone under 18 and we do not knowingly collect data from them.</p>
+      <p>Rafii is not directed at anyone under 18 and we do not knowingly collect data from them.</p>
 
       <h2 id='changes'>12. Changes</h2>
       <p>We will post changes here with a new “last updated” date and, for material changes, email account holders before they take effect.</p>

@@ -105,7 +105,7 @@ class PostgresWorkspaceRepository:
         self.api_tokens = ApiTokens(self)
 
     @contextmanager
-    def transaction(self, token, workspace_id):
+    def transaction(self, token, workspace_id, *, allow_deleting=False):
         from .api_tokens import is_api_token
         api_grant = self.api_tokens.resolve(token, workspace_id) if is_api_token(token) else None
         principal = api_grant["createdBy"] if api_grant else self.verify_session(token)  # Verified identity only.
@@ -116,6 +116,9 @@ class PostgresWorkspaceRepository:
                 if not row:
                     # Same status and message whether the workspace is foreign or nonexistent.
                     raise AlphaError("Workspace unavailable.", 403)
+                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                if state.get('accountDeletion') and not (allow_deleting and row[2] == 'owner'):
+                    raise AlphaError('Account deletion is pending. Only deletion can continue.', 409, code='account_deletion_pending')
                 if api_grant:
                     self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
                 yield cur, row, principal
@@ -131,7 +134,7 @@ class PostgresWorkspaceRepository:
             raise AlphaError("Sign in again to confirm this sensitive action.", 403, code="step_up_required")
 
     def get(self, workspace_id, token):
-        with self.transaction(token, workspace_id) as (_, row, _):
+        with self.transaction(token, workspace_id, allow_deleting=True) as (_, row, _):
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             return {"revision": row[0], "state": copy.deepcopy(state), "membership": _membership(row).summary()}
 
@@ -167,7 +170,7 @@ class PostgresWorkspaceRepository:
         if action == research.CONSENT_ACTION:
             audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
         after = None
-        if action in ("p2_review", "p2_approve", "p2_approve_many"):
+        if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
         return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
@@ -221,8 +224,14 @@ class HostedPhase2Commands:
             source_policy.stamp(state)
             self.engine.invalidate(state)
             return state
-        if action.startswith("raffi_campaign_") or action.startswith("raffi_recurrence_"):
+        if action.startswith("raffi_campaign_") or action.startswith("raffi_recurrence_") or action == "raffi_run_decide":
             campaigns.apply_action(state, action, payload, principal, self.clock())
+            return state
+        if action == "raffi_run_commit":
+            from . import publisher
+            publisher.commit(self.engine, state, principal, payload, self.clock())
+            source_policy.stamp(state)
+            self.engine.invalidate(state)
             return state
         if action.startswith("raffi_suggestion_"):
             suggestions.apply_action(state, action, payload, principal, self.clock())
@@ -310,7 +319,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, email_lookup=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -321,7 +330,7 @@ class HostedWorkspaceService:
         self.identity = identity
         # principal -> verified email, or None. Defaults to the identity admin; the dev harness supplies its own.
         self.email_lookup = email_lookup
-        self.ideas = IdeasService(self.repository, self.commands, clock=clock)
+        self.ideas = IdeasService(self.repository, self.commands, clock=clock, image_runtime=image_runtime, assets=assets)
         if ideas_runtime is not None:
             # A paid server-side route sits next to the deterministic preview when the service knows
             # several runtimes; a single-runtime service uses it as the only route.
@@ -334,6 +343,9 @@ class HostedWorkspaceService:
         from .privacy import DataRequests
         from .audience import AudienceService
         self.oauth = OAuthService(self.repository, self.commands, vault or CredentialVault(None), providers or {}, public_base_url, clock)
+        # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
+        self.publishing_live = False
+        self.ideas.service_ref = self
         self.ledger = Ledger()
         self.ideas.ledger = self.ledger
         self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock)
@@ -347,6 +359,8 @@ class HostedWorkspaceService:
         # Preference learning: every command's implied events are captured in that command's transaction.
         self.learning = HostedLearning(connection_factory, clock)
         self.repository.effects.append(self.learning.capture)
+        from .planning_store import sync as sync_planning
+        self.repository.effects.append(sync_planning)
         self.ideas.learning = self.learning
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
@@ -586,6 +600,9 @@ class HostedWorkspaceService:
         return self._present(self.repository.get(workspace_id, token))
 
     def mutate(self, workspace_id, token, revision, action, payload):
+        if action == 'voice_profile_analyze' and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
+            from .voice_ai import HostedVoiceAnalysis
+            return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload)
         return self._present(self.repository.mutate(workspace_id, token, revision, action, payload))
 
     # --- Workspaces, members, invitations, sessions, audit (architecture spec 8, 9, 21) ---
@@ -1009,6 +1026,8 @@ class HostedWorkspaceService:
         principal = self.verify_session(token)
         saved = self.repository.get(workspace_id, token)
         require(Membership(saved["membership"]["role"], saved["membership"]), "edit")
+        if saved['state'].get('accountDeletion'):
+            raise AlphaError('Account deletion is pending.', 409, code='account_deletion_pending')
         self.commands._require_mutable_media(saved["state"])
         asset = self.assets.stage_upload(workspace_id, payload)
         try:
@@ -1087,38 +1106,5 @@ class HostedWorkspaceService:
         return {"signedOut": True, "refreshRevoked": remote, "sessionDenied": True}
 
     def delete_account(self, workspace_id, token, confirmation):
-        if confirmation != "DELETE":
-            raise AlphaError("Type DELETE to confirm account removal.")
-        if self.identity is None:
-            raise AlphaError("Hosted account deletion is not configured.", 503)
-        principal = self.verify_session(token)
-        self.repository.assert_fresh(token, principal)
-        with self.connection_factory() as db:
-            with db.cursor() as cur:
-                cur.execute("SELECT w.state,m.role FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE w.id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR UPDATE OF w", (workspace_id, principal))
-                row = cur.fetchone()
-                if not row or row[1] != "owner":
-                    raise AlphaError("Workspace unavailable.", 403)
-                state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
-                if any(job.get("state") in IN_FLIGHT for job in state.get("phase2", {}).get("jobs", [])):
-                    raise AlphaError("Reconcile in-flight outcomes before deletion; deletion cannot recall a submitted post.", 409)
-                assets = [copy.deepcopy(item) for item in state.get("phase2", {}).get("assets", []) if item.get("objectName") and not item.get("deleted")]
-        if self.assets is not None:
-            for asset in assets:
-                self.assets.remove(workspace_id, asset)
-        with self.connection_factory() as db:
-            with db.cursor() as cur:
-                cur.execute("SELECT t.plan,t.started_at FROM public.pr_trials t JOIN public.pr_memberships m ON m.workspace_id=t.workspace_id WHERE t.workspace_id=%s AND m.user_id=%s AND m.role='owner' AND m.status='active' FOR UPDATE OF t", (workspace_id, principal))
-                trial = cur.fetchone()
-                if not trial:
-                    raise AlphaError("Workspace unavailable.", 403)
-                cur.execute("INSERT INTO public.pr_account_tombstones(user_id,plan,trial_started_at) VALUES(%s,%s,%s) ON CONFLICT (user_id) DO NOTHING", (principal, trial[0], trial[1]))
-                cur.execute("DELETE FROM public.pr_trials WHERE user_id=%s", (principal,))
-                cur.execute("DELETE FROM public.pr_memberships WHERE workspace_id=%s", (workspace_id,))
-                cur.execute("DELETE FROM public.pr_profiles WHERE user_id=%s", (principal,))
-                cur.execute("DELETE FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
-        auth_deleted = self.identity.delete_user(principal)
-        with self.connection_factory() as db:
-            with db.cursor() as cur:
-                cur.execute("UPDATE public.pr_account_tombstones SET auth_deleted_at=now() WHERE user_id=%s", (principal,))
-        return {"deleted": True, "workspaceDeleted": True, "identityDeleted": auth_deleted, "trialTombstoneRetained": True}
+        from .account_deletion import delete_account
+        return delete_account(self, workspace_id, token, confirmation)

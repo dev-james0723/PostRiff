@@ -100,7 +100,7 @@ export const NotificationCard: FC<NotificationCardProps> = ({
               >
                 {title}
               </h3>
-              {isUnread && <div className='h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-500' />}
+              {isUnread && <div aria-hidden className='bg-foreground h-1.5 w-1.5 flex-shrink-0 rounded-full' />}
             </div>
 
             {/* Description */}

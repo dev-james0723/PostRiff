@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ModelCatalog, ModelOption } from '@/lib/api/types';
+import { mapReasoning, normaliseLevel, type ReasoningLevel } from './reasoning-map';
 
 const STORAGE_KEY = 'postriff-agent-model';
+/** Reasoning preference per model id (`{ [modelId]: 'low' | 'medium' | 'high' | 'xhigh' | 'max' }`). */
+const REASONING_KEY = 'postriff-agent-reasoning';
 
 export const FIXTURE_MODEL = 'deterministic-preview';
 
@@ -21,19 +24,39 @@ export function shortLabel(option: ModelOption | undefined, id: string) {
   return option?.label ?? id;
 }
 
+function readPreferences(): Record<string, ReasoningLevel> {
+  const out: Record<string, ReasoningLevel> = {};
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(REASONING_KEY) ?? '{}');
+    if (raw && typeof raw === 'object') {
+      for (const [modelId, value] of Object.entries(raw as Record<string, unknown>)) {
+        const level = normaliseLevel(value);
+        if (level) out[modelId] = level;
+      }
+    }
+  } catch {
+    /* private mode or an old shape: start without preferences */
+  }
+  return out;
+}
+
 /**
- * Which model writes the next turn. Remembered per browser; falls back to the first
- * qualified model when the remembered one is unavailable (signed out CLI, other host).
+ * Which model writes the next turn, and how hard it should think. The model is remembered per
+ * browser and falls back to the first qualified model when the remembered one is unavailable
+ * (signed out CLI, other host). The reasoning preference is remembered per model id
+ * (`postriff-agent-reasoning`); `reasoning` is always an option id the chosen route accepts
+ * (see `reasoning-map.ts`), so the composer keeps sending exactly what the API lists.
  */
 export function useModelChoice(catalog: ModelCatalog | undefined) {
-  const [effort, setEffort] = useState('low');
   const [stored, setStored] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<Record<string, ReasoningLevel>>({});
   useEffect(() => {
     try {
       setStored(localStorage.getItem(STORAGE_KEY));
     } catch {
       /* private mode: stay with the default */
     }
+    setPreferences(readPreferences());
   }, []);
 
   const options = useMemo(() => catalog?.models ?? [], [catalog]);
@@ -51,8 +74,47 @@ export function useModelChoice(catalog: ModelCatalog | undefined) {
     }
   }, []);
 
+  /** Remember a preference (a ladder level or an option id) for one model. */
+  const setReasoningFor = useCallback((modelId: string, value: string) => {
+    const level = normaliseLevel(value);
+    if (!level) return;
+    setPreferences((current) => {
+      if (current[modelId] === level) return current;
+      const next = { ...current, [modelId]: level };
+      try {
+        localStorage.setItem(REASONING_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  /** The remembered preference for a model, or null when the person has not chosen one. */
+  const reasoningFor = useCallback((modelId: string): ReasoningLevel | null => preferences[modelId] ?? null, [preferences]);
+
+  const chooseReasoning = useCallback((value: string) => setReasoningFor(model, value), [model, setReasoningFor]);
+
   const option = options.find((m) => m.id === model);
-  const reasoningOptions = (option?.reasoning ?? catalog?.reasoning ?? []).filter((item) => item.available);
-  const reasoning = reasoningOptions.some((item) => item.id === effort) ? effort : reasoningOptions[0]?.id ?? 'quick';
-  return { model, option, options, choose, reasoning, reasoningOptions, chooseReasoning: setEffort, saved: stored, label: shortLabel(option, model) };
+  const reasoningSource = option?.reasoning ?? catalog?.reasoning ?? [];
+  const reasoningOptions = reasoningSource.filter((item) => item.available);
+  const reasoningMapping = mapReasoning(preferences[model] ?? null, reasoningSource, shortLabel(option, model));
+  const reasoning = reasoningMapping.effective ?? 'quick';
+  return {
+    model,
+    option,
+    options,
+    choose,
+    /** The option id sent with a run (never a level the route does not list). */
+    reasoning,
+    reasoningOptions,
+    /** How the stored preference maps onto the chosen model's real options (for the dialog and honest copy). */
+    reasoningMapping,
+    reasoningFor,
+    setReasoningFor,
+    /** Existing composer callback: accepts an option id or a ladder level for the current model. */
+    chooseReasoning,
+    saved: stored,
+    label: shortLabel(option, model)
+  };
 }

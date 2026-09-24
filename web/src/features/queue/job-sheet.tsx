@@ -7,11 +7,10 @@ import { toast } from 'sonner';
 import { ManifestPreview } from '@/components/application/post-preview/manifest-preview';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { JobCancelHold } from '@/components/jobs/job-cancel-hold';
+import { Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
-import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMe } from '@/lib/api/hooks';
 import { formatDateTime, relativeTime } from '@/lib/time';
@@ -31,6 +30,7 @@ import {
   workerNote,
   type QueueJob
 } from './job-state';
+import { StatusChip } from './status-chip';
 import { useWide } from './use-wide';
 
 /**
@@ -59,7 +59,7 @@ export interface JobSheetProps {
 
 function Row({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
-    <div className='grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 py-1.5'>
+    <div className='grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 py-2'>
       <dt className='text-muted-foreground text-xs'>{label}</dt>
       <dd className={cn('min-w-0 text-sm break-words', mono && 'font-mono text-xs')}>{children}</dd>
     </div>
@@ -69,8 +69,9 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
 function CopyButton({ value, label }: { value: string; label: string }) {
   return (
     <Button
-      variant='ghost'
-      size='icon-xs'
+      variant='quiet'
+      size='icon-control'
+      className='size-8 shrink-0'
       aria-label={`Copy ${label}`}
       onClick={async () => {
         try {
@@ -81,13 +82,13 @@ function CopyButton({ value, label }: { value: string; label: string }) {
         }
       }}
     >
-      <Icons.copy />
+      <Icons.copy className='size-3.5' />
     </Button>
   );
 }
 
 function Heading({ children }: { children: ReactNode }) {
-  return <h3 className='text-xs font-medium tracking-wide uppercase'>{children}</h3>;
+  return <h3 className='rafii-eyebrow'>{children}</h3>;
 }
 
 function Approved({ job, jobs }: { job: QueueJob; jobs: QueueJob[] }) {
@@ -98,7 +99,7 @@ function Approved({ job, jobs }: { job: QueueJob; jobs: QueueJob[] }) {
       <Heading>What was approved</Heading>
       <div className='flex flex-col gap-4'>
         <ManifestPreview manifest={manifest} scale={0.6} />
-        <dl className='divide-y'>
+        <dl className='flex flex-col'>
           <Row label='Time'>
             {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone})
             <span className='text-muted-foreground block text-xs'>{formatDateTime(epochOf(manifest.timing.utc))} in your time</span>
@@ -137,13 +138,12 @@ function Timeline({ job }: { job: QueueJob }) {
               // Events are append-only, so their position is a stable identity.
               // oxlint-disable-next-line react/no-array-index-key
               key={index}
-              className={cn('grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-l py-2 pl-3', index < STAGGERED_ROWS && 't-stagger-line')}
+              // The rail is the timeline's own structure, drawn from the text colour rather than a chrome stroke.
+              className={cn('border-foreground/15 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-l-2 py-2 pl-3', index < STAGGERED_ROWS && 't-stagger-line')}
               style={index < STAGGERED_ROWS ? ({ '--stagger-i': index } as CSSProperties) : undefined}
             >
               <span className='flex flex-wrap items-center gap-2'>
-                <AnimatedBadge size='sm' status={stateStatus(event.state)} pulse={false}>
-                  {stateWords(event.state)}
-                </AnimatedBadge>
+                <StatusChip tone={stateStatus(event.state)}>{stateWords(event.state)}</StatusChip>
                 <time className='text-muted-foreground text-xs tabular-nums' dateTime={new Date(event.at * 1000).toISOString()}>
                   {formatDateTime(event.at)}
                 </time>
@@ -194,7 +194,7 @@ function Provider({ job, nowSeconds }: { job: QueueJob; nowSeconds: number }) {
   return (
     <section className='flex flex-col gap-2'>
       <Heading>Provider</Heading>
-      <dl className='divide-y'>
+      <dl className='flex flex-col'>
         <Row label='Reference' mono>
           {job.providerReference ? (
             <span className='flex items-start gap-1'>
@@ -218,10 +218,10 @@ function Provider({ job, nowSeconds }: { job: QueueJob; nowSeconds: number }) {
       </dl>
       <PublicationReceipt job={job} />
       {note && (
-        <p className='bg-muted/60 rounded-md border px-3 py-2 text-sm'>
+        <Surface as='p' material='quiet' radius='control' padding='sm' className='text-sm'>
           <span className='text-muted-foreground block text-xs'>Last worker note</span>
           {note}
-        </p>
+        </Surface>
       )}
     </section>
   );
@@ -246,11 +246,12 @@ function FooterActions({ job, canApprove, canSchedule, cancelPending, holdEpoch,
   if (!prepare && !cancel) return null;
   const available = draftAvailable(job.manifest.variantId);
   return (
-    <div className='flex flex-wrap items-center gap-2'>
+    <div className='flex flex-wrap items-center gap-2 [&_button]:min-h-11'>
       {prepare && (
         <Button
-          variant='outline'
-          size='sm'
+          variant='glass'
+          size='control'
+          className='h-11 px-3.5 text-[13px]'
           disabled={!available}
           title={available ? 'Prepare a new review of the same draft' : 'This draft is no longer available'}
           onClick={() => onPrepareAgain(job.manifest.variantId)}
@@ -266,7 +267,11 @@ function FooterActions({ job, canApprove, canSchedule, cancelPending, holdEpoch,
   );
 }
 
-/** The full receipt of one job: what was approved, every event, every attempt, and what the provider confirmed. */
+/**
+ * The full receipt of one job: what was approved, every event, every attempt, and what the provider confirmed.
+ * An elevated glass side sheet on wide screens and a bottom drawer on phones (DNA §12.1); sections are separated
+ * by spacing and eyebrows rather than rules.
+ */
 export function JobSheet(props: JobSheetProps) {
   const { jobId, jobs, ready, nowSeconds, onClose } = props;
   const wide = useWide();
@@ -294,13 +299,10 @@ export function JobSheet(props: JobSheetProps) {
     'This job is not in the workspace. It may belong to another workspace, or the link is out of date.'
   );
   const body = job ? (
-    <div className='flex flex-col gap-5'>
+    <div className='flex flex-col gap-7'>
       <Approved job={job} jobs={jobs} />
-      <Separator />
       <Timeline job={job} />
-      <Separator />
       <Attempts job={job} />
-      <Separator />
       <Provider job={job} nowSeconds={nowSeconds} />
     </div>
   ) : null;
@@ -310,7 +312,7 @@ export function JobSheet(props: JobSheetProps) {
       <FooterActions {...props} job={job} />
     </>
   ) : (
-    <Button variant='outline' size='sm' className='self-start' onClick={onClose}>
+    <Button variant='glass' size='control' className='h-11 self-start' onClick={onClose}>
       Close
     </Button>
   );
@@ -321,13 +323,13 @@ export function JobSheet(props: JobSheetProps) {
   if (!wide) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent>
+        <DrawerContent className='rafii-elevated data-[swipe-direction=down]:rounded-t-[var(--rafii-radius-mobile-dialog)] data-[swipe-direction=down]:border-t-0'>
           <DrawerHeader className='text-left group-data-[swipe-axis=y]/drawer-popup:text-left'>
             <DrawerTitle>{title}</DrawerTitle>
             <DrawerDescription>{description}</DrawerDescription>
           </DrawerHeader>
           {body && <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain p-4'>{body}</div>}
-          <DrawerFooter className='border-t pt-4'>{footer}</DrawerFooter>
+          <DrawerFooter className='pt-3'>{footer}</DrawerFooter>
         </DrawerContent>
       </Drawer>
     );
@@ -335,13 +337,16 @@ export function JobSheet(props: JobSheetProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side='right' className='gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-lg'>
-        <SheetHeader className='border-b pr-12'>
+      <SheetContent
+        side='right'
+        className='rafii-elevated gap-0 shadow-none data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-lg'
+      >
+        <SheetHeader className='pr-12'>
           <SheetTitle>{title}</SheetTitle>
           <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
         {body && <div className='min-h-0 flex-1 overflow-y-auto p-4'>{body}</div>}
-        <SheetFooter className='border-t'>{footer}</SheetFooter>
+        <SheetFooter className='pt-3'>{footer}</SheetFooter>
       </SheetContent>
     </Sheet>
   );

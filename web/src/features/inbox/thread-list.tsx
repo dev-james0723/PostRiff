@@ -1,22 +1,21 @@
 'use client';
 
-import { LayoutGroup, motion, useReducedMotion } from 'motion/react';
+import { LayoutGroup, motion } from 'motion/react';
 import { ChannelIcon } from '@/components/channel-icon';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import type { ChannelView, Thread } from '@/lib/api/types';
-import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
+import { SPRING_LAYOUT } from '@/lib/ease';
+import { useMotionPreference } from '@/lib/rafii/motion';
 import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { authorLabel, providerName, replyStatusShort, replyStatusView, threadTime, type ReplyRecord } from './model';
 
 /**
- * Rows enter 30ms apart. The last delay plus the entrance stays within the 300ms budget
- * (motion system §5): 3 × 30ms + 200ms = 290ms, so rows past the fourth enter together.
+ * The conversation list (DNA §21.5): one hierarchy per row — participant, snippet, account and
+ * recency — with the real reply state at the trailing edge. Rows rest on the quiet list surface;
+ * the selected row carries the one persistent glass lens, which glides between rows (§18.5).
+ * Rows do not stagger in (§18.6); they only glide when a filter reorders them.
  */
-const STAGGER = 0.03;
-const STAGGER_CAP = 3;
-const ENTER_DURATION = 0.2;
-
 export function ThreadList({
   threads,
   selectedId,
@@ -30,31 +29,23 @@ export function ThreadList({
   channelsById: Map<string, ChannelView>;
   latestReply: (thread: Thread) => ReplyRecord | undefined;
 }) {
-  const reduce = useReducedMotion();
+  const { reduced } = useMotionPreference();
   return (
     <LayoutGroup id='inbox-threads'>
       <ul className='flex flex-col gap-1' aria-label='Comments'>
-        {threads.map((thread, index) => {
+        {threads.map((thread) => {
           const channel = channelsById.get(thread.connectionId);
           const selected = thread.threadId === selectedId;
           const time = threadTime(thread);
           const reply = latestReply(thread);
           return (
-            <motion.li
-              key={thread.threadId}
-              className='relative'
-              // Rows glide when a filter reorders them, so badges inside (which animate their own layout) move with their row.
-              layout={reduce ? false : 'position'}
-              initial={reduce ? false : { opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: ENTER_DURATION, ease: EASE_OUT, delay: Math.min(index, STAGGER_CAP) * STAGGER, layout: SPRING_LAYOUT }}
-            >
+            <motion.li key={thread.threadId} className='relative' layout={reduced ? false : 'position'} transition={{ layout: SPRING_LAYOUT }}>
               {selected && (
                 <motion.span
                   layoutId='inbox-selected-thread'
                   aria-hidden
-                  className='bg-accent absolute inset-0 rounded-lg'
-                  transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+                  className='rafii-glass-selected absolute inset-0 rounded-[var(--rafii-radius-control)]'
+                  transition={reduced ? { duration: 0 } : SPRING_LAYOUT}
                 />
               )}
               <button
@@ -62,16 +53,15 @@ export function ThreadList({
                 aria-current={selected ? 'true' : undefined}
                 onClick={() => onSelect(thread.threadId)}
                 className={cn(
-                  'relative flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left outline-none transition-colors',
-                  'focus-visible:ring-ring/50 focus-visible:ring-2',
-                  !selected && 'hover:bg-muted/60'
+                  'rafii-focus relative flex min-h-14 w-full flex-col gap-1 rounded-[var(--rafii-radius-control)] px-3 py-2.5 text-left transition-colors',
+                  !selected && 'hover:bg-foreground/5'
                 )}
               >
                 <span className='flex min-w-0 items-center gap-2'>
                   <ChannelIcon platform={channel?.platform ?? thread.provider} name={thread.provider} size='xs' />
-                  <span className='truncate text-sm font-medium'>{authorLabel(thread.author)}</span>
+                  <span className='text-foreground truncate text-sm font-medium'>{authorLabel(thread.author)}</span>
                   {thread.tombstoned && (
-                    <AnimatedBadge size='sm' status='neutral' showIcon={false}>
+                    <AnimatedBadge size='sm' status='neutral' showIcon={false} className='rafii-quiet border-0'>
                       No longer returned
                     </AnimatedBadge>
                   )}
@@ -80,7 +70,7 @@ export function ThreadList({
                       size='sm'
                       status={replyStatusView(reply.status).badge}
                       showIcon={false}
-                      className='ml-auto'
+                      className='rafii-quiet ml-auto border-0'
                       contentKey={reply.status}
                       title={replyStatusView(reply.status).label}
                     >

@@ -51,14 +51,14 @@ export function MiniCalendar({ value, onChange, timeZone, markedDays, firstDayOf
       focusedValue={shown}
       onFocusChange={setShown}
       firstDayOfWeek={firstDayOfWeek}
-      className={cn('flex flex-col gap-3', className)}
+      className={cn('flex flex-col gap-2', className)}
     >
       <header className='flex items-center justify-between'>
-        <AriaButton slot='previous' className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}>
+        <AriaButton slot='previous' className={buttonVariants({ variant: 'quiet', size: 'icon-control' })}>
           <Icons.chevronLeft />
         </AriaButton>
-        <AriaHeading className='text-sm font-semibold' />
-        <AriaButton slot='next' className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}>
+        <AriaHeading className='text-sm font-medium' />
+        <AriaButton slot='next' className={buttonVariants({ variant: 'quiet', size: 'icon-control' })}>
           <Icons.chevronRight />
         </AriaButton>
       </header>
@@ -101,9 +101,9 @@ function MiniCalendarCell({ date, today, marked }: { date: CalendarDate; today: 
               'relative flex size-full items-center justify-center rounded-full text-sm transition-colors',
               isDisabled && 'text-muted-foreground',
               isFocusVisible && 'outline-ring outline-2 outline-offset-2',
-              selected && 'bg-primary text-primary-foreground hover:bg-primary/90 font-medium',
-              !selected && !isDisabled && 'hover:bg-accent',
-              !selected && today && 'bg-muted font-semibold'
+              selected && 'rafii-action font-medium',
+              !selected && !isDisabled && 'hover:rafii-lens',
+              !selected && today && 'rafii-lens font-semibold'
             )}
           >
             {formattedDate}
@@ -112,7 +112,7 @@ function MiniCalendarCell({ date, today, marked }: { date: CalendarDate; today: 
                 aria-hidden
                 className={cn(
                   'absolute bottom-1 left-1/2 size-[5px] -translate-x-1/2 rounded-full',
-                  selected ? 'bg-primary-foreground' : 'bg-primary'
+                  selected ? 'bg-background' : 'bg-foreground'
                 )}
               />
             )}

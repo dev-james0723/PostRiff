@@ -1,6 +1,7 @@
 'use client';
 
 import { Icons } from '@/components/icons';
+import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -11,12 +12,12 @@ export interface Refetchable {
 }
 
 /** Refetches the queries that failed. Disabled while a request is already out, so a second press cannot stack. */
-export function RetryButton({ queries, className, label = 'Retry' }: { queries: Refetchable[]; className?: string; label?: string }) {
+export function RetryButton({ queries, className, label = 'Retry', size = 'sm' }: { queries: Refetchable[]; className?: string; label?: string; size?: 'sm' | 'default' | 'control' }) {
   const fetching = queries.some((query) => query.isFetching);
   return (
     <Button
-      variant='outline'
-      size='xs'
+      variant='glass'
+      size={size}
       className={cn('w-fit', className)}
       disabled={fetching}
       onClick={() => {
@@ -30,10 +31,5 @@ export function RetryButton({ queries, className, label = 'Retry' }: { queries: 
 
 /** A section whose data could not be read: say so plainly and offer a Retry, never a zero. */
 export function SectionUnavailable({ message, query }: { message: string; query: Refetchable }) {
-  return (
-    <div role='status' className='flex flex-col items-start gap-2'>
-      <p className='text-muted-foreground text-sm'>{message}</p>
-      <RetryButton queries={[query]} />
-    </div>
-  );
+  return <StateMessage kind='error' layout='inline' title={message} action={<RetryButton queries={[query]} />} />;
 }

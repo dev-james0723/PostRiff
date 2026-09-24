@@ -1,7 +1,6 @@
 'use client';
 
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import type { BrandMode, SnapshotState } from '@/lib/api/types';
 import { ExpandableText, Field, NotSet, SectionUnavailable, type Refetchable } from './brand-parts';
 import { MODE_LABELS } from './voice-model';
@@ -21,51 +20,48 @@ export function IdentityCard({ state, query }: { state: SnapshotState | undefine
   const layers = Array.isArray(hub?.layers) ? hub.layers.filter((layer) => typeof layer === 'string' && layer !== mode) : [];
 
   return (
-    <Card data-tour='brand-identity' className='min-w-0'>
-      <CardHeader>
-        <CardTitle>Identity</CardTitle>
-        <CardDescription>What you are building and for whom. Writing routes receive it as IDENTITY.md.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!hub ? (
-          <SectionUnavailable message='The brand context could not be read from this workspace.' query={query} />
-        ) : (
-          <dl className='flex flex-col gap-3'>
-            <Field label='Building'>
-              {mode ? (
-                <span className='flex flex-wrap items-center gap-1.5'>
-                  {MODE_LABELS[mode] ?? mode}
-                  {layers.map((layer) => (
-                    <Badge key={layer} variant='outline'>
-                      {layer}
-                    </Badge>
-                  ))}
-                </span>
-              ) : (
-                <NotSet />
-              )}
-            </Field>
-            <Field label='Purpose'>
-              <Text value={hub.purpose} />
-            </Field>
-            <Field label='Audience'>
-              <Text value={hub.audience} />
-            </Field>
-            {(mode !== 'personal' || hub.subject) && (
-              <Field label={mode === 'business' ? 'Business' : 'Subject'}>
-                <Text value={hub.subject} />
-              </Field>
+    <Panel
+      data-tour='brand-identity'
+      title='Identity'
+      titleId='brand-identity-heading'
+      description='What you are building and for whom. Writing routes receive it as IDENTITY.md.'
+      footer='What you are building, purpose, audience and speaker come from voice setup. Changing them after approval is not available on this page yet.'
+    >
+      {!hub ? (
+        <SectionUnavailable message='The brand context could not be read from this workspace.' query={query} />
+      ) : (
+        <dl className='flex flex-col gap-3'>
+          <Field label='Building'>
+            {mode ? (
+              <span className='flex flex-wrap items-center gap-1.5'>
+                {MODE_LABELS[mode] ?? mode}
+                {layers.map((layer) => (
+                  <StatusChip key={layer} icon={null}>
+                    {layer}
+                  </StatusChip>
+                ))}
+              </span>
+            ) : (
+              <NotSet />
             )}
-            <Field label='Speaker'>{speaker ? <Text value={speaker.label} /> : <NotSet>Unavailable</NotSet>}</Field>
-            <Field label='Identity sentence'>
-              <Text value={sentence} />
+          </Field>
+          <Field label='Purpose'>
+            <Text value={hub.purpose} />
+          </Field>
+          <Field label='Audience'>
+            <Text value={hub.audience} />
+          </Field>
+          {(mode !== 'personal' || hub.subject) && (
+            <Field label={mode === 'business' ? 'Business' : 'Subject'}>
+              <Text value={hub.subject} />
             </Field>
-          </dl>
-        )}
-      </CardContent>
-      <CardFooter>
-        <p className='text-muted-foreground text-xs'>What you are building, purpose, audience and speaker come from voice setup. Changing them after approval is not available on this page yet.</p>
-      </CardFooter>
-    </Card>
+          )}
+          <Field label='Speaker'>{speaker ? <Text value={speaker.label} /> : <NotSet>Unavailable</NotSet>}</Field>
+          <Field label='Identity sentence'>
+            <Text value={sentence} />
+          </Field>
+        </dl>
+      )}
+    </Panel>
   );
 }

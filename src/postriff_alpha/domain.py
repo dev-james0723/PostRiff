@@ -367,6 +367,7 @@ class Store:
                 note = clean(p.get("note", ""), 1500)
                 if note:
                     profile["observations"] = [note]
+                    profile["observationsBasis"] = "owner_edited"
                 self._voice(s, profile, "Explicit provisional-profile approval")
                 s["speaker"]["provisional"] = None
                 s["session"]["step"] = 4

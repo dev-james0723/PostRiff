@@ -12,8 +12,12 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           "Instagram": {"version": "local-conservative-2026-09-14", "characters": 2200, "operation": "professional_image"},
           # Threads text limit per the connector audit (500 chars, 250 posts/24h); hosted OAuth connector.
           "Threads": {"version": "hosted-2026-09-16", "characters": 500, "operation": "text_post"},
-          # Xiaohongshu note body (title is separate, 20 characters); drafting and preview only, no publishing route.
-          "Xiaohongshu": {"version": "local-conservative-2026-09-16", "characters": 1000, "operation": "note"}}
+          # Xiaohongshu note body; the title is the draft's first line, at most 20 characters (`title`). Drafting and
+          # preview only, no publishing route.
+          "Xiaohongshu": {"version": "local-conservative-2026-09-16", "characters": 1000, "operation": "note", "title": 20},
+          # X: one post of 280 weighted characters (text_measure counts CJK and emoji as 2). Drafting and preview only:
+          # PostRiff has no hosted X publisher, so being listed here never makes X publishable.
+          "X": {"version": "local-conservative-2026-09-24", "characters": 280, "operation": "post"}}
 SCENARIOS = ("success", "denied", "expired", "accepted", "delayed", "failed", "rate_limited", "timeout", "duplicate", "uncertain", "malformed", "capability_loss")
 
 def digest(value):

@@ -6,15 +6,15 @@ import { ContactForm } from './contact-form';
 
 export const metadata: Metadata = {
   title: 'Contact',
-  description: 'Support, billing, design partner applications, press and security contact for PostRiff.',
-  openGraph: { title: 'Contact · PostRiff', url: '/contact' }
+  description: 'Support, billing, design partner applications, press and security contact for Rafii.',
+  openGraph: { title: 'Contact · Rafii', url: '/contact' }
 };
 
 export default function ContactPage() {
   return (
     <>
-      <PageHero eyebrow='Contact' title='We read every message.' description='Pick a topic so it reaches the right person. Replies come by email.' />
-      <Section>
+      <PageHero eyebrow='Contact' title='We read' accent='every message.' description='Pick a topic so it reaches the right person. Replies come by email.' />
+      <Section className='pt-8 sm:pt-12'>
         <Suspense fallback={null}>
           <ContactForm />
         </Suspense>

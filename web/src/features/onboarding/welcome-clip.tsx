@@ -41,7 +41,7 @@ export function WelcomeClip({ className }: { className?: string }) {
   return (
     <div
       aria-hidden
-      className={cn('bg-muted ring-foreground/10 relative aspect-[16/10] w-full max-w-full overflow-hidden rounded-lg ring-1', className)}
+      className={cn('rafii-quiet relative aspect-[16/10] w-full max-w-full overflow-hidden rounded-[var(--rafii-radius-card)]', className)}
     >
       {still ? (
         // eslint-disable-next-line @next/next/no-img-element -- a static poster from /public; no optimisation needed

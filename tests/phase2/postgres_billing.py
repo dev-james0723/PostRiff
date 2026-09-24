@@ -57,6 +57,12 @@ assert view["subscription"]["status"] == "trial" and view["subscription"]["live"
 assert all(t["priceLabel"] == "proposed" for t in view["planTerms"]) and view["overage"] == "stop"
 checks.append("usage view shows trial entitlement, proposed prices, stop-only overage, no live subscription")
 
+# A candidate budget never authorizes spending.
+with connection() as db:
+    denied(lambda: ledger.reserve(db.cursor(),wid,ONE,'text_model',1,'candidate-budget',charge_batch=False),402)
+from consumer_fixtures import approve_budgets
+approve_budgets(connection,wid)
+
 # 2. Reserve/settle: completed with batch charge decrements; failed refunds the batch but books provider cost; unknown keeps reservation.
 with connection() as db:
     cur = db.cursor()

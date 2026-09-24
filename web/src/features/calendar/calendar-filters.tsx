@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { EVENT_COLORS } from '@/components/application/calendar/config';
+import { ToneIcon } from '@/components/application/calendar/event-button';
 import { ChannelIcon } from '@/components/channel-icon';
 import { DigitSwap } from '@/components/motion/digit-swap';
 import { Button } from '@/components/ui/button';
@@ -41,10 +41,13 @@ interface FilterChipProps {
   selected: boolean;
   onPress: () => void;
   leading: ReactNode;
-  selectedClassName: string;
 }
 
-function FilterChip({ label, name = label, count, unit, filtering, selected, onPress, leading, selectedClassName }: FilterChipProps) {
+/**
+ * A pressed chip catches the selected glass; with no filter in its group every chip rests on glass, and once one is
+ * pressed the others go quiet (DNA §10.5). The glyph and the label say what the chip stands for, never a colour.
+ */
+function FilterChip({ label, name = label, count, unit, filtering, selected, onPress, leading }: FilterChipProps) {
   const pressed = filtering && selected;
   const hint = !filtering ? `Show only ${label}` : selected ? `Hide ${label}` : `Also show ${label}`;
   return (
@@ -55,13 +58,13 @@ function FilterChip({ label, name = label, count, unit, filtering, selected, onP
       title={hint}
       onClick={onPress}
       className={cn(
-        'relative inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap transition-[color,background-color,border-color] duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-        !filtering && 'border-border bg-background text-foreground hover:bg-muted',
-        pressed && selectedClassName,
-        filtering && !selected && 'text-muted-foreground hover:text-foreground border-dashed bg-transparent hover:bg-muted'
+        'rafii-focus relative inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium whitespace-nowrap transition-colors duration-200 md:h-9',
+        !filtering && 'rafii-glass text-foreground',
+        pressed && 'rafii-glass-selected text-foreground',
+        filtering && !selected && 'rafii-quiet text-muted-foreground hover:text-foreground'
       )}
     >
-      <span className={cn('flex items-center', filtering && !selected && 'opacity-50')}>{leading}</span>
+      <span className={cn('flex items-center', filtering && !selected && 'opacity-60')}>{leading}</span>
       {label}
       <DigitSwap value={count} className={cn('tabular-nums', count === 0 ? 'opacity-50' : 'opacity-80')} />
     </button>
@@ -87,7 +90,7 @@ interface CalendarFiltersProps {
 // scrolls on its own instead of widening the page.
 const ROW = 'scrollbar-hide relative flex min-w-0 flex-1 gap-1.5 overflow-x-auto p-1 sm:flex-wrap';
 
-/** Status and account chips that double as the colour legend. Counts are real entries inside the visible period. */
+/** Status and account chips that double as the legend. Counts are real entries inside the visible period. */
 export function CalendarFilters({
   unit,
   kindCounts,
@@ -107,7 +110,7 @@ export function CalendarFilters({
   return (
     <div data-tour='calendar-legend' className='flex min-w-0 flex-col gap-1'>
       <div className='flex min-w-0 items-start gap-2'>
-        <span className='text-muted-foreground mt-1 shrink-0 py-1.5 text-xs font-medium max-sm:sr-only'>Status</span>
+        <span className='text-muted-foreground mt-1 w-14 shrink-0 py-2 text-xs font-medium max-sm:sr-only'>Status</span>
         <div role='group' aria-label={`Legend and status filter, counted for this ${unit}`} className={ROW}>
           {KINDS.map((kind) => {
             const meta = KIND_META[kind];
@@ -120,8 +123,7 @@ export function CalendarFilters({
                 filtering={selectedKinds !== null}
                 selected={selectedKinds?.includes(kind) ?? true}
                 onPress={() => onKindsChange(toggleSelection(KINDS, selectedKinds, kind))}
-                leading={<span aria-hidden className={cn('size-2 rounded-full', EVENT_COLORS[meta.color].dot)} />}
-                selectedClassName={EVENT_COLORS[meta.color].chip}
+                leading={<ToneIcon tone={meta.tone} className='size-3.5' />}
               />
             );
           })}
@@ -130,7 +132,7 @@ export function CalendarFilters({
 
       {channels.length > 1 && (
         <div className='flex min-w-0 items-start gap-2'>
-          <span className='text-muted-foreground mt-1 shrink-0 py-1.5 text-xs font-medium max-sm:sr-only'>Account</span>
+          <span className='text-muted-foreground mt-1 w-14 shrink-0 py-2 text-xs font-medium max-sm:sr-only'>Account</span>
           <div role='group' aria-label={`Account filter, counted for this ${unit}`} className={ROW}>
             {channels.map((channel) => (
               <FilterChip
@@ -143,7 +145,6 @@ export function CalendarFilters({
                 selected={selectedChannels?.includes(channel.key) ?? true}
                 onPress={() => onChannelsChange(toggleSelection(channelKeys, selectedChannels, channel.key))}
                 leading={<ChannelIcon platform={channel.platform} name={channel.platform} size='xs' />}
-                selectedClassName='border-foreground/25 bg-accent text-accent-foreground'
               />
             ))}
           </div>
@@ -154,13 +155,13 @@ export function CalendarFilters({
         <div aria-live='polite' className='text-muted-foreground flex min-h-6 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs'>
           {periodNote}
           {filtering && (
-            <Button variant='ghost' size='xs' className='-mx-2' onClick={onReset}>
+            <Button variant='quiet' size='sm' className='-mx-2 h-8 text-xs' onClick={onReset}>
               Show all
             </Button>
           )}
           {live && (
             <span className='flex items-center gap-1.5'>
-              <span aria-hidden className='size-1.5 rounded-full bg-emerald-500' />
+              <span aria-hidden className='rafii-decorative-motion bg-foreground size-1.5 animate-pulse rounded-full motion-reduce:animate-none' />
               Checking for updates every {LIVE_REFRESH_MS / 1000} seconds while a post is going out
             </span>
           )}

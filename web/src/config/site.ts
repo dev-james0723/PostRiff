@@ -3,10 +3,10 @@
  * Every page, metadata block and email footer reads from here.
  */
 export const siteConfig = {
-  name: 'PostRiff',
+  name: 'Rafii',
   url: process.env.NEXT_PUBLIC_APP_URL ?? 'https://postriff-phase2-private.vercel.app',
   description:
-    'One idea, 30+ platforms including 小紅書, B站, 知乎, 微博 and 抖音. PostRiff rewrites it per platform in your voice, and nothing publishes until you approve it.',
+    'Your AI teammate for social media. Prepare drafts from approved sources, review every version, then publish through an available connector or export for manual posting.',
   // TODO: confirm the support mailbox before general availability.
   supportEmail: 'support@postriff.app',
   links: {

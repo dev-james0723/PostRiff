@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PG = Path("/opt/homebrew/opt/postgresql@17/bin")
+PG = Path(__import__("os").environ.get("POSTRIFF_PG_BIN", "/opt/homebrew/opt/postgresql@17/bin"))
 PORT = 55438
 # macOS: without a fixed C locale the postmaster aborts with "became multithreaded during startup".
 os.environ.setdefault("LC_ALL", "C")

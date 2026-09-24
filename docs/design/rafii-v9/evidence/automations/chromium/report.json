@@ -1,0 +1,605 @@
+{
+  "base": "http://localhost:3140",
+  "browser": "chromium",
+  "workspaceId": "551a800a-2f3b-4dd7-ab2b-ea5ced94fbff",
+  "startedAt": "2026-09-24T14:23:43.794Z",
+  "scenes": [
+    {
+      "name": "build-and-run",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "no automation with this name yet",
+          "ok": true
+        },
+        {
+          "name": "content type chip shows the Library choice",
+          "ok": true
+        },
+        {
+          "name": "axe clean: builder: what",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "schedule preview names the day, time and zone",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nRepeats\nWeekly\nMonthly\nCountdown\nNew idea\nStrong post\nOn these days\nMon\nTue\nWed\nThu\nFri\nSat\nSun\nWeekdays\nEvery day\nOnce a week\nAt\nTime zone\nAmerica/New York\nAfrica/Abidjan\nAfrica/Accra\nAfrica/Addis Ababa\nAfrica/Algiers\nAfrica/Asmera\nAfric"
+        },
+        {
+          "name": "preview lists the first run and the viewer’s own time",
+          "ok": true
+        },
+        {
+          "name": "destination listed: Dev Member",
+          "ok": true
+        },
+        {
+          "name": "destination listed: Dev Member Two",
+          "ok": true
+        },
+        {
+          "name": "three drafts each run (two accounts, one with two languages)",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\n\nEach account gets its own draft in each of its languages. Two accounts on one app get two drafts.\n\nChoose accounts or folders\n\nFrom Festival\n\nDev Member\nLinkedIn\n🇬🇧 English (UK)\n🇭🇰 繁體中文（香港）\nLanguage\nDev Member Two\nLinkedIn\n🇬🇧 English (UK)\nLanguage\n\n3 drafts each run\n\nBack\nNext"
+        },
+        {
+          "name": "folder label kept for display",
+          "ok": true
+        },
+        {
+          "name": "budget shows the per-run limit and the monthly ceiling",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nWriter\nDeterministic preview\nClaude Code · your default model\nClaude Code · Fable\nClaude Code · Opus\nClaude Code · Sonnet\nClaude Code · Haiku\nCodex CLI · your default model\n\nRuns without sending the brief to a cloud provider.\n\nCost limit per run (USD)\n\nThis writer has no per-run charge.\n\nReasoning\nQuick\nStandard\nDeep\nBUDGET\n\nUp to $0.00 a run · up to 5 runs a month · at most $0.00 a month.\n\nCharges come from your workspace credits, the same as drafting on Home.\n\nWhat\nWeekly practice tip h4tq\nOne practical practice tip for adult piano students. Share it on Instagram at 8pm tomorrow.\nBehind the scenes · Carousel · brief only\nEdit wh"
+        },
+        {
+          "name": "nothing blocks saving",
+          "ok": true
+        },
+        {
+          "name": "axe clean: builder: review",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "saved and active on the server",
+          "ok": true,
+          "detail": {
+            "status": "active",
+            "authority": 2
+          }
+        },
+        {
+          "name": "schedule: today in Hong Kong at the chosen minute",
+          "ok": true,
+          "detail": {
+            "timeZone": "Asia/Hong_Kong",
+            "weekdays": [
+              "Thursday"
+            ],
+            "localTime": "22:31"
+          }
+        },
+        {
+          "name": "three destinations: both accounts, the first in two languages",
+          "ok": true,
+          "detail": {
+            "destinations": [
+              {
+                "language": "en-GB",
+                "platform": "LinkedIn",
+                "channelId": "abaad27ed4e69ff561db13790efff006"
+              },
+              {
+                "language": "zh-Hant-HK",
+                "platform": "LinkedIn",
+                "channelId": "abaad27ed4e69ff561db13790efff006"
+              },
+              {
+                "language": "en-GB",
+                "platform": "LinkedIn",
+                "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
+              }
+            ],
+            "expected": [
+              "LinkedIn|en|abaad27ed4e69ff561db13790efff006",
+              "LinkedIn|zh-Hant-HK|abaad27ed4e69ff561db13790efff006",
+              "LinkedIn|en|51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
+            ]
+          }
+        },
+        {
+          "name": "content type recorded on the automation",
+          "ok": true,
+          "detail": {
+            "formatId": "carousel",
+            "contentTypeId": "pack.creator:building_in_public",
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "fixture writer, quick, $0 limit",
+          "ok": true
+        },
+        {
+          "name": "Home content selection untouched by the automation",
+          "ok": true
+        },
+        {
+          "name": "card shows Active and the next run",
+          "ok": true
+        },
+        {
+          "name": "axe clean: hub with an automation",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "first run is within minutes (today, not next week)",
+          "ok": true,
+          "detail": {
+            "utc": "2026-09-24T14:31:00+00:00",
+            "fold": 0,
+            "local": "2026-09-24T22:31:00+08:00",
+            "offset": "+0800",
+            "scheduledFor": 1790260260
+          }
+        },
+        {
+          "name": "edit warns that saving returns it to draft",
+          "ok": true
+        },
+        {
+          "name": "edited definition is a draft, version 2, no activation",
+          "ok": true,
+          "detail": {
+            "status": "draft",
+            "version": 2
+          }
+        },
+        {
+          "name": "card shows Draft and Activate",
+          "ok": true
+        },
+        {
+          "name": "activated again",
+          "ok": true
+        },
+        {
+          "name": "paused",
+          "ok": true
+        },
+        {
+          "name": "resumed",
+          "ok": true
+        },
+        {
+          "name": "Home panel lists the automation",
+          "ok": true
+        },
+        {
+          "name": "cancelled on the server",
+          "ok": true
+        },
+        {
+          "name": "cancelled automation leaves the active list",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "automations/chromium/build-and-run/01-hub-before.png",
+        "automations/chromium/build-and-run/02-builder-what.png",
+        "automations/chromium/build-and-run/03-builder-when.png",
+        "automations/chromium/build-and-run/04-builder-where.png",
+        "automations/chromium/build-and-run/05-builder-review.png",
+        "automations/chromium/build-and-run/06-hub-active.png",
+        "automations/chromium/build-and-run/09-home-panel.png",
+        "automations/chromium/build-and-run/10-cancel-confirm.png",
+        "automations/chromium/build-and-run/11-hub-after-cancel.png"
+      ],
+      "axe": [
+        {
+          "label": "builder: what",
+          "violations": []
+        },
+        {
+          "label": "builder: review",
+          "violations": []
+        },
+        {
+          "label": "hub with an automation",
+          "violations": []
+        }
+      ],
+      "video": "automations/chromium/build-and-run/build-and-run.webm",
+      "t0": 1790259824023,
+      "durationSeconds": 30.9
+    },
+    {
+      "name": "templates",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "Event countdown: template fills the name",
+          "ok": true
+        },
+        {
+          "name": "countdown: schedule type selected",
+          "ok": true
+        },
+        {
+          "name": "countdown: 14 days before and on the day pressed",
+          "ok": true
+        },
+        {
+          "name": "countdown: preview lists the first run",
+          "ok": true
+        },
+        {
+          "name": "countdown budget counts the whole countdown",
+          "ok": true
+        },
+        {
+          "name": "countdown saved: kind, days and event date as the date fact",
+          "ok": true,
+          "detail": {
+            "schedule": {
+              "kind": "countdown",
+              "timeZone": "Asia/Hong_Kong",
+              "eventDate": "2026-10-14",
+              "localTime": "10:00",
+              "daysBefore": [
+                14,
+                7,
+                1,
+                0
+              ]
+            },
+            "facts": {
+              "date": "2026-10-14",
+              "venue": "City Hall"
+            }
+          }
+        },
+        {
+          "name": "countdown content type from the template",
+          "ok": true,
+          "detail": {
+            "formatId": "short_text",
+            "contentTypeId": "postriff:promote",
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "Monthly recap: template fills the name",
+          "ok": true
+        },
+        {
+          "name": "recap: published posts included",
+          "ok": true
+        },
+        {
+          "name": "recap: monthly on the last day",
+          "ok": true
+        },
+        {
+          "name": "recap saved: monthly last day, reads 31 days of published posts",
+          "ok": true,
+          "detail": {
+            "schedule": {
+              "kind": "monthly",
+              "timeZone": "America/New_York",
+              "localTime": "17:00",
+              "monthDays": [
+                "last"
+              ]
+            },
+            "include": {
+              "recentPostsDays": 31
+            }
+          }
+        },
+        {
+          "name": "recap content type from the template",
+          "ok": true,
+          "detail": {
+            "formatId": "short_text",
+            "contentTypeId": "postriff:update",
+            "contentTypeVersion": "1.0.0"
+          }
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "automations/chromium/templates/01-countdown-when.png",
+        "automations/chromium/templates/02-recap-when.png",
+        "automations/chromium/templates/03-hub-with-templates.png"
+      ],
+      "axe": [],
+      "video": "automations/chromium/templates/templates.webm",
+      "t0": 1790259855149,
+      "durationSeconds": 15.1
+    },
+    {
+      "name": "triggers",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "trigger: New idea selected",
+          "ok": true
+        },
+        {
+          "name": "trigger: ideas, notes and links start a run; documents do not",
+          "ok": true
+        },
+        {
+          "name": "trigger: no time to pick",
+          "ok": true
+        },
+        {
+          "name": "trigger: summary names the daily limit",
+          "ok": true,
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nRepeats\nWeekly\nMonthly\nCountdown\nNew idea\nStrong post\nStart a run when I add\nIdeas\nNotes\nLinks\nDocuments\n\nEach new item runs once and is read as the run’s source. Items added before the automation is activated are not included. Recordings"
+        },
+        {
+          "name": "trigger saved and active, watching from activation",
+          "ok": true,
+          "detail": {
+            "schedule": {
+              "kind": "on_new_source",
+              "timeZone": "America/New_York",
+              "maxPerDay": 3,
+              "sourceKinds": [
+                "idea",
+                "text",
+                "link"
+              ]
+            },
+            "status": "active",
+            "watchFrom": 1790259875.956544
+          }
+        },
+        {
+          "name": "trigger card waits for something new",
+          "ok": true
+        },
+        {
+          "name": "cron scanned Ideas and ran the new idea once",
+          "ok": true,
+          "detail": {
+            "runs": [
+              {
+                "state": "completed",
+                "occurrenceId": "662efb4b148746f29051f3921df4468c"
+              }
+            ]
+          }
+        },
+        {
+          "name": "the run carries the new idea as its event",
+          "ok": true,
+          "detail": [
+            {
+              "id": "662efb4b148746f29051f3921df4468c",
+              "event": {
+                "id": "source:1b3ab51d1ec544c39b87feea02642e0b",
+                "kind": "new_source",
+                "title": "Practice with a metronome",
+                "sourceId": "1b3ab51d1ec544c39b87feea02642e0b"
+              },
+              "runId": "09daf590-45a1-4171-b767-03469aebafec",
+              "state": "completed",
+              "taskId": "d623c49254f8452e8d9cdac10d9c58ea",
+              "authority": "draft_preparation_only",
+              "createdAt": 1790259876.811838,
+              "draftCount": 1,
+              "leaseUntil": 1790260476.811838,
+              "completedAt": 1790259876.877996,
+              "taskVersion": 1,
+              "costUsdMicro": 0,
+              "scheduledFor": 1790259876.8022861,
+              "conversationId": "717249c7-cc2b-4933-8a67-fc241adfc20c",
+              "idempotencyKey": "a96b3a3ab8b8214027d547a1d014ca58b41a5d84b5ea1f2284ddd7a70a5ae074"
+            }
+          ]
+        },
+        {
+          "name": "the same idea never runs twice",
+          "ok": true,
+          "detail": {
+            "idle": true
+          }
+        },
+        {
+          "name": "run history names the idea that started it",
+          "ok": true,
+          "detail": "New idea to drafts\n\nWhen you add a new idea, note or link to Ideas · up to 3 runs a day\n\n1 new\nActive\nWHERE\nPersonal · 🇬🇧 English (UK)\nWHAT\nEducational explainer · Text\nWRITER\nDeterministic preview · Quick · up to $0.00 a run\n$0.00 spent this month\nNEXT RUN\nWaiting for something new in Ideas\nup to 93 runs a month · at most $0.00 a month\n\nLast run\nDrafts ready\nThu, Sep 24, 10:24 AM\n\nReview latest drafts\nEdit\nPause\nCancel automation\nEmail me when its drafts are ready\nRun history (1)\nThu, Sep 24,"
+        },
+        {
+          "name": "evergreen: option ticked by the template",
+          "ok": true
+        },
+        {
+          "name": "evergreen: 60 days minimum age",
+          "ok": true
+        },
+        {
+          "name": "evergreen saved in the definition",
+          "ok": true,
+          "detail": {
+            "include": {
+              "evergreen": {
+                "minAgeDays": 60
+              }
+            },
+            "schedule": {
+              "timeZone": "America/New_York",
+              "weekdays": [
+                "Wednesday"
+              ],
+              "localTime": "10:00"
+            }
+          }
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "automations/chromium/triggers/01-trigger-when.png",
+        "automations/chromium/triggers/02-trigger-run-history.png"
+      ],
+      "axe": [],
+      "video": "automations/chromium/triggers/triggers.webm",
+      "t0": 1790259870334,
+      "durationSeconds": 13.6
+    },
+    {
+      "name": "phone",
+      "viewport": "390x844",
+      "theme": "light",
+      "checks": [
+        {
+          "name": "hub fits a 390px phone",
+          "ok": true,
+          "detail": 0
+        },
+        {
+          "name": "builder field text is 16px on phones (no zoom)",
+          "ok": true
+        },
+        {
+          "name": "weekday toggles are at least 44px tall",
+          "ok": true,
+          "detail": {
+            "x": 125.140625,
+            "y": 341,
+            "width": 42.5625,
+            "height": 44
+          }
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "automations/chromium/phone/01-hub.png",
+        "automations/chromium/phone/02-builder-what.png",
+        "automations/chromium/phone/03-builder-when.png"
+      ],
+      "axe": [],
+      "video": "automations/chromium/phone/phone.webm",
+      "t0": 1790259884033,
+      "durationSeconds": 3.3
+    },
+    {
+      "name": "chat",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "checks": [
+        {
+          "name": "Rafii reads it as an automation, not one draft",
+          "ok": true,
+          "detail": {
+            "status": "automation",
+            "runId": null
+          }
+        },
+        {
+          "name": "the reply says what will happen and when",
+          "ok": true,
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇬🇧 English (UK)"
+        },
+        {
+          "name": "an owner request with the fixture writer is on",
+          "ok": true,
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Scien"
+        },
+        {
+          "name": "voice and kind of post understood",
+          "ok": true,
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇬🇧 English (UK)"
+        },
+        {
+          "name": "saved with the builder checks: Tuesday 09:00, your voice, news type, active",
+          "ok": true,
+          "detail": {
+            "status": "active",
+            "schedule": {
+              "timeZone": "America/New_York",
+              "weekdays": [
+                "Tuesday"
+              ],
+              "localTime": "09:00"
+            },
+            "voiceMode": "personalized",
+            "contentType": {
+              "formatId": null,
+              "contentTypeId": "pack.creator:article_news_commentary",
+              "contentTypeVersion": "1.0.0"
+            }
+          }
+        },
+        {
+          "name": "nothing drafted, scheduled or published",
+          "ok": true
+        },
+        {
+          "name": "the composer is cleared for the next idea",
+          "ok": true
+        },
+        {
+          "name": "axe clean: Home with the automation reply",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "the reply card fits a 390px phone",
+          "ok": true,
+          "detail": 0
+        },
+        {
+          "name": "the hub lists it",
+          "ok": true,
+          "detail": "AI for Science · News article post"
+        },
+        {
+          "name": "the conversation shows the request and the reply",
+          "ok": true
+        },
+        {
+          "name": "Undo cancels it",
+          "ok": true,
+          "detail": "cancelled"
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "automations/chromium/chat/01-home-reply.png",
+        "automations/chromium/chat/02-home-reply-phone.png",
+        "automations/chromium/chat/03-hub.png",
+        "automations/chromium/chat/04-conversation-undone.png"
+      ],
+      "axe": [
+        {
+          "label": "Home with the automation reply",
+          "violations": []
+        }
+      ],
+      "video": "automations/chromium/chat/chat.webm",
+      "t0": 1790259887399,
+      "durationSeconds": 8.6
+    }
+  ],
+  "finishedAt": "2026-09-24T14:24:56.097Z",
+  "summary": {
+    "checks": 70,
+    "failed": 0,
+    "pageErrors": 0
+  }
+}

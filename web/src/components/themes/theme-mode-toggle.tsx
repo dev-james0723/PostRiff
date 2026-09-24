@@ -56,9 +56,10 @@ export function ThemeModeToggle() {
       <TooltipTrigger
         render={
           <Button
-            variant='secondary'
+            variant='ghost'
             size='icon'
             className='group/toggle size-8'
+            aria-label='Toggle theme'
             onClick={handleThemeToggle}
           />
         }

@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
+import { rafiiDialog, rafiiDialogFooter, rafiiIconWell, rafiiInput } from '@/components/auth/form-styles';
 import { Icons } from '@/components/icons';
+import { CollectionRow, StateMessage } from '@/components/rafii';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,13 +17,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
 import { passkeysSupported } from '@/lib/auth/mfa';
 import {
@@ -34,6 +33,7 @@ import {
 } from '@/lib/auth/passkeys';
 import { useAuth } from '@/lib/auth/session';
 import { formatDate, relativeTime } from '@/lib/time';
+import { SettingsSection } from './settings-section';
 
 const PASSKEYS_KEY = ['sign-in-passkeys'] as const;
 
@@ -65,27 +65,22 @@ function RenameDialog({ passkey, onOpenChange, onRenamed }: { passkey: SignInPas
 
   return (
     <Dialog open={passkey !== null} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent>
-        <form onSubmit={submit} className='flex flex-col gap-4'>
-          <DialogHeader>
-            <DialogTitle>Rename passkey</DialogTitle>
-            <DialogDescription>A name you will recognise later, such as the device it lives on.</DialogDescription>
+      <DialogContent className={rafiiDialog}>
+        <form onSubmit={submit} className='flex flex-col gap-5'>
+          <DialogHeader className='gap-1.5 pr-8'>
+            <DialogTitle className='text-foreground text-xl font-medium tracking-tight'>Rename passkey</DialogTitle>
+            <DialogDescription className='leading-relaxed'>A name you will recognise later, such as the device it lives on.</DialogDescription>
           </DialogHeader>
-          {error && (
-            <Alert variant='destructive'>
-              <Icons.alertCircle className='size-4' />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <div className='flex flex-col gap-1.5'>
+          {error && <StateMessage kind='error' layout='inline' title={error} />}
+          <div className='flex flex-col gap-2'>
             <Label htmlFor='passkey-name'>Name</Label>
-            <Input id='passkey-name' value={name} maxLength={60} autoFocus onChange={(event) => setName(event.target.value)} />
+            <Input id='passkey-name' value={name} maxLength={60} autoFocus onChange={(event) => setName(event.target.value)} className={rafiiInput} />
           </div>
-          <DialogFooter>
-            <Button type='button' variant='ghost' disabled={busy} onClick={() => onOpenChange(false)}>
+          <DialogFooter className={rafiiDialogFooter}>
+            <Button type='button' variant='quiet' size='control' disabled={busy} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type='submit' disabled={busy || name.trim().length === 0}>
+            <Button type='submit' variant='action' size='control' disabled={busy || name.trim().length === 0}>
               {busy ? 'Saving…' : 'Save'}
             </Button>
           </DialogFooter>
@@ -143,87 +138,88 @@ function PasskeysCardBody() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Passkeys for sign-in</CardTitle>
-        <CardDescription>
-          Sign in with Face ID, Touch ID or a security key instead of an email code. Separate from the two-factor methods above: if two-factor
-          authentication is on, you still confirm with it after a passkey sign-in.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        {dev ? (
-          <p className='text-muted-foreground text-sm'>Not available with a dev identity. Passkeys need a real sign-in provider.</p>
-        ) : passkeys.isLoading ? (
-          <Skeleton className='h-16 w-full' />
-        ) : passkeys.isError ? (
-          <Alert variant='destructive'>
-            <Icons.alertCircle className='size-4' />
-            <AlertDescription className='flex items-center justify-between gap-2'>
-              {message(passkeys.error, 'Passkeys could not be loaded.')}
-              <Button size='sm' variant='outline' onClick={() => void passkeys.refetch()}>
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : list.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>No passkeys yet. Add one on this device to skip the email code next time.</p>
-        ) : (
-          <ul className='divide-y rounded-lg border'>
-            {list.map((passkey) => (
-              <li key={passkey.id} className='flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm'>
-                <div className='flex min-w-0 items-center gap-3'>
-                  <span className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-md'>
-                    <Icons.key className='size-4' aria-hidden />
-                  </span>
-                  <div className='min-w-0'>
-                    <div className='truncate font-medium'>{passkey.name}</div>
-                    <div className='text-muted-foreground text-xs'>
-                      Added {formatDate(Date.parse(passkey.createdAt) / 1000)}
-                      {passkey.lastUsedAt ? ` · last used ${relativeTime(Date.parse(passkey.lastUsedAt) / 1000)}` : ' · not used yet'}
-                    </div>
-                  </div>
-                </div>
-                <div className='flex gap-1'>
-                  <Button variant='ghost' size='sm' disabled={busy} onClick={() => setRenaming(passkey)}>
+    <SettingsSection
+      id='profile-passkeys'
+      title='Passkeys for sign-in'
+      description='Sign in with Face ID, Touch ID or a security key instead of an email code. Separate from the two-factor methods above: if two-factor authentication is on, you still confirm with it after a passkey sign-in.'
+    >
+      {dev ? (
+        <StateMessage kind='unsupported' layout='inline' title='Not available with a dev identity.' description='Passkeys need a real sign-in provider.' />
+      ) : passkeys.isLoading ? (
+        <StateMessage kind='loading' title='Loading passkeys' className='bg-transparent p-0' />
+      ) : passkeys.isError ? (
+        <StateMessage
+          kind='error'
+          layout='inline'
+          title={message(passkeys.error, 'Passkeys could not be loaded.')}
+          action={
+            <Button size='sm' variant='glass' className='min-h-9' onClick={() => void passkeys.refetch()}>
+              Retry
+            </Button>
+          }
+        />
+      ) : list.length === 0 ? (
+        <StateMessage kind='empty' layout='inline' title='No passkeys yet.' description='Add one on this device to skip the email code next time.' />
+      ) : (
+        <ul className='flex flex-col gap-1.5'>
+          {list.map((passkey) => (
+            <CollectionRow
+              key={passkey.id}
+              as='li'
+              className='rafii-glass'
+              leading={
+                <span className={rafiiIconWell}>
+                  <Icons.key className='size-4' aria-hidden />
+                </span>
+              }
+              title={passkey.name}
+              meta={
+                <>
+                  Added {formatDate(Date.parse(passkey.createdAt) / 1000)}
+                  {passkey.lastUsedAt ? ` · last used ${relativeTime(Date.parse(passkey.lastUsedAt) / 1000)}` : ' · not used yet'}
+                </>
+              }
+              actions={
+                <>
+                  <Button variant='quiet' size='sm' className='min-h-9' disabled={busy} onClick={() => setRenaming(passkey)}>
                     Rename
                   </Button>
-                  <Button variant='ghost' size='sm' className='text-destructive' disabled={busy} onClick={() => setRemoving(passkey)}>
+                  <Button variant='quiet' size='sm' className='text-destructive min-h-9' disabled={busy} onClick={() => setRemoving(passkey)}>
                     Remove
                   </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {!dev && (
-          <Button variant='outline' className='w-fit' disabled={busy || !passkeysSupported()} onClick={() => void add()}>
-            <Icons.add className='size-4' aria-hidden />
-            {busy ? 'Waiting for your device…' : 'Add a passkey on this device'}
-          </Button>
-        )}
-        {!dev && !passkeysSupported() && <p className='text-muted-foreground text-xs'>This browser cannot create passkeys.</p>}
+                </>
+              }
+            />
+          ))}
+        </ul>
+      )}
+      {!dev && (
+        <Button variant='glass' size='control' className='w-fit' disabled={busy || !passkeysSupported()} onClick={() => void add()}>
+          <Icons.add className='size-4' aria-hidden />
+          {busy ? 'Waiting for your device…' : 'Add a passkey on this device'}
+        </Button>
+      )}
+      {!dev && !passkeysSupported() && <p className='text-muted-foreground text-xs'>This browser cannot create passkeys.</p>}
 
-        <RenameDialog passkey={renaming} onOpenChange={(open) => !open && setRenaming(null)} onRenamed={refresh} />
-        <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Remove {removing?.name ?? 'this passkey'}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                That device can no longer sign you in with it. Your email code and Google sign-in keep working; delete the passkey from the device
-                too if you want it gone everywhere.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Keep</AlertDialogCancel>
-              <AlertDialogAction disabled={busy} onClick={() => removing && void remove(removing)}>
-                Remove
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </CardContent>
-    </Card>
+      <RenameDialog passkey={renaming} onOpenChange={(open) => !open && setRenaming(null)} onRenamed={refresh} />
+      <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent className={rafiiDialog}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Remove {removing?.name ?? 'this passkey'}?</AlertDialogTitle>
+            <AlertDialogDescription className='leading-relaxed'>
+              That device can no longer sign you in with it. Your email code and Google sign-in keep working; delete the passkey from the device
+              too if you want it gone everywhere.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className={rafiiDialogFooter}>
+            <AlertDialogCancel variant='quiet' size='control'>Keep</AlertDialogCancel>
+            <AlertDialogAction variant='action' size='control' disabled={busy} onClick={() => removing && void remove(removing)}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SettingsSection>
   );
 }
 

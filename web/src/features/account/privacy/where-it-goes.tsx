@@ -4,24 +4,26 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LEGAL_LAST_UPDATED, LEGAL_REVIEW_STATUS } from '@/config/legal';
 import { siteConfig } from '@/config/site';
 import type { MemoryEgress, PrivacyNotice, ResearchEgress } from '@/lib/api/types';
+import { SettingsSection } from '../settings-section';
 import { plural, retentionLabel, sentence } from './privacy-model';
 import { PrivacySection, Unavailable, type Refetchable } from './section';
 
-const linkClass = 't-learn text-foreground inline-flex items-center gap-0.5 text-sm font-medium hover:underline';
+const linkClass = 't-learn rafii-focus text-foreground inline-flex min-h-9 items-center gap-0.5 rounded-sm text-sm font-medium hover:underline';
+const quietAction = buttonVariants({ variant: 'quiet', size: 'sm' }) + ' min-h-9';
 
 function SwitchRow({ title, badge, detail }: { title: string; badge: { label: string; status: AnimatedBadgeStatus }; detail?: ReactNode }) {
   return (
-    <div className='flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4'>
+    <div className='flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4'>
       <div className='flex min-w-0 flex-col gap-0.5'>
-        <span className='text-sm font-medium'>{title}</span>
-        {detail && <span className='text-muted-foreground text-xs'>{detail}</span>}
+        <span className='text-foreground text-sm font-medium'>{title}</span>
+        {detail && <span className='text-muted-foreground text-xs leading-relaxed'>{detail}</span>}
       </div>
       <AnimatedBadge size='sm' status={badge.status} contentKey={badge.label} pulse={false} className='w-fit'>
         {badge.label}
@@ -59,8 +61,8 @@ function researchRow(research: ResearchEgress | undefined) {
 function NoticeSkeleton({ tall }: { tall?: boolean }) {
   return (
     <div className='grid gap-4 lg:grid-cols-2' aria-hidden>
-      <Skeleton className={tall ? 'h-56 w-full' : 'h-40 w-full'} />
-      <Skeleton className={tall ? 'h-56 w-full' : 'h-40 w-full'} />
+      <Skeleton className={tall ? 'h-56 w-full rounded-[var(--rafii-radius-card)]' : 'h-40 w-full rounded-[var(--rafii-radius-card)]'} />
+      <Skeleton className={tall ? 'h-56 w-full rounded-[var(--rafii-radius-card)]' : 'h-40 w-full rounded-[var(--rafii-radius-card)]'} />
     </div>
   );
 }
@@ -75,46 +77,42 @@ function UsageAndServices({ notice }: { notice: PrivacyNotice }) {
 
   return (
     <div className='grid min-w-0 gap-4 lg:grid-cols-2'>
-      <Card>
-        <CardHeader>
-          <CardTitle className='text-base'>How your content is used</CardTitle>
-        </CardHeader>
-        <CardContent className='flex flex-col gap-3 text-sm'>
+      <Surface material='quiet' radius='card' padding='md' className='flex flex-col gap-4'>
+        <h4 className='text-foreground text-base font-medium'>How your content is used</h4>
+        <div className='flex flex-col gap-3 text-sm'>
           {usage.map((item) =>
             item.text ? (
               <div key={item.label} className='flex flex-col gap-0.5'>
                 <span className='text-muted-foreground text-xs font-medium'>{item.label}</span>
-                <p>{item.text}</p>
+                <p className='text-foreground leading-relaxed'>{item.text}</p>
               </div>
             ) : null
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Surface>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className='text-base'>Services that process your data</CardTitle>
-          <CardDescription>As the privacy notice lists them today.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {(notice.subprocessors ?? []).length === 0 ? (
-            <p className='text-muted-foreground text-sm'>The notice lists none.</p>
-          ) : (
-            <ul className='divide-y'>
-              {notice.subprocessors.map((processor) => (
-                <li key={processor.name} className='flex flex-col gap-0.5 py-2.5 text-sm first:pt-0 last:pb-0'>
-                  <span className='font-medium'>{processor.name}</span>
-                  <span className='text-muted-foreground'>{sentence(processor.purpose)}</span>
-                  <span className='text-muted-foreground text-xs'>
-                    {sentence(processor.status)}
-                    {processor.region ? ` · Region ${processor.region}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <Surface material='quiet' radius='card' padding='md' className='flex flex-col gap-4'>
+        <div className='flex flex-col gap-1'>
+          <h4 className='text-foreground text-base font-medium'>Services that process your data</h4>
+          <p className='text-muted-foreground text-sm'>As the privacy notice lists them today.</p>
+        </div>
+        {(notice.subprocessors ?? []).length === 0 ? (
+          <p className='text-muted-foreground text-sm'>The notice lists none.</p>
+        ) : (
+          <ul className='flex flex-col gap-3'>
+            {notice.subprocessors.map((processor) => (
+              <li key={processor.name} className='flex flex-col gap-0.5 text-sm'>
+                <span className='text-foreground font-medium'>{processor.name}</span>
+                <span className='text-muted-foreground'>{sentence(processor.purpose)}</span>
+                <span className='text-muted-foreground text-xs'>
+                  {sentence(processor.status)}
+                  {processor.region ? ` · Region ${processor.region}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Surface>
     </div>
   );
 }
@@ -123,38 +121,30 @@ function RetentionAndRights({ notice }: { notice: PrivacyNotice }) {
   const retention = Object.entries(notice.retention ?? {});
   return (
     <div className='grid min-w-0 gap-4 lg:grid-cols-3'>
-      <Card className='lg:col-span-2'>
-        <CardHeader>
-          <CardTitle className='text-base'>What is kept, and for how long</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className='grid gap-x-8 gap-y-3 md:grid-cols-2'>
-            {retention.map(([key, value]) => (
-              <div key={key} className='flex min-w-0 flex-col gap-0.5 border-b pb-3 text-sm'>
-                <dt className='font-medium'>{retentionLabel(key)}</dt>
-                <dd>{sentence(value.retention)}</dd>
-                {value.note && <dd className='text-muted-foreground text-xs'>{value.note}</dd>}
-              </div>
-            ))}
-          </dl>
-        </CardContent>
-      </Card>
+      <Surface material='quiet' radius='card' padding='md' className='flex flex-col gap-4 lg:col-span-2'>
+        <h4 className='text-foreground text-base font-medium'>What is kept, and for how long</h4>
+        <dl className='grid gap-x-8 gap-y-4 md:grid-cols-2'>
+          {retention.map(([key, value]) => (
+            <div key={key} className='flex min-w-0 flex-col gap-0.5 text-sm'>
+              <dt className='text-foreground font-medium'>{retentionLabel(key)}</dt>
+              <dd className='text-foreground'>{sentence(value.retention)}</dd>
+              {value.note && <dd className='text-muted-foreground text-xs leading-relaxed'>{value.note}</dd>}
+            </div>
+          ))}
+        </dl>
+      </Surface>
 
-      <Card className='h-fit'>
-        <CardHeader>
-          <CardTitle className='text-base'>Your rights</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className='flex flex-col gap-2 text-sm'>
-            {(notice.rights ?? []).map((right) => (
-              <li key={right} className='flex items-start gap-2'>
-                <Icons.check className='mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400' aria-hidden />
-                <span>{sentence(right)}</span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+      <Surface material='quiet' radius='card' padding='md' className='flex h-fit flex-col gap-4'>
+        <h4 className='text-foreground text-base font-medium'>Your rights</h4>
+        <ul className='flex flex-col gap-2 text-sm'>
+          {(notice.rights ?? []).map((right) => (
+            <li key={right} className='flex items-start gap-2'>
+              <Icons.check className='text-foreground mt-0.5 size-4 shrink-0' aria-hidden />
+              <span className='text-foreground'>{sentence(right)}</span>
+            </li>
+          ))}
+        </ul>
+      </Surface>
     </div>
   );
 }
@@ -178,7 +168,7 @@ export function RetentionSection({ notice }: { notice: NoticeQuery }) {
       title='What is kept, and your rights'
       description='The rest of the privacy notice: how long each kind of data is kept, and what you can ask for.'
       action={
-        <Link href={siteConfig.links.dataDeletion} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+        <Link href={siteConfig.links.dataDeletion} className={quietAction}>
           Deletion steps
         </Link>
       }
@@ -213,51 +203,51 @@ export function WhereItGoesSection({
       title='Where it goes'
       description='What this workspace allows to leave PostRiff, and what the privacy notice says about the rest.'
       action={
-        <Link href={siteConfig.links.privacy} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+        <Link href={siteConfig.links.privacy} className={quietAction}>
           Full policy <Icons.externalLink className='size-3.5' />
         </Link>
       }
+      className='gap-5'
     >
-      <Card data-tour='privacy-egress'>
-        <CardHeader>
-          <CardTitle className='text-base'>This workspace&apos;s switches</CardTitle>
-          <CardDescription>
-            {canEdit ? (
-              <Link href='/app/workspace/memory' className={linkClass}>
-                The owner changes these on Memory <LearnMoreChevron className='size-3.5' />
-              </Link>
-            ) : (
-              'Only the workspace owner can change these.'
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {memory.isPending ? (
-            <div className='flex flex-col gap-3' aria-hidden>
-              <Skeleton className='h-10 w-full' />
-              <Skeleton className='h-10 w-full' />
-            </div>
-          ) : memory.error ? (
-            <Unavailable query={memory} fallback='These settings could not be read.' />
+      <SettingsSection
+        id='privacy-switches'
+        title='This workspace’s switches'
+        description={
+          canEdit ? (
+            <Link href='/app/workspace/memory' className={linkClass}>
+              The owner changes these on Memory <LearnMoreChevron className='size-3.5' />
+            </Link>
           ) : (
-            <div className='divide-y'>
-              {cloud && <SwitchRow title='A cloud model may read your memory files' badge={cloud.badge} detail={cloud.detail} />}
-              {research && <SwitchRow title='Drafting may look facts up on the web' badge={research.badge} detail={research.detail} />}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            'Only the workspace owner can change these.'
+          )
+        }
+        data-tour='privacy-egress'
+      >
+        {memory.isPending ? (
+          <div className='flex flex-col gap-3' aria-hidden>
+            <Skeleton className='h-10 w-full' />
+            <Skeleton className='h-10 w-full' />
+          </div>
+        ) : memory.error ? (
+          <Unavailable query={memory} fallback='These settings could not be read.' />
+        ) : (
+          <div className='flex flex-col gap-4'>
+            {cloud && <SwitchRow title='A cloud model may read your memory files' badge={cloud.badge} detail={cloud.detail} />}
+            {research && <SwitchRow title='Drafting may look facts up on the web' badge={research.badge} detail={research.detail} />}
+          </div>
+        )}
+      </SettingsSection>
 
       <div className='flex min-w-0 flex-col gap-3' data-tour='privacy-notice'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-sm font-medium'>Privacy notice</span>
+        <div className='flex flex-wrap items-center gap-2 px-1'>
+          <span className='text-foreground text-sm font-medium'>Privacy notice</span>
           <LegalReviewBadge />
         </div>
         {notice.isPending ? (
           <NoticeSkeleton tall />
         ) : notice.data ? (
           <>
-            {notice.data.status && <p className='text-muted-foreground text-xs'>{sentence(notice.data.status)}</p>}
+            {notice.data.status && <p className='text-muted-foreground px-1 text-xs'>{sentence(notice.data.status)}</p>}
             <UsageAndServices notice={notice.data} />
           </>
         ) : (

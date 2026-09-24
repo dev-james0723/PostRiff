@@ -1,50 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import {
-  type Column,
-  type ColumnDef,
-  type SortingState,
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable
-} from '@tanstack/react-table';
+import { type Column, type ColumnDef, type SortingState, createColumnHelper, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { Tooltip } from '@/components/motion/tooltip';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
+import { Surface } from '@/components/rafii';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getCommonPinningStyles } from '@/lib/data-table';
 import type { Metric } from '@/lib/api/types';
-import { EASE_OUT } from '@/lib/ease';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import {
-  orderMetricKeys,
-  providerLabel,
-  type AnalyticsPostRow,
-  type ConnectionCoverage,
-  type JobRow
-} from './coverage';
-import { ENTER_DURATION, STAGGER, STAGGER_CAP } from './coverage-strip';
+import { orderMetricKeys, providerLabel, type AnalyticsPostRow, type ConnectionCoverage, type JobRow } from './coverage';
 import { MetricCell, isUnavailable } from './metric-value';
 
 /** One post joined with the job that published it (text, verification) and the account it belongs to. */
@@ -62,8 +30,10 @@ interface ProviderGroup {
   metrics: { key: string; sample: Metric }[];
 }
 
-const MotionTableRow = motion.create(TableRow);
 const TEXT_PREVIEW = 80;
+
+/** Pinned cells need an opaque-enough fill that matches the quiet surface they sit in. */
+const PINNED_FILL = 'color-mix(in oklch, var(--foreground) 4%, var(--background))';
 
 export function rowKey(post: AnalyticsPostRow) {
   return `${post.provider}-${post.providerPostId}`;
@@ -76,26 +46,12 @@ function previewText(row: PostRowData) {
 }
 
 function subtitle(post: AnalyticsPostRow) {
-  const parts = [
-    post.language || 'Language not recorded',
-    post.contentTypeId,
-    post.publishedState.replace(/_/g, ' ')
-  ];
+  const parts = [post.language || 'Language not recorded', post.contentTypeId, post.publishedState.replace(/_/g, ' ')];
   return parts.filter(Boolean).join(' · ');
 }
 
 function publishedAt(row: PostRowData) {
   return row.job?.verification?.at ?? undefined;
-}
-
-function enterTransition(reduce: boolean | null, index: number) {
-  return reduce
-    ? { duration: 0 }
-    : {
-        duration: ENTER_DURATION,
-        delay: Math.min(index * STAGGER, STAGGER_CAP),
-        ease: EASE_OUT
-      };
 }
 
 /** One group per provider, its metric columns in the API's family order. */
@@ -115,8 +71,7 @@ function groupByProvider(rows: PostRowData[], families: Record<string, string[]>
       groups.set(post.provider, group);
     }
     group.rows.push(row);
-    if (!group.definitionVersions.includes(post.definitionVersion))
-      group.definitionVersions.push(post.definitionVersion);
+    if (!group.definitionVersions.includes(post.definitionVersion)) group.definitionVersions.push(post.definitionVersion);
     for (const [key, metric] of Object.entries(post.metrics)) {
       if (!group.metrics.some((m) => m.key === key)) group.metrics.push({ key, sample: metric });
     }
@@ -131,32 +86,18 @@ function groupByProvider(rows: PostRowData[], families: Record<string, string[]>
   return Array.from(groups.values());
 }
 
-function SortButton<TData>({
-  column,
-  label,
-  children
-}: {
-  column: Column<TData, unknown>;
-  label: string;
-  children: React.ReactNode;
-}) {
+function SortButton<TData>({ column, label, children }: { column: Column<TData, unknown>; label: string; children: React.ReactNode }) {
   if (!column.getCanSort()) return <>{children}</>;
   const sorted = column.getIsSorted();
   return (
     <button
       type='button'
       onClick={() => column.toggleSorting(sorted === 'asc')}
-      className='hover:bg-accent -ml-1.5 inline-flex h-7 items-center gap-1 rounded-md px-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0'
+      className='rafii-focus hover:rafii-quiet -ml-1.5 inline-flex h-8 items-center gap-1 rounded-md px-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0'
       aria-label={`Sort by ${label}`}
     >
       {children}
-      {sorted === 'desc' ? (
-        <Icons.chevronDown />
-      ) : sorted === 'asc' ? (
-        <Icons.chevronUp />
-      ) : (
-        <Icons.chevronsUpDown className='text-muted-foreground' />
-      )}
+      {sorted === 'desc' ? <Icons.chevronDown /> : sorted === 'asc' ? <Icons.chevronUp /> : <Icons.chevronsUpDown className='text-muted-foreground' />}
     </button>
   );
 }
@@ -167,13 +108,8 @@ function PostCellContent({ row, onOpen }: { row: PostRowData; onOpen: () => void
   return (
     <div className='flex min-w-56 flex-col gap-0.5'>
       <span className='flex min-w-0 items-center gap-2'>
-        <ChannelIcon
-          platform={post.platform || post.provider}
-          name={post.platform || post.provider}
-        />
-        <span className='text-muted-foreground truncate text-xs'>
-          {connection?.account ?? 'Account not matched'}
-        </span>
+        <ChannelIcon platform={post.platform || post.provider} name={post.platform || post.provider} />
+        <span className='text-muted-foreground truncate text-xs'>{connection?.account ?? 'Account not matched'}</span>
       </span>
       <button
         type='button'
@@ -181,7 +117,7 @@ function PostCellContent({ row, onOpen }: { row: PostRowData; onOpen: () => void
           event.stopPropagation();
           onOpen();
         }}
-        className='line-clamp-2 max-w-72 text-left text-sm whitespace-normal hover:underline'
+        className='rafii-focus text-foreground line-clamp-2 max-w-72 rounded-sm text-left text-sm whitespace-normal hover:underline'
         title={preview ?? post.providerPostId}
       >
         {preview ?? <span className='font-mono text-xs'>{post.providerPostId}</span>}
@@ -210,64 +146,28 @@ export function PostsTable({
   const isMobile = useIsMobile();
   const groups = useMemo(() => groupByProvider(rows, families), [rows, families]);
   if (isMobile) return <PostCards rows={rows} families={families} onOpen={onOpen} />;
-  const firstWithUnavailable = groups.findIndex((group) =>
-    group.rows.some(({ post }) =>
-      group.metrics.some(({ key }) => !post.metrics[key] || isUnavailable(post.metrics[key]))
-    )
-  );
-  let offset = 0;
+  const firstWithUnavailable = groups.findIndex((group) => group.rows.some(({ post }) => group.metrics.some(({ key }) => !post.metrics[key] || isUnavailable(post.metrics[key]))));
   return (
     <div data-tour='analytics-table' className='flex flex-col gap-6'>
-      {groups.map((group, index) => {
-        const start = offset;
-        offset += group.rows.length;
-        return (
-          <section
-            key={group.key}
-            className='flex flex-col gap-2'
-            aria-label={`${group.label} posts`}
-          >
-            {groups.length > 1 && (
-              <h2 className='flex items-center gap-2 text-sm font-medium'>
-                <ChannelIcon platform={group.label} name={group.label} />
-                {group.label}
-                <span className='text-muted-foreground font-normal'>
-                  {group.rows.length} {group.rows.length === 1 ? 'post' : 'posts'} · native{' '}
-                  {group.label} metrics
-                </span>
-              </h2>
-            )}
-            <ProviderTable
-              group={group}
-              onOpen={onOpen}
-              metricSort={metricSort}
-              tagRow={index === 0}
-              tagUnavailable={index === firstWithUnavailable}
-              staggerOffset={start}
-            />
-          </section>
-        );
-      })}
+      {groups.map((group, index) => (
+        <section key={group.key} className='flex flex-col gap-2' aria-label={`${group.label} posts`}>
+          {groups.length > 1 && (
+            <h2 className='text-foreground flex items-center gap-2 text-sm font-medium'>
+              <ChannelIcon platform={group.label} name={group.label} />
+              {group.label}
+              <span className='text-muted-foreground font-normal'>
+                {group.rows.length} {group.rows.length === 1 ? 'post' : 'posts'} · native {group.label} metrics
+              </span>
+            </h2>
+          )}
+          <ProviderTable group={group} onOpen={onOpen} metricSort={metricSort} tagRow={index === 0} tagUnavailable={index === firstWithUnavailable} />
+        </section>
+      ))}
     </div>
   );
 }
 
-function ProviderTable({
-  group,
-  onOpen,
-  metricSort,
-  tagRow,
-  tagUnavailable,
-  staggerOffset
-}: {
-  group: ProviderGroup;
-  onOpen: (row: PostRowData) => void;
-  metricSort: boolean;
-  tagRow: boolean;
-  tagUnavailable: boolean;
-  staggerOffset: number;
-}) {
-  const reduce = useReducedMotion();
+function ProviderTable({ group, onOpen, metricSort, tagRow, tagUnavailable }: { group: ProviderGroup; onOpen: (row: PostRowData) => void; metricSort: boolean; tagRow: boolean; tagUnavailable: boolean }) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'published', desc: true }]);
 
   const columns = useMemo(() => {
@@ -278,9 +178,7 @@ function ProviderTable({
         id: 'post',
         header: 'Post',
         size: 300,
-        cell: ({ row }) => (
-          <PostCellContent row={row.original} onOpen={() => onOpen(row.original)} />
-        )
+        cell: ({ row }) => <PostCellContent row={row.original} onOpen={() => onOpen(row.original)} />
       }),
       helper.accessor((row) => publishedAt(row), {
         id: 'published',
@@ -292,70 +190,42 @@ function ProviderTable({
         ),
         cell: ({ getValue }) => {
           const at = getValue();
-          return at ? (
-            <span className='whitespace-nowrap'>{formatDateTime(at)}</span>
-          ) : (
-            <span className='text-muted-foreground'>—</span>
-          );
+          return at ? <span className='whitespace-nowrap'>{formatDateTime(at)}</span> : <span className='text-muted-foreground'>—</span>;
         },
         sortUndefined: 'last'
       }),
       ...group.metrics.map(({ key, sample }) =>
-        helper.accessor(
-          (row) =>
-            row.post.metrics[key]?.availability === 'available'
-              ? (row.post.metrics[key]?.value ?? undefined)
-              : undefined,
-          {
-            id: `metric:${key}`,
-            size: 96,
-            header: ({ column }) => (
-              <SortButton column={column} label={sample.nativeName}>
-                <Tooltip
-                  content={`${group.label} “${sample.nativeName}” · unit ${sample.unit} · definitions ${versions}. A native name, not comparable across providers.`}
-                  side='bottom'
-                >
-                  <span className='cursor-help capitalize underline decoration-dotted underline-offset-4'>
-                    {sample.nativeName}
-                  </span>
-                </Tooltip>
-              </SortButton>
-            ),
-            cell: ({ row }) => {
-              const metric = row.original.post.metrics[key];
-              return metric ? (
-                <MetricCell metric={metric} />
-              ) : (
-                <span className='text-muted-foreground italic'>Unavailable</span>
-              );
-            },
-            enableSorting: metricSort,
-            sortUndefined: 'last'
-          }
-        )
+        helper.accessor((row) => (row.post.metrics[key]?.availability === 'available' ? (row.post.metrics[key]?.value ?? undefined) : undefined), {
+          id: `metric:${key}`,
+          size: 96,
+          header: ({ column }) => (
+            <SortButton column={column} label={sample.nativeName}>
+              <Tooltip content={`${group.label} “${sample.nativeName}” · unit ${sample.unit} · definitions ${versions}. A native name, not comparable across providers.`} side='bottom'>
+                <span className='cursor-help capitalize underline decoration-dotted underline-offset-4'>{sample.nativeName}</span>
+              </Tooltip>
+            </SortButton>
+          ),
+          cell: ({ row }) => {
+            const metric = row.original.post.metrics[key];
+            return metric ? <MetricCell metric={metric} /> : <span className='text-muted-foreground italic'>Unavailable</span>;
+          },
+          enableSorting: metricSort,
+          sortUndefined: 'last'
+        })
       ),
       helper.accessor((row) => row.post.rates.likesPerView?.display ?? undefined, {
         id: 'rate',
         size: 110,
         header: () => (
-          <Tooltip
-            content='Likes over views (or reach), both from the same reading. Unavailable when either side is.'
-            side='bottom'
-          >
-            <span className='cursor-help whitespace-nowrap underline decoration-dotted underline-offset-4'>
-              Likes / views
-            </span>
+          <Tooltip content='Likes over views (or reach), both from the same reading. Unavailable when either side is.' side='bottom'>
+            <span className='cursor-help whitespace-nowrap underline decoration-dotted underline-offset-4'>Likes / views</span>
           </Tooltip>
         ),
         cell: ({ row }) => {
           const rate = row.original.post.rates.likesPerView;
           if (!rate) return <span className='text-muted-foreground'>—</span>;
           const missing = rate.numerator === null || rate.denominator === null;
-          return (
-            <span className={cn('tabular-nums', missing && 'text-muted-foreground italic')}>
-              {rate.display}
-            </span>
-          );
+          return <span className={cn('tabular-nums', missing && 'text-muted-foreground italic')}>{rate.display}</span>;
         },
         enableSorting: false
       }),
@@ -400,23 +270,19 @@ function ProviderTable({
     : null;
 
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <Table>
-        <TableHeader className='bg-muted'>
+    <div className='relative rafii-quiet overflow-x-auto rounded-[var(--rafii-radius-card)]'>
+      <Table className='text-sm'>
+        <TableHeader className='[&_tr]:border-0'>
           {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id} className='hover:bg-transparent'>
+            <TableRow key={headerGroup.id} className='border-0 hover:bg-transparent'>
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
                   colSpan={header.colSpan}
-                  style={{
-                    ...getCommonPinningStyles({ column: header.column }),
-                    background: 'var(--muted)'
-                  }}
+                  className='text-muted-foreground h-11 px-3 text-xs font-medium first:pl-4 last:pr-4'
+                  style={{ ...getCommonPinningStyles({ column: header.column }), background: PINNED_FILL }}
                 >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                 </TableHead>
               ))}
             </TableRow>
@@ -424,26 +290,18 @@ function ProviderTable({
         </TableHeader>
         <TableBody>
           {bodyRows.map((row, index) => (
-            <MotionTableRow
-              key={row.id}
-              data-tour={tagRow && index === 0 ? 'analytics-row' : undefined}
-              onClick={() => onOpen(row.original)}
-              className='cursor-pointer'
-              initial={reduce ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={enterTransition(reduce, staggerOffset + index)}
-            >
+            <TableRow key={row.id} data-tour={tagRow && index === 0 ? 'analytics-row' : undefined} onClick={() => onOpen(row.original)} className='hover:bg-foreground/[0.04] cursor-pointer border-0'>
               {row.getVisibleCells().map((cell) => (
                 <TableCell
                   key={cell.id}
                   data-tour={cell.id === firstUnavailable ? 'analytics-unavailable' : undefined}
-                  style={getCommonPinningStyles({ column: cell.column })}
-                  className={cn('align-top', cell.column.id === 'post' && 'bg-background')}
+                  style={{ ...getCommonPinningStyles({ column: cell.column }), ...(cell.column.id === 'post' ? { background: PINNED_FILL } : {}) }}
+                  className='px-3 py-3 align-top first:pl-4 last:pr-4'
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
               ))}
-            </MotionTableRow>
+            </TableRow>
           ))}
         </TableBody>
       </Table>
@@ -451,109 +309,56 @@ function ProviderTable({
   );
 }
 
-/** Below 768px each post is a card with its own provider's metric list, newest publication first. */
-function PostCards({
-  rows,
-  families,
-  onOpen
-}: {
-  rows: PostRowData[];
-  families: Record<string, string[]>;
-  onOpen: (row: PostRowData) => void;
-}) {
-  const reduce = useReducedMotion();
-  const ordered = useMemo(
-    () =>
-      rows.toSorted(
-        (a, b) =>
-          (publishedAt(b) ?? b.post.freshness.observedAt) -
-          (publishedAt(a) ?? a.post.freshness.observedAt)
-      ),
-    [rows]
-  );
+/** Below 768px each post is a quiet card with its own provider's metric list, newest publication first. */
+function PostCards({ rows, families, onOpen }: { rows: PostRowData[]; families: Record<string, string[]>; onOpen: (row: PostRowData) => void }) {
+  const ordered = useMemo(() => rows.toSorted((a, b) => (publishedAt(b) ?? b.post.freshness.observedAt) - (publishedAt(a) ?? a.post.freshness.observedAt)), [rows]);
   let unavailableTagged = false;
   return (
-    <div data-tour='analytics-table' className='grid gap-4'>
+    <div data-tour='analytics-table' className='grid gap-3'>
       {ordered.map((row, index) => {
         const { post } = row;
         const preview = previewText(row);
         return (
-          <motion.div
-            key={rowKey(post)}
-            data-tour={index === 0 ? 'analytics-row' : undefined}
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={enterTransition(reduce, index)}
-          >
-            <Card className='h-full'>
-              <CardHeader>
-                <CardTitle className='flex min-w-0 items-center gap-2 text-base'>
-                  <ChannelIcon
-                    platform={post.platform || post.provider}
-                    name={post.platform || post.provider}
-                  />
-                  {providerLabel(post)}
-                  {row.connection && (
-                    <span className='text-muted-foreground truncate text-sm font-normal'>
-                      {row.connection.account}
-                    </span>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  <button
-                    type='button'
-                    onClick={() => onOpen(row)}
-                    className='line-clamp-2 text-left break-words hover:underline'
-                  >
-                    {preview ?? (
-                      <span className='font-mono text-xs break-all'>{post.providerPostId}</span>
-                    )}
-                  </button>
-                  <span className='mt-1 block text-xs'>{subtitle(post)}</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-sm'>
-                  {orderMetricKeys(Object.keys(post.metrics), families).map((key) => {
-                    const metric = post.metrics[key];
-                    const tag = !unavailableTagged && isUnavailable(metric);
-                    if (tag) unavailableTagged = true;
-                    return (
-                      <div
-                        key={key}
-                        className='flex flex-col'
-                        data-tour={tag ? 'analytics-unavailable' : undefined}
-                      >
-                        <dt className='text-muted-foreground text-xs capitalize'>
-                          {metric.nativeName}
-                        </dt>
-                        <dd>
-                          <MetricCell metric={metric} />
-                        </dd>
-                      </div>
-                    );
-                  })}
-                </dl>
-                {post.rates.likesPerView && (
-                  <p className='text-muted-foreground mt-3 text-xs'>
-                    Likes / views:{' '}
-                    <span className='tabular-nums'>{post.rates.likesPerView.display}</span>
-                  </p>
-                )}
-              </CardContent>
-              <CardFooter className='text-muted-foreground flex-wrap gap-x-3 text-xs'>
-                <span>Read {relativeTime(post.freshness.observedAt)}</span>
-                <span>definitions {post.definitionVersion}</span>
-                <button
-                  type='button'
-                  onClick={() => onOpen(row)}
-                  className='text-primary ml-auto hover:underline'
-                >
-                  Details
-                </button>
-              </CardFooter>
-            </Card>
-          </motion.div>
+          <Surface key={rowKey(post)} as='article' material='quiet' data-tour={index === 0 ? 'analytics-row' : undefined} className='flex flex-col gap-4'>
+            <div className='flex flex-col gap-1'>
+              <h3 className='text-foreground flex min-w-0 items-center gap-2 text-base font-medium'>
+                <ChannelIcon platform={post.platform || post.provider} name={post.platform || post.provider} />
+                {providerLabel(post)}
+                {row.connection && <span className='text-muted-foreground truncate text-sm font-normal'>{row.connection.account}</span>}
+              </h3>
+              <button type='button' onClick={() => onOpen(row)} className='rafii-focus text-foreground line-clamp-2 rounded-sm text-left text-sm break-words hover:underline'>
+                {preview ?? <span className='font-mono text-xs break-all'>{post.providerPostId}</span>}
+              </button>
+              <span className='text-muted-foreground text-xs'>{subtitle(post)}</span>
+            </div>
+            <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-sm'>
+              {orderMetricKeys(Object.keys(post.metrics), families).map((key) => {
+                const metric = post.metrics[key];
+                const tag = !unavailableTagged && isUnavailable(metric);
+                if (tag) unavailableTagged = true;
+                return (
+                  <div key={key} className='flex flex-col' data-tour={tag ? 'analytics-unavailable' : undefined}>
+                    <dt className='text-muted-foreground text-xs capitalize'>{metric.nativeName}</dt>
+                    <dd>
+                      <MetricCell metric={metric} />
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+            {post.rates.likesPerView && (
+              <p className='text-muted-foreground text-xs'>
+                Likes / views: <span className='tabular-nums'>{post.rates.likesPerView.display}</span>
+              </p>
+            )}
+            <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+              <span>Read {relativeTime(post.freshness.observedAt)}</span>
+              <span>definitions {post.definitionVersion}</span>
+              <button type='button' onClick={() => onOpen(row)} className='rafii-focus text-foreground ml-auto min-h-11 rounded-md px-1 underline underline-offset-4'>
+                Details
+              </button>
+            </div>
+          </Surface>
         );
       })}
     </div>

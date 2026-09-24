@@ -19,7 +19,7 @@ export function JsonLd() {
       operatingSystem: 'Web',
       url: siteConfig.url,
       description: siteConfig.description,
-      offers: plans.map((plan) => ({
+      offers: plans.filter((plan) => plan.status === 'active').map((plan) => ({
         '@type': 'Offer',
         name: plan.name,
         price: (plan.priceCents / 100).toFixed(2),

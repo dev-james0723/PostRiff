@@ -9,7 +9,7 @@ This adapter adds what is specific to x. The shared adapter contract (`postriff-
 
 ## 1. Channel purpose
 
-One central claim per post; preserve ordered thread sequencing.
+One central claim in one post: shorter and sharper than the same idea on LinkedIn or Threads, never a clipped version of either.
 
 ## 2. Audience and expected language
 
@@ -26,7 +26,7 @@ The following are implemented **local draft schemas**, not current API capabilit
 
 ## 4. Caption/title/description rules
 
-Write independently authored audience-facing `text`; put any required title or description in `notes`, labelled. Do not invent personal experience or product facts. One central claim per post; preserve ordered thread sequencing. Character limits remain unverified until a current account-specific constraint record exists; never silently truncate copy to fit an assumed limit.
+A PostRiff writing run returns one `x.post` per destination in `text`: a single post, not a thread. It must fit 280 characters by X's own count, the `characterLimit` the run sends: a CJK character or an emoji counts as two, a link as 23. Put the claim in the first line and cut everything that does not carry it: warm-up sentences, restated context, sign-offs and filler. At most one hashtag, and only when the person uses them. Do not invent personal experience or product facts. If the approved facts cannot be stated honestly within the limit, keep the strongest supported point, list what was left out in `unknowns`, and say so in `warnings`; never silently truncate. PostRiff drafts X posts for review, copy and export; it has no hosted X publisher, so a draft here is never a publishing promise.
 
 ## 6. API setup requirements
 

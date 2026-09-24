@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import PageContainer from '@/components/layout/page-container';
 import { StatefulButton } from '@/components/motion/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StateMessage } from '@/components/rafii';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFlash } from '@/hooks/use-flash';
 import { useChannels, useMembers, useUsage } from '@/lib/api/hooks';
@@ -13,7 +13,7 @@ import { relativeTime } from '@/lib/time';
 import { Allowances } from './allowances';
 import { PAGE, infoContent } from './billing-copy';
 import { Ledger } from './ledger';
-import { LifecycleAlert } from './lifecycle-alert';
+import { GLASS_STATEFUL, LifecycleAlert } from './lifecycle-alert';
 import { PlanCard } from './plan-card';
 import { CheckoutConfirmation, Plans } from './plans';
 import { useBillingRedirect } from './use-billing-redirect';
@@ -33,48 +33,48 @@ function LoadError({ error, hasData, updatedAt, onRetry }: { error: unknown; has
   const [outcome, flash] = useFlash<'success' | 'error'>();
   const [retrying, setRetrying] = useState(false);
   return (
-    <Alert variant='destructive' className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
-      <div className='flex flex-col gap-0.5'>
-        <AlertTitle>{hasData ? 'Usage could not be refreshed' : 'Usage could not be loaded'}</AlertTitle>
-        <AlertDescription>
-          {loadErrorText(error)}
-          {hasData && ` Showing what was loaded ${relativeTime(updatedAt / 1000)}.`}
-        </AlertDescription>
-      </div>
-      <StatefulButton
-        variant='outline'
-        size='sm'
-        className='shrink-0'
-        state={retrying ? 'loading' : (outcome ?? 'idle')}
-        loadingText='Retrying…'
-        successText='Loaded'
-        errorText='Try again'
-        onClick={async () => {
-          setRetrying(true);
-          const result = await onRetry();
-          setRetrying(false);
-          flash(result.isError ? 'error' : 'success');
-        }}
-      >
-        Retry
-      </StatefulButton>
-    </Alert>
+    <StateMessage
+      kind={hasData ? 'stale' : 'error'}
+      layout={hasData ? 'inline' : 'panel'}
+      title={hasData ? 'Usage could not be refreshed' : 'Usage could not be loaded'}
+      description={`${loadErrorText(error)}${hasData ? ` Showing what was loaded ${relativeTime(updatedAt / 1000)}.` : ''}`}
+      className={hasData ? 'rafii-quiet rounded-[var(--rafii-radius-card)] px-5 py-4' : undefined}
+      action={
+        <StatefulButton
+          variant='outline'
+          size='sm'
+          className={GLASS_STATEFUL + ' h-10'}
+          state={retrying ? 'loading' : (outcome ?? 'idle')}
+          loadingText='Retrying…'
+          successText='Loaded'
+          errorText='Try again'
+          onClick={async () => {
+            setRetrying(true);
+            const result = await onRetry();
+            setRetrying(false);
+            flash(result.isError ? 'error' : 'success');
+          }}
+        >
+          Retry
+        </StatefulButton>
+      }
+    />
   );
 }
 
 /** Shaped like the page it stands in for; no numbers and no progress it cannot know. */
 function BillingSkeleton() {
   return (
-    <div role='status' aria-label='Loading usage and plan' className='flex flex-col gap-6'>
+    <div role='status' aria-label='Loading usage and plan' className='flex flex-col gap-8'>
       <div className='grid gap-4 lg:grid-cols-3'>
-        <Skeleton className='h-56 rounded-xl' />
-        <Skeleton className='h-56 rounded-xl lg:col-span-2' />
+        <Skeleton className='h-56 rounded-[var(--rafii-radius-card)]' />
+        <Skeleton className='h-56 rounded-[var(--rafii-radius-card)] lg:col-span-2' />
       </div>
       <div className='flex flex-col gap-3'>
         <Skeleton className='h-6 w-24' />
         <div className='grid gap-4 md:grid-cols-2'>
-          <Skeleton className='h-52 rounded-xl' />
-          <Skeleton className='h-52 rounded-xl' />
+          <Skeleton className='h-52 rounded-[var(--rafii-radius-card)]' />
+          <Skeleton className='h-52 rounded-[var(--rafii-radius-card)]' />
         </div>
       </div>
     </div>
@@ -106,7 +106,7 @@ export function BillingView() {
           <BillingSkeleton />
         )
       ) : (
-        <div className='flex flex-col gap-6'>
+        <div className='flex flex-col gap-8'>
           {phase !== 'idle' && <CheckoutConfirmation phase={phase} />}
           {usage.isError && <LoadError error={usage.error} hasData updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />}
           <LifecycleAlert usage={data} isOwner={isOwner} redirect={redirect} now={now} />
@@ -121,8 +121,8 @@ export function BillingView() {
           {isOwner ? (
             <Ledger entries={data.ledger} canEdit={canEdit} />
           ) : (
-            <section className='flex flex-col gap-1' aria-labelledby='ledger-heading'>
-              <h3 id='ledger-heading' className='text-lg font-semibold'>
+            <section className='flex flex-col gap-1 px-1' aria-labelledby='ledger-heading'>
+              <h3 id='ledger-heading' className='text-foreground text-lg font-medium tracking-tight'>
                 Recent usage
               </h3>
               <p className='text-muted-foreground text-sm'>Run-by-run costs are shown to the workspace owner.</p>

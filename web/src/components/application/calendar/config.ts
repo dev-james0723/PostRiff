@@ -4,61 +4,26 @@ import type { DayOfWeek, ZonedDateTime } from '@internationalized/date';
 export type CalendarView = 'month' | 'week' | 'day';
 
 export const CALENDAR_VIEWS: { value: CalendarView; label: string }[] = [
-  { value: 'month', label: 'Month view' },
-  { value: 'week', label: 'Week view' },
-  { value: 'day', label: 'Day view' }
+  { value: 'month', label: 'Month' },
+  { value: 'week', label: 'Week' },
+  { value: 'day', label: 'Day' }
 ];
 
-/** Nine event colours. `gray` and `brand` follow the active theme; the rest are fixed hues. */
-export type CalendarEventColor =
-  | 'gray'
-  | 'brand'
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'green'
-  | 'blue'
-  | 'indigo'
-  | 'pink';
+/**
+ * Monochrome event tones (Rafii DNA §4.3). The state is always carried by the event's `status` text and the tone's
+ * glyph (`event-button.tsx`); the tone only decides how much light a chip catches. `failure` is the one tone with a
+ * tint, through the approved `--destructive` token; the others stay grayscale in both themes.
+ */
+export type CalendarEventTone = 'quiet' | 'neutral' | 'active' | 'attention' | 'success' | 'failure';
 
 /** `chip` styles the month chip and the week/day block (with its hover state); `dot` is the mobile month marker. */
-export const EVENT_COLORS: Record<CalendarEventColor, { chip: string; dot: string }> = {
-  gray: {
-    chip: 'border-border bg-muted text-foreground hover:bg-accent',
-    dot: 'bg-muted-foreground'
-  },
-  brand: {
-    chip: 'border-primary/25 bg-primary/10 text-primary hover:bg-primary/15',
-    dot: 'bg-primary'
-  },
-  red: {
-    chip: 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20',
-    dot: 'bg-red-500'
-  },
-  orange: {
-    chip: 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300 dark:hover:bg-orange-500/20',
-    dot: 'bg-orange-500'
-  },
-  yellow: {
-    chip: 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20',
-    dot: 'bg-amber-500'
-  },
-  green: {
-    chip: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20',
-    dot: 'bg-emerald-500'
-  },
-  blue: {
-    chip: 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20',
-    dot: 'bg-sky-500'
-  },
-  indigo: {
-    chip: 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20',
-    dot: 'bg-indigo-500'
-  },
-  pink: {
-    chip: 'border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100 dark:border-pink-500/30 dark:bg-pink-500/10 dark:text-pink-300 dark:hover:bg-pink-500/20',
-    dot: 'bg-pink-500'
-  }
+export const EVENT_TONES: Record<CalendarEventTone, { chip: string; dot: string }> = {
+  quiet: { chip: 'rafii-quiet text-muted-foreground hover:text-foreground', dot: 'bg-foreground/25' },
+  neutral: { chip: 'rafii-quiet text-foreground hover:rafii-glass', dot: 'bg-foreground/55' },
+  active: { chip: 'rafii-glass text-foreground hover:rafii-glass-selected', dot: 'bg-foreground/70' },
+  attention: { chip: 'rafii-lens text-foreground', dot: 'bg-foreground' },
+  success: { chip: 'rafii-quiet text-foreground hover:rafii-glass', dot: 'bg-foreground/40' },
+  failure: { chip: 'rafii-quiet text-destructive hover:rafii-glass', dot: 'bg-destructive' }
 };
 
 export interface CalendarEvent<TData = unknown> {
@@ -68,8 +33,8 @@ export interface CalendarEvent<TData = unknown> {
   start: ZonedDateTime;
   /** Leave out for moments (a post goes out at one time); the block then takes `MIN_EVENT_MINUTES`. */
   end?: ZonedDateTime;
-  color: CalendarEventColor;
-  /** Read with the title, so colour never carries the meaning alone. */
+  tone: CalendarEventTone;
+  /** Read with the title, so the tone never carries the meaning alone. */
   status?: string;
   /** Leading visual, e.g. a channel icon. Decorative: keep it `aria-hidden`. */
   icon?: ReactNode;

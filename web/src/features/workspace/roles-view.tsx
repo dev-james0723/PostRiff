@@ -4,10 +4,8 @@ import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { Badge } from '@/components/ui/badge';
+import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { useFlash } from '@/hooks/use-flash';
 import { useMembers } from '@/lib/api/hooks';
@@ -17,17 +15,10 @@ import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/auth/permissions';
 import { useAuth } from '@/lib/auth/session';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/lib/workspace/provider';
-import {
-  ASSIGNABLE_ROLES,
-  canAssignRole,
-  FLAGS,
-  flagsOf,
-  howToGetMore,
-  PERMISSION_LABELS,
-  STEP_UP_ACTIONS
-} from './access-model';
+import { ASSIGNABLE_ROLES, canAssignRole, FLAGS, flagsOf, howToGetMore, PERMISSION_LABELS, STEP_UP_ACTIONS } from './access-model';
 import { MemberAccessSheet } from './member-access-sheet';
 import { PermissionMatrix } from './permission-matrix';
+import { Panel, SectionHeading, StatusChip } from './rafii-parts';
 import { RecentAccessChanges } from './recent-access-changes';
 import { RoleCards } from './role-cards';
 
@@ -36,14 +27,12 @@ const infoContent = {
   sections: [
     {
       title: 'Five roles and four grants',
-      description:
-        'Owner, admin, editor, approver and viewer. A grant adds one right (approve, reply, moderate, manage connections) to a member without changing their role.',
+      description: 'Owner, admin, editor, approver and viewer. A grant adds one right (approve, reply, moderate, manage connections) to a member without changing their role.',
       links: [{ title: 'Members', url: '/app/workspace/members' }]
     },
     {
       title: 'Grants never lift a viewer',
-      description:
-        'A viewer stays read-only whatever grants they carry. Only the owner or an admin can change access, nobody can change their own, and a grant can only be handed out by someone who holds it.'
+      description: 'A viewer stays read-only whatever grants they carry. Only the owner or an admin can change access, nobody can change their own, and a grant can only be handed out by someone who holds it.'
     },
     {
       title: 'Some changes need a recent sign-in',
@@ -79,127 +68,113 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
   const roles = ASSIGNABLE_ROLES.filter((r) => canAssignRole(membership, r));
 
   return (
-    <section aria-labelledby='roles-you-heading'>
-      <Card data-tour='roles-you'>
-        <CardContent className='flex flex-col gap-5'>
-          <h3 id='roles-you-heading' className='sr-only'>
-            Your access
-          </h3>
-          <div className='grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,14rem)]'>
-            <div className='flex flex-col gap-1.5'>
-              <FieldLabel>Your role</FieldLabel>
-              <AnimatedBadge status='info' className='w-fit' contentKey={role}>
-                {ROLE_LABELS[role]}
-              </AnimatedBadge>
-              <p className='text-muted-foreground text-xs'>{ROLE_DESCRIPTIONS[role]}</p>
-            </div>
-            <div className='flex flex-col gap-1.5'>
-              <FieldLabel>What you can do</FieldLabel>
-              {permissions.length === 0 ? (
-                <p className='text-muted-foreground text-sm'>Nothing in this workspace.</p>
-              ) : (
-                <ul className='flex flex-wrap gap-1.5'>
-                  {permissions.map((permission) => (
-                    <li key={permission}>
-                      <Badge variant='outline' title={PERMISSION_LABELS[permission].label}>
-                        {PERMISSION_LABELS[permission].short}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className='flex flex-col gap-1.5'>
-              <FieldLabel>Your extra grants</FieldLabel>
-              {owner ? (
-                <p className='text-muted-foreground text-sm'>Not needed: an owner holds every right.</p>
-              ) : held.length === 0 ? (
-                <p className='text-muted-foreground text-sm'>None</p>
-              ) : (
-                <>
-                  <ul className='flex flex-wrap gap-1.5'>
-                    {held.map((flag) => (
-                      <li key={flag.key}>
-                        <Badge variant='secondary' className={role === 'viewer' ? 'line-through' : undefined} title={flag.label}>
-                          {flag.short}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                  {role === 'viewer' && (
-                    <p className='text-muted-foreground text-xs'>Recorded, but inactive: grants never apply to a viewer.</p>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className={cn('grid gap-4 border-t pt-4', canManage && 'md:grid-cols-2')}>
-            <div className='flex flex-col gap-1.5'>
-              <FieldLabel>{owner ? 'As the owner' : 'To do more'}</FieldLabel>
-              {owner ? (
-                <p className='text-sm'>You own this workspace: every permission, billing and deletion.</p>
-              ) : (
-                <ul className='flex flex-col gap-1 text-sm'>
-                  {more.map((line) => (
-                    <li key={line} className='flex gap-2'>
-                      <Icons.chevronRight className='text-muted-foreground mt-0.5 size-3.5 shrink-0' aria-hidden />
-                      <span>{line}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            {canManage && (
-              <div className='flex flex-col gap-2' data-tour='roles-grants'>
-                <FieldLabel>What you can hand out</FieldLabel>
-                <div className='flex flex-wrap items-center gap-1.5'>
-                  <span className='text-muted-foreground text-xs'>Roles</span>
-                  {roles.map((r) => (
-                    <Badge key={r} variant='outline'>
-                      {ROLE_LABELS[r]}
-                    </Badge>
-                  ))}
-                </div>
-                <div className='flex flex-wrap items-center gap-1.5'>
-                  <span className='text-muted-foreground text-xs'>Grants</span>
-                  {FLAGS.map((flag) => {
-                    const yours = owner || flags[flag.key];
-                    return (
-                      <Badge
-                        key={flag.key}
-                        variant='outline'
-                        className={cn(!yours && 'text-muted-foreground line-through')}
-                        title={yours ? flag.label : `${flag.label}: you do not hold it`}
-                      >
-                        {flag.short}
-                        {!yours && <span className='sr-only'> (you do not hold it)</span>}
-                      </Badge>
-                    );
-                  })}
-                </div>
-                <p className='text-muted-foreground text-xs'>
-                  You can only hand out grants you hold yourself. Nobody can change their own access, and the owner’s access is not
-                  changed from here.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {drifted && (
-            <div
-              role='status'
-              className='flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm'
-            >
-              <span>Your access changed since this page loaded. Menus still follow the earlier access.</span>
-              <Button size='sm' variant='outline' onClick={() => void workspace.refresh()}>
-                Reload access
-              </Button>
-            </div>
+    <Panel material='glass' data-tour='roles-you' title='Your access' titleId='roles-you-heading' eyebrow='Where you stand' bodyClassName='gap-5'>
+      <div className='grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,14rem)]'>
+        <div className='flex flex-col gap-1.5'>
+          <FieldLabel>Your role</FieldLabel>
+          <StatusChip icon='user' className='w-fit'>
+            {ROLE_LABELS[role]}
+          </StatusChip>
+          <p className='text-muted-foreground text-xs'>{ROLE_DESCRIPTIONS[role]}</p>
+        </div>
+        <div className='flex flex-col gap-1.5'>
+          <FieldLabel>What you can do</FieldLabel>
+          {permissions.length === 0 ? (
+            <p className='text-muted-foreground text-sm'>Nothing in this workspace.</p>
+          ) : (
+            <ul className='flex flex-wrap gap-1.5'>
+              {permissions.map((permission) => (
+                <li key={permission}>
+                  <StatusChip icon='check' title={PERMISSION_LABELS[permission].label}>
+                    {PERMISSION_LABELS[permission].short}
+                  </StatusChip>
+                </li>
+              ))}
+            </ul>
           )}
-        </CardContent>
-      </Card>
-    </section>
+        </div>
+        <div className='flex flex-col gap-1.5'>
+          <FieldLabel>Your extra grants</FieldLabel>
+          {owner ? (
+            <p className='text-muted-foreground text-sm'>Not needed: an owner holds every right.</p>
+          ) : held.length === 0 ? (
+            <p className='text-muted-foreground text-sm'>None</p>
+          ) : (
+            <>
+              <ul className='flex flex-wrap gap-1.5'>
+                {held.map((flag) => (
+                  <li key={flag.key}>
+                    <StatusChip icon={null} className={role === 'viewer' ? 'line-through' : undefined} title={flag.label}>
+                      {flag.short}
+                    </StatusChip>
+                  </li>
+                ))}
+              </ul>
+              {role === 'viewer' && <p className='text-muted-foreground text-xs'>Recorded, but inactive: grants never apply to a viewer.</p>}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className={cn('grid gap-4', canManage && 'md:grid-cols-2')}>
+        <div className='flex flex-col gap-1.5'>
+          <FieldLabel>{owner ? 'As the owner' : 'To do more'}</FieldLabel>
+          {owner ? (
+            <p className='text-foreground text-sm'>You own this workspace: every permission, billing and deletion.</p>
+          ) : (
+            <ul className='flex flex-col gap-1 text-sm'>
+              {more.map((line) => (
+                <li key={line} className='flex gap-2'>
+                  <Icons.chevronRight className='text-muted-foreground mt-0.5 size-3.5 shrink-0' aria-hidden />
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {canManage && (
+          <div className='flex flex-col gap-2' data-tour='roles-grants'>
+            <FieldLabel>What you can hand out</FieldLabel>
+            <div className='flex flex-wrap items-center gap-1.5'>
+              <span className='text-muted-foreground text-xs'>Roles</span>
+              {roles.map((r) => (
+                <StatusChip key={r} icon={null}>
+                  {ROLE_LABELS[r]}
+                </StatusChip>
+              ))}
+            </div>
+            <div className='flex flex-wrap items-center gap-1.5'>
+              <span className='text-muted-foreground text-xs'>Grants</span>
+              {FLAGS.map((flag) => {
+                const yours = owner || flags[flag.key];
+                return (
+                  <StatusChip key={flag.key} icon={null} className={cn(!yours && 'text-muted-foreground line-through')} title={yours ? flag.label : `${flag.label}: you do not hold it`}>
+                    {flag.short}
+                    {!yours && <span className='sr-only'> (you do not hold it)</span>}
+                  </StatusChip>
+                );
+              })}
+            </div>
+            <p className='text-muted-foreground text-xs'>You can only hand out grants you hold yourself. Nobody can change their own access, and the owner’s access is not changed from here.</p>
+          </div>
+        )}
+      </div>
+
+      {drifted && (
+        <StateMessage
+          kind='stale'
+          layout='inline'
+          className='rafii-quiet rounded-[var(--rafii-radius-control)] px-4 py-3'
+          title='Your access changed since this page loaded.'
+          description='Menus still follow the earlier access.'
+          action={
+            <Button size='default' variant='glass' onClick={() => void workspace.refresh()}>
+              Reload access
+            </Button>
+          }
+        />
+      )}
+    </Panel>
   );
 }
 
@@ -207,22 +182,17 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
 function SensitiveChanges() {
   return (
     <section className='flex flex-col gap-3' aria-labelledby='roles-stepup-heading' data-tour='roles-stepup'>
-      <div className='flex flex-col gap-1'>
-        <h3 id='roles-stepup-heading' className='text-lg font-semibold'>
-          Sensitive changes
-        </h3>
-        <p className='text-muted-foreground text-sm'>
-          These only work shortly after a fresh sign-in, on top of the right permission. If yours is too old, nothing is saved: sign out,
-          sign in again and retry. Revoking an invitation does not need it.
-        </p>
-      </div>
+      <SectionHeading
+        id='roles-stepup-heading'
+        title='Sensitive changes'
+        description='These only work shortly after a fresh sign-in, on top of the right permission. If yours is too old, nothing is saved: sign out, sign in again and retry. Revoking an invitation does not need it.'
+      />
       <ul className='flex flex-wrap gap-1.5'>
         {STEP_UP_ACTIONS.map((action) => (
           <li key={action}>
-            <Badge variant='outline' className='font-normal'>
-              <Icons.lock aria-hidden />
+            <StatusChip icon='lock' className='font-normal'>
               {action}
-            </Badge>
+            </StatusChip>
           </li>
         ))}
       </ul>
@@ -252,19 +222,17 @@ export function RolesView() {
       pageDescription='What each role can do in this workspace, who holds it, and where you stand.'
       infoContent={infoContent}
       access={access.hasWorkspace}
-      accessFallback={<p className='text-muted-foreground text-sm'>Join or create a workspace first.</p>}
+      accessFallback={<StateMessage kind='permission' className='w-full max-w-md' title='Join or create a workspace first.' />}
       pageHeaderAction={
         canManage ? (
-          <Link href='/app/workspace/members' className={cn('t-learn', buttonVariants({ variant: 'outline' }))}>
+          <Link href='/app/workspace/members' className={cn('t-learn', buttonVariants({ variant: 'glass', size: 'control' }))}>
             Manage members <LearnMoreChevron />
           </Link>
         ) : undefined
       }
     >
-      <div className='flex min-w-0 flex-col gap-6'>
-        {workspace.membership && (
-          <YourAccess membership={workspace.membership} fresh={members.data?.membership ?? null} canManage={canManage} />
-        )}
+      <div className='flex min-w-0 flex-col gap-6 md:gap-8'>
+        {workspace.membership && <YourAccess membership={workspace.membership} fresh={members.data?.membership ?? null} canManage={canManage} />}
         <RoleCards
           state={{ members: list, isLoading: members.isPending, error: members.error, refetch: () => void members.refetch() }}
           canManage={canManage}

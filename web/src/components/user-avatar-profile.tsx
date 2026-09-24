@@ -1,3 +1,6 @@
+'use client';
+
+import { useSyncExternalStore } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export interface AvatarUser {
@@ -20,7 +23,13 @@ function initialsFor(user?: AvatarUser | null) {
   return source.slice(0, 2).toUpperCase();
 }
 
-export function UserAvatarProfile({ className, showInfo = false, user }: UserAvatarProfileProps) {
+const subscribe = () => () => {};
+
+export function UserAvatarProfile({ className, showInfo = false, user: signedIn }: UserAvatarProfileProps) {
+  // The signed-in user is known only in the browser, so the server renders the placeholder. The first
+  // client render must match it, or hydration fails (React #418) and the page is rebuilt from scratch.
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  const user = hydrated ? signedIn : null;
   return (
     <div className='flex items-center gap-2'>
       <Avatar className={className}>

@@ -4,8 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { rafiiSelectTrigger } from '@/components/auth/form-styles';
 import { HoldActionButton } from '@/components/motion/hold-action-button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { StateMessage } from '@/components/rafii';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,15 +14,16 @@ import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
 import type { Snapshot } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { SettingsSection } from '../settings-section';
 import type { BusyProps } from './export-cards';
 import { activeSources, draftsUsing, plural, retractionImpact, retractionLines, sourceKindLabel, sourceName } from './privacy-model';
 import { Unavailable, type Refetchable } from './section';
 
 /* Same destructive tint as the Ideas page's hold-to-withdraw, so the gesture reads the same everywhere. */
-const HOLD_CLASS = 'h-9 w-full min-w-0 bg-secondary px-4 text-secondary-foreground [--hold-radius:min(var(--radius-md),12px)]';
+const HOLD_CLASS = 'rafii-glass h-12 w-full min-w-0 rounded-[var(--rafii-radius-control)] px-4 text-foreground [--hold-radius:var(--rafii-radius-control)]';
 const HOLD_FILL = 'bg-[color-mix(in_oklch,var(--destructive)_28%,var(--secondary))]';
 const HOLD_WAVE = 'text-[color-mix(in_oklch,var(--destructive)_28%,var(--secondary))]';
-const linkClass = 't-learn text-foreground inline-flex items-center gap-0.5 text-sm font-medium hover:underline';
+const linkClass = 't-learn rafii-focus text-foreground inline-flex min-h-9 items-center gap-0.5 rounded-sm text-sm font-medium hover:underline';
 
 export function RetractCard({
   snapshot,
@@ -70,56 +72,54 @@ export function RetractCard({
   const disabled = !canEdit || !source || retracting || (busy !== null && busy !== 'retract');
 
   return (
-    <Card data-tour='privacy-retract' className='min-w-0'>
-      <CardHeader>
-        <CardTitle>Retract a source</CardTitle>
-        <CardDescription>
-          Blanks a source&apos;s text and facts. Drafts that used it keep their text but stay blocked until you draft them again.
-          Their posts waiting in the Queue are held until approved again. This cannot be undone.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        {snapshot.isPending ? (
-          <Skeleton className='h-8 w-full' />
-        ) : !state ? (
-          <Unavailable query={snapshot} fallback='Sources could not be read.' />
-        ) : sources.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>No active sources in this workspace.</p>
-        ) : (
-          <>
-            <Select value={picked ?? ''} onValueChange={(value) => setPicked(value ? String(value) : null)}>
-              <SelectTrigger className='h-9 w-full min-w-0' aria-label='Source to retract' disabled={!canEdit || retracting}>
-                <SelectValue>{source ? sourceName(source) : 'Choose a source'}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {sources.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    <span className='flex min-w-0 flex-col'>
-                      <span className='truncate'>{sourceName(item)}</span>
-                      <span className='text-muted-foreground text-xs'>
-                        {sourceKindLabel(item.kind)}
-                        {item.facts && item.facts.length > 0 ? ` · ${plural(item.facts.filter((fact) => fact.approved).length, 'approved fact')}` : ''}
-                        {` · used by ${plural(draftsUsing(state, item.id).length, 'draft')}`}
-                      </span>
+    <SettingsSection
+      id='privacy-retract'
+      title='Retract a source'
+      description='Blanks a source’s text and facts. Drafts that used it keep their text but stay blocked until you draft them again. Their posts waiting in the Queue are held until approved again. This cannot be undone.'
+      className='h-full'
+      bodyClassName='flex-1'
+      data-tour='privacy-retract'
+    >
+      {snapshot.isPending ? (
+        <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)]' />
+      ) : !state ? (
+        <Unavailable query={snapshot} fallback='Sources could not be read.' />
+      ) : sources.length === 0 ? (
+        <StateMessage kind='empty' layout='inline' title='No active sources in this workspace.' />
+      ) : (
+        <>
+          <Select value={picked ?? ''} onValueChange={(value) => setPicked(value ? String(value) : null)}>
+            <SelectTrigger className={rafiiSelectTrigger} aria-label='Source to retract' disabled={!canEdit || retracting}>
+              <SelectValue>{source ? sourceName(source) : 'Choose a source'}</SelectValue>
+            </SelectTrigger>
+            <SelectContent className='rafii-elevated rounded-2xl bg-transparent ring-0'>
+              {sources.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  <span className='flex min-w-0 flex-col'>
+                    <span className='truncate'>{sourceName(item)}</span>
+                    <span className='text-muted-foreground text-xs'>
+                      {sourceKindLabel(item.kind)}
+                      {item.facts && item.facts.length > 0 ? ` · ${plural(item.facts.filter((fact) => fact.approved).length, 'approved fact')}` : ''}
+                      {` · used by ${plural(draftsUsing(state, item.id).length, 'draft')}`}
                     </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {impact ? (
-              <ul className='text-muted-foreground flex list-disc flex-col gap-1 pl-4 text-xs' aria-live='polite'>
-                {lines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-                {impact.resetsIdea && <li>Your current idea came from this source and will be reset.</li>}
-              </ul>
-            ) : (
-              !canEdit && <p className='text-muted-foreground text-xs'>Ask an editor or the owner to retract a source.</p>
-            )}
-          </>
-        )}
-      </CardContent>
-      <CardFooter className='mt-auto flex flex-col items-stretch gap-2'>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {impact ? (
+            <ul className='text-muted-foreground flex list-disc flex-col gap-1 pl-4 text-xs leading-relaxed' aria-live='polite'>
+              {lines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+              {impact.resetsIdea && <li>Your current idea came from this source and will be reset.</li>}
+            </ul>
+          ) : (
+            !canEdit && <p className='text-muted-foreground text-xs'>Ask an editor or the owner to retract a source.</p>
+          )}
+        </>
+      )}
+      <div className='mt-auto flex flex-col items-stretch gap-2 pt-1'>
         {state && sources.length > 0 && (
           <HoldActionButton
             key={holdEpoch}
@@ -142,7 +142,7 @@ export function RetractCard({
         <Link href='/app/ideas' className={linkClass}>
           Review sources in Ideas <LearnMoreChevron className='size-3.5' />
         </Link>
-      </CardFooter>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }

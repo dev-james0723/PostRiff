@@ -1,0 +1,10 @@
+# HyperFrames CLI output and caches
+node_modules/
+renders/
+snapshots/
+.hyperframes/
+.hf-tmp/
+.cache/
+.media/
+*.log
+.DS_Store

@@ -88,6 +88,8 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
     revision = active_profile(state)
     profile = (revision or {}).get("profile") or {}
     all_boundaries = boundary_fields(state)
+    if revision and (revision.get('stale') or profile.get('status') == 'stale'):
+        revision, profile = None, {}
     boundaries = all_boundaries if shareable is None else [f for f in all_boundaries if f.get("privacy") in shareable]
     withheld = len(all_boundaries) - len(boundaries)
 
@@ -150,10 +152,23 @@ def egress(state):
     return decision if isinstance(decision, dict) else {"cloud": False}
 
 
-def projection(state, provider_class, destinations=None, content_type_id=None):
+def projection(state, provider_class, destinations=None, content_type_id=None, voice_route=None):
     """What a writing route may read. Local routes get every prompt file; a cloud route gets them only
     when the workspace allowed it, with private, local-only, excluded and unlabelled boundaries removed.
     `learned` records which learned preferences the slice carried, for the run's usage."""
+    import copy
+    from . import voice_sources
+    state = copy.deepcopy(state)
+    revision = active_profile(state)
+    profile = (revision or {}).get('profile') or {}
+    evidence = profile.get('evidenceSourceIds') or []
+    if evidence:
+        # A workspace-wide memory grant cannot expand a sample's exact-route grant.
+        # Raw sample examples never travel through the generic memory channel.
+        profile['writingExample'] = ''
+        allowed = voice_sources.project(state, evidence, 'generation', voice_route)['samples'] if voice_route else []
+        if len(allowed) != len(evidence):
+            revision['stale'] = True
     learned = learning.binding(state, destinations, content_type_id)
     if provider_class != "cloud":
         return {"files": prompt_fragments(state, destinations=destinations, content_type_id=content_type_id), "shared": True, "withheldBoundaries": 0, "learned": learned}

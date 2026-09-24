@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { Icons } from '@/components/icons';
 import { NumberTicker } from '@/components/motion/number-ticker';
+import { Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usd } from '@/lib/api/client';
 import type { ChannelView, Member, Membership, ProviderView, Usage } from '@/lib/api/types';
@@ -48,11 +49,12 @@ function Bar({ fill, warn, index, label, valueText }: { fill: number; warn: bool
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuetext={valueText}
-      className='bg-muted h-2 w-full overflow-hidden rounded-full'
+      className='bg-foreground/10 h-2 w-full overflow-hidden rounded-full'
     >
-      {/* Full-width fill slid in from the left (transform only), so its rounded end keeps its shape. */}
+      {/* Full-width fill slid in from the left (transform only), so its rounded end keeps its shape.
+          A near-limit state is hatched, not tinted (DNA §4.3: monochrome, with the reading beside it saying so). */}
       <motion.div
-        className={cn('h-full w-full rounded-full', warn ? 'bg-amber-500' : 'bg-primary')}
+        className={cn('h-full w-full rounded-full', warn ? 'bg-[repeating-linear-gradient(135deg,var(--foreground)_0_3px,color-mix(in_oklch,var(--foreground)_45%,transparent)_3px_6px)]' : 'bg-foreground')}
         initial={reduce ? false : { x: '-100%' }}
         animate={{ x: `${fill * 100 - 100}%` }}
         transition={reduce ? { duration: 0 } : { duration: BAR_S, ease: EASE_OUT, delay }}
@@ -86,7 +88,7 @@ function Meter({
         <span className='inline-flex items-center gap-2'>
           <span>Unavailable</span>
           {onRetry && (
-            <Button variant='link' size='xs' className='h-auto p-0' onClick={onRetry}>
+            <Button variant='quiet' size='xs' className='h-auto min-h-8 px-2 underline underline-offset-4' onClick={onRetry}>
               Retry
             </Button>
           )}
@@ -102,13 +104,7 @@ function Meter({
     case 'measured':
       reading = (
         <span className='inline-flex items-center gap-1'>
-          <NumberTicker
-            value={state.value}
-            locale
-            duration={BAR_S}
-            stagger={STAGGER_S}
-            className={cn(state.warn && 'text-amber-700 dark:text-amber-300')}
-          />
+          <NumberTicker value={state.value} locale duration={BAR_S} stagger={STAGGER_S} className={cn(state.warn && 'text-foreground font-medium')} />
           <span>{state.mode === 'remaining' ? `left of ${state.total.toLocaleString()}` : `of ${state.total.toLocaleString()}`}</span>
         </span>
       );
@@ -118,7 +114,7 @@ function Meter({
   return (
     <div className='flex flex-col gap-1.5'>
       <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-sm'>
-        <span>{label}</span>
+        <span className='text-foreground'>{label}</span>
         <span className='text-muted-foreground tabular-nums'>{reading}</span>
       </div>
       {state.kind === 'pending' && <Skeleton className='h-2 w-full rounded-full' />}
@@ -136,13 +132,23 @@ function Meter({
   );
 }
 
+/** An over-limit note: icon and sentence carry the state; no colour needed (DNA §4.3). */
+function OverNote({ children }: { children: ReactNode }) {
+  return (
+    <p className='text-foreground flex items-start gap-1.5 text-xs leading-relaxed'>
+      <Icons.warning className='mt-0.5 size-3.5 shrink-0' aria-hidden />
+      <span>{children}</span>
+    </p>
+  );
+}
+
 function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
   const guard = costGuardState(budget);
   return (
-    <div className='flex flex-col gap-2 rounded-lg border p-3 text-sm' data-tour='billing-cost-guard'>
+    <div className='rafii-glass flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3 text-sm' data-tour='billing-cost-guard'>
       <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5'>
-        <span className='font-medium'>Model spend this {budget.windowKind}</span>
-        <span className='tabular-nums'>
+        <span className='text-foreground font-medium'>Model spend this {budget.windowKind}</span>
+        <span className='text-foreground tabular-nums'>
           {usd(budget.spentUsdMicro)} <span className='text-muted-foreground'>of {usd(budget.stopUsdMicro)}</span>
         </span>
       </div>
@@ -155,7 +161,7 @@ function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
           valueText={`${usd(guard.committed)} spent or reserved of ${usd(budget.stopUsdMicro)}`}
         />
       )}
-      <p className='text-muted-foreground text-xs'>
+      <p className='text-muted-foreground text-xs leading-relaxed'>
         Reserved {usd(budget.reservedUsdMicro)} · {budgetStatusLabel(budget.status)}. Requests are refused before the ceiling would be crossed, never
         charged after.
       </p>
@@ -202,12 +208,12 @@ export function Allowances({
       }),
       onRetry: () => void channels.refetch(),
       over: (
-        <p className='text-xs text-amber-700 dark:text-amber-300'>
+        <OverNote>
           Above this plan&apos;s {ent.connectedAccounts}. Remove an account or change plan before connecting another.{' '}
           <Link href='/app/channels' className='underline underline-offset-2'>
             Channels
           </Link>
-        </p>
+        </OverNote>
       )
     },
     {
@@ -221,32 +227,30 @@ export function Allowances({
         error: members.isError && !members.data
       }),
       onRetry: () => void members.refetch(),
-      over: <p className='text-xs text-amber-700 dark:text-amber-300'>Above this plan&apos;s {ent.members}. Existing members stay; new joins require an available seat.</p>
+      over: <OverNote>Above this plan&apos;s {ent.members}. Existing members stay; new joins require an available seat.</OverNote>
     }
   ];
 
   return (
-    <Card className='lg:col-span-2' data-tour='billing-allowances'>
-      <CardHeader>
-        <CardDescription>This period</CardDescription>
-        <CardTitle>Allowances</CardTitle>
-        <CardDescription>{resetText(planTimeline(usage, now), ent.resetsAt)}</CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-4'>
+    <Surface material='quiet' radius='card' padding='md' className='flex flex-col gap-5 lg:col-span-2' data-tour='billing-allowances'>
+      <div className='flex flex-col gap-1.5'>
+        <span className='rafii-eyebrow'>This period</span>
+        <h2 className='text-foreground text-lg font-medium tracking-tight'>Allowances</h2>
+        <p className='text-muted-foreground text-sm'>{resetText(planTimeline(usage, now), ent.resetsAt)}</p>
+      </div>
+      <div className='flex flex-col gap-4'>
         {meters.map((meter, index) => (
           <Meter key={meter.label} label={meter.label} state={meter.state} index={index} onRetry={meter.onRetry} over={meter.over} />
         ))}
         <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-sm'>
-          <span>Storage</span>
+          <span className='text-foreground'>Storage</span>
           <span className='text-muted-foreground'>{ent.storageMb.toLocaleString()} MB included · usage is not measured yet</span>
         </div>
         {isOwner && usage.budget && <CostGuard budget={usage.budget} />}
-      </CardContent>
+      </div>
       {usage.overage === 'stop' && (
-        <CardFooter>
-          <p className='text-muted-foreground text-xs'>When an allowance runs out, paid drafting stops and tells you. Nothing is charged silently.</p>
-        </CardFooter>
+        <p className='text-muted-foreground text-xs leading-relaxed'>When an allowance runs out, paid drafting stops and tells you. Nothing is charged silently.</p>
       )}
-    </Card>
+    </Surface>
   );
 }

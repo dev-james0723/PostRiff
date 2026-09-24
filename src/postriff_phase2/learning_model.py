@@ -21,7 +21,7 @@ MIN_PAIRS_PER_SCOPE = 2
 MAX_SCOPES_PER_RUN = 3
 MAX_TEXT_CHARS = 2400
 CONFIDENCE_WEIGHT = {"high": 1.0, "medium": 0.7, "low": 0.4}
-CLOUD_MODEL = "anthropic/claude-haiku-4-5"
+CLOUD_MODEL = "anthropic/claude-haiku-4.5"
 CLI_ALIAS = "haiku"
 
 SCHEMA = {
@@ -111,19 +111,54 @@ class ModelExtractor:
         self.call, self.model, self.local, self.max_scopes = call, model, local, max_scopes
         self.calls = 0
 
-    def observe(self, state, events, now):
-        grouped = pairs_for(state, events, cloud=not self.local)
+    provider_class = "cloud"  # Both managed and Claude Code send content to a cloud provider.
+
+    def requests(self, state, events):
+        grouped = pairs_for(state, events, cloud=self.provider_class == "cloud")
         already = [item["statement"] for item in learning.active_items(state)]
-        observations = []
+        requests = []
         for (platform, language), pairs in sorted(grouped.items(), key=lambda item: -len(item[1]))[:self.max_scopes]:
             if len(pairs) < MIN_PAIRS_PER_SCOPE:
                 continue
             batch = pairs[-MAX_PAIRS_PER_SCOPE:]
             payload = {"scope": {"platform": platform, "language": language}, "alreadyLearned": already, "pairs": [{k: p[k] for k in ("id", "before", "after")} for p in batch]}
+            requests.append((platform, language, batch, "INPUT\n" + json.dumps(payload, ensure_ascii=False, indent=1)))
+        return requests
+
+    def price_quote_micro(self, state, events):
+        from .model_runtime import DEFAULT_PRICES
+        if self.model not in DEFAULT_PRICES:
+            raise AlphaError("The learning model has no verified price; extraction is paused.", 503)
+        ip, op = DEFAULT_PRICES[self.model]
+        schema = json.dumps(SCHEMA, separators=(",", ":"))
+        # UTF-8 bytes conservatively bound tokens; include schema, system and framing per request.
+        return __import__('math').ceil(sum((len((SYSTEM_PROMPT + schema + user).encode()) + 4096) * ip + 1200 * op for _, _, _, user in self.requests(state, events)))
+
+    def observe(self, state, events, now):
+        observations = []
+        cost_usd_micro = 0
+        for platform, language, batch, user in self.requests(state, events):
             self.calls += 1
-            result = self.call(SYSTEM_PROMPT, "INPUT\n" + json.dumps(payload, ensure_ascii=False, indent=1), SCHEMA)
+            try:
+                result = self.call(SYSTEM_PROMPT, user, SCHEMA)
+            except BaseException:
+                raise
+            cost = getattr(result, 'cost_usd_micro', None)
+            cost_usd_micro = cost_usd_micro + cost if cost_usd_micro is not None and cost is not None else None
             observations.extend(parse_candidates(result, batch, platform, language, now))
-        return observations
+        return Observations(observations, cost_usd_micro)
+
+
+class Observations(list):
+    def __init__(self, items=(), cost_usd_micro=None):
+        super().__init__(items)
+        self.cost_usd_micro = cost_usd_micro
+
+
+class ModelResponse(dict):
+    def __init__(self, value, cost_usd_micro=None):
+        super().__init__(value)
+        self.cost_usd_micro = cost_usd_micro
 
 
 class GatewayCall:
@@ -135,14 +170,28 @@ class GatewayCall:
         self.api_key, self.model, self.endpoint, self.transport = api_key, model, endpoint or DEFAULT_ENDPOINT, transport or model_transport
 
     def __call__(self, system, user, schema):
+        cost_usd_micro = None
         body = {"model": self.model, "temperature": 0.2, "max_tokens": 1200, "response_format": {"type": "json_object"},
                 "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}]}
         response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
         data = response.get("body") or {}
         if response.get("status") != 200 or not isinstance(data, dict):
             raise AlphaError("The extraction model call failed.", 502)
+        usage = data.get('usage') or {}
+        cost = usage.get('cost')
+        if isinstance(cost, (int, float)) and not isinstance(cost, bool) and __import__('math').isfinite(cost) and cost >= 0:
+            cost_usd_micro = __import__('math').ceil(cost * 1_000_000)
+        else:
+            from .model_runtime import DEFAULT_PRICES
+            prompt, completion = usage.get('prompt_tokens'), usage.get('completion_tokens')
+            if type(prompt) is int and type(completion) is int and min(prompt, completion) >= 0 and prompt + completion > 0 and self.model in DEFAULT_PRICES:
+                ip, op = DEFAULT_PRICES[self.model]
+                cost_usd_micro = __import__('math').ceil(prompt * ip + completion * op)
         try:
-            return json.loads(data["choices"][0]["message"]["content"])
+            value = json.loads(data["choices"][0]["message"]["content"])
+            if not isinstance(value, dict):
+                raise ValueError("Expected a JSON object")
+            return ModelResponse(value, cost_usd_micro)
         except (KeyError, IndexError, TypeError, ValueError) as error:
             raise AlphaError("The extraction model returned no JSON.", 502) from error
 

@@ -29,8 +29,9 @@ export interface AnimatedBadgeProps extends Omit<HTMLMotionProps<'span'>, 'child
 const STATUS_CLASS: Record<AnimatedBadgeStatus, string> = {
   neutral: 'border-border bg-card text-muted-foreground',
   info: 'border-primary/30 bg-primary/10 text-primary',
-  success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  // Monochrome status (DNA §4.3): the icon and the label carry the meaning; only danger keeps the destructive tint.
+  success: 'border-foreground/15 bg-foreground/[0.06] text-foreground',
+  warning: 'border-foreground/35 bg-foreground/[0.1] text-foreground font-semibold',
   danger: 'border-destructive/30 bg-destructive/10 text-destructive',
   loading: 'border-primary/30 bg-primary/10 text-primary'
 };

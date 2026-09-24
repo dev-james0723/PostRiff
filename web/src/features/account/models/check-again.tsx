@@ -15,6 +15,10 @@ export interface CheckAgainProps {
   disabled: boolean;
 }
 
+/** The glass recipe on the motion button: a quiet secondary control beside the page title (DNA §9.2). */
+const GLASS_BUTTON =
+  'rafii-glass hover:rafii-glass-selected h-12 rounded-[var(--rafii-radius-control)] border-0 bg-transparent px-4 text-sm hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent';
+
 /** Asks the API for the writer list again. The button shows the real request state, nothing simulated. */
 export function CheckAgainButton({ rescan, checking, disabled }: CheckAgainProps) {
   const [outcome, flash] = useFlash<'success' | 'error'>();
@@ -41,6 +45,7 @@ export function CheckAgainButton({ rescan, checking, disabled }: CheckAgainProps
     <StatefulButton
       variant='outline'
       size='md'
+      className={GLASS_BUTTON}
       data-tour='models-rescan'
       state={checking ? 'loading' : (outcome ?? 'idle')}
       loadingText='Checking…'

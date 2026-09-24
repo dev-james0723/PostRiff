@@ -1,7 +1,7 @@
 import { QueryClient, defaultShouldDehydrateQuery, isServer } from '@tanstack/react-query';
 import { releaseCachedMedia } from './api/media';
 
-function makeQueryClient() {
+export function makeQueryClient() {
   const client = new QueryClient({
     defaultOptions: {
       queries: {

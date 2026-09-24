@@ -6,6 +6,7 @@ its client credentials exist in server secrets, and `production_reviewed` is tru
 when the provider's review gate has been passed and the flag is set explicitly.
 """
 import json
+import re
 import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -64,6 +65,7 @@ class OAuthProvider:
         self.client_id, self.client_secret = client_id, client_secret
         self.transport = transport or http_transport
         self.production_reviewed = bool(production_reviewed)
+        self.execution_enabled = True
 
     def capability_scopes(self, capability):
         return list(self.SCOPES.get(capability, []))
@@ -92,18 +94,39 @@ class LinkedInProvider(OAuthProvider):
     SCOPES = {"identity": ["openid", "profile"], "publish": ["openid", "profile", "w_member_social"], "schedule": ["openid", "profile", "w_member_social"]}
     EXPLAIN = {"publish": "PostRiff will publish posts to your LinkedIn member profile only when you approve each exact post. Organization pages and analytics are not requested."}
 
+    history_approved = False
+
+    def capability_scopes(self, capability):
+        if capability == "posts_read":
+            return ["openid", "profile", "r_member_social"] if self.history_approved else []
+        return super().capability_scopes(capability)
+
+    def explain(self, capability):
+        if capability == "identity":
+            return "Connect your LinkedIn member identity only. This does not grant publishing or historical-post access."
+        if capability == "posts_read":
+            return "Read your own LinkedIn posts for a sample picker. You separately choose and approve samples for voice analysis. This requires LinkedIn's restricted r_member_social approval; no publishing permission is requested."
+        return super().explain(capability)
+
     def authorize_url(self, redirect, state, challenge, scopes):
         # LinkedIn's documented flow has no PKCE parameter; the verifier still binds our transaction server-side.
         return self.AUTH + "?" + urlencode({"response_type": "code", "client_id": self.client_id, "redirect_uri": redirect, "state": state, "scope": " ".join(scopes)})
 
     def exchange(self, code, verifier, redirect):
         body = self._ok(self.transport("POST", self.TOKEN, form={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect, "client_id": self.client_id, "client_secret": self.client_secret}), "access_token")
-        return {"accessToken": body["access_token"], "refreshToken": body.get("refresh_token"), "expiresIn": body.get("expires_in"), "scopes": (body.get("scope") or "").split() or None}
+        return {"accessToken": body["access_token"], "refreshToken": body.get("refresh_token"), "expiresIn": body.get("expires_in"), "scopes": re.split(r'[\s,]+', body['scope'].strip()) if isinstance(body.get('scope'), str) and body['scope'].strip() else None}
 
     def identity(self, access_token):
         body = self._ok(self.transport("GET", self.USERINFO, headers={"Authorization": "Bearer " + access_token}), "sub")
         # `picture` is part of the OpenID `profile` claims already requested; previews draw it (account_pictures.py).
         return {"providerAccountId": "urn:li:person:" + str(body["sub"]), "handle": body.get("name") or str(body["sub"]), "accountType": "member", "pictureUrl": body.get("picture")}
+
+    def inspect_scopes(self, access_token, expected_account_id):
+        # Identity is independently checked by the caller. Introspection binds token to this app.
+        body = self._ok(self.transport("POST", "https://www.linkedin.com/oauth/v2/introspectToken", form={"client_id": self.client_id, "client_secret": self.client_secret, "token": access_token}))
+        if body.get("active") is not True or body.get("client_id") != self.client_id or not isinstance(body.get("scope"), str):
+            return None
+        return list(dict.fromkeys(scope for scope in re.split(r"[,\s]+", body["scope"].strip()) if scope))
 
     def refresh(self, refresh_token):
         # Refresh tokens are issued only to approved partners; otherwise the customer re-authorizes every 60 days.
@@ -133,6 +156,17 @@ class ThreadsProvider(OAuthProvider):
         # Long-lived tokens (60 days) refresh with themselves; we store the same value as the refresh secret.
         return {"accessToken": long_lived["access_token"], "refreshToken": long_lived["access_token"], "expiresIn": long_lived.get("expires_in", 5184000), "scopes": None, "userId": str(short["user_id"])}
 
+    def inspect_scopes(self, access_token, expected_account=None):
+        # Meta's official Threads Postman collection documents /debug_token with OAuth bearer auth.
+        response = self.transport('GET', 'https://graph.threads.net/debug_token?' + urlencode({'input_token':access_token}), headers={'Authorization':'Bearer ' + access_token})
+        data = response.get('body', {}).get('data', {})
+        scopes = data.get('scopes') if isinstance(data, dict) else None
+        if response.get('status') != 200 or data.get('is_valid') is not True or not isinstance(scopes, list) or not all(isinstance(scope, str) for scope in scopes):
+            return None
+        if expected_account and str(data.get('user_id')) != str(expected_account):
+            return None
+        return sorted(set(scopes))
+
     def identity(self, access_token):
         body = self._ok(self.transport("GET", self.ME + "?" + urlencode({"fields": "id,username,threads_profile_picture_url", "access_token": access_token})), "id")
         return {"providerAccountId": str(body["id"]), "handle": "@" + body["username"] if body.get("username") else str(body["id"]), "accountType": "profile", "pictureUrl": body.get("threads_profile_picture_url")}
@@ -151,6 +185,30 @@ class InstagramProvider(OAuthProvider):
     ME = f"https://graph.instagram.com/{GRAPH_VERSION}/me"
     SCOPES = {"identity": ["instagram_business_basic"], "publish": ["instagram_business_basic", "instagram_business_content_publish"], "schedule": ["instagram_business_basic", "instagram_business_content_publish"], "analytics": ["instagram_business_basic", "instagram_business_manage_insights"], "comments_read": ["instagram_business_basic", "instagram_business_manage_comments"], "reply": ["instagram_business_basic", "instagram_business_manage_comments"]}
     EXPLAIN = {"publish": "PostRiff will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "PostRiff will read reach, views, likes, comments, saves and shares for posts it created.", "comments_read": "PostRiff will read comments on your posts.", "reply": "PostRiff will reply only after you approve the exact text."}
+
+    def capability_scopes(self, capability):
+        if capability == "posts_read":
+            return ["instagram_business_basic"]
+        return super().capability_scopes(capability)
+
+    def explain(self, capability):
+        if capability in ("identity", "posts_read"):
+            return "Connect your Instagram Creator or Business account and read its profile and media. No Facebook Page or publishing permission is requested. Selecting samples and allowing AI processing are separate choices."
+        return super().explain(capability)
+
+    def verify_read_access(self, access_token, expected_account_id):
+        """Prove basic media read access, not undocumented publish/insight scopes.
+
+        Instagram Login is not Facebook Login: do not invent a Facebook app-token
+        introspection call. An authenticated account match and a successful bounded
+        media read prove only instagram_business_basic. Never infer write permissions.
+        """
+        from .social_history import fetch_page
+        identity = self.identity(access_token)
+        if identity['providerAccountId'] != expected_account_id:
+            raise AlphaError("The connected Instagram account changed. Reconnect it.", 409)
+        fetch_page(self, access_token, expected_account_id, limit=1)
+        return ['instagram_business_basic']
 
     def authorize_url(self, redirect, state, challenge, scopes):
         return self.AUTH + "?" + urlencode({"client_id": self.client_id, "redirect_uri": redirect, "scope": ",".join(scopes), "response_type": "code", "state": state})
@@ -172,12 +230,36 @@ class InstagramProvider(OAuthProvider):
 ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider}
 
 
+class ProviderRegistry(dict):
+    """Adapters plus presence-only diagnostics, including when no adapter can mount."""
+    def __init__(self):
+        super().__init__()
+        self.diagnostics = {}
+
+
+def _credential_shape(value):
+    # Shape is not provider authentication. Never include the supplied value in an error.
+    return (isinstance(value, str) and 0 < len(value) <= 8192
+            and not any(character.isspace() for character in value)
+            and not value.startswith('<')
+            and value.lower() not in {'change-me', 'changeme', 'replace-me', 'placeholder', 'todo'})
+
+
 def registry_from_environment(values, transport=None):
-    """Mount an adapter only when its client credentials exist. Reviewed flag is explicit."""
-    registry = {}
+    """Only valid-shaped complete pairs mount. Review is an explicit operator declaration."""
+    registry = ProviderRegistry()
     for provider_id, cls in ADAPTERS.items():
         prefix = f"POSTRIFF_OAUTH_{provider_id.upper()}_"
         client_id, secret = values.get(prefix + "CLIENT_ID"), values.get(prefix + "CLIENT_SECRET")
-        if client_id and secret:
-            registry[provider_id] = cls(client_id, secret, transport=transport, production_reviewed=values.get(prefix + "REVIEWED", "").lower() == "true")
+        presence = {'clientId': client_id is not None, 'clientSecret': secret is not None}
+        missing = [prefix + suffix for suffix, present in (('CLIENT_ID', presence['clientId']), ('CLIENT_SECRET', presence['clientSecret'])) if not present]
+        valid = _credential_shape(client_id) and _credential_shape(secret)
+        state = 'not_configured' if len(missing) == 2 else 'partial_configuration' if missing else 'configured' if valid else 'invalid_configuration'
+        registry.diagnostics[provider_id] = {'configurationState': state, 'credentialPresence': presence, 'missingVariables': missing}
+        if valid:
+            registry[provider_id] = cls(client_id, secret, transport=transport, production_reviewed=str(values.get(prefix + "REVIEWED", "")).lower() == "true")
+            registry[provider_id].execution_enabled = str(values.get(prefix + "DISABLED", "")).lower() != "true"
+            if provider_id == "linkedin":
+                # Allows requesting the restricted scope, never substitutes for a real grant.
+                registry[provider_id].history_approved = str(values.get(prefix + "HISTORY_APPROVED", "")).lower() == "true"
     return registry

@@ -11,7 +11,7 @@ import {
 } from '@internationalized/date';
 import { useDateFormatter, useLocale } from '@react-aria/i18n';
 import { cn } from '@/lib/utils';
-import { EVENT_COLORS, MONTH_CHIP_LIMIT, type CalendarDetailsContext, type CalendarEvent } from './config';
+import { EVENT_TONES, MONTH_CHIP_LIMIT, type CalendarDetailsContext, type CalendarEvent } from './config';
 import { EventButton } from './event-button';
 
 interface MonthViewProps<T> {
@@ -30,6 +30,10 @@ interface MonthViewProps<T> {
   renderDetails?: (event: CalendarEvent<T>, context: CalendarDetailsContext) => ReactNode;
 }
 
+/**
+ * Quiet cells on the canvas (DNA §21.3): fill and spacing separate the days, no stroke around each one. Today is the
+ * inverted action circle; the focused date carries the lens.
+ */
 export function MonthView<T>({
   days,
   focusedDate,
@@ -77,21 +81,21 @@ export function MonthView<T>({
   const weeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) => days.slice(index * 7, index * 7 + 7));
 
   return (
-    <div ref={gridRef} role='grid' aria-labelledby={labelledBy} className='flex flex-col'>
-      <div role='row' className='bg-muted/40 grid grid-cols-7 border-b'>
+    <div ref={gridRef} role='grid' aria-labelledby={labelledBy} className='flex flex-col gap-1'>
+      <div role='row' className='grid grid-cols-7 gap-1'>
         {weeks[0]?.map((day) => (
           <div
             key={day.toString()}
             role='columnheader'
             aria-label={weekdayLong.format(day.toDate(timeZone))}
-            className='text-muted-foreground py-2 text-center text-xs font-semibold'
+            className='text-muted-foreground py-1.5 text-center text-xs font-medium'
           >
             {weekdayShort.format(day.toDate(timeZone))}
           </div>
         ))}
       </div>
       {weeks.map((week) => (
-        <div key={week[0].toString()} role='row' className='grid grid-cols-7 border-b last:border-b-0'>
+        <div key={week[0].toString()} role='row' className='grid grid-cols-7 gap-1'>
           {week.map((day) => {
             const key = day.toString();
             const events = byDay.get(key) ?? [];
@@ -108,8 +112,9 @@ export function MonthView<T>({
                 role='gridcell'
                 aria-selected={focused}
                 className={cn(
-                  'relative flex min-h-[5.5rem] min-w-0 flex-col gap-1 border-r p-1 last:border-r-0 md:min-h-[8.5rem] md:p-2',
-                  !inMonth && 'bg-muted/30'
+                  'relative flex min-h-[5.5rem] min-w-0 flex-col gap-1 rounded-[0.625rem] p-1.5 md:min-h-[8.5rem] md:p-2',
+                  // Days of the neighbouring months keep their events but lose the fill, so the month reads as one shape.
+                  inMonth ? 'rafii-quiet' : 'bg-transparent'
                 )}
               >
                 <button
@@ -120,11 +125,12 @@ export function MonthView<T>({
                   onClick={() => onOpenDay(day)}
                   onKeyDown={(event) => moveWithKeys(event, day)}
                   className={cn(
-                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                    // On phones the whole cell opens the day, since a row of dots cannot say what it holds.
-                    'after:absolute after:inset-0 md:after:hidden',
-                    today ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'hover:bg-accent',
-                    !today && focused && 'bg-muted',
+                    'rafii-focus flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors',
+                    // On phones the whole cell opens the day, since a row of dots cannot say what it holds; on wider
+                    // screens the cell's top band (above the first chip) stays the day's hit area.
+                    'after:absolute after:inset-0 after:rounded-[0.625rem] md:after:bottom-auto md:after:h-10',
+                    today ? 'rafii-action' : 'hover:rafii-lens',
+                    !today && focused && 'rafii-lens',
                     !today && !inMonth && 'text-muted-foreground'
                   )}
                 >
@@ -134,7 +140,7 @@ export function MonthView<T>({
                   <>
                     <span aria-hidden className='flex flex-wrap gap-1 px-1 md:hidden'>
                       {events.slice(0, 6).map((event) => (
-                        <span key={event.id} className={cn('size-2 rounded-full', EVENT_COLORS[event.color].dot)} />
+                        <span key={event.id} className={cn('size-2 rounded-full', EVENT_TONES[event.tone].dot)} />
                       ))}
                     </span>
                     <div className='hidden min-w-0 flex-col gap-1 md:flex'>
@@ -154,7 +160,7 @@ export function MonthView<T>({
                           tabIndex={-1}
                           aria-label={`${events.length - chips.length} more on ${dateLabel}`}
                           onClick={() => onOpenDay(day)}
-                          className='text-muted-foreground hover:text-foreground self-start rounded px-1.5 text-xs font-semibold transition-colors'
+                          className='rafii-focus text-muted-foreground hover:text-foreground self-start rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors'
                         >
                           +{events.length - chips.length} more
                         </button>

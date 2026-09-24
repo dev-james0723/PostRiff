@@ -13,7 +13,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { SessionQueryBoundary } from '@/lib/auth/session-query-boundary';
 import { ApiError, createApi, type PostRiffApi } from '@/lib/api/client';
+import type { WorkspaceBootstrap } from '@/lib/workspace/bootstrap';
 import type { AuthMode } from '@/lib/api/types';
 import { assurance } from '@/lib/auth/mfa';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
@@ -69,6 +71,7 @@ export function devSignIn(fresh = false): string {
     principal = crypto.randomUUID();
     localStorage.setItem(DEV_PRINCIPAL_KEY, principal);
   }
+  document.cookie = `postriff_dev_principal=${principal}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`;
   document.cookie = `${DEV_COOKIE}=1; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`;
   return principal;
 }
@@ -80,6 +83,7 @@ function devSignOut() {
     /* ignore */
   }
   document.cookie = `${DEV_COOKIE}=; Path=/; Max-Age=0`;
+  document.cookie = 'postriff_dev_principal=; Path=/; Max-Age=0';
 }
 
 function userFromSupabase(user: {
@@ -111,10 +115,10 @@ async function statusFor(client: SupabaseClient): Promise<AuthStatus> {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<AuthMode | null>(null);
-  const [status, setStatus] = useState<AuthStatus>('loading');
-  const [user, setUser] = useState<AuthUser | null>(null);
+export function AuthProvider({ children, initial }: { children: ReactNode; initial?: WorkspaceBootstrap | null }) {
+  const [mode, setMode] = useState<AuthMode | null>(initial?.mode ?? null);
+  const [status, setStatus] = useState<AuthStatus>(initial ? 'signed-in' : 'loading');
+  const [user, setUser] = useState<AuthUser | null>(initial ? { id: initial.me.userId, name: initial.me.displayName } : null);
   const [error, setError] = useState<string | null>(null);
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const supabaseRef = useRef<SupabaseClient | null>(null);
@@ -124,7 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const principal = readDevPrincipal();
       return principal ? `dev:${principal}` : null;
     }
-    if (mode === 'supabase' && supabaseRef.current) {
+    if (mode === 'supabase') {
+      if (!supabaseRef.current) { const { createClient } = await import('@/lib/supabase/client'); supabaseRef.current = createClient(); }
       const { data } = await supabaseRef.current.auth.getSession();
       return data.session?.access_token ?? null;
     }
@@ -140,8 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function boot() {
       let detected: AuthMode;
       try {
-        const catalog = await createApi(async () => null).catalog();
-        detected = catalog.authMode === 'dev' ? 'dev' : 'supabase';
+        detected = initial?.mode ?? ((await createApi(async () => null).catalog()).authMode === 'dev' ? 'dev' : 'supabase');
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof ApiError ? err.message : 'The PostRiff API is not reachable.');
@@ -154,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (detected === 'dev') {
         const principal = readDevPrincipal();
         if (principal) {
+          document.cookie = `postriff_dev_principal=${principal}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`;
           setUser({
             id: principal,
             name: 'Dev identity',
@@ -207,7 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, []);
+  }, [initial]);
 
   const signOut = useCallback(async () => {
     try {
@@ -234,7 +239,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [mode, status, user, error, getToken, signOut, completeMfa, supabase, api]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const identity = status === 'signed-in' ? user?.id ?? 'anonymous' : status;
+  return <AuthContext.Provider value={value}><SessionQueryBoundary identity={identity} initial={initial}>{children}</SessionQueryBoundary></AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
