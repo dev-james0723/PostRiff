@@ -139,3 +139,16 @@ The branch tip matches the verified working tree file for file, except `.claude/
 - **BLOCKED_OR_UNVERIFIED** — physical devices; live model/CLI generation, real OAuth, publishing, schedule approval, payments (need owner authorization); API-token list (harness schema gap); invitation acceptance; global-error and gate error states; manual screen-reader pass.
 - **PREVIEW_DEPLOYMENT** — none. No preview deployment was created; verification ran on the local dev harness only.
 - **PRODUCTION_DEPLOYMENT** — none. Nothing was deployed, migrated or published.
+
+## 11. After the release: Automations and next steps (2026-09-24)
+
+Built on top of this branch after the production deploy; **not deployed**.
+
+- Automations Phases 1–3 (hub and builder; templates, monthly and countdown schedules, "drafts ready",
+  batching and spend; triggers from new Ideas material and strong posts, evergreen): see
+  `automations.md` for design, safety rules, verification and limitations.
+- Home speed: dialogs code-split and preloaded when idle; Vercel Analytics opt-in
+  (`NEXT_PUBLIC_VERCEL_ANALYTICS=1`).
+- CI: `.github/workflows/rafii-browser.yml` runs the Rafii Playwright scenes on pull requests.
+- Before deploying: the read-only production migration check in `migrations-review.md` (Automations
+  need 018; 013 stays blocked on approval), then the steps in `real-world-checks.md` that need James.
