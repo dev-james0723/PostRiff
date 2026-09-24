@@ -15,7 +15,7 @@ from postriff_alpha.domain import AlphaError
 
 from . import locales
 
-INTENTS = ("draft", "schedule", "publish_now", "research", "memory")
+INTENTS = ("draft", "schedule", "publish_now", "research", "memory", "automation")
 
 
 def is_memory_instruction(text):
@@ -79,6 +79,36 @@ _RESEARCH = re.compile(r"\bresearch\b|調研|调研|搵(?:下|吓|一下)?(?:資
 _MEMORY = re.compile(r"^\s*(?:please\s+|唔該\s*|請\s*)?(?:(?:always|never|stop|don'?t|do not)\b|remember(?:\s*[:,]|\s+(?:that|to|no|not|never|always|don'?t|do not)\b)|no\s+(?:more\s+)?(?:hashtags?|emojis?|bullets?|lists?|exclamation|calls? to action|cta)\b)|\b(?:from now on|going forward|in (?:the )?future)\b|以後|以后|今後|今后|從今|从今|記住|记住|記得|记得|下次(?:開始|开始)?|唔好再|不要再|永遠|永远|一律", re.I)
 _MEMORY_ONCE = re.compile(r"\b(?:this post|this one|this time|just this|for now|today only|this draft|never mind)\b|今次|呢篇|這篇|这篇|呢次|這次|这次|今篇|呢個\s*post|這個\s*post|这个\s*post", re.I)
 MEMORY_MAX_CHARS = 240
+# A request to keep preparing drafts on a schedule ("every Tuesday, draft …", "逢星期二幫我寫…"), or one that asks for an
+# automation outright, becomes an automation (automation_chat), never a one-off draft or plan. "About automation" is a
+# topic, a one-off "weekly recap" is a draft, and a recurrence that describes the person's own habit ("I practise every
+# day, write a post about it") is context, not a request.
+_AUTOMATE = re.compile(
+    r"\b(?:set\s*up|setup|create|make|add|start|build)\s+(?:an?\s+|my\s+|the\s+)?(?:new\s+)?automations?\b"
+    r"|\ban?\s+automations?\s+(?:that|to|for|of|which|so)\b"
+    r"|\bautomate\s+(?:this|it|that|the|my|a|an|drafting|writing|posting|these)\b"
+    r"|(?:設定|设定|建立|開|开|整)(?:一個|一个|個|个)?(?:自動化|自动化)|定期(?:幫我|帮我|寫|写|出|發|发)",
+    re.I)
+_WEEKDAY_WORD = r"(?:mon|tues?|wednes|wed|thurs?|fri|satur|sat|sun)(?:day)?"
+_RECUR = re.compile(
+    rf"\b(?:every|each)\s+(?:other\s+|second\s+)?(?:{_WEEKDAY_WORD}|day|weekday|weekend|week|month|morning|evening|night)s?\b"
+    r"|\bon\s+(?:mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays|weekdays|weekends)\b"
+    r"|(?:逢|每(?:個|个|一)?)\s*(?:星期|禮拜|礼拜|週|周)[一二三四五六日天]|每(?:週|周|星期|個星期|个星期|月|個月|个月)"
+    r"|每(?:日|天)(?:都|早上|朝早|晚上)?(?:幫我|帮我|寫|写|出|發|发|準備|准备)",
+    re.I)
+_REQUEST = re.compile(r"\b(?:draft|drafting|write|writing|prepare|create|make|post|publish|share|send|generate|give me|set\s*up|schedule|remind me)\b|幫我|帮我|寫|写|出|發|发|準備|准备|草擬|草拟", re.I)
+_HABIT = re.compile(r"^\s*(?:i|i'm|i am|we|we're|we are|my|our)\b|^\s*(?:我|我哋|我們|我们)(?!.*(?:幫|帮))", re.I)
+_CLAUSE = re.compile(r"[.;!?\n。！？；]+|,\s*|，")
+
+
+def is_automation_request(text):
+    """A request to prepare drafts on a recurring schedule, or to set up an automation (see _AUTOMATE / _RECUR)."""
+    text = text if isinstance(text, str) else ""
+    if _AUTOMATE.search(text):
+        return True
+    if not _REQUEST.search(text):
+        return False
+    return any(_RECUR.search(clause) and not _HABIT.search(clause) for clause in _CLAUSE.split(text) if clause)
 _ZH_WEEKDAYS = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
 _EN_WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 _EN_MONTHS = {name: index + 1 for index, name in enumerate(_MONTHS.split("|"))}
@@ -270,7 +300,9 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
             warnings.append(f"“{destination['label']}” had already passed today, so {destination['platform']} moved to tomorrow.")
     unsupported = [d["platform"] for d in destinations if not d["supported"]]
     has_times = any(d["localTime"] for d in destinations) or bool(unattached)
-    if _PUBLISH_NOW.search(text):
+    if is_automation_request(text):
+        intent = "automation"
+    elif _PUBLISH_NOW.search(text):
         intent = "publish_now"
     elif has_times:
         intent = "schedule"

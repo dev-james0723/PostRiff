@@ -406,6 +406,8 @@ export interface RecurringTask {
   contentLabel?: string | null;
   contentLibrary?: { editorialId: string; nativeId: string } | null;
   contextSourceIds?: string[];
+  /** Personalized drafts use the workspace's writing samples allowed for this writer (part of the definition). */
+  voiceMode?: 'neutral' | 'personalized' | string;
   limits?: { draftsPerOccurrence: number };
   /** Extra context each run reads (part of the activated definition). */
   include?: { recentPostsDays?: number; evergreen?: { minAgeDays: number } } | null;
@@ -538,6 +540,34 @@ export interface Run {
   cursor: number;
   /** A memory turn (a standing instruction) opens no run: `status` is `memory` and this carries the proposal. */
   memoryProposal?: MemoryProposal | null;
+  /** A request for recurring drafts opens no run: `status` is `automation`, this is the automation Rafii set up
+   *  (null when it could not), and `reply` is Rafii's answer in the conversation. */
+  automation?: ChatAutomation | null;
+  reply?: string;
+}
+
+/** The automation a chat request set up (server `automation_chat.card`): what Rafii understood and what is left. */
+export interface ChatAutomation {
+  taskId: string;
+  campaignId: string;
+  name: string;
+  status: 'active' | 'draft' | string;
+  goal: string;
+  audience: string;
+  schedule: RecurringSchedule;
+  /** "Every Tuesday at 09:00 (Asia/Hong_Kong)". */
+  scheduleText: string;
+  nextOccurrence?: RecurringTask['nextOccurrence'] | null;
+  /** "Tuesday 29 September at 09:00", or null for a trigger. */
+  firstRun?: string | null;
+  destinations: (RecurringDestination & { account?: string })[];
+  contentLabel?: string | null;
+  voiceMode: 'neutral' | 'personalized' | string;
+  sources: { id: string; title: string }[];
+  /** Decisions left before it can run: an owner, a per-run spending limit, missing facts. */
+  needs: { code: 'owner' | 'spend' | 'facts' | 'review' | string; text: string }[];
+  /** What Rafii had to assume ("No time was named, so …"). */
+  notes: string[];
 }
 
 export interface Conversation {

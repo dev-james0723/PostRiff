@@ -113,8 +113,48 @@ See the Verification table in this file's commit message and `evidence/automatio
   transcription. A "new recording" trigger needs that pipeline first, which means choosing a
   transcription service (a paid-service decision) — left for the owner to decide.
 
+## From a chat request: "every Tuesday, draft me …"
+
+Asking Rafii on Home or in a conversation ("Set up an automation of drafting me a news article post in my
+voice about AI for Science every Tuesday") sets up the automation instead of drafting once.
+
+- **Reading the request.** A message with a recurrence or automation cue (every/each/twice a week/逢/每 …)
+  is read by a small model on the same route the person already chose: their own Claude Code for a Claude
+  Code writer, the managed gateway (Claude Haiku) for a managed writer, never for the preview writer. It
+  decides "automation" or "draft" and names the days, time, topic, kind of post and voice. The prompt
+  carries only the message, the date and the content-type catalog (no sources, memory or accounts). A
+  managed call's cost is reserved in the usage ledger before it leaves and settled after; a stop-line or a
+  failed call skips the reading, never the request. Without a model the deterministic reading decides
+  (`intent.is_automation_request`, `automation_chat`): "about automation" is a topic, "my weekly recap" is
+  one draft, "I practise every day, write about it" is a habit, not a schedule.
+- **Saving it.** `automation_chat.create` fills the builder's fields (schedule, destinations from the
+  composer, content type — installing the starter pack when only it has the type, as Home does — voice,
+  attached references as context sources, the brand audience or a general default) and saves through
+  `raffi_recurrence_save`, so every builder check applies. The model's reading is validated field by field;
+  anything it leaves out or gets wrong falls back to the deterministic reading.
+- **Turning it on.** An owner's request with a free writer is activated at once. A per-run spending limit
+  (paid writers), missing facts (event briefs) or a request from someone who is not an owner leaves it
+  waiting in the hub with the reason; nothing is invented for the person.
+- **The reply.** Rafii answers in the conversation with what will happen and when; a card shows the
+  schedule, first draft, destinations, kind of post, voice, references, what is left and what was assumed,
+  with Pause, Edit (the builder), Undo (cancel) and Open Automations. On Home the card scrolls into view.
+  The request is an instruction, so it is not stored as a source and nothing is drafted, scheduled or
+  published.
+- **Voice.** Automations carry `voiceMode` (part of the definition; the builder has "Write in my voice").
+  A run whose writing samples are gone or not allowed for its writer drafts in a neutral voice and says so
+  on the run, never a failed run.
+- **Verified.** Unit: `tests/test_postriff_automation_chat.py`, `tests/test_postriff_intent.py`.
+  PostgreSQL: `tests/phase2/postgres_chat_automation.py` (Home and conversation, non-owner, model reading
+  metered, "just a draft", failed reading, plain drafting unchanged) and the voice scenario in
+  `postgres_consumer_campaign_worker.py`. Browser: the `chat` scene in `web/tests/rafii-automations.cjs`
+  (Chromium and WebKit: reply, saved definition, nothing drafted, 390px fit, hub, Undo, axe).
+
 ## Limitations
 
 - Several times a day is not offered (runs prepare drafts; the posting time is chosen at approval).
 - Measured spend covers completed runs only; a held run costs nothing by design.
 - Trigger scans run on the one-minute cron, so a new idea is picked up within about a minute or two.
+- A chat request with a paid writer always waits for the owner to choose a per-run spending limit; with
+  credits enabled (FINAL-05, not on this branch), the request's credit limit could become that limit.
+- The model reading of a request is not yet under the gateway provider-routing rules the candidate
+  integration adds for drafting (FINAL-04); merge it into `request_model.call_for` when integrating.

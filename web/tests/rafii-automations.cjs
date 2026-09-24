@@ -542,6 +542,60 @@ async function phone(browser) {
   }
 }
 
+async function chat(browser) {
+  const s = await open(browser, 'chat');
+  const { page, dir } = s;
+  const request = 'Set up an Automation of drafting me a news article post using my voice and template uploaded here about the topic of AI for Science on every Tuesday';
+  try {
+    await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await arrive(page, page.getByRole('textbox', { name: 'Message' }));
+    const runsBefore = (await snapshot(page)).phase2?.jobs?.length ?? 0;
+    await page.getByRole('textbox', { name: 'Message' }).fill(request);
+    const answered = page.waitForResponse((response) => response.url().includes('/ideas/quick-start') && response.request().method() === 'POST', { timeout: 300000 });
+    await page.getByRole('button', { name: /^Generate drafts/ }).click();
+    const reply = await (await answered).json();
+    check('Rafii reads it as an automation, not one draft', reply.status === 'automation' && reply.runId === null && Boolean(reply.automation), { status: reply.status, runId: reply.runId });
+    const card = page.locator(`[data-chat-automation="${reply.automation?.taskId}"]`).first();
+    await card.waitFor({ timeout: 60000 });
+    await page.waitForTimeout(600);
+    const text = await card.innerText();
+    check('the reply says what will happen and when', /Every Tuesday at 09:00/.test(text) && /AI for Science/.test(text) && /nothing is published without you/.test(text), text.slice(0, 500));
+    check('an owner request with the fixture writer is on', /\bOn\b/.test(text) && /First draft/.test(text), text.slice(0, 300));
+    check('voice and kind of post understood', /Your voice/.test(text) && /Article\/news summary/.test(text), text.slice(0, 500));
+    const task = (await snapshot(page)).raffi?.campaignPlanning?.recurringTasks?.find((item) => item.id === reply.automation?.taskId);
+    check('saved with the builder checks: Tuesday 09:00, your voice, news type, active', Boolean(task) && task.status === 'active' && JSON.stringify(task.schedule.weekdays) === '["Tuesday"]' && task.schedule.localTime === '09:00' && task.voiceMode === 'personalized' && task.contentType?.contentTypeId === 'pack.creator:article_news_commentary', task && { status: task.status, schedule: task.schedule, voiceMode: task.voiceMode, contentType: task.contentType });
+    check('nothing drafted, scheduled or published', ((await snapshot(page)).phase2?.jobs?.length ?? 0) === runsBefore);
+    check('the composer is cleared for the next idea', (await page.getByRole('textbox', { name: 'Message' }).inputValue()) === '');
+    await shot(page, dir, '01-home-reply');
+    await axe(page, 'Home with the automation reply');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(500);
+    check('the reply card fits a 390px phone', (await overflow(page)) <= 0, await overflow(page));
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, dir, '02-home-reply-phone');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await gotoHub(page);
+    check('the hub lists it', await page.getByText(task?.name ?? '—').first().isVisible(), task?.name);
+    await shot(page, dir, '03-hub');
+    // The conversation keeps Rafii's reply and the card; Undo there cancels the automation.
+    await page.goto(`${base}/app/agent/${reply.conversationId}`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    const thread = page.locator(`[data-chat-automation="${reply.automation?.taskId}"]`).first();
+    await thread.waitFor({ timeout: 120000 });
+    check('the conversation shows the request and the reply', await page.getByText(request).first().isVisible() && /Every Tuesday at 09:00/.test(await thread.innerText()));
+    await thread.getByRole('button', { name: 'Undo' }).click();
+    await page.getByText('Automation cancelled.').first().waitFor({ timeout: 30000 });
+    await thread.getByText('Cancelled', { exact: true }).waitFor({ timeout: 30000 });
+    const after = (await snapshot(page)).raffi?.campaignPlanning?.recurringTasks?.find((item) => item.id === reply.automation?.taskId);
+    check('Undo cancels it', after?.status === 'cancelled', after?.status);
+    await shot(page, dir, '04-conversation-undone');
+  } catch (error) {
+    check('chat scene completed', false, error.message);
+    await shot(page, dir, 'zz-failure').catch(() => {});
+  } finally {
+    await close(s);
+  }
+}
+
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const executablePath = (engine === webkit ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
@@ -551,6 +605,7 @@ async function phone(browser) {
     if (!args.only || String(args.only).includes('templates')) await templates(browser);
     if (!args.only || String(args.only).includes('triggers')) await triggers(browser);
     if (!args.only || String(args.only).includes('phone')) await phone(browser);
+    if (!args.only || String(args.only).includes('chat')) await chat(browser);
   } finally {
     await browser.close();
   }

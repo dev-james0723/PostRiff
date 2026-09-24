@@ -293,3 +293,20 @@ assert [run['state'] for run in CampaignWorker(service).tick_many()['runs']] == 
 run = [o for o in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['occurrences'] if o['taskId'] == evergreen_task['id']][-1]
 assert run['evergreen'] == {} and 'fresh take' not in requests_seen[-1]['idea'], run
 print('PASS: new idea triggers exactly one run that reads it, strong-post scan reads real insights without side effects, evergreen without candidates still drafts')
+act('raffi_recurrence_cancel', {'taskId': evergreen_task['id'], 'confirmed': True})
+# Voice: an automation asks for the person's own voice; with no writing sample allowed for this writer the run still
+# drafts, in a neutral voice, and says so on the run (never a failed run).
+state = act('raffi_recurrence_save', {**base, 'name': 'In my voice', 'goal': 'One practice tip', 'voiceMode': 'personalized',
+                                      'schedule': {'weekdays': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], 'localTime': '09:00', 'timeZone': 'UTC'}})['state']
+voice_task = state['raffi']['campaignPlanning']['recurringTasks'][-1]
+assert voice_task['voiceMode'] == 'personalized', voice_task
+act('raffi_recurrence_activate', {'taskId': voice_task['id'], 'confirmed': True})
+clock[0] = current(voice_task['id'])['nextOccurrence']['scheduledFor'] + 1
+batch = CampaignWorker(service).tick_many()
+assert [run['state'] for run in batch['runs']] == ['completed'], batch
+run = [o for o in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['occurrences'] if o['taskId'] == voice_task['id']][-1]
+with connection() as db:
+    notes = [row[0] for row in db.execute("SELECT body->>'message' FROM pr_agent_events WHERE run_id::text=%s AND kind='warning.created'", (run['runId'],))]
+assert run['state'] == 'completed' and any('neutral voice' in (note or '') for note in notes), (run, notes)
+act('raffi_recurrence_cancel', {'taskId': voice_task['id'], 'confirmed': True})
+print('PASS: an automation in your voice without an allowed writing sample drafts in a neutral voice and says so')

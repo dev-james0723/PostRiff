@@ -9,6 +9,8 @@ import { Checkbox } from '@/components/motion/checkbox';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, SegmentedControl, SemanticIllustration, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { DRAFT_PLATFORMS } from '@/features/agent/composer';
 import { contentChoice, type LibraryValue } from '@/features/agent/content-choice';
@@ -85,6 +87,8 @@ export interface BuilderInitial {
   reasoning: Reasoning;
   maxCostUsd: string;
   sourceIds: string[];
+  /** Write each draft with the workspace's writing samples allowed for the writer ("Write like me" on Home). */
+  voiceMode: 'neutral' | 'personalized';
   /** Include this workspace's own published posts from this many days (recaps). */
   recentPostsDays: number | null;
   /** Triggers. */
@@ -122,7 +126,7 @@ function groupTargets(destinations: RecurringDestination[]): TargetState[] {
 }
 
 export function blankInitial(timeZone: string): BuilderInitial {
-  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], recentPostsDays: null, sourceKinds: ALL_SOURCE_KINDS, maxPerDay: 3, withinDays: 7, evergreenDays: null };
+  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], voiceMode: 'neutral', recentPostsDays: null, sourceKinds: ALL_SOURCE_KINDS, maxPerDay: 3, withinDays: 7, evergreenDays: null };
 }
 
 /** Start a new automation from an existing campaign brief (an older campaign or a suggestion). */
@@ -157,6 +161,7 @@ export function initialFromAutomation(automation: Automation, timeZone: string):
     reasoning: (REASONING as string[]).includes(task.reasoning ?? '') ? (task.reasoning as Reasoning) : 'quick',
     maxCostUsd: String((task.maxCostUsdMicro ?? 0) / 1_000_000),
     sourceIds: task.contextSourceIds ?? [],
+    voiceMode: task.voiceMode === 'personalized' ? 'personalized' : 'neutral',
     recentPostsDays: task.include?.recentPostsDays ?? null,
     sourceKinds: task.schedule.sourceKinds?.length ? task.schedule.sourceKinds : ALL_SOURCE_KINDS,
     maxPerDay: task.schedule.maxPerDay ?? (task.schedule.kind === 'on_strong_post' ? 1 : 3),
@@ -225,6 +230,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const [reasoning, setReasoning] = useState<Reasoning>(initial.reasoning);
   const [maxCost, setMaxCost] = useState(initial.maxCostUsd);
   const [sourceIds, setSourceIds] = useState<string[]>(initial.sourceIds);
+  const [voiceMode, setVoiceMode] = useState(initial.voiceMode);
   const [inner, setInner] = useState<null | 'library' | 'channels'>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -402,7 +408,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
         route,
         reasoning,
         maxCostUsdMicro: costMicro,
-        sourceIds
+        sourceIds,
+        voiceMode
       });
       // The server appends a new automation last; an edit keeps its id.
       taskId = taskId ?? after.state.raffi?.campaignPlanning?.recurringTasks.at(-1)?.id;
@@ -466,6 +473,13 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                 <Field label='Who is it for?' htmlFor='automation-audience'>
                   <Input id='automation-audience' value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Beginners who follow my work, and the people who support them' maxLength={800} className={FIELD} />
                 </Field>
+                <Label className='flex min-h-11 items-center justify-between gap-3 text-sm font-normal'>
+                  <span className='flex flex-col gap-0.5'>
+                    <span>Write in my voice</span>
+                    <span className='text-muted-foreground text-xs'>Uses the writing samples you allowed for this writer. Without one, a draft is neutral and says so.</span>
+                  </span>
+                  <Switch checked={voiceMode === 'personalized'} onCheckedChange={(checked) => setVoiceMode(checked ? 'personalized' : 'neutral')} aria-label='Write each draft in my voice' />
+                </Label>
                 <div className='grid gap-3 sm:grid-cols-2'>
                   <Field label='Event date' htmlFor='automation-date' hint={missing.includes('date') ? 'Needed before an event automation can be activated.' : 'Only for event briefs.'}>
                     <Input id='automation-date' value={date} onChange={(e) => setDate(e.target.value)} placeholder='18 April, 7:30 pm' maxLength={400} className={FIELD} />

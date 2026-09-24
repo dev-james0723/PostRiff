@@ -127,3 +127,37 @@ class ResolveAndPlanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutomationIntentTest(unittest.TestCase):
+    """A request to keep preparing drafts on a schedule becomes the automation intent; habits, topics and one-off
+    recaps stay what they were (agent chat → Automations)."""
+
+    def test_recurring_requests_are_automations(self):
+        for text in (
+            "Set up an Automation of drafting me a news article post using my voice and template uploaded here about the topic of AI for Science on every Tuesday",
+            "Write me a LinkedIn post every Tuesday about AI",
+            "Every Monday, draft a practice tip for my students",
+            "Draft a post on Tuesdays and Fridays about my studio",
+            "automate posting a weekly tip",
+            "逢星期二幫我寫一篇關於AI for Science嘅新聞文章",
+            "每個月1號幫我準備一篇學生演奏會回顧",
+        ):
+            with self.subTest(text=text):
+                self.assertTrue(intent.is_automation_request(text))
+                self.assertEqual(intent.parse_request(text, at("2026-09-24T10:00"), HK)["intent"], "automation")
+
+    def test_topics_habits_and_one_off_requests_are_not(self):
+        for text, expected in (
+            ("Write a post about automation in music", "draft"),
+            ("Write my weekly recap", "draft"),
+            ("I practise every day, write a post about it", "draft"),
+            ("我每日練琴，幫我寫篇post", "draft"),
+            ("Post about my Tuesdays at the studio", "draft"),
+            ("Draft a post for next Tuesday at 9am on LinkedIn", "schedule"),
+            ("Every post should end with a question", "draft"),
+            ("Always end with a question", "memory"),
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(intent.is_automation_request(text))
+                self.assertEqual(intent.parse_request(text, at("2026-09-24T10:00"), HK)["intent"], expected)

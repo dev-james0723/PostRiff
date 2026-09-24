@@ -1,9 +1,9 @@
 {
-  "base": "http://localhost:3100",
+  "base": "http://localhost:3140",
   "browser": "chromium",
-  "principal": "d6d9972b-a529-4572-8c5c-82965a042353",
-  "workspaceId": "44f94ff6-66c8-42b8-9f19-a5e300752e99",
-  "startedAt": "2026-09-24T07:18:01.734Z",
+  "principal": "53b08d40-8ab9-49c5-9c77-4dbe93217144",
+  "workspaceId": "af4a4b03-977b-4531-a2a7-8d4d867e9447",
+  "startedAt": "2026-09-24T14:07:02.480Z",
   "scenes": [
     {
       "name": "workflow",
@@ -107,8 +107,8 @@
           "ok": true,
           "detail": {
             "status": 201,
-            "runId": "90d4e17c-3d94-4285-8c38-327dc6e6eba8",
-            "conversationId": "383768b0-0675-41f6-903e-19a33f770261",
+            "runId": "222cf632-66c8-41c6-bc2d-2326927a55c4",
+            "conversationId": "abdabe3e-c103-4545-9f08-de82473b884e",
             "error": null
           }
         },
@@ -117,7 +117,7 @@
           "ok": true,
           "detail": [
             {
-              "id": "def3f8804700473fa53caaabbbf99ebb",
+              "id": "09d4cbf0fb92407e8ff70339dc2e8ed3",
               "platform": "LinkedIn",
               "language": "en-US",
               "channelId": "abaad27ed4e69ff561db13790efff006",
@@ -127,7 +127,7 @@
               "proposedUpdateFromRun": false
             },
             {
-              "id": "83303aec21454dc29f41c42df1d1070b",
+              "id": "b071e006cb1b4ed79e390e47c7fc3c21",
               "platform": "LinkedIn",
               "language": "en-GB",
               "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
@@ -143,7 +143,7 @@
           "ok": true,
           "detail": [
             {
-              "id": "def3f8804700473fa53caaabbbf99ebb",
+              "id": "09d4cbf0fb92407e8ff70339dc2e8ed3",
               "platform": "LinkedIn",
               "language": "en-US",
               "channelId": "abaad27ed4e69ff561db13790efff006",
@@ -153,7 +153,7 @@
               "proposedUpdateFromRun": false
             },
             {
-              "id": "83303aec21454dc29f41c42df1d1070b",
+              "id": "b071e006cb1b4ed79e390e47c7fc3c21",
               "platform": "LinkedIn",
               "language": "en-GB",
               "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
@@ -169,7 +169,7 @@
           "ok": true,
           "detail": [
             {
-              "id": "def3f8804700473fa53caaabbbf99ebb",
+              "id": "09d4cbf0fb92407e8ff70339dc2e8ed3",
               "platform": "LinkedIn",
               "language": "en-US",
               "channelId": "abaad27ed4e69ff561db13790efff006",
@@ -179,7 +179,7 @@
               "proposedUpdateFromRun": false
             },
             {
-              "id": "83303aec21454dc29f41c42df1d1070b",
+              "id": "b071e006cb1b4ed79e390e47c7fc3c21",
               "platform": "LinkedIn",
               "language": "en-GB",
               "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
@@ -202,67 +202,67 @@
       "marks": [
         {
           "label": "Home loaded",
-          "atSeconds": 30.1
+          "atSeconds": 2.5
         },
         {
           "label": "Channel Bloom open",
-          "atSeconds": 46.9
+          "atSeconds": 3.9
         },
         {
           "label": "Festival folder unfolds",
-          "atSeconds": 48.8
+          "atSeconds": 4.5
         },
         {
           "label": "Festival folder folds",
-          "atSeconds": 51
+          "atSeconds": 5.9
         },
         {
           "label": "destinations committed",
-          "atSeconds": 55.6
+          "atSeconds": 8.4
         },
         {
           "label": "language dialog open",
-          "atSeconds": 59.1
+          "atSeconds": 10.1
         },
         {
           "label": "language catalogue discloses",
-          "atSeconds": 60.4
+          "atSeconds": 10.3
         },
         {
           "label": "languages applied",
-          "atSeconds": 69.4
+          "atSeconds": 13.6
         },
         {
           "label": "model dialog open",
-          "atSeconds": 71.1
+          "atSeconds": 15.1
         },
         {
           "label": "provider swap 1",
-          "atSeconds": 73.4
+          "atSeconds": 16.1
         },
         {
           "label": "provider swap 0",
-          "atSeconds": 74.6
+          "atSeconds": 17
         },
         {
           "label": "generate",
-          "atSeconds": 79.2
+          "atSeconds": 20.3
         },
         {
           "label": "drafts ready",
-          "atSeconds": 84.1
+          "atSeconds": 20.6
         },
         {
           "label": "phone swipe",
-          "atSeconds": 86.4
+          "atSeconds": 22.1
         },
         {
           "label": "save as drafts",
-          "atSeconds": 99.1
+          "atSeconds": 23.7
         },
         {
           "label": "conversation view",
-          "atSeconds": 120.5
+          "atSeconds": 26
         }
       ],
       "errors": [],
@@ -281,20 +281,20 @@
         "workflow/chromium/workflow/11-conversation.png"
       ],
       "video": "workflow/chromium/workflow/workflow.webm",
-      "t0": 1790234285582,
+      "t0": 1790258822672,
       "language": {
         "firstShows": "Output language for LinkedIn · Dev Member: English (United States). Change",
         "secondChosen": "en-GB"
       },
       "quickStart": {
         "status": 201,
-        "runId": "90d4e17c-3d94-4285-8c38-327dc6e6eba8",
-        "conversationId": "383768b0-0675-41f6-903e-19a33f770261",
+        "runId": "222cf632-66c8-41c6-bc2d-2326927a55c4",
+        "conversationId": "abdabe3e-c103-4545-9f08-de82473b884e",
         "error": null
       },
       "saved": [
         {
-          "id": "def3f8804700473fa53caaabbbf99ebb",
+          "id": "09d4cbf0fb92407e8ff70339dc2e8ed3",
           "platform": "LinkedIn",
           "language": "en-US",
           "channelId": "abaad27ed4e69ff561db13790efff006",
@@ -304,7 +304,7 @@
           "proposedUpdateFromRun": false
         },
         {
-          "id": "83303aec21454dc29f41c42df1d1070b",
+          "id": "b071e006cb1b4ed79e390e47c7fc3c21",
           "platform": "LinkedIn",
           "language": "en-GB",
           "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
@@ -314,8 +314,8 @@
           "proposedUpdateFromRun": false
         }
       ],
-      "conversationId": "383768b0-0675-41f6-903e-19a33f770261",
-      "durationSeconds": 121.4
+      "conversationId": "abdabe3e-c103-4545-9f08-de82473b884e",
+      "durationSeconds": 26.4
     },
     {
       "name": "content-library",
@@ -340,19 +340,19 @@
           "ok": true,
           "detail": {
             "formatId": "carousel",
-            "changedAt": 1790234437.2203279,
+            "changedAt": 1790258855.5091279,
             "pillarIds": [],
             "contentTypeId": "pack.creator:building_in_public",
             "transformation": {
               "to": "pack.creator:building_in_public",
               "from": "unclassified",
               "preservedSourceIds": [
-                "fef7812256bc423bae5c4bbec9252bbd",
-                "685df3e5462b41748c0d9cd05c984a9e",
-                "8ef0dc3db48e413bae5196aea4c78f45"
+                "51d9678c9cdc4c8dbd992dde829210c5",
+                "ca037d5184b74427907c562b9f707f73",
+                "79eebb73a6b54411a024ae4bcd86e271"
               ],
               "preservedVariantIds": [
-                "83303aec21454dc29f41c42df1d1070b"
+                "b071e006cb1b4ed79e390e47c7fc3c21"
               ]
             },
             "contentTypeVersion": "1.0.0"
@@ -371,19 +371,19 @@
           "ok": true,
           "detail": {
             "formatId": "carousel",
-            "changedAt": 1790234437.2203279,
+            "changedAt": 1790258855.5091279,
             "pillarIds": [],
             "contentTypeId": "pack.creator:building_in_public",
             "transformation": {
               "to": "pack.creator:building_in_public",
               "from": "unclassified",
               "preservedSourceIds": [
-                "fef7812256bc423bae5c4bbec9252bbd",
-                "685df3e5462b41748c0d9cd05c984a9e",
-                "8ef0dc3db48e413bae5196aea4c78f45"
+                "51d9678c9cdc4c8dbd992dde829210c5",
+                "ca037d5184b74427907c562b9f707f73",
+                "79eebb73a6b54411a024ae4bcd86e271"
               ],
               "preservedVariantIds": [
-                "83303aec21454dc29f41c42df1d1070b"
+                "b071e006cb1b4ed79e390e47c7fc3c21"
               ]
             },
             "contentTypeVersion": "1.0.0"
@@ -391,29 +391,30 @@
         },
         {
           "name": "restored to Status update · Text",
-          "ok": false
+          "ok": true,
+          "detail": "Choose content type and native format, Status update · Text"
         }
       ],
       "marks": [
         {
           "label": "native formats tab (crossfade)",
-          "atSeconds": 26.2
+          "atSeconds": 4.7
         },
         {
           "label": "library staged",
-          "atSeconds": 27.7
+          "atSeconds": 5.8
         },
         {
           "label": "library applied",
-          "atSeconds": 29.8
+          "atSeconds": 7.2
         },
         {
           "label": "native formats tab (crossfade)",
-          "atSeconds": 34.1
+          "atSeconds": 8.9
         },
         {
           "label": "native formats tab (crossfade)",
-          "atSeconds": 41.9
+          "atSeconds": 12.3
         }
       ],
       "errors": [],
@@ -422,14 +423,14 @@
         "workflow/chromium/content-library/01-library-staged.png"
       ],
       "video": "workflow/chromium/content-library/content-library.webm",
-      "t0": 1790234407390,
-      "durationSeconds": 47.4
+      "t0": 1790258849088,
+      "durationSeconds": 14.1
     }
   ],
-  "finishedAt": "2026-09-24T07:20:55.084Z",
+  "finishedAt": "2026-09-24T14:07:43.175Z",
   "summary": {
     "checks": 28,
-    "failed": 1,
+    "failed": 0,
     "pageErrors": 0
   }
 }

@@ -3,6 +3,7 @@
 import { eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
+import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
 
 import { OnboardingAnswer } from './onboarding-chat';
 
@@ -28,7 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
 import { keys, useConversations, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
+import type { ChatAutomation, GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { ProposalCard } from '@/features/memory/proposal-card';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -67,6 +68,8 @@ interface AssistantBody {
   skills?: string[];
   /** A standing instruction turn: the preference it proposed (preference-learning design §5.5). */
   memoryProposal?: MemoryProposal | null;
+  /** A request for recurring drafts: the automation Rafii set up (null when it could not). */
+  automation?: ChatAutomation | null;
   /** Which learned preferences the run received (design §5.7). */
   memory?: MemoryBinding | null;
   images?: GeneratedImage[];
@@ -218,6 +221,9 @@ export function ConversationView({ conversationId }: { conversationId: string })
         // A standing instruction opened no run; the reply carries a proposal for the Memory page and this thread.
         void client.invalidateQueries({ queryKey: keys.memoryProposals(workspaceId) });
         void client.invalidateQueries({ queryKey: keys.memory(workspaceId) });
+      } else if (result.status === 'automation') {
+        // A request for recurring drafts opened no run; the reply carries the automation it set up.
+        void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
       } else {
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
       }
@@ -322,6 +328,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
                       {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} memory={body.memory} />}
                       {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
                       {body.memoryProposal && <ProposalCard proposal={body.memoryProposal} />}
+                      {body.automation && <ChatAutomationCard automation={body.automation} />}
                       {body.excluded && body.excluded.length > 0 && (
                         <ul className='text-muted-foreground text-xs'>
                           {body.excluded.map((item) => (

@@ -95,8 +95,13 @@ export function useHomeGeneration() {
           sourceIds: request.sourceIds ?? []
         });
         if (mine !== ticket.current) return null; // a newer request superseded this one
-        client.setQueryData(['agent-run', workspaceId, result.runId], result);
-        setSeed(result);
+        // A request for recurring drafts opens no run: Home shows Rafii's reply and the automation instead.
+        if (result.status !== 'automation') {
+          client.setQueryData(['agent-run', workspaceId, result.runId], result);
+          setSeed(result);
+        } else {
+          setRequested([]);
+        }
         await Promise.all([
           client.invalidateQueries({ queryKey: keys.conversations(workspaceId) }),
           client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) }),

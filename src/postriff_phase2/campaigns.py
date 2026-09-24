@@ -4,7 +4,7 @@ These commands create drafts and plans only. They never create publication appro
 
 An automation is one campaign brief plus one recurring task. `raffi_recurrence_save` creates or edits
 both in one command: any change to what would be drafted (brief, schedule, destinations, content
-type, writer, reasoning, cost limit or sources) returns the task to `draft`, so the owner activates
+type, writer, reasoning, cost limit, sources or voice) returns the task to `draft`, so the owner activates
 the new definition before it runs. Renaming alone keeps the current status.
 """
 from __future__ import annotations
@@ -28,7 +28,8 @@ MAX_DESTINATIONS = 10
 MAX_COST_USD_MICRO = 10_000_000
 # The definition an activation authorizes. Legacy (authority 1) tasks keep their original digest.
 LEGACY_DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "contextSourceIds", "destination", "maxCostUsdMicro")
-DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "reasoning", "contextSourceIds", "destinations", "contentType", "maxCostUsdMicro", "include")
+DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "reasoning", "contextSourceIds", "destinations", "contentType", "maxCostUsdMicro", "include", "voiceMode")
+VOICE_MODES = ("neutral", "personalized")
 # Event triggers run when something happens instead of at a time (Phase 3).
 EVENT_KINDS = ("on_new_source", "on_strong_post")
 SCHEDULE_KINDS = ("weekly", "monthly", "countdown") + EVENT_KINDS
@@ -456,12 +457,17 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     if type(max_cost) is not int or not 0 <= max_cost <= MAX_COST_USD_MICRO:
         raise AlphaError("Choose a cost limit per run between $0 and $10.")
     sources = normalize_sources(state, payload.get("sourceIds"))
+    # Personalized drafts use the workspace's selected writing samples allowed for this writer at run time.
+    voice_mode = payload.get("voiceMode", "neutral")
+    if voice_mode not in VOICE_MODES:
+        raise AlphaError("Choose neutral or personalized writing.")
     label = clean(payload["destinationLabel"], 120) if isinstance(payload.get("destinationLabel"), str) and payload["destinationLabel"].strip() else None
     channels = {c.get("id"): c for c in (state.get("phase2") or {}).get("channels", []) if isinstance(c, dict)}
     # Display only, so a later account rename never changes the authorized definition.
     account_labels = {d["channelId"]: clean(channels[d["channelId"]].get("account") or "", 120) for d in destinations if d.get("channelId")}
     definition = {"schedule": schedule, "destinations": destinations, "contentType": content, "route": route, "reasoning": reasoning,
-                  "maxCostUsdMicro": max_cost, "contextSourceIds": sources, "limits": {"draftsPerOccurrence": len(destinations)}, "include": include}
+                  "maxCostUsdMicro": max_cost, "contextSourceIds": sources, "limits": {"draftsPerOccurrence": len(destinations)}, "include": include,
+                  "voiceMode": voice_mode}
     task_id = payload.get("taskId")
     account_ids = list(dict.fromkeys(d["channelId"] for d in destinations if d.get("channelId")))
     if task_id is None:

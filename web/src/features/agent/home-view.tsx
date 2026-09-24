@@ -46,6 +46,8 @@ import { useModelChoice } from './use-model';
 import { eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
+import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
+import type { ChatAutomation } from '@/lib/api/types';
 
 /*
  * Home's dialogs are code-split: none is needed to paint Home, so each loads when the browser is idle
@@ -133,6 +135,7 @@ export function HomeView() {
   const [library, setLibrary] = useState<LibraryValue>(DEFAULT_LIBRARY);
   const [included, setIncluded] = useState<string[]>([]);
   const [learning, setLearning] = useState<(VoiceLearningRequest & { workspaceId: string; id: string }) | null>(null);
+  const [automationReply, setAutomationReply] = useState<{ workspaceId: string; id: string; automation: ChatAutomation | null; reply: string } | null>(null);
   const [dialog, setDialog] = useState<null | 'expand' | 'context' | 'library' | 'channels' | 'platforms' | 'language' | 'model' | 'voice'>(null);
   // A dialog mounts on its first opening and stays mounted, so closing it keeps its exit transition.
   const opened = useRef(new Set<string>());
@@ -249,7 +252,8 @@ export function HomeView() {
       toast.error(err instanceof ApiError ? err.message : 'The content type could not be selected.');
       return;
     }
-    await generation.start(
+    setAutomationReply(null);
+    const result = await generation.start(
       {
         text: body,
         ownContent: own,
@@ -264,6 +268,11 @@ export function HomeView() {
       },
       current
     );
+    if (result?.status === 'automation') {
+      // Rafii read a request for recurring drafts: it set up an automation instead of drafting once.
+      setAutomationReply({ workspaceId, id: result.conversationId, automation: result.automation ?? null, reply: result.reply ?? '' });
+      setText('');
+    }
   }
 
   const draftAgain = useCallback(() => {
@@ -398,6 +407,17 @@ export function HomeView() {
           {canEdit && <StartingPoints onPick={(sample) => { setText(sample); composer.current?.focus(); }} disabled={generation.busy || generation.running} />}
           {generation.busy && imageRequested && <ImageGenerationCard running className='mx-auto' />}
           {learning?.workspaceId === workspaceId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
+          {automationReply?.workspaceId === workspaceId &&
+            (automationReply.automation ? (
+              <ChatAutomationCard key={automationReply.id} automation={automationReply.automation} reply={automationReply.reply} reveal onClose={() => setAutomationReply(null)} />
+            ) : (
+              <Surface material='glass' padding='md' className='flex items-start justify-between gap-3'>
+                <p className='text-sm leading-relaxed'>{automationReply.reply}</p>
+                <Button type='button' variant='ghost' size='icon' className='size-9 shrink-0' onClick={() => setAutomationReply(null)} aria-label='Close'>
+                  <Icons.close className='size-4' />
+                </Button>
+              </Surface>
+            ))}
 
           {template && (
             <div className='flex flex-wrap items-center gap-2 text-xs'>

@@ -160,7 +160,7 @@ class CampaignWorker:
                 'text': self._lead(len(destinations), data) + json.dumps(data, ensure_ascii=False),
                 'idempotencyKey':'recurring:' + occurrence['idempotencyKey'], 'model':task['route'], 'reasoning':task.get('reasoning', 'quick'),
                 'sourceIds':list(dict.fromkeys(claim.get('sources', []) + task['contextSourceIds'])), 'destinations':destinations,
-                'research':False, 'voiceMode':'neutral', 'timeZone':task['schedule']['timeZone'],
+                'research':False, 'voiceMode':task.get('voiceMode', 'neutral'), 'timeZone':task['schedule']['timeZone'],
             })
         except Exception:
             # Reconcile a committed run even if the HTTP-style call raised after provider I/O.

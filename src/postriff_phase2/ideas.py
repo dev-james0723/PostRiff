@@ -19,6 +19,8 @@ from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
 from . import content_types, intent, locales, memory, research, voice_sources
 
+VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
+
 MAX_TEXT = 6000
 MAX_EVENTS = 2000
 DEFAULT_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
@@ -190,6 +192,92 @@ class IdeasService:
             state = self._state(row)
             learned = {**(self.learning.summary(state) if self.learning else learning.summary(state)), "pendingProposals": len(pending_proposals(cur, workspace_id))}
             return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned}
+
+    def _read_request(self, workspace_id, token, text, zone, runtime):
+        """Rafii's model reading of a message that may ask for recurring drafts (request_model); None when no model may
+        read it or its answer is unusable, so the deterministic reading decides. A managed call's cost is reserved
+        before the message leaves and settled after; a stop-line skips the reading, never the request."""
+        from . import request_model
+        call = request_model.call_for(runtime, getattr(self, "understanding", None))
+        if call is None:
+            return None
+        reservation = None
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self._member(row), "edit")
+            state = self._state(row)
+            user = request_model.user_prompt(text, zone, self.clock(), state)
+            if not getattr(call, "local", False):
+                cur.execute("SAVEPOINT understanding_reserve")
+                try:
+                    reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", request_model.price_quote_micro(state, user), f"understanding:{uid()}",
+                                                      charge_batch=False, provider="understanding", model=getattr(call, "model", "") or "")
+                    cur.execute("RELEASE SAVEPOINT understanding_reserve")
+                except AlphaError:
+                    cur.execute("ROLLBACK TO SAVEPOINT understanding_reserve")
+                    return None
+        answer, actual = None, None
+        try:
+            result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state))
+            actual = getattr(result, "cost_usd_micro", None)
+            answer = request_model.reading(result, state)
+        except Exception:  # noqa: BLE001 — a failed reading never blocks the request; the deterministic reading decides
+            answer = None
+        if reservation is not None:
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                self.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if actual is not None else "unknown", actual)
+        return answer
+
+    def _understand(self, workspace_id, token, text, zone, runtime, parsed):
+        """(parsed, automation reading): the model's decision wins over the deterministic one where a model may read."""
+        from . import request_model
+        understood = self._read_request(workspace_id, token, text, zone, runtime) if text and request_model.CUE.search(text) else None
+        if understood and understood["action"] == "draft" and parsed["intent"] == "automation":
+            parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
+        if understood and understood["action"] == "automation":
+            parsed = {**parsed, "intent": "automation"}
+        return parsed, (understood or {}).get("automation")
+
+    def _automation_turn(self, workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, revision=None, understood=None):
+        """A request to keep preparing drafts on a schedule: no run, no model, no charge. It becomes an automation with
+        the Automations builder's checks (automation_chat); an owner's request is turned on when nothing is left for the
+        owner to decide. The reply carries it as a card. Drafts only: nothing here schedules or publishes a post."""
+        from . import automation_chat
+        zone = intent.safe_zone(payload.get("timeZone"))
+        now = self.clock()
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            member = self._member(row)
+            require(member, "edit")
+            self._conversation(cur, workspace_id, conversation_id)
+            current = row[0]
+        provider_class = getattr(runtime, "provider_class", "local")
+        voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
+        # Attached references (Rafii v9 Context Pocket) are read on every run; voice samples never count as sources.
+        source_ids = [item for item in dict.fromkeys(payload.get("sourceIds") or []) if isinstance(item, str) and item][:20]
+        outcome, failure = {}, None
+
+        def command(state, actor):
+            outcome["view"] = automation_chat.create(
+                state, actor, now, text, zone, destinations=destinations, route=model_id, voice_route=voice_route,
+                reasoning=payload.get("reasoning", "quick"), paid=runtime.cost_class == "paid",
+                voice=payload.get("voiceMode") == "personalized", source_ids=source_ids, owner=member.allows("owner"), understood=understood)
+            return state
+
+        try:
+            saved = self.repository.command(workspace_id, token, current if revision is None else revision, command)
+            current = saved["revision"]
+        except AlphaError as error:
+            if getattr(error, "code", None) == "workspace_revision_conflict":
+                raise
+            failure = str(error)
+        view = outcome.get("view") if failure is None else None
+        reply = automation_chat.reply(view, failure)
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), "edit")
+            self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": "automation"})
+            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None})
+        return {"runId": None, "conversationId": conversation_id, "status": "automation", "artifactHash": None, "artifact": None,
+                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": payload.get("reasoning", "quick"),
+                "events": [], "cursor": 0, "automation": view, "reply": reply, "messageId": message["messageId"], "revision": current}
 
     def _memory_turn(self, workspace_id, token, conversation_id, text, parsed, destinations, model_id):
         """A standing instruction about how to write: no run, no model, no charge. The instruction becomes a
@@ -623,10 +711,18 @@ class IdeasService:
             # An automation drafts exactly the destinations its owner activated. Channels, languages, times or
             # instructions inside its brief are data: they never re-route, schedule or become memory.
             parsed = {**parsed, "intent": "draft", "languages": [], "destinations": [], "unattachedTimes": [], "unsupported": [], "warnings": [], "hasTimes": False}
+        understood = None
+        if text and not recurring:
+            parsed, understood = self._understand(workspace_id, token, text, zone, runtime, parsed)
+        elif parsed["intent"] == "automation":
+            # Quick start already decided to draft this message now.
+            parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
         # Each (channel, language) pair is one destination; the workspace's remembered languages fill any channel the request left open.
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
         plan = intent.build_plan(parsed, destinations)
+        if parsed["intent"] == "automation" and text and not recurring:
+            return self._automation_turn(workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, understood=understood)
         if parsed["intent"] == "memory" and text:
             return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id)
         # A completed or in-flight writing run must not repeat research on HTTP replay.
@@ -677,12 +773,23 @@ class IdeasService:
             if voice_mode not in ("neutral", "personalized"):
                 raise AlphaError("Choose neutral or personalized writing.")
             voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
-            shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
+            voice_projection = None
             if voice_mode == "personalized":
                 requested_voice = payload.get("voiceSourceIds") if isinstance(payload.get("voiceSourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("kind") == "voice_sample" and s.get("active") and s.get("selected")]
-                voice_projection = voice_sources.retrieve(state, requested_voice, "generation", voice_route, query=idea)
-                if not voice_projection["samples"]:
-                    raise AlphaError("Select and allow at least one writing sample for this writer route.", 409)
+                try:
+                    voice_projection = voice_sources.retrieve(state, requested_voice, "generation", voice_route, query=idea)
+                except AlphaError:
+                    if not recurring:
+                        raise
+                if not (voice_projection or {}).get("samples"):
+                    if not recurring:
+                        raise AlphaError("Select and allow at least one writing sample for this writer route.", 409)
+                    # An automation keeps preparing drafts when its writing samples are gone or not allowed for this
+                    # writer; this draft is neutral and says so, never a failed run.
+                    voice_mode, voice_projection = "neutral", None
+                    reminders.append(VOICE_FALLBACK_NOTE)
+            shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
+            if voice_projection:
                 voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
                 style_directives = voice_sources.style_directives(voice_projection)
             else:
@@ -908,9 +1015,17 @@ class IdeasService:
             raise AlphaError("Choose a reasoning level supported by this writer.", 400)
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
+        parsed, understood = self._understand(workspace_id, token, text, zone, runtime, parsed)
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
+
+        if parsed["intent"] == "automation" and text:
+            conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))
+            run = self._automation_turn(workspace_id, token, conversation["conversationId"], text, destinations, runtime,
+                                        payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model,
+                                        {**payload, "timeZone": zone}, revision=revision, understood=understood)
+            return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **run}
 
         # Optional extra workspace sources to read alongside the pasted idea (Rafii v9 Context Pocket).
         # Only ids the workspace holds as active, non-voice sources are accepted; anything else is refused.

@@ -228,7 +228,7 @@ export function createApi(getToken: TokenSource) {
         { expectedRevision, artifactHash }
       ),
     quickStart: (w: string, expectedRevision: number, body: Record<string, unknown>) =>
-      send<Run & { sourceId: string; sourcePolicy: string; revision: number }>('POST', `${ws(w)}/ideas/quick-start`, {
+      send<Run & { sourceId: string | null; sourcePolicy: string | null; revision: number }>('POST', `${ws(w)}/ideas/quick-start`, {
         expectedRevision,
         ...body
       }),
