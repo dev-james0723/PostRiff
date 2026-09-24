@@ -618,10 +618,29 @@ async function drafts(browser) {
     return response.json();
   };
   try {
-    // Save the seeded run's drafts, as Home's Save does, so there is something to schedule (an earlier scene may have).
-    const snapshot = await api('GET', '');
-    const run = await api('GET', `/ideas/runs/${seed.runId}/events?cursor=0`);
-    await api('POST', `/ideas/runs/${seed.runId}/apply`, { expectedRevision: snapshot.revision, artifactHash: run.artifactHash }).catch(() => {});
+    // Save the seeded run's drafts, as Home's Save does, so there is something to schedule. Earlier scenes add
+    // sources, and the server then refuses to save that older candidate ("draft again from current context"), so
+    // in that case draft again for the same three destinations and save the new candidate.
+    const save = async (runId) => {
+      const snapshot = await api('GET', '');
+      let run = await api('GET', `/ideas/runs/${runId}/events?cursor=0`);
+      for (let i = 0; run.status === 'running' && i < 120; i++) { await page.waitForTimeout(500); run = await api('GET', `/ideas/runs/${runId}/events?cursor=0`); }
+      return api('POST', `/ideas/runs/${runId}/apply`, { expectedRevision: snapshot.revision, artifactHash: run.artifactHash });
+    };
+    let redrafted = false;
+    try { await save(seed.runId); } catch {
+      const snapshot = await api('GET', '');
+      const fresh = await api('POST', '/ideas/quick-start', {
+        expectedRevision: snapshot.revision,
+        text: 'A second thought from practice: short daily sessions carry further than rare long ones.',
+        ownContent: true, confirmUse: true,
+        destinations: seed.variants.map((v) => ({ platform: v.platform, language: v.language, ...(v.channelId ? { channelId: v.channelId } : {}) })),
+        model: 'deterministic-preview', reasoning: 'quick', voiceMode: 'neutral', timeZone: 'Asia/Hong_Kong'
+      });
+      await save(fresh.runId);
+      redrafted = true;
+    }
+    check('drafts saved for scheduling', true, redrafted ? 'seeded candidate was stale; drafted again from current context' : 'seeded candidate saved');
     await page.goto(`${base}/app/pipeline`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await settle(page);
     await page.waitForURL(/\/app\/queue\?view=drafts/, { timeout: 120000 });

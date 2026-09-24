@@ -513,7 +513,7 @@ function HomeWorkspace() {
       </div>
 
       <div className='mx-auto mt-10 flex w-full max-w-[1192px] flex-col gap-6'>
-        {state && <details><summary className='rafii-focus min-h-11 cursor-pointer py-3 text-sm'>Campaigns & suggestions</summary><RaffiPlanner state={state} revision={revision} canEdit={canEdit} isOwner={checkAccess(access, { permission: 'owner' })} /></details>}
+        {state && <RaffiPlanner state={state} revision={revision} canEdit={canEdit} isOwner={checkAccess(access, { permission: 'owner' })} />}
 
         {needsYou.length > 0 && (
           <div>

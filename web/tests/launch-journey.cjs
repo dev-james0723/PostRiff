@@ -69,8 +69,8 @@ async function call(method,url,body){
   if(creditMode){const usage=await call('GET',`/api/workspaces/${wid}/usage`);assert.equal(usage.credits.availableMilliCredits,47000);assert.equal(usage.credits.heldMilliCredits,0);assert.equal(usage.credits.usedMilliCredits,3000);results.steps.push('real credit quote, reserve and settlement: 50 to 47 credits, with zero held');}
   await page.getByLabel('Edit draft preview',{exact:true}).fill('This is the manually edited draft for one specific account.');
   await page.getByRole('button',{name:'Save as drafts',exact:true}).click();
-  await page.getByRole('link',{name:'Open Pipeline',exact:true}).waitFor();
-  await page.reload();await page.getByRole('link',{name:'Open Pipeline',exact:true}).waitFor();
+  await page.getByRole('link',{name:'Open drafts',exact:true}).waitFor();
+  await page.reload();await page.getByRole('link',{name:'Open drafts',exact:true}).waitFor();
   assert.equal(await page.getByLabel('Edit draft preview',{exact:true}).inputValue(),'This is the manually edited draft for one specific account.');
   snapshot=await call('GET',`/api/workspaces/${wid}`);
   const edited=snapshot.state.variants.filter(v=>v.text==='This is the manually edited draft for one specific account.');
@@ -95,7 +95,7 @@ async function call(method,url,body){
     assert.deepEqual([used.credits.availableMilliCredits,used.credits.usedMilliCredits,used.credits.heldMilliCredits],[44000,6000,0]);
     results.steps.push('conversation follow-up uses its own approved quote: 47 to 44 credits');
     await page.goto(base+'/app?run='+runId);
-    await page.getByRole('link',{name:'Open Pipeline',exact:true}).waitFor();
+    await page.getByRole('link',{name:'Open drafts',exact:true}).waitFor();
   }
   if(!creditMode){
     // Recurring drafting lives in the Automation builder: a custom schedule saved as a draft stays unactivated.
@@ -127,15 +127,16 @@ async function call(method,url,body){
     const days=task.schedule.weekdays??(task.schedule.weekday?[task.schedule.weekday]:[]);
     assert.deepEqual(days,['Thursday']);assert.equal(task.schedule.localTime,'20:45');assert.equal(task.status,'draft');
     await page.goto(base+'/app');
-    await page.getByText('Campaigns & suggestions',{exact:true}).click();
     const planner=page.locator('section[aria-label="Automations and Rafii suggestions"]');
+    // Home is server-rendered: wait until React has attached the button's handler before clicking it.
+    await planner.getByRole('button',{name:'Refresh',exact:true}).waitFor();
+    await page.waitForFunction(()=>[...document.querySelectorAll('section[aria-label="Automations and Rafii suggestions"] button')].some(b=>b.textContent.trim()==='Refresh'&&Object.keys(b).some(k=>k.startsWith('__reactProps'))));
     await planner.getByRole('button',{name:'Refresh',exact:true}).click();
     await planner.getByRole('button',{name:'Snooze 1 day',exact:true}).first().click();
     await planner.getByRole('button',{name:'Snooze 1 day',exact:true}).waitFor({state:'hidden'});
     const snoozed=await call('GET',`/api/workspaces/${wid}`);
     assert.ok(snoozed.state.raffi.suggestions.some(item=>item.status==='snoozed'));
     results.steps.push('custom recurring schedule saved as a draft automation stays unactivated; suggestion snooze persists');
-    await page.getByText('Campaigns & suggestions',{exact:true}).click();
   }
   for(const width of [390,768,1440]){
    await page.setViewportSize({width,height:1000});
