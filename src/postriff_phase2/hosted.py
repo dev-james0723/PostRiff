@@ -170,7 +170,7 @@ class PostgresWorkspaceRepository:
         if action == research.CONSENT_ACTION:
             audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
         after = None
-        if action in ("p2_review", "p2_approve", "p2_approve_many"):
+        if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
         return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
@@ -224,8 +224,14 @@ class HostedPhase2Commands:
             source_policy.stamp(state)
             self.engine.invalidate(state)
             return state
-        if action.startswith("raffi_campaign_") or action.startswith("raffi_recurrence_"):
+        if action.startswith("raffi_campaign_") or action.startswith("raffi_recurrence_") or action == "raffi_run_decide":
             campaigns.apply_action(state, action, payload, principal, self.clock())
+            return state
+        if action == "raffi_run_commit":
+            from . import publisher
+            publisher.commit(self.engine, state, principal, payload, self.clock())
+            source_policy.stamp(state)
+            self.engine.invalidate(state)
             return state
         if action.startswith("raffi_suggestion_"):
             suggestions.apply_action(state, action, payload, principal, self.clock())
@@ -337,6 +343,9 @@ class HostedWorkspaceService:
         from .privacy import DataRequests
         from .audience import AudienceService
         self.oauth = OAuthService(self.repository, self.commands, vault or CredentialVault(None), providers or {}, public_base_url, clock)
+        # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
+        self.publishing_live = False
+        self.ideas.service_ref = self
         self.ledger = Ledger()
         self.ideas.ledger = self.ledger
         self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock)

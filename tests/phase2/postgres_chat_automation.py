@@ -150,7 +150,9 @@ assert out["status"] == "automation", out
 twice = task_of(out["automation"])
 assert (twice["schedule"]["weekdays"], twice["name"]) == (["Tuesday", "Friday"], "AI news, twice a week"), twice
 assert "Twice a week: Tuesday and Friday." in out["automation"]["notes"], out["automation"]["notes"]
-assert set(reader.prompts[-1]) == {"message", "now", "timeZone", "contentTypes", "formats"}, reader.prompts[-1]  # no sources, memory or accounts
+# No sources, memory or accounts: the workspace's automations appear only by name, schedule words, platforms and status.
+assert set(reader.prompts[-1]) <= {"message", "now", "timeZone", "contentTypes", "formats", "automations"}, reader.prompts[-1]
+assert all(set(item) == {"name", "schedule", "platforms", "status"} for item in reader.prompts[-1].get("automations", [])), reader.prompts[-1].get("automations")
 with connection() as db:
     rows = db.execute("select r.id, s.kind, s.actual_usd_micro from public.pr_usage_ledger r join public.pr_usage_ledger s on s.reservation_id=r.id and s.kind<>'reserve' where r.workspace_id=%s and r.provider='understanding' and r.kind='reserve'", (wid,)).fetchall()
 assert len(rows) == 1 and rows[0][2] == 1234, rows

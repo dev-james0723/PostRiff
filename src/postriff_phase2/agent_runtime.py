@@ -12,8 +12,10 @@ from . import locale_lint, locales
 SAFE_EVENTS = ("run.started", "progress.updated", "source.added", "artifact.created", "message.delta", "message.completed", "warning.created", "action.proposed", "run.completed", "run.failed", "run.cancelled")
 REASONING = ("quick", "standard", "deep")
 # Platforms every drafting route can write for. Any language PostRiff knows (locales.is_valid) goes with any of them,
-# and a platform may appear several times in one request, once per language.
-PLATFORMS = ("LinkedIn", "Instagram", "Threads", "Xiaohongshu")
+# and a platform may appear several times in one request, once per language. Draftable is not publishable: X and
+# Xiaohongshu have no hosted publisher (hosted_social maps LinkedIn, Threads and Instagram only), so their drafts are
+# for review, copy and export, and the capability check reports them as having no publishing route.
+PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu")
 DEFAULT_REQUEST_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
 
 

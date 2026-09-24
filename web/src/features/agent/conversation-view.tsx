@@ -195,16 +195,26 @@ export function ConversationView({ conversationId }: { conversationId: string })
     };
   }
 
-  async function sendTurn() {
-    const body = text.trim();
+  /**
+   * Sends the next message. `override` is a quick reply from an automation card: it goes through exactly this path,
+   * as if typed and sent, and leaves whatever the person had typed in the composer untouched.
+   */
+  async function sendTurn(override?: string) {
+    const body = (override ?? text).trim();
     if (!body || busy) return;
+    const clear = () => {
+      if (override === undefined) setText('');
+    };
     const learningRequest = voiceLearningIntent(body);
     if (learningRequest) {
       setLearning({ ...learningRequest, workspaceId, conversationId, id: crypto.randomUUID() });
-      setText('');
+      clear();
       return; // The reviewed sample workflow is separate from draft generation.
     }
-    if (languages.selection.length === 0) return;
+    if (languages.selection.length === 0) {
+      if (override !== undefined) toast.error('Choose at least one channel below, then send your answer again.');
+      return;
+    }
     setBusy(true);
     try {
       const result = await api.turn(workspaceId, conversationId, {
@@ -227,7 +237,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
       } else {
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
       }
-      setText('');
+      clear();
       setImageRequested(false);
       setVariantIndex(0);
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
@@ -328,7 +338,13 @@ export function ConversationView({ conversationId }: { conversationId: string })
                       {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} memory={body.memory} />}
                       {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
                       {body.memoryProposal && <ProposalCard proposal={body.memoryProposal} />}
-                      {body.automation && <ChatAutomationCard automation={body.automation} />}
+                      {body.automation && (
+                        <ChatAutomationCard
+                          automation={body.automation}
+                          // Only the latest turn can still be answered; older cards show what was decided then.
+                          onQuickReply={canEdit && message.messageId === messages.at(-1)?.messageId ? (reply) => sendTurn(reply) : undefined}
+                        />
+                      )}
                       {body.excluded && body.excluded.length > 0 && (
                         <ul className='text-muted-foreground text-xs'>
                           {body.excluded.map((item) => (

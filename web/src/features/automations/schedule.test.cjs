@@ -97,3 +97,31 @@ test('triggers: no scheduled runs, plain labels, a daily-limit ceiling', () => {
   assert.equal(S.isTrigger(idea), true);
   assert.equal(S.isTrigger({ weekdays: ['Monday'] }), false);
 });
+
+// Raffi orchestration (§1): a one-time date and weekly slots with a time each, saved from chat.
+test('once: one run on its date, strictly after now; plain words', () => {
+  const once = { kind: 'once', date: '2026-10-03', localTime: '09:00', timeZone: 'Asia/Hong_Kong' };
+  assert.equal(new Date(S.nextRun(once, Date.UTC(2026, 8, 24))).toISOString(), '2026-10-03T01:00:00.000Z');
+  assert.equal(S.nextRun(once, Date.UTC(2026, 9, 3, 1)), null);
+  assert.deepEqual(S.nextRuns(once, Date.UTC(2026, 8, 24), 3).length, 1);
+  assert.equal(S.nextRun({ ...once, date: '2026-02-30' }, 0), null);
+  assert.equal(S.onceLabel(once, 'en-GB'), 'Once on Sat, 3 Oct 2026');
+  assert.equal(S.scheduleSummary(once, 'en-GB'), 'Once on Sat, 3 Oct 2026 at 9:00 · Hong Kong time');
+  assert.equal(S.onceLabel({}), 'Once (choose the date)');
+  assert.deepEqual(S.maxRuns(once), { runs: 1, per: 'once' });
+  assert.equal(S.ceilingText(250_000, once), 'one run · at most $0.25 in total');
+  assert.equal(S.isFixedForm(once), true);
+});
+
+test('slots: each weekday at its own time; days sharing a time are grouped', () => {
+  const slots = { weekdays: ['Monday'], localTime: '09:00', slots: [{ weekday: 'Thursday', localTime: '18:00' }, { weekday: 'Monday', localTime: '09:00' }, { weekday: 'saturday', localTime: '9:00' }], timeZone: 'Asia/Hong_Kong' };
+  const runs = S.nextRuns(slots, Date.UTC(2026, 2, 3, 12), 4); // Tuesday 3 March 2026, 20:00 in Hong Kong
+  assert.deepEqual(runs.map((ms) => iso(ms, 'Asia/Hong_Kong').slice(0, 17)), ['2026-03-05, 18:00', '2026-03-07, 09:00', '2026-03-09, 09:00', '2026-03-12, 18:00']);
+  assert.equal(S.slotsLabel(slots, 'en-GB'), 'Mon and Sat at 9:00 and Thursdays at 18:00');
+  assert.equal(S.scheduleSummary(slots, 'en-GB'), 'Mon and Sat at 9:00 and Thursdays at 18:00 · Hong Kong time');
+  assert.equal(S.runsPerWeek(slots), 3);
+  assert.deepEqual(S.maxRuns(slots), { runs: 15, per: 'month' });
+  assert.equal(S.isFixedForm(slots), true);
+  assert.equal(S.isFixedForm({ weekdays: ['Monday'], localTime: '09:00', timeZone: 'UTC' }), false);
+  assert.deepEqual(S.slotsOf({ kind: 'monthly', slots: [{ weekday: 'Monday', localTime: '09:00' }] }), []);
+});

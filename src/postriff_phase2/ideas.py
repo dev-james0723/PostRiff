@@ -194,22 +194,28 @@ class IdeasService:
             return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned}
 
     def _read_request(self, workspace_id, token, text, zone, runtime):
-        """Rafii's model reading of a message that may ask for recurring drafts (request_model); None when no model may
-        read it or its answer is unusable, so the deterministic reading decides. A managed call's cost is reserved
-        before the message leaves and settled after; a stop-line skips the reading, never the request."""
-        from . import request_model
-        call = request_model.call_for(runtime, getattr(self, "understanding", None))
-        if call is None:
-            return None
+        """Rafii's model reading of a message that may create, change or ask about an automation or a scheduled post
+        (request_model); None when no model may read it or its answer is unusable, so the deterministic reading decides.
+        A short, plain request goes to the light model; several stages, conditions, sources, platforms or an edit go to
+        the strong one (request_model.tier; never shown to the person). A managed call's cost is reserved before the
+        message leaves and settled after; a stop-line skips the reading, never the request."""
+        from . import automation_edit, request_model, workflow_parse
         reservation = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
             state = self._state(row)
-            user = request_model.user_prompt(text, zone, self.clock(), state)
+            automations = automation_edit.summaries(state)
+            # Changing an existing automation's plan is reasoning work (spec §12): it goes to the strong model.
+            editing = bool(automations) and (bool(request_model._EDIT.search(text)) or workflow_parse.names_automation(text, [a["name"] for a in automations]))
+            tier = request_model.tier(text, editing=editing)
+            call = request_model.call_for(runtime, getattr(self, "understanding", None), tier)
+            if call is None:
+                return None
+            user = request_model.user_prompt(text, zone, self.clock(), state, automations=automations or None)
             if not getattr(call, "local", False):
                 cur.execute("SAVEPOINT understanding_reserve")
                 try:
-                    reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", request_model.price_quote_micro(state, user), f"understanding:{uid()}",
+                    reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", request_model.price_quote_micro(state, user, tier), f"understanding:{uid()}",
                                                       charge_batch=False, provider="understanding", model=getattr(call, "model", "") or "")
                     cur.execute("RELEASE SAVEPOINT understanding_reserve")
                 except AlphaError:
@@ -217,9 +223,9 @@ class IdeasService:
                     return None
         answer, actual = None, None
         try:
-            result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state))
+            result = call(request_model.SYSTEM_PROMPT, user, request_model.schema(state, tier))
             actual = getattr(result, "cost_usd_micro", None)
-            answer = request_model.reading(result, state)
+            answer = request_model.reading(result, state, tier, text=text)
         except Exception:  # noqa: BLE001 — a failed reading never blocks the request; the deterministic reading decides
             answer = None
         if reservation is not None:
@@ -228,14 +234,19 @@ class IdeasService:
         return answer
 
     def _understand(self, workspace_id, token, text, zone, runtime, parsed):
-        """(parsed, automation reading): the model's decision wins over the deterministic one where a model may read."""
-        from . import request_model
-        understood = self._read_request(workspace_id, token, text, zone, runtime) if text and request_model.CUE.search(text) else None
+        """(parsed, reading): the model's decision wins over the deterministic one where a model may read."""
+        from . import automation_edit, request_model, workflow_parse
+        wanted = bool(text) and request_model.wants_reading(text)
+        if text and not wanted:
+            # A message that names one of the person's automations ("the Gramophone one") may be changing it.
+            names = [item["name"] for item in automation_edit.summaries(self.repository.get(workspace_id, token)["state"])]
+            wanted = workflow_parse.names_automation(text, names)
+        understood = self._read_request(workspace_id, token, text, zone, runtime) if wanted else None
         if understood and understood["action"] == "draft" and parsed["intent"] == "automation":
             parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
         if understood and understood["action"] == "automation":
             parsed = {**parsed, "intent": "automation"}
-        return parsed, (understood or {}).get("automation")
+        return parsed, understood
 
     def _automation_turn(self, workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, revision=None, understood=None):
         """A request to keep preparing drafts on a schedule: no run, no model, no charge. It becomes an automation with
@@ -278,6 +289,170 @@ class IdeasService:
         return {"runId": None, "conversationId": conversation_id, "status": "automation", "artifactHash": None, "artifact": None,
                 "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": payload.get("reasoning", "quick"),
                 "events": [], "cursor": 0, "automation": view, "reply": reply, "messageId": message["messageId"], "revision": current}
+
+    def _conversation_automation(self, workspace_id, token, conversation_id):
+        """The automation this conversation is about and Rafii's open question, from the latest assistant replies."""
+        with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            cur.execute("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s AND role='assistant' ORDER BY seq DESC LIMIT 6", (conversation_id, workspace_id))
+            rows = [row[0] for row in cur.fetchall()]
+        latest = rows[0] if rows else {}
+        card = next(((body or {}).get("automation") for body in rows if isinstance((body or {}).get("automation"), dict)), None) or {}
+        pending = (latest or {}).get("automation", {}).get("pending") if isinstance((latest or {}).get("automation"), dict) else None
+        return {"taskId": card.get("taskId"), "pending": pending}
+
+    def _publishing_context(self):
+        service = getattr(self, "service_ref", None)
+        providers = getattr(getattr(service, "oauth", None), "providers", None) or {}
+        return providers, bool(getattr(service, "publishing_live", False))
+
+    def _may_orchestrate(self, workspace_id, token, text, parsed, reading):
+        """Whether a Home message could be an automation request, an edit or a question about one (cheap checks only)."""
+        from . import automation_edit, workflow_parse
+        if (reading or {}).get("action") in ("automation", "edit", "explain") or parsed["intent"] == "automation" or workflow_parse.is_scheduled_post(text) or workflow_parse.is_recurring_request(text):
+            return True
+        if (workflow_parse.is_edit(text) or workflow_parse.is_explain(text)) and not workflow_parse.is_drafting_request(text):
+            state = self.repository.get(workspace_id, token)["state"]
+            names = [item["name"] for item in automation_edit.summaries(state)]
+            return bool(names) and workflow_parse.refers_to_automation(text, names, False)
+        return False
+
+    def _orchestration_turn(self, workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload):
+        """Route a chat message that answers Rafii's question, changes or asks about an automation, or asks for a staged
+        automation (publishing, stages, research, a one-time post). None leaves it to the drafting or drafts-automation path."""
+        from . import automation_edit, automation_plan, workflow_parse
+        zone = intent.safe_zone(payload.get("timeZone"))
+        now = self.clock()
+        context = self._conversation_automation(workspace_id, token, conversation_id)
+        state = self.repository.get(workspace_id, token)["state"]
+        has_automations = bool(automation_edit.live_tasks(state))
+        pending = context.get("pending")
+        if pending and pending.get("taskId") and not workflow_parse.is_drafting_request(text) and len(text.split()) <= 14 and any(t["id"] == pending["taskId"] for t in automation_edit.live_tasks(state)):
+            task = next(t for t in automation_edit.live_tasks(state) if t["id"] == pending["taskId"])
+            if pending.get("question") == "policy":
+                policy = automation_plan.answer_policy(text)
+                if policy:
+                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "policy": policy}, reading)
+            elif pending.get("question") == "review_time":
+                try:
+                    spec = automation_plan.answer_review_time(text, task["schedule"])
+                except AlphaError:
+                    spec = None
+                if spec:
+                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "generate": spec}, reading)
+        action = (reading or {}).get("action")
+        if len({d.get("localTime") for d in parsed.get("destinations") or [] if d.get("localTime")}) > 1 and not intent._RECUR.search(text):
+            # Different times for different channels in one message: the per-channel scheduling plan handles it.
+            return None
+        if action is None:
+            # Without a model reading, a message is about an automation only when it names one (or says
+            # "automation"), or points at the one this conversation is about; a request to write something now is
+            # always drafted ("pause before the chorus — write a post about that").
+            names = [item["name"] for item in automation_edit.summaries(state)]
+            about = has_automations and not workflow_parse.is_drafting_request(text) and workflow_parse.refers_to_automation(text, names, bool(context.get("taskId")))
+            if about and workflow_parse.is_explain(text):
+                action = "explain"
+            elif about and workflow_parse.is_edit(text) and not intent.is_automation_request(text):
+                action = "edit"
+            elif parsed["intent"] == "automation" or workflow_parse.is_scheduled_post(text) or workflow_parse.is_recurring_request(text):
+                action = "automation"
+        if action == "explain" and has_automations:
+            explain = (reading or {}).get("explain") or workflow_parse.read_explain(text)
+            return self._orchestrate(workspace_id, token, conversation_id, text, "explain", runtime, model_id, payload, {"explain": explain, "taskId": context.get("taskId")}, reading)
+        if action == "edit" and has_automations:
+            edit = (reading or {}).get("edit") or workflow_parse.read_edit(text, now, zone)
+            if edit.get("changes"):
+                return self._orchestrate(workspace_id, token, conversation_id, text, "edit", runtime, model_id, payload, {"edit": edit, "taskId": context.get("taskId")}, reading)
+        if action == "automation":
+            automation = (reading or {}).get("automation") if (reading or {}).get("action") == "automation" else None
+            automation = automation or workflow_parse.read_automation(text, now, zone)
+            if automation.get("schedule") and automation_plan.needs_workflow(automation, text):
+                return self._orchestrate(workspace_id, token, conversation_id, text, "create", runtime, model_id, payload, {"automation": automation, "destinations": destinations}, reading)
+        return None
+
+    def _orchestrate(self, workspace_id, token, conversation_id, text, kind, runtime, model_id, payload, detail, reading):
+        """Create, answer, edit or explain an automation in one workspace command, then record both turns."""
+        from . import automation_edit, automation_explain, automation_plan, campaigns, workflow_parse
+        zone = intent.safe_zone(payload.get("timeZone"))
+        now = self.clock()
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            member = self._member(row)
+            require(member, "edit" if kind != "explain" else "read")
+            self._conversation(cur, workspace_id, conversation_id)
+            current = row[0]
+        provider_class = getattr(runtime, "provider_class", "local")
+        voice_route = "local-cli" if provider_class == "local" else f"cloud:{runtime.provider}:{model_id}"
+        source_ids = [item for item in dict.fromkeys(payload.get("sourceIds") or []) if isinstance(item, str) and item][:20]
+        providers, live = self._publishing_context()
+        tier = (reading or {}).get("tier")
+        owner, paid = member.allows("owner"), runtime.cost_class == "paid"
+        outcome, failure = {}, None
+
+        def command(state, actor):
+            if kind == "create":
+                automation = detail["automation"]
+                built, question, notes = automation_plan.build(state, actor, now, text, zone, automation, destinations=detail["destinations"], route=model_id,
+                                                               reasoning=payload.get("reasoning", "quick"), voice=payload.get("voiceMode") == "personalized",
+                                                               voice_route=voice_route, source_ids=source_ids)
+                saved = campaigns.apply_action(state, "raffi_recurrence_save", built, actor, now)
+                explicit = built["workflow"].get("policy") == "auto" and workflow_parse.explicit_auto(text)
+                grant = {"confirmed": True, "sourceUse": bool(built["workflow"].get("research"))} if explicit else None
+                needs = automation_plan.activate(state, saved["taskId"], actor, now, owner=owner, paid=paid, question=question, grant=grant)
+                outcome["view"] = automation_plan.card(state, saved["taskId"], needs, notes, question=question, providers=providers, live=live, tier=tier)
+                if question:
+                    outcome["view"]["pending"].update(stages=(automation.get("stages") or {}), timeRole=automation.get("timeRole"))
+            elif kind == "answer":
+                pending = detail["pending"]
+                task = next(t for t in campaigns._root(state)["recurringTasks"] if t["id"] == pending["taskId"])
+                built = automation_edit._payload(state, task)
+                workflow = built["workflow"] or {}
+                given = {"policy": detail.get("policy") or workflow.get("policy"), "stages": pending.get("stages") or {}, "timeRole": pending.get("timeRole") or "publish"}
+                stages, question = automation_plan.stages_for(given, built["schedule"], given["policy"])
+                if detail.get("generate"):
+                    stages, question = {**stages, "generate": detail["generate"], "review": {"at": "generate"}}, None
+                workflow.update(policy=given["policy"], stages=stages)
+                built["workflow"] = workflow
+                campaigns.apply_action(state, "raffi_recurrence_save", built, actor, now)
+                # "Publish automatically" (the button or the owner's explicit words) is the standing authority.
+                grant = {"confirmed": True, "sourceUse": bool(workflow.get("research"))} if given["policy"] == "auto" and detail.get("policy") == "auto" else None
+                needs = automation_plan.activate(state, task["id"], actor, now, owner=owner, paid=paid, question=question, grant=grant)
+                outcome["view"] = automation_plan.card(state, task["id"], needs, [], question=question, providers=providers, live=live, tier=tier)
+                if question:
+                    outcome["view"]["pending"].update(stages=pending.get("stages") or {}, timeRole=pending.get("timeRole"))
+            elif kind == "edit":
+                result = automation_edit.apply(state, actor, now, detail["edit"], conversation_task_id=detail.get("taskId"), owner=owner, paid=paid, zone=zone)
+                outcome["edit"] = result
+                if "view" in result:
+                    result["view"] = automation_plan.card(state, result["task"], result["view"].get("needs") or [], [], providers=providers, live=live, tier=tier)
+            return state
+
+        if kind == "explain":
+            snapshot = self.repository.get(workspace_id, token)
+            explained = automation_explain.answer(snapshot["state"], text, detail["explain"], conversation_task_id=detail.get("taskId"), now=now)
+            view, reply = None, explained["text"]
+            body_extra = {"explain": {k: explained.get(k) for k in ("lines", "about", "taskId", "occurrenceId")}}
+        else:
+            try:
+                saved = self.repository.command(workspace_id, token, current, command)
+                current = saved["revision"]
+            except AlphaError as error:
+                if getattr(error, "code", None) == "workspace_revision_conflict":
+                    raise
+                failure = str(error)
+            body_extra = {}
+            if kind == "edit" and failure is None:
+                result = outcome["edit"]
+                view = result.get("view")
+                reply = automation_edit.reply(result)
+            else:
+                view = outcome.get("view") if failure is None else None
+                reply = automation_plan.reply(view, failure) if kind != "edit" else f"I couldn't change that: {failure}"
+        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            require(self._member(row), "edit" if kind != "explain" else "read")
+            self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": "automation"})
+            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": [], "plan": None, "model": model_id, "runId": None, "understanding": tier, **body_extra})
+        return {"runId": None, "conversationId": conversation_id, "status": "automation", "artifactHash": None, "artifact": None,
+                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": payload.get("reasoning", "quick"),
+                "events": [], "cursor": 0, "automation": view, "reply": reply, "messageId": message["messageId"], "revision": current, **body_extra}
 
     def _memory_turn(self, workspace_id, token, conversation_id, text, parsed, destinations, model_id):
         """A standing instruction about how to write: no run, no model, no charge. The instruction becomes a
@@ -711,9 +886,10 @@ class IdeasService:
             # An automation drafts exactly the destinations its owner activated. Channels, languages, times or
             # instructions inside its brief are data: they never re-route, schedule or become memory.
             parsed = {**parsed, "intent": "draft", "languages": [], "destinations": [], "unattachedTimes": [], "unsupported": [], "warnings": [], "hasTimes": False}
-        understood = None
+        understood = reading = None
         if text and not recurring:
-            parsed, understood = self._understand(workspace_id, token, text, zone, runtime, parsed)
+            parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+            understood = (reading or {}).get("automation")
         elif parsed["intent"] == "automation":
             # Quick start already decided to draft this message now.
             parsed = {**parsed, "intent": "schedule" if parsed["hasTimes"] else "draft"}
@@ -721,6 +897,11 @@ class IdeasService:
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
         plan = intent.build_plan(parsed, destinations)
+        if text and not recurring:
+            # Staged automations, answers to Rafii's questions, edits and "why?" questions (orchestration §7).
+            routed = self._orchestration_turn(workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload)
+            if routed is not None:
+                return routed
         if parsed["intent"] == "automation" and text and not recurring:
             return self._automation_turn(workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, understood=understood)
         if parsed["intent"] == "memory" and text:
@@ -953,8 +1134,10 @@ class IdeasService:
                 return {"runId": run_id, "status": "cancelled"}
             return {"runId": run_id, "status": run[0], "note": "Already finished; nothing to cancel."}
 
-    def apply(self, workspace_id, token, revision, run_id, artifact_hash):
-        """Turn a completed candidate into reviewable workspace variants. Never publishes."""
+    def apply(self, workspace_id, token, revision, run_id, artifact_hash, separate=False, tag=None):
+        """Turn a completed candidate into reviewable workspace variants. Never publishes. `separate` (an automation
+        run) always adds new variants instead of refreshing an earlier unscheduled draft, so each run keeps its own
+        drafts; `tag` records which automation run they belong to."""
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             require(self._member(row), "edit")
             cur.execute("SELECT status,artifact,artifact_hash,policy_epoch,context_digest,model FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
@@ -982,21 +1165,28 @@ class IdeasService:
             # record of what went out; a new candidate never becomes an "update" to it. Only a draft that
             # is still unscheduled in the same platform/language slot is refreshed in place.
             committed = {job["manifest"]["variantId"] for job in state.get("phase2", {}).get("jobs", []) if job.get("state") not in ("canceled", "failed")}
+            created.clear()
             for candidate in artifact["variants"]:
-                drafts = [v for v in state["variants"] if same_slot(v, candidate) and v["id"] not in committed]
+                drafts = [] if separate else [v for v in state["variants"] if same_slot(v, candidate) and v["id"] not in committed]
                 old = drafts[-1] if drafts else None
                 values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if old:
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
+                    created.append({"platform": candidate["platform"], "language": candidate["language"], "channelId": candidate.get("channelId"), "variantId": old["id"]})
                 else:
-                    state["variants"].append({**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}})
+                    variant = {**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}}
+                    if tag:
+                        variant["automation"] = dict(tag)
+                    state["variants"].append(variant)
+                    created.append({"platform": candidate["platform"], "language": candidate["language"], "channelId": candidate.get("channelId"), "variantId": variant["id"]})
             return state
 
+        created = []
         saved = self.repository.command(workspace_id, token, revision, command)
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             cur.execute("UPDATE public.pr_agent_runs SET status='applied',updated_at=now() WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
-        return {"runId": run_id, "status": "applied", "revision": saved["revision"], "variants": len(artifact["variants"])}
+        return {"runId": run_id, "status": "applied", "revision": saved["revision"], "variants": len(artifact["variants"]), "variantIds": list(created)}
 
     # --- source-first activation --------------------------------------------------
     def quick_start(self, workspace_id, token, revision, payload):
@@ -1015,16 +1205,30 @@ class IdeasService:
             raise AlphaError("Choose a reasoning level supported by this writer.", 400)
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
-        parsed, understood = self._understand(workspace_id, token, text, zone, runtime, parsed)
+        parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
+        understood = (reading or {}).get("automation")
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
+        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
+        if text and self._may_orchestrate(workspace_id, token, text, parsed, reading):
+            # Home is the primary place to create, change or ask about automations (orchestration §7).
+            conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))
+            routed = self._orchestration_turn(workspace_id, token, conversation["conversationId"], text, parsed, reading, destinations, runtime, model_id, {**payload, "timeZone": zone})
+            if routed is not None:
+                return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **routed}
+            if parsed["intent"] == "automation":
+                run = self._automation_turn(workspace_id, token, conversation["conversationId"], text, destinations, runtime, model_id,
+                                            {**payload, "timeZone": zone}, understood=understood)
+                return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **run}
+            # Not an automation after all: drop the empty conversation; the draft gets its own below.
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                cur.execute("DELETE FROM public.pr_conversations c WHERE c.id::text=%s AND c.workspace_id=%s AND NOT EXISTS (SELECT 1 FROM public.pr_messages m WHERE m.conversation_id=c.id)", (conversation["conversationId"], workspace_id))
 
         if parsed["intent"] == "automation" and text:
             conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))
             run = self._automation_turn(workspace_id, token, conversation["conversationId"], text, destinations, runtime,
-                                        payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model,
-                                        {**payload, "timeZone": zone}, revision=revision, understood=understood)
+                                        model_id, {**payload, "timeZone": zone}, revision=revision, understood=understood)
             return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **run}
 
         # Optional extra workspace sources to read alongside the pasted idea (Rafii v9 Context Pocket).

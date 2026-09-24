@@ -1,11 +1,17 @@
 """Persisted campaign plans and recurring draft preparation definitions (Automations).
 
-These commands create drafts and plans only. They never create publication approvals.
+These commands create drafts and plans, and record people's decisions about them. They never create a
+publication approval themselves: an approved post is committed by the worker through the Phase 2 review and
+approve chain (publisher.py), as the person who approved it or, for auto-publish, as the owner who granted it.
 
 An automation is one campaign brief plus one recurring task. `raffi_recurrence_save` creates or edits
 both in one command: any change to what would be drafted (brief, schedule, destinations, content
-type, writer, reasoning, cost limit, sources or voice) returns the task to `draft`, so the owner activates
-the new definition before it runs. Renaming alone keeps the current status.
+type, writer, reasoning, cost limit, sources, voice or workflow) returns the task to `draft`, so the owner
+activates the new definition before it runs. Renaming alone keeps the current status.
+
+A version 3 automation carries a `workflow` (workflow.py): separate generation, review and publication times, a
+publish policy (auto, review or drafts), optional research, and per-platform notes. Its runs keep their items'
+lifecycle (lifecycle.py) and history in the occurrence body; the projected occurrence state stays the generation state.
 """
 from __future__ import annotations
 
@@ -17,7 +23,8 @@ import zoneinfo
 from typing import Any
 
 from postriff_alpha.domain import AlphaError, clean, uid
-from . import content_types, locales
+from . import content_types, lifecycle, locales, source_policy
+from . import workflow as workflows
 from .agent_runtime import PLATFORMS
 from .contracts import digest
 
@@ -29,10 +36,14 @@ MAX_COST_USD_MICRO = 10_000_000
 # The definition an activation authorizes. Legacy (authority 1) tasks keep their original digest.
 LEGACY_DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "contextSourceIds", "destination", "maxCostUsdMicro")
 DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "reasoning", "contextSourceIds", "destinations", "contentType", "maxCostUsdMicro", "include", "voiceMode")
+# Version 3 adds the staged workflow (generation, review and publication times, publish policy, research).
+DEFINITION_V3 = DEFINITION + ("workflow",)
+MAX_PAUSE_SECONDS = 366 * 86400
+MAX_SLOTS = 14
 VOICE_MODES = ("neutral", "personalized")
 # Event triggers run when something happens instead of at a time (Phase 3).
 EVENT_KINDS = ("on_new_source", "on_strong_post")
-SCHEDULE_KINDS = ("weekly", "monthly", "countdown") + EVENT_KINDS
+SCHEDULE_KINDS = ("weekly", "monthly", "countdown", "once") + EVENT_KINDS
 SOURCE_KINDS = ("idea", "text", "link", "document")
 # Conversation metrics per provider (insights.INSIGHT_METRICS); LinkedIn reports none.
 CONVERSATION_METRICS = {"threads": "replies", "instagram": "comments"}
@@ -98,6 +109,36 @@ def _local_time(schedule: dict) -> tuple[int, int]:
     except (TypeError, ValueError):
         raise AlphaError("Choose a local time as HH:MM.")
     return hour, minute
+
+
+def slots_of(schedule: dict) -> list[tuple[int, int, int]]:
+    """(weekday, hour, minute) for every weekly slot: `slots` when they give days their own times ("Monday at 9
+    and Thursday at 5"), else each chosen weekday at the one local time."""
+    raw = schedule.get("slots")
+    if raw is None:
+        hour, minute = _local_time(schedule)
+        return [(day, hour, minute) for day in weekdays_of(schedule)]
+    if not isinstance(raw, list) or not raw or len(raw) > MAX_SLOTS:
+        raise AlphaError(f"Choose one to {MAX_SLOTS} weekly times.")
+    out = []
+    for slot in raw:
+        day = DAYS.get(slot.get("weekday", "").casefold()) if isinstance(slot, dict) and isinstance(slot.get("weekday"), str) else None
+        if day is None:
+            raise AlphaError("Choose a weekday for each weekly time.")
+        hour, minute = _local_time(slot)
+        if (day, hour, minute) not in out:
+            out.append((day, hour, minute))
+    return sorted(out)
+
+
+def once_of(schedule: dict) -> dt.datetime:
+    """The local date and time of a one-time schedule (naive; the zone is applied by the caller)."""
+    try:
+        day = dt.date.fromisoformat(str(schedule.get("date", "")))
+    except ValueError:
+        raise AlphaError("Choose the date as YYYY-MM-DD.")
+    hour, minute = _local_time(schedule)
+    return dt.datetime(day.year, day.month, day.day, hour, minute)
 
 
 def _valid_local(local: dt.datetime, zone: zoneinfo.ZoneInfo) -> dt.datetime:
@@ -193,10 +234,12 @@ def next_occurrence(schedule: dict, after: float) -> dict | None:
     if kind in EVENT_KINDS:
         return None  # triggered by events (`enqueue_events`), never by the clock
     if kind == "weekly":
-        weekdays = weekdays_of(schedule)
-        hour, minute = _local_time(schedule)
         current = dt.datetime.fromtimestamp(after, dt.timezone.utc).astimezone(zone)
-        local = min((_next_local(current, weekday, hour, minute, zone) for weekday in weekdays), key=lambda item: item.astimezone(dt.timezone.utc))
+        local = min((_next_local(current, weekday, hour, minute, zone) for weekday, hour, minute in slots_of(schedule)), key=lambda item: item.astimezone(dt.timezone.utc))
+    elif kind == "once":
+        local = _valid_local(once_of(schedule).replace(tzinfo=zone, fold=0), zone)
+        if local.astimezone(dt.timezone.utc).timestamp() <= after:
+            return None
     elif kind == "monthly":
         days = month_days_of(schedule)
         hour, minute = _local_time(schedule)
@@ -232,9 +275,17 @@ def normalize_schedule(schedule: Any) -> dict:
     zone = _zone(schedule)
     kind = schedule_kind(schedule)
     if kind == "weekly":
-        days = weekdays_of(schedule)
-        hour, minute = _local_time(schedule)
-        return {"weekdays": [WEEKDAY_NAMES[day] for day in days], "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
+        slots = slots_of(schedule)
+        days = list(dict.fromkeys(day for day, _, _ in slots))
+        hour, minute = slots[0][1], slots[0][2]
+        out = {"weekdays": [WEEKDAY_NAMES[day] for day in days], "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
+        if len({(h, m) for _, h, m in slots}) > 1 or len(slots) != len(days):
+            # Days with their own times keep every slot; `weekdays`/`localTime` stay readable by older views.
+            out["slots"] = [{"weekday": WEEKDAY_NAMES[day], "localTime": f"{h:02d}:{m:02d}"} for day, h, m in slots]
+        return out
+    if kind == "once":
+        local = once_of(schedule)
+        return {"kind": "once", "date": local.date().isoformat(), "localTime": f"{local.hour:02d}:{local.minute:02d}", "timeZone": zone.key}
     if kind == "monthly":
         days = month_days_of(schedule)
         hour, minute = _local_time(schedule)
@@ -403,8 +454,28 @@ def countdown_context(schedule: dict, scheduled_for: float) -> dict | None:
 
 
 def definition_digest(task: dict) -> str:
-    keys = DEFINITION if task.get("authorityVersion") == 2 else LEGACY_DEFINITION
+    version = task.get("authorityVersion")
+    keys = DEFINITION_V3 if version == 3 else DEFINITION if version == 2 else LEGACY_DEFINITION
     return digest({key: task.get(key) for key in keys})
+
+
+def is_staged(task: dict) -> bool:
+    """A version 3 automation with a workflow: staged generation, review and publication."""
+    return task.get("authorityVersion") == 3 and isinstance(task.get("workflow"), dict)
+
+
+def first_run(task: dict, now: float) -> dict | None:
+    """The next generation instant of a task (its workflow's, for a staged one)."""
+    if is_staged(task):
+        return workflows.next_run(task, now)
+    return next_occurrence(task["schedule"], now)
+
+
+def next_publish(task: dict, occurrence: dict | None) -> str | None:
+    """Local ISO time the next run publishes (display only)."""
+    if not occurrence or not is_staged(task) or not occurrence.get("anchorAt"):
+        return None
+    return workflows.stage_times(task["workflow"], task["schedule"], occurrence["anchorAt"], claimed_at=occurrence["scheduledFor"])["local"]["publish"]
 
 
 def _apply_brief(root: dict, campaign: dict, task: dict | None, goal: str, audience: str, facts: dict, account_ids: list[str], actor: str, now: float) -> bool:
@@ -432,8 +503,22 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     audience = _required(payload.get("audience"), "Describe who the drafts are for.", 800)
     facts = _facts(payload.get("facts"))
     schedule = normalize_schedule(payload.get("schedule"))
-    first_run = next_occurrence(schedule, now)
-    if first_run is None and not is_event(schedule):
+    task_id = payload.get("taskId")
+    existing = _find(root["recurringTasks"], task_id, "Automation") if task_id is not None else None
+    # A save that does not mention the workflow keeps the one the automation has (the builder never drops it).
+    raw_workflow = payload["workflow"] if "workflow" in payload else (existing or {}).get("workflow")
+    staged_destinations = [d.get("platform") for d in payload.get("destinations") or [] if isinstance(d, dict)]
+    workflow = workflows.normalize_workflow(raw_workflow, schedule, staged_destinations) if raw_workflow is not None else None
+    if schedule.get("kind") == "once" and workflow is None:
+        raise AlphaError("A one-time automation needs its publishing plan.")
+    probe = {"schedule": schedule, "workflow": workflow, "authorityVersion": 3 if workflow else 2,
+             "lastAnchorAt": (existing or {}).get("lastAnchorAt") if existing and existing.get("schedule") == schedule else None}
+    upcoming_run = first_run(probe, now)
+    if schedule.get("kind") == "once":
+        # A one-time post is valid while its time is ahead, even when its run already started (then no new run).
+        if next_occurrence(schedule, now) is None:
+            raise AlphaError("That time has already passed. Choose a later time.", 409)
+    elif upcoming_run is None and not is_event(schedule):
         raise AlphaError("Every countdown date has passed. Choose a later event date.", 409)
     if is_event(schedule) and isinstance(payload.get("include"), dict) and "evergreen" in payload["include"]:
         raise AlphaError("Resharing an older post needs a weekly, monthly or countdown schedule.")
@@ -468,7 +553,10 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     definition = {"schedule": schedule, "destinations": destinations, "contentType": content, "route": route, "reasoning": reasoning,
                   "maxCostUsdMicro": max_cost, "contextSourceIds": sources, "limits": {"draftsPerOccurrence": len(destinations)}, "include": include,
                   "voiceMode": voice_mode}
-    task_id = payload.get("taskId")
+    version = 3 if workflow is not None else 2
+    if workflow is not None:
+        definition["workflow"] = workflow
+    intent_text = clean(payload["intent"], 600) if isinstance(payload.get("intent"), str) and payload["intent"].strip() else (existing or {}).get("intent")
     account_ids = list(dict.fromkeys(d["channelId"] for d in destinations if d.get("channelId")))
     if task_id is None:
         if payload.get("campaignId") is not None:
@@ -490,33 +578,200 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
         root["recurringTasks"].append(task)
         changed = True
     else:
-        task = _find(root["recurringTasks"], task_id, "Automation")
+        task = existing
         if task["status"] == "cancelled":
             raise AlphaError("This automation was cancelled. Create a new one.", 409)
         campaign = _find(root["campaigns"], task["campaignId"], "Campaign")
         brief_changed = _apply_brief(root, campaign, task, goal, audience, facts, account_ids, actor, now)
-        changed = brief_changed or task.get("authorityVersion") != 2 or any(task.get(key) != value for key, value in definition.items())
+        changed = brief_changed or task.get("authorityVersion") != version or any(task.get(key) != value for key, value in definition.items()) or (version == 2 and "workflow" in task)
         if changed:
             task["version"] += 1
     task.update(name=name, destinationLabel=label, accountLabels=account_labels, contentLabel=content_label, contentLibrary=library, updatedAt=now, updatedBy=actor)
+    if intent_text:
+        task["intent"] = intent_text
     if changed:
         task.pop("destination", None)
-        for key in ("activatedBy", "activatedAt", "pauseReason", "watchFrom", "pendingEvents"):
+        for key in ("activatedBy", "activatedAt", "pauseReason", "watchFrom", "pendingEvents", "publishAuthority", "pausedUntil"):
             task.pop(key, None)
-        task.update(definition, status="draft", authorityVersion=2, campaignVersion=campaign["version"], nextOccurrence=first_run)
+        if version == 2:
+            task.pop("workflow", None)
+        task.update(definition, status="draft", authorityVersion=version, campaignVersion=campaign["version"], nextOccurrence=upcoming_run)
         task["definitionDigest"] = definition_digest(task)
-        # Nothing prepared under the previous definition may still run.
+        task["nextPublish"] = next_publish(task, upcoming_run)
+        # Nothing prepared under the previous definition may still run; drafted runs follow the new plan.
         for occurrence in root["occurrences"]:
             if occurrence["taskId"] == task["id"] and occurrence["state"] in ("pending", "running"):
                 occurrence.update(state="cancelled", reason="definition_changed")
+                if occurrence.get("lifecycle"):
+                    occurrence["lifecycle"] = "skipped"
+                    _history(occurrence, now, "cancelled", "The automation changed before this run finished, so it stopped.", actor)
+        retime_open_runs(state, task, now, actor)
     return {"taskId": task["id"], "campaignId": campaign["id"], "status": task["status"], "missingFacts": campaign["missingFacts"],
             "nextOccurrence": task["nextOccurrence"], "upcoming": upcoming(task["schedule"], now, 3)}
 
 
+def _history(occurrence: dict, at: float, event: str, detail: str, actor: str = "raffi") -> None:
+    """Append one line to a run's execution history (bounded; the newest lines are kept)."""
+    items = occurrence.setdefault("history", [])
+    items.append({"at": at, "event": event, "detail": clean(detail, 400) if detail else "", "actor": actor})
+    del items[:-60]
+
+
+def item_of(occurrence: dict, key: Any) -> dict:
+    item = next((entry for entry in occurrence.get("items") or [] if entry.get("key") == key), None)
+    if item is None:
+        raise AlphaError("That post is not part of this run.", 404)
+    return item
+
+
+def open_items(occurrence: dict) -> list[dict]:
+    """Items that have not reached a final state."""
+    return [item for item in occurrence.get("items") or [] if item.get("state") not in lifecycle.ITEM_TERMINAL]
+
+
+def _cancel_job(state: dict, job_id: str | None, now: float, message: str) -> bool:
+    """Cancel a job that has not been handed to the platform yet (as p2_cancel does); never recalls a post."""
+    job = next((j for j in (state.get("phase2") or {}).get("jobs", []) if j.get("id") == job_id), None) if job_id else None
+    if job is None or job.get("state") not in ("approved", "scheduled", "held"):
+        return False
+    job["cancelRequested"] = True
+    job["state"] = "canceled"
+    job.setdefault("events", []).append({"at": now, "state": "canceled", "message": message, "execution": (job.get("manifest") or {}).get("execution", "synthetic")})
+    return True
+
+
+def stop_open_items(state: dict, task: dict, now: float, reason: str, actor: str, *, publish_before: float | None = None) -> int:
+    """Stop this automation's unpublished posts: waiting drafts are skipped and posts not yet handed to the platform
+    are cancelled. A post already being published is left alone (a cancel cannot recall it). With `publish_before`,
+    only posts due before then (a pause window) are stopped."""
+    stopped = 0
+    for occurrence in _root(state)["occurrences"]:
+        if occurrence["taskId"] != task["id"]:
+            continue
+        for item in open_items(occurrence):
+            if item.get("state") == "publishing":
+                continue
+            if publish_before is not None and (item.get("publishAt") is None or item["publishAt"] >= publish_before):
+                continue
+            if item.get("jobId") and not _cancel_job(state, item["jobId"], now, reason):
+                continue
+            lifecycle.move(item, "skipped", reason=reason, at=now)
+            stopped += 1
+        if stopped:
+            _history(occurrence, now, "stopped", reason, actor)
+    return stopped
+
+
+def retime_open_runs(state: dict, task: dict, now: float, actor: str) -> None:
+    """After an edit, drafted runs that have not published follow the new plan instead of running twice: their
+    publish time is recomputed (a moved anchor re-anchors them), destinations that were removed are skipped, and the
+    automation never claims an anchor one of these runs already covers. Posts already handed to the platform keep
+    their time; a policy change applies from the next run (drafts already waiting for review still need approval)."""
+    if not is_staged(task):
+        return
+    workflow, schedule = task["workflow"], task["schedule"]
+    wanted = {(d["platform"], d.get("channelId") or "", d["language"]) for d in task["destinations"]}
+    for occurrence in _root(state)["occurrences"]:
+        if occurrence["taskId"] != task["id"] or occurrence.get("lifecycle") != "drafted" or not open_items(occurrence):
+            continue
+        anchor = occurrence.get("anchorAt")
+        if schedule.get("kind") == "once":
+            found = next_occurrence(schedule, 0)
+            anchor = found["scheduledFor"] if found else anchor
+        elif occurrence.get("schedule") != schedule:
+            # The run's post moves to the new schedule's next time, never into the past.
+            found = next_occurrence(schedule, max(now, float(occurrence.get("generatedAt") or occurrence["scheduledFor"])) - 1)
+            anchor = found["scheduledFor"] if found else anchor
+        times = workflows.stage_times(workflow, schedule, anchor, claimed_at=occurrence["scheduledFor"])
+        occurrence.update(anchorAt=anchor, schedule=schedule, stages={key: times[key] for key in ("generateAt", "reviewAt", "publishAt", "local")})
+        task["lastAnchorAt"] = max(float(task.get("lastAnchorAt") or 0), anchor)
+        for item in open_items(occurrence):
+            if (item["platform"], item.get("channelId") or "", item["language"]) not in wanted:
+                if item.get("state") != "publishing" and (not item.get("jobId") or _cancel_job(state, item["jobId"], now, "Removed from the automation")):
+                    lifecycle.move(item, "skipped", reason=f"{item['platform']} was removed from this automation.", at=now)
+                continue
+            if item.get("jobId") or item.get("publishAt") is None:
+                continue  # already queued at its approved time, or a draft only (never turned into a publication)
+            item["publishAt"] = times["publishAt"] if workflow.get("policy") != "drafts" else None
+            if item["publishAt"] is None and item.get("state") == "approved":
+                # Switching to drafts only: an approval to publish no longer applies.
+                item["decision"], item["approvedVia"] = None, None
+                lifecycle.move(item, "ready_for_review", reason="This automation now prepares drafts only.", at=now)
+        _history(occurrence, now, "retimed", f"Updated to the new plan: publish {times['local']['publish'] or 'not scheduled'}.", actor)
+    task["nextOccurrence"] = first_run(task, now)
+    task["nextPublish"] = next_publish(task, task["nextOccurrence"])
+
+
+def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> dict:
+    """A person's decision on one drafted post: approve this exact draft, ask for changes, or reject it. Approval
+    records exactly what was reviewed (revision, text digest, excluded unknowns, acknowledged warnings, source use);
+    the worker publishes it at its time through the review and approve chain, as this person."""
+    if payload.get("confirmed") is not True:
+        raise AlphaError("Confirm your decision on this post.")
+    decision = payload.get("decision")
+    if decision not in ("approve", "reject", "revise"):
+        raise AlphaError("Choose approve, request changes, or reject.")
+    occurrence = _find(root["occurrences"], payload.get("occurrenceId"), "Run")
+    task = _find(root["recurringTasks"], occurrence["taskId"], "Automation")
+    item = item_of(occurrence, payload.get("itemKey"))
+    allowed = ("ready_for_review", "needs_revision", "platform_disconnected") if decision == "approve" else ("ready_for_review", "needs_revision", "approved", "platform_disconnected")
+    if item.get("state") not in allowed or item.get("jobId"):
+        raise AlphaError(f"This post is {lifecycle.LABELS.get(item.get('state'), item.get('state'))} and can't take that decision now.", 409, code="lifecycle_transition")
+    note = clean(payload["note"], 400) if isinstance(payload.get("note"), str) and payload["note"].strip() else ""
+    if decision == "approve":
+        if item.get("publishAt") is not None and now >= item["publishAt"]:
+            raise AlphaError("The publish time for this post has passed, so it can no longer be approved. Its draft is kept.", 409, code="approval_expired")
+        variant = next((v for v in state.get("variants", []) if v.get("id") == item.get("variantId")), None)
+        if variant is None:
+            raise AlphaError("This draft is no longer available.", 404)
+        if payload.get("variantRevision") != variant.get("revision"):
+            raise AlphaError("This draft changed. Read the current version before approving it.", 409)
+        if variant.get("rejected") or variant.get("blockedByRetraction") or variant.get("policyBlocked"):
+            raise AlphaError("This draft can't be published as it is. Draft it again or edit it first.", 409)
+        if payload.get("excludedUnknowns") != variant.get("unknowns", []):
+            raise AlphaError("Review every unknown and confirm unsupported details are left out of this draft.", 409)
+        if sorted(payload.get("acknowledgedWarnings") or []) != sorted(variant.get("warnings") or []):
+            raise AlphaError("Acknowledge every warning shown for this draft.", 409)
+        given = {entry.get("sourceId"): entry.get("factsDigest") for entry in payload.get("sourceUse") or [] if isinstance(entry, dict)}
+        uses = []
+        for source_id in variant.get("sourceIds", []):
+            source = next((x for x in state.get("sources", []) if x.get("id") == source_id), None)
+            if source is None or not source.get("active"):
+                continue
+            if source.get("sourcePolicy") == "rewrite_approval" and not source_policy.use_approved(source):
+                current = source_policy.facts_digest(source)
+                if given.get(source_id) != current:
+                    raise AlphaError(f"Confirm public use of “{clean(source.get('title') or 'a source', 80)}” before approving.", 409)
+                uses.append({"sourceId": source_id, "factsDigest": current})
+        item["decision"] = {"decision": "approve", "by": actor, "at": now, "note": note, "variantRevision": variant["revision"], "textDigest": digest(variant.get("text", "")),
+                            "excludedUnknowns": list(variant.get("unknowns", [])), "acknowledgedWarnings": list(variant.get("warnings") or []), "sourceUse": uses}
+        item["approvedVia"] = "human"
+        lifecycle.move(item if item["state"] != "needs_revision" else lifecycle.move(item, "ready_for_review", at=now), "approved", at=now)
+        _history(occurrence, now, "approved", f"{item['platform']} post approved; it publishes at its scheduled time." if item.get("publishAt") else f"{item['platform']} draft approved.", actor)
+    elif decision == "revise":
+        if not note:
+            raise AlphaError("Say what should change.")
+        if item["state"] in ("approved", "platform_disconnected"):
+            item["decision"] = None
+            lifecycle.move(item, "ready_for_review", at=now)
+        lifecycle.move(item, "needs_revision", reason=note, at=now)
+        item["revisionFrom"] = item.get("variantRevision")
+        _history(occurrence, now, "changes_requested", f"{item['platform']}: {note}", actor)
+    else:
+        if item["state"] in ("approved", "platform_disconnected"):
+            lifecycle.move(item, "ready_for_review", at=now)
+        lifecycle.move(item, "rejected", reason=note or "Rejected", at=now)
+        item["decision"] = {"decision": "reject", "by": actor, "at": now, "note": note}
+        _history(occurrence, now, "rejected", f"{item['platform']} post rejected; it will not be published.", actor)
+    return {"occurrenceId": occurrence["id"], "itemKey": item["key"], "state": item["state"], "taskId": task["id"]}
+
+
 def apply_action(state: dict, action: str, payload: dict, actor: str, now: float) -> dict | None:
-    if not action.startswith("raffi_campaign_") and not action.startswith("raffi_recurrence_"):
+    if not action.startswith("raffi_campaign_") and not action.startswith("raffi_recurrence_") and action != "raffi_run_decide":
         return None
     root = _root(state)
+    if action == "raffi_run_decide":
+        return _decide(state, root, payload, actor, now)
     if action == "raffi_campaign_create":
         goal = _text(payload.get("goal"), "campaign goal", 1200)
         audience = _text(payload.get("audience"), "campaign audience", 800)
@@ -605,31 +860,64 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             raise AlphaError(f"Add the missing campaign facts first: {', '.join(campaign['missingFacts'])}.", 409)
         if campaign['version'] != task.get('campaignVersion'):
             raise AlphaError('Campaign facts changed. Create a new schedule preview.', 409)
-        if task.get('authorityVersion') == 2:
+        if task.get('authorityVersion') in (2, 3):
             # The accounts and content type must still exist when the owner authorizes the definition.
             normalize_destinations(state, task['destinations'])
             if task.get('contentType'):
                 content_types.definition(state, task['contentType']['contentTypeId'], task['contentType']['contentTypeVersion'])
+        if is_staged(task):
+            policy = task["workflow"].get("policy")
+            if policy is None:
+                raise AlphaError("Choose whether posts publish automatically, wait for your approval, or stay as drafts.", 409, code="publish_policy_required")
+            grant = payload.get("publishAuthority") if isinstance(payload.get("publishAuthority"), dict) else {}
+            if policy == "auto":
+                # Standing authority to publish without a per-post review: granted by an owner, for this exact definition.
+                if grant.get("confirmed") is not True:
+                    raise AlphaError("Confirm that Rafii may publish these posts without asking you each time.", 409, code="publish_authority_required")
+                task["publishAuthority"] = {"grantedBy": actor, "grantedAt": now, "definitionDigest": task["definitionDigest"], "sourceUse": grant.get("sourceUse") is True}
+            else:
+                task.pop("publishAuthority", None)
         # A definition saved earlier must not run at a time that passed while it waited for activation.
-        upcoming_run = next_occurrence(task["schedule"], now)
-        if upcoming_run is None and not is_event(task["schedule"]):
+        upcoming_run = first_run(task, now)
+        if task["schedule"].get("kind") == "once":
+            if next_occurrence(task["schedule"], now) is None:
+                raise AlphaError("That time has already passed. Edit the time to use it again.", 409)
+        elif upcoming_run is None and not is_event(task["schedule"]):
             raise AlphaError("Every countdown date has passed. Edit the event date to use it again.", 409)
         task["status"], task["activatedBy"], task["activatedAt"] = "active", actor, now
         task["nextOccurrence"] = upcoming_run
+        task["nextPublish"] = next_publish(task, upcoming_run)
+        task.pop("pausedUntil", None)
         if is_event(task["schedule"]):
             # Only what happens from now on starts a run; nothing from before is replayed.
             task["watchFrom"], task["pendingEvents"] = now, []
     elif action == "raffi_recurrence_pause":
+        until = payload.get("until")
+        if until is not None:
+            if type(until) not in (int, float) or not now < until <= now + MAX_PAUSE_SECONDS:
+                raise AlphaError("Choose when the pause ends, within a year.")
+            task["pausedUntil"] = float(until)
+        else:
+            task.pop("pausedUntil", None)
         task["status"], task["pausedBy"], task["pausedAt"] = "paused", actor, now
+        # Nothing this automation prepared publishes while it is paused.
+        stop_open_items(state, task, now, "The automation was paused before this post's time.", actor, publish_before=task.get("pausedUntil", float("inf")))
     elif action == "raffi_recurrence_resume":
         if payload.get('confirmed') is not True: raise AlphaError('Confirm recurring draft preparation.')
         campaign = _find(root['campaigns'], task['campaignId'], 'Campaign')
         if campaign['version'] != task.get('campaignVersion'):
             raise AlphaError('Campaign facts changed. Create a new schedule preview.', 409)
-        upcoming_run = next_occurrence(task["schedule"], now)
-        if upcoming_run is None and not is_event(task["schedule"]):
+        if is_staged(task) and task["workflow"].get("policy") == "auto" and (task.get("publishAuthority") or {}).get("definitionDigest") != task["definitionDigest"]:
+            raise AlphaError("Turn this automation on again to confirm automatic publishing.", 409, code="publish_authority_required")
+        upcoming_run = first_run(task, now)
+        if task["schedule"].get("kind") == "once":
+            if next_occurrence(task["schedule"], now) is None:
+                raise AlphaError("That time has already passed. Edit the time to use it again.", 409)
+        elif upcoming_run is None and not is_event(task["schedule"]):
             raise AlphaError("Every countdown date has passed. Edit the event date to use it again.", 409)
         task["status"], task["nextOccurrence"] = "active", upcoming_run
+        task["nextPublish"] = next_publish(task, upcoming_run)
+        task.pop("pausedUntil", None)
         if is_event(task["schedule"]):
             task["watchFrom"], task["pendingEvents"] = now, []
         task['activatedBy'] = actor
@@ -637,6 +925,10 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
     elif action == "raffi_recurrence_cancel":
         if payload.get("confirmed") is not True: raise AlphaError("Confirm cancellation of future draft preparation.")
         task["status"], task["cancelledBy"], task["cancelledAt"] = "cancelled", actor, now
+        if payload.get("delete") is True:
+            # Deleting hides the automation; its run history stays for the audit trail.
+            task["deletedAt"], task["deletedBy"] = now, actor
+        stop_open_items(state, task, now, "The automation was deleted." if payload.get("delete") is True else "The automation was cancelled.", actor)
     else:
         raise AlphaError("Unsupported campaign action.")
     if task['status'] in ('paused', 'cancelled'):
@@ -646,7 +938,10 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         for occurrence in root['occurrences']:
             if occurrence['taskId'] == task['id'] and occurrence['state'] in ('pending', 'running'):
                 occurrence.update(state='cancelled', reason='authority_revoked')
-    return {"taskId": task["id"], "status": task["status"], "nextOccurrence": task.get("nextOccurrence")}
+                if occurrence.get('lifecycle'):
+                    occurrence['lifecycle'] = 'skipped'
+                    _history(occurrence, now, 'stopped', 'The automation was paused or cancelled before this run finished.', actor)
+    return {"taskId": task["id"], "status": task["status"], "nextOccurrence": task.get("nextOccurrence"), "pausedUntil": task.get("pausedUntil")}
 
 
 def claim_occurrence(state: dict, task_id: str, scheduled_for: float, now: float) -> dict:
@@ -670,11 +965,24 @@ def claim_occurrence(state: dict, task_id: str, scheduled_for: float, now: float
     occurrence = {"id": uid(), "taskId": task_id, "taskVersion": task["version"], "scheduledFor": scheduled_for, "state": "pending", "createdAt": now, "idempotencyKey": key, "authority": "draft_preparation_only"}
     if event is not None:
         occurrence["event"] = {k: v for k, v in event.items() if k != "at"}
+    if is_staged(task):
+        # A staged run: its own anchor and stage instants, frozen now so later edits re-time it explicitly.
+        anchor = (task.get("nextOccurrence") or {}).get("anchorAt") or scheduled_for
+        workflow = task["workflow"]
+        times = workflows.stage_times(workflow, task["schedule"], anchor, claimed_at=scheduled_for)
+        occurrence.update(anchorAt=anchor, schedule=task["schedule"], policy=workflow.get("policy"), authority=f"workflow_{workflow.get('policy')}",
+                          stages={key: times[key] for key in ("generateAt", "reviewAt", "publishAt", "local")}, lifecycle="planned",
+                          research=None, skills=[], items=[], history=[], notices={})
+        _history(occurrence, now, "triggered", f"Scheduled run for {times['local']['publish'] or times['local']['generate']}.")
+        task["lastAnchorAt"] = max(float(task.get("lastAnchorAt") or 0), anchor)
     root["occurrences"].append(occurrence)
     task["lastOccurrence"] = occurrence["id"]
     if event is not None:
         task["pendingEvents"] = [item for item in task.get("pendingEvents") or [] if item is not event]
         task["nextOccurrence"] = _due(task["pendingEvents"][0]["at"], task["schedule"]) if task["pendingEvents"] else None
+    elif is_staged(task):
+        task["nextOccurrence"] = workflows.next_run(task, max(now, scheduled_for))
+        task["nextPublish"] = next_publish(task, task["nextOccurrence"])
     else:
         task["nextOccurrence"] = next_occurrence(task["schedule"], scheduled_for + 1)
     return occurrence
@@ -686,7 +994,8 @@ def refresh_next(task: dict, now: float) -> None:
         pending = task.get("pendingEvents") or []
         task["nextOccurrence"] = _due(pending[0]["at"], task["schedule"]) if pending else None
     else:
-        task["nextOccurrence"] = next_occurrence(task["schedule"], now)
+        task["nextOccurrence"] = first_run(task, now)
+        task["nextPublish"] = next_publish(task, task["nextOccurrence"])
 
 
 def _due(at: float, schedule: dict) -> dict:
@@ -714,6 +1023,9 @@ def new_source_events(state: dict, task: dict) -> list[dict]:
     kinds = set(task["schedule"].get("sourceKinds") or SOURCE_KINDS)
     events = []
     for source in state.get("sources", []):
+        # Pages an automation's own research stored are its inputs, not new material to react to.
+        if (source.get("origin") or {}).get("kind") in ("web_research", "automation_research"):
+            continue
         if source.get("active") and source.get("kind") in kinds and _epoch(source.get("createdAt")) >= watch:
             events.append({"id": f"source:{source['id']}", "kind": "new_source", "sourceId": source["id"], "title": clean(source.get("title") or "Untitled", 200)})
     return events

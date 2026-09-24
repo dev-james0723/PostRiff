@@ -264,7 +264,9 @@ class Phase2Store(Store):
             asset.update({"deleted": True, "data": ""})
         elif action == "channel_add":
             platform = p.get("platform")
-            if platform not in LIMITS:
+            # A fixture account only where a publishing connector exists (DAILY_LIMITS = LinkedIn, Instagram, Threads,
+            # as in hosted_social). X and Xiaohongshu are in LIMITS for drafting only, never simulated publishing.
+            if platform not in LIMITS or platform not in DAILY_LIMITS:
                 raise AlphaError("Use native drafting/export for this channel.")
             data["channels"].append({"id": uid(), "platform": platform, "account": f"Fictional {platform} account {len(data['channels'])+1}", "accountType": "member" if platform == "LinkedIn" else "professional", "language": locales.canonical(p.get("language")), "configured": True, "identityVerified": False, "capabilityVerified": False, "scopes": [], "verifiedAt": 0, "expiresAt": now+86400, "revoked": False, "capabilityVersion": 0, "qualification": "implemented_with_fixtures", "evidenceSource": "synthetic", "scenario": "success"})
         elif action == "channel_verify":

@@ -32,7 +32,7 @@ Every result stays `draft_only`, with `publish_authorized=false`. No cross-accou
 Return the draft inside the run's output schema; this skill never issues an API request. The schema is authoritative and rejects extra fields: if it names a field differently from this section, follow the schema. Each variant carries `platform` (the destination's platform name), `language`, `text`, `sourceIds`, `unknowns` and `notes`; the run carries `warnings`.
 
 - `text` is audience-facing copy and nothing else.
-- A title, description, ordered slide text or other native field the format requires goes in `notes`, labelled (for example `Title: …`), never in `text`.
+- A title, description, ordered slide text or other native field the format requires goes in `notes`, labelled (for example `Title: …`), never in `text`. The exception is a channel whose adapter says its title opens `text` (Xiaohongshu): there the title is the first line of `text`.
 - `sourceIds` lists only the approved sources the text actually relies on.
 - Anything the draft needed but did not have is an `unknowns` entry, kept out of `text`.
 

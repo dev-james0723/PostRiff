@@ -152,6 +152,8 @@ def runtime_from_environment(environ=None):
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
+    # Automations promise publishing only where live transport exists (capabilities.publish_route).
+    service.publishing_live = social is not None
     worker = PostgresWorker(database, social=social, on_verified=service.audience.on_post_verified)
     return service, worker, {"projectUrl": project_url, "publishableKey": publishable, "provider": "supabase", "flow": "pkce"}
 

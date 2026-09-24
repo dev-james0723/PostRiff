@@ -275,6 +275,41 @@ export function HomeView() {
     }
   }
 
+  /**
+   * A quick reply on the automation card: the person's next message in the same conversation (`turn`, never a new
+   * `quickStart`), sent with the composer's current writer and destinations like a message typed in that conversation.
+   * An automation answer updates the card; any other answer continues in the conversation itself.
+   */
+  async function answerAutomation(reply: string) {
+    const target = automationReply;
+    if (!target || target.workspaceId !== workspaceId || !canEdit) return;
+    try {
+      const result = await api.turn(workspaceId, target.id, {
+        text: reply,
+        destinations: languages.destinations,
+        model: choice.model,
+        reasoning: choice.reasoning,
+        voiceMode,
+        voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
+        timeZone
+      });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: keys.messages(workspaceId, target.id) }),
+        client.invalidateQueries({ queryKey: keys.conversations(workspaceId) }),
+        client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) }),
+        client.invalidateQueries({ queryKey: keys.usage(workspaceId) })
+      ]);
+      if (result.status === 'automation') {
+        setAutomationReply({ workspaceId, id: result.conversationId || target.id, automation: result.automation ?? null, reply: result.reply ?? '' });
+      } else {
+        if (result.runId) client.setQueryData(['agent-run', workspaceId, result.runId], result);
+        router.push(`/app/agent/${encodeURIComponent(target.id)}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Your answer could not be sent. Try again from the conversation.');
+    }
+  }
+
   const draftAgain = useCallback(() => {
     generation.reset();
     composer.current?.focus();
@@ -409,7 +444,7 @@ export function HomeView() {
           {learning?.workspaceId === workspaceId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
           {automationReply?.workspaceId === workspaceId &&
             (automationReply.automation ? (
-              <ChatAutomationCard key={automationReply.id} automation={automationReply.automation} reply={automationReply.reply} reveal onClose={() => setAutomationReply(null)} />
+              <ChatAutomationCard key={automationReply.id} automation={automationReply.automation} reply={automationReply.reply} reveal onClose={() => setAutomationReply(null)} onQuickReply={canEdit ? answerAutomation : undefined} />
             ) : (
               <Surface material='glass' padding='md' className='flex items-start justify-between gap-3'>
                 <p className='text-sm leading-relaxed'>{automationReply.reply}</p>

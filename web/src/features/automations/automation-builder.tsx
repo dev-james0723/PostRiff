@@ -21,14 +21,15 @@ import { useModelChoice } from '@/features/agent/use-model';
 import { ChannelBloomDialog, toFolderAccounts } from '@/features/channels/channel-bloom';
 import { ApiError } from '@/lib/api/client';
 import { useModels, useSnapshot } from '@/lib/api/hooks';
-import type { RaffiCampaign, RecurringDestination, Snapshot } from '@/lib/api/types';
+import type { AutomationWorkflow, RaffiCampaign, RecurringDestination, RecurringSchedule, Snapshot } from '@/lib/api/types';
 import { selectionLabel, type FolderContext } from '@/lib/channels/folders';
 import { languageLabel, locales } from '@/lib/locales';
 import { useTimeZone } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
 import type { Automation } from './use-automations';
-import { SOURCE_KINDS, WEEKDAYS, WEEKDAY_SHORT, ceilingText, daysBeforeOf, kindOf, missingFacts, monthDaysOf, nextRuns, parseTime, runLabel, scheduleSummary, usd, validTimeZone, weekdaysOf, type MonthDay, type ScheduleKind, type ScheduleValue, type Weekday } from './schedule';
+import { SOURCE_KINDS, WEEKDAYS, WEEKDAY_SHORT, ceilingText, daysBeforeOf, isFixedForm, kindOf, missingFacts, monthDaysOf, nextRuns, parseTime, runLabel, scheduleSummary, usd, validTimeZone, weekdaysOf, type MonthDay, type ScheduleKind, type ScheduleValue, type Weekday } from './schedule';
 import { TEMPLATES, type AutomationTemplate } from './templates';
+import { policyText, researchRule, stageRules } from './workflow';
 
 /** 48px fields with 16px text on phones (no iOS zoom), quiet field material (DNA §10, §12). */
 const FIELD = 'rafii-field h-12 rounded-[var(--rafii-radius-control)] px-3.5 text-base md:h-11 md:text-sm';
@@ -97,6 +98,13 @@ export interface BuilderInitial {
   withinDays: number;
   /** Refresh one published post at least this many days old (evergreen). */
   evergreenDays: number | null;
+  /** A workflow Rafii set up in chat (orchestration §1). The builder has no controls for it: it is shown read-only and
+   *  saved back unchanged, so editing here never drops it. */
+  workflow: AutomationWorkflow | null;
+  /** The person's request in their words, kept with the workflow. */
+  intent: string | null;
+  /** A one-time date or weekly slots with their own times: shown read-only and saved back unchanged. */
+  fixedSchedule: RecurringSchedule | null;
 }
 
 const MONTH_DAYS: MonthDay[] = [...Array.from({ length: 31 }, (_, i) => i + 1), 'last'];
@@ -126,7 +134,7 @@ function groupTargets(destinations: RecurringDestination[]): TargetState[] {
 }
 
 export function blankInitial(timeZone: string): BuilderInitial {
-  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], voiceMode: 'neutral', recentPostsDays: null, sourceKinds: ALL_SOURCE_KINDS, maxPerDay: 3, withinDays: 7, evergreenDays: null };
+  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], voiceMode: 'neutral', recentPostsDays: null, sourceKinds: ALL_SOURCE_KINDS, maxPerDay: 3, withinDays: 7, evergreenDays: null, workflow: null, intent: null, fixedSchedule: null };
 }
 
 /** Start a new automation from an existing campaign brief (an older campaign or a suggestion). */
@@ -166,7 +174,10 @@ export function initialFromAutomation(automation: Automation, timeZone: string):
     sourceKinds: task.schedule.sourceKinds?.length ? task.schedule.sourceKinds : ALL_SOURCE_KINDS,
     maxPerDay: task.schedule.maxPerDay ?? (task.schedule.kind === 'on_strong_post' ? 1 : 3),
     withinDays: task.schedule.withinDays ?? 7,
-    evergreenDays: task.include?.evergreen?.minAgeDays ?? null
+    evergreenDays: task.include?.evergreen?.minAgeDays ?? null,
+    workflow: task.workflow ?? null,
+    intent: task.intent ?? null,
+    fixedSchedule: isFixedForm(task.schedule) ? task.schedule : null
   };
 }
 
@@ -271,14 +282,24 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const accountConnected = (target: TargetState) => !target.channelId || Boolean(accounts.find((a) => a.id === target.channelId)?.connected);
 
   const trigger = kind === 'on_new_source' || kind === 'on_strong_post';
-  const schedule: ScheduleValue =
-    kind === 'monthly' ? { kind, monthDays, localTime, timeZone }
+  const fixed = initial.fixedSchedule;
+  const workflow = initial.workflow;
+  const policy = workflow ? policyText(workflow.policy) : null;
+  const rules = workflow ? stageRules(workflow) : [];
+  const research = researchRule(workflow?.research);
+  const [allowAuto, setAllowAuto] = useState(false);
+  const [allowSourceUse, setAllowSourceUse] = useState(false);
+  const autoPolicy = workflow?.policy === 'auto';
+  const noPolicy = Boolean(workflow && !workflow.policy);
+  const schedule: ScheduleValue = fixed
+    ? { ...fixed }
+    : kind === 'monthly' ? { kind, monthDays, localTime, timeZone }
     : kind === 'countdown' ? { kind, eventDate, daysBefore, localTime, timeZone }
     : kind === 'on_new_source' ? { kind, sourceKinds, maxPerDay, timeZone }
     : kind === 'on_strong_post' ? { kind, maxPerDay, withinDays, timeZone }
     : { weekdays, localTime, timeZone };
-  const runs = useMemo(() => nextRuns(schedule, now, 3), [kind, weekdays, monthDays, eventDate, daysBefore, localTime, timeZone, now]); // eslint-disable-line react-hooks/exhaustive-deps
-  const scheduleReady = kind === 'monthly' ? monthDays.length > 0 : kind === 'countdown' ? /^\d{4}-\d{2}-\d{2}$/.test(eventDate) && daysBefore.length > 0 : kind === 'on_new_source' ? sourceKinds.length > 0 : trigger || weekdays.length > 0;
+  const runs = useMemo(() => nextRuns(schedule, now, 3), [fixed, kind, weekdays, monthDays, eventDate, daysBefore, localTime, timeZone, now]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scheduleReady = fixed ? true : kind === 'monthly' ? monthDays.length > 0 : kind === 'countdown' ? /^\d{4}-\d{2}-\d{2}$/.test(eventDate) && daysBefore.length > 0 : kind === 'on_new_source' ? sourceKinds.length > 0 : trigger || weekdays.length > 0;
   const destinations: RecurringDestination[] = targets.flatMap((t) => t.languages.map((language) => ({ platform: t.platform, language, ...(t.channelId ? { channelId: t.channelId } : {}) })));
   const costMicro = Math.round(Number(maxCost || '0') * 1_000_000);
   const costValid = Number.isFinite(costMicro) && costMicro >= 0 && costMicro <= 10_000_000;
@@ -286,18 +307,20 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const cleanFacts = Object.fromEntries(Object.entries(facts).filter(([, value]) => typeof value === 'string' && value.trim()));
   const missing = missingFacts(goal, cleanFacts);
 
+  const clockChecks = !fixed;
   const blockers: { step: Step; text: string }[] = [
     ...(!name.trim() ? [{ step: 'what' as Step, text: 'Name the automation.' }] : []),
     ...(!goal.trim() ? [{ step: 'what' as Step, text: 'Describe what the drafts should be about.' }] : []),
     ...(!audience.trim() ? [{ step: 'what' as Step, text: 'Describe who the drafts are for.' }] : []),
-    ...(kind === 'weekly' && !weekdays.length ? [{ step: 'when' as Step, text: 'Choose at least one day.' }] : []),
-    ...(kind === 'monthly' && !monthDays.length ? [{ step: 'when' as Step, text: 'Choose at least one day of the month.' }] : []),
-    ...(kind === 'countdown' && !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? [{ step: 'when' as Step, text: 'Choose the event date.' }] : []),
-    ...(kind === 'countdown' && !daysBefore.length ? [{ step: 'when' as Step, text: 'Choose when the countdown drafts.' }] : []),
-    ...(kind === 'countdown' && scheduleReady && parseTime(localTime) && validTimeZone(timeZone) && !runs.length ? [{ step: 'when' as Step, text: 'Every countdown date has passed. Choose a later event date.' }] : []),
-    ...(!trigger && !parseTime(localTime) ? [{ step: 'when' as Step, text: 'Choose a time.' }] : []),
-    ...(kind === 'on_new_source' && !sourceKinds.length ? [{ step: 'when' as Step, text: 'Choose what starts a run.' }] : []),
-    ...(!validTimeZone(timeZone) ? [{ step: 'when' as Step, text: 'Choose a time zone.' }] : []),
+    ...(workflow && trigger ? [{ step: 'when' as Step, text: 'This automation publishes on a plan, so it needs a clock schedule: weekly, monthly or a countdown.' }] : []),
+    ...(clockChecks && kind === 'weekly' && !weekdays.length ? [{ step: 'when' as Step, text: 'Choose at least one day.' }] : []),
+    ...(clockChecks && kind === 'monthly' && !monthDays.length ? [{ step: 'when' as Step, text: 'Choose at least one day of the month.' }] : []),
+    ...(clockChecks && kind === 'countdown' && !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? [{ step: 'when' as Step, text: 'Choose the event date.' }] : []),
+    ...(clockChecks && kind === 'countdown' && !daysBefore.length ? [{ step: 'when' as Step, text: 'Choose when the countdown drafts.' }] : []),
+    ...(clockChecks && kind === 'countdown' && scheduleReady && parseTime(localTime) && validTimeZone(timeZone) && !runs.length ? [{ step: 'when' as Step, text: 'Every countdown date has passed. Choose a later event date.' }] : []),
+    ...(clockChecks && !trigger && !parseTime(localTime) ? [{ step: 'when' as Step, text: 'Choose a time.' }] : []),
+    ...(clockChecks && kind === 'on_new_source' && !sourceKinds.length ? [{ step: 'when' as Step, text: 'Choose what starts a run.' }] : []),
+    ...(!validTimeZone(schedule.timeZone) ? [{ step: 'when' as Step, text: 'Choose a time zone.' }] : []),
     ...(!destinations.length ? [{ step: 'where' as Step, text: 'Choose at least one account or channel.' }] : []),
     ...(destinations.length > MAX_DESTINATIONS ? [{ step: 'where' as Step, text: `Keep it to ${MAX_DESTINATIONS} drafts a run or fewer.` }] : []),
     ...(targets.some((t) => !accountConnected(t)) ? [{ step: 'where' as Step, text: 'Remove the accounts that are no longer connected.' }] : []),
@@ -306,6 +329,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   ];
   const reminders = [
     ...(missing.length ? [`Add the event ${missing.join(' and ')} before it can be activated. You can still save it as a draft.`] : []),
+    ...(fixed && fixed.kind === 'once' && !runs.length ? ['Its date has passed, so it will not run again. Ask Rafii in chat for a new date.'] : []),
+    ...(noPolicy ? ['How its posts go out is not chosen yet, so it can be saved but not activated. Answer Rafii in chat first.'] : []),
     ...(writer?.costClass === 'paid' && costMicro === 0 ? ['This writer charges per run. With a $0 limit every run is held, so set a limit above $0.'] : [])
   ];
   const stepIndex = STEPS.findIndex((s) => s.value === step);
@@ -409,20 +434,23 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
         reasoning,
         maxCostUsdMicro: costMicro,
         sourceIds,
-        voiceMode
+        voiceMode,
+        // Rafii's workflow and the person's request are part of the definition: always sent back unchanged.
+        ...(workflow ? { workflow } : {}),
+        ...(initial.intent ? { intent: initial.intent } : {})
       });
       // The server appends a new automation last; an edit keeps its id.
       taskId = taskId ?? after.state.raffi?.campaignPlanning?.recurringTasks.at(-1)?.id;
       setSavedTaskId(taskId);
       if (activate && taskId) {
         try {
-          await act('raffi_recurrence_activate', { taskId, confirmed: true });
+          await act('raffi_recurrence_activate', { taskId, confirmed: true, ...(autoPolicy ? { publishAuthority: { confirmed: true, sourceUse: Boolean(workflow?.research) && allowSourceUse } } : {}) });
         } catch (err) {
           setError(`Saved as a draft, but it could not be activated: ${err instanceof ApiError ? err.message : 'try again.'}`);
           return;
         }
       }
-      toast.success(activate ? 'Automation saved and active. Drafts will wait for your review.' : 'Automation saved as a draft.');
+      toast.success(!activate ? 'Automation saved as a draft.' : autoPolicy ? 'Automation saved and active. Posts that pass every check publish at their time.' : workflow?.policy === 'review' ? 'Automation saved and active. Each post waits for your approval.' : 'Automation saved and active. Drafts will wait for your review.');
       if (taskId) onSaved?.(taskId);
       onOpenChange(false);
     } catch (err) {
@@ -436,7 +464,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   return (
       <RafiiDialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
         <RafiiDialogContent size='lg' className='md:h-[min(52rem,92dvh)]'>
-          <RafiiDialogHeader eyebrow='Automations' title={title} accent='automation' intro='Rafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.' />
+          <RafiiDialogHeader eyebrow='Automations' title={title} accent='automation' intro={workflow ? `Rafii prepares posts on your schedule. ${policy?.label}.` : 'Rafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.'} />
           <div className='px-5 pb-1 md:px-7'>
             <SegmentedControl options={STEPS.map((s) => ({ value: s.value, label: s.label }))} value={step} onChange={setStep} pattern='tabs' label='Automation steps' size='sm' panelIds={STEPS.map((s) => `automation-step-${s.value}`)} />
           </div>
@@ -555,9 +583,27 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
 
             {step === 'when' && (
               <section id='automation-step-when' role='tabpanel' aria-label='When' className='flex flex-col gap-5'>
+                {fixed ? (
+                  <Surface material='quiet' radius='control' padding='sm' className='flex flex-col gap-1.5'>
+                    <span className='rafii-eyebrow'>Schedule</span>
+                    <p className='text-sm font-medium'>{scheduleSummary(fixed)}</p>
+                    {runs.length > 0 && (
+                      <ul className='flex flex-col gap-1'>
+                        {runs.map((run, index) => (
+                          <li key={run} className='text-muted-foreground text-xs'>
+                            <span className='text-foreground'>{index === 0 ? 'Next' : 'Then'} · {runLabel(run, fixed.timeZone)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className={HINT}>{fixed.kind === 'once' ? 'A single date' : 'Each day has its own time'}, set up with Rafii in chat. Change these by asking Rafii in chat; saving here keeps them as they are.</p>
+                  </Surface>
+                ) : (
+                <>
                 <div className='flex flex-col gap-2'>
                   <span className={LABEL}>Repeats</span>
-                  <SegmentedControl options={KINDS} value={kind} onChange={chooseKind} label='Schedule type' size='sm' widths='content' className='self-start' />
+                  <SegmentedControl options={workflow ? KINDS.map((option) => ({ ...option, disabled: option.value === 'on_new_source' || option.value === 'on_strong_post' })) : KINDS} value={kind} onChange={chooseKind} label='Schedule type' size='sm' widths='content' className='self-start' />
+                  {workflow && <p className={HINT}>This automation publishes on a plan, so it runs on a clock schedule, not on new ideas or strong posts.</p>}
                 </div>
                 {kind === 'on_new_source' && (
                   <fieldset className='flex flex-col gap-2'>
@@ -694,6 +740,21 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   )}
                   <p className={cn(HINT, 'mt-2')}>{trigger ? 'Rafii checks about once a minute while the automation is active. ' : kind === 'countdown' ? 'After the last date the countdown finishes on its own. ' : ''}A run that is more than a day late, for example after a pause, is skipped rather than caught up.</p>
                 </Surface>
+                </>
+                )}
+                {workflow && rules.length > 0 && (
+                  <Surface material='quiet' radius='control' padding='sm' className='flex flex-col gap-1'>
+                    <span className='rafii-eyebrow'>At each scheduled time</span>
+                    <ol className='flex flex-col gap-0.5 text-sm'>
+                      {rules.map((rule) => (
+                        <li key={rule.step}>
+                          <span className='text-muted-foreground'>{rule.label}</span> {rule.when}
+                        </li>
+                      ))}
+                    </ol>
+                    <p className={HINT}>Change these by asking Rafii in chat.</p>
+                  </Surface>
+                )}
               </section>
             )}
 
@@ -825,6 +886,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </Summary>
                   <Summary term='When' onEdit={() => setStep('when')}>
                     <span>{scheduleReady ? scheduleSummary(schedule) : 'Not complete yet'}</span>
+                    {fixed && <span className='text-muted-foreground'>Set up with Rafii in chat; change it by asking Rafii.</span>}
                     {runs[0] && <span className='text-muted-foreground'>First run after activation: {runLabel(runs[0], timeZone)}</span>}
                     {trigger && <span className='text-muted-foreground'>Starts watching when it is activated.</span>}
                   </Summary>
@@ -841,6 +903,40 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                     )}
                   </Summary>
                 </dl>
+                {workflow && policy && (
+                  <Surface material='quiet' radius='control' padding='sm' className='flex flex-col gap-1.5'>
+                    <span className='rafii-eyebrow'>Publishing</span>
+                    <p className='text-sm font-medium'>{policy.label}</p>
+                    <p className={HINT}>{policy.detail}</p>
+                    {rules.length > 0 && (
+                      <ol className='flex flex-col gap-0.5 text-sm'>
+                        {rules.map((rule) => (
+                          <li key={rule.step}>
+                            <span className='text-muted-foreground'>{rule.label}</span> {rule.when}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {research && <p className='text-sm'>{research}</p>}
+                    {workflow.content?.instructions && <p className='text-muted-foreground text-sm'>{workflow.content.instructions}</p>}
+                    {Object.entries(workflow.platformNotes ?? {}).map(([platform, note]) => (
+                      <p key={platform} className='text-muted-foreground text-sm'>
+                        {platform}: {note}
+                      </p>
+                    ))}
+                    {initial.intent && <p className='text-muted-foreground text-xs'>You asked: “{initial.intent}”</p>}
+                    <p className={HINT}>Change these by asking Rafii in chat. Saving here keeps them as they are.</p>
+                  </Surface>
+                )}
+                {autoPolicy && isOwner && (
+                  <div className='flex flex-col gap-1'>
+                    <Checkbox checked={allowAuto} onCheckedChange={setAllowAuto} label='To activate: I allow Rafii to publish these posts automatically at their time.' className='min-h-11 items-start gap-2.5 [&>span]:text-sm' />
+                    {workflow?.research && (
+                      <Checkbox checked={allowSourceUse} onCheckedChange={setAllowSourceUse} label='Also publish posts built on sources Rafii finds, without asking me about each source (optional).' className='min-h-11 items-start gap-2.5 [&>span]:text-sm' />
+                    )}
+                    <p className={HINT}>Only posts that pass every safety check publish on their own. The rest wait for your approval, with the reason.</p>
+                  </div>
+                )}
                 {(blockers.length > 0 || reminders.length > 0) && (
                   <ul className='flex flex-col gap-1.5' aria-label='Before saving'>
                     {blockers.map((b) => (
@@ -860,7 +956,13 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </ul>
                 )}
                 <p className={HINT}>
-                  {isOwner ? 'Activating lets Rafii prepare drafts on this schedule. Every draft still needs your review and approval before anything is published.' : 'Saving creates a draft. The workspace owner activates it before any run.'}
+                  {!isOwner
+                    ? 'Saving creates a draft. The workspace owner activates it before any run.'
+                    : autoPolicy
+                      ? 'Activating lets Rafii publish posts that pass every safety check at their time; anything else waits for your approval.'
+                      : workflow?.policy === 'drafts'
+                        ? 'Activating lets Rafii prepare drafts on this schedule. Nothing is published.'
+                        : 'Activating lets Rafii prepare drafts on this schedule. Every draft still needs your review and approval before anything is published.'}
                   {initial.wasActive ? ' Changing anything except the name returns it to draft until the owner activates it again.' : ''}
                 </p>
               </section>
@@ -886,7 +988,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   {saving ? 'Saving…' : 'Save as draft'}
                 </Button>
                 {isOwner && (
-                  <Button variant='action' size='control' disabled={saving || blockers.length > 0 || missing.length > 0} onClick={() => void save(true)}>
+                  <Button variant='action' size='control' disabled={saving || blockers.length > 0 || missing.length > 0 || noPolicy || (autoPolicy && !allowAuto)} onClick={() => void save(true)}>
                     <Icons.bolt />
                     Save and activate
                   </Button>

@@ -30,7 +30,7 @@ PLATFORM_ALIASES = (
     ("LinkedIn", ("linkedin", "領英", "领英")),
     ("Threads", ("threads",)),
     ("Facebook", ("facebook", "fb", "面書", "臉書", "脸书")),
-    ("X", ("twitter", "x.com", "推特")),
+    ("X", ("twitter", "x.com", "推特")),  # a bare "X" is read in context: see mark_platform_x
     ("TikTok", ("tiktok",)),
     ("YouTube", ("youtube",)),
     ("Xiaohongshu", ("xiaohongshu", "rednote", "xhs", "小紅書", "小红书")),
@@ -47,6 +47,46 @@ PLATFORM_ALIASES = (
     ("Snapchat", ("snapchat",)),
     ("Discord", ("discord",)),
 )
+
+# A bare capital "X" names the platform only where it reads as one: after a preposition or list joiner
+# ("on X", "to X", "for X", "LinkedIn, and X", "Threads & X", "LinkedIn同X"), paired with Twitter ("X/Twitter",
+# "X (Twitter)", "Twitter/X"), or opening a sentence as the first item of a platform list ("X and LinkedIn at 9").
+# Inside a word or a name it stays a letter: "X-ray", "10x", "SpaceX", "Series X", "Malcolm X", "X光". The aliases
+# above never include the bare letter, so every other reader of PLATFORM_ALIASES is unaffected.
+_BARE_X = re.compile(r"(?<![A-Za-z0-9_\-])X(?![A-Za-z0-9_\-]|光|射|線|线)")
+_X_BEFORE = re.compile(r"(?:(?<![A-Za-z0-9_])(?:on|to|for|and|or|via)|[,&、，同和及與与跟去到喺在]|(?:twitter|推特)\s*[/(（])\s*$", re.I)
+_X_AFTER = re.compile(r"^\s*[/(（]\s*(?:twitter|推特)", re.I)
+_X_OPENS = re.compile(r"(?:^|[.!?:;。！？：；\n])\s*$")
+_X_LIST_JOIN = re.compile(r"^\s*(?:[,，、&/]|(?:and|or)(?![A-Za-z0-9_])|同|和|及)\s*", re.I)
+# Stands in for a bare "X" read as the platform. One character, so offsets and clause splits are unchanged.
+X_MARK = "\ue000"
+
+
+def _opens_with_platform(text):
+    lowered = text.lower()
+    for platform, aliases in PLATFORM_ALIASES:
+        for alias in aliases:
+            if alias.isascii() and re.match(re.escape(alias) + r"(?![a-z0-9])", lowered):
+                return True
+            if not alias.isascii() and text.startswith(alias):
+                return True
+    return False
+
+
+def mark_platform_x(text):
+    """`text` with each bare "X" that reads as the platform replaced by X_MARK (same length, same clauses)."""
+    if not isinstance(text, str) or "X" not in text:
+        return text
+    chars = list(text)
+    for match in _BARE_X.finditer(text):
+        index = match.start()
+        before, after = text[:index], text[index + 1:]
+        joined = _X_LIST_JOIN.match(after)
+        if (_X_BEFORE.search(before) or _X_AFTER.match(after)
+                or (_X_OPENS.search(before) and joined and _opens_with_platform(after[joined.end():]))):
+            chars[index] = X_MARK
+    return "".join(chars)
+
 
 _CJK = re.compile(r"[一-鿿]")
 _SPLIT = re.compile(r"[、，,;；。！!？?\n]+|\s+(?:and|then)\s+|同埋|然後|然后|跟住|之後|之后")
@@ -136,6 +176,7 @@ def _platform_mentions(segment):
 
 
 def _platform_positions(segment):
+    segment = mark_platform_x(segment)
     lowered = segment.lower()
     found = []
     for platform, aliases in PLATFORM_ALIASES:
@@ -148,6 +189,8 @@ def _platform_positions(segment):
                 index = match.start() if match else -1
             if index >= 0 and (best is None or index < best):
                 best = index
+        if platform == "X" and X_MARK in segment and (best is None or segment.index(X_MARK) < best):
+            best = segment.index(X_MARK)
         if best is not None:
             found.append((best, platform))
     return sorted(found)
@@ -261,8 +304,11 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
     supported_set = set(supported) if supported else None
     destinations, unattached, warnings = [], [], []
     carry_day = None
-    for segment in (s for s in _SPLIT.split(text) if s and s.strip()):
-        platforms = _platform_mentions(segment)
+    # Platform names are read on the whole message first, so "…, LinkedIn, and X" keeps the list context that
+    # tells the platform X from the letter; the marked text splits into the same clauses as the original.
+    marked = mark_platform_x(text)
+    for segment, named in ((s, m) for s, m in zip(_SPLIT.split(text), _SPLIT.split(marked)) if s and s.strip()):
+        platforms = _platform_mentions(named)
         day, day_label = _explicit_day(segment, today)
         if day is None and day_label is not None:
             warnings.append(f"“{day_label}” is not a valid date; that time was ignored.")
@@ -316,7 +362,7 @@ def parse_request(text, now, zone=DEFAULT_ZONE, supported=None):
         "intent": intent,
         "language": detect_language(text),
         # Languages named as instructions, each paired with the channels named in its clause ([] = every channel).
-        "languages": locales.pair_with_channels(text, _platform_positions),
+        "languages": locales.pair_with_channels(marked, _platform_positions),
         "timeZone": zone,
         "destinations": [{k: d[k] for k in ("platform", "supported", "localTime", "assumed")} for d in destinations],
         "unattachedTimes": [{"localTime": t["localTime"], "assumed": t["assumed"]} for t in unattached],

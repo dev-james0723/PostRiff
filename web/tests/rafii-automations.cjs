@@ -596,6 +596,84 @@ async function chat(browser) {
   }
 }
 
+// Raffi orchestration on Home: a multi-platform, publishing request becomes a staged plan; Rafii asks only how posts
+// publish and, for approval, when drafts should be ready (quick replies answer in the same conversation); X and
+// Xiaohongshu are drafts only; then a conversational edit moves it without a duplicate and a delete by name removes it.
+async function orchestrate(browser) {
+  const s = await open(browser, 'orchestrate');
+  const { page, dir } = s;
+  const request = 'Every Wednesday and Friday at 4:30 PM, create a motivational quote post using a quote from a famous scientist and publish it to Xiaohongshu, LinkedIn, and X.';
+  const tasks = async () => (await snapshot(page)).raffi?.campaignPlanning?.recurringTasks ?? [];
+  const turn = (conversationId) => page.waitForResponse((r) => r.url().includes(`/ideas/conversations/${conversationId}/turns`) && r.request().method() === 'POST', { timeout: 300000 });
+  try {
+    await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await arrive(page, page.getByRole('textbox', { name: 'Message' }));
+    const jobsBefore = (await snapshot(page)).phase2?.jobs?.length ?? 0;
+    await page.getByRole('textbox', { name: 'Message' }).fill(request);
+    const answered = page.waitForResponse((r) => r.url().includes('/ideas/quick-start') && r.request().method() === 'POST', { timeout: 300000 });
+    await page.getByRole('button', { name: /^Generate drafts/ }).click();
+    const reply = await (await answered).json();
+    const taskId = reply.automation?.taskId;
+    check('a staged plan, and the only question is how it publishes', reply.status === 'automation' && reply.automation?.pending?.question === 'policy', reply.automation?.pending);
+    const card = page.locator(`[data-chat-automation="${taskId}"]`).first();
+    await card.waitFor({ timeout: 60000 });
+    await page.waitForTimeout(600);
+    let text = await card.innerText();
+    check('the plan is in plain words (no JSON, cron or model names)', /Wednesday/.test(text) && /16:30/.test(text) && !/[{}]|cron|anthropic|claude|sonnet|haiku/i.test(text), text.slice(0, 600));
+    check('X and Xiaohongshu are said to be drafts only', /X/.test(text) && /Xiaohongshu/.test(text) && /can.t publish|draft/i.test(text), text.slice(0, 800));
+    await shot(page, dir, '01-policy-question');
+    await axe(page, 'Home with the orchestration question');
+    let next = turn(reply.conversationId);
+    await card.getByRole('button', { name: 'Reply: Send them to me for approval first' }).click();
+    let answer = await (await next).json();
+    check('the answer edits the same automation and asks when drafts should be ready', answer.automation?.taskId === taskId && answer.automation?.pending?.question === 'review_time', answer.automation?.pending);
+    const second = page.locator(`[data-chat-automation="${taskId}"]`).last();
+    await second.getByRole('button', { name: /^Reply: The day before/ }).waitFor({ timeout: 60000 });
+    next = turn(reply.conversationId);
+    await second.getByRole('button', { name: /^Reply: The day before/ }).click();
+    answer = await (await next).json();
+    let task = (await tasks()).find((t) => t.id === taskId);
+    check('now on: review first, drafts the day before, publishes Wednesday and Friday 16:30', task?.status === 'active' && task?.workflow?.policy === 'review' && task?.workflow?.stages?.generate?.dayOffset === -1 && task?.schedule?.localTime === '16:30',
+      task && { status: task.status, workflow: task.workflow, schedule: task.schedule });
+    check('the confirmation says nothing publishes without approval', /Nothing publishes without your approval/.test(answer.reply ?? ''), answer.reply);
+    check('exactly one automation for the request', (await tasks()).filter((t) => t.intent === request).length === 1);
+    check('nothing is scheduled or published', ((await snapshot(page)).phase2?.jobs?.length ?? 0) === jobsBefore);
+    await page.waitForTimeout(600);
+    await shot(page, dir, '02-active');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(500);
+    check('the card fits a 390px phone', (await overflow(page)) <= 0, await overflow(page));
+    await shot(page, dir, '03-phone');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    // In the conversation: move it, then delete it by name.
+    await page.goto(`${base}/app/agent/${reply.conversationId}`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await page.getByRole('textbox', { name: 'Message' }).waitFor({ timeout: 120000 });
+    const before = (await tasks()).length;
+    await page.getByRole('textbox', { name: 'Message' }).fill('Actually move it to Friday at 6');
+    next = turn(reply.conversationId);
+    await page.getByRole('button', { name: 'Send' }).click();
+    answer = await (await next).json();
+    task = (await tasks()).find((t) => t.id === taskId);
+    check('the edit moves the same automation to Friday 18:00, no duplicate', answer.automation?.taskId === taskId && JSON.stringify(task?.schedule?.weekdays) === '["Friday"]' && task?.schedule?.localTime === '18:00' && (await tasks()).length === before,
+      task && { schedule: task.schedule, reply: answer.reply });
+    check('the reply confirms the change', /Done — I moved/.test(answer.reply ?? ''), answer.reply);
+    await page.getByText('Done — I moved').first().waitFor({ timeout: 30000 });
+    await shot(page, dir, '04-moved');
+    await page.getByRole('textbox', { name: 'Message' }).fill('Delete the motivational quote automation');
+    next = turn(reply.conversationId);
+    await page.getByRole('button', { name: 'Send' }).click();
+    answer = await (await next).json();
+    task = (await tasks()).find((t) => t.id === taskId);
+    check('delete by name cancels it and keeps its history', task?.status === 'cancelled' && Boolean(task?.deletedAt), task && { status: task.status, deletedAt: task.deletedAt });
+    await shot(page, dir, '05-deleted');
+  } catch (error) {
+    check('orchestrate scene completed', false, error.message);
+    await shot(page, dir, 'zz-failure').catch(() => {});
+  } finally {
+    await close(s);
+  }
+}
+
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const executablePath = (engine === webkit ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
@@ -606,6 +684,7 @@ async function chat(browser) {
     if (!args.only || String(args.only).includes('triggers')) await triggers(browser);
     if (!args.only || String(args.only).includes('phone')) await phone(browser);
     if (!args.only || String(args.only).includes('chat')) await chat(browser);
+    if (!args.only || String(args.only).includes('orchestrate')) await orchestrate(browser);
   } finally {
     await browser.close();
   }
