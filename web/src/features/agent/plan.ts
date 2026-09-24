@@ -31,13 +31,13 @@ export interface ApproveResult {
 export type ApproveStep = { id: 'apply' } | { id: 'row'; index: number } | { id: 'approve' };
 
 /** The variant `apply` created (or updated) for this run and destination. */
-export function variantForRow(state: SnapshotState, run: Run, row: { platform: string; language: string }): SnapshotVariant | undefined {
-  const matches = (state.variants ?? []).filter((v) => v.platform === row.platform && locales.same(v.language, row.language) && !v.blockedByRetraction);
-  return (
-    matches.find((v) => v.provenance?.runId === run.runId) ??
-    matches.find((v) => v.proposedUpdate?.runId === run.runId) ??
-    matches[matches.length - 1]
-  );
+export function variantForRow(state: SnapshotState, run: Run, row: { platform: string; language: string; channelId?: string }): SnapshotVariant | undefined {
+  const owned = (state.variants ?? []).filter((v) => v.platform === row.platform && locales.same(v.language, row.language) && !v.blockedByRetraction && (v.provenance?.runId === run.runId || v.proposedUpdate?.runId === run.runId));
+  const exact = owned.filter((v) => (v.channelId ?? undefined) === (row.channelId ?? undefined));
+  if (exact.length === 1) return exact[0];
+  // Legacy platform-only drafts can be deliberately assigned, but never borrow another account/run.
+  if (row.channelId && owned.length === 1 && !owned[0].channelId) return owned[0];
+  return undefined;
 }
 
 export async function approvePlan(input: {
