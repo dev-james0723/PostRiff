@@ -55,6 +55,19 @@ const VERTICAL_FIRST = new Set(['tiktok', 'douyin', 'kuaishou', 'wechat-channels
 
 type MediaChoice = 'none' | 'one' | 'tall' | 'several' | 'video';
 
+/** The sample post text for a channel's region, shared with the preview deck sheet. */
+export function sampleText(region?: string) {
+  return SAMPLE_TEXT[region ?? 'global'] ?? SAMPLE_TEXT.global;
+}
+
+/** The drawn sample media for a channel: the first item is 9:16 on short-video apps. */
+export function sampleMedia(slug: string, choice: Exclude<MediaChoice, 'video'>): PreviewMedia[] {
+  const first = VERTICAL_FIRST.has(slug) ? VERTICAL_MEDIA : SAMPLE_MEDIA[0];
+  return choice === 'none' ? [] : choice === 'one' ? [first] : choice === 'tall' ? [VERTICAL_MEDIA] : [first, ...SAMPLE_MEDIA.slice(1)];
+}
+
+export { SAMPLE_AVATAR };
+
 // A 9:16 photo on every channel shows which templates crop and where overlays sit.
 const MEDIA_LABELS: Record<MediaChoice, string> = { none: 'Text only', one: 'One image', tall: 'Tall photo', several: 'Several images', video: 'Video' };
 
@@ -158,16 +171,14 @@ export function PostPreviewGallery() {
       </header>
       <div className='grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-4 gap-y-8'>
         {channels.filter((channel) => !only || channel.slug === only).map((channel) => {
-          const first = VERTICAL_FIRST.has(channel.slug) ? VERTICAL_MEDIA : SAMPLE_MEDIA[0];
           const video: PreviewMedia = { id: 'video', kind: 'video', url: videoUrl ?? undefined, alt: 'Piano keys lighting up in turn', width: 360, height: 640, status: videoUrl ? 'ready' : 'loading' };
-          const media =
-            choice === 'none' ? [] : choice === 'one' ? [first] : choice === 'tall' ? [VERTICAL_MEDIA] : choice === 'video' ? [video] : [first, ...SAMPLE_MEDIA.slice(1)];
+          const media = choice === 'video' ? [video] : sampleMedia(channel.slug, choice);
           const post: PreviewPost = {
             channel: channel.slug,
             channelName: channel.name,
             account: channel.region === 'global' || !channel.region ? '@yourstudio' : 'Your Studio',
             avatarUrl: withPicture ? SAMPLE_AVATAR : undefined,
-            text: SAMPLE_TEXT[channel.region ?? 'global'] ?? SAMPLE_TEXT.global,
+            text: sampleText(channel.region),
             media,
             publishAt,
             timeZone

@@ -15,6 +15,12 @@ An iPhone mockup of a post inside its destination app, one template per channel 
 - `app-icons.ts`: glyphs that stand in for other apps' chrome, kept apart from PostRiff's own icon set.
 - `templates/<slug>.tsx`: one default export per channel; `templates/index.ts` maps slugs to loaders; `generic.tsx` covers anything unmapped; `templates/checks.ts` records when each was last checked against its app.
 - `gallery.tsx` with `src/app/dev/post-previews/page.tsx`: every template side by side with sample posts (text only, one image, a tall photo, several images, a recorded video, a sample profile picture). Development only; production answers 404.
+- `preview-deck.tsx`: `PreviewDeck` puts several posts on one stage (Rafii DNA §17): the active phone centred, up to two dimmed neighbours behind it, a 560ms slide/crossfade between them, and a horizontal swipe to move. Each layer is a real `PostPreview`, kept mounted while on stage, so a caption edit updates the active phone without replaying the transition; neighbours and the outgoing layer are `aria-hidden` and `inert`. It only reports `onChange(key)`; destinations never change from here.
+- `preview-deck-core.ts`: the framework-free rules (which items are on stage, switch direction, swipe thresholds, poses), tested in `preview-deck.test.cjs` (`node --test`).
+- `use-swipe.ts`: the pointer recogniser: sideways swipes change the item, vertical reading stays native, small, diagonal, cancelled and multi-touch gestures do nothing, and a completed swipe swallows its click.
+- `preview-dock.tsx`: `PreviewDock`, the row of `aria-pressed` app buttons with one gliding lens; arrow, Home and End keys move and select. This is the keyboard path to the deck.
+- `expanded-preview-dialog.tsx`: `ExpandedPreviewDialog`, "{Channel} on iPhone." in an elevated dialog with the dock, a larger deck, previous/next and the note that it is an illustrative layout.
+- `preview-deck-sheet.tsx` with `src/app/dev/preview-deck/page.tsx`: the deck, dock and dialog with six sample posts, a caption field and the motion setting, for review and motion recordings. Development only.
 
 ## Using it
 
