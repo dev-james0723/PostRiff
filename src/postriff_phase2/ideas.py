@@ -160,6 +160,19 @@ class IdeasService:
                     runtime.detect(force=True)
             return self.model_catalog()
 
+    @staticmethod
+    def _automation_selection(state, chosen):
+        """(selection, preflight rule ids, note) for an automation's own content type. None = general writing.
+        A type that is no longer offered falls back to general writing with a note, never a failed run."""
+        general = {"contentTypeId": "unclassified", "contentTypeVersion": None, "formatId": None}
+        if not chosen:
+            return general, (), None
+        try:
+            item = content_types.definition(state, chosen["contentTypeId"], chosen.get("contentTypeVersion"))
+        except (AlphaError, KeyError, TypeError):
+            return general, (), "This automation's content type is no longer available, so these drafts use general writing. Edit the automation to choose another type."
+        return {"contentTypeId": item["id"], "contentTypeVersion": item["version"], "formatId": chosen.get("formatId")}, tuple(item.get("preflightRuleIds", ())), None
+
     def _select_runtime(self, model_id):
         if not model_id:
             return self.runtime
@@ -605,6 +618,11 @@ class IdeasService:
         # destinations and a candidate plan. Parsed text never gains any authority of its own.
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text or clean(payload.get("intentText", ""), MAX_TEXT), self.clock(), zone, runtime.supported_platforms() or None)
+        recurring = getattr(self, 'recurring_binding', None)
+        if recurring:
+            # An automation drafts exactly the destinations its owner activated. Channels, languages, times or
+            # instructions inside its brief are data: they never re-route, schedule or become memory.
+            parsed = {**parsed, "intent": "draft", "languages": [], "destinations": [], "unattachedTimes": [], "unsupported": [], "warnings": [], "hasTimes": False}
         # Each (channel, language) pair is one destination; the workspace's remembered languages fill any channel the request left open.
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
@@ -642,9 +660,16 @@ class IdeasService:
                 self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": parsed["intent"]})
             idea = text or state.get("brief", {}).get("idea", "")
             selection = ((state.get("contentSystem") or {}).get("selection") or {})
+            rule_ids = content_types.selected_rule_ids(state)
+            automation_notes = list((recurring or {}).get("notes") or [])
+            if recurring and "contentType" in recurring:
+                # An automation writes with the content type that was activated, not whatever Home has selected now.
+                selection, rule_ids, note = self._automation_selection(state, recurring["contentType"])
+                automation_notes += [note] if note else []
             content_type_id = selection.get("contentTypeId")
             # A how-to that names no steps still drafts; the person gets a reminder next to it, never a block.
-            reminders = [content_types.TUTORIAL_REMINDER] if content_types.missing_tutorial_input(content_types.selected_rule_ids(state), idea, context) else []
+            reminders = [content_types.TUTORIAL_REMINDER] if content_types.missing_tutorial_input(rule_ids, idea, context) else []
+            reminders += automation_notes
             # Step ②: everything a route may see is assembled here; adapters only ever receive this request.
             # Memory files follow the route: a cloud route reads them only with the workspace's consent (memory.projection).
             # Learned preferences arrive as the slice that applies to these destinations (design §5.7), recorded on the run.
@@ -676,7 +701,6 @@ class IdeasService:
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
             estimate = __import__('math').ceil(runtime.price_quote(request, model_id) * 1_000_000) if paid and hasattr(runtime, 'price_quote') else 500_000 if paid else 0
-            recurring = getattr(self, 'recurring_binding', None)
             if recurring and estimate > recurring['maxCostUsdMicro']:
                 raise AlphaError('This writer exceeds the confirmed per-occurrence cost limit.', 402)
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id)

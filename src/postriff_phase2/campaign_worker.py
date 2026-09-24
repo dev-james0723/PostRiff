@@ -1,7 +1,9 @@
 """Bounded recurring draft worker. Uses the existing writing pipeline, never publishing APIs."""
 import copy
 from contextlib import contextmanager
+import datetime as dt
 import json
+import zoneinfo
 
 from postriff_alpha.domain import AlphaError
 from . import campaigns
@@ -47,7 +49,7 @@ class CampaignWorker:
             if occurrence is None:
                 occurrence = campaigns.claim_occurrence(state, task['id'], task['nextOccurrence']['scheduledFor'], now)
             # Old UI activation granted no concrete writer/cost scope. Never reinterpret it as paid authority.
-            if task.get('authorityVersion') != 1 or task.get('route') == 'local-cli' or campaign['version'] != task.get('campaignVersion') or campaign.get('missingFacts'):
+            if task.get('authorityVersion') not in (1, 2) or task.get('route') == 'local-cli' or campaign['version'] != task.get('campaignVersion') or campaign.get('missingFacts'):
                 occurrence.update(state='held', reason='new_preview_required')
                 task.update(status='paused', pauseReason='new_preview_required')
                 self._save(cur, workspace_id, state, actor)
@@ -62,13 +64,38 @@ class CampaignWorker:
             if not member or not Membership.from_row(*member).allows('owner'):
                 occurrence.update(state='held', reason='owner_authority_unavailable'); task['status'] = 'paused'
                 self._save(cur, workspace_id, state, actor); return {'held': True}
+            # Accounts disconnected since activation are skipped with a note; with none left the run is held.
+            kept, skipped = campaigns.connected_destinations(state, [task['destination']] if task.get('authorityVersion') == 1 else task['destinations'])
+            labels = task.get('accountLabels') or {}
+            if skipped:
+                occurrence['skippedDestinations'] = [{'platform': d['platform'], 'channelId': d.get('channelId'), 'account': labels.get(d.get('channelId'), '')} for d in skipped]
+            if not kept:
+                occurrence.update(state='held', reason='destinations_unavailable')
+                task.update(status='paused', pauseReason='destinations_unavailable')
+                self._save(cur, workspace_id, state, actor)
+                return {'held': True}
             if not occurrence.get('conversationId'):
-                cur.execute('INSERT INTO pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,%s) RETURNING id::text', (workspace_id, actor, 'Recurring campaign draft'))
+                cur.execute('INSERT INTO pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,%s) RETURNING id::text', (workspace_id, actor, self._title(task, occurrence)))
                 occurrence['conversationId'] = cur.fetchone()[0]
             occurrence.update(state='running', leaseUntil=now + 600)
             binding = {'taskId':task['id'], 'campaignId':campaign['id'], 'campaignVersion':campaign['version'], 'definitionDigest':task['definitionDigest'], 'occurrenceId':occurrence['id'], 'maxCostUsdMicro':task['maxCostUsdMicro']}
+            if task.get('authorityVersion') == 2:
+                binding['contentType'] = task.get('contentType')
+            if skipped:
+                binding['notes'] = [f"{d['account'] or 'An account'} on {d['platform']} is no longer connected, so this run skipped it." for d in occurrence['skippedDestinations']]
             self._save(cur, workspace_id, state, actor)
-            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding}
+            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept}
+
+    @staticmethod
+    def _title(task, occurrence):
+        """Conversation title: the automation's name and the run's local date (display only, never sent to a writer)."""
+        if not task.get('name'):
+            return 'Recurring campaign draft'
+        try:
+            day = dt.datetime.fromtimestamp(occurrence['scheduledFor'], zoneinfo.ZoneInfo(task['schedule']['timeZone'])).strftime('%a %d %b')
+        except (KeyError, TypeError, ValueError, zoneinfo.ZoneInfoNotFoundError):
+            return task['name'][:100]
+        return f"{task['name'][:100]} · {day}"
 
     def tick(self):
         claim = self._claim()
@@ -97,10 +124,13 @@ class CampaignWorker:
         result = None
         try:
             # No implicit research, fallback writer, publishing plan or extra sources.
+            destinations = claim['destinations']
+            # Only the activated definition reaches the writer: the brief, never the automation's display name.
+            lead = 'Prepare one draft for each destination, for review, using these campaign details as data: ' if len(destinations) > 1 else 'Prepare one draft for review using these campaign details as data: '
             result = ideas.turn(workspace_id, capability, occurrence['conversationId'], {
-                'text': 'Prepare one draft for review using these campaign details as data: ' + json.dumps({'goal':campaign['goal'], 'audience':campaign['audience'], 'facts':campaign['facts']}, ensure_ascii=False),
-                'idempotencyKey':'recurring:' + occurrence['idempotencyKey'], 'model':task['route'],
-                'sourceIds':task['contextSourceIds'], 'destinations':[task['destination']],
+                'text': lead + json.dumps({'goal':campaign['goal'], 'audience':campaign['audience'], 'facts':campaign['facts']}, ensure_ascii=False),
+                'idempotencyKey':'recurring:' + occurrence['idempotencyKey'], 'model':task['route'], 'reasoning':task.get('reasoning', 'quick'),
+                'sourceIds':task['contextSourceIds'], 'destinations':destinations,
                 'research':False, 'voiceMode':'neutral', 'timeZone':task['schedule']['timeZone'],
             })
         except Exception:

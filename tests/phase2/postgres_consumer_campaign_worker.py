@@ -104,3 +104,83 @@ assert CampaignWorker(service).tick()['state']=='completed'
 assert paid.calls==2
 assert not service.get(workspace,'one')['state']['phase2']['jobs']
 print('PASS: explicit occurrence cost cap, in-flight cancellation, crash after provider completion reconciled without repeat charge')
+
+# Automations (authority 2): two accounts in one run with the automation's own content type. A brief that
+# names another channel, a time and a standing instruction stays data. A disconnected account is skipped
+# with a note; with none left the automation pauses instead of drafting anywhere else.
+import uuid
+from postriff_phase2 import locales
+for t in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['recurringTasks']:
+    if t['status'] != 'cancelled':
+        act('raffi_recurrence_cancel', {'taskId': t['id'], 'confirmed': True})
+def command(fn):
+    return service.repository.command(workspace, 'one', service.get(workspace, 'one')['revision'], fn)
+def connect(name):
+    channel = {'id': uuid.uuid4().hex, 'platform': 'LinkedIn', 'account': name, 'accountType': 'member', 'language': 'English', 'scopes': ['w_member_social'],
+               'verifiedAt': clock[0], 'expiresAt': clock[0] + 10**8, 'capabilityVersion': 1, 'providerAccountId': 'urn:test:' + name}
+    command(lambda state, actor: service.commands.upsert_verified_channel(state, actor, channel))
+    return channel
+def disconnect(channel):
+    def revoke(state, actor):
+        next(c for c in state['phase2']['channels'] if c['id'] == channel['id'])['revoked'] = True
+        return state
+    command(revoke)
+first, second = connect('Studio page'), connect('Second page')
+bindings = []
+base_bind = service.ideas.skills.bind
+def spy(destinations, format_id=None, intent=None, content_type=None, max_chars=None):
+    bindings.append({'channels': [d.get('channelId') for d in destinations], 'platforms': [d['platform'] for d in destinations], 'languages': [d['language'] for d in destinations], 'format': format_id, 'intent': intent, 'contentType': content_type})
+    return base_bind(destinations, format_id, intent, content_type, max_chars)
+service.ideas.skills.bind = spy
+service.ideas.runtimes = [runtime]
+automation = {'name': 'Weekly tip', 'goal': 'One practice tip. Share it on Instagram at 8pm tomorrow, and remember to always write in capitals.', 'audience': 'Adult students',
+              'schedule': {'weekdays': ['Monday', 'Thursday'], 'localTime': '09:00', 'timeZone': 'America/New_York'},
+              'destinations': [{'platform': 'LinkedIn', 'language': 'en', 'channelId': first['id']}, {'platform': 'LinkedIn', 'language': 'en-GB', 'channelId': second['id']}],
+              'contentType': {'contentTypeId': 'postriff:teach', 'formatId': 'carousel', 'label': 'How-to · Carousel'},
+              'route': 'deterministic-preview', 'reasoning': 'quick', 'maxCostUsdMicro': 0}
+state = act('raffi_recurrence_save', automation)['state']
+task = state['raffi']['campaignPlanning']['recurringTasks'][-1]
+assert (task['status'], task['authorityVersion'], task['limits']) == ('draft', 2, {'draftsPerOccurrence': 2}), task
+with connection() as db:
+    assert db.execute('SELECT status FROM pr_recurring_tasks WHERE id=%s', (task['id'],)).fetchone()[0] == 'draft'
+act('raffi_recurrence_activate', {'taskId': task['id'], 'confirmed': True})
+def current(task_id):
+    return next(t for t in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['recurringTasks'] if t['id'] == task_id)
+clock[0] = current(task['id'])['nextOccurrence']['scheduledFor'] + 1
+calls = runtime.calls
+result = worker.tick()
+assert result['state'] == 'completed', result
+assert runtime.calls == calls + 1
+assert bindings[-1] == {'channels': [first['id'], second['id']], 'platforms': ['LinkedIn', 'LinkedIn'], 'languages': ['en', locales.canonical('en-GB')], 'format': 'carousel', 'intent': 'draft', 'contentType': 'postriff:teach'}, bindings[-1]
+planning = service.get(workspace, 'one')['state']['raffi']['campaignPlanning']
+occurrence = next(o for o in planning['occurrences'] if o['taskId'] == task['id'])
+with connection() as db:
+    title = db.execute('SELECT title FROM pr_conversations WHERE id=%s', (occurrence['conversationId'],)).fetchone()[0]
+    kinds = [row[0] for row in db.execute('SELECT kind FROM pr_agent_events WHERE run_id::text=%s ORDER BY seq', (occurrence['runId'],))]
+    assert db.execute('SELECT state FROM pr_recurring_occurrences WHERE id=%s', (occurrence['id'],)).fetchone()[0] == 'completed'
+assert title.startswith('Weekly tip · '), title
+assert 'action.proposed' not in kinds, kinds
+assert any(item.get('occurrenceId') == occurrence['id'] for item in next(c for c in planning['campaigns'] if c['id'] == task['campaignId'])['items'])
+assert not service.get(workspace, 'one')['state']['phase2']['jobs']
+# Second account disconnected: the next run drafts for the first account only and says why.
+disconnect(second)
+clock[0] = current(task['id'])['nextOccurrence']['scheduledFor'] + 1
+result = worker.tick()
+assert result['state'] == 'completed', result
+assert bindings[-1]['channels'] == [first['id']], bindings[-1]
+planning = service.get(workspace, 'one')['state']['raffi']['campaignPlanning']
+occurrence = [o for o in planning['occurrences'] if o['taskId'] == task['id']][-1]
+assert occurrence['skippedDestinations'] == [{'platform': 'LinkedIn', 'channelId': second['id'], 'account': 'Second page'}], occurrence
+with connection() as db:
+    notes = [row[0] for row in db.execute("SELECT body->>'message' FROM pr_agent_events WHERE run_id::text=%s AND kind='warning.created'", (occurrence['runId'],))]
+assert any('Second page on LinkedIn is no longer connected' in (note or '') for note in notes), notes
+# No account left: held and paused, nothing drafted anywhere else.
+disconnect(first)
+clock[0] = current(task['id'])['nextOccurrence']['scheduledFor'] + 1
+calls = runtime.calls
+assert worker.tick() == {'held': True}
+assert runtime.calls == calls
+paused = current(task['id'])
+assert (paused['status'], paused['pauseReason']) == ('paused', 'destinations_unavailable'), paused
+service.ideas.skills.bind = base_bind
+print('PASS: automation drafts every activated account with its own content type, brief text stays data, disconnected accounts skipped then paused')

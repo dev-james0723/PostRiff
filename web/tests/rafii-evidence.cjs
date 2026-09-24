@@ -25,6 +25,7 @@ const ROUTES = {
   home: '/app',
   overview: '/app/overview',
   ideas: '/app/ideas',
+  automations: '/app/automations',
   calendar: '/app/calendar',
   pipeline: '/app/pipeline',
   library: '/app/library',

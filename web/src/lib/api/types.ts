@@ -332,13 +332,87 @@ export interface SnapshotState {
   sources?: SnapshotSource[];
   raffi?: {
     campaignPlanning?: {
-      campaigns: { id: string; version: number; goal: string; audience: string; facts: Record<string, string>; status: string; missingFacts: string[]; items: { id: string; conversationId?: string; runId?: string; status?: string }[] }[];
-      recurringTasks: { id: string; campaignId: string; version: number; status: string; route?: string; maxCostUsdMicro?: number; pauseReason?: string; schedule: { weekday: string; localTime: string; timeZone: string }; nextOccurrence?: { local: string; utc: string; offset: string } }[];
-      occurrences: { id: string; taskId: string; state: string; scheduledFor: number; reason?: string; runId?: string }[];
+      campaigns: RaffiCampaign[];
+      recurringTasks: RecurringTask[];
+      occurrences: RecurringOccurrence[];
     };
     suggestions?: { id: string; kind: string; reason: string; status: string; evidence: { type: string; id: string; revision: number }[]; action: string; actionRef?: { id: string; type: string; authority: string; workspaceId?: string; targetType?: string; targetId?: string; targetRevision?: number } | null }[];
   };
   [key: string]: unknown;
+}
+
+/** A campaign brief; an automation owns one (`kind: 'automation'`), older campaigns may have none. */
+export interface RaffiCampaign {
+  id: string;
+  version: number;
+  goal: string;
+  audience: string;
+  facts: Record<string, string>;
+  status: string;
+  missingFacts: string[];
+  kind?: 'automation' | string;
+  items: { id: string; occurrenceId?: string; conversationId?: string; runId?: string; status?: string; needsReview?: boolean }[];
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/** One place an automation drafts for: a platform in a language, optionally a connected account. */
+export interface RecurringDestination {
+  platform: string;
+  language: string;
+  channelId?: string;
+}
+
+export interface RecurringSchedule {
+  /** Automations: one or more weekday names. Older tasks carry a single `weekday`. */
+  weekdays?: string[];
+  weekday?: string;
+  localTime: string;
+  timeZone: string;
+}
+
+/** A recurring draft-preparation task (an Automation). Drafts only; never a publish approval. */
+export interface RecurringTask {
+  id: string;
+  campaignId: string;
+  version: number;
+  status: 'draft' | 'active' | 'paused' | 'cancelled' | string;
+  name?: string;
+  route?: string;
+  reasoning?: 'quick' | 'standard' | 'deep' | string;
+  maxCostUsdMicro?: number;
+  pauseReason?: string;
+  schedule: RecurringSchedule;
+  nextOccurrence?: { scheduledFor?: number; local: string; utc: string; offset: string };
+  /** Authority 2 (Automations); older tasks have one LinkedIn `destination`. */
+  authorityVersion?: number;
+  destinations?: RecurringDestination[];
+  destination?: RecurringDestination;
+  destinationLabel?: string | null;
+  accountLabels?: Record<string, string>;
+  contentType?: { contentTypeId: string; contentTypeVersion: string; formatId: string | null } | null;
+  contentLabel?: string | null;
+  contentLibrary?: { editorialId: string; nativeId: string } | null;
+  contextSourceIds?: string[];
+  limits?: { draftsPerOccurrence: number };
+  createdBy?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  activatedBy?: string;
+  activatedAt?: number;
+}
+
+export interface RecurringOccurrence {
+  id: string;
+  taskId: string;
+  taskVersion?: number;
+  state: 'pending' | 'running' | 'completed' | 'failed' | 'held' | 'missed' | 'cancelled' | string;
+  scheduledFor: number;
+  reason?: string;
+  runId?: string;
+  conversationId?: string;
+  completedAt?: number;
+  skippedDestinations?: { platform: string; channelId?: string; account?: string }[];
 }
 
 export interface Snapshot {

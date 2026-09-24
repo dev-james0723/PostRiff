@@ -23,3 +23,17 @@ Verification legend: **PW** = Playwright real-input run against the local dev ha
 | Plan card | `PlanCard` | `approvePlan` (review → approve chain) | server | server | the row's own account is pre-selected (`channelId`), else the ready account | typecheck; not exercised (no approval in automation) |
 | Theme toggle | `ThemeModeToggle` (next-themes) + Appearance (`active_theme` cookie) | — | browser | persisted | — | evidence sweep dark + light |
 | Motion preference | `useMotionPreference` + `prefers-reduced-motion` | — | browser | persisted | spatial animation off, state still changes | PW `reduced-motion` scene |
+
+## Automations (`/app/automations`, Phase 1)
+
+| control | production component | real action | state owner | persistence | error / cancel | verification |
+|---|---|---|---|---|---|---|
+| New automation / Edit | `AutomationBuilder` (`features/automations/automation-builder.tsx`) | stages every step locally; Save sends one `raffi_recurrence_save` (installs `pack.creator` first when the chosen type needs it) | builder state | server (`raffi.campaignPlanning` + `pr_recurring_tasks`) | Cancel/Escape discard; refusals (disconnected account, unknown type, bad schedule) shown in the dialog; stale revision retried once | py `test_postriff_campaigns` (13); PW `rafii-automations.cjs` |
+| What: brief, audience, event facts | builder step 1 | part of the save payload (campaign brief, versioned) | builder | server | event brief saves as a draft; activation waits for date and venue (reminder, not a block) | py (activation refused with the missing facts) |
+| What: content type | `ContentLibraryDialog` → `contentChoice` | stored on the automation (`contentType`), not the workspace selection | builder | server | "Use general" clears it; an unavailable type drafts as general writing with a note | py (`_automation_selection`); pg (skills bound with the automation's type); PW (Home selection unchanged) |
+| When: weekdays, time, zone, next runs | builder step 2 + `schedule.ts` | `schedule {weekdays, localTime, timeZone}`; preview computed like `campaigns.next_occurrence` | builder | server | incomplete schedule blocks Save with a reason | node `schedule.test.cjs` (5, incl. DST); py weekday cases |
+| Where: accounts, folders, languages | `ChannelBloomDialog`, `LanguagePicker` | `destinations[{platform, language, channelId}]` + folder label (display) | builder | server | disconnected accounts must be removed before saving; at most 10 drafts a run | py refusals; pg run drafts exactly the chosen accounts; PW 3 destinations |
+| Review: writer, reasoning, cost limit, budget | builder step 4 | `route`, `reasoning`, `maxCostUsdMicro`; weekly ceiling = limit × runs a week | builder | server | paid writer with $0 limit: reminder (every run would be held) | pg cost cap held before provider I/O (existing) |
+| Activate / Pause / Resume / Cancel | `AutomationCard` | `raffi_recurrence_activate` / `pause` / `resume` / `cancel` (owner, `confirmed`) | server | server | Cancel asks for confirmation; activation refused without facts or live accounts | py; PW all four |
+| Run history, Review latest drafts | `AutomationCard` | reads `occurrences` (state, reason, skipped accounts, conversation) | server | server | held/missed/cancelled runs explained in words | pg; PW run → drafts for both accounts |
+| Home panel | `RaffiPlanner` (Home) | reads automations; suggestions unchanged; a campaign suggestion opens `/app/automations?campaign=<id>` | snapshot | — | — | PW Home panel lists the automation and links back |
