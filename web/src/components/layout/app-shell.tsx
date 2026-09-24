@@ -37,7 +37,7 @@ export function AppShell({ defaultOpen, children, initial }: { defaultOpen: bool
                 </a>
                 <AppSidebar />
                 <SidebarInset id='main-content' tabIndex={-1} className='relative isolate min-w-0 scroll-mt-16 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0'>
-                  <div aria-hidden className='rafii-ambient' />
+                  <div aria-hidden data-extent='viewport' className='rafii-ambient' />
                   <Header />
                   <InfobarProvider defaultOpen={false}>
                     {children}
