@@ -77,8 +77,9 @@ async function open(browser, name, { width = 1440, height = 1000, theme = 'dark'
   const page = await context.newPage();
   scene = { name, viewport: `${width}x${height}`, theme, checks: [], errors: [], blocked: [], screenshots: [], axe: [], video: null, t0: Date.now() };
   report.scenes.push(scene);
-  page.on('pageerror', (e) => scene.errors.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => m.type() === 'error' && !/Download the React DevTools|net::ERR_FAILED/.test(m.text()) && scene.errors.push(`console: ${m.text().slice(0, 300)}`));
+  const where = () => { try { return new URL(page.url()).pathname; } catch { return '?'; } };
+  page.on('pageerror', (e) => scene.errors.push(`pageerror at ${where()}: ${e.message}`));
+  page.on('console', (m) => m.type() === 'error' && !/Download the React DevTools|net::ERR_FAILED/.test(m.text()) && scene.errors.push(`console at ${where()}: ${m.text().slice(0, 300)}`));
   return { context, page, dir };
 }
 
@@ -557,6 +558,7 @@ async function phone(browser) {
   const failed = report.scenes.flatMap((sc) => sc.checks.filter((c) => !c.ok).map((c) => `${sc.name}: ${c.name}`));
   report.summary = { checks: report.scenes.reduce((n, sc) => n + sc.checks.length, 0), failed: failed.length, pageErrors: report.scenes.reduce((n, sc) => n + sc.errors.length, 0) };
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
+  for (const sc of report.scenes) for (const e of sc.errors) process.stdout.write(`ERROR [${sc.name}] ${e.slice(0, 400)}\n`);
   process.stdout.write(`\n${report.summary.checks} checks, ${report.summary.failed} failed, ${report.summary.pageErrors} console/page errors → ${path.relative(process.cwd(), path.join(out, 'report.json'))}\n`);
   if (failed.length || report.summary.pageErrors) process.exitCode = 1;
 })();

@@ -31,6 +31,8 @@ jobs:
       - name: Install pinned application and validation tools
         run: |
           python -m pip install -r requirements-dev.txt
+          # Vercel's Python builder (used by the isolated function archive step) needs uv on PATH.
+          python -m pip install uv==0.11.16
           npm install -g npm@11.12.1
           npm --prefix web ci
       - name: Install PostgreSQL 17 using its signed official repository
