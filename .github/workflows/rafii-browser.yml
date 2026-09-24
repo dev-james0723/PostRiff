@@ -75,6 +75,8 @@ jobs:
         run: node web/tests/rafii-automations.cjs --no-run
       - name: Home scenes (drafting with the fixture writer, Content Library)
         run: node web/tests/rafii-workflow.cjs --only=workflow,library
+      - name: Theme bars (header and phone tab bar match light and dark under any stored theme)
+        run: node web/tests/rafii-theme-bars.cjs
       - name: Keep the evidence for this commit
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -83,6 +85,7 @@ jobs:
           path: |
             docs/design/rafii-v9/evidence/automations/
             docs/design/rafii-v9/evidence/workflow/
+            docs/design/rafii-v9/evidence/theme-bars/
             harness.log
             web.log
           retention-days: 14

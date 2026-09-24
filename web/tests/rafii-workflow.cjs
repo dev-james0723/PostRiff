@@ -60,7 +60,7 @@ async function open(browser, name, { width = 1440, height = 1000, theme = 'dark'
   await context.addCookies([
     { name: 'postriff_dev', value: '1', url: base },
     { name: 'postriff_dev_principal', value: seed.principal, url: base },
-    { name: 'active_theme', value: 'rafii', url: base }
+    { name: 'postriff_theme', value: 'rafii', url: base }
   ]);
   await context.addInitScript(({ id, theme, model, tours }) => {
     localStorage.setItem('postriff-dev-principal', id);

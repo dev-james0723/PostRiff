@@ -18,7 +18,7 @@ const DIALOGS = ['content-library', 'channel-bloom-dialog', 'language-dialog', '
   await context.addCookies([
     { name: 'postriff_dev', value: '1', url: base },
     { name: 'postriff_dev_principal', value: seed.principal, url: base },
-    { name: 'active_theme', value: 'rafii', url: base }
+    { name: 'postriff_theme', value: 'rafii', url: base }
   ]);
   const tours = [...fs.readFileSync(path.resolve(__dirname, '../src/features/onboarding/tours.ts'), 'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map((m) => m[1]);
   const seen = JSON.stringify({ completed: {}, dismissed: Object.fromEntries(tours.map((id) => [id, 1])), nudged: Object.fromEntries(tours.map((id) => [id, 1])) });
