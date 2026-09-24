@@ -34,7 +34,11 @@ const fontMono = Geist_Mono({
 const fontGoogleSansFlex = Google_Sans_Flex({
   subsets: ['latin'],
   preload: false,
-  variable: '--font-google-sans-flex'
+  variable: '--font-google-sans-flex',
+  // next/font has no metrics for this family, so it cannot size-adjust a fallback (it warned on every
+  // compile); name the fallback explicitly instead.
+  adjustFontFallback: false,
+  fallback: ['system-ui', 'sans-serif']
 });
 
 const fontSourceCodePro = Source_Code_Pro({
