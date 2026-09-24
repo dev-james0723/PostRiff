@@ -7,7 +7,7 @@ import type { LibraryValue } from '@/features/agent/content-choice';
 import type { MonthDay, ScheduleKind, Weekday } from './schedule';
 
 export interface AutomationTemplate {
-  id: 'weekly_tip' | 'event_countdown' | 'monthly_recap';
+  id: 'weekly_tip' | 'event_countdown' | 'monthly_recap' | 'new_idea' | 'strong_post' | 'evergreen';
   title: string;
   description: string;
   icon: keyof typeof Icons;
@@ -22,6 +22,12 @@ export interface AutomationTemplate {
   localTime: string;
   /** Recaps read the workspace's own published posts from this many days. */
   recentPostsDays?: number;
+  /** Triggers. */
+  sourceKinds?: string[];
+  maxPerDay?: number;
+  withinDays?: number;
+  /** Evergreen: refresh one published post at least this many days old. */
+  evergreenDays?: number;
   /** Shown under the template in the picker. */
   note: string;
 }
@@ -66,5 +72,47 @@ export const TEMPLATES: AutomationTemplate[] = [
     localTime: '17:00',
     recentPostsDays: 31,
     note: 'Last day of the month at 17:00 · reads your published posts'
+  },
+  {
+    id: 'new_idea',
+    title: 'New idea → drafts',
+    description: 'Each idea, link or note you add to Ideas becomes drafts.',
+    icon: 'post',
+    name: 'New idea to drafts',
+    goal: 'Turn the new material into a post: the one point worth sharing, why it matters to my audience, and a question that invites replies.',
+    library: { editorialId: 'educational_explainer', nativeId: 'text' },
+    kind: 'on_new_source',
+    sourceKinds: ['idea', 'text', 'link'],
+    maxPerDay: 3,
+    localTime: '09:00',
+    note: 'Runs when you add something to Ideas · up to 3 a day'
+  },
+  {
+    id: 'strong_post',
+    title: 'Follow up a strong post',
+    description: 'When a post gets more replies than usual, draft a follow-up.',
+    icon: 'trendingUp',
+    name: 'Strong post follow-up',
+    goal: 'Continue the conversation from my post that people responded to: answer the most likely follow-up question and add one new, useful detail.',
+    library: { editorialId: 'recap_followup', nativeId: 'text' },
+    kind: 'on_strong_post',
+    maxPerDay: 1,
+    withinDays: 7,
+    localTime: '09:00',
+    note: 'Threads replies and Instagram comments, compared with your comparable posts · LinkedIn reports none yet'
+  },
+  {
+    id: 'evergreen',
+    title: 'Evergreen reshare',
+    description: 'Every two weeks, a fresh take on an older post that worked.',
+    icon: 'refresh',
+    name: 'Evergreen reshare',
+    goal: 'Give an earlier post a fresh take for today: the same core idea, new wording and a current example. Never copy the old text.',
+    library: { editorialId: 'educational_explainer', nativeId: 'text' },
+    kind: 'weekly',
+    weekdays: ['Wednesday'],
+    localTime: '10:00',
+    evergreenDays: 60,
+    note: 'Wednesdays at 10:00 · posts at least 60 days old, never the same one twice'
   }
 ];

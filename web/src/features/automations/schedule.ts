@@ -10,7 +10,14 @@ export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
 export type Weekday = (typeof WEEKDAYS)[number];
 export const WEEKDAY_SHORT: Record<Weekday, string> = { Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun' };
 
-export type ScheduleKind = 'weekly' | 'monthly' | 'countdown';
+export type ScheduleKind = 'weekly' | 'monthly' | 'countdown' | 'on_new_source' | 'on_strong_post';
+export type TriggerKind = 'on_new_source' | 'on_strong_post';
+export const SOURCE_KINDS = [
+  { value: 'idea', label: 'Ideas' },
+  { value: 'text', label: 'Notes' },
+  { value: 'link', label: 'Links' },
+  { value: 'document', label: 'Documents' }
+] as const;
 export type MonthDay = number | 'last';
 
 export interface ScheduleValue {
@@ -23,11 +30,18 @@ export interface ScheduleValue {
   /** Countdown: the event date (YYYY-MM-DD) and the days before it that get a run. */
   eventDate?: string;
   daysBefore?: number[];
-  localTime: string;
+  /** Triggers: what starts a run, and at most how many runs a day. */
+  sourceKinds?: string[];
+  maxPerDay?: number;
+  withinDays?: number;
+  /** Absent for triggers. */
+  localTime?: string;
   timeZone: string;
 }
 
-export const kindOf = (schedule: Pick<ScheduleValue, 'kind'>): ScheduleKind => (schedule.kind === 'monthly' || schedule.kind === 'countdown' ? schedule.kind : 'weekly');
+const KNOWN: ScheduleKind[] = ['monthly', 'countdown', 'on_new_source', 'on_strong_post'];
+export const kindOf = (schedule: Pick<ScheduleValue, 'kind'>): ScheduleKind => (KNOWN.includes(schedule.kind as ScheduleKind) ? (schedule.kind as ScheduleKind) : 'weekly');
+export const isTrigger = (schedule: Pick<ScheduleValue, 'kind'>): boolean => schedule.kind === 'on_new_source' || schedule.kind === 'on_strong_post';
 
 export function monthDaysOf(schedule: Pick<ScheduleValue, 'monthDays'>): MonthDay[] {
   const valid = (schedule.monthDays ?? []).filter((d): d is MonthDay => d === 'last' || (Number.isInteger(d) && (d as number) >= 1 && (d as number) <= 31));
@@ -143,7 +157,8 @@ function validInstant(year: number, month: number, day: number, hour: number, mi
 
 /** The next run strictly after `afterMs`, as epoch milliseconds, or null for an incomplete or finished schedule. */
 export function nextRun(schedule: ScheduleValue, afterMs: number): number | null {
-  const time = parseTime(schedule.localTime);
+  if (isTrigger(schedule)) return null;
+  const time = parseTime(schedule.localTime ?? '');
   if (!time || !validTimeZone(schedule.timeZone)) return null;
   const now = wallAt(afterMs, schedule.timeZone);
   const kind = kindOf(schedule);
@@ -235,11 +250,22 @@ export function countdownLabel(schedule: Pick<ScheduleValue, 'eventDate' | 'days
   return `Countdown to ${date}${parts.length ? `: ${parts.join(' and ')}` : ''}`;
 }
 
+/** "When you add an idea or a link · up to 3 a day" for triggers. */
+export function triggerLabel(schedule: ScheduleValue): string {
+  const perDay = schedule.maxPerDay ?? 1;
+  const limit = `up to ${perDay} run${perDay === 1 ? '' : 's'} a day`;
+  if (schedule.kind === 'on_strong_post') return `After a post gets more replies or comments than usual (last ${schedule.withinDays ?? 7} days) · ${limit}`;
+  const names = SOURCE_KINDS.filter((k) => (schedule.sourceKinds ?? SOURCE_KINDS.map((s) => s.value)).includes(k.value)).map((k) => k.label.toLowerCase().replace(/s$/, ''));
+  const what = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : (names[0] ?? 'item');
+  return `When you add a new ${what} to Ideas · ${limit}`;
+}
+
 /** "Mondays and Thursdays at 9:00 AM · Hong Kong time" style summary, for every schedule kind. */
 export function scheduleSummary(schedule: ScheduleValue, locale?: string): string {
+  if (isTrigger(schedule)) return triggerLabel(schedule);
   const kind = kindOf(schedule);
   const days = kind === 'monthly' ? monthDaysLabel(schedule) : kind === 'countdown' ? countdownLabel(schedule, locale) : daysLabel(schedule);
-  return `${days} at ${timeLabel(schedule.localTime, locale)} · ${zoneLabel(schedule.timeZone)} time`;
+  return `${days} at ${timeLabel(schedule.localTime ?? '', locale)} · ${zoneLabel(schedule.timeZone)} time`;
 }
 
 /** A run instant as "Wed 4 Mar, 9:00 AM" in the given zone. */
@@ -257,6 +283,7 @@ export function runsPerWeek(schedule: Pick<ScheduleValue, 'weekdays' | 'weekday'
  * weekday) and monthly schedules, the whole countdown for a countdown.
  */
 export function maxRuns(schedule: ScheduleValue): { runs: number; per: 'month' | 'countdown' } {
+  if (isTrigger(schedule)) return { runs: (schedule.maxPerDay ?? 1) * 31, per: 'month' };
   const kind = kindOf(schedule);
   if (kind === 'monthly') return { runs: monthDaysOf(schedule).length, per: 'month' };
   if (kind === 'countdown') return { runs: daysBeforeOf(schedule).length, per: 'countdown' };

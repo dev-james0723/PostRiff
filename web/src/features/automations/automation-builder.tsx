@@ -25,7 +25,7 @@ import { languageLabel, locales } from '@/lib/locales';
 import { useTimeZone } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
 import type { Automation } from './use-automations';
-import { WEEKDAYS, WEEKDAY_SHORT, ceilingText, daysBeforeOf, kindOf, missingFacts, monthDaysOf, nextRuns, parseTime, runLabel, scheduleSummary, usd, validTimeZone, weekdaysOf, type MonthDay, type ScheduleKind, type ScheduleValue, type Weekday } from './schedule';
+import { SOURCE_KINDS, WEEKDAYS, WEEKDAY_SHORT, ceilingText, daysBeforeOf, kindOf, missingFacts, monthDaysOf, nextRuns, parseTime, runLabel, scheduleSummary, usd, validTimeZone, weekdaysOf, type MonthDay, type ScheduleKind, type ScheduleValue, type Weekday } from './schedule';
 import { TEMPLATES, type AutomationTemplate } from './templates';
 
 /** 48px fields with 16px text on phones (no iOS zoom), quiet field material (DNA §10, §12). */
@@ -87,6 +87,12 @@ export interface BuilderInitial {
   sourceIds: string[];
   /** Include this workspace's own published posts from this many days (recaps). */
   recentPostsDays: number | null;
+  /** Triggers. */
+  sourceKinds: string[];
+  maxPerDay: number;
+  withinDays: number;
+  /** Refresh one published post at least this many days old (evergreen). */
+  evergreenDays: number | null;
 }
 
 const MONTH_DAYS: MonthDay[] = [...Array.from({ length: 31 }, (_, i) => i + 1), 'last'];
@@ -94,8 +100,11 @@ const COUNTDOWN_STEPS = [30, 14, 7, 3, 2, 1, 0];
 const KINDS: { value: ScheduleKind; label: string }[] = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
-  { value: 'countdown', label: 'Countdown' }
+  { value: 'countdown', label: 'Countdown' },
+  { value: 'on_new_source', label: 'New idea' },
+  { value: 'on_strong_post', label: 'Strong post' }
 ];
+const ALL_SOURCE_KINDS = SOURCE_KINDS.map((k) => k.value as string);
 
 const REASONING: Reasoning[] = ['quick', 'standard', 'deep'];
 const REASONING_LABEL: Record<Reasoning, string> = { quick: 'Quick', standard: 'Standard', deep: 'Deep' };
@@ -113,7 +122,7 @@ function groupTargets(destinations: RecurringDestination[]): TargetState[] {
 }
 
 export function blankInitial(timeZone: string): BuilderInitial {
-  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], recentPostsDays: null };
+  return { wasActive: false, name: '', goal: '', audience: '', facts: {}, kind: 'weekly', weekdays: ['Monday'], monthDays: [1], eventDate: '', daysBefore: [14, 7, 1, 0], localTime: '09:00', timeZone, targets: [], folderContext: null, destinationLabel: null, content: null, route: null, reasoning: 'quick', maxCostUsd: '0', sourceIds: [], recentPostsDays: null, sourceKinds: ALL_SOURCE_KINDS, maxPerDay: 3, withinDays: 7, evergreenDays: null };
 }
 
 /** Start a new automation from an existing campaign brief (an older campaign or a suggestion). */
@@ -138,7 +147,7 @@ export function initialFromAutomation(automation: Automation, timeZone: string):
     monthDays: monthDaysOf(task.schedule).length ? monthDaysOf(task.schedule) : [1],
     eventDate: task.schedule.eventDate ?? '',
     daysBefore: daysBeforeOf(task.schedule).length ? daysBeforeOf(task.schedule) : [14, 7, 1, 0],
-    localTime: task.schedule.localTime,
+    localTime: task.schedule.localTime ?? '09:00',
     timeZone: validTimeZone(task.schedule.timeZone) ? task.schedule.timeZone : timeZone,
     targets: groupTargets(automation.destinations),
     folderContext: null,
@@ -148,7 +157,11 @@ export function initialFromAutomation(automation: Automation, timeZone: string):
     reasoning: (REASONING as string[]).includes(task.reasoning ?? '') ? (task.reasoning as Reasoning) : 'quick',
     maxCostUsd: String((task.maxCostUsdMicro ?? 0) / 1_000_000),
     sourceIds: task.contextSourceIds ?? [],
-    recentPostsDays: task.include?.recentPostsDays ?? null
+    recentPostsDays: task.include?.recentPostsDays ?? null,
+    sourceKinds: task.schedule.sourceKinds?.length ? task.schedule.sourceKinds : ALL_SOURCE_KINDS,
+    maxPerDay: task.schedule.maxPerDay ?? (task.schedule.kind === 'on_strong_post' ? 1 : 3),
+    withinDays: task.schedule.withinDays ?? 7,
+    evergreenDays: task.include?.evergreen?.minAgeDays ?? null
   };
 }
 
@@ -197,6 +210,10 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const [eventDate, setEventDate] = useState(initial.eventDate);
   const [daysBefore, setDaysBefore] = useState<number[]>(initial.daysBefore);
   const [recentPostsDays, setRecentPostsDays] = useState<number | null>(initial.recentPostsDays);
+  const [sourceKinds, setSourceKinds] = useState<string[]>(initial.sourceKinds);
+  const [maxPerDay, setMaxPerDay] = useState(initial.maxPerDay);
+  const [withinDays, setWithinDays] = useState(initial.withinDays);
+  const [evergreenDays, setEvergreenDays] = useState<number | null>(initial.evergreenDays);
   const [templateId, setTemplateId] = useState<AutomationTemplate['id'] | null>(null);
   const [localTime, setLocalTime] = useState(initial.localTime);
   const [timeZone, setTimeZone] = useState(initial.timeZone);
@@ -247,9 +264,15 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const accountName = (target: TargetState) => (target.channelId ? (accounts.find((a) => a.id === target.channelId)?.account ?? 'Disconnected account') : `${target.platform} (no account)`);
   const accountConnected = (target: TargetState) => !target.channelId || Boolean(accounts.find((a) => a.id === target.channelId)?.connected);
 
-  const schedule: ScheduleValue = kind === 'monthly' ? { kind, monthDays, localTime, timeZone } : kind === 'countdown' ? { kind, eventDate, daysBefore, localTime, timeZone } : { weekdays, localTime, timeZone };
+  const trigger = kind === 'on_new_source' || kind === 'on_strong_post';
+  const schedule: ScheduleValue =
+    kind === 'monthly' ? { kind, monthDays, localTime, timeZone }
+    : kind === 'countdown' ? { kind, eventDate, daysBefore, localTime, timeZone }
+    : kind === 'on_new_source' ? { kind, sourceKinds, maxPerDay, timeZone }
+    : kind === 'on_strong_post' ? { kind, maxPerDay, withinDays, timeZone }
+    : { weekdays, localTime, timeZone };
   const runs = useMemo(() => nextRuns(schedule, now, 3), [kind, weekdays, monthDays, eventDate, daysBefore, localTime, timeZone, now]); // eslint-disable-line react-hooks/exhaustive-deps
-  const scheduleReady = kind === 'monthly' ? monthDays.length > 0 : kind === 'countdown' ? /^\d{4}-\d{2}-\d{2}$/.test(eventDate) && daysBefore.length > 0 : weekdays.length > 0;
+  const scheduleReady = kind === 'monthly' ? monthDays.length > 0 : kind === 'countdown' ? /^\d{4}-\d{2}-\d{2}$/.test(eventDate) && daysBefore.length > 0 : kind === 'on_new_source' ? sourceKinds.length > 0 : trigger || weekdays.length > 0;
   const destinations: RecurringDestination[] = targets.flatMap((t) => t.languages.map((language) => ({ platform: t.platform, language, ...(t.channelId ? { channelId: t.channelId } : {}) })));
   const costMicro = Math.round(Number(maxCost || '0') * 1_000_000);
   const costValid = Number.isFinite(costMicro) && costMicro >= 0 && costMicro <= 10_000_000;
@@ -266,7 +289,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
     ...(kind === 'countdown' && !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? [{ step: 'when' as Step, text: 'Choose the event date.' }] : []),
     ...(kind === 'countdown' && !daysBefore.length ? [{ step: 'when' as Step, text: 'Choose when the countdown drafts.' }] : []),
     ...(kind === 'countdown' && scheduleReady && parseTime(localTime) && validTimeZone(timeZone) && !runs.length ? [{ step: 'when' as Step, text: 'Every countdown date has passed. Choose a later event date.' }] : []),
-    ...(!parseTime(localTime) ? [{ step: 'when' as Step, text: 'Choose a time.' }] : []),
+    ...(!trigger && !parseTime(localTime) ? [{ step: 'when' as Step, text: 'Choose a time.' }] : []),
+    ...(kind === 'on_new_source' && !sourceKinds.length ? [{ step: 'when' as Step, text: 'Choose what starts a run.' }] : []),
     ...(!validTimeZone(timeZone) ? [{ step: 'when' as Step, text: 'Choose a time zone.' }] : []),
     ...(!destinations.length ? [{ step: 'where' as Step, text: 'Choose at least one account or channel.' }] : []),
     ...(destinations.length > MAX_DESTINATIONS ? [{ step: 'where' as Step, text: `Keep it to ${MAX_DESTINATIONS} drafts a run or fewer.` }] : []),
@@ -327,6 +351,17 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
     if (template.daysBefore) setDaysBefore(template.daysBefore);
     setLocalTime(template.localTime);
     setRecentPostsDays(template.recentPostsDays ?? null);
+    if (template.sourceKinds) setSourceKinds(template.sourceKinds);
+    if (template.maxPerDay) setMaxPerDay(template.maxPerDay);
+    if (template.withinDays) setWithinDays(template.withinDays);
+    setEvergreenDays(template.evergreenDays ?? null);
+  }
+
+  function chooseKind(next: ScheduleKind) {
+    setKind(next);
+    if (next === 'on_strong_post' && kind !== 'on_strong_post') setMaxPerDay(1);
+    if (next === 'on_new_source' && kind !== 'on_new_source') setMaxPerDay(3);
+    if (next === 'on_new_source' || next === 'on_strong_post') setEvergreenDays(null);
   }
 
   function toggleMonthDay(day: MonthDay) {
@@ -360,7 +395,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
         audience: audience.trim(),
         facts: cleanFacts,
         schedule,
-        include: recentPostsDays ? { recentPostsDays } : null,
+        include: recentPostsDays || (evergreenDays && !trigger) ? { ...(recentPostsDays ? { recentPostsDays } : {}), ...(evergreenDays && !trigger ? { evergreen: { minAgeDays: evergreenDays } } : {}) } : null,
         destinations,
         destinationLabel,
         contentType: content ? { contentTypeId: content.contentTypeId, formatId: content.formatId, label: content.label, ...(content.library ? { library: content.library } : {}) } : null,
@@ -476,6 +511,20 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   <Checkbox checked={recentPostsDays !== null} onCheckedChange={(checked) => setRecentPostsDays(checked ? 31 : null)} label='Include my published posts from the last month' className='min-h-11 gap-2.5 [&>span]:text-sm' />
                   <p className={HINT}>For recaps and follow-ups. Each run reads up to ten posts this workspace published in the 31 days before it; nothing else.</p>
                 </div>
+                {!trigger && (
+                  <div className='flex flex-col gap-1'>
+                    <Checkbox checked={evergreenDays !== null} onCheckedChange={(checked) => setEvergreenDays(checked ? 60 : null)} label='Give an older post a fresh take each run (evergreen)' className='min-h-11 gap-2.5 [&>span]:text-sm' />
+                    {evergreenDays !== null && (
+                      <label className='text-muted-foreground flex flex-wrap items-center gap-2 pl-7 text-xs'>
+                        Posts at least
+                        <select value={evergreenDays} onChange={(e) => setEvergreenDays(Number(e.target.value))} aria-label='Minimum age of the post to reshare' className='rafii-field rafii-focus h-9 rounded-md px-2 text-sm'>
+                          {[30, 60, 90, 180, 365].map((d) => <option key={d} value={d}>{d} days</option>)}
+                        </select>
+                        old · the one that started the most conversation first, never the same post twice.
+                      </label>
+                    )}
+                  </div>
+                )}
                 {sources.length > 0 && (
                   <fieldset className='flex flex-col gap-2'>
                     <legend className={cn(LABEL, 'mb-1')}>Sources to draw from (optional)</legend>
@@ -494,8 +543,44 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
               <section id='automation-step-when' role='tabpanel' aria-label='When' className='flex flex-col gap-5'>
                 <div className='flex flex-col gap-2'>
                   <span className={LABEL}>Repeats</span>
-                  <SegmentedControl options={KINDS} value={kind} onChange={setKind} label='Schedule type' size='sm' widths='content' className='self-start' />
+                  <SegmentedControl options={KINDS} value={kind} onChange={chooseKind} label='Schedule type' size='sm' widths='content' className='self-start' />
                 </div>
+                {kind === 'on_new_source' && (
+                  <fieldset className='flex flex-col gap-2'>
+                    <legend className={cn(LABEL, 'mb-1')}>Start a run when I add</legend>
+                    <div className='flex flex-wrap gap-1.5'>
+                      {SOURCE_KINDS.map((item) => {
+                        const on = sourceKinds.includes(item.value);
+                        return (
+                          <button key={item.value} type='button' aria-pressed={on} onClick={() => setSourceKinds((current) => (on ? current.filter((k) => k !== item.value) : [...current, item.value]))} className={cn('rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-sm font-medium transition-colors', on ? 'rafii-glass-selected text-foreground' : 'rafii-quiet text-muted-foreground hover:text-foreground')}>
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className={HINT}>Each new item runs once and is read as the run’s source. Items added before the automation is activated are not included. Recordings are not supported yet: the Library holds images only.</p>
+                  </fieldset>
+                )}
+                {kind === 'on_strong_post' && (
+                  <div className='flex flex-col gap-2'>
+                    <p className={HINT}>Runs when one of your published posts gets clearly more replies (Threads) or comments (Instagram) than your comparable posts: same app, language and content type, at least three measured. LinkedIn does not report these yet. This is an observation, not proof of what caused it.</p>
+                    <label className='flex flex-wrap items-center gap-2 text-sm'>
+                      Look at posts from the last
+                      <select value={withinDays} onChange={(e) => setWithinDays(Number(e.target.value))} aria-label='How far back to look for strong posts' className='rafii-field rafii-focus h-11 rounded-md px-2 text-sm'>
+                        {[3, 7, 14, 30].map((d) => <option key={d} value={d}>{d} days</option>)}
+                      </select>
+                    </label>
+                  </div>
+                )}
+                {trigger && (
+                  <label className='flex flex-wrap items-center gap-2 text-sm'>
+                    At most
+                    <select value={maxPerDay} onChange={(e) => setMaxPerDay(Number(e.target.value))} aria-label='Most runs a day' className='rafii-field rafii-focus h-11 rounded-md px-2 text-sm'>
+                      {[1, 2, 3, 5, 10].map((d) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    run{maxPerDay === 1 ? '' : 's'} a day. More than that on one day are skipped, not saved for later.
+                  </label>
+                )}
                 {kind === 'monthly' && (
                   <fieldset className='flex flex-col gap-2'>
                     <legend className={cn(LABEL, 'mb-1')}>On these days of the month (up to 4)</legend>
@@ -566,10 +651,10 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </div>
                 </fieldset>
                 )}
-                <div className='grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]'>
-                  <Field label='At' htmlFor='automation-time'>
+                <div className={cn('grid gap-3', !trigger && 'sm:grid-cols-[10rem_minmax(0,1fr)]')}>
+                  {!trigger && <Field label='At' htmlFor='automation-time'>
                     <Input id='automation-time' type='time' value={localTime} onChange={(e) => setLocalTime(e.target.value)} className={FIELD} />
-                  </Field>
+                  </Field>}
                   <Field label='Time zone' htmlFor='automation-zone'>
                     <select id='automation-zone' value={timeZone} onChange={(e) => setTimeZone(e.target.value)} className={cn(FIELD, 'rafii-focus w-full min-w-0')}>
                       {zones.map((zone) => (
@@ -581,7 +666,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </Field>
                 </div>
                 <Surface material='quiet' radius='control' padding='sm' aria-live='polite'>
-                  <p className='text-sm font-medium'>{scheduleReady && parseTime(localTime) ? scheduleSummary(schedule) : kind === 'countdown' ? 'Choose the event date and days' : 'Choose days and a time'}</p>
+                  <p className='text-sm font-medium'>{scheduleReady && (trigger || parseTime(localTime)) ? scheduleSummary(schedule) : kind === 'countdown' ? 'Choose the event date and days' : trigger ? 'Choose what starts a run' : 'Choose days and a time'}</p>
                   {kind === 'countdown' && scheduleReady && parseTime(localTime) && runs.length === 0 && <p className='text-muted-foreground mt-1 text-xs'>Every countdown date has passed. Choose a later event date.</p>}
                   {runs.length > 0 && (
                     <ul className='mt-2 flex flex-col gap-1'>
@@ -593,7 +678,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                       ))}
                     </ul>
                   )}
-                  <p className={cn(HINT, 'mt-2')}>{kind === 'countdown' ? 'After the last date the countdown finishes on its own. ' : ''}A run that is more than a day late, for example after a pause, is skipped rather than caught up.</p>
+                  <p className={cn(HINT, 'mt-2')}>{trigger ? 'Rafii checks about once a minute while the automation is active. ' : kind === 'countdown' ? 'After the last date the countdown finishes on its own. ' : ''}A run that is more than a day late, for example after a pause, is skipped rather than caught up.</p>
                 </Surface>
               </section>
             )}
@@ -721,11 +806,13 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                     <span className='text-muted-foreground'>
                       {content ? content.label : 'General writing'} · {sourceIds.length ? `${sourceIds.length} source${sourceIds.length === 1 ? '' : 's'}` : 'brief only'}
                       {recentPostsDays ? ' · reads your published posts' : ''}
+                      {evergreenDays && !trigger ? ` · refreshes a post at least ${evergreenDays} days old` : ''}
                     </span>
                   </Summary>
                   <Summary term='When' onEdit={() => setStep('when')}>
                     <span>{scheduleReady ? scheduleSummary(schedule) : 'Not complete yet'}</span>
                     {runs[0] && <span className='text-muted-foreground'>First run after activation: {runLabel(runs[0], timeZone)}</span>}
+                    {trigger && <span className='text-muted-foreground'>Starts watching when it is activated.</span>}
                   </Summary>
                   <Summary term='Where' onEdit={() => setStep('where')}>
                     {targets.length ? (

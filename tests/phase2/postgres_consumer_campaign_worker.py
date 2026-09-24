@@ -1,4 +1,5 @@
 """Real DB worker calls the existing synthetic runtime, reconciles restarts and loses authority safely."""
+import json
 import os
 import sys
 from pathlib import Path
@@ -243,3 +244,52 @@ clock[0] += 40 * 86400
 result = worker.tick_many()
 assert all(run.get('state') != 'completed' or run.get('occurrenceId') not in [o['id'] for o in planning['occurrences'] if o['taskId'] == countdown['id']] for run in result.get('runs', [])), result
 print('PASS: countdown and recap context reach the writer, costs and draft counts recorded, batched cron, one deduplicated drafts-ready email, countdown finishes')
+
+# Phase 3: a new idea added after activation starts exactly one run that reads it; a strong-post trigger
+# scans real insights without drafting when nothing qualifies; evergreen with nothing old enough still drafts.
+for t in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['recurringTasks']:
+    if t['status'] != 'cancelled':
+        act('raffi_recurrence_cancel', {'taskId': t['id'], 'confirmed': True})
+requests_seen = []
+class ContextRuntime(CountingRuntime):
+    def start_turn(self, request, emit):
+        requests_seen.append(request)
+        return super().start_turn(request, emit)
+context_runtime = ContextRuntime(); service.ideas.runtimes = [context_runtime]
+state = act('raffi_recurrence_save', {**base, 'name': 'New ideas', 'goal': 'Turn each new idea into a post', 'schedule': {'kind': 'on_new_source', 'sourceKinds': ['idea'], 'maxPerDay': 2, 'timeZone': 'UTC'}})['state']
+ideas_task = state['raffi']['campaignPlanning']['recurringTasks'][-1]
+act('raffi_recurrence_activate', {'taskId': ideas_task['id'], 'confirmed': True})
+assert CampaignWorker(service).tick_many() == {'idle': True}  # nothing new yet
+def add_source(source_id, created):
+    def insert(state, actor):
+        state['sources'].append({'id': source_id, 'kind': 'idea', 'title': 'Practice with a metronome', 'text': 'Start slow, then add ten beats a minute each day.', 'active': True, 'visibility': 'private-local', 'facts': [], 'createdAt': created, 'egressConsent': ['local', 'cloud']})
+        return state
+    command(insert)
+add_source('idea-new', clock[0] + 5)
+clock[0] += 10
+batch = CampaignWorker(service).tick_many()
+assert [run['state'] for run in batch['runs']] == ['completed'], batch
+assert 'about the new material' in requests_seen[-1]['idea'], requests_seen[-1]['idea'][:300]
+assert any(item.get('id') == 'idea-new' for item in json.loads(json.dumps(requests_seen[-1]['context'])).get('sources', [])) or 'idea-new' in json.dumps(requests_seen[-1]['context']), 'new source not read'
+run = [o for o in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['occurrences'] if o['taskId'] == ideas_task['id']]
+assert len(run) == 1 and run[0]['event']['sourceId'] == 'idea-new' and run[0]['state'] == 'completed', run
+assert CampaignWorker(service).tick_many() == {'idle': True}  # the same idea never runs twice
+act('raffi_recurrence_cancel', {'taskId': ideas_task['id'], 'confirmed': True})
+# Strong posts: the scan reads real observations (none here) and drafts nothing.
+state = act('raffi_recurrence_save', {**base, 'name': 'Strong posts', 'goal': 'Follow up what people responded to', 'schedule': {'kind': 'on_strong_post', 'withinDays': 7, 'timeZone': 'UTC'}})['state']
+strong_task = state['raffi']['campaignPlanning']['recurringTasks'][-1]
+act('raffi_recurrence_activate', {'taskId': strong_task['id'], 'confirmed': True})
+revision = service.get(workspace, 'one')['revision']
+assert CampaignWorker(service).scan_triggers() == 0 and CampaignWorker(service).tick_many() == {'idle': True}
+assert service.get(workspace, 'one')['revision'] == revision  # an idle scan never changes the workspace
+act('raffi_recurrence_cancel', {'taskId': strong_task['id'], 'confirmed': True})
+# Evergreen with no post old enough: the run still drafts, with nothing reshared.
+state = act('raffi_recurrence_save', {**base, 'name': 'Evergreen', 'goal': 'Refresh an older post', 'include': {'evergreen': {'minAgeDays': 30}},
+                                      'schedule': {'weekdays': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], 'localTime': '09:00', 'timeZone': 'UTC'}})['state']
+evergreen_task = state['raffi']['campaignPlanning']['recurringTasks'][-1]
+act('raffi_recurrence_activate', {'taskId': evergreen_task['id'], 'confirmed': True})
+clock[0] = current(evergreen_task['id'])['nextOccurrence']['scheduledFor'] + 1
+assert [run['state'] for run in CampaignWorker(service).tick_many()['runs']] == ['completed']
+run = [o for o in service.get(workspace, 'one')['state']['raffi']['campaignPlanning']['occurrences'] if o['taskId'] == evergreen_task['id']][-1]
+assert run['evergreen'] == {} and 'fresh take' not in requests_seen[-1]['idea'], run
+print('PASS: new idea triggers exactly one run that reads it, strong-post scan reads real insights without side effects, evergreen without candidates still drafts')

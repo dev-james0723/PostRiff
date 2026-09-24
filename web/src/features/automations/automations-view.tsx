@@ -21,7 +21,7 @@ import { languageLabel } from '@/lib/locales';
 import { useTimeZone } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
 import { AutomationBuilder, blankInitial, initialFromAutomation, initialFromBrief, type BuilderInitial } from './automation-builder';
-import { ceilingMicro, ceilingText, runLabel, runText, scheduleSummary, statusText, usd } from './schedule';
+import { ceilingMicro, ceilingText, isTrigger, runLabel, runText, scheduleSummary, statusText, usd } from './schedule';
 import { finished, monthStart, spentSince, unseen, useAutomations, type Automation } from './use-automations';
 
 const infoContent = {
@@ -368,7 +368,20 @@ function AutomationCard({ automation, canEdit, isOwner, busy, spent, watching, o
           <span className='text-muted-foreground block text-xs'>{usd(spent)} spent this month</span>
         </Fact>
         <Fact term={task.status === 'active' && !done ? 'Next run' : 'Schedule'}>
-          {done ? 'Finished' : task.status === 'active' && nextAt ? runLabel(nextAt * 1000, task.schedule.timeZone) : task.status === 'draft' ? 'Starts after activation' : 'Not running'}
+          {done
+            ? 'Finished'
+            : task.status === 'active' && isTrigger(task.schedule)
+              ? nextAt
+                ? 'Starting now'
+                : task.schedule.kind === 'on_strong_post'
+                  ? 'Watching your published posts'
+                  : 'Waiting for something new in Ideas'
+              : task.status === 'active' && nextAt
+                ? runLabel(nextAt * 1000, task.schedule.timeZone)
+                : task.status === 'draft'
+                  ? 'Starts after activation'
+                  : 'Not running'}
+          {isTrigger(task.schedule) && (task.skippedEvents ?? 0) > 0 && <span className='text-muted-foreground block text-xs'>{task.skippedEvents} skipped by the daily limit</span>}
           <span className='text-muted-foreground block text-xs'>{ceilingText(task.maxCostUsdMicro, task.schedule)}</span>
         </Fact>
       </dl>
@@ -458,6 +471,9 @@ function AutomationCard({ automation, canEdit, isOwner, busy, spent, watching, o
                     <span className='min-w-[9.5rem]'>{runLabel(run.scheduledFor * 1000, task.schedule.timeZone)}</span>
                     <StatusChip tone={RUN_TONE[text.tone]}>{text.label}</StatusChip>
                     <span className='text-muted-foreground min-w-0 flex-[1_1_12rem] text-xs'>
+                      {run.event?.kind === 'new_source' && `From “${run.event.title ?? 'a new item'}”. `}
+                      {run.event?.kind === 'strong_post' && `Following up a ${run.event.platform ?? ''} post from ${run.event.publishedAt ?? 'recently'}: ${run.event.value ?? '?'} ${run.event.metric ?? ''} vs a typical ${run.event.typical ?? '?'}. `}
+                      {run.evergreen?.jobId && `Refreshed a ${run.evergreen.platform ?? ''} post from ${run.evergreen.publishedAt ?? 'earlier'}. `}
                       {text.detail}
                       {run.state === 'completed' && `${run.draftCount ? `${run.draftCount} draft${run.draftCount === 1 ? '' : 's'}` : 'Drafts'} · ${usd(run.costUsdMicro ?? 0)}${run.seenAt ? '' : ' · new'}`}
                       {skipped.length > 0 && ` Skipped ${skipped.map((s) => s.account || s.platform).join(', ')}: no longer connected.`}

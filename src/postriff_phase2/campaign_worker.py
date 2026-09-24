@@ -8,7 +8,7 @@ import time
 import zoneinfo
 
 from postriff_alpha.domain import AlphaError
-from . import campaigns
+from . import campaigns, insights
 from .planning_store import sync
 from .permissions import Membership, require
 
@@ -61,7 +61,7 @@ class CampaignWorker:
                 return {'held': True}
             if occurrence['scheduledFor'] < now - 86400 and occurrence['state'] != 'running':
                 occurrence.update(state='missed', reason='over_24_hours_late')
-                task['nextOccurrence'] = campaigns.next_occurrence(task['schedule'], now)
+                campaigns.refresh_next(task, now)
                 self._save(cur, workspace_id, state, actor)
                 return {'missed': True}
             cur.execute("SELECT m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections FROM pr_memberships m JOIN pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL", (workspace_id, actor))
@@ -89,15 +89,31 @@ class CampaignWorker:
             if skipped:
                 binding['notes'] = [f"{d['account'] or 'An account'} on {d['platform']} is no longer connected, so this run skipped it." for d in occurrence['skippedDestinations']]
             # Context the activated definition asked for, read now from this workspace only.
-            context = {}
+            context, extra_sources = {}, []
             countdown = campaigns.countdown_context(task['schedule'], occurrence['scheduledFor'])
             if countdown:
                 context['countdown'] = countdown
             days = (task.get('include') or {}).get('recentPostsDays')
             if days:
                 context['recentPosts'] = campaigns.recent_posts(state, occurrence['scheduledFor'], days)
+            event = occurrence.get('event') or {}
+            if event.get('kind') == 'new_source':
+                # The new idea, link or document is read as a source of this run (with its usual consent rules).
+                extra_sources.append(event['sourceId'])
+                context['newMaterial'] = {'title': event.get('title', '')}
+            elif event.get('kind') == 'strong_post':
+                context['strongPost'] = {'platform': event.get('platform'), 'publishedAt': event.get('publishedAt'), 'text': event.get('text', ''),
+                                         'observation': f"{event['value']:g} {event['metric']}, compared with a typical {event['typical']:g} across {event['sampleSize']} comparable posts"}
+            if (task.get('include') or {}).get('evergreen'):
+                if occurrence.get('evergreen') is None:
+                    posts = insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now)['posts']
+                    occurrence['evergreen'] = campaigns.evergreen_post(state, task, occurrence['scheduledFor'], posts) or {}
+                    if occurrence['evergreen']:
+                        task['evergreenUsed'] = (list(task.get('evergreenUsed') or []) + [occurrence['evergreen']['jobId']])[-200:]
+                if occurrence['evergreen']:
+                    context['evergreen'] = {key: occurrence['evergreen'][key] for key in ('platform', 'publishedAt', 'text')}
             self._save(cur, workspace_id, state, actor)
-            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept, 'context':context}
+            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept, 'context':context, 'sources':extra_sources}
 
     @staticmethod
     def _title(task, occurrence):
@@ -143,7 +159,7 @@ class CampaignWorker:
             result = ideas.turn(workspace_id, capability, occurrence['conversationId'], {
                 'text': self._lead(len(destinations), data) + json.dumps(data, ensure_ascii=False),
                 'idempotencyKey':'recurring:' + occurrence['idempotencyKey'], 'model':task['route'], 'reasoning':task.get('reasoning', 'quick'),
-                'sourceIds':task['contextSourceIds'], 'destinations':destinations,
+                'sourceIds':list(dict.fromkeys(claim.get('sources', []) + task['contextSourceIds'])), 'destinations':destinations,
                 'research':False, 'voiceMode':'neutral', 'timeZone':task['schedule']['timeZone'],
             })
         except Exception:
@@ -188,6 +204,12 @@ class CampaignWorker:
             lead += ', counting down to the event (the countdown shows the days left)'
         if 'recentPosts' in data:
             lead += ', recapping the recent published posts listed in the data without inventing others'
+        if 'newMaterial' in data:
+            lead += ', about the new material in the source provided with this run'
+        if 'strongPost' in data:
+            lead += ', following up the published post in the data to continue its conversation (the numbers are an observation, not proof of what caused them)'
+        if 'evergreen' in data:
+            lead += ', giving the earlier published post in the data a fresh take for today without copying it'
         return lead + ', using these campaign details as data: '
 
     def _notify(self, workspace_id, task, occurrence, watchers):
@@ -216,8 +238,37 @@ class CampaignWorker:
             logging.getLogger('postriff.automations').warning(json.dumps({'event': 'drafts_ready.failed', 'error': type(error).__name__}))
         return results
 
+    def scan_triggers(self, max_workspaces=20):
+        """Queue events for active triggers: new material in Ideas and strong recent posts. Saves a workspace
+        only when something new was seen, so an idle scan never changes its revision."""
+        now, queued = self.clock(), 0
+        kinds = list(campaigns.EVENT_KINDS)
+        with self.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT id::text,state FROM pr_workspaces WHERE NOT state ? 'accountDeletion' AND EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(state#>'{raffi,campaignPlanning,recurringTasks}','[]'::jsonb)) t WHERE t->>'status'='active' AND t#>>'{schedule,kind}' = ANY(%s)) ORDER BY id LIMIT %s FOR UPDATE SKIP LOCKED", (kinds, max_workspaces))
+            for workspace_id, state in cur.fetchall():
+                tasks = [t for t in state['raffi']['campaignPlanning']['recurringTasks'] if t['status'] == 'active' and campaigns.is_event(t['schedule'])]
+                posts, changed, actor = None, False, None
+                for task in tasks:
+                    if task['schedule']['kind'] == 'on_new_source':
+                        events = campaigns.new_source_events(state, task)
+                    else:
+                        if posts is None:
+                            posts = insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now)['posts']
+                        events = campaigns.strong_post_events(state, task, posts, now)
+                    before = len(task.get('pendingEvents') or [])
+                    if campaigns.enqueue_events(state, task, events, now):
+                        changed, actor = True, task.get('activatedBy') or task['createdBy']
+                        queued += len(task.get('pendingEvents') or []) - before
+                if changed:
+                    self._save(cur, workspace_id, state, actor)
+        return queued
+
     def tick_many(self, max_runs=5, max_seconds=90):
-        """Cron entry: prepare up to `max_runs` due runs (across workspaces) within `max_seconds`."""
+        """Cron entry: queue trigger events, then prepare up to `max_runs` due runs (any workspaces) within `max_seconds`."""
+        try:
+            self.scan_triggers()
+        except Exception as error:  # a scan failure never blocks scheduled runs
+            logging.getLogger('postriff.automations').warning(json.dumps({'event': 'trigger_scan.failed', 'error': type(error).__name__}))
         started, results = time.monotonic(), []
         while len(results) < max_runs and time.monotonic() - started < max_seconds:
             result = self.tick()

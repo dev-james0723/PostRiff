@@ -12,6 +12,7 @@ from __future__ import annotations
 import calendar
 import datetime as dt
 import re
+import statistics
 import zoneinfo
 from typing import Any
 
@@ -28,7 +29,13 @@ MAX_COST_USD_MICRO = 10_000_000
 # The definition an activation authorizes. Legacy (authority 1) tasks keep their original digest.
 LEGACY_DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "contextSourceIds", "destination", "maxCostUsdMicro")
 DEFINITION = ("campaignId", "campaignVersion", "version", "schedule", "limits", "route", "reasoning", "contextSourceIds", "destinations", "contentType", "maxCostUsdMicro", "include")
-SCHEDULE_KINDS = ("weekly", "monthly", "countdown")
+# Event triggers run when something happens instead of at a time (Phase 3).
+EVENT_KINDS = ("on_new_source", "on_strong_post")
+SCHEDULE_KINDS = ("weekly", "monthly", "countdown") + EVENT_KINDS
+SOURCE_KINDS = ("idea", "text", "link", "document")
+# Conversation metrics per provider (insights.INSIGHT_METRICS); LinkedIn reports none.
+CONVERSATION_METRICS = {"threads": "replies", "instagram": "comments"}
+MIN_COMPARABLE = 3
 MAX_MONTH_DAYS = 4
 MAX_COUNTDOWN_STEPS = 8
 MAX_COUNTDOWN_DAYS = 90
@@ -113,8 +120,19 @@ def _next_local(current: dt.datetime, weekday: int, hour: int, minute: int, zone
 def schedule_kind(schedule: dict) -> str:
     kind = schedule.get("kind", "weekly")
     if kind not in SCHEDULE_KINDS:
-        raise AlphaError("Choose a weekly, monthly or countdown schedule.")
+        raise AlphaError("Choose a weekly, monthly or countdown schedule, or a trigger.")
     return kind
+
+
+def is_event(schedule: dict) -> bool:
+    return schedule.get("kind") in EVENT_KINDS
+
+
+def _per_day(schedule: dict, default: int) -> int:
+    value = schedule.get("maxPerDay", default)
+    if type(value) is not int or not 1 <= value <= 10:
+        raise AlphaError("Choose between 1 and 10 runs a day.")
+    return value
 
 
 def month_days_of(schedule: dict) -> list:
@@ -171,6 +189,8 @@ def next_occurrence(schedule: dict, after: float) -> dict | None:
     first, earlier-offset instance; a skipped one (spring) moves to the next valid local minute."""
     zone = _zone(schedule)
     kind = schedule_kind(schedule)
+    if kind in EVENT_KINDS:
+        return None  # triggered by events (`enqueue_events`), never by the clock
     if kind == "weekly":
         weekdays = weekdays_of(schedule)
         hour, minute = _local_time(schedule)
@@ -218,21 +238,41 @@ def normalize_schedule(schedule: Any) -> dict:
         days = month_days_of(schedule)
         hour, minute = _local_time(schedule)
         return {"kind": "monthly", "monthDays": days, "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
+    if kind == "on_new_source":
+        kinds = schedule.get("sourceKinds", list(SOURCE_KINDS))
+        if not isinstance(kinds, list) or not kinds or any(item not in SOURCE_KINDS for item in kinds):
+            raise AlphaError("Choose which kinds of new material start a run.")
+        return {"kind": kind, "sourceKinds": [item for item in SOURCE_KINDS if item in kinds], "maxPerDay": _per_day(schedule, 3), "timeZone": zone.key}
+    if kind == "on_strong_post":
+        within = schedule.get("withinDays", 7)
+        if type(within) is not int or not 1 <= within <= 30:
+            raise AlphaError("Look back between 1 and 30 days for strong posts.")
+        return {"kind": kind, "maxPerDay": _per_day(schedule, 1), "withinDays": within, "timeZone": zone.key}
     event, days_before = countdown_of(schedule)
     hour, minute = _local_time(schedule)
     return {"kind": "countdown", "eventDate": event.isoformat(), "daysBefore": days_before, "localTime": f"{hour:02d}:{minute:02d}", "timeZone": zone.key}
 
 
 def normalize_include(value: Any) -> dict | None:
-    """Extra context each run reads: `recentPostsDays` adds this workspace's own published posts from that many days."""
+    """Extra context each run reads: `recentPostsDays` adds this workspace's own published posts from that
+    many days; `evergreen.minAgeDays` adds one older published post to refresh (never the same one twice)."""
     if value is None or value == {}:
         return None
-    if not isinstance(value, dict) or set(value) - {"recentPostsDays"}:
+    if not isinstance(value, dict) or not value or set(value) - {"recentPostsDays", "evergreen"}:
         raise AlphaError("Choose what each run should include.")
-    days = value.get("recentPostsDays")
-    if type(days) is not int or not 7 <= days <= 92:
-        raise AlphaError("Include published posts from the last 7 to 92 days.")
-    return {"recentPostsDays": days}
+    out = {}
+    if "recentPostsDays" in value:
+        days = value["recentPostsDays"]
+        if type(days) is not int or not 7 <= days <= 92:
+            raise AlphaError("Include published posts from the last 7 to 92 days.")
+        out["recentPostsDays"] = days
+    if "evergreen" in value:
+        evergreen = value["evergreen"]
+        age = evergreen.get("minAgeDays") if isinstance(evergreen, dict) and set(evergreen) <= {"minAgeDays"} else None
+        if type(age) is not int or not 14 <= age <= 365:
+            raise AlphaError("Reshare posts that are between 14 and 365 days old.")
+        out["evergreen"] = {"minAgeDays": age}
+    return out
 
 
 def normalize_destinations(state: dict, value: Any) -> list[dict]:
@@ -392,8 +432,10 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     facts = _facts(payload.get("facts"))
     schedule = normalize_schedule(payload.get("schedule"))
     first_run = next_occurrence(schedule, now)
-    if first_run is None:
+    if first_run is None and not is_event(schedule):
         raise AlphaError("Every countdown date has passed. Choose a later event date.", 409)
+    if is_event(schedule) and isinstance(payload.get("include"), dict) and "evergreen" in payload["include"]:
+        raise AlphaError("Resharing an older post needs a weekly, monthly or countdown schedule.")
     if schedule.get("kind") == "countdown" and not facts.get("date"):
         # The countdown's event date is the brief's date fact unless the person wrote one.
         facts["date"] = schedule["eventDate"]
@@ -453,7 +495,7 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
     task.update(name=name, destinationLabel=label, accountLabels=account_labels, contentLabel=content_label, contentLibrary=library, updatedAt=now, updatedBy=actor)
     if changed:
         task.pop("destination", None)
-        for key in ("activatedBy", "activatedAt", "pauseReason"):
+        for key in ("activatedBy", "activatedAt", "pauseReason", "watchFrom", "pendingEvents"):
             task.pop(key, None)
         task.update(definition, status="draft", authorityVersion=2, campaignVersion=campaign["version"], nextOccurrence=first_run)
         task["definitionDigest"] = definition_digest(task)
@@ -564,10 +606,13 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
                 content_types.definition(state, task['contentType']['contentTypeId'], task['contentType']['contentTypeVersion'])
         # A definition saved earlier must not run at a time that passed while it waited for activation.
         upcoming_run = next_occurrence(task["schedule"], now)
-        if upcoming_run is None:
+        if upcoming_run is None and not is_event(task["schedule"]):
             raise AlphaError("Every countdown date has passed. Edit the event date to use it again.", 409)
         task["status"], task["activatedBy"], task["activatedAt"] = "active", actor, now
         task["nextOccurrence"] = upcoming_run
+        if is_event(task["schedule"]):
+            # Only what happens from now on starts a run; nothing from before is replayed.
+            task["watchFrom"], task["pendingEvents"] = now, []
     elif action == "raffi_recurrence_pause":
         task["status"], task["pausedBy"], task["pausedAt"] = "paused", actor, now
     elif action == "raffi_recurrence_resume":
@@ -576,9 +621,11 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         if campaign['version'] != task.get('campaignVersion'):
             raise AlphaError('Campaign facts changed. Create a new schedule preview.', 409)
         upcoming_run = next_occurrence(task["schedule"], now)
-        if upcoming_run is None:
+        if upcoming_run is None and not is_event(task["schedule"]):
             raise AlphaError("Every countdown date has passed. Edit the event date to use it again.", 409)
         task["status"], task["nextOccurrence"] = "active", upcoming_run
+        if is_event(task["schedule"]):
+            task["watchFrom"], task["pendingEvents"] = now, []
         task['activatedBy'] = actor
         task["resumedBy"], task["resumedAt"] = actor, now
     elif action == "raffi_recurrence_cancel":
@@ -587,6 +634,9 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
     else:
         raise AlphaError("Unsupported campaign action.")
     if task['status'] in ('paused', 'cancelled'):
+        task.pop('pendingEvents', None)
+        if is_event(task['schedule']):
+            task['nextOccurrence'] = None
         for occurrence in root['occurrences']:
             if occurrence['taskId'] == task['id'] and occurrence['state'] in ('pending', 'running'):
                 occurrence.update(state='cancelled', reason='authority_revoked')
@@ -594,15 +644,162 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
 
 
 def claim_occurrence(state: dict, task_id: str, scheduled_for: float, now: float) -> dict:
-    """Idempotently record one preparation occurrence; it carries no publish authority."""
+    """Idempotently record one preparation occurrence; it carries no publish authority. An event trigger's
+    occurrence carries its event and is keyed by the event, so the same idea or post never runs twice."""
     root = _root(state)
     task = _find(root["recurringTasks"], task_id, "Recurring task")
     if task.get("status") != "active": raise AlphaError("Recurring task is not active.", 409)
-    key = digest({"workspace": state.get("workspace", {}).get("id"), "task": task_id, "taskVersion": task["version"], "scheduledFor": scheduled_for})
+    event = None
+    if is_event(task["schedule"]):
+        pending = task.get("pendingEvents") or []
+        event = next((item for item in pending if item["at"] == scheduled_for), pending[0] if pending else None)
+        if event is None:
+            raise AlphaError("Nothing is waiting for this automation.", 409)
+        scheduled_for = event["at"]
+        key = digest({"workspace": state.get("workspace", {}).get("id"), "task": task_id, "taskVersion": task["version"], "event": event["id"]})
+    else:
+        key = digest({"workspace": state.get("workspace", {}).get("id"), "task": task_id, "taskVersion": task["version"], "scheduledFor": scheduled_for})
     existing = next((item for item in root["occurrences"] if item["idempotencyKey"] == key), None)
     if existing: return existing
     occurrence = {"id": uid(), "taskId": task_id, "taskVersion": task["version"], "scheduledFor": scheduled_for, "state": "pending", "createdAt": now, "idempotencyKey": key, "authority": "draft_preparation_only"}
+    if event is not None:
+        occurrence["event"] = {k: v for k, v in event.items() if k != "at"}
     root["occurrences"].append(occurrence)
     task["lastOccurrence"] = occurrence["id"]
-    task["nextOccurrence"] = next_occurrence(task["schedule"], scheduled_for + 1)
+    if event is not None:
+        task["pendingEvents"] = [item for item in task.get("pendingEvents") or [] if item is not event]
+        task["nextOccurrence"] = _due(task["pendingEvents"][0]["at"], task["schedule"]) if task["pendingEvents"] else None
+    else:
+        task["nextOccurrence"] = next_occurrence(task["schedule"], scheduled_for + 1)
     return occurrence
+
+
+def refresh_next(task: dict, now: float) -> None:
+    """Point the task at its next due time: the next waiting event for a trigger, else the schedule."""
+    if is_event(task["schedule"]):
+        pending = task.get("pendingEvents") or []
+        task["nextOccurrence"] = _due(pending[0]["at"], task["schedule"]) if pending else None
+    else:
+        task["nextOccurrence"] = next_occurrence(task["schedule"], now)
+
+
+def _due(at: float, schedule: dict) -> dict:
+    local = dt.datetime.fromtimestamp(at, dt.timezone.utc).astimezone(_zone(schedule))
+    utc = local.astimezone(dt.timezone.utc)
+    return {"scheduledFor": at, "local": local.isoformat(), "utc": utc.isoformat(), "offset": local.strftime("%z"), "fold": local.fold}
+
+
+def _epoch(value: Any) -> float:
+    """Source rows store ISO-8601 strings (domain) or epoch floats (hosted)."""
+    if type(value) in (int, float):
+        return float(value)
+    if isinstance(value, str) and value:
+        try:
+            parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return 0.0
+        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)).timestamp()
+    return 0.0
+
+
+def new_source_events(state: dict, task: dict) -> list[dict]:
+    """Ideas, notes, links and documents added (and still usable) since the automation started watching."""
+    watch = float(task.get("watchFrom") or 0)
+    kinds = set(task["schedule"].get("sourceKinds") or SOURCE_KINDS)
+    events = []
+    for source in state.get("sources", []):
+        if source.get("active") and source.get("kind") in kinds and _epoch(source.get("createdAt")) >= watch:
+            events.append({"id": f"source:{source['id']}", "kind": "new_source", "sourceId": source["id"], "title": clean(source.get("title") or "Untitled", 200)})
+    return events
+
+
+def _conversation(post: dict) -> tuple[str | None, float | None]:
+    metric = CONVERSATION_METRICS.get(post.get("provider"))
+    value = ((post.get("metrics") or {}).get(metric) or {}).get("value") if metric else None
+    return metric, (float(value) if isinstance(value, (int, float)) else None)
+
+
+def strong_post_events(state: dict, task: dict, posts: list[dict], now: float) -> list[dict]:
+    """Recently published posts that started more conversation (replies or comments) than comparable posts.
+
+    Follows the analytics rules (insights.py): posts are compared only within one cohort (same provider,
+    language, content type and metric definition), only when at least three posts in it are measured, and
+    a post qualifies when it is in the cohort's top quarter with a clear margin over the median (at least
+    1.5 times it and at least two more), so the best of a few ordinary posts is not called strong.
+    An observation, not a cause.
+    """
+    within = task["schedule"].get("withinDays", 7) * 86400
+    jobs = {job.get("providerReference"): job for job in (state.get("phase2") or {}).get("jobs", []) if job.get("providerReference")}
+    cohorts: dict = {}
+    for post in posts:
+        metric, value = _conversation(post)
+        if value is not None:
+            cohorts.setdefault(tuple(sorted((post.get("cohort") or {}).items())), []).append((post, metric, value))
+    events = []
+    for members in cohorts.values():
+        if len(members) < MIN_COMPARABLE:
+            continue
+        values = sorted(value for _, _, value in members)
+        typical = statistics.median(values)
+        top_quarter = statistics.quantiles(values, n=4, method="inclusive")[2]
+        for post, metric, value in members:
+            job = jobs.get(post.get("providerPostId"))
+            at = ((job or {}).get("verification") or {}).get("at")
+            if not job or job.get("state") != "verified" or not isinstance(at, (int, float)) or at < now - within:
+                continue
+            if value >= top_quarter and value >= 1.5 * typical and value - typical >= 2:
+                manifest = job.get("manifest") or {}
+                events.append({"id": f"post:{job['id']}", "kind": "strong_post", "jobId": job["id"], "platform": manifest.get("platform"),
+                               "publishedAt": dt.datetime.fromtimestamp(at, dt.timezone.utc).date().isoformat(),
+                               "text": str((manifest.get("payload") or {}).get("text") or "")[:600],
+                               "metric": metric, "value": value, "typical": typical, "sampleSize": len(members)})
+    return events
+
+
+def enqueue_events(state: dict, task: dict, events: list[dict], now: float) -> bool:
+    """Queue newly detected events: each at most once, and at most `maxPerDay` runs in any 24 hours. An event
+    over the limit is skipped (counted), never saved for later, so a busy day cannot become a backlog."""
+    if task.get("status") != "active" or not events:
+        return False
+    seen = list(task.get("seenEventIds") or [])
+    known = set(seen) | {item["id"] for item in task.get("pendingEvents") or []}
+    fresh = [event for event in events if event["id"] not in known]
+    if not fresh:
+        return False
+    recent = sum(1 for item in _root(state)["occurrences"] if item["taskId"] == task["id"] and item.get("event") and item.get("createdAt", 0) > now - 86400)
+    budget = task["schedule"].get("maxPerDay", 1) - recent - len(task.get("pendingEvents") or [])
+    pending = task.setdefault("pendingEvents", [])
+    for event in fresh:
+        seen.append(event["id"])
+        if budget <= 0:
+            task["skippedEvents"] = task.get("skippedEvents", 0) + 1
+            continue
+        pending.append({**event, "at": now + len(pending) * 0.001})
+        budget -= 1
+    task["seenEventIds"] = seen[-500:]
+    if pending:
+        task["nextOccurrence"] = _due(pending[0]["at"], task["schedule"])
+    return True
+
+
+def evergreen_post(state: dict, task: dict, now: float, posts: list[dict] | None = None) -> dict | None:
+    """One older published post to refresh: at least `minAgeDays` old, never one this automation used
+    before; the one that started the most conversation first (when measured), then the oldest."""
+    config = (task.get("include") or {}).get("evergreen")
+    if not config:
+        return None
+    used = set(task.get("evergreenUsed") or [])
+    measured = {post.get("providerPostId"): _conversation(post)[1] or 0 for post in posts or []}
+    best = None
+    for job in (state.get("phase2") or {}).get("jobs", []):
+        at = (job.get("verification") or {}).get("at")
+        text = str(((job.get("manifest") or {}).get("payload") or {}).get("text") or "").strip()
+        if job.get("state") != "verified" or not isinstance(at, (int, float)) or at > now - config["minAgeDays"] * 86400 or not text or job["id"] in used:
+            continue
+        rank = (measured.get(job.get("providerReference"), 0), -at)
+        if best is None or rank > best[0]:
+            best = (rank, job, at, text)
+    if best is None:
+        return None
+    _, job, at, text = best
+    return {"jobId": job["id"], "platform": (job.get("manifest") or {}).get("platform"), "publishedAt": dt.datetime.fromtimestamp(at, dt.timezone.utc).date().isoformat(), "text": text[:600]}

@@ -331,5 +331,101 @@ class ScheduleKindTests(unittest.TestCase):
         self.assertIn("Nothing was scheduled or published", sent[0]["text"])
 
 
+class TriggerTests(unittest.TestCase):
+    """Phase 3: runs started by new material in Ideas, by strong recent posts, and evergreen resharing."""
+
+    def setUp(self):
+        self.state = initial_state("workspace-one")
+        self.state["phase2"] = {"channels": [{"id": "acct-threads", "platform": "Threads", "account": "@studio"}], "jobs": []}
+        self.now = dt.datetime(2026, 3, 3, 12, tzinfo=dt.timezone.utc).timestamp()
+
+    def save(self, schedule, **changes):
+        payload = {"name": "Trigger", "goal": "Studio notes", "audience": "Students", "schedule": schedule,
+                   "destinations": [{"platform": "Threads", "language": "en", "channelId": "acct-threads"}], "route": "deterministic-preview"}
+        payload.update(changes)
+        campaigns.apply_action(self.state, "raffi_recurrence_save", payload, "editor", self.now)
+        task = self.state["raffi"]["campaignPlanning"]["recurringTasks"][-1]
+        campaigns.apply_action(self.state, "raffi_recurrence_activate", {"taskId": task["id"], "confirmed": True}, "owner", self.now)
+        return task
+
+    def source(self, source_id, created, kind="link", active=True):
+        self.state["sources"].append({"id": source_id, "kind": kind, "title": f"Source {source_id}", "active": active, "createdAt": created})
+
+    def test_new_material_runs_once_per_item_added_after_activation_within_the_daily_limit(self):
+        self.source("old", self.now - 60)  # added before the automation started watching
+        task = self.save({"kind": "on_new_source", "sourceKinds": ["link", "idea"], "maxPerDay": 2, "timeZone": "Asia/Hong_Kong"})
+        self.assertEqual((task["schedule"]["maxPerDay"], task["watchFrom"], task["nextOccurrence"]), (2, self.now, None))
+        self.assertEqual(campaigns.upcoming(task["schedule"], self.now), [])
+        self.source("link-1", dt.datetime.fromtimestamp(self.now + 10, dt.timezone.utc).isoformat(), "link")
+        self.source("doc-1", self.now + 11, "document")  # not a chosen kind
+        self.source("idea-1", self.now + 12, "idea")
+        self.source("idea-2", self.now + 13, "idea")
+        self.source("idea-off", self.now + 14, "idea", active=False)
+        events = campaigns.new_source_events(self.state, task)
+        self.assertEqual([e["sourceId"] for e in events], ["link-1", "idea-1", "idea-2"])
+        self.assertTrue(campaigns.enqueue_events(self.state, task, events, self.now + 20))
+        self.assertEqual([e["sourceId"] for e in task["pendingEvents"]], ["link-1", "idea-1"])
+        self.assertEqual(task["skippedEvents"], 1)
+        self.assertFalse(campaigns.enqueue_events(self.state, task, events, self.now + 21))  # already seen
+        first = campaigns.claim_occurrence(self.state, task["id"], task["nextOccurrence"]["scheduledFor"], self.now + 30)
+        self.assertEqual((first["event"]["sourceId"], first["event"]["kind"]), ("link-1", "new_source"))
+        again = campaigns.claim_occurrence(self.state, task["id"], first["scheduledFor"], self.now + 31)
+        self.assertEqual(again["event"]["sourceId"], "idea-1")
+        self.assertIsNone(task["nextOccurrence"])
+        # Pausing drops anything waiting; resuming watches from then on only.
+        self.source("idea-3", self.now + 40, "idea")
+        campaigns.enqueue_events(self.state, task, campaigns.new_source_events(self.state, task), self.now + 90000)
+        campaigns.apply_action(self.state, "raffi_recurrence_pause", {"taskId": task["id"]}, "owner", self.now + 90001)
+        self.assertEqual((task.get("pendingEvents"), task["nextOccurrence"]), (None, None))
+        campaigns.apply_action(self.state, "raffi_recurrence_resume", {"taskId": task["id"], "confirmed": True}, "owner", self.now + 90002)
+        self.assertEqual(campaigns.new_source_events(self.state, task), [])
+
+    def test_strong_posts_compare_like_for_like_and_need_three_measured_posts(self):
+        task = self.save({"kind": "on_strong_post", "withinDays": 7, "timeZone": "UTC"})
+        day = 86400
+        def post(ref, replies, language="en", provider="threads"):
+            self.state["phase2"]["jobs"].append({"id": f"job-{ref}", "providerReference": ref, "state": "verified", "verification": {"at": self.now - day},
+                                                 "manifest": {"platform": "Threads", "payload": {"text": f"Post {ref}"}}})
+            return {"provider": provider, "providerPostId": ref, "cohort": {"provider": provider, "language": language, "contentTypeId": None, "definitionVersion": "2026-09"},
+                    "metrics": {"replies": {"value": replies}}}
+        posts = [post("a", 2), post("b", 3), post("c", 4), post("d", 30), post("e", 40, language="fr"), post("f", 1, language="fr")]
+        events = campaigns.strong_post_events(self.state, task, posts, self.now)
+        self.assertEqual([e["jobId"] for e in events], ["job-d"])  # the French pair is too small to compare
+        self.assertEqual((events[0]["value"], events[0]["typical"], events[0]["sampleSize"], events[0]["metric"]), (30.0, 3.5, 4, "replies"))
+        # Too old for the window, or unmeasured: never a trigger.
+        self.state["phase2"]["jobs"][3]["verification"]["at"] = self.now - 8 * day
+        self.assertEqual(campaigns.strong_post_events(self.state, task, posts, self.now), [])
+        posts[3]["metrics"]["replies"]["value"] = None
+        self.assertEqual(campaigns.strong_post_events(self.state, task, posts, self.now), [])
+
+    def test_evergreen_picks_an_old_post_once_and_needs_a_time_schedule(self):
+        weekly = {"weekdays": ["Monday"], "localTime": "09:00", "timeZone": "UTC"}
+        task = self.save(weekly, include={"evergreen": {"minAgeDays": 30}})
+        self.assertEqual(task["include"], {"evergreen": {"minAgeDays": 30}})
+        day = 86400
+        self.state["phase2"]["jobs"] = [
+            {"id": "recent", "providerReference": "r", "state": "verified", "verification": {"at": self.now - 5 * day}, "manifest": {"platform": "Threads", "payload": {"text": "Too new"}}},
+            {"id": "older", "providerReference": "o", "state": "verified", "verification": {"at": self.now - 90 * day}, "manifest": {"platform": "Threads", "payload": {"text": "Oldest"}}},
+            {"id": "strong", "providerReference": "s", "state": "verified", "verification": {"at": self.now - 40 * day}, "manifest": {"platform": "Threads", "payload": {"text": "Popular"}}},
+        ]
+        self.assertEqual(campaigns.evergreen_post(self.state, task, self.now)["jobId"], "older")  # nothing measured: oldest first
+        measured = [{"provider": "threads", "providerPostId": "s", "metrics": {"replies": {"value": 9}}}]
+        self.assertEqual(campaigns.evergreen_post(self.state, task, self.now, measured)["jobId"], "strong")
+        task["evergreenUsed"] = ["strong", "older"]
+        self.assertIsNone(campaigns.evergreen_post(self.state, task, self.now, measured))
+        with self.assertRaisesRegex(AlphaError, "weekly, monthly or countdown"):
+            self.save({"kind": "on_new_source", "timeZone": "UTC"}, include={"evergreen": {"minAgeDays": 30}})
+        for bad in ({"evergreen": {"minAgeDays": 7}}, {"evergreen": {"days": 30}}, {"evergreen": 30}):
+            with self.subTest(bad), self.assertRaises(AlphaError):
+                self.save(weekly, include=bad)
+
+    def test_trigger_schedules_validate(self):
+        for bad in ({"kind": "on_new_source", "sourceKinds": ["voice_sample"], "timeZone": "UTC"}, {"kind": "on_new_source", "maxPerDay": 0, "timeZone": "UTC"},
+                    {"kind": "on_strong_post", "withinDays": 60, "timeZone": "UTC"}, {"kind": "on_rain", "timeZone": "UTC"}):
+            with self.subTest(bad), self.assertRaises(AlphaError):
+                campaigns.normalize_schedule(bad)
+        self.assertEqual(campaigns.normalize_schedule({"kind": "on_new_source", "timeZone": "UTC"}), {"kind": "on_new_source", "sourceKinds": ["idea", "text", "link", "document"], "maxPerDay": 3, "timeZone": "UTC"})
+
+
 if __name__ == "__main__":
     unittest.main()

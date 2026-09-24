@@ -83,3 +83,17 @@ test('countdown: runs before the event in date order, then finishes', () => {
   assert.equal(S.ceilingText(250_000, schedule), '4 runs in total · at most $1.00 for the whole countdown');
   assert.equal(S.ceilingText(100_000, { weekdays: ['Monday'], localTime: '09:00', timeZone: 'UTC' }), 'up to 5 runs a month · at most $0.50 a month');
 });
+
+// Phase 3 triggers: no clock runs; labels and ceilings follow the daily limit.
+test('triggers: no scheduled runs, plain labels, a daily-limit ceiling', () => {
+  const idea = { kind: 'on_new_source', sourceKinds: ['idea', 'link'], maxPerDay: 3, timeZone: 'UTC' };
+  const strong = { kind: 'on_strong_post', maxPerDay: 1, withinDays: 7, timeZone: 'UTC' };
+  assert.equal(S.nextRun(idea, Date.UTC(2026, 2, 3)), null);
+  assert.deepEqual(S.nextRuns(strong, Date.UTC(2026, 2, 3), 3), []);
+  assert.equal(S.scheduleSummary(idea), 'When you add a new idea or link to Ideas · up to 3 runs a day');
+  assert.equal(S.scheduleSummary(strong), 'After a post gets more replies or comments than usual (last 7 days) · up to 1 run a day');
+  assert.deepEqual(S.maxRuns(idea), { runs: 93, per: 'month' });
+  assert.equal(S.ceilingText(100_000, strong), 'up to 31 runs a month · at most $3.10 a month');
+  assert.equal(S.isTrigger(idea), true);
+  assert.equal(S.isTrigger({ weekdays: ['Monday'] }), false);
+});

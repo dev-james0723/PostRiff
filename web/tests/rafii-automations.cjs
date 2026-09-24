@@ -267,7 +267,7 @@ async function build(browser) {
       const ran = await ours(page);
       const runOne = ran.runs.at(-1);
       check('one completed run with a conversation', ran.runs.length === 1 && runOne?.state === 'completed' && Boolean(runOne?.conversationId), ran.runs);
-      const conversation = await (await page.request.get(`${base}/api/workspaces/${seed.workspaceId}/conversations/${runOne.conversationId}`, { headers })).json();
+      const conversation = await (await page.request.get(`${base}/api/workspaces/${seed.workspaceId}/ideas/conversations/${runOne.conversationId}/messages`, { headers })).json();
       const assistant = (conversation.messages ?? []).filter((m) => m.role === 'assistant').at(-1)?.body ?? {};
       const platforms = (assistant.destinations ?? []).map((d) => d.platform);
       check('drafts only for the chosen accounts (brief named Instagram)', platforms.length === 3 && platforms.every((p) => p === 'LinkedIn'), assistant.destinations);
@@ -432,6 +432,86 @@ async function templates(browser) {
   }
 }
 
+/** Phase 3: an automation started by new material in Ideas, and the evergreen option. */
+async function triggers(browser) {
+  const s = await open(browser, 'triggers');
+  const { page, dir } = s;
+  const created = [];
+  const act = async (action, payload) => {
+    const current = await (await page.request.get(`${base}/api/workspaces/${seed.workspaceId}`, { headers })).json();
+    return (await page.request.post(`${base}/api/workspaces/${seed.workspaceId}/actions`, { headers, data: { expectedRevision: current.revision, action, payload } })).json();
+  };
+  try {
+    await gotoHub(page);
+    for (const template of ['New idea → drafts', 'Evergreen reshare']) {
+      await page.getByRole('button', { name: 'New automation' }).first().click();
+      const builder = page.getByRole('dialog', { name: /automation/i }).first();
+      await builder.getByLabel('Name', { exact: true }).waitFor();
+      await page.waitForTimeout(500);
+      await builder.getByRole('button', { name: new RegExp(`^${template}`) }).click();
+      await builder.getByLabel('Who is it for?').fill('Students and their families');
+      if (template === 'Evergreen reshare') {
+        check('evergreen: option ticked by the template', await builder.getByRole('checkbox', { name: /fresh take each run/ }).isChecked());
+        check('evergreen: 60 days minimum age', (await builder.getByRole('combobox', { name: 'Minimum age of the post to reshare' }).inputValue()) === '60');
+      }
+      await builder.getByRole('tab', { name: /When/ }).click();
+      await page.waitForTimeout(300);
+      if (template === 'New idea → drafts') {
+        check('trigger: New idea selected', (await builder.getByRole('radio', { name: 'New idea' }).getAttribute('aria-checked')) === 'true');
+        const pressed = async (name) => (await builder.getByRole('button', { name, exact: true }).getAttribute('aria-pressed')) === 'true';
+        check('trigger: ideas, notes and links start a run; documents do not', (await pressed('Ideas')) && (await pressed('Notes')) && (await pressed('Links')) && !(await pressed('Documents')));
+        check('trigger: no time to pick', (await builder.getByLabel('At', { exact: true }).count()) === 0);
+        check('trigger: summary names the daily limit', /When you add a new idea, note or link to Ideas · up to 3 runs a day/.test(await builder.innerText()), (await builder.innerText()).slice(0, 400));
+        await shot(page, dir, '01-trigger-when');
+      }
+      await builder.getByRole('tab', { name: /Where/ }).click();
+      await builder.getByRole('button', { name: 'Choose accounts or folders' }).click();
+      const bloom = page.getByRole('dialog').filter({ has: page.getByRole('checkbox', { name: /^Personal/ }) }).last();
+      await bloom.getByRole('checkbox', { name: /^Personal/ }).click();
+      await page.waitForTimeout(300);
+      await bloom.getByRole('button', { name: /^Done/ }).click();
+      await bloom.waitFor({ state: 'hidden' });
+      await builder.getByRole('tab', { name: /Review/ }).click();
+      await builder.getByLabel('Writer').selectOption(MODEL);
+      await page.waitForTimeout(300);
+      await builder.getByRole('button', { name: template === 'New idea → drafts' ? 'Save and activate' : 'Save as draft' }).click();
+      await builder.waitFor({ state: 'hidden', timeout: 60000 });
+      await page.waitForTimeout(600);
+      const task = (await snapshot(page)).raffi.campaignPlanning.recurringTasks.at(-1);
+      created.push(task.id);
+      if (template === 'Evergreen reshare') {
+        check('evergreen saved in the definition', task.include?.evergreen?.minAgeDays === 60 && JSON.stringify(task.schedule.weekdays) === '["Wednesday"]', { include: task.include, schedule: task.schedule });
+        continue;
+      }
+      check('trigger saved and active, watching from activation', task.schedule.kind === 'on_new_source' && task.status === 'active' && typeof task.watchFrom === 'number' && !task.nextOccurrence, { schedule: task.schedule, status: task.status, watchFrom: task.watchFrom });
+      check('trigger card waits for something new', /Waiting for something new in Ideas/.test(await page.locator('article').filter({ has: page.getByRole('heading', { name: task.name }) }).innerText()));
+      // Add an idea the way Home's Context Pocket does, then let the harness cron scan and run.
+      await act('source', { kind: 'idea', title: 'Practice with a metronome', text: 'Start slow, then add ten beats a minute each day until the passage feels easy.' });
+      const cron = await (await fetch(`${api}/api/cron/worker`, { headers: { Authorization: `Bearer ${CRON}` } })).json();
+      const prepared = cron.campaignPreparation?.runs ?? [];
+      check('cron scanned Ideas and ran the new idea once', prepared.length === 1 && prepared[0].state === 'completed', cron.campaignPreparation);
+      const planning = (await snapshot(page)).raffi.campaignPlanning;
+      const runs = planning.occurrences.filter((o) => o.taskId === task.id);
+      const source = (await snapshot(page)).sources.findLast((x) => x.title === 'Practice with a metronome');
+      check('the run carries the new idea as its event', runs.length === 1 && runs[0].event?.sourceId === source?.id && runs[0].state === 'completed', runs);
+      const again = await (await fetch(`${api}/api/cron/worker`, { headers: { Authorization: `Bearer ${CRON}` } })).json();
+      check('the same idea never runs twice', again.campaignPreparation?.idle === true, again.campaignPreparation);
+      await gotoHub(page);
+      const cardEl = page.locator('article').filter({ has: page.getByRole('heading', { name: task.name }) });
+      await cardEl.getByRole('button', { name: /Run history/ }).click();
+      await page.waitForTimeout(400);
+      check('run history names the idea that started it', /From “Practice with a metronome”/.test(await cardEl.innerText()), (await cardEl.innerText()).slice(0, 500));
+      await shot(page, dir, '02-trigger-run-history');
+    }
+  } catch (error) {
+    check('triggers scene completed', false, error.message);
+    await shot(page, dir, 'zz-failure').catch(() => {});
+  } finally {
+    for (const taskId of created) await act('raffi_recurrence_cancel', { taskId, confirmed: true }).catch(() => {});
+    await close(s);
+  }
+}
+
 async function phone(browser) {
   const s = await open(browser, 'phone', { width: 390, height: 844, theme: 'light' });
   const { page, dir } = s;
@@ -468,6 +548,7 @@ async function phone(browser) {
   try {
     if (!args.only || String(args.only).includes('build')) await build(browser);
     if (!args.only || String(args.only).includes('templates')) await templates(browser);
+    if (!args.only || String(args.only).includes('triggers')) await triggers(browser);
     if (!args.only || String(args.only).includes('phone')) await phone(browser);
   } finally {
     await browser.close();

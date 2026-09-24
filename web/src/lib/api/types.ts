@@ -374,7 +374,12 @@ export interface RecurringSchedule {
   /** Countdown: the event date (YYYY-MM-DD) and the days before it that get a run. */
   eventDate?: string;
   daysBefore?: number[];
-  localTime: string;
+  /** Triggers (`on_new_source`, `on_strong_post`): what starts a run and how many a day. */
+  sourceKinds?: string[];
+  maxPerDay?: number;
+  withinDays?: number;
+  /** Absent for triggers. */
+  localTime?: string;
   timeZone: string;
 }
 
@@ -403,7 +408,10 @@ export interface RecurringTask {
   contextSourceIds?: string[];
   limits?: { draftsPerOccurrence: number };
   /** Extra context each run reads (part of the activated definition). */
-  include?: { recentPostsDays?: number } | null;
+  include?: { recentPostsDays?: number; evergreen?: { minAgeDays: number } } | null;
+  /** Triggers: events waiting to run, and how many a daily limit skipped. */
+  pendingEvents?: { id: string; kind: string; at: number }[];
+  skippedEvents?: number;
   /** Members who asked for a "drafts ready" email (outside the definition). */
   emailWatchers?: string[];
   createdBy?: string;
@@ -425,6 +433,10 @@ export interface RecurringOccurrence {
   completedAt?: number;
   skippedDestinations?: { platform: string; channelId?: string; account?: string }[];
   draftCount?: number;
+  /** What started a trigger run: a new idea/link/document, or a strong post (observation). */
+  event?: { id: string; kind: 'new_source' | 'strong_post' | string; title?: string; sourceId?: string; platform?: string; publishedAt?: string; metric?: string; value?: number; typical?: number; sampleSize?: number };
+  /** The older post an evergreen run refreshed ({} when none was old enough). */
+  evergreen?: { jobId?: string; platform?: string; publishedAt?: string };
   /** What the run's writer charged, in micro-dollars (0 for free routes). */
   costUsdMicro?: number;
   /** Set when someone opened or dismissed the drafts ("drafts ready" clears). */

@@ -88,7 +88,33 @@ See the Verification table in this file's commit message and `evidence/automatio
   shows spend this month per automation and in total, next to the ceiling: per-run limit × the most runs
   in a month (a weekly day can occur five times) or in the whole countdown.
 
+## Phase 3: runs started by your own material
+
+- **New material in Ideas** (`on_new_source`): each idea, note, link or document added after the
+  automation is activated starts one run that reads that item as its source (usual consent rules).
+  Items from before activation, or added while paused, never replay. At most `maxPerDay` runs in any
+  24 hours (1–10); anything over the limit is skipped and counted, never saved for later.
+- **Strong posts** (`on_strong_post`): a post published in the last 1–30 days whose conversation
+  (Threads replies, Instagram comments) is clearly above comparable posts starts a follow-up run.
+  Comparable means the analytics module's cohort (same provider, language, content type and metric
+  definition) with at least three measured posts; "clearly" means top quarter, at least 1.5 times the
+  median and at least two more. LinkedIn reports no such metric yet. The run receives the post and the
+  observation in words, labelled as an observation, not a cause.
+- **Evergreen** (`include.evergreen.minAgeDays`, 14–365, weekly/monthly/countdown only): each run
+  refreshes one published post at least that old; the one that started the most conversation first
+  (else the oldest), never the same post twice for that automation.
+- **How it runs.** The cron entry first scans active triggers (only workspaces that have one; a scan
+  that finds nothing new does not touch the workspace), queues events on the automation, then prepares
+  due runs as before. Each event run is keyed by the event, so the same idea or post never runs twice.
+- **Builder and hub.** "New idea" and "Strong post" sit beside Weekly, Monthly and Countdown, with the
+  daily limit and look-back window; three templates (New idea → drafts, Follow up a strong post,
+  Evergreen reshare). Run history names what started each run.
+- **Not built: recordings.** The Library stores images only; there is no audio or video upload or
+  transcription. A "new recording" trigger needs that pipeline first, which means choosing a
+  transcription service (a paid-service decision) — left for the owner to decide.
+
 ## Limitations
 
 - Several times a day is not offered (runs prepare drafts; the posting time is chosen at approval).
 - Measured spend covers completed runs only; a held run costs nothing by design.
+- Trigger scans run on the one-minute cron, so a new idea is picked up within about a minute or two.
