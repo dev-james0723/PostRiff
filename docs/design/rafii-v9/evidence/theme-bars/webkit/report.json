@@ -1,0 +1,74 @@
+{
+  "base": "http://localhost:3100",
+  "at": "2026-09-24T12:55:23.018Z",
+  "results": [
+    {
+      "name": "legacy-cookie-dark",
+      "appearance": "dark",
+      "cookies": {
+        "active_theme": "vercel"
+      },
+      "theme": "rafii",
+      "dark": true,
+      "header": 5,
+      "tabBar": 5,
+      "page": 0,
+      "legacyCookie": false,
+      "errors": []
+    },
+    {
+      "name": "legacy-cookie-light",
+      "appearance": "light",
+      "cookies": {
+        "active_theme": "vercel"
+      },
+      "theme": "rafii",
+      "dark": false,
+      "header": 97,
+      "tabBar": 97,
+      "page": 99,
+      "legacyCookie": false,
+      "errors": []
+    },
+    {
+      "name": "picked-vercel-dark",
+      "appearance": "dark",
+      "cookies": {
+        "postriff_theme": "vercel"
+      },
+      "theme": "vercel",
+      "dark": true,
+      "header": 0,
+      "tabBar": 0,
+      "page": 0,
+      "legacyCookie": false,
+      "errors": []
+    },
+    {
+      "name": "picked-vercel-light",
+      "appearance": "light",
+      "cookies": {
+        "postriff_theme": "vercel"
+      },
+      "theme": "vercel",
+      "dark": false,
+      "header": 99,
+      "tabBar": 99,
+      "page": 99,
+      "legacyCookie": false,
+      "errors": []
+    },
+    {
+      "name": "default-dark",
+      "appearance": "dark",
+      "cookies": {},
+      "theme": "rafii",
+      "dark": true,
+      "header": 5,
+      "tabBar": 5,
+      "page": 0,
+      "legacyCookie": false,
+      "errors": []
+    }
+  ]
+}
