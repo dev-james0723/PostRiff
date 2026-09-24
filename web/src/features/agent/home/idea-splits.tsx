@@ -221,8 +221,8 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
         )}
         {applied && (
           <>
-            <Link href='/app/pipeline' className='rafii-focus text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm underline underline-offset-2'>
-              Open Pipeline
+            <Link href='/app/queue?view=drafts' className='rafii-focus text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm underline underline-offset-2'>
+              Open drafts
             </Link>
             <Link href='/app/queue' className='rafii-focus text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm underline underline-offset-2'>
               Review in Queue
@@ -239,8 +239,8 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
         {saved && saved.pendingReview > 0 && (
           <p className='text-muted-foreground basis-full text-xs leading-relaxed'>
             {saved.pendingReview === 1 ? 'One account already had an unscheduled draft in this language, so this version waits on it as a proposed update.' : `${saved.pendingReview} accounts already had unscheduled drafts in these languages, so these versions wait on them as proposed updates.`}{' '}
-            <Link href='/app/pipeline' className='text-foreground underline underline-offset-2'>
-              Review in the Pipeline
+            <Link href='/app/queue?view=drafts' className='text-foreground underline underline-offset-2'>
+              Review in Drafts
             </Link>
           </p>
         )}

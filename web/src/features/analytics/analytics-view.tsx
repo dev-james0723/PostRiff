@@ -118,7 +118,7 @@ export function AnalyticsView() {
   const complete = Boolean(data && channels.data && snapshot.data);
   const state = coverageState(coverage);
 
-  // `?connection=<id>` from the Pipeline or Channels pages preselects a tab, once, when the accounts are known.
+  // `?connection=<id>` from a draft's details or the Channels page preselects a tab, once, when the accounts are known.
   const preselected = useRef(false);
   useEffect(() => {
     if (preselected.current || !channels.data) return;

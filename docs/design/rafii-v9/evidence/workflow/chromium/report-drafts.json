@@ -1,0 +1,67 @@
+{
+  "base": "http://localhost:3140",
+  "browser": "chromium",
+  "principal": "af2056df-99f3-4ce2-9935-036ab0a655d4",
+  "workspaceId": "551a800a-2f3b-4dd7-ab2b-ea5ced94fbff",
+  "startedAt": "2026-09-24T14:21:48.323Z",
+  "scenes": [
+    {
+      "name": "queue-drafts",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "the old Pipeline address opens Queue → Drafts",
+          "ok": true,
+          "detail": "http://localhost:3140/app/queue?view=drafts"
+        },
+        {
+          "name": "the Drafts tab is selected",
+          "ok": true
+        },
+        {
+          "name": "Pipeline left the menu",
+          "ok": true
+        },
+        {
+          "name": "saved drafts are listed",
+          "ok": true,
+          "detail": 3
+        },
+        {
+          "name": "the tab counts them",
+          "ok": true,
+          "detail": "Drafts\n3\n3"
+        },
+        {
+          "name": "Schedule… opens the exact-review dialog",
+          "ok": true,
+          "detail": "Schedule a draft\n\nChoose the draft, the account and the exact time. This prepares a review; nothing publishes until you approve it.\n\nNo voice profile is active."
+        },
+        {
+          "name": "drafts scene completed",
+          "ok": false,
+          "detail": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator('#queue-jobs-list') to be visible\n"
+        }
+      ],
+      "marks": [],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "workflow/chromium/queue-drafts/01-drafts.png",
+        "workflow/chromium/queue-drafts/02-schedule.png",
+        "workflow/chromium/queue-drafts/zz-failure.png"
+      ],
+      "video": "workflow/chromium/queue-drafts/queue-drafts.webm",
+      "t0": 1790259709036,
+      "durationSeconds": 38.7
+    }
+  ],
+  "finishedAt": "2026-09-24T14:22:27.778Z",
+  "summary": {
+    "checks": 7,
+    "failed": 1,
+    "pageErrors": 0
+  }
+}

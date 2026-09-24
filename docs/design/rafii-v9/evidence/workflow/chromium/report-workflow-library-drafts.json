@@ -1,0 +1,490 @@
+{
+  "base": "http://localhost:3140",
+  "browser": "chromium",
+  "principal": "af2056df-99f3-4ce2-9935-036ab0a655d4",
+  "workspaceId": "551a800a-2f3b-4dd7-ab2b-ea5ced94fbff",
+  "startedAt": "2026-09-24T14:22:54.908Z",
+  "scenes": [
+    {
+      "name": "workflow",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "Home heading",
+          "ok": true
+        },
+        {
+          "name": "model is the deterministic preview fixture",
+          "ok": true,
+          "detail": "Model\nDeterministic preview"
+        },
+        {
+          "name": "folder inspector unfolds (aria-expanded)",
+          "ok": true
+        },
+        {
+          "name": "overlapping folders select each account once",
+          "ok": true,
+          "detail": "Done, 2 accounts selected"
+        },
+        {
+          "name": "composer summarises the folder selection",
+          "ok": true,
+          "detail": "2 folders\n2 drafts"
+        },
+        {
+          "name": "composer counts two accounts",
+          "ok": true,
+          "detail": "Choose channels, 2 accounts selected"
+        },
+        {
+          "name": "idle deck names both accounts on one app",
+          "ok": true,
+          "detail": [
+            "Preview Dev Member on iPhone",
+            "Preview Dev Member Two on iPhone"
+          ]
+        },
+        {
+          "name": "language dialog lists each account separately",
+          "ok": true
+        },
+        {
+          "name": "language summary shows per-destination languages",
+          "ok": true,
+          "detail": "Language\n2 languages"
+        },
+        {
+          "name": "reasoning shows the route’s real options or an honest “not applied”",
+          "ok": true,
+          "detail": {
+            "applied": 0,
+            "notApplied": 4
+          }
+        },
+        {
+          "name": "fixture model still selected after browsing providers",
+          "ok": true,
+          "detail": "Model\nDeterministic preview"
+        },
+        {
+          "name": "Generate is enabled with two account destinations",
+          "ok": true
+        },
+        {
+          "name": "one draft per account (2 of 2 ready)",
+          "ok": true,
+          "detail": "2 of 2 ready · yours to edit"
+        },
+        {
+          "name": "results keep each account as its own draft",
+          "ok": true,
+          "detail": [
+            "LinkedIn · Dev Member, ready",
+            "LinkedIn · Dev Member Two, ready"
+          ]
+        },
+        {
+          "name": "swipe moves to the other draft",
+          "ok": true,
+          "detail": {
+            "before": "LinkedIn · Dev Member, ready",
+            "after": "LinkedIn · Dev Member Two, ready"
+          }
+        },
+        {
+          "name": "edited caption is marked unsaved",
+          "ok": true
+        },
+        {
+          "name": "one edited caption recorded",
+          "ok": true
+        },
+        {
+          "name": "the drafting request succeeded",
+          "ok": true,
+          "detail": {
+            "status": 201,
+            "runId": "009805c5-842e-458b-b21f-91617cc83c03",
+            "conversationId": "f6b13dfa-941a-4ada-838c-434a6c716f7c",
+            "error": null
+          }
+        },
+        {
+          "name": "server holds exactly one draft per account for the run",
+          "ok": true,
+          "detail": [
+            {
+              "id": "179a909ffadd468b8a58e594e37da6d8",
+              "platform": "LinkedIn",
+              "language": "en-US",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false,
+              "createdByRun": false,
+              "proposedUpdateFromRun": true
+            },
+            {
+              "id": "9fe04100c7b0477b86d0219a6134c745",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 2,
+              "edited": true,
+              "createdByRun": true,
+              "proposedUpdateFromRun": false
+            }
+          ]
+        },
+        {
+          "name": "each account kept its own language (second account en-GB, first unchanged)",
+          "ok": true,
+          "detail": [
+            {
+              "id": "179a909ffadd468b8a58e594e37da6d8",
+              "platform": "LinkedIn",
+              "language": "en-US",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false,
+              "createdByRun": false,
+              "proposedUpdateFromRun": true
+            },
+            {
+              "id": "9fe04100c7b0477b86d0219a6134c745",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 2,
+              "edited": true,
+              "createdByRun": true,
+              "proposedUpdateFromRun": false
+            }
+          ]
+        },
+        {
+          "name": "the edited caption persisted as a new revision",
+          "ok": true,
+          "detail": [
+            {
+              "id": "179a909ffadd468b8a58e594e37da6d8",
+              "platform": "LinkedIn",
+              "language": "en-US",
+              "channelId": "abaad27ed4e69ff561db13790efff006",
+              "revision": 1,
+              "edited": false,
+              "createdByRun": false,
+              "proposedUpdateFromRun": true
+            },
+            {
+              "id": "9fe04100c7b0477b86d0219a6134c745",
+              "platform": "LinkedIn",
+              "language": "en-GB",
+              "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+              "revision": 2,
+              "edited": true,
+              "createdByRun": true,
+              "proposedUpdateFromRun": false
+            }
+          ]
+        },
+        {
+          "name": "conversation tabs name each account",
+          "ok": true,
+          "detail": [
+            "LinkedIn\nDev Member\n🇺🇸\nEnglish (US)",
+            "LinkedIn\nDev Member Two\n🇬🇧\nEnglish (UK)"
+          ]
+        }
+      ],
+      "marks": [
+        {
+          "label": "Home loaded",
+          "atSeconds": 5.9
+        },
+        {
+          "label": "Channel Bloom open",
+          "atSeconds": 7.4
+        },
+        {
+          "label": "Festival folder unfolds",
+          "atSeconds": 7.8
+        },
+        {
+          "label": "Festival folder folds",
+          "atSeconds": 9.1
+        },
+        {
+          "label": "destinations committed",
+          "atSeconds": 11.6
+        },
+        {
+          "label": "language dialog open",
+          "atSeconds": 13.3
+        },
+        {
+          "label": "language catalogue discloses",
+          "atSeconds": 13.4
+        },
+        {
+          "label": "languages applied",
+          "atSeconds": 16.6
+        },
+        {
+          "label": "model dialog open",
+          "atSeconds": 18
+        },
+        {
+          "label": "provider swap 1",
+          "atSeconds": 19.1
+        },
+        {
+          "label": "provider swap 0",
+          "atSeconds": 19.9
+        },
+        {
+          "label": "generate",
+          "atSeconds": 23
+        },
+        {
+          "label": "drafts ready",
+          "atSeconds": 23.3
+        },
+        {
+          "label": "phone swipe",
+          "atSeconds": 24.8
+        },
+        {
+          "label": "save as drafts",
+          "atSeconds": 26.4
+        },
+        {
+          "label": "conversation view",
+          "atSeconds": 29.3
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "workflow/chromium/workflow/01-home-idle.png",
+        "workflow/chromium/workflow/02-channel-bloom.png",
+        "workflow/chromium/workflow/03-folder-inspector.png",
+        "workflow/chromium/workflow/04-folders-selected.png",
+        "workflow/chromium/workflow/05-idle-deck-two-accounts.png",
+        "workflow/chromium/workflow/06-language-per-account.png",
+        "workflow/chromium/workflow/07-model-dialog.png",
+        "workflow/chromium/workflow/08-results.png",
+        "workflow/chromium/workflow/09-after-swipe.png",
+        "workflow/chromium/workflow/10-saved.png",
+        "workflow/chromium/workflow/11-conversation.png"
+      ],
+      "video": "workflow/chromium/workflow/workflow.webm",
+      "t0": 1790259775413,
+      "language": {
+        "firstShows": "Output language for LinkedIn · Dev Member: English (United States). Change",
+        "secondChosen": "en-GB"
+      },
+      "quickStart": {
+        "status": 201,
+        "runId": "009805c5-842e-458b-b21f-91617cc83c03",
+        "conversationId": "f6b13dfa-941a-4ada-838c-434a6c716f7c",
+        "error": null
+      },
+      "saved": [
+        {
+          "id": "179a909ffadd468b8a58e594e37da6d8",
+          "platform": "LinkedIn",
+          "language": "en-US",
+          "channelId": "abaad27ed4e69ff561db13790efff006",
+          "revision": 1,
+          "edited": false,
+          "createdByRun": false,
+          "proposedUpdateFromRun": true
+        },
+        {
+          "id": "9fe04100c7b0477b86d0219a6134c745",
+          "platform": "LinkedIn",
+          "language": "en-GB",
+          "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78",
+          "revision": 2,
+          "edited": true,
+          "createdByRun": true,
+          "proposedUpdateFromRun": false
+        }
+      ],
+      "conversationId": "f6b13dfa-941a-4ada-838c-434a6c716f7c",
+      "durationSeconds": 29.6
+    },
+    {
+      "name": "content-library",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "footer shows the staged editorial type and native format",
+          "ok": true
+        },
+        {
+          "name": "composer shows the applied choice",
+          "ok": true,
+          "detail": {
+            "before": "Choose content type and native format, Status update · Text",
+            "after": "Choose content type and native format, Behind the scenes · Carousel"
+          }
+        },
+        {
+          "name": "server records the mapped content type and format",
+          "ok": true,
+          "detail": {
+            "formatId": "carousel",
+            "changedAt": 1790259810.652606,
+            "pillarIds": [],
+            "contentTypeId": "pack.creator:building_in_public",
+            "transformation": {
+              "to": "pack.creator:building_in_public",
+              "from": "unclassified",
+              "preservedSourceIds": [
+                "44f0c2c8911e4c9dbaf731003e3fc218",
+                "0620e51d2bb743e09ebab6e3eb11104d"
+              ],
+              "preservedVariantIds": [
+                "9fe04100c7b0477b86d0219a6134c745"
+              ]
+            },
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "Escape discards staged choices",
+          "ok": true,
+          "detail": {
+            "after": "Choose content type and native format, Behind the scenes · Carousel",
+            "escaped": "Choose content type and native format, Behind the scenes · Carousel"
+          }
+        },
+        {
+          "name": "server selection unchanged after Escape",
+          "ok": true,
+          "detail": {
+            "formatId": "carousel",
+            "changedAt": 1790259810.652606,
+            "pillarIds": [],
+            "contentTypeId": "pack.creator:building_in_public",
+            "transformation": {
+              "to": "pack.creator:building_in_public",
+              "from": "unclassified",
+              "preservedSourceIds": [
+                "44f0c2c8911e4c9dbaf731003e3fc218",
+                "0620e51d2bb743e09ebab6e3eb11104d"
+              ],
+              "preservedVariantIds": [
+                "9fe04100c7b0477b86d0219a6134c745"
+              ]
+            },
+            "contentTypeVersion": "1.0.0"
+          }
+        },
+        {
+          "name": "restored to Status update · Text",
+          "ok": true,
+          "detail": "Choose content type and native format, Status update · Text"
+        }
+      ],
+      "marks": [
+        {
+          "label": "native formats tab (crossfade)",
+          "atSeconds": 3.9
+        },
+        {
+          "label": "library staged",
+          "atSeconds": 5
+        },
+        {
+          "label": "library applied",
+          "atSeconds": 5.9
+        },
+        {
+          "label": "native formats tab (crossfade)",
+          "atSeconds": 7.5
+        },
+        {
+          "label": "native formats tab (crossfade)",
+          "atSeconds": 11
+        }
+      ],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "workflow/chromium/content-library/01-library-staged.png"
+      ],
+      "video": "workflow/chromium/content-library/content-library.webm",
+      "t0": 1790259805069,
+      "durationSeconds": 12.6
+    },
+    {
+      "name": "queue-drafts",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "the old Pipeline address opens Queue → Drafts",
+          "ok": true,
+          "detail": "http://localhost:3140/app/queue?view=drafts"
+        },
+        {
+          "name": "the Drafts tab is selected",
+          "ok": true
+        },
+        {
+          "name": "Pipeline left the menu",
+          "ok": true
+        },
+        {
+          "name": "saved drafts are listed",
+          "ok": true,
+          "detail": 4
+        },
+        {
+          "name": "the tab counts them",
+          "ok": true,
+          "detail": "Drafts\n4\n4"
+        },
+        {
+          "name": "Schedule… opens the exact-review dialog",
+          "ok": true,
+          "detail": "Schedule a draft\n\nChoose the draft, the account and the exact time. This prepares a review; nothing publishes until you approve it.\n\nNo voice profile is active."
+        },
+        {
+          "name": "the Queue tab still shows approvals and jobs",
+          "ok": true
+        },
+        {
+          "name": "Drafts fits a 390px phone",
+          "ok": true,
+          "detail": 0
+        }
+      ],
+      "marks": [],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "workflow/chromium/queue-drafts/01-drafts.png",
+        "workflow/chromium/queue-drafts/02-schedule.png",
+        "workflow/chromium/queue-drafts/03-drafts-phone.png"
+      ],
+      "video": "workflow/chromium/queue-drafts/queue-drafts.webm",
+      "t0": 1790259817900,
+      "durationSeconds": 5.5
+    }
+  ],
+  "finishedAt": "2026-09-24T14:23:43.465Z",
+  "summary": {
+    "checks": 36,
+    "failed": 0,
+    "pageErrors": 0
+  }
+}

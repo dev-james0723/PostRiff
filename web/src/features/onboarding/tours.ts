@@ -301,6 +301,14 @@ export const PAGE_TOURS: Tour[] = [
     route: '/app/queue',
     steps: [
       {
+        id: 'drafts',
+        route: '/app/queue',
+        stop: 'Queue',
+        target: ['[data-tour="queue-tabs"]', ...heading('queue')],
+        title: 'Drafts wait here',
+        body: 'The Drafts tab holds everything not scheduled yet. Choose Schedule… on a draft to pick an account and a time.'
+      },
+      {
         id: 'approvals',
         route: '/app/queue',
         stop: 'Queue',
@@ -524,45 +532,6 @@ export const PAGE_TOURS: Tour[] = [
         title: 'Record an exact reply approval',
         body: 'Write and save a reply, then review its exact account, comment and text. Sending is not enabled; each recorded approval needs reconfirmation before a real send.',
         when: (ctx) => ctx.canEdit || ctx.canReply
-      }
-    ]
-  },
-  {
-    id: 'pipeline-tips',
-    title: 'Pipeline',
-    route: '/app/pipeline',
-    steps: [
-      {
-        id: 'board',
-        route: '/app/pipeline',
-        stop: 'Pipeline',
-        target: ['[data-tour="pipeline-board"]', ...heading('pipeline')],
-        title: 'Left to right, nothing moves on its own',
-        body: 'Work moves from sources to drafts, reviews, the queue and published posts, and only when someone acts.'
-      },
-      {
-        id: 'drafts',
-        route: '/app/pipeline',
-        stop: 'Pipeline',
-        target: ['[data-tour="pipeline-col-drafts"]', '[data-tour="pipeline-board"]'],
-        title: 'Drafts',
-        body: 'Edit a draft or choose Schedule to pick an account and a time. Drafts you set aside wait at the bottom of the column.'
-      },
-      {
-        id: 'review',
-        route: '/app/pipeline',
-        stop: 'Pipeline',
-        target: ['[data-tour="pipeline-col-review"]', '[data-tour="pipeline-board"]'],
-        title: 'Needs approval',
-        body: 'A review locks the exact text, account and time until someone who can approve confirms it.'
-      },
-      {
-        id: 'published',
-        route: '/app/pipeline',
-        stop: 'Pipeline',
-        target: ['[data-tour="pipeline-col-published"]', '[data-tour="pipeline-board"]'],
-        title: 'Published means confirmed',
-        body: 'Only posts the provider confirmed appear here. A Fixture label marks a test run, not a real post.'
       }
     ]
   },

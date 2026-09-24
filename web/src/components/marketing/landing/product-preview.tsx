@@ -5,7 +5,7 @@ import { TiltCard } from '@/components/motion/tilt-card';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 
-const NAV = ['Overview', 'Ideas', 'Calendar', 'Pipeline', 'Channels', 'Queue', 'Analytics', 'Inbox'];
+const NAV = ['Overview', 'Ideas', 'Automations', 'Calendar', 'Channels', 'Queue', 'Analytics', 'Inbox'];
 const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
 /** Event marks are monochrome like the app's calendar chrome (DNA §2.2); the count is how many items sit on that day. */
 const DOTS: Record<number, number> = { 3: 1, 5: 2, 9: 1, 12: 1, 16: 2, 19: 1, 24: 1 };

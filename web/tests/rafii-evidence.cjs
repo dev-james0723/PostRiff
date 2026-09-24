@@ -27,7 +27,7 @@ const ROUTES = {
   ideas: '/app/ideas',
   automations: '/app/automations',
   calendar: '/app/calendar',
-  pipeline: '/app/pipeline',
+  'queue-drafts': '/app/queue?view=drafts',
   library: '/app/library',
   channels: '/app/channels',
   queue: '/app/queue',

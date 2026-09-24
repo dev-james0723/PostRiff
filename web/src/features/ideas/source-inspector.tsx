@@ -513,8 +513,8 @@ function UsedIn({ source }: { source: IdeaSource }) {
         </li>
       ))}
       <li>
-        <Link href='/app/pipeline' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1 rounded-md text-xs'>
-          Open the pipeline <Icons.chevronRight className='size-3' />
+        <Link href='/app/queue?view=drafts' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1 rounded-md text-xs'>
+          Open drafts <Icons.chevronRight className='size-3' />
         </Link>
       </li>
     </ul>

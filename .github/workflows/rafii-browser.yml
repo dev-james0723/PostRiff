@@ -73,8 +73,8 @@ jobs:
         # --no-run skips waiting for a scheduled minute; the worker run itself is covered by
         # tests/phase2/postgres_consumer_campaign_worker.py in the release gates.
         run: node web/tests/rafii-automations.cjs --no-run
-      - name: Home scenes (drafting with the fixture writer, Content Library)
-        run: node web/tests/rafii-workflow.cjs --only=workflow,library
+      - name: Home scenes (drafting with the fixture writer, Content Library, Queue → Drafts)
+        run: node web/tests/rafii-workflow.cjs --only=workflow,library,drafts
       - name: Theme bars (header and phone tab bar match light and dark under any stored theme)
         run: node web/tests/rafii-theme-bars.cjs
       - name: Keep the evidence for this commit

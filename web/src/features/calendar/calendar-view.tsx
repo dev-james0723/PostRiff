@@ -75,7 +75,7 @@ const infoContent = {
     },
     {
       title: 'Moving a post',
-      description: 'Timing is part of the exact approval. To change it, prepare the draft again with the new time from the Pipeline or Queue.'
+      description: 'Timing is part of the exact approval. To change it, prepare the draft again with the new time from Queue → Drafts.'
     }
   ]
 };
@@ -127,7 +127,7 @@ function StatusNotes({ post, timeZone, context }: { post: Post; timeZone: string
   if (post.manifest.execution === 'synthetic') notes.push('Local fixture only; no real publication was performed.');
   if (post.kind === 'uncertain') notes.push('Check the platform and the queue receipt. Do not publish again while the result is unconfirmed.');
   if (post.kind === 'unknown') notes.push('Automatic progress cannot be confirmed. Open the queue receipt for the latest events.');
-  if (post.kind === 'held') notes.push('Resolve the reason above, then prepare a new exact review in the pipeline.');
+  if (post.kind === 'held') notes.push('Resolve the reason above, then prepare a new exact review from Queue → Drafts.');
   if (post.kind === 'verified' && post.job?.providerReference) {
     notes.push(
       <>
@@ -157,7 +157,7 @@ function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<
   // The approving zone's clock, only when it reads differently from this one (another name for the same offset adds nothing).
   const approvedTime = post.approvedZone && post.approvedZone !== timeZone ? zoneTime(post.at, post.approvedZone) : null;
   const approvedElsewhere = approvedTime && approvedTime !== zoneTime(post.at, timeZone) ? approvedTime : null;
-  const next = NEEDS_NEW_REVIEW.has(post.kind) ? { href: '/app/pipeline', label: 'Open the pipeline' } : { href: post.job ? `/app/queue?job=${encodeURIComponent(post.job.id)}` : '/app/queue', label: 'Open the queue' };
+  const next = NEEDS_NEW_REVIEW.has(post.kind) ? { href: '/app/queue?view=drafts', label: 'Open drafts' } : { href: post.job ? `/app/queue?job=${encodeURIComponent(post.job.id)}` : '/app/queue', label: 'Open the queue' };
 
   const details = (
     <div className={cn('flex min-w-0 flex-col gap-2', context === 'popover' && 'w-72 max-w-full shrink-0')}>

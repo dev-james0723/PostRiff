@@ -45,6 +45,7 @@ import {
   type QueueReview
 } from './job-state';
 import { ScheduleDialog } from './schedule-dialog';
+import { DraftsPanel, useDraftCount } from '@/features/pipeline/drafts-panel';
 import { StatusChip } from './status-chip';
 import { useElementWidth, useWide } from './use-wide';
 
@@ -67,8 +68,13 @@ const REVIEW_ENTER_S = 0.22;
 const REVIEW_EXIT = { opacity: 0, transition: { duration: 0.15, ease: EASE_OUT } };
 
 const infoContent = {
-  title: 'Approvals and the queue',
+  title: 'Drafts, approvals and the queue',
   sections: [
+    {
+      title: 'Drafts',
+      description:
+        'The Drafts tab holds every draft that is not scheduled yet: from Home, conversations and automations. Schedule… picks the account and time and prepares the exact post for approval. Set-aside drafts stay at the bottom of the list; editing one brings it back.'
+    },
     {
       title: 'Exact approvals',
       description:
@@ -446,6 +452,8 @@ function FirstRun({ canSchedule, hasDrafts, hasReadyAccount, onSchedule }: { can
   );
 }
 
+const QUEUE_VIEWS = ['queue', 'drafts'] as const;
+
 export function QueueView() {
   // `?filter=`, `?job=` and `?channel=` live in the URL, which needs a suspense boundary above the reader.
   return (
@@ -472,9 +480,12 @@ function Queue() {
   // Preparing a review (`p2_review`) is in the server's approve class, with approving and cancelling
   // (`permissions.py` ACTION_CLASSES), so an editor without it is not offered a button the server refuses.
   const canSchedule = canApprove;
+  const draftCount = useDraftCount();
   const [params, setParams] = useQueryStates(
     {
       filter: parseAsStringLiteral(FILTER_VALUES).withDefault('all'),
+      // Drafts not yet scheduled (the Pipeline board's drafts column, folded into Queue in Rafii v9).
+      view: parseAsStringLiteral(QUEUE_VIEWS).withDefault('queue'),
       job: parseAsString,
       asset: parseAsString,
       channel: parseAsString
@@ -607,7 +618,7 @@ function Queue() {
   return (
     <PageContainer
       pageTitle='Queue'
-      pageDescription='Approvals waiting on you, then everything the worker is handling.'
+      pageDescription='Drafts waiting to be scheduled, approvals waiting on you, then everything the worker is handling.'
       infoContent={infoContent}
       pageHeaderAction={
         canSchedule ? (
@@ -653,6 +664,32 @@ function Queue() {
       />
 
       <div className='flex flex-col gap-8'>
+        <div data-tour='queue-tabs' className='relative scrollbar-hide max-w-full min-w-0 overflow-x-auto py-0.5'>
+          <SegmentedControl
+            label='Queue view'
+            pattern='tabs'
+            value={params.view}
+            onChange={(value) => void setParams({ view: value, job: null })}
+            widths='content'
+            options={[
+              { value: 'queue', label: 'Queue', title: 'Approvals waiting on you, then everything the worker is handling' },
+              {
+                value: 'drafts',
+                title: 'Drafts that are not scheduled yet',
+                label: (
+                  <>
+                    Drafts
+                    {draftCount !== null && <DigitSwap value={draftCount} className='text-muted-foreground text-xs' />}
+                  </>
+                )
+              }
+            ]}
+          />
+        </div>
+        {params.view === 'drafts' ? (
+          <DraftsPanel />
+        ) : (
+        <>
         {sample ? (
           <StateMessage kind='unsupported' layout='inline' title='Sample workspaces are read-only.' description='Nothing here can be scheduled, approved or cancelled.' />
         ) : (
@@ -821,6 +858,8 @@ function Queue() {
               </section>
             </>
           )
+        )}
+        </>
         )}
       </div>
     </PageContainer>

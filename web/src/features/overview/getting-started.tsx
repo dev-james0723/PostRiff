@@ -32,7 +32,7 @@ export function GettingStarted() {
     { id: 'voice', title: 'Set your voice', detail: 'What you are building, who it is for, and a tone.', action: 'Set up', href: '/app/workspace/brand', done: Boolean(state.speaker?.activeRevision) },
     { id: 'channel', title: 'Connect a channel', detail: 'Any account you own; each shows how it can publish.', action: 'Connect', href: '/app/channels', done: channels.data.channels.length > 0 },
     { id: 'draft', title: 'Draft your first post', detail: 'Start from a sentence or a link in Ideas.', action: 'Draft', href: '/app/ideas', done: (state.variants ?? []).length > 0 },
-    { id: 'approve', title: 'Approve and schedule it', detail: 'Pick the account and time, then approve the exact text.', action: 'Approve', href: '/app/pipeline', done: (state.phase2?.jobs.length ?? 0) > 0 }
+    { id: 'approve', title: 'Approve and schedule it', detail: 'Pick the account and time, then approve the exact text.', action: 'Approve', href: '/app/queue?view=drafts', done: (state.phase2?.jobs.length ?? 0) > 0 }
   ];
   const done = steps.filter((s) => s.done).length;
   if (done === steps.length) return null;

@@ -1,8 +1,8 @@
 {
   "base": "http://localhost:3140",
   "browser": "chromium",
-  "workspaceId": "af4a4b03-977b-4531-a2a7-8d4d867e9447",
-  "startedAt": "2026-09-24T14:06:02.634Z",
+  "workspaceId": "551a800a-2f3b-4dd7-ab2b-ea5ced94fbff",
+  "startedAt": "2026-09-24T14:23:43.794Z",
   "scenes": [
     {
       "name": "build-and-run",
@@ -42,7 +42,7 @@
         {
           "name": "three drafts each run (two accounts, one with two languages)",
           "ok": true,
-          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\n\nEach account gets its own draft in each of its languages. Two accounts on one app get two drafts.\n\nChoose accounts or folders\n\nFrom Festival\n\nDev Member\nLinkedIn\n🌐 English\n🇭🇰 繁體中文（香港）\nLanguage\nDev Member Two\nLinkedIn\n🌐 English\nLanguage\n\n3 drafts each run\n\nBack\nNext"
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\n\nEach account gets its own draft in each of its languages. Two accounts on one app get two drafts.\n\nChoose accounts or folders\n\nFrom Festival\n\nDev Member\nLinkedIn\n🇬🇧 English (UK)\n🇭🇰 繁體中文（香港）\nLanguage\nDev Member Two\nLinkedIn\n🇬🇧 English (UK)\nLanguage\n\n3 drafts each run\n\nBack\nNext"
         },
         {
           "name": "folder label kept for display",
@@ -51,7 +51,7 @@
         {
           "name": "budget shows the per-run limit and the monthly ceiling",
           "ok": true,
-          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nWriter\nDeterministic preview\nClaude Code · your default model\nClaude Code · Fable\nClaude Code · Opus\nClaude Code · Sonnet\nClaude Code · Haiku\nCodex CLI · your default model\n\nRuns without sending the brief to a cloud provider.\n\nCost limit per run (USD)\n\nThis writer has no per-run charge.\n\nReasoning\nQuick\nStandard\nDeep\nBUDGET\n\nUp to $0.00 a run · up to 5 runs a month · at most $0.00 a month.\n\nCharges come from your workspace credits, the same as drafting on Home.\n\nWhat\nWeekly practice tip ue12\nOne practical practice tip for adult piano students. Share it on Instagram at 8pm tomorrow.\nBehind the scenes · Carousel · brief only\nEdit wh"
+          "detail": "AUTOMATIONS\nNew automation\n\nRafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.\n\n1 · What\n2 · When\n3 · Where\n4 · Review\nWriter\nDeterministic preview\nClaude Code · your default model\nClaude Code · Fable\nClaude Code · Opus\nClaude Code · Sonnet\nClaude Code · Haiku\nCodex CLI · your default model\n\nRuns without sending the brief to a cloud provider.\n\nCost limit per run (USD)\n\nThis writer has no per-run charge.\n\nReasoning\nQuick\nStandard\nDeep\nBUDGET\n\nUp to $0.00 a run · up to 5 runs a month · at most $0.00 a month.\n\nCharges come from your workspace credits, the same as drafting on Home.\n\nWhat\nWeekly practice tip h4tq\nOne practical practice tip for adult piano students. Share it on Instagram at 8pm tomorrow.\nBehind the scenes · Carousel · brief only\nEdit wh"
         },
         {
           "name": "nothing blocks saving",
@@ -78,7 +78,7 @@
             "weekdays": [
               "Thursday"
             ],
-            "localTime": "22:14"
+            "localTime": "22:31"
           }
         },
         {
@@ -87,7 +87,7 @@
           "detail": {
             "destinations": [
               {
-                "language": "en",
+                "language": "en-GB",
                 "platform": "LinkedIn",
                 "channelId": "abaad27ed4e69ff561db13790efff006"
               },
@@ -97,7 +97,7 @@
                 "channelId": "abaad27ed4e69ff561db13790efff006"
               },
               {
-                "language": "en",
+                "language": "en-GB",
                 "platform": "LinkedIn",
                 "channelId": "51ea4aeb8c54dd8c6c5bafcf3ebc6e78"
               }
@@ -139,11 +139,11 @@
           "name": "first run is within minutes (today, not next week)",
           "ok": true,
           "detail": {
-            "utc": "2026-09-24T14:14:00+00:00",
+            "utc": "2026-09-24T14:31:00+00:00",
             "fold": 0,
-            "local": "2026-09-24T22:14:00+08:00",
+            "local": "2026-09-24T22:31:00+08:00",
             "offset": "+0800",
-            "scheduledFor": 1790259240
+            "scheduledFor": 1790260260
           }
         },
         {
@@ -215,8 +215,8 @@
         }
       ],
       "video": "automations/chromium/build-and-run/build-and-run.webm",
-      "t0": 1790258763225,
-      "durationSeconds": 23
+      "t0": 1790259824023,
+      "durationSeconds": 30.9
     },
     {
       "name": "templates",
@@ -322,8 +322,8 @@
       ],
       "axe": [],
       "video": "automations/chromium/templates/templates.webm",
-      "t0": 1790258786330,
-      "durationSeconds": 11.7
+      "t0": 1790259855149,
+      "durationSeconds": 15.1
     },
     {
       "name": "triggers",
@@ -362,7 +362,7 @@
               ]
             },
             "status": "active",
-            "watchFrom": 1790258803.8224561
+            "watchFrom": 1790259875.956544
           }
         },
         {
@@ -376,7 +376,7 @@
             "runs": [
               {
                 "state": "completed",
-                "occurrenceId": "ca36eac830674ff6a5c1616336064bf5"
+                "occurrenceId": "662efb4b148746f29051f3921df4468c"
               }
             ]
           }
@@ -386,26 +386,26 @@
           "ok": true,
           "detail": [
             {
-              "id": "ca36eac830674ff6a5c1616336064bf5",
+              "id": "662efb4b148746f29051f3921df4468c",
               "event": {
-                "id": "source:ca037d5184b74427907c562b9f707f73",
+                "id": "source:1b3ab51d1ec544c39b87feea02642e0b",
                 "kind": "new_source",
                 "title": "Practice with a metronome",
-                "sourceId": "ca037d5184b74427907c562b9f707f73"
+                "sourceId": "1b3ab51d1ec544c39b87feea02642e0b"
               },
-              "runId": "78b50d9e-cbce-4932-be8b-5c9e4a1a0c19",
+              "runId": "09daf590-45a1-4171-b767-03469aebafec",
               "state": "completed",
-              "taskId": "d82e9183496a4bdaa45063b9c26a8e05",
+              "taskId": "d623c49254f8452e8d9cdac10d9c58ea",
               "authority": "draft_preparation_only",
-              "createdAt": 1790258804.6570728,
+              "createdAt": 1790259876.811838,
               "draftCount": 1,
-              "leaseUntil": 1790259404.6570728,
-              "completedAt": 1790258804.706787,
+              "leaseUntil": 1790260476.811838,
+              "completedAt": 1790259876.877996,
               "taskVersion": 1,
               "costUsdMicro": 0,
-              "scheduledFor": 1790258804.6493912,
-              "conversationId": "6ff0994a-7152-4c8a-b1e9-1367c53ba5d3",
-              "idempotencyKey": "e70591cfb04e5501f72cb08bbb6502859ffd528734e12218290a5060d02d1fa3"
+              "scheduledFor": 1790259876.8022861,
+              "conversationId": "717249c7-cc2b-4933-8a67-fc241adfc20c",
+              "idempotencyKey": "a96b3a3ab8b8214027d547a1d014ca58b41a5d84b5ea1f2284ddd7a70a5ae074"
             }
           ]
         },
@@ -419,7 +419,7 @@
         {
           "name": "run history names the idea that started it",
           "ok": true,
-          "detail": "New idea to drafts\n\nWhen you add a new idea, note or link to Ideas · up to 3 runs a day\n\n1 new\nActive\nWHERE\nPersonal · 🌐 English\nWHAT\nEducational explainer · Text\nWRITER\nDeterministic preview · Quick · up to $0.00 a run\n$0.00 spent this month\nNEXT RUN\nWaiting for something new in Ideas\nup to 93 runs a month · at most $0.00 a month\n\nLast run\nDrafts ready\nThu, Sep 24, 10:06 AM\n\nReview latest drafts\nEdit\nPause\nCancel automation\nEmail me when its drafts are ready\nRun history (1)\nThu, Sep 24, 10:06 "
+          "detail": "New idea to drafts\n\nWhen you add a new idea, note or link to Ideas · up to 3 runs a day\n\n1 new\nActive\nWHERE\nPersonal · 🇬🇧 English (UK)\nWHAT\nEducational explainer · Text\nWRITER\nDeterministic preview · Quick · up to $0.00 a run\n$0.00 spent this month\nNEXT RUN\nWaiting for something new in Ideas\nup to 93 runs a month · at most $0.00 a month\n\nLast run\nDrafts ready\nThu, Sep 24, 10:24 AM\n\nReview latest drafts\nEdit\nPause\nCancel automation\nEmail me when its drafts are ready\nRun history (1)\nThu, Sep 24,"
         },
         {
           "name": "evergreen: option ticked by the template",
@@ -456,8 +456,8 @@
       ],
       "axe": [],
       "video": "automations/chromium/triggers/triggers.webm",
-      "t0": 1790258798102,
-      "durationSeconds": 13.3
+      "t0": 1790259870334,
+      "durationSeconds": 13.6
     },
     {
       "name": "phone",
@@ -493,8 +493,8 @@
       ],
       "axe": [],
       "video": "automations/chromium/phone/phone.webm",
-      "t0": 1790258811517,
-      "durationSeconds": 3.4
+      "t0": 1790259884033,
+      "durationSeconds": 3.3
     },
     {
       "name": "chat",
@@ -512,7 +512,7 @@
         {
           "name": "the reply says what will happen and when",
           "ok": true,
-          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇺🇸 English (US)"
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇬🇧 English (UK)"
         },
         {
           "name": "an owner request with the fixture writer is on",
@@ -522,7 +522,7 @@
         {
           "name": "voice and kind of post understood",
           "ok": true,
-          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇺🇸 English (US)"
+          "detail": "Done. Every Tuesday at 09:00 (America/New_York), I'll prepare a news article post about AI for Science for LinkedIn and Instagram, in your voice. The first draft will be ready Tuesday 29 September at 09:00. Each draft waits for your review; nothing is published without you.\n\nAUTOMATION\n\nAI for Science · News article post\nOn\nWhen\nEvery Tuesday at 09:00 (America/New_York)\nFirst draft\nTuesday 29 September at 09:00\nEach draft\nA news article post about AI for Science.\nFor\nLinkedIn\n· 🇬🇧 English (UK)"
         },
         {
           "name": "saved with the builder checks: Tuesday 09:00, your voice, news type, active",
@@ -592,11 +592,11 @@
         }
       ],
       "video": "automations/chromium/chat/chat.webm",
-      "t0": 1790258814915,
-      "durationSeconds": 7.2
+      "t0": 1790259887399,
+      "durationSeconds": 8.6
     }
   ],
-  "finishedAt": "2026-09-24T14:07:02.188Z",
+  "finishedAt": "2026-09-24T14:24:56.097Z",
   "summary": {
     "checks": 70,
     "failed": 0,

@@ -1,0 +1,71 @@
+{
+  "base": "http://localhost:3140",
+  "browser": "webkit",
+  "principal": "af2056df-99f3-4ce2-9935-036ab0a655d4",
+  "workspaceId": "551a800a-2f3b-4dd7-ab2b-ea5ced94fbff",
+  "startedAt": "2026-09-24T14:24:56.431Z",
+  "scenes": [
+    {
+      "name": "queue-drafts",
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "reducedMotion": false,
+      "checks": [
+        {
+          "name": "the old Pipeline address opens Queue → Drafts",
+          "ok": true,
+          "detail": "http://localhost:3140/app/queue?view=drafts"
+        },
+        {
+          "name": "the Drafts tab is selected",
+          "ok": true
+        },
+        {
+          "name": "Pipeline left the menu",
+          "ok": true
+        },
+        {
+          "name": "saved drafts are listed",
+          "ok": true,
+          "detail": 4
+        },
+        {
+          "name": "the tab counts them",
+          "ok": true,
+          "detail": "Drafts\n4\n4"
+        },
+        {
+          "name": "Schedule… opens the exact-review dialog",
+          "ok": true,
+          "detail": "Schedule a draft\n\nChoose the draft, the account and the exact time. This prepares a review; nothing publishes until you approve it.\n\nNo voice profile is active."
+        },
+        {
+          "name": "the Queue tab still shows approvals and jobs",
+          "ok": true
+        },
+        {
+          "name": "Drafts fits a 390px phone",
+          "ok": true,
+          "detail": 0
+        }
+      ],
+      "marks": [],
+      "errors": [],
+      "blocked": [],
+      "screenshots": [
+        "workflow/webkit/queue-drafts/01-drafts.png",
+        "workflow/webkit/queue-drafts/02-schedule.png",
+        "workflow/webkit/queue-drafts/03-drafts-phone.png"
+      ],
+      "video": "workflow/webkit/queue-drafts/queue-drafts.webm",
+      "t0": 1790259898515,
+      "durationSeconds": 6.1
+    }
+  ],
+  "finishedAt": "2026-09-24T14:25:04.650Z",
+  "summary": {
+    "checks": 8,
+    "failed": 0,
+    "pageErrors": 0
+  }
+}

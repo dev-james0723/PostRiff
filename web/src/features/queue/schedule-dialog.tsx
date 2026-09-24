@@ -28,7 +28,7 @@ import { languageLabel } from '@/lib/locales';
 interface ScheduleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Preselect a draft (from the Pipeline card). */
+  /** Preselect a draft (from a draft card in Queue → Drafts). */
   variantId?: string | null;
   assetId?: string | null;
   /**

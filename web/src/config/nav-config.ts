@@ -48,13 +48,6 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
-        title: 'Pipeline',
-        url: '/app/pipeline',
-        icon: 'kanban',
-        shortcut: ['p', 'p'],
-        items: []
-      },
-      {
         title: 'Library',
         url: '/app/library',
         icon: 'media',

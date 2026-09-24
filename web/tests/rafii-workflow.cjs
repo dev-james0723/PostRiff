@@ -32,7 +32,7 @@ const engine = engineName === 'webkit' ? webkit : chromium;
 const evidence = path.resolve(__dirname, '../../docs/design/rafii-v9/evidence');
 const seed = JSON.parse(fs.readFileSync(path.join(evidence, 'seed.json'), 'utf8'));
 const out = path.join(evidence, 'workflow', engineName);
-const only = args.only ? String(args.only).split(',') : ['workflow', 'motion', 'library', 'reduced', 'mobile'];
+const only = args.only ? String(args.only).split(',') : ['workflow', 'motion', 'library', 'reduced', 'mobile', 'drafts'];
 const MODEL = 'deterministic-preview';
 // Unique per run so the server check finds this run's edit even when earlier passes left drafts behind.
 const EDIT_MARK = `Edited in the Rafii v9 composer (${Date.now().toString(36)}).`;
@@ -606,6 +606,65 @@ async function mobile(browser) {
   }
 }
 
+
+/** Queue → Drafts (the Pipeline board folded into Queue): the old address lands there, the menu has no Pipeline,
+ *  saved drafts are listed and counted, Schedule… opens the exact-review dialog, and the Queue tab is unchanged. */
+async function drafts(browser) {
+  const s = await open(browser, 'queue-drafts');
+  const { page, dir } = s;
+  const api = async (method, route, data) => {
+    const response = await page.request.fetch(`${base}/api/workspaces/${seed.workspaceId}${route}`, { method, headers: { ...headers, 'Content-Type': 'application/json' }, data });
+    if (!response.ok()) throw new Error(`${method} ${route} → ${response.status()}`);
+    return response.json();
+  };
+  try {
+    // Save the seeded run's drafts, as Home's Save does, so there is something to schedule (an earlier scene may have).
+    const snapshot = await api('GET', '');
+    const run = await api('GET', `/ideas/runs/${seed.runId}/events?cursor=0`);
+    await api('POST', `/ideas/runs/${seed.runId}/apply`, { expectedRevision: snapshot.revision, artifactHash: run.artifactHash }).catch(() => {});
+    await page.goto(`${base}/app/pipeline`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await settle(page);
+    await page.waitForURL(/\/app\/queue\?view=drafts/, { timeout: 120000 });
+    check('the old Pipeline address opens Queue → Drafts', /\/app\/queue\?view=drafts/.test(page.url()), page.url());
+    const tab = page.getByRole('tab', { name: /^Drafts/ });
+    await tab.waitFor({ timeout: 120000 });
+    check('the Drafts tab is selected', (await tab.getAttribute('aria-selected')) === 'true');
+    check('Pipeline left the menu', (await page.getByRole('link', { name: 'Pipeline', exact: true }).count()) === 0);
+    const cards = page.locator('#pipeline-col-drafts [data-card-key]');
+    await cards.first().waitFor({ timeout: 60000 });
+    await page.waitForTimeout(600);
+    const count = await cards.count();
+    check('saved drafts are listed', count >= 3, count);
+    check('the tab counts them', (await tab.innerText()).includes(String(count)), await tab.innerText());
+    await shot(page, dir, '01-drafts');
+    await page.locator('#pipeline-col-drafts').getByRole('button', { name: /^Schedule/ }).first().click();
+    const dialog = page.getByRole('dialog').first();
+    await dialog.waitFor({ timeout: 30000 });
+    check('Schedule… opens the exact-review dialog', /Schedule|review/i.test(await dialog.innerText()), (await dialog.innerText()).slice(0, 160));
+    await shot(page, dir, '02-schedule');
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden', timeout: 15000 });
+    await page.getByRole('tab', { name: /^Queue/ }).click();
+    await page.waitForURL((url) => !url.search.includes('view=drafts'), { timeout: 30000 });
+    // With no jobs yet the Queue tab explains the three steps instead of an empty list.
+    const queued = page.locator('#queue-jobs-list').or(page.getByText('Nothing publishes on its own')).first();
+    await queued.waitFor({ timeout: 30000 });
+    check('the Queue tab still shows approvals and jobs', await queued.isVisible());
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${base}/app/queue?view=drafts`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await cards.first().waitFor({ timeout: 120000 });
+    await page.waitForTimeout(600);
+    const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
+    check('Drafts fits a 390px phone', overflow <= 0, overflow);
+    await shot(page, dir, '03-drafts-phone');
+  } catch (error) {
+    check('drafts scene completed', false, error.message);
+    await shot(page, dir, 'zz-failure').catch(() => {});
+  } finally {
+    await close(s);
+  }
+}
+
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   // A locally installed build may be named explicitly (RAFII_CHROMIUM_PATH / RAFII_WEBKIT_PATH); nothing is downloaded.
@@ -615,6 +674,7 @@ async function mobile(browser) {
     if (only.includes('workflow')) await workflow(browser);
     if (only.includes('motion')) await motion(browser);
     if (only.includes('library')) await library(browser);
+    if (only.includes('drafts')) await drafts(browser);
     if (only.includes('reduced')) await reduced(browser);
     if (only.includes('mobile')) await mobile(browser);
   } finally {

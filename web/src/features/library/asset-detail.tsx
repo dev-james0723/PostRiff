@@ -234,8 +234,8 @@ function DetailBody({
           <h3 id='asset-uses' className='rafii-eyebrow'>
             Used in
           </h3>
-          <Link href='/app/pipeline' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'lg' }))}>
-            Pipeline
+          <Link href='/app/queue?view=drafts' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'lg' }))}>
+            Drafts
             <LearnMoreChevron />
           </Link>
         </div>
