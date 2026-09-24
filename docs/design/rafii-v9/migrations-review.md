@@ -70,3 +70,27 @@ each file states the migration it must follow.
 2. The two policy changes, 014 and 015, if missing (they narrow who can read raw costs and audit).
 3. 009 together with the Supabase MFA settings.
 4. 013 last, only with James's explicit approval, after a backup (it rewrites existing rows).
+
+## Production result (2026-09-24)
+
+James approved the production release. The checks against the production database (Supabase project
+`buoyhkbodnhzngaotoel`, Postgres 17.6) found the following.
+
+- **018 was missing and is now applied and verified.**
+  - All four tables were absent. It was applied with the exact reviewed file (sha256 `e9ccc13a…9bb`) through a one-off
+    production-environment Vercel build that was never aliased.
+  - The runner checked the prerequisites (`pr_workspaces`, `pr_profiles`, `postriff_private.member`, `gen_random_uuid`)
+    and refused a partial state.
+  - It then verified the columns, forced RLS, the `tenant_read` and `trusted_write` policies, grants (anon none,
+    authenticated select, service_role insert) and both indexes.
+  - A public PostgREST probe after the deploy answered 42501 (exists and is private) for all four tables.
+  - Record: `.codex/rafii-v9-migration-018-20260924-1241/migration.json`.
+- **The rest were read only and not applied**, because this release does not need them:
+  - 016 (`pr_api_tokens`) and 019 (`pr_research_requests`) are missing (PGRST205). While 019 is missing, the cron's
+    operations snapshot logs "unavailable" every minute.
+  - The 014 and 015 policies are not present.
+  - The 017 reasoning constraint is not widened.
+  - There is no migration ledger table.
+  - 013 has 0 legacy rows, so nothing is left for it to rewrite.
+- The next step is unchanged from the recommended order above: 019, then 016, then the others, each additive except 013.
+
