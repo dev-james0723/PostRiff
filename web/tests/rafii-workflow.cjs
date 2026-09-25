@@ -184,7 +184,7 @@ async function workflow(browser) {
     mark('Home loaded');
     await shot(page, dir, '01-home-idle');
     check('Home heading', /What.s the idea/.test(await page.getByRole('heading', { level: 1 }).innerText()));
-    check('model is the deterministic preview fixture', /Deterministic preview/.test(await settingButton(page, 'Model').innerText()), await settingButton(page, 'Model').innerText());
+    check('model is the deterministic preview fixture', /Templates \(no AI model\)/.test(await settingButton(page, 'Model').innerText()), await settingButton(page, 'Model').innerText());
 
     await chooseFolders(page, dir);
     const channels = page.locator('[data-tour="composer-channels"]');
@@ -246,7 +246,7 @@ async function workflow(browser) {
       await modelDialog.getByRole('radio', { name: 'API models', exact: true }).click();
       await page.waitForTimeout(600);
     }
-    await modelDialog.getByRole('radio', { name: /Deterministic preview/ }).click();
+    await modelDialog.getByRole('radio', { name: /Templates \(no AI model\)/ }).click();
     await page.waitForTimeout(300);
     const applied = await modelDialog.getByRole('radio', { name: /sends standard/ }).count();
     const notApplied = await modelDialog.getByRole('radio', { name: /not applied by this provider/ }).count();
@@ -261,7 +261,7 @@ async function workflow(browser) {
     await shot(page, dir, '07-model-dialog');
     await modelDialog.getByRole('button', { name: /Use this model/ }).click();
     await modelDialog.waitFor({ state: 'hidden' });
-    check('fixture model still selected after browsing providers', /Deterministic preview/.test(await settingButton(page, 'Model').innerText()), await settingButton(page, 'Model').innerText());
+    check('fixture model still selected after browsing providers', /Templates \(no AI model\)/.test(await settingButton(page, 'Model').innerText()), await settingButton(page, 'Model').innerText());
 
     // Real generation through the existing quick-start service.
     await page.getByRole('textbox', { name: 'Message' }).fill('Practice notes from this week: the slow, unglamorous hours at the piano are where every good performance is really decided.');
@@ -387,7 +387,7 @@ async function motion(browser) {
     }
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await s.page.waitForTimeout(500);
-    check('Cancel keeps the fixture model', /Deterministic preview/.test(await settingButton(s.page, 'Model').innerText()), await settingButton(s.page, 'Model').innerText());
+    check('Cancel keeps the fixture model', /Templates \(no AI model\)/.test(await settingButton(s.page, 'Model').innerText()), await settingButton(s.page, 'Model').innerText());
   } catch (error) {
     check('provider/reasoning clip completed', false, error.message);
   } finally {

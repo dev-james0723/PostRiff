@@ -316,7 +316,7 @@ export function RecipeForm({ recipe, isOwner, onSaved }: { recipe: Recipe | null
             </span>
           </div>
           <SelectField label='Writing model' value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}>
-            <option value=''>Templates (no AI model)</option>
+            <option value=''>Rafii's AI writer (default)</option>
             {writers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}

@@ -28,7 +28,7 @@ The agent reads only the sources you included in the Context Pocket and marked u
 
 - Content type picks the kind of post (for example an announcement or a reflection) and its format.
 - Language is chosen per account and remembered per platform.
-- Model chooses the writer: a CLI signed in on the machine that serves Rafii, Rafii's managed model, or the free preview writer.
+- Model chooses the writer: Rafii's managed AI model (the default when it is available), a CLI signed in on the machine that serves Rafii, or Templates (no AI model), which writes from templates only when you choose it.
 - Writing Voice is neutral, or personalized when you have approved writing samples for the chosen writer.
 
 ## Everything is a proposal

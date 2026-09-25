@@ -256,10 +256,12 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   const writers = useMemo(() => models.data?.models.filter((m) => m.qualified) ?? [], [models.data]);
   const zones = useMemo(() => timeZones([initial.timeZone, viewerZone]), [initial.timeZone, viewerZone]);
 
-  // A new automation starts with the writer chosen on Home when it can run unattended.
+  // A new automation starts with the writer chosen on Home when it can run unattended, else Rafii's managed AI writer,
+  // never templates the person did not choose.
   useEffect(() => {
     if (route || !writers.length) return;
-    setRoute(writers.find((m) => m.id === modelChoice.model)?.id ?? writers[0].id);
+    const managed = writers.find((m) => m.costClass === 'paid' && (!m.route || m.route === 'managed'));
+    setRoute(writers.find((m) => m.id === modelChoice.model)?.id ?? managed?.id ?? writers[0].id);
   }, [route, writers, modelChoice.model]);
 
   const writer = writers.find((m) => m.id === route);

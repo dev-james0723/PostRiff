@@ -494,7 +494,7 @@ def privacy_egress_state(ctx):
 
 def _writer_class(ctx):
     ideas = getattr(ctx.service, "ideas", None)
-    if ideas is None or not ctx.model_id:
+    if ideas is None:
         return {"modelId": ctx.model_id, "class": "none" if not ctx.model_id else None}
     try:
         runtime = ideas._select_runtime(ctx.model_id)

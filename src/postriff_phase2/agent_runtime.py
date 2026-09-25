@@ -99,7 +99,7 @@ class FixtureAgentRuntime(AgentRuntime):
 
     def list_supported_models(self):
         return [
-            {"id": self.model, "label": "Deterministic preview", "qualified": True, "costClass": "none", "detail": "Writes from templates and your approved sources. No AI model."},
+            {"id": self.model, "label": "Templates (no AI model)", "qualified": True, "costClass": "none", "detail": "Writes from templates and your approved sources. No AI model."},
             {"id": "server-openai", "label": "Rafii managed model", "qualified": False, "costClass": "paid", "detail": "Not available yet."},
         ]
 
