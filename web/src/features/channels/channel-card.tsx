@@ -44,6 +44,7 @@ import { cn } from '@/lib/utils';
 import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import type { ConnectRequest } from './connect-sheet';
+import { DestinationPicker } from './destination-picker';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
 /** Jobs for this account, counted from the workspace snapshot by the page. */
@@ -378,6 +379,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <Icons.history className='size-4' />
           History
         </Button>
+        {canManage && !disconnected && provider?.hasDestinations && <DestinationPicker channelId={channel.id} platform={channel.platform} disabled={busy} />}
         {canManage && !disconnected && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
       </div>
       <ChannelHistorySheet channel={channel} open={historyOpen} onOpenChange={setHistoryOpen} />
