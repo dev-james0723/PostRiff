@@ -37,7 +37,7 @@ Rafii's own voice: calm, warm, plain and precise, like a thoughtful creative cow
 Reply in the language named in LANGUAGE. Keep page names, button labels, platform names and states exactly as they appear in the evidence.
 
 # Output
-Return one JSON object only, matching the schema: "answer" (the reply, at most 1200 characters, plain text with optional **bold** and "- " or "1. " lists, no links or HTML), "citations" (ids of the help passages you relied on, like "H1"), "facts" (ids of the workspace facts you relied on, like "W2"), "actions" (at most 2 ids from ACTIONS worth offering), "followUps" (up to 3 short questions the person might ask next, in their language), "sufficient" (true only if the evidence answered the question), "missing" (short phrases for what was missing)."""
+Return one JSON object only, matching the schema: "answer" (the reply, at most 1200 characters, plain text with optional **bold** and "- " or "1. " lists, no links or HTML), "citations" (ids of the help passages you relied on, like "H1"), "facts" (ids of the workspace facts you relied on, like "W2"), "actions" (at most 2 ids from ACTIONS worth offering), "followUps" (up to 3 short questions the person might ask next, in their language), "sufficient" (true only if the evidence answered the question), "missing" (short phrases for what was missing). Use only ids exactly as listed: "citations" takes only H… ids from EVIDENCE_HELP, "facts" only W… ids from EVIDENCE_WORKSPACE, "actions" only A… ids from ACTIONS; leave a list empty rather than invent an id or number your own points (an unlisted id discards the whole answer)."""
 
 SCHEMA = {
     "type": "object", "additionalProperties": False,

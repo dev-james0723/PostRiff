@@ -204,6 +204,8 @@ ledger = one("SELECT count(*) FILTER (WHERE kind='reserve'),count(*) FILTER (WHE
 assert ledger == (1, 1), ledger
 calls = len(writer.calls)
 assert agent.compose(wid, OWNER, pending["runId"])["status"] == "completed" and len(writer.calls) == calls, "a finished answer is never composed twice"
+# The answer names the model that phrased it (the tier's model on the chosen writer's route), not only the route.
+assert composed["message"]["siteAgent"]["model"].get("phrasedBy") == Writer.model, composed["message"]["siteAgent"]["model"]
 
 # 6. An answer that claims an action, or cites what it was not given, is discarded for the grounded one.
 writer.answer = {"answer": "Done! I published it to LinkedIn.", "citations": [], "facts": ["W1"], "actions": [], "followUps": [], "sufficient": True, "missing": []}
@@ -211,6 +213,12 @@ lie = ask("Why didn't this publish?", pageContext={"route": "/app/queue", "selec
 lie = agent.compose(wid, OWNER, lie["runId"])
 assert lie["message"]["siteAgent"]["model"]["composedBy"] == "grounded" and blocks(lie, "warning")[0]["code"] == "model_claims_action", blocks(lie)
 assert "published it" not in json.dumps(lie["message"])
+assert "didn't pass its checks" in blocks(lie, "warning")[0]["message"], blocks(lie, "warning")
+# An answer citing an id it was never given is discarded too; the run's trace names the ids (never any text).
+writer.answer = {"answer": "It is held for review.", "citations": ["H99"], "facts": ["W1"], "actions": [], "followUps": [], "sufficient": True, "missing": []}
+unknown = agent.compose(wid, OWNER, ask("Why didn't this publish?", pageContext={"route": "/app/queue", "selectedEntity": {"type": "job", "id": HELD}})["runId"])
+assert unknown["message"]["siteAgent"]["model"]["composedBy"] == "grounded" and blocks(unknown, "warning")[0]["code"] == "model_unknown_reference", blocks(unknown)
+assert one("SELECT artifact->'trace'->'rejectedRefs' FROM public.pr_agent_runs WHERE id::text=%s", unknown["runId"])[0] == {"citations": ["H99"]}
 
 # 6b. A writer that fails (a timeout, an error) never loses the answer: the grounded one is kept, and the reserved cost
 # stays booked as an estimate until reconciled (the provider may have charged), never as zero.
@@ -223,6 +231,21 @@ failed = agent.compose(wid, OWNER, ask("Why didn't this publish?", pageContext={
 assert failed["status"] == "completed" and failed["message"]["siteAgent"]["model"]["composedBy"] == "grounded", failed["message"]
 assert blocks(failed, "warning")[0]["code"] == "model_error" and blocks(failed, "diagnostic_card"), blocks(failed)
 assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE workspace_id=%s AND provider='site_agent' AND cost_state='estimated_unknown'", wid)[0] == 1
+assert "didn't answer" in blocks(failed, "warning")[0]["message"], blocks(failed, "warning")
+
+
+# 6c. A writer that refuses with the app's own error (the Claude Code CLI exiting early, say) also "didn't answer": the
+# warning never says a failed call's answer "didn't pass its checks".
+def exits_early(user):
+    raise AlphaError("Claude Code reached the time limit or exited early.", 504)
+
+
+writer.answer = exits_early
+refused = agent.compose(wid, OWNER, ask("Why didn't this publish?", pageContext={"route": "/app/queue", "selectedEntity": {"type": "job", "id": HELD}})["runId"])
+warning = blocks(refused, "warning")[0]
+assert refused["message"]["siteAgent"]["model"]["composedBy"] == "grounded" and warning["code"] == "model_request_failed" and "didn't answer" in warning["message"], warning
+assert blocks(refused, "diagnostic_card"), blocks(refused)
+assert one("SELECT artifact->'trace'->>'fallbackDetail' FROM public.pr_agent_runs WHERE id::text=%s", refused["runId"])[0] == "Claude Code reached the time limit or exited early."
 
 # 7. Out of budget: no model call, a grounded answer that says why.
 with connection() as db:

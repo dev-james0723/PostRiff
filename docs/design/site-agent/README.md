@@ -6,9 +6,10 @@ itself. Writing requests go to the existing writing pipeline; scheduling and aut
 person applies. Implements "Raffi Site-wide AI Agent Engineering Design Spec v0.1"; verified against the "AI Agent
 Assist — End-to-End Capability Verification" brief (see [verification-matrix.md](verification-matrix.md)).
 
-Launch status: **PARTIAL.** Everything below is built and verified locally with mocked providers and the preview
-writer. Not verified live: a real writer model phrasing answers, real provider accounts, the production deployment.
-The animated character is **BLOCKED** (see the end of this document).
+Status (2026-09-24): every scenario in the verification brief passes: 98 of 98, 0 PARTIAL, 0 FAIL. Verification ran
+locally against mocked social providers. A live writer was checked separately through the Claude Code CLI route (see
+[Live writer](#live-writer)). Not verified: real social accounts (production publishing is disabled) and the
+production deployment. The animated character is **BLOCKED** (see the end of this document), separately from the agent.
 
 ## How a turn works
 
@@ -21,16 +22,20 @@ The animated character is **BLOCKED** (see the end of this document).
    "that draft", "the second one", "the campaign we were just discussing" come from the refs stored on the last answers
    of this conversation; "Thursday's post" is the one post that day, or a question when there are several. An answer
    to Rafii's own question ("the second one", "2", "the 16:30 one") runs the request it asked about on the chosen item.
-3. **Reading** (`classifier.classify`). Deterministic, in order: forbidden effects, greetings, memory, campaign
-   questions, automation questions, compound requests, reworks, scheduling, writing, edits, then read intents (status,
-   attention, reviews, publishing, campaign, calendar, brand, voice, drafts, search) and help intents (page, navigate,
-   capability, diagnose, privacy, memory, models, billing, explain).
+3. **Reading** (`classifier.classify`). Deterministic, in this order:
+   - forbidden effects, greetings, memory;
+   - "who approved/changed this" (attribution) and person questions ("What did Alex post?");
+   - compound requests, then removing from and adding to a campaign, and "which campaign is this in?";
+   - "does this sound like me?", campaign questions, automation questions, reworks, scheduling, writing, edits;
+   - read intents: status, attention, reviews, publishing, campaign, calendar, brand, voice, drafts, search;
+   - help intents: page, navigate, capability, diagnose, privacy, memory, models, billing, explain.
 4. **Plan and tools** (`procedures.select`, `tools.run`). Every tool is typed (argument schema, effect class, label),
-   validated before it runs and re-checked against the member's role. 28 tools, release id pinned in each run's trace:
-   - read (25): `help.search`, `help.get`, `route.describe`, `workspace.summary`, `channels.capabilities`,
+   validated before it runs and re-checked against the member's role. 32 tools, release id pinned in each run's trace:
+   - read (29): `help.search`, `help.get`, `route.describe`, `workspace.summary`, `channels.capabilities`,
      `queue.summary`, `job.get`, `draft.get`, `automation.list/get/explain`, `memory.summary`, `privacy.egress_state`,
-     `entitlements.summary`, `models.summary`, `brand.summary`, `voice.profile`, `content.search`, `calendar.range`,
-     `campaign.list/get`, `reviews.list`, `publishing.summary`, `attention.summary`, `entity.status`;
+     `entitlements.summary`, `models.summary`, `brand.summary`, `voice.profile`, `voice.check`, `content.search`,
+     `calendar.range`, `campaign.list/get`, `campaign.membership`, `reviews.list`, `publishing.summary`,
+     `attention.summary`, `entity.status`, `member.activity`, `record.attribution`;
    - client actions (2): `ui.navigate`, `ui.show_help` (manifest routes only);
    - `automation.patch_propose` builds a digest-bound proposal; nothing changes until the person applies it.
    Tools that would publish, reply, message, delete, disconnect, buy, change settings or reveal secrets do not exist.
@@ -44,7 +49,10 @@ The animated character is **BLOCKED** (see the end of this document).
    kept with a warning. A finished answer is never composed twice; a stalled one is recovered after 180 s.
 7. **Writing requests** are delegated to `IdeasService.turn` in the same conversation (drafts, automations, memory).
    A rework ("Shorten this draft", "Adapt this for Instagram", "Create a post for this campaign") passes the draft or
-   campaign brief as `material`: data, never instructions, never parsed for days, times or channels.
+   campaign brief as `material`: data, never instructions, never parsed for days, times or channels, and never looked
+   up on the web (only a link in the message is read). A rework saves as a proposed update on exactly that draft (its
+   text changes only when someone uses it; the earlier text stays in the history) or, for another platform, as a new
+   draft with `provenance.derivedFrom`. A post written for a campaign joins that campaign when it is saved.
 
 ## Actions and proposals
 
@@ -54,6 +62,8 @@ The animated character is **BLOCKED** (see the end of this document).
 | Move a waiting post | `reschedule_post` proposal: Apply cancels the waiting job (`p2_cancel`) and prepares a new review | approve |
 | Change an automation | `automation_change` proposal from the automation editor's own code; Apply runs it in one command | edit; pause/resume owner |
 | Write, rework, adapt | writing pipeline run; drafts are candidates until saved | edit |
+| Add to / remove from a campaign | the campaign's own `raffi_campaign_link` / `raffi_campaign_unlink`, run as the person on an explicit request; recorded on the campaign (`itemLog`) and audited | edit |
+| Compound ("shorten this, add it to the launch campaign and schedule it Thursday 6 PM") | each safe step runs (write → save → link); scheduling is a `schedule_draft` proposal that uses the rewrite; each step reports done, waiting, needs you, not done or failed | per step |
 | Publish, approve, reply, DM, delete, disconnect, buy, change settings, show secrets | refused, with the page where a person does it | — |
 
 Proposals are stored on the answer's message with a digest over the fields they would change. Apply refuses a
@@ -65,8 +75,8 @@ proposal is applied, older open ones for the same automation are marked supersed
 
 All under `/api/workspaces/{id}/site-agent/`, with the same session, request guard and origin checks as the rest of the
 API: `POST turns` (201), `POST runs/{run}/compose`, `POST runs/{run}/cancel`, `GET runs/{run}/events?cursor=`,
-`POST proposals/apply`, `POST proposals/dismiss`, `POST feedback`, `GET help`, `GET help/{documentId}`, `GET insights`
-(owners and admins). The cron endpoint recovers stalled answers. No new tables or migrations: turns and answers are
+`POST proposals/apply`, `POST proposals/dismiss`, `POST compound/continue` (finishes a compound request whose writer
+finished after the turn), `POST feedback`, `GET help`, `GET help/{documentId}`, `GET insights` (owners and admins). The cron endpoint recovers stalled answers. No new tables or migrations: turns and answers are
 `pr_conversations`, `pr_messages` and `pr_agent_runs`/`pr_agent_events`; cost is `pr_usage_ledger`; audit is
 `pr_audit_events`.
 
@@ -113,14 +123,21 @@ deterministic and testable. Revisit this when the corpus grows past a few hundre
 
 | Suite | Command | Result |
 |---|---|---|
-| Python unit (whole repo) | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` | 797 OK (52 site agent) |
-| PostgreSQL (whole repo) | `PYTHONPATH=src:tests python scripts/postriff_pg_suite.py` | 39/39 scripts pass |
-| Site-agent scenarios | `… postriff_pg_suite.py postgres_site_agent_scenarios` | 79 scenarios: 73 PASS, 6 PARTIAL, 0 FAIL (I01: 169 answer links checked against stored ids) |
-| Web contracts | `node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs` | 48/48 (6 site agent) |
+| Python unit (whole repo) | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` | 841 OK, 8 skipped (56 site agent) |
+| PostgreSQL (whole repo) | `PYTHONPATH=src:tests python scripts/postriff_pg_suite.py` | 40/40 scripts. Run with an interpreter that has `openai-agents`, so `postgres_agent_runtime` ran all 43 of its scenarios; the shared `.venv` skips that script |
+| Site-agent scenarios | `… postriff_pg_suite.py postgres_site_agent_scenarios` | 98 scenarios: 98 PASS, 0 PARTIAL, 0 FAIL (I01: 213 answer links checked against stored ids) |
+| Web contracts | CI set `node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs`; all web node tests | 48/48; 112/112 |
 | Types, lint, build | `npm --prefix web run typecheck`, `run lint`, `npx next build` | pass, 0 lint findings, build pass |
-| Browser | `node web/tests/site-agent-browser.cjs [--browser=webkit --shots=off]` on the dev harness | Chromium 37/37, WebKit 37/37 |
+| Browser | `node web/tests/site-agent-browser.cjs [--browser=webkit --shots=off] [--sections=…]` on the dev harness started with `POSTRIFF_RESEARCH=0` | Chromium 39/39. WebKit 39/39 over two section runs; see the note below |
+| Secret scan | `scripts/consumer_ready_secrets.py` (detect-secrets with the reviewed allowlist) | PASS: 1,314 files, 287 reviewed findings, 0 unexpected |
+| Live writer | `scripts/site_agent_live_writer.py --model claude-code:haiku` | see [Live writer](#live-writer) |
 
-### Defects the verification found, all fixed
+WebKit note: the local Playwright WebKit build aborts at random points while text is entered (`-[NSTextInputContext
+textInputClientDidUpdateSelection]: unrecognized selector`). The journey runs in sections, and a crashed section is
+run again. Six attempts crashed; none had a failed check. `evidence/browser-webkit/site-agent-browser.json` lists
+the runs.
+
+### Defects the first verification found, all fixed
 
 Each is pinned by a scenario (ID) and, where it applies, a unit test in `tests/test_site_agent.py`
 (`VerificationFixTest`).
@@ -145,11 +162,11 @@ Each is pinned by a scenario (ID) and, where it applies, a unit test in `tests/t
   from the conversation is now read directly.
 - **X02 → X02b — a reply to Rafii's question lost the request.** "the second one" now runs the original request on
   the chosen item.
-- **X03 — dropped part of a request.** "Add this to the campaign and schedule it" silently dropped the first part;
-  it now says the draft can't be added to a campaign.
+- **X03 — dropped part of a request.** "Add this to the campaign and schedule it" silently dropped the first part.
+  The first stage made it say so; the second stage added the campaign link itself (see below).
 - **Z02 — wrong refusal.** "Delete all my drafts" got the account-deletion refusal; it now points to Queue → Drafts.
-- **H05 — irrelevant answer.** "What did Alex post?" got a Calendar help paragraph. It now says Rafii can't attribute
-  posts to a person and shows the workspace's posts for that period, unattributed.
+- **H05 — irrelevant answer.** "What did Alex post?" got a Calendar help paragraph. The first stage made it say that
+  posts couldn't be attributed; the second stage reads attribution from stored records (see below).
 - **A02 — false "neglected".** The rule ignored waiting reviews and automation posts, so Threads was flagged as
   neglected although a Threads automation post was waiting.
 - **Browser — panel unusable over dialogs.** Two problems:
@@ -165,38 +182,82 @@ Each is pinned by a scenario (ID) and, where it applies, a unit test in `tests/t
   under "Waiting for approval"; an approved review links to its job. I01 checks every link in every answer against
   the stored ids.
 
-### PARTIAL (the product can't do it yet; answers say so instead of guessing)
+### Gaps closed in the second stage (formerly PARTIAL)
 
-| ID | Reason |
+| ID | Now |
 |---|---|
-| V04 | "Why does this sentence not sound like me?" needs a writer model; the answer shows only what the profile stores. |
-| D04 | The rework is a real writing run with the draft as material; the preview writer can't actually shorten, so wording quality needs a live model. |
-| K05 | Drafts made for a campaign are real but not linked to it: the product links drafts to campaigns only through automation runs. |
-| X03 | The same missing link: adding a draft to a campaign has no backing operation. |
-| X04 | A compound request runs find, gaps and create; scheduling waits for a saved draft and an exact time by design. |
-| H05 | There is no member-activity reader, so posts can't be attributed to people. |
+| V04 | "Does this sound like me?" compares the draft or quoted text with the stored voice. Each finding names the trait it used (a profile observation, a learned preference, the approved example) and how it was checked: **measured** (counted), **heuristic** (a rule that can be wrong), or **needs a writer**. Tone is never "measured". A writer model's reading is shown separately as "Writer's judgement", naming the model that wrote it. With no stored voice, Rafii says so and judges nothing (`voice_check.py`). |
+| D04 | "Shorten this draft" rewrites that draft through the writing pipeline. It saves as a proposed update on exactly that draft; the text changes only when someone uses it, and the earlier text stays as a revision (D04 checks the revision history). The answer links to the resulting draft. |
+| K05, X03 | Drafts, posts and images can be added to or removed from a campaign as a real domain action: `raffi_campaign_link` / `raffi_campaign_unlink` on the campaign, with who and when, audited. It is idempotent, and a cancelled campaign refuses. "Which campaign is this draft in?" reads it back. A post written for a campaign is linked when it is saved (L01–L06, K05, X03). |
+| X04 | A compound request runs every safe step and reports each one (find, gaps, revise or create, save, link). Scheduling becomes a proposal that waits for approval. When the writer finishes after the turn (the Claude Code route), `compound/continue` finishes the steps (X04–X06c). |
+| H05 | "What did Alex post / do this week?", "Who approved this?" and "Who changed this automation?" read stored records: reviews and approvals, writing runs, automation and campaign changes, the audit log (owners and admins) and learning events. Each answer links to the record. A person is matched by name without guessing; anything without an actor is listed as "not attributed" (H05–H10). |
 
-Not built: `ui.highlight` (the answer links to the page instead), embeddings, campaign-goal conflict analysis. A
-waiting review has no deep link of its own; links open the Queue's "Waiting for approval" list.
+Remaining PARTIAL: none. Not built: `ui.highlight` (the answer links to the page instead), embeddings, and
+campaign-goal conflict analysis. A waiting review has no deep link of its own; links open the Queue's "Waiting for
+approval" list.
+
+### Defects the second stage found, all fixed
+
+- **Saving a model-written draft failed (production bug).** `IdeasService.apply` refused any candidate whose writer
+  cited fewer sources than it was given ("Sources or their policies changed"). The guard re-checks every source the
+  writer was given, so a changed uncited source still refuses. Pinned by `postgres_cli_route` step 11.
+- **Reworks were researched on the web.** "Shorten this draft", "Adapt this for Instagram" and "Create alternate
+  hooks" were looked up as topics, so unrelated pages (text-shortener sites) became sources a rewrite could cite.
+  Pinned by `postgres_research`.
+- **Compound request, writer finishing later.** The continuation lost the request's words, so scheduling asked for a
+  day and time already given. Pinned by X06c, which uses an asynchronous writer.
+- **The conversation replaced the person's message.** A compound request was stored as the writing step's
+  instruction ("Shorten this draft"). Pinned by X06 and the browser journey.
+- **Wrong model named.** Phrasing is picked by tier (light or strong) on the chosen writer's route. The answer named
+  the chosen writer instead of the model that wrote it. It now records `phrasedBy`.
+- **Wrong failure wording.** A writer call that failed with a coded error was reported as an answer that "didn't pass
+  its checks". It now says the writer didn't answer. Rejected answers record the unknown ids (ids only) and the
+  failure detail in the run's trace.
 
 ### Mocked vs live
 
-Everything above ran locally against a disposable PostgreSQL with the real hosted services:
-
 - **Mocked:**
-  - the writer (the preview writer, plus a test double for model phrasing);
   - social providers (the harness's canned consent grants no publishing scope, so no harness account is ever
     "Ready for posting");
-  - the provider outcomes seeded as fixtures (verified, failed, uncertain, held) and last week's automation run.
-- **Not run:** no real post, reply or DM, and no live model call.
-- **Not verified live:** Claude or Codex routes phrasing answers, production accounts, the deployed app.
+  - the provider outcomes seeded as fixtures (verified, failed, uncertain, held) and last week's automation run;
+  - in the scenario suite, the preview writer and a scripted asynchronous writer (X06c).
+- **Live:** the Claude Code CLI writer, below.
+- **Not run:** no real post, reply or DM. Production publishing stays disabled.
+- **Not verified live:** the gateway models on a production deployment, and production accounts.
+
+### Live writer
+
+`scripts/site_agent_live_writer.py` runs on a disposable PostgreSQL with the same hosted services, through the
+person's signed-in Claude Code CLI (`claude-code:haiku`; `--max-budget-usd` per call). Web research is off, so the
+fresh draft comes from the Brand Brain and voice profile only. Evidence: `evidence/live-writer.json` (run ids, draft
+ids, provenance, the CLI-reported cost per run, and every failure mode seen). Final run: 7/7 checks, $0.06
+CLI-reported cost for its four writing runs. Results are in the verification matrix.
+
+- **Rework:** the shortened text is saved as a proposed update on exactly the chosen draft. Using it adds a revision,
+  and the earlier text is kept.
+- **"Does this sound like me?":** asked three times per run. Measurements always come first. The writer's phrasing
+  is accepted only when it cites what it was given; otherwise the measured answer stands with a warning.
+  - This question runs at the strong tier, so it was phrased by `claude-code:sonnet` even with haiku chosen. The
+    answer now names that model (`phrasedBy`).
+  - Before the prompt spelled out its id rule, 2 of 5 phrasings were accepted: 2 cited ids that don't exist, and 1
+    CLI call failed.
+  - After, 6 of 9 were accepted, including 3 of 3 in the final run. There were no invented ids: 2 CLI calls failed
+    and 1 answer was ungrounded.
+  - Evidence: `evidence/live-voice-samples.json`.
+- **Compound:** revise, save and link are done; scheduling is one proposal waiting for approval, and nothing is
+  prepared until it is applied.
+- **Failure:** a CLI that fails or is signed out gives the measured answer with the reason, or a writing request
+  refused with the fix. No draft changes.
+- **Cost:** the app records the CLI-reported cost per writing run; the PostRiff ledger settles at $0 (the person's
+  plan pays). Token counts are not recorded.
 
 ## Animated character
 
 The raccoon stills are in (`web/public/raffi/avatar-*.png`, `full-*.png`, with the source cutouts in
 `motion/raffi-idle/`). The panel uses them with a static ring under reduced motion.
 
-The animated idle loop is **BLOCKED**:
+The animated idle loop is **BLOCKED**. It is separate from the agent and was not retried in the second stage, as
+instructed: no attempt to get around the gateway minimum, and nothing in quota cooldown was restarted.
 
 - **AI Gateway video:** needs a $10 minimum balance; the last check (2026-09-24 19:02 UTC) showed $4.88 and returned
   402.
@@ -211,8 +272,15 @@ Next: top up the gateway, then resume the prepared jobs (idle loop at 1080p, one
   - Core: `contracts`, `routes`, `knowledge` + `help/`, `classifier`, `procedures`, `tools`, `reads`, `timeframe`,
     `references`.
   - Answers and actions: `compose`, `compose_reads`, `prompts`, `policy`, `proposals`, `service`.
-  - Wiring in existing files: `hosted.py`, `hosted_app.py` (routes, cron) and `ideas.py` (material, drafting
-    reworks, the quick-start idea). Routing fixes in `model_runtime.py`, `learning_model.py` and `codex_runtime.py`.
+  - Second stage: `voice_check` (measured voice comparison), `member_activity` (attribution from stored records),
+    `compound` (multi-step requests).
+  - Wiring in existing files:
+    - `hosted.py` and `hosted_app.py` (routes, cron);
+    - `ideas.py` (material; reworks as drafts; `reworkOf`/`forCampaign`; the apply source guard; no research for
+      reworks; the quick-start idea);
+    - `campaigns.py` (campaign items);
+    - `postriff_alpha/generation.py` (`MATERIAL_LABEL`).
+    - Merge plan against PR #2: [ideas-merge-plan.md](ideas-merge-plan.md). Routing fixes in `model_runtime.py`, `learning_model.py` and `codex_runtime.py`.
 - **Web:**
   - Panel: `web/src/features/site-agent/` — `panel`, `chat`, `answer`, `delegated`, `store`, `use-page-context`,
     `launcher`, `rafii-avatar`.
@@ -223,7 +291,10 @@ Next: top up the gateway, then resume the prepared jobs (idle loop at 1080p, one
 - **Tests:**
   - `tests/test_site_agent.py`;
   - `tests/phase2/postgres_site_agent.py` and `postgres_site_agent_scenarios.py`;
+  - `tests/phase2/postgres_cli_route.py` (apply guard) and `postgres_research.py` (no research for reworks);
+  - `scripts/site_agent_live_writer.py` (live writer checks);
   - `web/tests/site-agent.test.cjs` and `site-agent-browser.cjs`.
 - **Evidence:**
-  - `evidence/scenarios.json`, `evidence/browser-chromium/` (results and screenshots), `evidence/browser-webkit/`;
+  - `evidence/scenarios.json`, `evidence/browser-chromium/` (results and screenshots), `evidence/browser-webkit/`,
+    `evidence/live-writer.json`;
   - the matrix, generated by `scripts/site_agent_matrix.py`.

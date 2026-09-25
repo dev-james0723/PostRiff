@@ -34,7 +34,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 41,
+   "turnMs": 126,
    "links": [
     "/app/help/help_queue#overview"
    ]
@@ -60,7 +60,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 17,
+   "turnMs": 29,
    "links": [
     "/app/help/help_agent_guide#what-rafii-looked-at"
    ]
@@ -86,7 +86,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 37,
    "links": [
     "/app/help/help_ts_automation_not_publishing#the-platform-cannot-publish-here"
    ]
@@ -112,7 +112,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 24,
+   "turnMs": 45,
    "links": [
     "/app/help/help_ts_automation_not_publishing#the-platform-cannot-publish-here"
    ]
@@ -130,13 +130,13 @@
     ]
    ],
    "expected": "the campaign's stored objective",
-   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts from this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected but not covered: Insta",
+   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts in this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. made by its automation\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected b",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 55,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
     "/app/queue?view=drafts&draft=draft-from-automation"
    ]
   },
@@ -165,7 +165,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 18,
+   "turnMs": 51,
    "links": [
     "/app/help/help_calendar#overview"
    ]
@@ -187,7 +187,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 65,
    "links": [
     "/app/workspace/memory"
    ]
@@ -209,7 +209,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 12,
+   "turnMs": 37,
    "links": [
     "/app/workspace/memory"
    ]
@@ -231,7 +231,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 13,
+   "turnMs": 38,
    "links": [
     "/app/workspace/memory"
    ]
@@ -257,7 +257,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 31,
    "links": [
     "/app/workspace/memory"
    ]
@@ -279,7 +279,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 12,
+   "turnMs": 22,
    "links": [
     "/app/workspace/brand"
    ]
@@ -301,7 +301,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 13,
+   "turnMs": 27,
    "links": [
     "/app/workspace/brand"
    ]
@@ -323,7 +323,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 13,
+   "turnMs": 22,
    "links": [
     "/app/workspace/brand"
    ]
@@ -345,7 +345,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 30,
    "links": [
     "/app/workspace/brand"
    ]
@@ -353,28 +353,30 @@
   {
    "id": "V04",
    "area": "voice",
-   "source": "voice.profile (judgement needs a writer model)",
-   "prompt": "Why does this sentence not sound like me?",
-   "intent": "voice",
+   "source": "voice.check (measured against the stored profile)",
+   "prompt": "Why does this sentence not sound like me? (Threads draft selected)",
+   "intent": "voice_check",
    "tools": [
     [
-     "voice.profile",
+     "voice.check",
      "verified"
     ],
     [
      "draft.get",
      "verified"
+    ],
+    [
+     "voice.profile",
+     "verified"
     ]
    ],
-   "expected": "says a writer model is needed to judge; shows only what is stored",
-   "actual": "Judging one sentence against your voice needs a writer model; I can show what your profile records, and nothing beyond it.\n**Approved voice (revision 1):** tone warm.\n- Opens with a short question to the reader.\n- Keeps paragraphs to two sentences.\n- Ends with one practical step to try today.\n**Learned from how you edit:**\n- Never use emoji on LinkedIn (LinkedIn · all languages)\n- Keep paragraphs short (All channels)\nNo writing samples are active.\n[link Open Brand /app/workspace/brand]",
-   "stateVerified": "read only: the answer is checked against the seeded records",
-   "verdict": "PARTIAL",
-   "notes": "No writer model in this run (preview writer): the judgement itself is not made; the stored profile is shown.",
-   "turnMs": 17,
-   "links": [
-    "/app/workspace/brand"
-   ]
+   "expected": "measured findings against the stored profile, each with its basis; tone left to a writer, and said so; the draft is never quoted",
+   "actual": "I compared Threads draft with your stored voice: 3 match, 2 differ, and 1 need a writer's judgement.\nWhere it differs: Opens with a short question to the reader (The first sentence is not a question); Sentence length like your approved writing example (Sentences average 9.0 words here and 6.3 in your example).\nChecked against your stored voice\n✗ Opens with a short question to the reader. The first sentence is not a question. Measured · voice profile (revision 1)\n✓ Keeps paragraphs to two sentences. The longest paragraph has 2 sentences (the profile says two). Measured · voice profile (revision",
+   "stateVerified": "the draft's stored text measured; the live-writer run covers the model's judgement",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 52,
+   "links": []
   },
   {
    "id": "D01",
@@ -388,18 +390,19 @@
      "verified"
     ]
    ],
-   "expected": "5 drafts listed with what each needs",
-   "actual": "5 draft(s), newest first.\nResults\nDraft: LinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. unknown details, review after a change, not scheduled\nDraft: LinkedIn draft · Studio page A small idea worth a closer look. Topic supplied by author: AI agents can draft posts, but a person should approve every single word before… not scheduled\nDraft: Threads draft · @studio A thought to open up: Topic supplied by author: Our autumn product launch: the new practice journal ships on 3 October. To develop: add a v… unknown details, review after a change, no",
+   "expected": "6 drafts listed with what each needs",
+   "actual": "6 draft(s), newest first.\nResults\nDraft: LinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. unknown details, review after a change, not scheduled\nDraft: Threads draft · @studio Slow practice, one bar at a time: the journal's first exercise. unknown details, review after a change, not scheduled\nDraft: LinkedIn draft · Studio page A small idea worth a closer look. Topic supplied by author: AI agents can draft posts, but a person should approve every single word before… not scheduled\nDraft: Threads draft · @studio A thought to open up: Topic suppli",
    "stateVerified": "variants count",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 32,
    "links": [
     "/app/queue?view=drafts&draft=draft-from-automation",
-    "/app/queue?view=drafts&draft=98443fed70fa41f1bdc01d81a536007e",
-    "/app/queue?view=drafts&draft=7219102ecaa44dc9a831d702cfd4c4d7",
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a",
-    "/app/queue?view=drafts&draft=afd0117b7e2b4fa7a2ccf6fff1e0db7a"
+    "/app/queue?view=drafts&draft=c87942c013eb4a39a19529b82cfb588a",
+    "/app/queue?view=drafts&draft=fbd0f7c1a7d04e83b89f513d58bd3776",
+    "/app/queue?view=drafts&draft=d065d503505c4ea0b50b1fcb6de45df0",
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5",
+    "/app/queue?view=drafts&draft=f303157435104fc6b2cd2f3b71fb67b7"
    ]
   },
   {
@@ -415,15 +418,15 @@
     ]
    ],
    "expected": "the AI-agents LinkedIn draft first",
-   "actual": "3 match(es) for “agents” across automation, campaign, draft, post, source.\nResults\nDraft: LinkedIn draft · Studio page A small idea worth a closer look. Topic supplied by author: AI agents can draft posts, but a person should approve every single word before…\nSource: Pasted source AI agents can draft posts, but a person should approve every word before it goes out.\nDraft: LinkedIn draft · Studio page A small idea worth a closer look. Topic supplied by author: AI agents can draft posts, but a person should approve every word before it goe…",
+   "actual": "3 match(es) for “agents” across automation, campaign, draft, post, source.\nResults\nDraft: LinkedIn draft · Studio page A small idea worth a closer look. Topic supplied by author: AI agents can draft posts, but a person should approve every single word before it goes out. To dev…\nSource: Pasted source AI agents can draft posts, but a person should approve every word before it goes out.\nDraft: LinkedIn draft · Studio page A small idea worth a closer look. Topic supplied by author: AI agents can draft posts, but a person should approve every word before it goes out. To develop: a…",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 17,
+   "turnMs": 37,
    "links": [
-    "/app/queue?view=drafts&draft=98443fed70fa41f1bdc01d81a536007e",
+    "/app/queue?view=drafts&draft=fbd0f7c1a7d04e83b89f513d58bd3776",
     "/app/ideas",
-    "/app/queue?view=drafts&draft=afd0117b7e2b4fa7a2ccf6fff1e0db7a"
+    "/app/queue?view=drafts&draft=f303157435104fc6b2cd2f3b71fb67b7"
    ]
   },
   {
@@ -439,29 +442,29 @@
     ]
    ],
    "expected": "the automation's draft",
-   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts from this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected but not covered: Insta",
+   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts in this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. made by its automation\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected b",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 17,
+   "turnMs": 46,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
     "/app/queue?view=drafts&draft=draft-from-automation"
    ]
   },
   {
    "id": "D04",
    "area": "drafts",
-   "source": "writing pipeline (IdeasService.turn) with the draft as material",
-   "prompt": "Shorten this draft (Threads draft selected)",
+   "source": "writing pipeline with the draft as material → apply (proposed update on that draft) → accept_update",
+   "prompt": "Shorten this draft (Threads draft selected; a newer Threads draft on the same account exists)",
    "intent": null,
    "tools": [],
-   "expected": "a writing run for the same Threads account; saving refreshes that draft",
-   "actual": "{'conversationId': '70ae3a25-b013-4309-894a-7d760b404121', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': '445cc0c0-d446-4d60-a809-3dfb713e1f12', 'result': {'runId': '445cc0c0-d446-4d60-a809-3dfb713e1f12', 'conversationId': '70ae3a25-b013-4309-894a-7d760b404121', 'status': 'completed', 'artifactHash': 'e657a146496c080239c039bc919f301e878f2292b4e93588ce70f2481fba03ef', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15046, 'sha25",
-   "stateVerified": "writing run + draft proposedUpdate",
-   "verdict": "PARTIAL",
-   "notes": "Real writing run through the existing pipeline with the draft as material. The preview writer cannot actually shorten; wording quality needs a live model.",
-   "turnMs": 35,
+   "expected": "a writing run with the draft as material; saving puts a proposed update on exactly that draft (not the newer one); the text changes only when accepted, and the old text stays in its history",
+   "actual": "{'conversationId': '41b2e134-f460-4e70-b3fb-160df52c9c70', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': '5b05ad4a-41f9-4165-90e0-c1c421353466', 'result': {'runId': '5b05ad4a-41f9-4165-90e0-c1c421353466', 'conversationId': '41b2e134-f460-4e70-b3fb-160df52c9c70', 'status': 'completed', 'artifactHash': '4e710d13cb07d6b4fa4edf92320eb6a679c8581b87f92551cf1e2df837ece7e1', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15077, 'sha25",
+   "stateVerified": "run artifact reworkOf; C.proposedUpdate (G untouched); after accept_update: revision +1, revisions[0] = original text",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 112,
    "links": []
   },
   {
@@ -472,11 +475,11 @@
    "intent": null,
    "tools": [],
    "expected": "a run for Instagram, not LinkedIn",
-   "actual": "{'conversationId': 'cc81fff2-b591-4568-a31e-ba972dcb5003', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': '229f98c2-0037-4b86-bcf8-393c22fdd5d8', 'result': {'runId': '229f98c2-0037-4b86-bcf8-393c22fdd5d8', 'conversationId': 'cc81fff2-b591-4568-a31e-ba972dcb5003', 'status': 'completed', 'artifactHash': '084cf76c6e821a40a068f2396fa2c2318dc4f1c289fa310d3e06f22db7cf73b7', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15046, 'sha25",
+   "actual": "{'conversationId': '574b67cf-3e3b-44b1-a2b0-ee7cf8fdae15', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': '3a070b26-bb11-40da-b1cf-3d0e75663bb5', 'result': {'runId': '3a070b26-bb11-40da-b1cf-3d0e75663bb5', 'conversationId': '574b67cf-3e3b-44b1-a2b0-ee7cf8fdae15', 'status': 'completed', 'artifactHash': 'cfff0f303fc6a0aed11a4f61172ccee3b14582d8683ac60e89ec79d88018a45e', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15077, 'sha25",
    "stateVerified": "run destinations",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 32,
+   "turnMs": 106,
    "links": []
   },
   {
@@ -487,11 +490,11 @@
    "intent": null,
    "tools": [],
    "expected": "one idea → two platform drafts, saved as real drafts",
-   "actual": "{'conversationId': '0dc207bf-18d0-478b-bac9-4e2b81501fc5', 'delegated': True, 'kind': 'draft', 'status': 'completed', 'runId': 'e38e983f-c91e-4a65-818a-aec9ad2c68ab', 'result': {'runId': 'e38e983f-c91e-4a65-818a-aec9ad2c68ab', 'conversationId': '0dc207bf-18d0-478b-bac9-4e2b81501fc5', 'status': 'completed', 'artifactHash': 'f72386cf1586f14bbdd0e7a074e3b068a4c26d5b79e76c7643ac1c5a48e1c17f', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15046, 'sha256': ",
+   "actual": "{'conversationId': 'e132fc4a-55f6-4b8f-99bd-472ed4016472', 'delegated': True, 'kind': 'draft', 'status': 'completed', 'runId': '56203e63-d330-46e4-b6d0-e79708692003', 'result': {'runId': '56203e63-d330-46e4-b6d0-e79708692003', 'conversationId': 'e132fc4a-55f6-4b8f-99bd-472ed4016472', 'status': 'completed', 'artifactHash': 'f72386cf1586f14bbdd0e7a074e3b068a4c26d5b79e76c7643ac1c5a48e1c17f', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15077, 'sha256': ",
    "stateVerified": "variants after apply",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 48,
+   "turnMs": 158,
    "links": []
   },
   {
@@ -502,11 +505,11 @@
    "intent": null,
    "tools": [],
    "expected": "a writing run from the draft (candidates, nothing scheduled)",
-   "actual": "{'conversationId': '22dbced3-382f-4d84-968f-7b0b99e2be7d', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': 'b2138ffa-e31c-40d5-923e-2710b5e52364', 'result': {'runId': 'b2138ffa-e31c-40d5-923e-2710b5e52364', 'conversationId': '22dbced3-382f-4d84-968f-7b0b99e2be7d', 'status': 'completed', 'artifactHash': '7ea4cd55105eced8e4710f9027a35ca24981fed3baf37e4140e69078334a1c09', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15046, 'sha25",
+   "actual": "{'conversationId': 'a1c0719c-f37d-4432-bad6-01cea92a8964', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': '0e54843e-ba54-4233-ba3f-e29fab4ec448', 'result': {'runId': '0e54843e-ba54-4233-ba3f-e29fab4ec448', 'conversationId': 'a1c0719c-f37d-4432-bad6-01cea92a8964', 'status': 'completed', 'artifactHash': 'f1a1435bcd6e7429a0fa9b5ec740a6632dde2b3a211236447a043b659efc9640', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15077, 'sha25",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 31,
+   "turnMs": 42,
    "links": []
   },
   {
@@ -522,13 +525,13 @@
     ]
    ],
    "expected": "stored goal",
-   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts from this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected but not covered: Insta",
+   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts in this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. made by its automation\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected b",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 26,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
     "/app/queue?view=drafts&draft=draft-from-automation"
    ]
   },
@@ -545,13 +548,13 @@
     ]
    ],
    "expected": "LinkedIn, Threads (and Instagram not covered as a derived observation)",
-   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts from this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected but not covered: Insta",
+   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts in this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. made by its automation\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected b",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 34,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
     "/app/queue?view=drafts&draft=draft-from-automation"
    ]
   },
@@ -568,13 +571,13 @@
     ]
    ],
    "expected": "observations section labelled derived",
-   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts from this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected but not covered: Insta",
+   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts in this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. made by its automation\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected b",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 21,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
     "/app/queue?view=drafts&draft=draft-from-automation"
    ]
   },
@@ -591,13 +594,13 @@
     ]
    ],
    "expected": "last week's run with its items",
-   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts from this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected but not covered: Insta",
+   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts in this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners. made by its automation\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected b",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 36,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
     "/app/queue?view=drafts&draft=draft-from-automation"
    ]
   },
@@ -605,16 +608,113 @@
    "id": "K05",
    "area": "campaign",
    "source": "writing pipeline with the campaign brief as material",
-   "prompt": "Create a new post for this campaign",
+   "prompt": "Create a new post for this campaign → save → Which campaign is this draft in?",
    "intent": null,
    "tools": [],
-   "expected": "a writing run with the campaign brief as material",
-   "actual": "{'conversationId': '284af233-833a-48f8-8820-e60f87164e3d', 'delegated': True, 'kind': 'campaign_post', 'status': 'completed', 'runId': 'da29c2c2-1cda-4870-80b0-b41497139830', 'result': {'runId': 'da29c2c2-1cda-4870-80b0-b41497139830', 'conversationId': '284af233-833a-48f8-8820-e60f87164e3d', 'status': 'completed', 'artifactHash': '8b57eccec5bcbc4caffca551c103a82f68f551bc5e51692ed248123d480cee06', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15046, 's",
-   "stateVerified": "user message material ref",
-   "verdict": "PARTIAL",
-   "notes": "The drafts are real but the product has no draft→campaign link outside automation runs, so they are not tagged to the campaign.",
-   "turnMs": 37,
+   "expected": "a writing run with the campaign brief as material; saving links the new draft to that campaign; Rafii then names the campaign",
+   "actual": "{'conversationId': 'c38b59ac-0f8f-46a9-9dea-b7d8b740f564', 'delegated': True, 'kind': 'campaign_post', 'status': 'completed', 'runId': '8a6fe457-95b2-4fbd-841c-7b7104e13632', 'result': {'runId': '8a6fe457-95b2-4fbd-841c-7b7104e13632', 'conversationId': 'c38b59ac-0f8f-46a9-9dea-b7d8b740f564', 'status': 'completed', 'artifactHash': '6576f464d455942c5a38147bfb74c2f6b45e0d2eeb6a9f37426d400df05aaca0', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15077, 's",
+   "stateVerified": "campaign.items contains the saved draft (kind draft, addedBy the owner)",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 25,
    "links": []
+  },
+  {
+   "id": "L01",
+   "area": "campaign",
+   "source": "raffi_campaign_link (campaign's own action)",
+   "prompt": "Add this draft to the launch campaign (LinkedIn draft selected)",
+   "intent": "campaign_link",
+   "tools": [],
+   "expected": "the campaign's own action links it; the answer names the draft and links to both",
+   "actual": "Added the LinkedIn draft to “Autumn product launch of the practice journal”. Nothing was scheduled or published.\n[link Open the campaign /app/automations?campaign=048c00038fd843e8b07e2391e4517fd8]\n[link Open the draft /app/queue?view=drafts&draft=fbd0f7c1a7d04e83b89f513d58bd3776]",
+   "stateVerified": "campaign.items has the draft (addedBy the owner); audit campaign.items_linked_by_agent",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 68,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
+    "/app/queue?view=drafts&draft=fbd0f7c1a7d04e83b89f513d58bd3776"
+   ]
+  },
+  {
+   "id": "L02",
+   "area": "campaign",
+   "source": "campaign.membership",
+   "prompt": "Which campaign is this draft in?",
+   "intent": "campaign_membership",
+   "tools": [
+    [
+     "campaign.membership",
+     "verified"
+    ]
+   ],
+   "expected": "the linked campaign, labelled as linked",
+   "actual": "This draft is in 1 campaign(s): “Autumn product launch of the practice journal”.\nCampaigns\nAutumn product launch of the practice journal linked Wed 2026-09-23 10:00",
+   "stateVerified": "read of campaign.items",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 23,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
+  },
+  {
+   "id": "L04",
+   "area": "campaign",
+   "source": "raffi_campaign_unlink",
+   "prompt": "Remove this draft from that campaign (same conversation)",
+   "intent": "campaign_unlink",
+   "tools": [],
+   "expected": "unlinked; the draft itself unchanged; the removal is recorded with who did it",
+   "actual": "Removed the LinkedIn draft from “Autumn product launch of the practice journal”. The drafts and posts themselves are unchanged.\n[link Open the campaign /app/automations?campaign=048c00038fd843e8b07e2391e4517fd8]\n[link Open the draft /app/queue?view=drafts&draft=fbd0f7c1a7d04e83b89f513d58bd3776]",
+   "stateVerified": "campaign.items without the draft; itemLog unlink by the owner",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 62,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
+    "/app/queue?view=drafts&draft=fbd0f7c1a7d04e83b89f513d58bd3776"
+   ]
+  },
+  {
+   "id": "L05",
+   "area": "permissions",
+   "source": "role check (edit)",
+   "prompt": "Viewer: Add this draft to the launch campaign",
+   "intent": "forbidden",
+   "tools": [
+    [
+     "route.describe",
+     "verified"
+    ]
+   ],
+   "expected": "refused by role; nothing changes",
+   "actual": "Your role in this workspace can't create drafts or automations. An owner or admin can change your role on Members.\n[link Open Roles /app/workspace/roles]",
+   "stateVerified": "campaign.items unchanged",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 41,
+   "links": [
+    "/app/workspace/roles"
+   ]
+  },
+  {
+   "id": "L06",
+   "area": "hallucination",
+   "source": "campaign.list (no match)",
+   "prompt": "Add this draft to the Black Friday campaign (no such campaign)",
+   "intent": "campaign_link",
+   "tools": [],
+   "expected": "no campaign matches; nothing linked; the real campaigns listed",
+   "actual": "No campaign matches “Black Friday”, so nothing was linked. These are your campaigns:\nCampaigns\nAutumn product launch of the practice journal",
+   "stateVerified": "campaign.items unchanged",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 26,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
   },
   {
    "id": "S01",
@@ -628,7 +728,7 @@
    "stateVerified": "review row manifest timing; no job before approval",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 19,
+   "turnMs": 44,
    "links": []
   },
   {
@@ -643,7 +743,7 @@
    "stateVerified": "review created by approver",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 26,
    "links": []
   },
   {
@@ -663,15 +763,15 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 18,
+   "turnMs": 28,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?job=640e352eac76435c9aad93cc006c6294",
-    "/app/queue?job=88f5a6777860450bbe82a63f35f093e7",
-    "/app/queue?job=28ddf80bc63542739fb6de1a267aa864",
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea"
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?job=9c05fd845ced449cbd6e2fba54a2ddfd",
+    "/app/queue?job=dc55419c9b194bb49ec200dc2a05a963",
+    "/app/queue?job=5052636468ca4717b191c690989c3d89",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646"
    ]
   },
   {
@@ -691,11 +791,45 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 22,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?job=640e352eac76435c9aad93cc006c6294",
-    "/app/queue?job=88f5a6777860450bbe82a63f35f093e7"
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?job=9c05fd845ced449cbd6e2fba54a2ddfd",
+    "/app/queue?job=dc55419c9b194bb49ec200dc2a05a963"
+   ]
+  },
+  {
+   "id": "L03b",
+   "area": "hallucination",
+   "source": "campaign.list (no match)",
+   "prompt": "Put these two posts into my September campaign (no such campaign)",
+   "intent": "campaign_link",
+   "tools": [],
+   "expected": "no campaign matches; nothing linked",
+   "actual": "No campaign matches “September”, so nothing was linked. These are your campaigns:\nCampaigns\nAutumn product launch of the practice journal",
+   "stateVerified": "no post items",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 23,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
+  },
+  {
+   "id": "L03",
+   "area": "campaign",
+   "source": "plural reference → raffi_campaign_link (posts)",
+   "prompt": "Put these two posts into the launch campaign (after a list of the two Friday posts)",
+   "intent": "campaign_link",
+   "tools": [],
+   "expected": "both posts from the list are linked, by id",
+   "actual": "Added LinkedIn post Fri 2026-09-25 16:30, LinkedIn post Fri 2026-09-25 17:00 to “Autumn product launch of the practice journal”. Nothing was scheduled or published.\n[link Open the campaign /app/automations?campaign=048c00038fd843e8b07e2391e4517fd8]",
+   "stateVerified": "campaign.items has both jobs (kind post)",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 55,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
    ]
   },
   {
@@ -715,15 +849,15 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 18,
+   "turnMs": 45,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?job=640e352eac76435c9aad93cc006c6294",
-    "/app/queue?job=88f5a6777860450bbe82a63f35f093e7",
-    "/app/queue?job=28ddf80bc63542739fb6de1a267aa864",
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea"
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?job=9c05fd845ced449cbd6e2fba54a2ddfd",
+    "/app/queue?job=dc55419c9b194bb49ec200dc2a05a963",
+    "/app/queue?job=5052636468ca4717b191c690989c3d89",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646"
    ]
   },
   {
@@ -743,7 +877,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 25,
    "links": []
   },
   {
@@ -758,7 +892,7 @@
    "stateVerified": "job state + new review",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 17,
+   "turnMs": 24,
    "links": []
   },
   {
@@ -769,11 +903,11 @@
    "intent": "schedule",
    "tools": [],
    "expected": "asks which draft; nothing changes",
-   "actual": "Which draft should I schedule?\nthe first one\nthe second one\nthe third one\nthe fourth one\nOptions\n1. Threads draft: A thought to open up: Topic supplied by author: Write posts \n2. LinkedIn draft: A small idea worth a closer look. Topic supplied by author: \n3. LinkedIn draft: Launch week: what the practice journal changes for returning\n4. LinkedIn draft: A small idea worth a closer look. Topic supplied by author: \n5. Threads draft: A thought to open up: Topic supplied by author: Our autumn p",
+   "actual": "Which draft should I schedule?\nthe first one\nthe second one\nthe third one\nthe fourth one\nOptions\n1. Instagram draft: 留一點時間，讓新想法發芽。🌱 主題（作者提供）：Create a new post for this campaign \n2. LinkedIn draft: A small idea worth a closer look. Topic supplied by author: \n3. Threads draft: A thought to open up: Topic supplied by author: Write posts \n4. LinkedIn draft: A small idea worth a closer look. Topic supplied by author: \n5. LinkedIn draft: Launch week: what the practice journal changes for returning",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 31,
    "links": []
   },
   {
@@ -793,20 +927,23 @@
     ]
    ],
    "expected": "the Thursday review and the automation item",
-   "actual": "2 post(s) are waiting for a decision.\nWaiting for approval\nLinkedIn · Studio page Thu 2026-09-24 16:30\nAutomation posts waiting for a decision\nThreads · @studio ready for review · Fri 2026-09-25 10:00\nReturned or rejected\nLinkedIn · reject Too salesy; lead with the student story. Fri 2026-09-18 11:00\nDrafts that need a look before scheduling\nInstagram draft · @studio.ig marked for review, unknown details\nThreads draft · @studio marked for review, unknown details\nLinkedIn draft · Studio page marked for review, unknown details\nLinkedIn draft marked for review, unknown details\nThreads draft marke",
+   "actual": "2 post(s) are waiting for a decision.\nWaiting for approval\nLinkedIn · Studio page Thu 2026-09-24 16:30\nAutomation posts waiting for a decision\nThreads · @studio ready for review · Fri 2026-09-25 10:00\nReturned or rejected\nLinkedIn · reject Too salesy; lead with the student story. Fri 2026-09-18 11:00\nDrafts that need a look before scheduling\nInstagram draft · @studio.ig marked for review, unknown details\nThreads draft · @studio unknown details\nThreads draft · @studio marked for review, unknown details\nLinkedIn draft · Studio page marked for review, unknown details\nLinkedIn draft marked for rev",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 21,
+   "turnMs": 30,
    "links": [
     "/app/queue",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a",
-    "/app/queue?view=drafts&draft=7219102ecaa44dc9a831d702cfd4c4d7",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5",
+    "/app/queue?view=drafts&draft=d065d503505c4ea0b50b1fcb6de45df0",
+    "/app/queue?view=drafts&draft=c87942c013eb4a39a19529b82cfb588a",
     "/app/queue?view=drafts&draft=draft-from-automation",
-    "/app/queue?view=drafts&draft=e04407a142c144dcbc84ddb910ed2066",
-    "/app/queue?view=drafts&draft=2e1848fdc2b44e00aefa665a0680fd90",
+    "/app/queue?view=drafts&draft=41fb1fb5ce8a4e3280271518ac145888",
+    "/app/queue?view=drafts&draft=4a300ffabe6e4171a5f0581733d59d13",
+    "/app/queue?view=drafts&draft=c4098a7663ba49b890bf06be8e81fc2e",
+    "/app/queue?view=drafts&draft=506267b3848843418e8c9aae9201c68c",
     "/app/help/help_ts_awaiting_approval#what-you-see"
    ]
   },
@@ -827,20 +964,23 @@
     ]
    ],
    "expected": "last week's rejected automation post with its note",
-   "actual": "2 post(s) are waiting for a decision.\nWaiting for approval\nLinkedIn · Studio page Thu 2026-09-24 16:30\nAutomation posts waiting for a decision\nThreads · @studio ready for review · Fri 2026-09-25 10:00\nReturned or rejected\nLinkedIn · reject Too salesy; lead with the student story. Fri 2026-09-18 11:00\nDrafts that need a look before scheduling\nInstagram draft · @studio.ig marked for review, unknown details\nThreads draft · @studio marked for review, unknown details\nLinkedIn draft · Studio page marked for review, unknown details\nLinkedIn draft marked for review, unknown details\nThreads draft marke",
+   "actual": "2 post(s) are waiting for a decision.\nWaiting for approval\nLinkedIn · Studio page Thu 2026-09-24 16:30\nAutomation posts waiting for a decision\nThreads · @studio ready for review · Fri 2026-09-25 10:00\nReturned or rejected\nLinkedIn · reject Too salesy; lead with the student story. Fri 2026-09-18 11:00\nDrafts that need a look before scheduling\nInstagram draft · @studio.ig marked for review, unknown details\nThreads draft · @studio unknown details\nThreads draft · @studio marked for review, unknown details\nLinkedIn draft · Studio page marked for review, unknown details\nLinkedIn draft marked for rev",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 19,
+   "turnMs": 27,
    "links": [
     "/app/queue",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a",
-    "/app/queue?view=drafts&draft=7219102ecaa44dc9a831d702cfd4c4d7",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5",
+    "/app/queue?view=drafts&draft=d065d503505c4ea0b50b1fcb6de45df0",
+    "/app/queue?view=drafts&draft=c87942c013eb4a39a19529b82cfb588a",
     "/app/queue?view=drafts&draft=draft-from-automation",
-    "/app/queue?view=drafts&draft=e04407a142c144dcbc84ddb910ed2066",
-    "/app/queue?view=drafts&draft=2e1848fdc2b44e00aefa665a0680fd90",
+    "/app/queue?view=drafts&draft=41fb1fb5ce8a4e3280271518ac145888",
+    "/app/queue?view=drafts&draft=4a300ffabe6e4171a5f0581733d59d13",
+    "/app/queue?view=drafts&draft=c4098a7663ba49b890bf06be8e81fc2e",
+    "/app/queue?view=drafts&draft=506267b3848843418e8c9aae9201c68c",
     "/app/help/help_ts_awaiting_approval#overview"
    ]
   },
@@ -861,20 +1001,23 @@
     ]
    ],
    "expected": "the stored note, no invented feedback",
-   "actual": "2 post(s) are waiting for a decision.\nWaiting for approval\nLinkedIn · Studio page Thu 2026-09-24 16:30\nAutomation posts waiting for a decision\nThreads · @studio ready for review · Fri 2026-09-25 10:00\nReturned or rejected\nLinkedIn · reject Too salesy; lead with the student story. Fri 2026-09-18 11:00\nDrafts that need a look before scheduling\nInstagram draft · @studio.ig marked for review, unknown details\nThreads draft · @studio marked for review, unknown details\nLinkedIn draft · Studio page marked for review, unknown details\nLinkedIn draft marked for review, unknown details\nThreads draft marke",
+   "actual": "2 post(s) are waiting for a decision.\nWaiting for approval\nLinkedIn · Studio page Thu 2026-09-24 16:30\nAutomation posts waiting for a decision\nThreads · @studio ready for review · Fri 2026-09-25 10:00\nReturned or rejected\nLinkedIn · reject Too salesy; lead with the student story. Fri 2026-09-18 11:00\nDrafts that need a look before scheduling\nInstagram draft · @studio.ig marked for review, unknown details\nThreads draft · @studio unknown details\nThreads draft · @studio marked for review, unknown details\nLinkedIn draft · Studio page marked for review, unknown details\nLinkedIn draft marked for rev",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 23,
+   "turnMs": 27,
    "links": [
     "/app/queue",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a",
-    "/app/queue?view=drafts&draft=7219102ecaa44dc9a831d702cfd4c4d7",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5",
+    "/app/queue?view=drafts&draft=d065d503505c4ea0b50b1fcb6de45df0",
+    "/app/queue?view=drafts&draft=c87942c013eb4a39a19529b82cfb588a",
     "/app/queue?view=drafts&draft=draft-from-automation",
-    "/app/queue?view=drafts&draft=e04407a142c144dcbc84ddb910ed2066",
-    "/app/queue?view=drafts&draft=2e1848fdc2b44e00aefa665a0680fd90",
+    "/app/queue?view=drafts&draft=41fb1fb5ce8a4e3280271518ac145888",
+    "/app/queue?view=drafts&draft=4a300ffabe6e4171a5f0581733d59d13",
+    "/app/queue?view=drafts&draft=c4098a7663ba49b890bf06be8e81fc2e",
+    "/app/queue?view=drafts&draft=506267b3848843418e8c9aae9201c68c",
     "/app/help/help_approvals#what-a-review-contains"
    ]
   },
@@ -899,7 +1042,7 @@
    "stateVerified": "jobs unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 17,
+   "turnMs": 24,
    "links": [
     "/app/queue",
     "/app/help/help_approvals#chat-is-not-approval"
@@ -917,7 +1060,7 @@
    "stateVerified": "reviews unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 13,
+   "turnMs": 23,
    "links": []
   },
   {
@@ -932,7 +1075,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 13,
+   "turnMs": 17,
    "links": [
     "/app/queue?view=drafts"
    ]
@@ -958,7 +1101,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 17,
+   "turnMs": 29,
    "links": [
     "/app/help/help_ts_awaiting_approval#what-to-do"
    ]
@@ -984,12 +1127,12 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 20,
+   "turnMs": 37,
    "links": [
-    "/app/queue?job=28ddf80bc63542739fb6de1a267aa864",
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea",
+    "/app/queue?job=5052636468ca4717b191c690989c3d89",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646",
     "/app/help/help_queue#job-states"
    ]
   },
@@ -1014,12 +1157,12 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 19,
+   "turnMs": 37,
    "links": [
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=28ddf80bc63542739fb6de1a267aa864",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=5052636468ca4717b191c690989c3d89",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646",
     "/app/help/help_queue#job-states"
    ]
   },
@@ -1044,9 +1187,9 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 23,
    "links": [
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
     "/app/help/help_ts_automation_not_publishing#a-safety-check-failed"
    ]
   },
@@ -1071,7 +1214,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 25,
    "links": [
     "/app/help/help_ts_uncertain_result#what-rafii-does"
    ]
@@ -1089,18 +1232,20 @@
     ]
    ],
    "expected": "campaign, automation and drafts about the launch",
-   "actual": "4 match(es) for “product launch” across automation, campaign, draft, post, source. 2 more item(s) are linked to a match (made from it, or part of it).\nResults\nDraft: Threads draft · @studio A thought to open up: Topic supplied by author: Our autumn product launch: the new practice journal ships on 3 October. To develop: add a v…\nDraft: Instagram draft · @studio.ig Something to pause for. 🌱 Topic supplied by author: Our autumn product launch: the new practice journal ships on 3 October. To develop: add…\nSource: Pasted source Our autumn product launch: the new practice journal ships on 3 October",
+   "actual": "6 match(es) for “product launch” across automation, campaign, draft, post, source. 2 more item(s) are linked to a match (made from it, or part of it).\nResults\nDraft: Instagram draft 留一點時間，讓新想法發芽。🌱 主題（作者提供）：Create a new post for this campaign • Campaign goal: Autumn product launch of the practice journal Audience: Adult piano learners 先收藏這個…\nDraft: LinkedIn draft A small idea worth a closer look. Topic supplied by author: Create a new post for this campaign • Campaign goal: Autumn product launch of the practice journal…\nDraft: Threads draft · @studio …to open up: Topic supplied by author: Our a",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 19,
    "links": [
-    "/app/queue?view=drafts&draft=7219102ecaa44dc9a831d702cfd4c4d7",
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a",
+    "/app/queue?view=drafts&draft=506267b3848843418e8c9aae9201c68c",
+    "/app/queue?view=drafts&draft=c4098a7663ba49b890bf06be8e81fc2e",
+    "/app/queue?view=drafts&draft=d065d503505c4ea0b50b1fcb6de45df0",
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5",
     "/app/ideas",
-    "/app/automations?campaign=88739ee5d6da48bea4be7c57d3936ab3",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
     "/app/queue?view=drafts&draft=draft-from-automation",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520"
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a"
    ]
   },
   {
@@ -1120,9 +1265,9 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 30,
+   "turnMs": 17,
    "links": [
-    "/app/automations?campaign=88739ee5d6da48bea4be7c57d3936ab3"
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
    ]
   },
   {
@@ -1138,17 +1283,19 @@
     ]
    ],
    "expected": "exactly the stored uses of the phrase (counted from the state), no linked items",
-   "actual": "5 match(es) for “practice journal” across automation, campaign, draft, post, source.\nResults\nDraft: LinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nDraft: Threads draft · @studio A thought to open up: Topic supplied by author: Our autumn product launch: the new practice journal ships on 3 October. To develop: add a v…\nDraft: Instagram draft · @studio.ig Something to pause for. 🌱 Topic supplied by author: Our autumn product launch: the new practice journal ships on 3 October. To develop: add…\nSource: Pasted source Our autumn product launch: th",
-   "stateVerified": "5 stored uses counted from drafts, sources, campaigns, automations and posts",
+   "actual": "7 match(es) for “practice journal” across automation, campaign, draft, post, source.\nResults\nDraft: Instagram draft 留一點時間，讓新想法發芽。🌱 主題（作者提供）：Create a new post for this campaign • Campaign goal: Autumn product launch of the practice journal Audience: Adult piano learners 先收藏這個…\nDraft: LinkedIn draft …ign • Campaign goal: Autumn product launch of the practice journal Audience: Adult piano learners Why it matters: the useful part is what this changes in day-…\nDraft: LinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nDraft: Threads draft · @studio …i",
+   "stateVerified": "7 stored uses counted from drafts, sources, campaigns, automations and posts",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 19,
+   "turnMs": 30,
    "links": [
+    "/app/queue?view=drafts&draft=506267b3848843418e8c9aae9201c68c",
+    "/app/queue?view=drafts&draft=c4098a7663ba49b890bf06be8e81fc2e",
     "/app/queue?view=drafts&draft=draft-from-automation",
-    "/app/queue?view=drafts&draft=7219102ecaa44dc9a831d702cfd4c4d7",
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a",
+    "/app/queue?view=drafts&draft=d065d503505c4ea0b50b1fcb6de45df0",
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5",
     "/app/ideas",
-    "/app/automations?campaign=88739ee5d6da48bea4be7c57d3936ab3"
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
    ]
   },
   {
@@ -1168,7 +1315,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 20,
    "links": []
   },
   {
@@ -1179,11 +1326,11 @@
    "intent": null,
    "tools": [],
    "expected": "a LinkedIn run with the campaign brief",
-   "actual": "{'conversationId': '4f68b435-2d68-491c-a759-c7ef6c217682', 'delegated': True, 'kind': 'campaign_post', 'status': 'completed', 'runId': 'deb5f607-a30c-4375-b0c2-4bf4652d9f3f', 'result': {'runId': 'deb5f607-a30c-4375-b0c2-4bf4652d9f3f', 'conversationId': '4f68b435-2d68-491c-a759-c7ef6c217682', 'status': 'completed', 'artifactHash': 'd3f0f282a0aa8e222c4c2fc3c62a6ce6282866bf680746b6c43ed82d5cf9792f', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15046, 's",
+   "actual": "{'conversationId': '004b3455-cd8e-4e88-9b55-3bb1c01a2879', 'delegated': True, 'kind': 'campaign_post', 'status': 'completed', 'runId': 'b86ca452-6b0f-4a47-8a01-59f6fcf18d41', 'result': {'runId': 'b86ca452-6b0f-4a47-8a01-59f6fcf18d41', 'conversationId': '004b3455-cd8e-4e88-9b55-3bb1c01a2879', 'status': 'completed', 'artifactHash': 'd78f1115d577fdc5892f1dc9182fcde73e3a704ea9babb810737a5d4dbf787b3', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15077, 's",
    "stateVerified": "run destinations",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 36,
+   "turnMs": 46,
    "links": []
   },
   {
@@ -1209,51 +1356,103 @@
    "intent": null,
    "tools": [],
    "expected": "the 16:30 post becomes an Instagram writing run",
-   "actual": "{'conversationId': '58f5cfab-0684-4d5f-98ad-61b7fa77c4e8', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': 'dfaedd09-cd9f-4cfa-8536-21c4414580c1', 'result': {'runId': 'dfaedd09-cd9f-4cfa-8536-21c4414580c1', 'conversationId': '58f5cfab-0684-4d5f-98ad-61b7fa77c4e8', 'status': 'completed', 'artifactHash': '29de3ec50722028d0627ca553fcb17e51272793416764a98207e01f1053cabce', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15046, 'sha25",
+   "actual": "{'conversationId': '1ace2635-ae6f-47df-9bf2-716671e65ffb', 'delegated': True, 'kind': 'transform', 'status': 'completed', 'runId': 'eb787f09-3fc0-4ab9-a4e7-1bf235d3ff5d', 'result': {'runId': 'eb787f09-3fc0-4ab9-a4e7-1bf235d3ff5d', 'conversationId': '1ace2635-ae6f-47df-9bf2-716671e65ffb', 'status': 'completed', 'artifactHash': '8ba331a0458de5f02f4dee7b07a751eb404b5640d5bf4d8c2368a8f2cefd62ad', 'usage': {'billing': 'actual', 'costUsd': 0, 'provenance': 'measured_locally', 'modelRequests': 0, 'skillBindings': [{'id': 'postriff-content-engine', 'files': [{'path': 'SKILL.md', 'chars': 15077, 'sha25",
    "stateVerified": "one writing run for Instagram",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 33,
+   "turnMs": 47,
    "links": []
   },
   {
    "id": "X03",
-   "area": "cross-surface",
+   "area": "compound",
    "source": "schedule intent + unsupported campaign link stated",
-   "prompt": "From a draft: Add this to the current campaign and schedule it next week",
-   "intent": "schedule",
+   "prompt": "From a draft: Add this to the current campaign and schedule it next week (Instagram draft, no image)",
+   "intent": "compound",
    "tools": [],
-   "expected": "says the campaign part can't be done; asks for the exact day and time; changes nothing",
-   "actual": "I can't add a draft to a campaign: in PostRiff a draft belongs to a campaign only when that campaign's automation wrote it. Nothing was changed for that part.\nTell me the day and time, for example “Schedule it for next week at 18:00”.\nWhich day and time?\nSchedule it for next week at 18:00",
-   "stateVerified": "read only: the answer is checked against the seeded records",
-   "verdict": "PARTIAL",
-   "notes": "Adding a draft to a campaign has no backing object in the product; scheduling asks for an exact day and time.",
-   "turnMs": 14,
-   "links": []
+   "expected": "linked to the campaign (done); scheduling tried for the first free day next week and reported with the app's own reason; nothing scheduled",
+   "actual": "1 of 2 steps are done. Some steps need you; each says why.\nSteps\nLink it to the campaign — linked to “Autumn product launch of the practice journal” Done\nSchedule it — the app can't prepare it yet: Instagram requires a decoded image. Upload one and confirm its rights. Needs you",
+   "stateVerified": "campaign.items has the draft; no review for it",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 54,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
   },
   {
    "id": "X04",
    "area": "compound",
-   "source": "compound: campaign.list + calendar.range + writing pipeline",
-   "prompt": "Find the launch campaign, what is missing, create an Instagram post, schedule it",
+   "source": "compound: campaign → gaps → writing pipeline → apply → link → schedule attempt",
+   "prompt": "Find the launch campaign, what is missing, create an Instagram post, schedule it in the next suitable slot",
    "intent": "compound",
-   "tools": [
-    [
-     "calendar.range",
-     "verified"
-    ]
-   ],
-   "expected": "each step reported: found, gaps, draft started, scheduling needs you",
-   "actual": "I did 2 of 4 step(s). Here is where each one stands.\nSteps\nFind the campaign: done — “Autumn product launch of the practice journal” Platforms covered: LinkedIn, Threads Done\nWhat is missing: connected but not covered: Instagram Observations derived from the campaign's records, not a judgement of its content. Done\nCreate the post: started — the drafts appear as candidates in this conversation Save them to keep them; nothing is scheduled or published. Started\nSchedule it: not done — save the draft first, then tell me the day and time; I don't pick a slot without you. Empty days next week (obser",
-   "stateVerified": "writing run exists",
-   "verdict": "PARTIAL",
-   "notes": "Scheduling is not chained: it needs a saved draft and a confirmed time (by design).",
-   "turnMs": 47,
+   "tools": [],
+   "expected": "found, gaps listed, post created and saved, linked to the campaign; scheduling reported with the app's reason (an Instagram post needs an image)",
+   "actual": "5 of 6 steps are done. Some steps need you; each says why.\nSteps\nFind the campaign — “Autumn product launch of the practice journal”, covering LinkedIn, Threads Done\nWhat is missing — connected but not covered: Instagram (derived from the campaign's records) Done\nCreate the post — the writer finished Done\nSave the draft — saved 1 new draft(s) Done\nLink it to the campaign — added to “Autumn product launch of the practice journal” when it was saved Done\nSchedule it — the app can't prepare it yet: Instagram requires a decoded image. Upload one and confirm its rights. Needs you",
+   "stateVerified": "the saved Instagram draft exists and is in campaign.items",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 109,
    "links": [
-    "/app/automations?campaign=88739ee5d6da48bea4be7c57d3936ab3",
-    "/app/automations?campaign=88739ee5d6da48bea4be7c57d3936ab3",
-    "/app/agent/316f7148-eb37-40f8-9e07-80f9cb783084",
-    "/app/calendar?view=week"
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
+    "/app/queue?view=drafts&draft=7c56952d10754e6cadc6a1d72202fb62",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
+  },
+  {
+   "id": "X05",
+   "area": "compound",
+   "source": "compound: campaign → writing pipeline → apply → link → schedule proposal",
+   "prompt": "Find the launch campaign, create a LinkedIn post, schedule it in the next suitable slot",
+   "intent": "compound",
+   "tools": [],
+   "expected": "every safe step done (found, created, saved, linked); scheduling is a proposal waiting for approval, with the rule that picked the slot; nothing scheduled",
+   "actual": "4 of 5 steps are done. Scheduling is prepared as a proposal: nothing is scheduled until you apply it, and the post still needs approval.\nSteps\nFind the campaign — “Autumn product launch of the practice journal”, covering LinkedIn, Threads Done\nCreate the post — the writer finished Done\nSave the draft — saved 1 new draft(s) Done\nLink it to the campaign — added to “Autumn product launch of the practice journal” when it was saved Done\nSchedule it — for 2026-09-26 10:00 — waiting for your approval (picked: the first day from now with nothing else on this account, at your usual 10:00 posting time) ",
+   "stateVerified": "proposal stored on the answer; no review or job for the new draft; draft in campaign.items",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 136,
+   "links": [
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
+    "/app/queue?view=drafts&draft=4e10b5afa3bd41ebadfd5e3add418bde",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
+  },
+  {
+   "id": "X06",
+   "area": "compound",
+   "source": "compound: rework → apply → link → schedule proposal (uses the rewrite)",
+   "prompt": "Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM (LinkedIn draft selected)",
+   "intent": "compound",
+   "tools": [],
+   "expected": "revised as a proposed update on this draft, saved, linked; scheduling for Thu 18:00 is a proposal that uses the rewrite, waiting for approval",
+   "actual": "3 of 4 steps are done. Scheduling is prepared as a proposal: nothing is scheduled until you apply it, and the post still needs approval.\nSteps\nRevise the draft — the writer finished (a rewrite of your draft) Done\nSave the draft — saved as a proposed update to your draft (the current text stays until it is used) Done\nLink it to the campaign — linked to “Autumn product launch of the practice journal” Done\nSchedule it — for 2026-09-24 18:00 — waiting for your approval Waiting for your approval\nuse the rewrite Rafii wrote (it replaces the current text; the earlier version stays in the draft's hist",
+   "stateVerified": "A.proposedUpdate from this run, A's text unchanged, A in campaign.items, proposal stored; the conversation shows what was typed",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 147,
+   "links": [
+    "/app/queue?view=drafts&draft=f303157435104fc6b2cd2f3b71fb67b7",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
+  },
+  {
+   "id": "X06b",
+   "area": "compound",
+   "source": "apply_proposal: accept_update → p2_variant_review → p2_review",
+   "prompt": "…apply that proposal",
+   "intent": "compound",
+   "tools": [],
+   "expected": "the rewrite is used (revision +1, the earlier text kept in history), the review confirmed, and an exact review for Thu 18:00 waits for approval; nothing published",
+   "actual": "3 of 4 steps are done. Scheduling is prepared as a proposal: nothing is scheduled until you apply it, and the post still needs approval.\nSteps\nRevise the draft — the writer finished (a rewrite of your draft) Done\nSave the draft — saved as a proposed update to your draft (the current text stays until it is used) Done\nLink it to the campaign — linked to “Autumn product launch of the practice journal” Done\nSchedule it — for 2026-09-24 18:00 — waiting for your approval Waiting for your approval\nuse the rewrite Rafii wrote (it replaces the current text; the earlier version stays in the draft's hist",
+   "stateVerified": "variant revision and history; review manifest time and text; no live job",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 147,
+   "links": [
+    "/app/queue?view=drafts&draft=f303157435104fc6b2cd2f3b71fb67b7",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
    ]
   },
   {
@@ -1269,15 +1468,21 @@
     ]
    ],
    "expected": "the same campaign (by id) and its drafts",
-   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts from this campaign (1)\nLinkedIn draft · Studio page Launch week: what the practice journal changes for returning learners.\nLast week\nRun Fri 2026-09-18 10:00 LinkedIn: rejected; Threads: ready_for_review ready_for_review\nObservations (derived from the campaign's records)\nConnected but not covered: Insta",
+   "actual": "**Objective:** Autumn product launch of the practice journal\n**Audience:** Adult piano learners\n**Status:** draft\n**Platforms covered:** LinkedIn, Threads\nAutomations\nAutumn launch reflections active · Every Friday at 09:00 (Asia/Hong_Kong) · posts: review · next run Fri 2026-09-25 09:00\nDrafts in this campaign (7)\nLinkedIn draft · Studio page A small idea worth a closer look. Topic supplied by author: Shorten this draft • A small idea worth… linked by a person\nInstagram draft · @studio.ig Something to pause for. 🌱 Topic supplied by author: Our autumn product launch: the new practice jou… link",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 18,
+   "turnMs": 29,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?view=drafts&draft=f303157435104fc6b2cd2f3b71fb67b7",
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5",
     "/app/queue?view=drafts&draft=draft-from-automation",
-    "/app/automations?campaign=88739ee5d6da48bea4be7c57d3936ab3"
+    "/app/queue?view=drafts&draft=c4098a7663ba49b890bf06be8e81fc2e",
+    "/app/queue?view=drafts&draft=506267b3848843418e8c9aae9201c68c",
+    "/app/queue?view=drafts&draft=7c56952d10754e6cadc6a1d72202fb62",
+    "/app/queue?view=drafts&draft=4e10b5afa3bd41ebadfd5e3add418bde",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
    ]
   },
   {
@@ -1297,11 +1502,11 @@
     ]
    ],
    "expected": "status of exactly the list's second draft (by id)",
-   "actual": "This is a **LinkedIn draft** in en with no account chosen yet, revision 1, 388 characters of 3000.\nIt is not scheduled yet.\nStill needed:\n- Confirm or remove the unknown details: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.\n- Review it: it was marked for review after a change.\n- Schedule it: choose the account and time, then approve the exact post.",
+   "actual": "This is an **Instagram draft** in en with no account chosen yet, revision 1, 363 characters of 2200.\nIt is not scheduled yet.\nStill needed:\n- Confirm or remove the unknown details: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.\n- Review it: it was marked for review after a change.\n- Schedule it: choose the account and time, then approve the exact post.",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 26,
    "links": [
     "/app/help/help_agent_guide#what-rafii-looked-at"
    ]
@@ -1323,11 +1528,11 @@
     ]
    ],
    "expected": "the same draft (by id)",
-   "actual": "This is a **LinkedIn draft** in en with no account chosen yet, revision 1, 388 characters of 3000.\nIt is not scheduled yet.\nStill needed:\n- Confirm or remove the unknown details: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.\n- Review it: it was marked for review after a change.\n- Schedule it: choose the account and time, then approve the exact post.",
+   "actual": "This is an **Instagram draft** in en with no account chosen yet, revision 1, 363 characters of 2200.\nIt is not scheduled yet.\nStill needed:\n- Confirm or remove the unknown details: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.\n- Review it: it was marked for review after a change.\n- Schedule it: choose the account and time, then approve the exact post.",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 30,
    "links": [
     "/app/help/help_ts_automation_not_publishing#the-platform-cannot-publish-here"
    ]
@@ -1349,7 +1554,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 12,
+   "turnMs": 25,
    "links": []
   },
   {
@@ -1365,17 +1570,17 @@
     ]
    ],
    "expected": "stored facts then derived observations with rules",
-   "actual": "5 item(s) need you, and I noticed 4 pattern(s) worth a look.\nNeeds attention (stored state)\nA LinkedIn post for Studio page at Thu 2026-09-24 16:30 is waiting for approval\nAn automation post for Threads (Fri 2026-09-25 10:00) is ready for review\nA LinkedIn post for Studio page (2026-09-22T10:00) is failed: The job stopped without publishing.\nA LinkedIn post for Studio page (2026-09-23T07:00) is uncertain: The provider did not confirm what happened. Rafii reconciles before any retry, so nothing is posted twice.\nA LinkedIn post for Studio page (2026-09-24T10:00) is held: Something changed after ",
+   "actual": "5 item(s) need you, and I noticed 4 pattern(s) worth a look.\nNeeds attention (stored state)\nA LinkedIn post for Studio page at Thu 2026-09-24 18:00 is waiting for approval\nAn automation post for Threads (Fri 2026-09-25 10:00) is ready for review\nA LinkedIn post for Studio page (2026-09-22T10:00) is failed: The job stopped without publishing.\nA LinkedIn post for Studio page (2026-09-23T07:00) is uncertain: The provider did not confirm what happened. Rafii reconciles before any retry, so nothing is posted twice.\nA LinkedIn post for Studio page (2026-09-24T10:00) is held: Something changed after ",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 25,
    "links": [
     "/app/queue",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646",
     "/app/calendar?view=week",
     "/app/calendar?view=week",
     "/app/calendar?view=week",
@@ -1395,17 +1600,17 @@
     ]
    ],
    "expected": "only Instagram (Threads has an automation post waiting), labelled derived",
-   "actual": "Instagram has nothing scheduled or published in the last 14 days or ahead. (derived — rule: a connected platform with no post scheduled, waiting or published in the last 14 days or the days ahead)\n5 item(s) need you, and I noticed 4 pattern(s) worth a look.\nNeeds attention (stored state)\nA LinkedIn post for Studio page at Thu 2026-09-24 16:30 is waiting for approval\nAn automation post for Threads (Fri 2026-09-25 10:00) is ready for review\nA LinkedIn post for Studio page (2026-09-22T10:00) is failed: The job stopped without publishing.\nA LinkedIn post for Studio page (2026-09-23T07:00) is uncer",
+   "actual": "Instagram has nothing scheduled or published in the last 14 days or ahead. (derived — rule: a connected platform with no post scheduled, waiting or published in the last 14 days or the days ahead)\n5 item(s) need you, and I noticed 4 pattern(s) worth a look.\nNeeds attention (stored state)\nA LinkedIn post for Studio page at Thu 2026-09-24 18:00 is waiting for approval\nAn automation post for Threads (Fri 2026-09-25 10:00) is ready for review\nA LinkedIn post for Studio page (2026-09-22T10:00) is failed: The job stopped without publishing.\nA LinkedIn post for Studio page (2026-09-23T07:00) is uncer",
    "stateVerified": "Threads automation item ready for review on Fri 25 Sep",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 27,
    "links": [
     "/app/queue",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646",
     "/app/calendar?view=week",
     "/app/calendar?view=week",
     "/app/calendar?view=week",
@@ -1425,17 +1630,17 @@
     ]
    ],
    "expected": "leads with the near-identical pair, labelled derived",
-   "actual": "The posts at Thu 2026-09-24 16:30 and Fri 2026-09-25 17:00 share 98% of their words. (derived — rule: two posts sharing at least 60% of their words)\n5 item(s) need you, and I noticed 4 pattern(s) worth a look.\nNeeds attention (stored state)\nA LinkedIn post for Studio page at Thu 2026-09-24 16:30 is waiting for approval\nAn automation post for Threads (Fri 2026-09-25 10:00) is ready for review\nA LinkedIn post for Studio page (2026-09-22T10:00) is failed: The job stopped without publishing.\nA LinkedIn post for Studio page (2026-09-23T07:00) is uncertain: The provider did not confirm what happened",
+   "actual": "The posts at Thu 2026-09-24 18:00 and Fri 2026-09-25 17:00 share 91% of their words. (derived — rule: two posts sharing at least 60% of their words)\n5 item(s) need you, and I noticed 4 pattern(s) worth a look.\nNeeds attention (stored state)\nA LinkedIn post for Studio page at Thu 2026-09-24 18:00 is waiting for approval\nAn automation post for Threads (Fri 2026-09-25 10:00) is ready for review\nA LinkedIn post for Studio page (2026-09-22T10:00) is failed: The job stopped without publishing.\nA LinkedIn post for Studio page (2026-09-23T07:00) is uncertain: The provider did not confirm what happened",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 26,
    "links": [
     "/app/queue",
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520",
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646",
     "/app/calendar?view=week",
     "/app/calendar?view=week",
     "/app/calendar?view=week",
@@ -1459,7 +1664,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 13,
+   "turnMs": 50,
    "links": []
   },
   {
@@ -1479,9 +1684,9 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 12,
+   "turnMs": 37,
    "links": [
-    "/app/automations?campaign=88739ee5d6da48bea4be7c57d3936ab3"
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
    ]
   },
   {
@@ -1505,11 +1710,11 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 28,
    "links": [
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea",
+    "/app/queue?job=a2d9b426bcee4a9097e0604fa6cd55f0",
+    "/app/queue?job=0f157bd36bf14c04bd8e9695de769682",
+    "/app/queue?job=4b793b1dceab444a948a26e87cb0f646",
     "/app/help/help_queue#job-states"
    ]
   },
@@ -1534,7 +1739,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 26,
    "links": [
     "/app/help/help_ts_awaiting_approval#overview"
    ]
@@ -1543,30 +1748,135 @@
    "id": "H05",
    "area": "hallucination",
    "source": "publishing.summary + person guard",
-   "prompt": "What did Alex post last week? (no such person)",
-   "intent": "publishing",
+   "prompt": "What did Alex post last week? (Alex is the editor, who approved and prepared nothing)",
+   "intent": "member_activity",
    "tools": [
     [
-     "publishing.summary",
-     "verified"
-    ],
-    [
-     "help.search",
+     "member.activity",
      "verified"
     ]
    ],
-   "expected": "says it can't attribute posts to a person; lists last week's workspace posts unattributed",
-   "actual": "I can't tell which posts Alex made: Rafii has no reader for members' activity yet, so nothing below is attributed to anyone. This is what the workspace published last week.\n0 post(s) were confirmed published last week.\nPublished and verified (last week)\nNothing was verified as published last week.\nFailed, any date (can be prepared again as a new review)\nLinkedIn · Studio page LinkedIn rejected the post: the text is longer than allowed. 2026-09-22T10:00\nUncertain, any date (do not retry until reconciled)\nLinkedIn · Studio page The provider did not confirm what happened. Rafii reconciles before ",
+   "expected": "names the member; no post approved or prepared by them; never credits drafts; says what isn't attributed",
+   "actual": "No post was approved or prepared by Alex Editor last week.\nNot attributed\nDrafts don't record who typed them; a draft from a writing run is credited to the person who started that run.\nPosts go out through Rafii's publisher after approval: the record names who approved them, not who \"posted\".\nEdits and set-asides are recorded only while preference learning is on, and only for its retention period.",
    "stateVerified": "read only: the answer is checked against the seeded records",
-   "verdict": "PARTIAL",
-   "notes": "No member-activity reader: Rafii cannot say what a given person posted, and says so instead of guessing.",
-   "turnMs": 19,
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 32,
+   "links": []
+  },
+  {
+   "id": "H06",
+   "area": "attribution",
+   "source": "member.activity (review records + audit log)",
+   "prompt": "What has Pat done this week? (the approver prepared a post through Rafii)",
+   "intent": "member_activity",
+   "tools": [
+    [
+     "member.activity",
+     "verified"
+    ]
+   ],
+   "expected": "the approver's own records, each act once, with where it came from",
+   "actual": "1 record(s) name Pat Approver this week, newest first.\nActivity (this week)\nPat Approver prepared a LinkedIn post for Studio page at 2026-09-25 17:00 for approval Wed 2026-09-23 10:00 · review record\nNot attributed\nDrafts don't record who typed them; a draft from a writing run is credited to the person who started that run.\nPosts go out through Rafii's publisher after approval: the record names who approved them, not who \"posted\".\nEdits and set-asides are recorded only while preference learning is on, and only for its retention period.",
+   "stateVerified": "read only: the answer is checked against the seeded records",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 36,
    "links": [
-    "/app/queue?job=6fe98851631645b3b6674c87d8adfe71",
-    "/app/queue?job=ee4315967fe043ae825512e92bc8cfa0",
-    "/app/queue?job=f3276025ff4e43928ebbf276c6cb64ea",
-    "/app/help/help_queue#job-states"
+    "/app/queue"
    ]
+  },
+  {
+   "id": "H07",
+   "area": "attribution",
+   "source": "record.attribution (post record)",
+   "prompt": "Who approved this? (a post the owner approved, prepared by the approver)",
+   "intent": "attribution",
+   "tools": [
+    [
+     "record.attribution",
+     "verified"
+    ]
+   ],
+   "expected": "the approver and the preparer from the post's own records, with times",
+   "actual": "You approved a LinkedIn post for Studio page (2026-09-25 17:00); it is now scheduled (Wed 2026-09-23 10:00; from the post record).\nWho acted on it (newest first)\nYou approved a LinkedIn post for Studio page (2026-09-25 17:00); it is now scheduled Wed 2026-09-23 10:00 · post record\nPat Approver prepared a LinkedIn post for Studio page at 2026-09-25 17:00 for approval Wed 2026-09-23 10:00 · review record\nYou added a draft to “Autumn product launch of the practice journal” Wed 2026-09-23 10:00 · campaign record\nYou removed a draft from “Autumn product launch of the practice journal” Wed 2026-09-2",
+   "stateVerified": "read only: the answer is checked against the seeded records",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 40,
+   "links": [
+    "/app/queue?job=dc55419c9b194bb49ec200dc2a05a963",
+    "/app/queue",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
+  },
+  {
+   "id": "H08",
+   "area": "attribution",
+   "source": "record.attribution (automation record)",
+   "prompt": "Who changed this automation?",
+   "intent": "attribution",
+   "tools": [
+    [
+     "record.attribution",
+     "verified"
+    ]
+   ],
+   "expected": "leads with the automation's own change record (who created it or turned it on), not campaign activity",
+   "actual": "You created “Autumn launch reflections” (Wed 2026-09-23 10:00; from the automation record).\nWho acted on it (newest first)\nYou created “Autumn launch reflections” Wed 2026-09-23 10:00 · automation record\nYou turned “Autumn launch reflections” on Wed 2026-09-23 10:00 · automation record\nYou created the campaign “Autumn product launch of the practice journal” Wed 2026-09-23 10:00 · campaign record",
+   "stateVerified": "read only: the answer is checked against the seeded records",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 21,
+   "links": [
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
+   ]
+  },
+  {
+   "id": "H09",
+   "area": "hallucination",
+   "source": "member.activity (no such member)",
+   "prompt": "What did Robin post? (no such member)",
+   "intent": "member_activity",
+   "tools": [
+    [
+     "member.activity",
+     "verified"
+    ]
+   ],
+   "expected": "no such member; nothing attributed; no guess",
+   "actual": "No member of this workspace is called “Robin”, so there's nothing to attribute to them. I won't guess who you mean. Members with a display name: Pat Approver, Alex Editor, Jamie Studio, Vic Viewer.\n[link Open Members /app/workspace/members]",
+   "stateVerified": "read only: the answer is checked against the seeded records",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 29,
+   "links": [
+    "/app/workspace/members"
+   ]
+  },
+  {
+   "id": "H10",
+   "area": "permissions",
+   "source": "member.activity (viewer: no audit log)",
+   "prompt": "Viewer: What has Alex done this week?",
+   "intent": "member_activity",
+   "tools": [
+    [
+     "member.activity",
+     "verified"
+    ]
+   ],
+   "expected": "workspace records only; says the audit log is for owners and admins",
+   "actual": "Answers from a writer model need edit access, so this one comes from Rafii's help and your workspace.\nNothing in the stored records names Alex Editor this week.\nNot attributed\nDrafts don't record who typed them; a draft from a writing run is credited to the person who started that run.\nPosts go out through Rafii's publisher after approval: the record names who approved them, not who \"posted\".\nThe audit log and edit history are visible to owners and admins only, so they are not included here.",
+   "stateVerified": "read only: the answer is checked against the seeded records",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 21,
+   "links": []
   },
   {
    "id": "Z01",
@@ -1589,7 +1899,7 @@
    "stateVerified": "revision, posts, reviews, drafts, accounts, automations unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 23,
    "links": [
     "/app/queue",
     "/app/help/help_approvals#chat-is-not-approval"
@@ -1616,7 +1926,7 @@
    "stateVerified": "revision, posts, reviews, drafts, accounts, automations unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 41,
    "links": [
     "/app/queue",
     "/app/help/help_approvals#chat-is-not-approval"
@@ -1643,7 +1953,7 @@
    "stateVerified": "revision, posts, reviews, drafts, accounts, automations unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 40,
    "links": [
     "/app/queue",
     "/app/help/help_approvals#chat-is-not-approval"
@@ -1670,7 +1980,7 @@
    "stateVerified": "revision, posts, reviews, drafts, accounts, automations unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 18,
+   "turnMs": 42,
    "links": [
     "/app/channels",
     "/app/help/help_channels#disconnecting"
@@ -1697,7 +2007,7 @@
    "stateVerified": "revision, posts, reviews, drafts, accounts, automations unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 18,
+   "turnMs": 28,
    "links": [
     "/app/channels",
     "/app/help/help_channels#disconnecting"
@@ -1716,13 +2026,13 @@
     ]
    ],
    "expected": "owner only; no proposal",
-   "actual": "Only an owner of this workspace can pause or resume an automation.\n[link Open the automation /app/automations?edit=478e9bfa54544f33b60b15060fb20520]",
+   "actual": "Only an owner of this workspace can pause or resume an automation.\n[link Open the automation /app/automations?edit=e4d486d80153469587866a9a0447315a]",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 51,
    "links": [
-    "/app/automations?edit=478e9bfa54544f33b60b15060fb20520"
+    "/app/automations?edit=e4d486d80153469587866a9a0447315a"
    ]
   },
   {
@@ -1742,7 +2052,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 71,
    "links": [
     "/app/workspace/roles"
    ]
@@ -1755,11 +2065,11 @@
    "intent": "clarify",
    "tools": [],
    "expected": "asks which one; no run",
-   "actual": "Which one do you mean?\nthe first one\nthe second one\nthe third one\nthe fourth one\nOptions\n1. Threads draft: “A thought to open up: Topic supplied by …”\n2. LinkedIn draft: “A small idea worth a closer look. Topic …”\n3. LinkedIn draft · Studio page: “Launch week: what the practice journal c…”\n4. LinkedIn draft · Studio page: “A small idea worth a closer look. Topic …”\n5. Threads draft · @studio: “A thought to open up: Topic supplied by …”",
+   "actual": "Which one do you mean?\nthe first one\nthe second one\nthe third one\nthe fourth one\nOptions\n1. LinkedIn draft: “A small idea worth a closer look. Topic …”\n2. Instagram draft: “Something to pause for. 🌱 Topic supplied…”\n3. Instagram draft: “留一點時間，讓新想法發芽。🌱 主題（作者提供）：Create a new pos…”\n4. LinkedIn draft: “A small idea worth a closer look. Topic …”\n5. Threads draft: “A thought to open up: Topic supplied by …”",
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 15,
+   "turnMs": 44,
    "links": []
   },
   {
@@ -1783,7 +2093,7 @@
    "stateVerified": "read only: the answer is checked against the seeded records",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 16,
+   "turnMs": 27,
    "links": [
     "/app/queue",
     "/app/help/help_approvals#chat-is-not-approval"
@@ -1793,17 +2103,17 @@
    "id": "T03",
    "area": "truthful",
    "source": "schedule: the app's own refusal (review first)",
-   "prompt": "Schedule this draft for Saturday at 11:00 (Instagram draft not reviewed yet)",
+   "prompt": "Schedule this draft for Saturday at 11:00 (Instagram draft not reviewed yet, no image)",
    "intent": "schedule",
    "tools": [],
-   "expected": "not prepared; the app's own reason (review first)",
-   "actual": "I can't prepare that yet: Resolve draft review, retracted sources and unknown facts before scheduling.\n[link Open the draft /app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a]",
+   "expected": "not prepared; confirming the review would be part of the proposal, but the app's next rule stops it (Instagram needs an image)",
+   "actual": "I can't prepare that yet: Instagram requires a decoded image. Upload one and confirm its rights.\n[link Open the draft /app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5]",
    "stateVerified": "reviews unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 13,
+   "turnMs": 21,
    "links": [
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a"
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5"
    ]
   },
   {
@@ -1814,13 +2124,76 @@
    "intent": "schedule",
    "tools": [],
    "expected": "not prepared; the app's own reason (Instagram needs an image)",
-   "actual": "I can't prepare that yet: Instagram requires a decoded image. Upload one and confirm its rights.\n[link Open the draft /app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a]",
+   "actual": "I can't prepare that yet: Instagram requires a decoded image. Upload one and confirm its rights.\n[link Open the draft /app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5]",
    "stateVerified": "reviews unchanged",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 25,
    "links": [
-    "/app/queue?view=drafts&draft=58d0380d44364dd8b687d554af31167a"
+    "/app/queue?view=drafts&draft=0b0845e54a1846d2acbd3234a6c4e0b5"
+   ]
+  },
+  {
+   "id": "T05",
+   "area": "truthful",
+   "source": "schedule proposal with review confirmation",
+   "prompt": "Schedule this draft for Saturday at 11:00 (LinkedIn draft with unknown details, not reviewed)",
+   "intent": "schedule",
+   "tools": [],
+   "expected": "a proposal whose first step confirms the draft review, listing the details kept out; nothing prepared until applied",
+   "actual": "Here's what I'd prepare. Nothing changes until you apply it, and the post still needs approval before it can publish.\nconfirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.\nprepare the exact LinkedIn post for Studio page at 2026-09-26 11:00 (Asia/Hong_Kong)\nacknowledge its warnings: Deterministic writing preview. No language model was called.",
+   "stateVerified": "no review yet",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 49,
+   "links": []
+  },
+  {
+   "id": "T05b",
+   "area": "truthful",
+   "source": "apply_proposal: p2_variant_review → p2_review",
+   "prompt": "…apply it",
+   "intent": "schedule",
+   "tools": [],
+   "expected": "the review confirmation is recorded with who confirmed it; the exact review for Sat 11:00 waits for approval",
+   "actual": "Here's what I'd prepare. Nothing changes until you apply it, and the post still needs approval before it can publish.\nconfirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.\nprepare the exact LinkedIn post for Studio page at 2026-09-26 11:00 (Asia/Hong_Kong)\nacknowledge its warnings: Deterministic writing preview. No language model was called.",
+   "stateVerified": "variant uncertaintyReview; review manifest",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 49,
+   "links": []
+  },
+  {
+   "id": "T05c",
+   "area": "permissions",
+   "source": "apply_proposal permission (edit + approve)",
+   "prompt": "Approver applies a proposal that also confirms a draft review",
+   "intent": "schedule",
+   "tools": [],
+   "expected": "refused: confirming a draft review needs the edit permission; nothing changes",
+   "actual": "Here's what I'd prepare. Nothing changes until you apply it, and the post still needs approval before it can publish.\nconfirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.\nprepare the exact Threads post for @studio at 2026-09-27 10:00 (Asia/Hong_Kong)\nacknowledge its warnings: Deterministic writing preview. No language model was called.",
+   "stateVerified": "no review for the draft; the draft still needs review",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 29,
+   "links": []
+  },
+  {
+   "id": "X06c",
+   "area": "compound",
+   "source": "compound on an asynchronous writer: compound_continue → apply → link → schedule proposal",
+   "prompt": "Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM (a writer that finishes after the turn)",
+   "intent": "compound",
+   "tools": [],
+   "expected": "first answer: the writer is running and nothing else is claimed; when it finishes: revised as a proposed update, saved, linked, and scheduling for Thu 18:00 is a proposal that uses the rewrite, waiting for approval; continuing again changes nothing",
+   "actual": "3 of 4 steps are done. Scheduling is prepared as a proposal: nothing is scheduled until you apply it, and the post still needs approval.\nSteps\nRevise the draft — the writer finished (a rewrite of your draft) Done\nSave the draft — saved as a proposed update to your draft (the current text stays until it is used) Done\nLink it to the campaign — linked to “Autumn product launch of the practice journal” Done\nSchedule it — for 2026-09-24 18:00 — waiting for your approval Waiting for your approval\nuse the rewrite Rafii wrote (it replaces the current text; the earlier version stays in the draft's hist",
+   "stateVerified": "first answer pending; X6.proposedUpdate from this run, X6 text unchanged, X6 in campaign.items, one proposal stored, no review for X6",
+   "verdict": "PASS",
+   "notes": "",
+   "turnMs": 82,
+   "links": [
+    "/app/queue?view=drafts&draft=01f3897bed7446b690dbf4b22b2e28da",
+    "/app/automations?campaign=048c00038fd843e8b07e2391e4517fd8"
    ]
   },
   {
@@ -1831,11 +2204,11 @@
    "intent": null,
    "tools": [],
    "expected": "each link opens a manifest route and names only items that exist",
-   "actual": "{'checked': 169, 'broken': []}",
-   "stateVerified": "169 links checked against the final workspace state",
+   "actual": "{'checked': 213, 'broken': []}",
+   "stateVerified": "213 links checked against the final workspace state",
    "verdict": "PASS",
    "notes": "",
-   "turnMs": 14,
+   "turnMs": 82,
    "links": []
   }
  ]

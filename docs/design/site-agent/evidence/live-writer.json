@@ -1,0 +1,391 @@
+{
+ "model": "claude-code:haiku",
+ "route": "claude-code (ClaudeCliRuntime: the person's signed-in Claude Code CLI on this machine; a cloud route for source and memory egress, since the text goes to Anthropic; capped by --max-budget-usd per call)",
+ "startedAt": "2026-09-25T02:41:41.922636+00:00",
+ "workspace": "disposable local PostgreSQL",
+ "webResearch": "off (POSTRIFF_RESEARCH=0)",
+ "checks": [
+  {
+   "check": "rework: Shorten this draft",
+   "verdict": "PASS",
+   "runId": "31c5d410-137f-483f-8afc-6d2c38483279",
+   "seconds": 26.3,
+   "run": {
+    "status": "applied",
+    "model": "claude-code:haiku",
+    "reasoning": "low",
+    "usage": {
+     "provenance": "reported_by_cli",
+     "modelRequests": 1,
+     "costUsd": 0,
+     "cliCostUsd": 0.0120143,
+     "billing": "subscription",
+     "ledgerCostState": "actual"
+    }
+   },
+   "ledger": [
+    {
+     "kind": "reserve",
+     "costState": "estimated",
+     "estimatedUsdMicro": 0,
+     "actualUsdMicro": null,
+     "provider": "claude-code",
+     "model": "claude-code:haiku"
+    },
+    {
+     "kind": "settle",
+     "costState": "actual",
+     "estimatedUsdMicro": 0,
+     "actualUsdMicro": 0,
+     "provider": "claude-code",
+     "model": "claude-code:haiku"
+    }
+   ],
+   "draftId": "ddc7bbd554e64cc8b735f5277017a4ff",
+   "before": {
+    "characters": 638,
+    "revision": 2
+   },
+   "candidate": {
+    "characters": 524,
+    "text": "Most adult piano students come back after twenty years and make the same mistake: they try to play the whole piece, then wonder why nothing improves. I did it. I watched students do it week after week.\n\nThe fix is almost boring. Pick one bar that trips you up. Play it slowly three times, eyes on the keys. Stop for the day. It feels like too little. It is not.\n\nOver a month, those small sessions add up. You can play from start to finish. You enjoy practicing again.\n\nTry it tonight with the one bar you always stumble on."
+   },
+   "after": {
+    "revision": 3,
+    "historyKept": true,
+    "history": [
+     {
+      "revision": 1,
+      "origin": "ideas-candidate",
+      "characters": 372
+     },
+     {
+      "revision": 2,
+      "origin": "author-edit",
+      "characters": 638
+     },
+     {
+      "revision": 3,
+      "origin": "accepted-fixture-replacement",
+      "characters": 524
+     }
+    ]
+   },
+   "appliedAs": [
+    {
+     "platform": "LinkedIn",
+     "language": "en",
+     "channelId": "3f452d850d3545c6a4ad508558b02e8b",
+     "variantId": "ddc7bbd554e64cc8b735f5277017a4ff",
+     "proposedUpdate": true
+    }
+   ],
+   "reworkOf": "ddc7bbd554e64cc8b735f5277017a4ff"
+  },
+  {
+   "check": "voice: Does this sound like me?",
+   "verdict": "PASS",
+   "modelAccepted": "3/3",
+   "attempts": [
+    {
+     "runId": "0a8cc47f-34dd-43a3-950b-508137dec8a0",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet",
+     "tier": "strong",
+     "labelledJudgement": true,
+     "honestFallback": false,
+     "warning": null,
+     "rejectedRefs": null,
+     "fallbackDetail": null,
+     "measuredCard": true,
+     "measured": [
+      "✗ Opens with a short question to the reader.",
+      "✗ Keeps paragraphs to two sentences.",
+      "✓ Ends with one practical step to try today.",
+      "✗ Sentence length like your approved writing example",
+      "✓ Never use emoji on LinkedIn",
+      "✗ Keep paragraphs short",
+      "Tone: warm"
+     ],
+     "ledgerRows": 0,
+     "judgement": "**Writer's judgement** (claude-code:sonnet; a model's reading of tone and word choice, not a measurement):\nThis draft partly matches your voice: 2 checks match, 4 differ, 1 needs your judgement. It matches on ending with a practical step and using no emoji. It differs on opening with a question, paragraph length (8 sentences vs your usual 2), and sentence length (15.8 words vs 6.3 in your example). Tone (warm) needs your own call since that cannot be measured."
+    },
+    {
+     "runId": "9a7c1bac-bcb2-44e9-8548-fadd52c5eee0",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet",
+     "tier": "strong",
+     "labelledJudgement": true,
+     "honestFallback": false,
+     "warning": null,
+     "rejectedRefs": null,
+     "fallbackDetail": null,
+     "measuredCard": true,
+     "measured": [
+      "✗ Opens with a short question to the reader.",
+      "✗ Keeps paragraphs to two sentences.",
+      "✓ Ends with one practical step to try today.",
+      "✗ Sentence length like your approved writing example",
+      "✓ Never use emoji on LinkedIn",
+      "✗ Keep paragraphs short",
+      "Tone: warm"
+     ],
+     "ledgerRows": 0,
+     "judgement": "**Writer's judgement** (claude-code:sonnet; a model's reading of tone and word choice, not a measurement):\nI checked the LinkedIn draft against your stored voice profile: 2 points match, 4 differ, and 1 needs your judgement.\n\n**Matches:**\n- Ends with one practical step to try today — the last sentence starts with an instruction (\"Try it tonight...\").\n- Never use emoji on LinkedIn — none used.\n\n**Differs:**\n- Opens with a short question to the reader — your first sentence isn't a question.\n- Keeps paragraphs to two sentences — the longest paragraph here runs 8 sentences (profile says two).\n- Sentence length like your approved writing example — sentences average 15.8 words vs. 6.3 in your example.\n- Keep paragraphs short (learned preference) — same 8-sentence paragraph issue.\n\n**Needs your judgement:**\n- Tone: warm — this isn't measured automatically, so it's your call whether it lands right.\n\nOverall it leans off your usual voice mainly on pacing: longer sentences and one long paragraph instead of your typical short, punchy structure. The closing instruction and no-emoji habit are on-brand."
+    },
+    {
+     "runId": "eca955b2-e389-4a2e-a87e-6173f3d5d78c",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet",
+     "tier": "strong",
+     "labelledJudgement": true,
+     "honestFallback": false,
+     "warning": null,
+     "rejectedRefs": null,
+     "fallbackDetail": null,
+     "measuredCard": true,
+     "measured": [
+      "✗ Opens with a short question to the reader.",
+      "✗ Keeps paragraphs to two sentences.",
+      "✓ Ends with one practical step to try today.",
+      "✗ Sentence length like your approved writing example",
+      "✓ Never use emoji on LinkedIn",
+      "✗ Keep paragraphs short",
+      "Tone: warm"
+     ],
+     "ledgerRows": 0,
+     "judgement": "**Writer's judgement** (claude-code:sonnet; a model's reading of tone and word choice, not a measurement):\nTest answer."
+    }
+   ],
+   "note": "Local CLI route: no PostRiff ledger reservation (the person's own plan pays). A rejected phrasing leaves the measured answer with a warning."
+  },
+  {
+   "check": "fresh draft from Brand Brain + voice",
+   "verdict": "PASS",
+   "runId": "9c50824d-c920-4852-bee5-5a3024eb7b8b",
+   "seconds": 55.0,
+   "run": {
+    "status": "applied",
+    "model": "claude-code:haiku",
+    "reasoning": "low",
+    "usage": {
+     "provenance": "reported_by_cli",
+     "modelRequests": 1,
+     "costUsd": 0,
+     "cliCostUsd": 0.023637,
+     "billing": "subscription",
+     "ledgerCostState": "actual"
+    }
+   },
+   "ledger": [
+    {
+     "kind": "reserve",
+     "costState": "estimated",
+     "estimatedUsdMicro": 0,
+     "actualUsdMicro": null,
+     "provider": "claude-code",
+     "model": "claude-code:haiku"
+    },
+    {
+     "kind": "settle",
+     "costState": "actual",
+     "estimatedUsdMicro": 0,
+     "actualUsdMicro": 0,
+     "provider": "claude-code",
+     "model": "claude-code:haiku"
+    }
+   ],
+   "draftId": "5d2b249c69a1487da91a471584901d19",
+   "provenance": {
+    "model": "claude-code:haiku",
+    "runId": "9c50824d-c920-4852-bee5-5a3024eb7b8b",
+    "policyEpoch": "f6be99ad75906b3ac40941f023faf48de99b3c9a0755a7ac4782354ee41935bd",
+    "contextDigest": "e92231e580e31baeffaea484b0d309822f35e6a355f1b6de0bbb3d1fa3bddbaf"
+   },
+   "text": "I've been thinking about slow practice—what shifts when you deliberately move slower. Whether it's music, craft, or any skill work, the conventional story is that slowing down lets you notice what speed glosses over.\n\nBut I'm curious about something deeper. How does this actually feel? Does the attention you build stay with you when you speed back up? And does it change how you think about the work itself, not just how you execute it?\n\nI think the real tension is between the urge to move forward and the value of staying still for a moment. I'm still figuring out what that balance looks like.\n\nWhat's your experience with slow practice? Has it shifted something for you?",
+   "voiceCheck": {
+    "summary": {
+     "matches": 1,
+     "differs": 5,
+     "unclear": 1
+    },
+    "findings": [
+     [
+      "Opens with a short question to the reader.",
+      "differs",
+      "measured"
+     ],
+     [
+      "Keeps paragraphs to two sentences.",
+      "differs",
+      "measured"
+     ],
+     [
+      "Ends with one practical step to try today.",
+      "differs",
+      "heuristic"
+     ],
+     [
+      "Tone: warm",
+      "unclear",
+      "needs_writer"
+     ],
+     [
+      "Sentence length like your approved writing example",
+      "differs",
+      "measured"
+     ],
+     [
+      "Never use emoji on LinkedIn",
+      "matches",
+      "measured"
+     ],
+     [
+      "Keep paragraphs short",
+      "differs",
+      "measured"
+     ]
+    ]
+   }
+  },
+  {
+   "check": "compound (4a): shorten + link + schedule, before rewritten sources are approved",
+   "verdict": "PASS",
+   "expected": "the rewrite cites no source needing approval, so scheduling is a proposal waiting for approval",
+   "runId": "943b5b94-2a76-4ed3-840d-7ed5cb77dfd3",
+   "seconds": 22.5,
+   "firstAnswer": {
+    "pending": true,
+    "storedHasText": true,
+    "steps": {
+     "revise": "running"
+    }
+   },
+   "steps": {
+    "revise": "done",
+    "save": "done",
+    "link": "done",
+    "schedule": "waiting"
+   },
+   "stepDetails": {
+    "revise": "the writer finished (a rewrite of your draft)",
+    "save": "saved as a proposed update to your draft (the current text stays until it is used)",
+    "link": "linked to “Autumn product launch of the practice journal”",
+    "schedule": "for 2026-10-01 18:00 — waiting for your approval"
+   },
+   "citedSources": [],
+   "citedNeedingUseApproval": [],
+   "proposals": [
+    {
+     "type": "schedule_draft",
+     "localTime": "2026-10-01T18:00",
+     "summary": [
+      "use the rewrite Rafii wrote (it replaces the current text; the earlier version stays in the draft's history)",
+      "prepare the exact LinkedIn post for Studio page at 2026-10-01 18:00 (Asia/Hong_Kong)",
+      "acknowledge its warnings: Written by Claude Code on this machine; review every claim before scheduling.; Condensed from ~160 to ~90 words. Kept the problem-solution-result structure, the specific practice detail, the counter-intuitive claim ('feels like too little. It is not.'), and the action-oriented closing. Tightened pac"
+     ],
+     "needsEdit": true,
+     "status": "proposed"
+    }
+   ],
+   "run": {
+    "status": "applied",
+    "model": "claude-code:haiku",
+    "reasoning": "low",
+    "usage": {
+     "provenance": "reported_by_cli",
+     "modelRequests": 1,
+     "costUsd": 0,
+     "cliCostUsd": 0.015399600000000001,
+     "billing": "subscription",
+     "ledgerCostState": "actual"
+    }
+   },
+   "warnings": []
+  },
+  {
+   "check": "compound (4b): shorten + link + schedule proposal, after the owner approves public use",
+   "verdict": "PASS",
+   "sourcesApprovedByOwner": [],
+   "gatedBy": "nothing is scheduled: the proposal must be applied, then the review approved",
+   "runId": "308dd167-aa14-4ce7-8781-0639a93d386d",
+   "seconds": 22.1,
+   "firstAnswer": {
+    "pending": true,
+    "storedHasText": true,
+    "steps": {
+     "revise": "running"
+    }
+   },
+   "steps": {
+    "revise": "done",
+    "save": "done",
+    "link": "done",
+    "schedule": "waiting"
+   },
+   "stepDetails": {
+    "revise": "the writer finished (a rewrite of your draft)",
+    "save": "saved as a proposed update to your draft (the current text stays until it is used)",
+    "link": "linked to “Autumn product launch of the practice journal” (it was already there)",
+    "schedule": "for 2026-10-01 18:00 — waiting for your approval"
+   },
+   "citedSources": [],
+   "citedNeedingUseApproval": [],
+   "proposals": [
+    {
+     "type": "schedule_draft",
+     "localTime": "2026-10-01T18:00",
+     "summary": [
+      "use the rewrite Rafii wrote (it replaces the current text; the earlier version stays in the draft's history)",
+      "prepare the exact LinkedIn post for Studio page at 2026-10-01 18:00 (Asia/Hong_Kong)",
+      "acknowledge its warnings: Written by Claude Code on this machine; review every claim before scheduling.; Shortened from ~200 to ~90 words. Preserved the structure: concrete opening observation, credibility signal ('I watched it happen'), the specific method, the rebuttal of 'feels like too little', visible results, and direc"
+     ],
+     "needsEdit": true,
+     "status": "proposed"
+    }
+   ],
+   "run": {
+    "status": "applied",
+    "model": "claude-code:haiku",
+    "reasoning": "low",
+    "usage": {
+     "provenance": "reported_by_cli",
+     "modelRequests": 1,
+     "costUsd": 0,
+     "cliCostUsd": 0.0082193,
+     "billing": "subscription",
+     "ledgerCostState": "actual"
+    }
+   },
+   "warnings": []
+  },
+  {
+   "check": "failure: voice answer when the writer fails",
+   "verdict": "PASS",
+   "composedBy": {
+    "id": "claude-code:haiku",
+    "composedBy": "grounded"
+   },
+   "mode": "failed during the call",
+   "warning": {
+    "code": "model_request_failed",
+    "message": "Rafii's writer didn't answer, so this answer comes straight from Rafii's help and your workspace."
+   },
+   "measuredCardKept": true
+  },
+  {
+   "check": "failure: writing request when the writer fails",
+   "verdict": "PASS",
+   "draftUntouched": true,
+   "mode": "run failed",
+   "runId": "77a69fb8-0450-4527-a5bb-fdfa400f001c",
+   "status": "failed",
+   "message": "Claude Code reached the time limit or exited early. No draft was changed and this request will not retry automatically."
+  }
+ ],
+ "finishedAt": "2026-09-25T02:45:22.206918+00:00",
+ "summary": {
+  "PASS": 7,
+  "FAIL": 0
+ }
+}
