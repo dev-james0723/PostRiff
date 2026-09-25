@@ -76,4 +76,11 @@ with connection() as db:
     audience.on_post_verified(db.cursor(),wid,job)
     assert job["comments"]["availability"] == "unavailable"
     assert db.execute("SELECT 1").fetchone()[0] == 1
-print(json.dumps({"status":"pass","execution":"disposable local PostgreSQL; synthetic transport only","checks":["reply history and counts survive reload","starter line label","record approval with sender disabled","enabling sender cannot replay old approvals","explicit reconfirmation permits synthetic send","ingestion failure preserves transaction"]}))
+# A copilot draft saved before replies were AI-written (a template starter) reads back as a starter, never AI-written.
+with connection() as db:
+    older = str(db.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,text) VALUES(%s,'test-channel','threads','123','457','Older comment') RETURNING id", (wid,)).fetchone()[0])
+    db.execute("INSERT INTO public.pr_reply_drafts(workspace_id,thread_id,author,origin,text,status,events) VALUES(%s,%s,%s,'copilot','Thanks for asking! [ANSWER: price]','draft',%s::jsonb)",
+               (wid, older, ONE, json.dumps([{"state": "draft", "by": "engagement_copilot", "provenance": {"route": {"kind": "deterministic_starter", "methodApplied": False}}}])))
+older_thread = next(t for t in audience.threads(wid, "synthetic")["threads"] if t["threadId"] == older)
+assert [r["origin"] for r in older_thread["replies"]] == ["ai_fixture"], older_thread["replies"]
+print(json.dumps({"status":"pass","execution":"disposable local PostgreSQL; synthetic transport only","checks":["AI suggestions without a managed writer are refused (409 reply_writer_unavailable) and nothing is saved","a template copilot draft reads back as a starter, never AI-written","manual reply labelled 'Your reply'","reply history and counts survive reload","record approval with sender disabled","enabling sender cannot replay old approvals","explicit reconfirmation permits synthetic send","ingestion failure preserves transaction"]}))

@@ -14,11 +14,13 @@ STATE = {"phase2": {"jobs": [{"providerReference": "post-1", "manifest": {"paylo
 
 
 class Cursor:
+    comment = "Is it free to attend?"
+
     def execute(self, sql, params=None):
         self.last = sql
 
     def fetchone(self):
-        return ("Is it free to attend?", "ana", "threads", "post-1")
+        return (self.comment, "ana", "threads", "post-1")
 
 
 class Ledger:
@@ -35,9 +37,10 @@ class Ledger:
         self.settled.append((outcome, actual))
 
 
-def service(runtime, ledger=None):
+def service(runtime, ledger=None, state=None):
     class Skills:
         def bind(self, destinations, **kwargs):
+            self.destinations = destinations
             return {"bindings": [{"id": "postriff-channel-threads", "version": "1", "sha256": "a" * 64}], "text": "THREADS ADAPTER: keep replies short."}
 
     class Ideas:
@@ -53,7 +56,7 @@ def service(runtime, ledger=None):
             return mock.Mock(allows=lambda permission: True)
 
         def _state(self, row):
-            return STATE
+            return state or STATE
 
     @contextmanager
     def transaction(token, workspace_id):
@@ -66,7 +69,10 @@ def managed():
 
 
 PATCHES = (mock.patch("postriff_phase2.reply_writer.require"),
-           mock.patch("postriff_phase2.source_policy.project_context", return_value={"sources": [{"facts": [{"text": "Entry is free."}]}]}),
+           mock.patch("postriff_phase2.source_policy.project_context", return_value={"sources": [
+               {"id": "brief", "facts": [{"text": "Entry is free."}]},
+               # A research find (or a rewritten source) whose public use the owner has not approved yet.
+               {"id": "found", "candidateOnly": True, "facts": [{"text": "Tickets sell out every year."}]}]}),
            mock.patch("postriff_phase2.memory.projection", return_value={"files": [{"name": "VOICE.md", "body": "Warm, brief, no exclamation marks."}]}))
 
 
@@ -125,6 +131,84 @@ class ReplyWriterTest(unittest.TestCase):
         text = "Yes, entry is free. " * 40
         self.assertLessEqual(len(reply_writer._fit(text)), reply_writer.REPLY_LIMIT)
         self.assertTrue(reply_writer._fit(text).endswith("."))
+
+
+class ReviewFixesTest(unittest.TestCase):
+    def setUp(self):
+        for patch in PATCHES:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def reply(self, text):
+        return lambda *a: ModelResponse({"reply": text, "needs": [], "language": "en"}, 700)
+
+    def test_only_sources_cleared_for_public_use_supply_facts_and_they_are_recorded(self):
+        seen = {}
+
+        def call(system, user, schema):
+            seen["user"] = json.loads(user)
+            return ModelResponse({"reply": "Yes, entry is free.", "needs": []}, 800)
+        written = reply_writer.write(service(managed()), "ws", "tok", "th1", call=call)
+        self.assertEqual(seen["user"]["approvedFacts"], ["Entry is free."])
+        self.assertEqual(written["provenance"]["factSourceIds"], ["brief"])
+
+    def test_any_failure_of_the_call_is_settled_unknown_and_refused(self):
+        import http.client
+
+        def cut(*a):
+            raise http.client.IncompleteRead(b"partial")
+        svc = service(managed())
+        with self.assertRaises(AlphaError) as caught:
+            reply_writer.write(svc, "ws", "tok", "th1", call=cut)
+        self.assertEqual((caught.exception.status, caught.exception.code), (502, "reply_writer_failed"))
+        self.assertEqual(svc.ideas.ledger.settled, [("unknown", None)])
+
+    def test_the_reply_method_is_sent_and_the_provenance_says_only_what_was_sent(self):
+        seen = {}
+
+        def call(system, user, schema):
+            seen["system"] = system
+            return ModelResponse({"reply": "Yes, entry is free.", "needs": []}, 800)
+        written = reply_writer.write(service(managed()), "ws", "tok", "th1", call=call)
+        self.assertIn("REPLY METHOD", seen["system"])
+        self.assertIn("Engagement triage and reply drafts", seen["system"])
+        self.assertNotIn("leave a clear placeholder", seen["system"])
+        skills = {(s["id"], s["via"]) for s in written["provenance"]["skills"]}
+        self.assertIn(("rafii-engagement-triage", "compiler"), skills)
+        self.assertIn(("postriff-channel-threads", "writer"), skills)
+        self.assertNotIn("postriff-channel-threads", [s["id"] for s in written["provenance"]["skills"] if s["via"] == "compiler"], "the channel skill is sent once")
+        self.assertEqual(written["provenance"]["evaluators"], [], "no evaluator runs on a reply")
+        self.assertTrue(written["provenance"]["route"]["methodApplied"])
+
+    def test_the_reply_language_follows_the_comment_and_the_workspace(self):
+        state = {**STATE, "languageSettings": {"default": "zh-Hant-HK", "channels": {}}}
+        svc = service(managed(), state=state)
+        with mock.patch.object(Cursor, "comment", "幾時開始？要唔要買飛？"):
+            written = reply_writer.write(svc, "ws", "tok", "th1", call=self.reply("唔使買飛，入場免費。"))
+        self.assertEqual(svc.ideas.skills.destinations[0]["language"], "zh-Hant-HK")
+        self.assertEqual(written["provenance"]["language"], "zh-Hant-HK")
+        self.assertIn("rafii-humanizer-zh", [s["id"] for s in written["provenance"]["skills"]])
+        # An English comment in the same workspace is answered in English.
+        svc = service(managed(), state=state)
+        reply_writer.write(svc, "ws", "tok", "th1", call=self.reply("Yes, entry is free."))
+        self.assertEqual(svc.ideas.skills.destinations[0]["language"].split("-")[0], "en")
+
+    def test_placeholders_are_refused_and_ordinary_brackets_are_not(self):
+        for text in ("DM us: [link]", "Book now at [insert link].", "Thanks, [Your name]", "It costs [PRICE].", "Doors open {{time}}.", "票價係【價錢】。",
+                     "Thanks! [ANSWER: price]"):
+            svc = service(managed())
+            with self.assertRaises(AlphaError, msg=text) as caught:
+                reply_writer.write(svc, "ws", "tok", "th1", call=self.reply(text))
+            self.assertEqual(caught.exception.code, "reply_writer_unusable", text)
+            self.assertEqual(svc.ideas.ledger.settled, [("completed", 700)], text)
+        for text in ("Thanks! [Edit: typo fixed]", "As we said [sic], entry is free.", "See note [1] on the poster."):
+            self.assertEqual(reply_writer.write(service(managed()), "ws", "tok", "th1", call=self.reply(text))["text"], text)
+
+    def test_a_long_answer_with_line_breaks_is_cut_at_a_sentence(self):
+        text = "Thanks so much for coming!\n" * 30
+        fitted = reply_writer._fit(text)
+        self.assertLessEqual(len(fitted), reply_writer.REPLY_LIMIT)
+        self.assertTrue(fitted.endswith("!"), fitted[-20:])
 
 
 class RepliesAreNeverFixedTextTest(unittest.TestCase):

@@ -68,7 +68,10 @@ class AudienceService:
             items = []
             for r in cur.fetchall():
                 reply_level = self._capability(cur, workspace_id, r[1], "reply")
-                cur.execute("SELECT id::text,status,text,origin,extract(epoch from updated_at),coalesce((approval->>'requiresReconfirmation')::boolean,true) FROM public.pr_reply_drafts WHERE workspace_id=%s AND thread_id::text=%s ORDER BY created_at", (workspace_id, r[0]))
+                # A copilot draft saved before replies were AI-written carries a template starter (route kind
+                # deterministic_starter): it is shown as the starter it is, never as AI-written.
+                cur.execute("SELECT id::text,status,text,CASE WHEN origin='copilot' AND events->0->'provenance'->'route'->>'kind'='deterministic_starter' THEN 'ai_fixture' ELSE origin END,"
+                            "extract(epoch from updated_at),coalesce((approval->>'requiresReconfirmation')::boolean,true) FROM public.pr_reply_drafts WHERE workspace_id=%s AND thread_id::text=%s ORDER BY created_at", (workspace_id, r[0]))
                 replies = [{"draftId": d[0], "status": d[1], "text": d[2], "origin": d[3], "updatedAt": float(d[4]), "requiresReconfirmation": d[5]} for d in cur.fetchall()]
                 items.append({"threadId": r[0], "connectionId": r[1], "provider": r[2], "providerPostId": r[3], "commentId": r[4], "author": r[5], "text": r[6], "ingestedAt": float(r[7]), "tombstoned": bool(r[8]), "replyAvailable": reply_level == "Direct" and self._member(row).allows("reply"), "replyLevel": reply_level, "createdAtProvider": float(r[9]) if r[9] is not None else None, "replies": replies})
             cur.execute("SELECT connection_id,level FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='comments_read'", (workspace_id,))

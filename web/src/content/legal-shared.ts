@@ -23,7 +23,7 @@ export const SUBPROCESSORS = [
   { name: 'Stripe', purpose: 'Subscription billing and invoices (card details never touch Rafii)', region: 'Global', status: 'When you subscribe' },
   { name: 'Resend', purpose: 'Transactional email (invitations, trial and billing notices)', region: 'To be verified', status: 'Only when a reviewed email sender is configured' },
   { name: 'Social providers (LinkedIn, Threads, Instagram)', purpose: 'Publishing and metrics for accounts you connect', region: 'Provider’s own', status: 'Only through your own OAuth grant' },
-  { name: 'Vercel AI Gateway and the selected model provider; configured CLI provider', purpose: 'Drafting from the instruction and permitted context', region: 'Provider route and contract to be verified', status: 'Cloud routes require the applicable consent; deterministic preview makes no model call' },
+  { name: 'Vercel AI Gateway and the selected model provider; configured CLI provider', purpose: 'Drafting posts and reply suggestions from the instruction and permitted context', region: 'Provider route and contract to be verified', status: 'Cloud routes require the applicable consent; deterministic preview makes no model call' },
   { name: 'Exa (exa.ai)', purpose: 'Web search for facts when you ask for research: receives a search query derived from your message, never your sources, memory files or drafts', region: 'To be verified for release', status: 'Only after the workspace owner turns web research on' },
   { name: 'Jina Reader (r.jina.ai)', purpose: 'Fetches the public pages found by that search, or a page whose link you paste, as plain text', region: 'To be verified for release', status: 'Only after the workspace owner turns web research on' }
 ];

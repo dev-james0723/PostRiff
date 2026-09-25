@@ -28,7 +28,7 @@ SUBPROCESSORS = [
     {"name": "Stripe", "purpose": "billing and invoices", "status": "only when an approved plan and payment provider are enabled"},
     {"name": "Resend", "purpose": "transactional email", "status": "only when a reviewed sender is configured"},
     {"name": "Exa; Jina Reader", "purpose": "public web research", "status": "only with owner research consent; release region and contract require review"},
-    {"name": "Vercel AI Gateway and selected model provider; configured CLI provider", "purpose": "drafting", "status": "configured cloud or CLI route; contract and region require release review"},
+    {"name": "Vercel AI Gateway and selected model provider; configured CLI provider", "purpose": "drafting posts and reply suggestions", "status": "configured cloud or CLI route; contract and region require release review"},
 ]
 
 
@@ -36,7 +36,7 @@ def notice():
     return {
         "schema": "postriff.privacy-notice.v1",
         "status": "draft — requires qualified legal review before public sale; not a legal approval",
-        "aiProcessing": "Drafts are produced only from sources you select and approve. The deterministic preview makes no model request. A configured cloud writer, including a local CLI connected to its cloud provider, receives your instruction and permitted context. Sources require applicable egress consent; writing samples also require purpose and exact writer-route permission. Only bounded style observations are used for sample-based drafting. Paid routes reserve a workspace budget and keep unknown usage reserved until reconciled. Your voice profile, identity and boundaries reach a cloud model only if a workspace owner allows it on the Memory page, and a boundary marked private or local-only never does.",
+        "aiProcessing": "Drafts are produced only from sources you select and approve. A reply suggestion you ask for sends the comment, the commenter's public handle and the post it answers to the managed writer, with facts from sources you cleared for public use and the memory you allowed; nothing is sent to the platform until you approve the reply. The deterministic preview makes no model request. A configured cloud writer, including a local CLI connected to its cloud provider, receives your instruction and permitted context. Sources require applicable egress consent; writing samples also require purpose and exact writer-route permission. Only bounded style observations are used for sample-based drafting. Paid routes reserve a workspace budget and keep unknown usage reserved until reconciled. Your voice profile, identity and boundaries reach a cloud model only if a workspace owner allows it on the Memory page, and a boundary marked private or local-only never does.",
         "providerAccess": "Rafii connects social accounts only through your own OAuth grant, requests the minimum scopes for the capability you enable, stores tokens encrypted, wipes them on disconnect, and attempts remote revocation where supported. Any unconfirmed remote revocation must be completed in the platform settings.",
         "ingestion": "Post metrics and comments are read only for accounts you connect with those capabilities enabled, and are shown with native definitions and freshness.",
         "retention": RETENTION_CLASSES,

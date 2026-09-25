@@ -2644,9 +2644,9 @@
   },
   {
    "id": "rafii-engagement-triage",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "kind": "workflow",
-   "sha256": "sha256:972c104d1e4932c027a587b9b5e26a1f8c2deb6843ec9666363732e36eaef95e",
+   "sha256": "sha256:a212dcff8947ccbd0b748c419e09a84a59424334533e4d8e857290e8324cd467",
    "description": "Use when sorting supported comments, mentions, reviews or messages into what needs a person, summarising a thread, or drafting a reply for approval.",
    "intents": [
     "engagement",
@@ -2676,6 +2676,7 @@
       }
      },
      "callers": [
+      "postriff_phase2.reply_writer:write",
       "postriff_phase2.coworker.engagement:draft_reply"
      ]
     }
@@ -2697,7 +2698,7 @@
     }
    ],
    "priority": 5,
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "postriff-source-extraction-providers",
