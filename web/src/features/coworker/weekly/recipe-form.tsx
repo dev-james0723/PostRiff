@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { StateMessage } from '@/components/rafii';
@@ -95,6 +95,13 @@ export function RecipeForm({ recipe, isOwner, onSaved }: { recipe: Recipe | null
   const uid = useId();
   const writers = (models.data?.models ?? []).filter((m) => m.qualified);
   const zoneList = useMemo(() => zones(form.timeZone), [form.timeZone]);
+  // A new recipe starts with Rafii's managed AI writer when there is one (as a new automation does); the weekly
+  // drafting limit above still caps what it may spend. An existing recipe keeps the writer it was saved with.
+  const managed = writers.find((m) => m.costClass === 'paid' && (!m.route || m.route === 'managed'))?.id ?? null;
+  useEffect(() => {
+    if (recipe || !managed) return;
+    setForm((f) => (f.model ? f : { ...f, model: managed }));
+  }, [recipe, managed]);
 
   // Accounts that arrived after the form opened join it unchecked.
   const destinations = list.map((c) => form.destinations[c.id] ?? { channelId: c.id, on: false, postsPerWeek: 3, language: 'en' });
@@ -309,7 +316,7 @@ export function RecipeForm({ recipe, isOwner, onSaved }: { recipe: Recipe | null
             </span>
           </div>
           <SelectField label='Writing model' value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}>
-            <option value=''>Workspace default</option>
+            <option value=''>Templates (no AI model)</option>
             {writers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
