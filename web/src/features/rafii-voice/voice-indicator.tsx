@@ -5,11 +5,28 @@
  * open Rafii or end voice (spec §27: "Page navigation must not tear down the voice session"; privacy: a live mic is
  * always visible). Mounted once in the app shell, beside the panel's hotkeys.
  */
+import { useEffect } from 'react';
 import { IconMicrophone, IconPhoneOff } from '@tabler/icons-react';
 import { panelStore, usePanel } from '@/features/site-agent/store';
 import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
+import { useWorkspaceApi } from '@/lib/workspace/provider';
+
+const inCall = () => ['connecting', 'live', 'reconnecting'].includes(voiceSession.get().state);
 
 export function VoiceIndicator() {
+  const { workspaceId } = useWorkspaceApi();
+  // A call belongs to one workspace: switching workspace ends it (spoken requests would otherwise act on the old one).
+  useEffect(() => {
+    const callWorkspace = voiceSession.get().workspaceId;
+    if (inCall() && workspaceId && callWorkspace && callWorkspace !== workspaceId) void voiceSession.end();
+  }, [workspaceId]);
+  // Mounted once in the signed-in app shell: leaving it (signing out, leaving the app) ends the call and releases the microphone.
+  useEffect(
+    () => () => {
+      if (inCall()) void voiceSession.end();
+    },
+    []
+  );
   const state = useVoice((s) => s.state);
   const speaker = useVoice((s) => s.speaker);
   const open = usePanel((s) => s.open || s.above);

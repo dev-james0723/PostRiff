@@ -53,14 +53,21 @@ function PrivateImage({ asset }: { asset: GeneratedAsset }) {
 
 export function AgentExtras({ result, conversationId }: { result: AgentResult; conversationId: string | null }) {
   const { api, workspaceId } = useAgent();
-  const running = result.task?.status === 'running';
+  const startedRunning = result.task?.status === 'running';
   const live = useQuery({
     queryKey: ['agent-runtime', 'conversation', workspaceId, conversationId],
     queryFn: () => api.conversationState(workspaceId, conversationId as string),
-    enabled: Boolean(running && conversationId),
-    refetchInterval: running ? 2500 : false
+    enabled: Boolean(startedRunning && conversationId),
+    // Polls only while this answer's task is still the conversation's running task; stops when it finishes or moves on.
+    refetchInterval: (query) => {
+      const current = query.state.data?.task;
+      if (!query.state.data) return 2500;
+      return current && current.taskId === result.task?.taskId && current.status === 'running' ? 2500 : false;
+    }
   });
-  const task = (running && live.data?.task?.taskId === result.task?.taskId ? live.data?.task : null) ?? result.task;
+  const liveTask = live.data?.task?.taskId === result.task?.taskId ? live.data?.task : null;
+  const task = liveTask ?? result.task;
+  const running = liveTask ? liveTask.status === 'running' : startedRunning && !live.data;
   const specialists = Array.from(new Set(result.toolActivity.map((a) => a.specialist).filter(Boolean)));
   return (
     <div className='mt-2 flex flex-col gap-2'>

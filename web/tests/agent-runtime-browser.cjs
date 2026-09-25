@@ -294,6 +294,25 @@ async function axe(page) {
     check('typing during voice works in the same conversation; Live gets the exchange as context',
       (await sent(page)).some((e) => e.type === 'session.thinking.append' && /The user typed/.test(e.content)));
 
+    // A long call: past 60 transcript lines (the list keeps the last 60), a spoken request still carries exactly its own words.
+    for (let i = 0; i < 36; i += 1) {
+      await live(page, (n) => window.rafiiLiveHarness.userSays(`note number ${n}`, { delegate: false }), i);
+      await live(page, (n) => window.rafiiLiveHarness.rafiiSays(`okay ${n}`, { chunkMs: 0 }), i);
+    }
+    await say(page, 'Tell me the next step for the launch');
+    const longCall = await say(page, 'What is on the calendar this week?');
+    const working = (await sent(page)).filter((e) => e.type === 'session.thinking.append' && e.content.startsWith('Working on:')).map((e) => e.content);
+    check('long call: past 60 transcript lines, a spoken request still carries exactly its own words', Boolean(longCall) && Boolean(working.at(-1)?.startsWith('Working on: What is on the calendar this week?.')), working.at(-1));
+
+    // A brief drop that WebRTC recovers by itself: back to live on its own, and End voice stays available meanwhile.
+    await live(page, () => window.rafiiLiveHarness.drop());
+    await page.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'reconnecting', null, { timeout: 10000 });
+    const endWhileDropped = await panel(page).getByRole('button', { name: 'End voice' }).isVisible();
+    await live(page, () => window.rafiiLiveHarness.recover());
+    await page.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'live', null, { timeout: 10000 }).catch(() => null);
+    const recovered = (await page.evaluate(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice'))) === 'live';
+    check('a brief drop that recovers returns to live by itself; End voice stays available while reconnecting', endWhileDropped && recovered, { endWhileDropped, recovered });
+
     // Connection drop → truthful reconnect banner → reconnect in the same conversation.
     await live(page, () => window.rafiiLiveHarness.drop());
     await page.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'reconnecting', null, { timeout: 10000 });
@@ -377,8 +396,11 @@ async function axe(page) {
     await tp.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'live', null, { timeout: 60000 });
     check('tablet: Voice Mode runs in the sheet; nothing scrolls sideways', await tp.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1));
     await shot(tp, 'voice-tablet.png');
-    await panel(tp).getByRole('button', { name: 'End voice' }).click();
-    await tp.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'ended', null, { timeout: 30000 }).catch(() => null);
+    // Leaving the signed-in app with the call on (as signing out does, a client-side navigation): the call ends with it.
+    await tp.evaluate(() => window.next.router.push('/auth/sign-in'));
+    await tp.waitForFunction(() => (window.rafiiLiveHarness?.sent ?? []).some((e) => e.type === 'session.close'), null, { timeout: 30000 }).catch(() => null);
+    const closedOnLeave = await tp.evaluate(() => (window.rafiiLiveHarness?.sent ?? []).some((e) => e.type === 'session.close'));
+    check('leaving the app (as signing out does) ends the call and releases the microphone', closedOnLeave);
     await tablet.close();
   } catch (error) {
     check('browser run completed', false, String(error?.stack ?? error).slice(0, 800));

@@ -67,6 +67,10 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   }, [workspaceId]);
   const conversationId = usePanel((s) => (workspaceId ? (s.conversations[workspaceId] ?? null) : null));
   const busy = usePanel((s) => Boolean(workspaceId && s.busy[workspaceId]));
+  // Added images wait for the next turn of this conversation in this workspace; they never follow a switch elsewhere.
+  useEffect(() => {
+    setImages([]);
+  }, [workspaceId, conversationId]);
   const live = usePanel((s) => s.live);
   const page = usePanel((s) => s.page);
   const thread = useMessages(conversationId);
@@ -244,7 +248,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         </Button>
       </div>
 
-      {agent.status?.flags?.RAFII_VOICE_ENABLED && (
+      {agent.status?.flags?.RAFII_VOICE_ENABLED && agent.status?.flags?.RAFII_AGENT_V2_ENABLED && (
         <VoiceMode conversationId={conversationId} pageContext={voicePageContext} onConversation={onVoiceConversation} onAnswer={onVoiceAnswer} timeZone={timeZone} model={choice.model} />
       )}
       <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3' role='log' aria-live='polite' aria-relevant='additions' aria-label={`Conversation with ${siteConfig.name}`}>

@@ -69,8 +69,10 @@ export function VoiceMode({
   useEffect(() => {
     voiceSession.pageChanged(matchRoute(MANIFEST, pathname)?.route.title ?? null);
   }, [pathname]);
+  // The panel's conversation is the call's: a new or different conversation during the call takes the next requests.
   useEffect(() => {
-    if (!active) voiceSession.setConversation(conversationId);
+    if (active) voiceSession.followConversation(conversationId);
+    else voiceSession.setConversation(conversationId);
   }, [conversationId, active]);
 
   const start = useCallback(() => {
@@ -93,7 +95,7 @@ export function VoiceMode({
           <span className='sr-only'>Voice language</span>
           <select
             className='rafii-focus bg-transparent text-xs'
-            defaultValue='auto'
+            defaultValue={locale.current}
             onChange={(event) => (locale.current = event.target.value)}
             aria-label='Voice language'
           >
@@ -129,7 +131,13 @@ export function VoiceMode({
           </span>
         )}
       </div>
-      {state === 'live' && (
+      {state === 'connecting' && (
+        <Button type='button' variant='quiet' size='sm' className='min-h-9 gap-1 self-start' onClick={() => void voiceSession.end()}>
+          <IconPhoneOff className='size-4' aria-hidden />
+          Cancel
+        </Button>
+      )}
+      {(state === 'live' || state === 'reconnecting') && (
         <div className='flex flex-wrap items-center gap-1.5'>
           <Button
             type='button'
@@ -142,15 +150,23 @@ export function VoiceMode({
             {snapshot.micMuted ? <IconMicrophoneOff className='size-4' aria-hidden /> : <IconMicrophone className='size-4' aria-hidden />}
             {snapshot.micMuted ? 'Unmute' : 'Mute'}
           </Button>
-          <Button type='button' variant='quiet' size='sm' className='min-h-9 gap-1' onClick={() => voiceSession.stopSpeaking()} disabled={snapshot.speaker !== 'rafii'}>
-            <IconPlayerStop className='size-4' aria-hidden />
-            Stop talking
-          </Button>
+          {state === 'live' && (
+            // Always available during the call (it only yields Rafii's turn), so focus never lands on a disabled control.
+            <Button type='button' variant='quiet' size='sm' className='min-h-9 gap-1' onClick={() => voiceSession.stopSpeaking()}>
+              <IconPlayerStop className='size-4' aria-hidden />
+              Stop talking
+            </Button>
+          )}
           <Button type='button' variant='quiet' size='sm' className='min-h-9 gap-1' onClick={() => void voiceSession.end()}>
             <IconPhoneOff className='size-4' aria-hidden />
             End voice
           </Button>
         </div>
+      )}
+      {state === 'live' && snapshot.error && (
+        <p className='text-muted-foreground text-xs' data-rafii-voice-error>
+          The voice service reported a problem: {snapshot.error.message}
+        </p>
       )}
       {(state === 'reconnecting' || state === 'error') && (
         <div className='flex flex-wrap items-center gap-1.5' role='alert'>

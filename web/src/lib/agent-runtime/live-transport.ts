@@ -31,6 +31,8 @@ export interface LiveTransport {
   send(event: Record<string, unknown>): void;
   onEvent(handler: (event: LiveEvent) => void): () => void;
   onState(handler: (state: TransportState) => void): () => void;
+  /** True while events can reach the voice service (the data channel is open). */
+  connected(): boolean;
   setMicEnabled(on: boolean): void;
   setOutputMuted(muted: boolean): void;
   outputLevel(): number;
@@ -62,6 +64,7 @@ export class WebRtcLiveTransport implements LiveTransport {
   private queue: string[] = [];
   private events = new Emitter<LiveEvent>();
   private states = new Emitter<TransportState>();
+  private closed = false;
 
   async connect(offer: (sdp: string) => Promise<string>) {
     if (typeof RTCPeerConnection === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -69,12 +72,25 @@ export class WebRtcLiveTransport implements LiveTransport {
     }
     this.states.emit('connecting');
     try {
+      // Created inside the click that started the call, so browsers (WebKit in particular) let it run; the level meter uses it.
+      this.context = new AudioContext();
+      void this.context.resume().catch(() => undefined);
+    } catch {
+      this.context = null; // the level meter is optional
+    }
+    try {
       this.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     } catch (error) {
       const name = (error as { name?: string })?.name;
       if (name === 'NotAllowedError' || name === 'SecurityError') throw new VoiceTransportError('mic_denied', 'Microphone access was not allowed. You can keep typing, or allow the microphone and try again.');
       if (name === 'NotFoundError' || name === 'OverconstrainedError') throw new VoiceTransportError('mic_missing', 'No microphone was found. You can keep typing.');
       throw new VoiceTransportError('mic_busy', 'The microphone is busy in another app. You can keep typing.');
+    }
+    if (this.closed) {
+      // Ended while the browser was asking for the microphone: release it at once.
+      for (const track of this.mic.getTracks()) track.stop();
+      this.mic = null;
+      throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
     }
     const pc = new RTCPeerConnection();
     this.pc = pc;
@@ -88,7 +104,8 @@ export class WebRtcLiveTransport implements LiveTransport {
       const stream = event.streams[0];
       audio.srcObject = stream;
       try {
-        this.context = new AudioContext();
+        this.context ??= new AudioContext();
+        void this.context.resume().catch(() => undefined);
         const source = this.context.createMediaStreamSource(stream);
         this.analyser = this.context.createAnalyser();
         this.analyser.fftSize = 512;
@@ -123,9 +140,15 @@ export class WebRtcLiveTransport implements LiveTransport {
     await pc.setLocalDescription(await pc.createOffer());
     await waitForIce(pc, 10_000);
     const local = pc.localDescription?.sdp;
+    if (this.closed) throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
     if (!local) throw new VoiceTransportError('negotiation_failed', 'The voice connection could not be prepared.');
     const answer = await offer(local);
+    if (this.closed) throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
     await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+  }
+
+  connected() {
+    return !this.closed && this.channel?.readyState === 'open';
   }
 
   send(event: Record<string, unknown>) {
@@ -159,6 +182,7 @@ export class WebRtcLiveTransport implements LiveTransport {
   }
 
   close() {
+    this.closed = true;
     try {
       this.channel?.close();
     } catch {
@@ -199,6 +223,7 @@ interface FakeControls {
   delegate(): string;
   usage(seconds: number): void;
   drop(): void;
+  recover(): void;
   close(reason?: string): void;
   speaking(): boolean;
   micEnabled(): boolean;
@@ -222,6 +247,7 @@ export class FakeLiveTransport implements LiveTransport {
   private muted = false;
   private generation = 0;
   private closed = false;
+  private dropped = false;
 
   async connect(offer: (sdp: string) => Promise<string>) {
     this.states.emit('connecting');
@@ -266,7 +292,14 @@ export class FakeLiveTransport implements LiveTransport {
       rafiiSays,
       delegate,
       usage: (seconds) => this.emit({ type: 'session.usage.updated', usage: { seconds } }),
-      drop: () => this.states.emit('disconnected'),
+      drop: () => {
+        this.dropped = true;
+        this.states.emit('disconnected');
+      },
+      recover: () => {
+        this.dropped = false;
+        this.states.emit('connected');
+      },
       close: (reason = 'remote_hangup') => this.emit({ type: 'session.closed', reason, usage: { seconds: 42 } }),
       speaking: () => this.level > 0,
       micEnabled: () => this.mic,
@@ -298,6 +331,10 @@ export class FakeLiveTransport implements LiveTransport {
 
   onState(handler: (state: TransportState) => void) {
     return this.states.on(handler);
+  }
+
+  connected() {
+    return !this.closed && !this.dropped;
   }
 
   setMicEnabled(on: boolean) {

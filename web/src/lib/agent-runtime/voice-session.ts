@@ -11,6 +11,7 @@
  * `session.closed` and the connection state — never timers.
  */
 import { useSyncExternalStore } from 'react';
+import { ApiError } from '@/lib/api/client';
 import type { SiteAgentPageContext } from '@/lib/site-agent/types';
 import type { AgentApi } from './client';
 import { createTransport, VoiceTransportError, type LiveEvent, type LiveTransport } from './live-transport';
@@ -21,6 +22,8 @@ export type Speaker = 'user' | 'rafii' | null;
 
 export interface TranscriptLine {
   id: string;
+  /** Increases with every new line; a delegation takes the words after the last one it used (the list itself is capped). */
+  seq: number;
   role: 'user' | 'assistant';
   text: string;
   final: boolean;
@@ -77,7 +80,12 @@ const UTTERANCE_GAP_MS = 1200;
 const SETTLE_MS = 650;
 const SETTLE_MAX_MS = 3000;
 const MAX_LINES = 60;
-const MAX_COMMENTARY_CHARS = 1800; // Live accepts at most 500 tokens per append
+// Live accepts at most 500 tokens per append: about 1800 characters of English, but Chinese, Japanese or Korean text is
+// close to a token per character.
+const MAX_COMMENTARY_CHARS = 1800;
+const MAX_COMMENTARY_CJK_CHARS = 450;
+const TRANSCRIPT_BATCH = 50; // the server takes at most 50 lines per request
+const SPEAKING_HOLD_MS = 700; // "Rafii is speaking" holds through short pauses instead of flickering
 
 let snapshot: VoiceSnapshot = IDLE;
 const listeners = new Set<() => void>();
@@ -86,8 +94,11 @@ let host: VoiceHost | null = null;
 let unsubscribe: (() => void)[] = [];
 let levelTimer: ReturnType<typeof setInterval> | null = null;
 let lastInputAt = 0;
-let lastDelegatedLine = 0;
+let lastLoudAt = 0;
+let nextSeq = 0;
+let lastDelegatedSeq = 0;
 let unsent: TranscriptLine[] = [];
+let flushing: Promise<void> | null = null;
 let closedEarly = false;
 
 function set(patch: Partial<VoiceSnapshot>) {
@@ -122,9 +133,15 @@ function appendTranscript(role: 'user' | 'assistant', delta: string, startMs: nu
       lines[lines.length - 1] = { ...last, final: true };
       unsent.push(lines[lines.length - 1]);
     }
-    lines.push({ id: newKey(), role, text: delta.trimStart(), final: false, startMs, endMs });
+    lines.push({ id: newKey(), seq: ++nextSeq, role, text: delta.trimStart(), final: false, startMs, endMs });
   }
   set({ transcript: lines.slice(-MAX_LINES), speaker: role === 'user' ? 'user' : 'rafii' });
+  // Stored as it goes (text only), so a long call or a closed tab keeps what was said and the backend sees it.
+  if (unsent.length >= 20) void flushTranscript();
+}
+
+function commentaryLimit(content: string) {
+  return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff]/.test(content) ? MAX_COMMENTARY_CJK_CHARS : MAX_COMMENTARY_CHARS;
 }
 
 function send(event: Record<string, unknown>) {
@@ -133,18 +150,25 @@ function send(event: Record<string, unknown>) {
 
 /** Quiet context for GPT-Live (not spoken): progress, page changes, typed turns. */
 function think(content: string, delegationId: string | null = null) {
-  send({ type: 'session.thinking.append', delegation_id: delegationId, content: content.slice(0, MAX_COMMENTARY_CHARS) });
+  send({ type: 'session.thinking.append', delegation_id: delegationId, content: content.slice(0, commentaryLimit(content)) });
 }
 
 /** A result GPT-Live says aloud, paraphrased. */
 function say(content: string, delegationId: string | null) {
-  send({ type: 'session.commentary.append', delegation_id: delegationId, content: content.slice(0, MAX_COMMENTARY_CHARS) });
+  send({ type: 'session.commentary.append', delegation_id: delegationId, content: content.slice(0, commentaryLimit(content)) });
 }
 
 function userTextSinceLastDelegation(): string {
-  const lines = snapshot.transcript;
-  const fresh = lines.slice(lastDelegatedLine).filter((line) => line.role === 'user' && line.text.trim());
-  lastDelegatedLine = lines.length;
+  const lines = [...snapshot.transcript];
+  const fresh = lines.filter((line) => line.seq > lastDelegatedSeq && line.role === 'user' && line.text.trim());
+  lastDelegatedSeq = lines.at(-1)?.seq ?? lastDelegatedSeq;
+  const last = lines.at(-1);
+  if (last && !last.final) {
+    // Words said after this point start a new line, so they belong to the next request instead of this one.
+    lines[lines.length - 1] = { ...last, final: true };
+    unsent.push(lines[lines.length - 1]);
+    set({ transcript: lines });
+  }
   return fresh.map((line) => line.text.trim()).join(' ').trim();
 }
 
@@ -154,7 +178,7 @@ function updateDelegation(id: string, patch: Partial<Delegation>) {
 
 async function onDelegation(id: string) {
   const current = host;
-  if (!current || !transport) return;
+  if (!current || !transport || snapshot.delegations.some((d) => d.id === id)) return;
   const pending: Delegation = { id, request: '', status: 'collecting', startedAt: Date.now() };
   set({ delegations: [...snapshot.delegations, pending].slice(-12) });
   // The delegation notice can arrive before the sentence is fully transcribed: wait for the words to settle.
@@ -174,9 +198,11 @@ async function onDelegation(id: string) {
   const images = snapshot.pendingImages;
   set({ pendingImages: [] });
   const progress = startProgress(id);
+  await flushTranscript(); // the backend reads what was just said (recentVoiceTranscript)
   try {
     const response = await current.api.turn(current.workspaceId, {
-      message: request, idempotencyKey: newKey(), conversationId: snapshot.conversationId, modality: 'voice', pageContext: current.pageContext(),
+      // One key per delegation: a repeated event or a retried request is the same turn on the server.
+      message: request, idempotencyKey: `voice:${snapshot.voiceSessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: snapshot.conversationId, modality: 'voice', pageContext: current.pageContext(),
       attachments: images.map((image) => ({ assetId: image.assetId })), timeZone: current.timeZone, locale: snapshot.locale, model: current.model,
       traceId: newTraceId(), delegationId: id, voiceSessionId: snapshot.voiceSessionId ?? undefined
     });
@@ -188,14 +214,17 @@ async function onDelegation(id: string) {
     current.onAnswer(response);
     const result = response.result;
     updateDelegation(id, { status: 'done', runId: response.runId, result, finishedAt: Date.now() });
-    const spoken = result?.speakableSummary?.trim() || 'That’s done. The details are in the panel.';
+    // Only what the server returned is said; with no spoken summary, nothing is claimed beyond "it's in the panel".
+    const spoken = result?.speakableSummary?.trim() || (result?.errors?.length ? 'That didn’t fully work. The details are in the panel.' : 'I’ve put the answer in the panel.');
     say(spoken, id);
   } catch (error) {
     progress.stop();
     const message = error instanceof Error ? error.message : 'The request failed.';
     updateDelegation(id, { status: 'failed', error: message, finishedAt: Date.now() });
-    // Never let a failure sound like success (spec §37): say plainly that it did not happen.
-    say(`That didn't go through: ${message} Nothing was changed by that request.`, id);
+    // Never let a failure sound like success (spec §37), and never claim "nothing changed" unless the server refused the
+    // request before doing anything (a dropped connection may come after the server applied it).
+    const refused = error instanceof ApiError && [400, 401, 402, 403, 404, 409, 413, 415, 422, 429].includes(error.status);
+    say(refused ? `That didn't go through: ${message} Nothing was changed by that request.` : `I couldn't confirm whether that went through (${message}). Check the panel before asking again.`, id);
   }
 }
 
@@ -265,16 +294,33 @@ function onLiveEvent(event: LiveEvent) {
   }
 }
 
-async function flushTranscript() {
+async function flushTranscript(includeOpen = false) {
+  // One flush at a time; batches of at most TRANSCRIPT_BATCH lines (the server's limit).
+  if (flushing) await flushing;
   const current = host;
+  const sessionId = snapshot.voiceSessionId;
   const lines = unsent.splice(0);
   const last = snapshot.transcript.at(-1);
-  if (last && !last.final && !lines.includes(last)) lines.push({ ...last, final: true });
-  if (!current || !snapshot.voiceSessionId || !lines.length) return;
-  try {
-    await current.api.voiceTranscript(current.workspaceId, snapshot.voiceSessionId, lines.map((l) => ({ role: l.role, text: l.text, startMs: Math.round(l.startMs) })));
-  } catch {
+  if (includeOpen && last && !last.final && !lines.some((line) => line.id === last.id)) lines.push({ ...last, final: true });
+  if (!current || !sessionId || !lines.length) {
     unsent.unshift(...lines);
+    return;
+  }
+  flushing = (async () => {
+    for (let index = 0; index < lines.length; index += TRANSCRIPT_BATCH) {
+      const batch = lines.slice(index, index + TRANSCRIPT_BATCH);
+      try {
+        await current.api.voiceTranscript(current.workspaceId, sessionId, batch.map((l) => ({ role: l.role, text: l.text, startMs: Math.round(l.startMs) })));
+      } catch {
+        unsent.unshift(...lines.slice(index));
+        return;
+      }
+    }
+  })();
+  try {
+    await flushing;
+  } finally {
+    flushing = null;
   }
 }
 
@@ -283,7 +329,7 @@ async function finish(reason: string, usageSeconds: number | null) {
   const sessionId = snapshot.voiceSessionId;
   if (levelTimer) clearInterval(levelTimer);
   levelTimer = null;
-  await flushTranscript();
+  await flushTranscript(true);
   for (const off of unsubscribe.splice(0)) off();
   transport?.close();
   transport = null;
@@ -310,8 +356,10 @@ export const voiceSession = {
   async start(next: VoiceHost) {
     if (snapshot.state === 'connecting' || snapshot.state === 'live') return;
     host = next;
-    lastDelegatedLine = 0;
+    lastDelegatedSeq = nextSeq;
     unsent = [];
+    if (levelTimer) clearInterval(levelTimer);
+    levelTimer = null;
     set({ ...IDLE, state: 'connecting', workspaceId: next.workspaceId, conversationId: next.conversationId, locale: next.locale });
     const live = createTransport();
     transport = live;
@@ -320,25 +368,43 @@ export const voiceSession = {
       live.onState((state) => {
         if ((state === 'disconnected' || state === 'failed') && snapshot.state === 'live') {
           set({ state: 'reconnecting', error: { code: 'connection_lost', message: 'The voice connection dropped. Reconnect, or keep typing.' } });
+        } else if (state === 'connected' && snapshot.state === 'reconnecting') {
+          // A brief network drop that WebRTC recovered by itself: the call is live again.
+          set({ state: 'live', error: null });
         }
       })
     ];
     try {
       await live.connect(async (sdp) => {
+        if (transport !== live) throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
         const started = await next.api.voiceStart(next.workspaceId, { sdp, conversationId: next.conversationId, locale: next.locale });
+        if (transport !== live) {
+          // Ended while the session was being created: end that session too, so it is neither left open nor billed to the cap.
+          void next.api.voiceEnd(next.workspaceId, started.voiceSessionId, { reason: 'user_ended', usageSeconds: 0 }).catch(() => undefined);
+          throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
+        }
         set({ voiceSessionId: started.voiceSessionId, conversationId: started.conversationId });
         if (started.conversationId !== next.conversationId) next.onConversation(started.conversationId);
         return started.sdp;
       });
+      if (transport !== live) {
+        // Ended (or signed out) while connecting: this connection is not the call any more.
+        live.close();
+        return;
+      }
       set({ transport: live.kind });
       levelTimer = setInterval(() => {
         const level = transport?.outputLevel() ?? 0;
-        const speaker: Speaker = level > 0.04 ? 'rafii' : Date.now() - lastInputAt < 900 ? 'user' : null;
+        const now = Date.now();
+        if (level > 0.04) lastLoudAt = now;
+        const speaker: Speaker = now - lastLoudAt < SPEAKING_HOLD_MS ? 'rafii' : now - lastInputAt < 900 ? 'user' : null;
         if (Math.abs(level - snapshot.level) > 0.02 || speaker !== snapshot.speaker) set({ level, speaker });
       }, 120);
     } catch (error) {
-      for (const off of unsubscribe.splice(0)) off();
+      const abandoned = transport !== live;
       live.close();
+      if (abandoned) return; // ended on purpose while connecting: not an error (finish already reset the state)
+      for (const off of unsubscribe.splice(0)) off();
       transport = null;
       const code = error instanceof VoiceTransportError ? error.code : ((error as { code?: string })?.code ?? 'voice_failed');
       const message = error instanceof Error ? error.message : 'Voice Mode could not start. You can keep typing.';
@@ -349,7 +415,13 @@ export const voiceSession = {
 
   async end() {
     if (!transport || snapshot.state === 'ending') {
-      set({ state: 'ended' });
+      if (snapshot.state !== 'idle') set({ state: 'ended' });
+      return;
+    }
+    if (!transport.connected()) {
+      // Nothing can hear a close request (still connecting, or the connection dropped): finish now, locally and on the server.
+      closedEarly = false;
+      await finish('close_requested', snapshot.usageSeconds);
       return;
     }
     set({ state: 'ending' });
@@ -364,6 +436,9 @@ export const voiceSession = {
   async reconnect() {
     const previous = host;
     if (!previous) return;
+    if (levelTimer) clearInterval(levelTimer);
+    levelTimer = null;
+    await flushTranscript(true);
     if (transport) {
       for (const off of unsubscribe.splice(0)) off();
       transport.close();
@@ -410,6 +485,16 @@ export const voiceSession = {
 
   setConversation(conversationId: string | null) {
     set({ conversationId });
+  },
+
+  /** The panel moved to another conversation (or started a new one) during the call: new requests go there. */
+  followConversation(conversationId: string | null) {
+    if (conversationId === snapshot.conversationId) return;
+    set({ conversationId, pendingImages: [] });
+    if (snapshot.state === 'live') {
+      think(conversationId ? 'The user switched the panel to another conversation. Treat new requests as part of that conversation.'
+        : 'The user started a new conversation in the panel. Earlier requests are finished; treat what they ask next as a fresh start.');
+    }
   },
 
   reset() {

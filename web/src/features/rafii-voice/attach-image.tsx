@@ -26,16 +26,26 @@ function toBase64(blob: Blob): Promise<string> {
   });
 }
 
+class UnreadableImage extends Error {}
+
 async function fitForUpload(file: File): Promise<Blob | null> {
   if (file.size <= MAX_SEND_BYTES) return file;
-  const bitmap = await createImageBitmap(file);
+  let bitmap: ImageBitmap;
+  try {
+    // Decoded upright (camera photos carry their rotation in EXIF).
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    throw new UnreadableImage('This image could not be read here. Try a PNG or JPEG exported from your photos app.');
+  }
   try {
     for (const edge of EDGES) {
       const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const context = canvas.getContext('2d');
+      if (!context) throw new UnreadableImage('This browser couldn’t scale the image down. Try a smaller one.');
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       // The original format first (a PNG keeps its transparency), then JPEG.
       for (const [type, quality] of [[file.type, 0.9], ['image/jpeg', 0.85]] as const) {
         const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
@@ -53,30 +63,44 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [problem, setProblem] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   useEffect(() => {
-    if (!justAdded) return;
-    const timer = setTimeout(() => setJustAdded(false), 6000);
+    if (!justAdded && !problem) return;
+    const timer = setTimeout(() => {
+      setJustAdded(false);
+      setProblem(false);
+    }, 6000);
     return () => clearTimeout(timer);
-  }, [justAdded]);
+  }, [justAdded, problem]);
   if (!status?.imageAvailable && !status?.manager.available) return null;
 
   async function onFile(file: File | undefined) {
     if (!file || !conversationId) return;
     setMessage(null);
-    if (!/^image\/(png|jpeg)$/.test(file.type)) return setMessage('Use a PNG or JPEG image.');
-    if (file.size > MAX_PICK_BYTES) return setMessage('Images must be at most 30 MB.');
+    setProblem(false);
+    const fail = (text: string) => {
+      setMessage(text);
+      setProblem(true);
+    };
+    if (!/^image\/(png|jpeg)$/.test(file.type)) return fail('Use a PNG or JPEG image.');
+    if (file.size > MAX_PICK_BYTES) return fail('Images must be at most 30 MB.');
     setBusy(true);
     try {
-      const fitted = await fitForUpload(file).catch(() => null);
-      if (!fitted) return setMessage('This image is too large to send, even scaled down. Try a smaller one.');
+      let fitted: Blob | null;
+      try {
+        fitted = await fitForUpload(file);
+      } catch (error) {
+        return fail(error instanceof UnreadableImage ? error.message : 'This image could not be prepared for sending.');
+      }
+      if (!fitted) return fail('This image is too large to send, even scaled down. Try a smaller one.');
       const attached = await api.attach(workspaceId, { conversationId, data: await toBase64(fitted) });
       onAttached({ assetId: attached.assetId, index: attached.index });
       voiceSession.imageAttached(attached.assetId, attached.index);
       setMessage(`Image ${attached.index ?? ''} added. Ask Rafii about it.`);
       setJustAdded(true);
     } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : 'The image could not be added.');
+      fail(error instanceof ApiError ? error.message : 'The image could not be added.');
     } finally {
       setBusy(false);
       if (input.current) input.current.value = '';
@@ -99,6 +123,12 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
           <IconPhoto className='size-4' aria-hidden />
         </Button>
         {justAdded && <span aria-hidden className='pointer-events-none absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500' />}
+        {problem && message && (
+          // Visible to everyone (not only screen readers), above the button so the composer keeps its width.
+          <span aria-hidden className='bg-popover text-popover-foreground pointer-events-none absolute right-0 bottom-full z-10 mb-1.5 w-max max-w-56 rounded-md px-2 py-1 text-[11px] leading-snug shadow-md' data-rafii-attach-error>
+            {message}
+          </span>
+        )}
       </span>
       {/* The result is announced without taking space from the composer. */}
       <span className='sr-only' role='status' aria-live='polite'>
