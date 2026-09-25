@@ -34,7 +34,7 @@ export function StaleNotice({ query, className }: { query: Refetchable; classNam
     <StateMessage
       kind='stale'
       layout='inline'
-      title='This is the last copy that loaded; the latest could not be read.'
+      title='Showing the last copy. Couldn’t refresh.'
       className={className}
       action={
         <Button variant='quiet' size='sm' disabled={query.isFetching} onClick={() => void query.refetch()}>

@@ -6,7 +6,6 @@ import { StatefulButton } from '@/components/motion/button';
 import type { ModelCatalog } from '@/lib/api/types';
 import { useFlash } from '@/hooks/use-flash';
 import { relativeTime } from '@/lib/time';
-import { authState } from './catalog';
 
 export interface CheckAgainProps {
   /** Performs an authenticated fresh scan, including newly installed CLI routes. */
@@ -19,24 +18,20 @@ export interface CheckAgainProps {
 const GLASS_BUTTON =
   'rafii-glass hover:rafii-glass-selected h-12 rounded-[var(--rafii-radius-control)] border-0 bg-transparent px-4 text-sm hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent';
 
-/** Asks the API for the writer list again. The button shows the real request state, nothing simulated. */
+/**
+ * Asks the API for the writer list again. The button shows the real request state, nothing simulated;
+ * the refreshed cards show the result, so success needs no toast.
+ */
 export function CheckAgainButton({ rescan, checking, disabled }: CheckAgainProps) {
   const [outcome, flash] = useFlash<'success' | 'error'>();
 
   async function check() {
-    let catalog: ModelCatalog;
     try {
-      catalog = await rescan();
+      await rescan();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'The writer list could not be checked.');
+      toast.error(error instanceof Error ? error.message : 'Couldn’t check writers.');
       flash('error');
       return;
-    }
-    const agents = catalog.agents ?? [];
-    if (agents.length > 0) {
-      toast.success(agents.map((agent) => `${agent.name}${agent.version ? ` ${agent.version}` : ''}: ${authState(agent).label}`).join(' · '));
-    } else {
-      toast.success('Checked. No CLI is listed for this deployment.');
     }
     flash('success');
   }
@@ -53,7 +48,7 @@ export function CheckAgainButton({ rescan, checking, disabled }: CheckAgainProps
       errorText='Try again'
       icon={<Icons.refresh className='size-4' />}
       disabled={disabled}
-      aria-label='Check again: ask the server for the writer list'
+      aria-label='Check writers again'
       onClick={() => void check()}
     >
       Check again
@@ -61,17 +56,12 @@ export function CheckAgainButton({ rescan, checking, disabled }: CheckAgainProps
   );
 }
 
-/** When this browser last received the list, plus what the server may reuse. */
+/** When this browser last received the list. */
 export function CheckedLine({ receivedAt, now }: { receivedAt: number; now: number }) {
+  if (receivedAt <= 0) return null;
   return (
     <p className='text-muted-foreground text-xs'>
-      {receivedAt > 0 ? (
-        <>
-          List received{' '}
-          <time dateTime={new Date(receivedAt * 1000).toISOString()}>{relativeTime(receivedAt, Math.max(now, receivedAt))}</time>.{' '}
-        </>
-      ) : null}
-      Check again refreshes the installation and sign-in checks.
+      Checked <time dateTime={new Date(receivedAt * 1000).toISOString()}>{relativeTime(receivedAt, Math.max(now, receivedAt))}</time>
     </p>
   );
 }

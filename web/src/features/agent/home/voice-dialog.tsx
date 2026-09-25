@@ -33,18 +33,18 @@ export function VoiceDialog({ open, onOpenChange, value, onApply, available, sam
     if (open) setStaged(value);
   }, [open, value]);
   const options: { id: VoiceMode; title: string; detail: string; disabled?: boolean }[] = [
-    { id: 'neutral', title: 'Neutral', detail: 'Clear and natural. Writes from your idea and sources without your writing samples.' },
+    { id: 'neutral', title: 'Neutral', detail: 'Clear and natural. Doesn’t use your writing samples.' },
     {
       id: 'personalized',
       title: 'Writing like you',
-      detail: available ? `Uses the ${sampleCount} writing sample${sampleCount === 1 ? '' : 's'} you approved for ${modelLabel}.` : `No writing samples are approved for ${modelLabel} yet. Add and allow samples on the Brand page.`,
+      detail: available ? `Uses ${sampleCount} sample${sampleCount === 1 ? '' : 's'} you approved for ${modelLabel}.` : `No samples approved for ${modelLabel} yet.`,
       disabled: !available
     }
   ];
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>
       <RafiiDialogContent size='sm' aria-describedby={undefined}>
-        <RafiiDialogHeader eyebrow='Writing voice' title='Choose the' accent='voice.' intro='Which writing the drafts should sound like. Nothing here changes your languages, model or destinations.' />
+        <RafiiDialogHeader eyebrow='Writing voice' title='Choose the' accent='voice.' />
         <RafiiDialogBody className='flex flex-col gap-3 pt-1'>
           <div role='radiogroup' aria-label='Writing voice' className='flex flex-col gap-2'>
             {options.map((option) => {
@@ -70,15 +70,9 @@ export function VoiceDialog({ open, onOpenChange, value, onApply, available, sam
               );
             })}
           </div>
-          <p className='text-muted-foreground flex items-start gap-2 text-xs leading-relaxed'>
-            <Icons.info aria-hidden className='mt-0.5 size-3.5 shrink-0' />
-            <span>
-              {voiceRevision ? `Voice profile revision ${voiceRevision} is active for approvals.` : 'No voice profile is active yet.'}{' '}
-              <Link href='/app/workspace/brand' className='text-foreground underline underline-offset-2'>
-                Manage voice and samples
-              </Link>
-            </span>
-          </p>
+          <Link href='/app/workspace/brand' className='rafii-focus text-foreground w-fit rounded-md text-xs underline underline-offset-2' title={voiceRevision ? `Voice profile revision ${voiceRevision} is active` : 'No voice profile yet'}>
+            Manage voice and samples
+          </Link>
         </RafiiDialogBody>
         <RafiiDialogFooter>
           <Button variant='action' size='control' className='w-full' onClick={() => { onApply(staged); onOpenChange(false); }}>

@@ -71,7 +71,7 @@ class OAuthProvider:
         return list(self.SCOPES.get(capability, []))
 
     def explain(self, capability):
-        return self.EXPLAIN.get(capability, "PostRiff will act on this account only when you approve an exact action.")
+        return self.EXPLAIN.get(capability, "Rafii will act on this account only when you approve an exact action.")
 
     def revoke(self, token):
         return False
@@ -92,7 +92,7 @@ class LinkedInProvider(OAuthProvider):
     USERINFO = "https://api.linkedin.com/v2/userinfo"
     # Member posting is self-serve ("Share on LinkedIn"); org/analytics/comments need the Community Management API, not held.
     SCOPES = {"identity": ["openid", "profile"], "publish": ["openid", "profile", "w_member_social"], "schedule": ["openid", "profile", "w_member_social"]}
-    EXPLAIN = {"publish": "PostRiff will publish posts to your LinkedIn member profile only when you approve each exact post. Organization pages and analytics are not requested."}
+    EXPLAIN = {"publish": "Rafii will publish posts to your LinkedIn member profile only when you approve each exact post. Organization pages and analytics are not requested."}
 
     history_approved = False
 
@@ -145,7 +145,7 @@ class ThreadsProvider(OAuthProvider):
     REFRESH = "https://graph.threads.net/refresh_access_token"
     ME = f"https://graph.threads.net/{GRAPH_VERSION}/me"
     SCOPES = {"identity": ["threads_basic"], "publish": ["threads_basic", "threads_content_publish"], "schedule": ["threads_basic", "threads_content_publish"], "analytics": ["threads_basic", "threads_manage_insights"], "comments_read": ["threads_basic", "threads_read_replies"], "reply": ["threads_basic", "threads_manage_replies"]}
-    EXPLAIN = {"publish": "PostRiff will create Threads posts on this profile only when you approve each exact post.", "analytics": "PostRiff will read views, likes, replies, reposts and quotes for posts it created.", "comments_read": "PostRiff will read replies to your posts.", "reply": "PostRiff will post replies only after you approve the exact text."}
+    EXPLAIN = {"publish": "Rafii will create Threads posts on this profile only when you approve each exact post.", "analytics": "Rafii will read views, likes, replies, reposts and quotes for posts it created.", "comments_read": "Rafii will read replies to your posts.", "reply": "Rafii will post replies only after you approve the exact text."}
 
     def authorize_url(self, redirect, state, challenge, scopes):
         return self.AUTH + "?" + urlencode({"client_id": self.client_id, "redirect_uri": redirect, "scope": ",".join(scopes), "response_type": "code", "state": state})
@@ -184,7 +184,7 @@ class InstagramProvider(OAuthProvider):
     REFRESH = "https://graph.instagram.com/refresh_access_token"
     ME = f"https://graph.instagram.com/{GRAPH_VERSION}/me"
     SCOPES = {"identity": ["instagram_business_basic"], "publish": ["instagram_business_basic", "instagram_business_content_publish"], "schedule": ["instagram_business_basic", "instagram_business_content_publish"], "analytics": ["instagram_business_basic", "instagram_business_manage_insights"], "comments_read": ["instagram_business_basic", "instagram_business_manage_comments"], "reply": ["instagram_business_basic", "instagram_business_manage_comments"]}
-    EXPLAIN = {"publish": "PostRiff will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "PostRiff will read reach, views, likes, comments, saves and shares for posts it created.", "comments_read": "PostRiff will read comments on your posts.", "reply": "PostRiff will reply only after you approve the exact text."}
+    EXPLAIN = {"publish": "Rafii will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "Rafii will read reach, views, likes, comments, saves and shares for posts it created.", "comments_read": "Rafii will read comments on your posts.", "reply": "Rafii will reply only after you approve the exact text."}
 
     def capability_scopes(self, capability):
         if capability == "posts_read":

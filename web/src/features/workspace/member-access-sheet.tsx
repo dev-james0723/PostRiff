@@ -95,7 +95,8 @@ function AccessForm({ member, actor, onDone, onSaved }: { member: Member; actor:
       await Promise.all([client.invalidateQueries({ queryKey: keys.members(workspaceId) }), client.invalidateQueries({ queryKey: keys.audit(workspaceId) })]);
       setState('success');
       onSaved?.(member.userId);
-      toast.success(`Access changed for ${shortId(member.userId)}`, holdsApprovals ? { description: APPROVAL_HOLD_NOTE } : undefined);
+      // The button reads Saved and the row shows a check; a toast only carries the held-approvals consequence.
+      if (holdsApprovals) toast.success(`Access changed for ${shortId(member.userId)}`, { description: APPROVAL_HOLD_NOTE });
       closeTimer.current = window.setTimeout(onDone, SUCCESS_HOLD_MS);
     } catch (err) {
       setState('error');
@@ -103,7 +104,7 @@ function AccessForm({ member, actor, onDone, onSaved }: { member: Member; actor:
       if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
         void client.invalidateQueries({ queryKey: keys.members(workspaceId) });
       }
-      reportError(err, 'The change could not be confirmed. Check the member list before trying again.');
+      reportError(err, 'Couldn’t confirm the change. Check the member list, then try again.');
     }
   }
 
@@ -129,7 +130,7 @@ function AccessForm({ member, actor, onDone, onSaved }: { member: Member; actor:
 
         <fieldset className='flex flex-col gap-2.5'>
           <legend className='text-foreground mb-2 text-sm font-medium'>Extra grants</legend>
-          {viewer ? <p className='text-muted-foreground text-xs'>Viewers cannot carry grants. Saving as a viewer clears them.</p> : unheld && <p className='text-muted-foreground text-xs'>Greyed-out grants are ones you do not hold, so you cannot hand them out.</p>}
+          {viewer ? <p className='text-muted-foreground text-xs'>Viewers cannot carry grants. Saving as a viewer clears them.</p> : unheld && <p className='text-muted-foreground text-xs'>You can only give grants you hold.</p>}
           {FLAGS.map((flag) => {
             const rule = rules[flag.key];
             const checked = payload[flag.key];
@@ -147,7 +148,7 @@ function AccessForm({ member, actor, onDone, onSaved }: { member: Member; actor:
                 {rule.mustRemove && (
                   <p className='text-foreground flex items-start gap-1.5 pl-6 text-xs' role='alert'>
                     <Icons.warning aria-hidden className='mt-px size-3.5 shrink-0 text-foreground' />
-                    <span>You do not hold this grant, so you cannot keep it on. Turn it off to save, or ask the owner to make this change.</span>
+                    <span>You don’t hold this grant. Turn it off to save, or ask the owner.</span>
                   </p>
                 )}
               </div>
@@ -165,7 +166,7 @@ function AccessForm({ member, actor, onDone, onSaved }: { member: Member; actor:
       </div>
 
       <SheetFooter className='rafii-panel'>
-        <p className='text-muted-foreground text-xs'>Changing access needs a recent sign-in. The change is recorded in the audit log.</p>
+        <p className='text-muted-foreground text-xs'>Needs a recent sign-in.</p>
         <div className='flex flex-wrap justify-end gap-2'>
           <Button variant='glass' size='control' onClick={onDone} disabled={state === 'loading'}>
             {state === 'success' ? 'Close' : 'Cancel'}

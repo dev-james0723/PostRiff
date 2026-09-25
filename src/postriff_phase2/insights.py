@@ -90,7 +90,7 @@ def compare(posts, metric):
         return {"interpretation": "no_data", "sampleSize": 0}
     cohorts = {tuple(sorted(p["cohort"].items())) for p in posts}
     if len(cohorts) != 1:
-        raise AlphaError("These posts are not a comparable cohort (provider, language, content type or definition version differ).", 409)
+        raise AlphaError("These posts can't be compared: their platform, language or post type differ.", 409)
     values = [p["metrics"].get(metric, {}).get("value") for p in posts]
     measured = [v for v in values if v is not None]
     if len(measured) < MIN_COMPARABLE:

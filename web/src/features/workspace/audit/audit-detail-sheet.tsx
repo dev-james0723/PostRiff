@@ -92,7 +92,7 @@ function Body({ event, lookup, now, canOpen }: { event: AuditEvent; lookup: Audi
             Open {link.label} <LearnMoreChevron />
           </Link>
         )}
-        <p className='text-muted-foreground text-xs'>Events cannot be edited. They hold ids, kinds, counts and times — never post text, prompts, access tokens or email addresses.</p>
+        <p className='text-muted-foreground text-xs'>Events can’t be edited and never store post text, prompts, tokens or emails.</p>
       </SheetFooter>
     </>
   );

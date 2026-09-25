@@ -13,6 +13,18 @@ from postriff_alpha.domain import AlphaError
 from .contracts import digest
 
 USD = 1_000_000  # micro-dollars
+
+
+def plan_display_label(label):
+    """The plan name a customer sees. A trailing parenthetical on a `pr_plan_terms` label is an internal
+    note ("Studio Assist (bounded-batch experiment)"): the row keeps it, customer copy never shows it."""
+    text = (label or "").strip()
+    if text.endswith(")") and "(" in text:
+        shown = text[: text.rindex("(")].strip()
+        if shown:
+            return shown
+    return text or "Rafii"
+
 # Candidate ceilings from improvement SPEC §6 — "待價格與品質評估修正的候選上限", flagged 'candidate' in data.
 CANDIDATE_BUDGETS = {
     "global": {"window_kind": "day", "warn": 5 * USD, "stop": 10 * USD},
@@ -77,9 +89,9 @@ class Ledger:
         gl_budget = self._budget(cur, "global", "day")
         for scope, budget in (("workspace", ws_budget), ("global", gl_budget)):
             if estimated_usd_micro > 0 and budget['status'] != 'approved':
-                raise AlphaError(f"The {scope} spending budget has not been approved; no provider call was made.", 402)
+                raise AlphaError("AI spending isn't set up yet, so nothing ran. Nothing was charged.", 402)
             if budget["spent"] + budget["reserved"] + estimated_usd_micro > budget["stop"]:
-                raise AlphaError(f"The {scope} spending stop-line would be exceeded; this request is refused before any provider call.", 402)
+                raise AlphaError("This would go over the AI spending limit, so it didn't run. Nothing was charged.", 402)
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,run_id,job_id,kind,dimension,provider,model,estimated_usd_micro,cost_state,charge_batch,idempotency_key,meta) VALUES(%s,%s,%s,%s,'reserve',%s,%s,%s,%s,'estimated',%s,%s,%s::jsonb) RETURNING id::text", (workspace_id, member_id, run_id, job_id, dimension, provider, model, estimated_usd_micro, charge_batch, idempotency_key, json.dumps({**(meta or {}), "fingerprint": fingerprint})))
         reservation_id = cur.fetchone()[0]
         cur.execute("UPDATE public.pr_usage_ledger SET reservation_id=id WHERE id::text=%s", (reservation_id,))
@@ -130,15 +142,15 @@ class Ledger:
         ledger = [{"kind": r[0], "dimension": r[1], "costState": r[2], "estimatedUsdMicro": r[3], "actualUsdMicro": r[4], "at": float(r[5]), "provider": r[6], "model": r[7], "chargeBatch": r[8], "reservationId": r[9], "runId": r[10], "jobId": r[11]} for r in cur.fetchall()]
         ws_budget = self._budget(cur, f"workspace:{workspace_id}", "month")
         cur.execute("SELECT id,plan,version,label,price_cents,currency,status,entitlements FROM public.pr_plan_terms ORDER BY plan,version")
-        terms = [{"id": r[0], "plan": r[1], "version": r[2], "label": r[3], "priceCents": r[4], "currency": r[5], "status": r[6], "entitlements": r[7], "priceLabel": "proposed" if r[6] != "active" else "active"} for r in cur.fetchall()]
+        terms = [{"id": r[0], "plan": r[1], "version": r[2], "label": plan_display_label(r[3]), "priceCents": r[4], "currency": r[5], "status": r[6], "entitlements": r[7], "priceLabel": "proposed" if r[6] != "active" else "active"} for r in cur.fetchall()]
         return {
             "entitlement": entitlement,
-            "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": sub[7], "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
+            "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
             "budget": {"windowKind": ws_budget["windowKind"], "spentUsdMicro": ws_budget["spent"], "reservedUsdMicro": ws_budget["reserved"], "warnUsdMicro": ws_budget["warn"], "stopUsdMicro": ws_budget["stop"], "status": ws_budget["status"]},
             "overage": "stop",
             "ledger": ledger,
             "planTerms": terms,
-            "note": "Prices marked 'proposed' are decision records, not offers. Nothing is charged by this deployment.",
+            "note": "Prices marked 'proposed' aren't final. Nothing is charged yet.",
         }
 
 
@@ -171,7 +183,7 @@ class DisabledPaymentProvider:
     id = "disabled"
 
     def parse_webhook(self, signature, body):
-        raise AlphaError("Billing is not configured for this deployment.", 503)
+        raise AlphaError("Billing isn't available yet.", 503)
 
 
 

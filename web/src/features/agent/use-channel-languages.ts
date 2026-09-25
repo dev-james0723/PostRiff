@@ -112,7 +112,7 @@ export function useChannelLanguages<P extends string>(initial: P[]) {
             await client.refetchQueries({ queryKey: keys.snapshot(workspaceId) });
             return attempt(false);
           }
-          toast.error(error instanceof ApiError ? error.message : 'Your language choice could not be saved; it still applies to this draft.');
+          toast.error(error instanceof ApiError ? error.message : 'Couldn’t save your language choice. It still applies to this draft.');
         }
       };
       saving.current = saving.current.then(() => attempt(true));

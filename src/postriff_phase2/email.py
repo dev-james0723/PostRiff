@@ -90,11 +90,11 @@ class Mailer:
     """Builds text+HTML for each notice kind and hands it to the transport. Returns {'sent', 'kind'}; never raises."""
     KINDS = ("invitation", "welcome", "trial_ending", "trial_ended", "payment_failed", "subscription_activated", "new_device")
 
-    def __init__(self, transport, from_address, public_base_url, brand="PostRiff"):
+    def __init__(self, transport, from_address, public_base_url, brand="Rafii"):
         if not valid_address(from_address):
             raise AlphaError("Email sender address is not configured.", 503)
         self.transport, self.from_address = transport, from_address.strip()
-        self.public_base_url, self.brand = str(public_base_url or "").rstrip("/"), _clean(brand, 40) or "PostRiff"
+        self.public_base_url, self.brand = str(public_base_url or "").rstrip("/"), _clean(brand, 40) or "Rafii"
 
     # ---- templates -------------------------------------------------------------------------------
     def _template(self, kind, ctx):

@@ -55,7 +55,7 @@ export default function GlobalError({
               </svg>
             </span>
             <h1>Something went wrong</h1>
-            <p>Rafii hit an unexpected error. Check your activity before retrying any publication.</p>
+            <p>If you were publishing, check your posts before trying again.</p>
             <div className='actions'>
               <button type='button' className='action' onClick={() => reset()}>
                 Try again

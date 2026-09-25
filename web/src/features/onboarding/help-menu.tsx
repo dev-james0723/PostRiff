@@ -62,7 +62,7 @@ export function HelpMenu() {
             className='min-h-10 rounded-[0.625rem]'
             onClick={() => {
               tourStore.reset();
-              toast('Tips reset', { description: 'The welcome and every page nudge will show again.' });
+              toast('Tips will show again');
             }}
           >
             <Icons.refresh className='mr-2 size-4' />

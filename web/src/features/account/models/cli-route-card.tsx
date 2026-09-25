@@ -58,46 +58,38 @@ export function CliRouteCard({ agent, options, current, onChoose, checking, now 
             size='sm'
             pulse={checking}
             contentKey={`${agent.installed}-${agent.authStatus}`}
-            title={`Reported by the API: installed ${agent.installed ? 'yes' : 'no'}, authStatus “${agent.authStatus}”`}
+            title={`Installed: ${agent.installed ? 'yes' : 'no'} · sign-in: ${agent.authStatus}`}
           >
             {auth.label}
           </AnimatedBadge>
         </h3>
-        {agent.vendor && <p className='text-muted-foreground text-sm'>{agent.vendor}</p>}
+        {(agent.vendor || checkedAt !== null) && (
+          <p className='text-muted-foreground text-sm'>
+            {agent.vendor}
+            {agent.vendor && checkedAt !== null && <span aria-hidden> · </span>}
+            {checkedAt !== null && (
+              <span className='hidden md:inline'>
+                Checked{' '}
+                <time dateTime={new Date(checkedAt * 1000).toISOString()} title={formatDateTime(checkedAt)}>
+                  {relativeTime(checkedAt, Math.max(now, checkedAt))}
+                </time>
+              </span>
+            )}
+          </p>
+        )}
       </div>
 
       {agent.guidance && <StateMessage kind='partial' layout='inline' title={agent.guidance} />}
       {agent.installed && agent.authStatus === 'expired' && (
-        <p className='text-muted-foreground text-xs leading-relaxed'>
-          This mark comes from a run the CLI refused. It stays until the PostRiff server restarts, even after you sign in again; Check again cannot clear it yet.
-        </p>
+        <p className='text-muted-foreground text-xs leading-relaxed'>Sign in again in Terminal. This mark clears when the app restarts.</p>
       )}
-
-      <dl className='flex flex-col gap-2'>
-        <Fact term='Version'>{agent.version ? <span className='font-mono'>{agent.version}</span> : 'Not reported'}</Fact>
-        {agent.installed && <Fact term='Signed in with'>{agent.authMethod ? <span className='font-mono'>{agent.authMethod}</span> : 'Not reported'}</Fact>}
-        <Fact term='Runs on'>
-          {hostLabel(agent.host)}
-          {agent.host === 'api-process' && <span className='text-muted-foreground'> · everyone who writes through this PostRiff server shares its sign-in and subscription</span>}
-        </Fact>
-        <Fact term='Who pays'>
-          {costClasses.length === 0 ? 'No models listed' : costClasses.map((costClass) => costCopy(costClass).line).join(' ')}
-        </Fact>
-        {checkedAt !== null && (
-          <Fact term='Checked'>
-            <time dateTime={new Date(checkedAt * 1000).toISOString()} title={formatDateTime(checkedAt)}>
-              {relativeTime(checkedAt, Math.max(now, checkedAt))}
-            </time>
-          </Fact>
-        )}
-      </dl>
 
       <div className='flex flex-col gap-2'>
         <span className='text-foreground text-sm font-medium' id={`models-${agent.id}-label`}>
-          Models{agent.modelsSource === 'aliases' ? ' · the CLI’s own names' : agent.modelsSource === 'configured' ? ' · as configured for this deployment' : ''}
+          Models
         </span>
         {mine.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>{agent.installed ? 'The API listed no models for this CLI.' : 'Models appear once the CLI is installed.'}</p>
+          <p className='text-muted-foreground text-sm'>{agent.installed ? 'No models listed.' : 'Models appear once the CLI is installed.'}</p>
         ) : (
           <RadioGroup
             value={selectedHere ? current : ''}
@@ -119,48 +111,57 @@ export function CliRouteCard({ agent, options, current, onChoose, checking, now 
           </RadioGroup>
         )}
         {details.length === 1 && details[0] !== agent.guidance && <p className='text-muted-foreground text-xs'>{details[0]}</p>}
+        <p className='text-muted-foreground text-xs'>{costClasses.length === 0 ? 'No models listed' : costClasses.map((costClass) => costCopy(costClass).line).join(' ')}</p>
       </div>
 
       {reasoning && <ReasoningChips levels={reasoning} />}
 
-      {execution && (
-        <Collapsible>
-          <CollapsibleTrigger className='group/how rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1 rounded-md text-sm font-medium'>
-            <Icons.chevronRight className='size-4 transition-transform duration-(--duration-quick) group-data-[panel-open]/how:rotate-90 motion-reduce:transition-none' />
-            How it runs
-          </CollapsibleTrigger>
-          <CollapsibleContent
-            className={cn(
-              'pt-3 transition-[opacity,transform] duration-(--duration-fast) ease-(--ease-smooth-out) motion-reduce:transition-none',
-              'data-[starting-style]:-translate-y-1 data-[starting-style]:opacity-0',
-              'data-[ending-style]:-translate-y-1 data-[ending-style]:opacity-0 data-[ending-style]:duration-(--duration-quick)'
+      <Collapsible>
+        <CollapsibleTrigger className='group/how rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1 rounded-md text-sm font-medium'>
+          <Icons.chevronRight className='size-4 transition-transform duration-(--duration-quick) group-data-[panel-open]/how:rotate-90 motion-reduce:transition-none' />
+          Details
+        </CollapsibleTrigger>
+        <CollapsibleContent
+          className={cn(
+            'pt-3 transition-[opacity,transform] duration-(--duration-fast) ease-(--ease-smooth-out) motion-reduce:transition-none',
+            'data-[starting-style]:-translate-y-1 data-[starting-style]:opacity-0',
+            'data-[ending-style]:-translate-y-1 data-[ending-style]:opacity-0 data-[ending-style]:duration-(--duration-quick)'
+          )}
+        >
+          <dl className='flex flex-col gap-2'>
+            <Fact term='Version'>{agent.version ? <span className='font-mono'>{agent.version}</span> : 'Not reported'}</Fact>
+            {agent.installed && <Fact term='Signed in with'>{agent.authMethod ? <span className='font-mono'>{agent.authMethod}</span> : 'Not reported'}</Fact>}
+            <Fact term='Runs on'>
+              {hostLabel(agent.host)}
+              {agent.host === 'api-process' && <span className='text-muted-foreground'> · everyone writing here shares its sign-in and subscription</span>}
+            </Fact>
+            {execution && (
+              <>
+                <Fact term='Spending cap per run'>
+                  {cap !== null ? (
+                    <>
+                      <span className='font-mono'>${cap.toFixed(2)}</span>
+                      <span className='text-muted-foreground'> · {agent.name} stops a run that reaches it</span>
+                    </>
+                  ) : (
+                    <span>No cap reported for this CLI · the time limit still applies</span>
+                  )}
+                </Fact>
+                <Fact term='Time limit'>
+                  <span className='font-mono'>{execution.timeoutSeconds}s</span>
+                </Fact>
+                <Fact term='Tools'>{execution.tools}</Fact>
+                <Fact term='MCP servers'>{execution.mcp}</Fact>
+                <Fact term='Settings read'>{execution.settingSources}</Fact>
+                <Fact term='Saved sessions'>{execution.sessionPersistence ? 'On' : 'Off'}</Fact>
+                <Fact term='Environment passed'>
+                  <span className='font-mono text-xs'>{execution.environment.join(' ')}</span>
+                </Fact>
+              </>
             )}
-          >
-            <dl className='flex flex-col gap-2'>
-              <Fact term='Spending cap per run'>
-                {cap !== null ? (
-                  <>
-                    <span className='font-mono'>${cap.toFixed(2)}</span>
-                    <span className='text-muted-foreground'> · {agent.name} stops a run that reaches it</span>
-                  </>
-                ) : (
-                  <span>No cap reported for this CLI · the time limit still applies</span>
-                )}
-              </Fact>
-              <Fact term='Time limit'>
-                <span className='font-mono'>{execution.timeoutSeconds}s</span>
-              </Fact>
-              <Fact term='Tools'>{execution.tools}</Fact>
-              <Fact term='MCP servers'>{execution.mcp}</Fact>
-              <Fact term='Settings read'>{execution.settingSources}</Fact>
-              <Fact term='Saved sessions'>{execution.sessionPersistence ? 'On' : 'Off'}</Fact>
-              <Fact term='Environment passed'>
-                <span className='font-mono text-xs'>{execution.environment.join(' ')}</span>
-              </Fact>
-            </dl>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+          </dl>
+        </CollapsibleContent>
+      </Collapsible>
     </Surface>
   );
 }

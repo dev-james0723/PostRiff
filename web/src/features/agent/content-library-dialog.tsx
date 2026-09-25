@@ -51,7 +51,7 @@ export interface ContentLibraryDialogProps {
 type View = 'gallery' | 'list' | 'pairings';
 
 const ARTWORK_KEY = 'rafii.library.artwork';
-const NOTE = 'Changes draft choices only. Channels stay unchanged. Suggested app fit does not guarantee publishing support.';
+const NOTE = 'Changes this draft only. Your channels stay the same.';
 const VIEWS: { value: View; label: ReactNode; ariaLabel: string }[] = [
   { value: 'gallery', ariaLabel: 'Gallery', label: <ViewLabel icon='dashboard'>Gallery</ViewLabel> },
   { value: 'list', ariaLabel: 'List', label: <ViewLabel icon='listDetails'>List</ViewLabel> },
@@ -257,14 +257,12 @@ export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platf
                 <div className='flex items-center justify-between gap-3'>
                   <div className='flex flex-col gap-0.5'>
                     <span className='text-foreground text-sm font-medium'>Artwork motion</span>
-                    <span className='text-muted-foreground text-xs'>Subtle animation in thumbnails</span>
                   </div>
                   <Button variant='glass' size='control' aria-pressed={paused} onClick={toggleArtwork} className='gap-2 text-xs'>
                     {paused ? <Icons.play className='size-3.5' /> : <Icons.pause className='size-3.5' />}
                     {paused ? 'Play artwork' : 'Pause artwork'}
                   </Button>
                 </div>
-                <p className='text-muted-foreground text-xs leading-relaxed'>App fit is a suggestion, not publishing support. Your selected channels stay unchanged.</p>
                 <Button
                   variant='quiet'
                   size='control'
@@ -302,7 +300,7 @@ export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platf
                 </span>
                 <div className='flex flex-col gap-1.5'>
                   <strong className='text-sm font-medium'>From idea to format to audience.</strong>
-                  <span className='text-muted-foreground text-xs leading-relaxed'>Curated fit suggestions, not a popularity ranking. Research measures format use or engagement, not which topic wins.</span>
+                  <span className='text-muted-foreground text-xs leading-relaxed'>Curated suggestions, not a ranking.</span>
                   <button type='button' onClick={() => setEvidence({ pairingId: null })} className='rafii-focus text-foreground mt-1 min-h-8 self-start rounded-md text-xs underline underline-offset-4'>
                     Read the evidence
                   </button>
@@ -324,7 +322,6 @@ export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platf
               <StateMessage
                 kind='empty'
                 title='No matches in this corner.'
-                description='Try another category, app or search term. Your staged choices are unchanged.'
                 action={
                   <Button variant='glass' size='control' onClick={() => clearFilters(true)}>
                     Clear filters
@@ -370,7 +367,7 @@ export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platf
                 directly comparable across platforms.
               </p>
               {evidenceRecords.length === 0 ? (
-                <StateMessage kind='empty' layout='inline' title='No quantitative signal attached.' description='This is a composition suggestion, not a measured popular pairing.' />
+                <StateMessage kind='empty' layout='inline' title='No measured data for this pairing.' />
               ) : (
                 evidenceRecords.map((record) => (
                   <article key={record.id} className='rafii-quiet rounded-[var(--rafii-radius-card)] p-5'>
@@ -387,7 +384,7 @@ export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platf
                 ))
               )}
               <p className='text-muted-foreground text-xs leading-relaxed'>
-                Research snapshot: {snapshotDate(TAXONOMY_SOURCE.reviewedAt)}. No live analytics. Xiaohongshu pairings are design suggestions only; no comparable usage or engagement dataset was verified. This library does not check API support, account eligibility or platform surfaces.
+                Research snapshot: {snapshotDate(TAXONOMY_SOURCE.reviewedAt)}. No live analytics. Xiaohongshu pairings are unverified suggestions. Doesn’t check platform support or account eligibility.
               </p>
             </RafiiDialogBody>
           </RafiiDialogContent>
@@ -553,7 +550,7 @@ function PairingCard({ item, selected, paused, onSelect, onKey, platform, onEvid
         <ItemInfo item={item} className='absolute top-1/2 right-0 -translate-y-1/2' />
       </div>
       <div className='flex flex-col gap-2.5'>
-        {routes.length === 0 && <p className='text-muted-foreground text-xs leading-relaxed'>No pairing is suggested for this app fit. Clear the app-fit filter to see every route.</p>}
+        {routes.length === 0 && <p className='text-muted-foreground text-xs leading-relaxed'>No pairing for this app. Clear the app filter to see all.</p>}
         {routes.map((pairing) => {
           const other = taxonomyItem(item.dimension === 'editorial' ? pairing.native : pairing.editorial);
           const editorial = taxonomyItem(pairing.editorial);

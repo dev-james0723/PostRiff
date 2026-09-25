@@ -46,7 +46,7 @@ function previewText(row: PostRowData) {
 }
 
 function subtitle(post: AnalyticsPostRow) {
-  const parts = [post.language || 'Language not recorded', post.contentTypeId, post.publishedState.replace(/_/g, ' ')];
+  const parts = [post.language, post.contentTypeId, post.publishedState.replace(/_/g, ' ')];
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -109,7 +109,7 @@ function PostCellContent({ row, onOpen }: { row: PostRowData; onOpen: () => void
     <div className='flex min-w-56 flex-col gap-0.5'>
       <span className='flex min-w-0 items-center gap-2'>
         <ChannelIcon platform={post.platform || post.provider} name={post.platform || post.provider} />
-        <span className='text-muted-foreground truncate text-xs'>{connection?.account ?? 'Account not matched'}</span>
+        <span className='text-muted-foreground truncate text-xs'>{connection?.account ?? 'Unknown account'}</span>
       </span>
       <button
         type='button'
@@ -200,7 +200,7 @@ function ProviderTable({ group, onOpen, metricSort, tagRow, tagUnavailable }: { 
           size: 96,
           header: ({ column }) => (
             <SortButton column={column} label={sample.nativeName}>
-              <Tooltip content={`${group.label} “${sample.nativeName}” · unit ${sample.unit} · definitions ${versions}. A native name, not comparable across providers.`} side='bottom'>
+              <Tooltip content={`${group.label}’s own “${sample.nativeName}” (${sample.unit}, definitions ${versions}). Not comparable across platforms.`} side='bottom'>
                 <span className='cursor-help capitalize underline decoration-dotted underline-offset-4'>{sample.nativeName}</span>
               </Tooltip>
             </SortButton>
@@ -217,7 +217,7 @@ function ProviderTable({ group, onOpen, metricSort, tagRow, tagUnavailable }: { 
         id: 'rate',
         size: 110,
         header: () => (
-          <Tooltip content='Likes over views (or reach), both from the same reading. Unavailable when either side is.' side='bottom'>
+          <Tooltip content='Likes ÷ views (or reach), from the same read.' side='bottom'>
             <span className='cursor-help whitespace-nowrap underline decoration-dotted underline-offset-4'>Likes / views</span>
           </Tooltip>
         ),

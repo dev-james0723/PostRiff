@@ -1,12 +1,13 @@
 import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import type { CapabilityLevel, ChannelView, MyChannel } from '@/lib/api/types';
-import { formatDate, relativeTime } from '@/lib/time';
+import { STATUS } from '@/lib/status-labels';
+import { relativeTime } from '@/lib/time';
 
 /**
  * One reading of a channel's state for every surface that shows it (Channels,
  * Overview, the profile page). The API decides `connectionState`
  * (`postriff_phase2/channels.py: connection_state`); this module only turns
- * it into a label, an attention flag and a plain sentence, and never blends
+ * it into a label, an attention flag and a short sentence, and never blends
  * per-capability levels into a single "Connected".
  */
 
@@ -55,18 +56,19 @@ export interface ChannelBadge {
   status: AnimatedBadgeStatus;
 }
 
-/** Badge for one channel: the connection state in plain words, expiry called out a week ahead. */
+/** Badge for one channel: the connection state in the shared status words (`STATUS`), expiry called out a week ahead. */
 export function channelBadge(channel: ChannelStateInput, now = nowSeconds()): ChannelBadge {
   const state = channel.connectionState;
   if (VERIFIED_STATES.has(state)) {
-    if (expiringSoon(channel, now)) return { label: 'Expiring soon', status: 'warning' };
-    return { label: state === 'publish_verified' ? 'Connected' : 'Connected · read only', status: 'success' };
+    if (expiringSoon(channel, now)) return { label: STATUS.expiringSoon, status: 'warning' };
+    return { label: state === 'publish_verified' ? STATUS.connected : STATUS.readOnly, status: 'success' };
   }
-  if (disconnectedByCustomer(channel)) return { label: 'Disconnected', status: 'neutral' };
-  if (state === 'token_expired' || state === 'reauthorization_required') return { label: 'Needs reconnect', status: 'warning' };
-  if (state === 'scope_missing') return { label: 'Missing permissions', status: 'warning' };
-  if (state === 'identity_known') return { label: 'Identity only', status: 'neutral' };
-  return { label: 'Disconnected', status: 'neutral' };
+  if (disconnectedByCustomer(channel)) return { label: STATUS.disconnected, status: 'neutral' };
+  if (state === 'token_expired' || state === 'reauthorization_required') return { label: STATUS.reconnect, status: 'warning' };
+  if (state === 'scope_missing') return { label: STATUS.missingPermissions, status: 'warning' };
+  // Identity verified, nothing else granted (the "Account only" connect choice): not an error, not "Connected".
+  if (state === 'identity_known') return { label: STATUS.accountOnly, status: 'neutral' };
+  return { label: STATUS.disconnected, status: 'neutral' };
 }
 
 /** Whether the card belongs at the top with a Reconnect button. Held jobs count too when the caller knows them. */
@@ -83,33 +85,26 @@ export function needsReconnect(channel: Pick<MyChannel, 'connectionState' | 'can
 
 function heldSentence(heldJobs: number) {
   if (heldJobs <= 0) return '';
-  return heldJobs === 1 ? ' 1 scheduled post is held.' : ` ${heldJobs} scheduled posts are held.`;
+  return heldJobs === 1 ? ' 1 post on hold.' : ` ${heldJobs} posts on hold.`;
 }
 
 /**
- * One plain sentence for the attention banner, or null when nothing needs doing.
- * Dates come from the API; nothing here is invented when a date is missing.
+ * One short line for the attention band, or null when nothing needs doing. The held-post
+ * count stays in the line: it is what the person loses by waiting. Exact dates live on the card.
  */
 export function attentionSentence(channel: ChannelStateInput, now = nowSeconds(), heldJobs = 0): string | null {
   const state = channel.connectionState;
   const held = heldSentence(heldJobs);
   if (disconnectedByCustomer(channel)) {
-    return heldJobs > 0 ? `Disconnected. Reconnect to release the posts on hold.${held}` : null;
+    return heldJobs > 0 ? `Disconnected.${held}` : null;
   }
-  if (state === 'token_expired') {
-    const when = channel.expiresAt ? ` on ${formatDate(channel.expiresAt)}` : '';
-    return `Access expired${when}. Scheduled posts for this account are waiting.${held}`;
-  }
-  if (state === 'reauthorization_required') {
-    return `Access was revoked or withdrawn. Sign in again to resume scheduled posts.${held}`;
-  }
-  if (state === 'scope_missing') {
-    return `The account is connected but no permissions were granted. Reconnect and approve them.${held}`;
-  }
+  if (state === 'token_expired') return `Access expired.${held}`;
+  if (state === 'reauthorization_required') return `Access revoked.${held}`;
+  if (state === 'scope_missing') return `No permissions granted.${held}`;
   if (expiringSoon(channel, now) && channel.expiresAt) {
-    return `Access ends ${relativeTime(channel.expiresAt, now)} (${formatDate(channel.expiresAt)}). Reconnect before then to keep scheduled posts moving.${held}`;
+    return `Access ends ${relativeTime(channel.expiresAt, now)}.${held}`;
   }
-  if (heldJobs > 0) return `Posts for this account are on hold.${held}`;
+  if (heldJobs > 0) return `${heldJobs === 1 ? '1 post' : `${heldJobs} posts`} on hold.`;
   return null;
 }
 

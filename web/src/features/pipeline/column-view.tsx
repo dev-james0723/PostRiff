@@ -30,9 +30,10 @@ const EXIT_DURATION = 0.15;
 /** The column's quiet reading panel (DNA §5.2): the cards inside are its opaque rows. */
 export const COLUMN_CLASS = 'rafii-quiet flex flex-col rounded-[var(--rafii-radius-card)]';
 
-export function ColumnHeader({ column, count }: { column: Pick<BoardColumn, 'key' | 'title' | 'hint'>; count: number | null }) {
+/** `hidden` keeps the heading for screen readers where a tab above already names the column and its count. */
+export function ColumnHeader({ column, count, hidden = false }: { column: Pick<BoardColumn, 'key' | 'title' | 'hint'>; count: number | null; hidden?: boolean }) {
   return (
-    <header className='px-4 pt-3 pb-1.5'>
+    <header className={hidden ? 'sr-only' : 'px-4 pt-3 pb-1.5'}>
       <h3 id={`pipeline-col-${column.key}-title`} className='flex items-center gap-1.5 text-sm font-medium'>
         {column.title}
         {count !== null && <DigitSwap value={count} className='text-muted-foreground font-normal tabular-nums' />}
@@ -91,10 +92,10 @@ export function ColumnView({ column, platform, now, permissions, actions, cancel
       aria-labelledby={`pipeline-col-${column.key}-title`}
       className={cn(COLUMN_CLASS, single ? 'w-full' : 'w-72 shrink-0 snap-start min-[1440px]:w-auto min-[1440px]:min-w-0')}
     >
-      <ColumnHeader column={column} count={column.items.length} />
+      <ColumnHeader column={column} count={column.items.length} hidden={single} />
       <motion.div
         layoutScroll
-        className={cn('relative flex flex-col gap-2 px-2 pb-2', !single && 'max-h-[calc(100dvh-14rem)] min-h-24 overflow-y-auto')}
+        className={cn('relative flex flex-col gap-2 px-2 pb-2', single ? 'pt-2' : 'max-h-[calc(100dvh-14rem)] min-h-24 overflow-y-auto')}
       >
         {renderCards(visible)}
         {column.items.length === 0 && <p className='text-muted-foreground px-2 py-3 text-center text-[13px] leading-relaxed text-balance'>{emptySentence}</p>}
@@ -118,10 +119,10 @@ export function ColumnView({ column, platform, now, permissions, actions, cancel
               <div className='flex flex-col gap-2 px-1.5 pb-1.5'>
                 <p className='text-muted-foreground px-1.5 text-xs leading-relaxed'>
                   {column.key === 'drafts'
-                    ? 'Kept, not scheduled. Edit a draft to bring it back.'
+                    ? 'Edit a draft to bring it back.'
                     : column.key === 'review'
-                      ? 'Past the approval deadline, so they can no longer be approved. Their drafts are back in Drafts to schedule again.'
-                      : 'Ended before or during publishing. The receipts stay here; nothing is retried.'}
+                      ? 'Not approved in time. Their drafts are back in Drafts.'
+                      : 'Ended; nothing is retried.'}
                 </p>
                 {renderCards(footer.items)}
               </div>

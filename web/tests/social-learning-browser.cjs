@@ -99,7 +99,7 @@ const account = (id, platform, accountId, scopes) => ({ id, platform, account: '
     assert.ok(snapshot.state.sources.every(source => !source.selected && source.useGrants.length === 0));
     const beforeLinkedIn = calls.filter(call => call.path.endsWith('/posts')).length;
     await page.getByLabel('Account to read posts from').selectOption('connection-li');
-    await page.getByText(/LinkedIn is connected, but LinkedIn has not granted this app permission/).waitFor();
+    await page.getByText(/LinkedIn hasn't granted permission to import past posts/).waitFor();
     assert.equal(await page.getByRole('button', { name: /Load my posts/ }).isDisabled(), true);
     assert.equal(calls.filter(call => call.path.endsWith('/posts')).length, beforeLinkedIn);
     await page.getByLabel('Writing sample import format').selectOption('json');

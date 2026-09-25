@@ -61,21 +61,15 @@ const infoContent = {
   sections: [
     {
       title: 'What shows here',
-      description:
-        'Reviews and publishing jobs, each at its approved time in your time zone. A review that expired or went out of date, and a job the worker held, stay visible with their own state, so nothing disappears quietly.'
+      description: 'Posts waiting for review and scheduled posts, at their times in your time zone. Expired and held posts stay visible.'
     },
     {
-      title: 'States and filters',
-      description:
-        'Each entry names its state beside its title. The chips above the calendar count the posts in the period on screen; choose one to show only those, and the address keeps the filter for a bookmark.'
-    },
-    {
-      title: 'Month, week and day',
-      description: 'Month shows the shape of the month; week and day place each post on the hour it goes out. Choose a date or "+N more" to open that day.'
+      title: 'Filters',
+      description: 'The chips count posts in the period on screen. Choose one to show only those.'
     },
     {
       title: 'Moving a post',
-      description: 'Timing is part of the exact approval. To change it, prepare the draft again with the new time from Queue → Drafts.'
+      description: 'The time is part of the approval. To change it, schedule the draft again from Queue → Drafts.'
     }
   ]
 };
@@ -105,13 +99,9 @@ function StatusNotes({ post, timeZone, context }: { post: Post; timeZone: string
 
   if (post.kind === 'expired') {
     const closed = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(new Date(post.manifest.expiresAt * 1000));
-    notes.push(`Not approved in time: its approval window closed on ${closed}, so it will not go out. Schedule the draft again for a new time.`);
+    notes.push(<span title={`Approval window closed ${closed}`}>Not approved in time. Schedule the draft again.</span>);
   }
-  if (post.kind === 'stale') {
-    notes.push(
-      'Something it was checked against changed after it was prepared (the draft, the account, the voice profile or a source), so it can no longer be approved. Schedule the draft again.'
-    );
-  }
+  if (post.kind === 'stale') notes.push('Something changed after it was prepared. Schedule the draft again.');
   if ((['held', 'failed', 'in-flight', 'processing', 'accepted', 'uncertain', 'unknown'].includes(post.kind)) && lastEvent?.message) notes.push(lastEvent.message);
   // `nextAction` is written after a worker attempt; a job held later by an approval check keeps the older
   // wording, so held jobs rely on the message written with the hold itself.
@@ -122,19 +112,13 @@ function StatusNotes({ post, timeZone, context }: { post: Post; timeZone: string
       </>
     );
   }
-  if (post.kind === 'assisted') notes.push('Finish the handoff in the destination app. Opening the app does not confirm publication.');
-  if (post.kind === 'manual') notes.push('This is your report of completion; it has not been verified by the provider API.');
-  if (post.manifest.execution === 'synthetic') notes.push('Local fixture only; no real publication was performed.');
-  if (post.kind === 'uncertain') notes.push('Check the platform and the queue receipt. Do not publish again while the result is unconfirmed.');
-  if (post.kind === 'unknown') notes.push('Automatic progress cannot be confirmed. Open the queue receipt for the latest events.');
-  if (post.kind === 'held') notes.push('Resolve the reason above, then prepare a new exact review from Queue → Drafts.');
-  if (post.kind === 'verified' && post.job?.providerReference) {
-    notes.push(
-      <>
-        Receipt: <span className='font-mono break-all'>{post.job.providerReference}</span>
-      </>
-    );
-  }
+  if (post.kind === 'assisted') notes.push('Finish posting in the app. Opening it doesn’t confirm the post.');
+  if (post.kind === 'manual') notes.push('Marked done by you; not verified.');
+  if (post.manifest.execution === 'synthetic') notes.push('Test post; nothing was published.');
+  if (post.kind === 'uncertain') notes.push('Check the platform before posting again.');
+  if (post.kind === 'unknown') notes.push('Open the queue for the latest events.');
+  if (post.kind === 'held') notes.push('Fix the reason above, then schedule the draft again.');
+  if (post.kind === 'failed') notes.unshift(<span className='text-destructive font-medium'>Couldn’t publish this post</span>);
   if (post.cancelRequested && !FINAL.has(post.kind)) notes.push('Cancel requested');
 
   if (notes.length === 0) return null;
@@ -157,7 +141,9 @@ function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<
   // The approving zone's clock, only when it reads differently from this one (another name for the same offset adds nothing).
   const approvedTime = post.approvedZone && post.approvedZone !== timeZone ? zoneTime(post.at, post.approvedZone) : null;
   const approvedElsewhere = approvedTime && approvedTime !== zoneTime(post.at, timeZone) ? approvedTime : null;
-  const next = NEEDS_NEW_REVIEW.has(post.kind) ? { href: '/app/queue?view=drafts', label: 'Open drafts' } : { href: post.job ? `/app/queue?job=${encodeURIComponent(post.job.id)}` : '/app/queue', label: 'Open the queue' };
+  const next = NEEDS_NEW_REVIEW.has(post.kind)
+    ? { href: '/app/queue?view=drafts', label: post.kind === 'failed' ? 'Try again' : 'Open drafts' }
+    : { href: post.job ? `/app/queue?job=${encodeURIComponent(post.job.id)}` : '/app/queue', label: 'Open Queue' };
 
   const details = (
     <div className={cn('flex min-w-0 flex-col gap-2', context === 'popover' && 'w-72 max-w-full shrink-0')}>
@@ -170,9 +156,8 @@ function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<
           {meta.label}
         </StatusChip>
       </div>
-      <p className='text-muted-foreground text-xs'>
+      <p className='text-muted-foreground text-xs' title={approvedElsewhere ? `${approvedElsewhere} ${post.approvedZone}` : undefined}>
         {post.account} · {when}
-        {approvedElsewhere && ` (${approvedElsewhere} ${post.approvedZone})`}
       </p>
       <StatusNotes post={post} timeZone={timeZone} context={context} />
       <p className={cn('text-xs whitespace-pre-line', context === 'popover' ? 'line-clamp-5' : 'line-clamp-3')}>{post.text}</p>
@@ -238,7 +223,7 @@ function CalendarSkeleton() {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof ApiError && error.message ? error.message : 'The workspace could not be read.';
+  return error instanceof ApiError && error.message ? error.message : undefined;
 }
 
 export function CalendarView() {
@@ -370,7 +355,7 @@ export function CalendarView() {
   ) : canEdit ? (
     <Link href='/app' data-tour='calendar-schedule' className={buttonVariants({ variant: 'action', size: 'control' })}>
       <Icons.add />
-      New post
+      Create post
     </Link>
   ) : undefined;
 
@@ -435,8 +420,8 @@ export function CalendarView() {
             title='Couldn’t refresh your schedule'
             description={
               <>
-                {errorMessage(snapshot.error)} The calendar shows what loaded at{' '}
-                {new Intl.DateTimeFormat('en', { timeStyle: 'short', timeZone }).format(snapshot.dataUpdatedAt)}.
+                Showing what loaded at {new Intl.DateTimeFormat('en', { timeStyle: 'short', timeZone }).format(snapshot.dataUpdatedAt)}.
+                {errorMessage(snapshot.error) && <span className='text-muted-foreground block text-xs'>{errorMessage(snapshot.error)}</span>}
               </>
             }
             action={retry}
@@ -451,27 +436,18 @@ export function CalendarView() {
                 <Icons.calendar className='size-5' />
               </span>
             }
-            title='Nothing scheduled yet'
-            description={
-              <>
-                Draft something in Ideas, then schedule it for an account at an exact time. It appears here at that time, in your time zone, and publishes only after you approve it.
-                {channels.length === 0 && ' No accounts are connected yet.'}
-              </>
-            }
+            title='Nothing scheduled'
+            description={channels.length === 0 ? 'Connect an account to schedule posts.' : undefined}
+            // One action: the missing prerequisite first (an account, then a draft); with both, the header's Schedule.
             action={
-              variantsCount === 0 || channels.length === 0 ? (
-                <>
-                  {variantsCount === 0 && canEdit && (
-                    <Link href='/app/ideas' className={buttonVariants({ variant: scheduleAction ? 'glass' : 'action', size: 'control' })}>
-                      Go to Ideas
-                    </Link>
-                  )}
-                  {channels.length === 0 && canConnect && (
-                    <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
-                      Connect a channel
-                    </Link>
-                  )}
-                </>
+              channels.length === 0 && canConnect ? (
+                <Link href='/app/channels' className={buttonVariants({ variant: 'action', size: 'control' })}>
+                  Connect account
+                </Link>
+              ) : variantsCount === 0 && canEdit ? (
+                <Link href='/app' className={buttonVariants({ variant: 'action', size: 'control' })}>
+                  Create post
+                </Link>
               ) : undefined
             }
           />
@@ -502,7 +478,7 @@ export function CalendarView() {
           renderEventDetails={(event, context) => <PostDetails event={event} context={context} timeZone={timeZone} wide={wide} />}
           dayPanelFooter={
             <Link href='/app/queue' className={cn('t-learn self-start', buttonVariants({ variant: 'quiet', size: 'sm' }), '-ml-2.5 h-8 text-xs')}>
-              Open the queue <LearnMoreChevron />
+              Open Queue <LearnMoreChevron />
             </Link>
           }
         />
@@ -513,7 +489,6 @@ export function CalendarView() {
   return (
     <PageContainer
       pageTitle='Calendar'
-      pageDescription='Approved and pending publications at their exact times, in your time zone.'
       infoContent={infoContent}
       pageHeaderAction={!fatalError && !loading ? scheduleAction : undefined}
     >

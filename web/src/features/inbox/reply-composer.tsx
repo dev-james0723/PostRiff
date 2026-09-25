@@ -18,7 +18,7 @@ import type { Thread } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { InboxLevelBadge } from './level-badge';
-import { authorLabel, modelWrote, originLabel, replyStatusView, type ReplyPreview, type ReplyRecord, type SavedDraft } from './model';
+import { authorLabel, modelWrote, originLabel, type ReplyPreview, type ReplyRecord, type SavedDraft } from './model';
 
 /** The API's reply limit (`audience.py` REPLY_LIMIT). */
 const REPLY_LIMIT = 500;
@@ -43,9 +43,9 @@ function manifestText(preview: ReplyPreview | null): string | null {
 /** One sentence for someone who cannot do every step, or null when they can. */
 export function permissionSentence(canEdit: boolean, canReply: boolean) {
   if (canEdit && canReply) return null;
-  if (canEdit) return 'You can write and save replies; approving one needs the reply permission, which a workspace owner can grant.';
-  if (canReply) return 'You can approve replies, but writing and saving a draft needs the edit permission.';
-  return 'You can read comments here; writing a reply needs the edit permission and approving one needs the reply permission.';
+  if (canEdit) return 'Approving needs the reply permission. Ask a workspace owner.';
+  if (canReply) return 'Writing drafts needs the edit permission.';
+  return 'Replying needs the edit and reply permissions.';
 }
 
 /**
@@ -113,7 +113,7 @@ export function ReplyComposer({
       await persist();
       setSaved(true);
     } catch (error) {
-      toast.error(errorMessage(error, 'The reply could not be saved.'));
+      toast.error(errorMessage(error, "Couldn't save the reply."));
     } finally {
       setPending(null);
     }
@@ -128,12 +128,12 @@ export function ReplyComposer({
       onChange({ text: result.text, draft: { draftId: result.draftId, text: result.text, origin: result.origin, label: result.label } });
       if (previous.trim() && previous.trim() !== result.text) {
         toast('Starter line inserted', {
-          description: 'It replaced the text you had written.',
+          description: 'It replaced your text.',
           action: { label: 'Undo', onClick: () => onChange({ text: previous }) }
         });
       }
     } catch (error) {
-      toast.error(errorMessage(error, 'The starter line could not be inserted.'));
+      toast.error(errorMessage(error, "Couldn't insert a starter line."));
     } finally {
       setPending(null);
     }
@@ -151,7 +151,7 @@ export function ReplyComposer({
       const result = await api.replyPreview(workspaceId, current.draftId);
       setPreview({ draftId: current.draftId, ...result });
     } catch (error) {
-      toast.error(errorMessage(error, 'The review could not be prepared.'));
+      toast.error(errorMessage(error, "Couldn't prepare the review."));
     } finally {
       setPending(null);
     }
@@ -162,14 +162,14 @@ export function ReplyComposer({
     setPending('approve');
     try {
       const result = await api.approveReply(workspaceId, preview.draftId, preview.digest);
-      toast.success(`Reply ${replyStatusView(result.status).label.toLowerCase()}`);
+      // No toast: the approved reply appears in the thread with its status.
       setPreview(null);
       onChange({ text: '', draft: null });
       onApproved({ draftId: result.draftId, status: result.status, text: approvedText, origin: draft?.origin, label: draft?.label, updatedAt: null });
       void client.invalidateQueries({ queryKey: keys.audience(workspaceId) });
       void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
     } catch (error) {
-      toast.error(errorMessage(error, 'The reply could not be approved.'));
+      toast.error(errorMessage(error, "Couldn't approve the reply."));
       if (error instanceof ApiError && error.status === 409) {
         // The draft changed or was already approved: this review is stale.
         setPreview(null);
@@ -181,11 +181,10 @@ export function ReplyComposer({
   }
 
   const reviewEnabled = canReply && !busy && (inSync || (unsaved && canEdit));
-  const starterLabel = modelWrote(draft?.origin) ? 'Suggest another reply' : 'Insert a starter line';
+  const starterLabel = modelWrote(draft?.origin) ? 'Suggest another' : 'Insert starter line';
   let draftLine: string | null = null;
   if (draft && inSync) draftLine = `Draft saved · ${originLabel(draft.origin, draft.label)}`;
-  else if (draft && unsaved) draftLine = 'Changed since the last save · a review saves this text first';
-  else if (!draft && unsaved && canEdit) draftLine = 'Not saved yet';
+  else if (unsaved && canEdit) draftLine = 'Unsaved changes';
 
   return (
     <Surface material='glass' radius='card' padding='sm' className='flex flex-col gap-3' data-tour='inbox-composer'>
@@ -199,7 +198,7 @@ export function ReplyComposer({
             onChange({ text: event.target.value });
             setSaved(false);
           }}
-          placeholder={canEdit ? `Reply to ${authorLabel(thread.author)}…` : 'Writing a reply needs the edit permission'}
+          placeholder={canEdit ? `Reply to ${authorLabel(thread.author)}…` : 'You can’t write replies'}
           maxLength={REPLY_LIMIT}
           aria-label='Your reply'
           aria-describedby={`reply-limit-${thread.threadId}`}
@@ -255,8 +254,8 @@ export function ReplyComposer({
       >
         <DialogContent className={cn(DIALOG_ELEVATED, 'sm:max-w-md')}>
           <DialogHeader>
-            <DialogTitle className='text-xl font-medium tracking-tight'>Approve this reply</DialogTitle>
-            <DialogDescription>Check the account, the comment and the exact text. This text is what gets approved.</DialogDescription>
+            <DialogTitle className='text-xl font-medium tracking-tight'>Approve reply?</DialogTitle>
+            <DialogDescription>This exact text, from this account, is what gets approved.</DialogDescription>
           </DialogHeader>
           <dl className='grid gap-3 text-sm'>
             <div className='grid gap-1'>
@@ -276,14 +275,11 @@ export function ReplyComposer({
                 {approvedText !== null ? (
                   <blockquote className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3.5 py-2.5 break-words whitespace-pre-wrap'>{approvedText}</blockquote>
                 ) : (
-                  <span className='text-destructive'>The server did not return the reply text, so this reply cannot be approved.</span>
+                  <span className='text-destructive'>Couldn&apos;t load the reply text. Close and try again.</span>
                 )}
               </dd>
             </div>
             <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
-              <span>
-                Digest <span className='font-mono'>{preview?.digest.slice(0, 12)}…</span>
-              </span>
               <span className='flex items-center gap-1'>
                 Reply <InboxLevelBadge level={preview?.replyLevel} />
               </span>
@@ -291,13 +287,13 @@ export function ReplyComposer({
           </dl>
           {accountMissing ? (
             <p className='text-destructive text-xs'>
-              The connection for {accountLabel} has no {platform} account on record, so this reply cannot be approved.
+              Reconnect {accountLabel} on {platform} before approving.
             </p>
           ) : preview?.replyLevel === 'Direct' ? (
-            <p className='text-muted-foreground text-xs leading-relaxed'>Approving records your decision. Sending is not switched on yet, so nothing is posted to {platform} for now.</p>
+            <p className='text-muted-foreground text-xs leading-relaxed'>Sending isn&apos;t available yet. Approving doesn&apos;t post to {platform}.</p>
           ) : (
             <p className='text-muted-foreground text-xs leading-relaxed'>
-              Replies are {preview?.replyLevel ?? 'Unsupported'} for {accountLabel}, so PostRiff cannot send this one.
+              Rafii can&apos;t send replies for {accountLabel}.
               {permalink && (
                 <>
                   {' '}
@@ -320,7 +316,7 @@ export function ReplyComposer({
               disabled={busy || !canReply || approvedText === null || accountMissing || preview?.replyLevel !== 'Direct'}
               onClick={() => void approve()}
             >
-              {preview?.replyLevel === 'Direct' ? 'Approve reply' : 'Sending not available'}
+              {preview?.replyLevel === 'Direct' ? 'Approve reply' : 'Not available'}
             </StatefulButton>
           </DialogFooter>
         </DialogContent>

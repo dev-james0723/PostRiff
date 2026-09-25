@@ -1,18 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import { StateMessage } from '@/components/rafii';
+import { StateMessage, Surface } from '@/components/rafii';
 import { GettingStarted } from './getting-started';
 import { HeatCalendar } from '@/components/charts/heat-calendar';
 import { addDays, GAP, mondayOf, PITCH, startOfDay } from '@/components/charts/heat-calendar/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { NumberTicker } from '@/components/motion/number-ticker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Panel, StatTile, StatusChip } from '@/features/workspace/rafii-parts';
+import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import { useChannels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import type { Job } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -31,25 +32,9 @@ import { WAITING as PRE_FLIGHT, IN_FLIGHT, DONE } from '@/lib/jobs';
 const infoContent = {
   title: 'How the overview counts',
   sections: [
-    {
-      title: 'Honest numbers only',
-      description:
-        'Every figure here comes from your workspace ledger and publishing receipts. “Unavailable” is never shown as zero.'
-    },
-    {
-      title: 'Direct · Assisted · Local',
-      description:
-        'Direct publishes through a reviewed provider API. Assisted means PostRiff prepares the post and you (or the desktop companion) finish it. Local runs through the companion on your own machine.'
-    },
-    {
-      title: 'Nothing publishes without you',
-      description: 'Scheduled items only leave the queue after an exact approval of the text, media and time.'
-    },
-    {
-      title: 'What Next up counts',
-      description:
-        'Only approved jobs with a time the worker can read appear there, in your time zone. Drafts waiting for approval are listed under attention instead.'
-    }
+    { title: 'Real numbers only', description: 'If a number can’t be read, it says “Unavailable”, never zero.' },
+    { title: 'Direct · Assisted · Local', description: 'Direct posts for you. Assisted: you finish the post. Local: posts from your computer.' },
+    { title: 'Next up', description: 'Approved posts only. Drafts waiting for approval are under Needs your attention.' }
   ]
 };
 
@@ -117,17 +102,11 @@ function PublishingActivity({ jobs, pending, className }: { jobs: Job[] | null; 
       className={className}
       title='Publishing activity'
       titleId='overview-activity-heading'
-      description={
-        !activity
-          ? 'Posts the provider confirmed, by day.'
-          : activity.total === 0
-            ? 'Posts the provider confirmed, by day. None in this range yet; each confirmed post fills its day.'
-            : `Posts the provider confirmed, by day: ${activity.total} in this range. Hover a day; click two days to total the span.`
-      }
+      actions={activity ? <span className='text-muted-foreground text-xs tabular-nums'>{activity.total} published</span> : undefined}
     >
       <div ref={measureRef} className='w-full'>
         {unavailable ? (
-          <StateMessage kind='error' layout='inline' title='Publishing activity is unavailable right now.' />
+          <StateMessage kind='error' layout='inline' title='Couldn’t load publishing activity.' />
         ) : !activity ? (
           <Skeleton className='h-44 w-full rounded-[var(--rafii-radius-control)]' />
         ) : (
@@ -138,13 +117,46 @@ function PublishingActivity({ jobs, pending, className }: { jobs: Job[] | null; 
   );
 }
 
-/** A stat whose query failed: the word, never a zero, and a Retry where the footer would be. */
+/** A stat whose query failed: the word, never a zero, and a Retry beside it. */
 function unavailableStat(message: string, query: Refetchable) {
   return {
     value: 'Unavailable',
-    hint: <span className='text-muted-foreground font-normal'>{message}</span>,
+    hint: <span className='sr-only'>{message}</span>,
     footer: <RetryButton queries={[query]} />
   };
+}
+
+interface Stat {
+  label: ReactNode;
+  value: ReactNode;
+  hint?: ReactNode;
+  footer?: ReactNode;
+  badge?: ReactNode;
+  loading?: boolean;
+}
+
+/**
+ * The four headline numbers as one compact strip instead of four cards: number first, a short
+ * label under it, and at most one short qualifier. Numbers are the compression ("4 scheduled").
+ */
+function StatStrip({ stats }: { stats: Stat[] }) {
+  return (
+    <Surface as='dl' material='quiet' padding='none' data-tour='overview-stats' className='grid grid-cols-2 overflow-hidden lg:grid-cols-4'>
+      {stats.map((stat, index) => (
+        <div key={index} className='flex min-w-0 flex-col gap-1 p-4 md:p-5'>
+          <dt className='text-muted-foreground order-2 flex items-center gap-2 text-xs font-medium'>
+            {stat.label}
+            {stat.badge}
+          </dt>
+          <dd className='text-foreground order-1 text-2xl font-semibold tracking-[-0.02em] tabular-nums'>
+            {stat.loading ? <Skeleton className='h-8 w-16' /> : typeof stat.value === 'number' ? <NumberTicker value={stat.value} locale /> : stat.value}
+          </dd>
+          {!stat.loading && stat.hint && <dd className='text-muted-foreground order-3 text-xs'>{stat.hint}</dd>}
+          {!stat.loading && stat.footer && <dd className='order-4 text-xs'>{stat.footer}</dd>}
+        </div>
+      ))}
+    </Surface>
+  );
 }
 
 /** One attention item as an object: what, why, who can act, and its one action (DNA §21.17). */
@@ -162,12 +174,8 @@ function AttentionRow({ item, canAct }: { item: AttentionItem; canAct: boolean |
             {item.title}
           </p>
           <p className='text-muted-foreground text-sm leading-relaxed text-pretty'>{item.description}</p>
-          {who && (
-            <p className='text-muted-foreground text-xs'>
-              Needs {who.label}
-              {canAct === null ? '' : canAct ? ' · you can do this' : ' · ask an owner or admin'}
-            </p>
-          )}
+          {/* Who can act only matters when it isn't you. */}
+          {who && canAct === false && <p className='text-muted-foreground text-xs'>Needs {who.label} · ask an owner or admin</p>}
         </div>
       </div>
       <Link href={item.href} className={cn(buttonVariants({ variant: 'glass', size: 'default' }), 'w-fit')}>
@@ -213,32 +221,23 @@ export function OverviewView() {
   const sample = snapshot.data?.state.workspace?.sample === true;
 
   const scheduledStat = snapshot.isError
-    ? unavailableStat('Could not read the workspace', snapshot)
-    : {
-        value: scheduled,
-        hint: scheduled ? `${waiting} waiting · ${sending} sending now` : 'Nothing in the queue',
-        footer: 'Approved posts the worker will publish'
-      };
-  const publishedStat = snapshot.isError
-    ? unavailableStat('Could not read the workspace', snapshot)
-    : {
-        value: publishedRecently,
-        hint: publishedRecently ? `${verified} verified` : 'No verified publications yet',
-        footer: 'Confirmed by the provider; unverified jobs remain in sending'
-      };
+    ? unavailableStat('Couldn’t read scheduled posts', snapshot)
+    : { value: scheduled, hint: sending ? `${sending} sending now` : undefined };
+  const publishedStat = snapshot.isError ? unavailableStat('Couldn’t read published posts', snapshot) : { value: publishedRecently };
+  // Money stays explicit: when the allowance runs out, nothing extra is charged.
   const batchesStat = usage.isError
-    ? unavailableStat('Could not read your plan', usage)
+    ? unavailableStat('Couldn’t read your plan', usage)
     : {
         value: entitlement ? entitlement.writingBatchesRemaining : '—',
-        hint: entitlement?.resetsAt ? `Resets ${relativeTime(entitlement.resetsAt, now)}` : 'Stops at the limit, never overcharges',
-        footer: usage.data?.overage === 'stop' ? 'Overage: stop — nothing is charged silently' : undefined
+        hint: entitlement?.resetsAt ? `Resets ${relativeTime(entitlement.resetsAt, now)}` : undefined,
+        footer: usage.data?.overage === 'stop' ? <span className='text-muted-foreground'>No overage charges</span> : undefined
       };
   const channelsStat = channels.isError
-    ? unavailableStat('Could not read channels', channels)
+    ? unavailableStat('Couldn’t read channels', channels)
     : {
         value: counts.connected,
-        hint: counts.connected ? `${counts.direct} Direct · ${counts.assisted} Assisted · ${counts.local} Local` : 'Connect an account to schedule',
-        footer: entitlement ? `Plan allows ${entitlement.connectedAccounts}` : undefined
+        hint: counts.connected ? `${counts.direct} Direct · ${counts.assisted} Assisted · ${counts.local} Local` : undefined,
+        footer: entitlement ? <span className='text-muted-foreground'>Plan allows {entitlement.connectedAccounts}</span> : undefined
       };
 
   const newIdea = !canEdit ? undefined : sample ? (
@@ -265,25 +264,22 @@ export function OverviewView() {
   const move = reduce ? { duration: 0 } : { opacity: { duration: 0.2, ease: EASE_OUT }, y: SPRING_LAYOUT, layout: SPRING_LAYOUT };
 
   return (
-    <PageContainer pageTitle='Overview' pageDescription='What is scheduled, what needs you, and how much of your plan is left.' infoContent={infoContent} pageHeaderAction={newIdea}>
+    <PageContainer pageTitle='Overview' infoContent={infoContent} pageHeaderAction={newIdea}>
       <div className='flex flex-1 flex-col gap-4 md:gap-5'>
         <GettingStarted />
-        <div data-tour='overview-stats' className='grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-4'>
-          <StatTile label='Scheduled' loading={snapshot.isPending} {...scheduledStat} />
-          <StatTile label='Published · 30 days' loading={snapshot.isPending} {...publishedStat} />
-          <StatTile
-            label='Writing batches left'
-            loading={usage.isPending}
-            badge={!usage.isError && subscription ? <StatusChip icon={null}>{subscription.label}</StatusChip> : undefined}
-            {...batchesStat}
-          />
-          <StatTile label='Connected channels' loading={channels.isPending} {...channelsStat} />
-        </div>
+        <StatStrip
+          stats={[
+            { label: 'Scheduled', loading: snapshot.isPending, ...scheduledStat },
+            { label: 'Published · 30 days', loading: snapshot.isPending, ...publishedStat },
+            { label: 'Writing batches left', loading: usage.isPending, badge: !usage.isError && subscription ? <StatusChip icon={null}>{subscription.label}</StatusChip> : undefined, ...batchesStat },
+            { label: 'Channels connected', loading: channels.isPending, ...channelsStat }
+          ]}
+        />
 
         <div className='grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-7'>
           <NextUp className='lg:col-span-4' />
 
-          <Panel data-tour='overview-attention' className='lg:col-span-3' title='Needs your attention' titleId='overview-attention-heading' description='Things only you can decide. Empty is good.'>
+          <Panel data-tour='overview-attention' className='lg:col-span-3' title='Needs your attention' titleId='overview-attention-heading'>
             {attentionPending ? (
               <StateMessage kind='loading' title='Checking what needs you…' />
             ) : (
@@ -292,7 +288,7 @@ export function OverviewView() {
                 <AnimatePresence initial={false} mode='popLayout'>
                   {allClear ? (
                     <motion.div key='all-clear' role='listitem' initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reduce ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT }}>
-                      <StateMessage kind='success' title='All clear' description='No approvals waiting and every connection is healthy.' />
+                      <StateMessage kind='success' layout='inline' title='All clear' />
                     </motion.div>
                   ) : (
                     [
@@ -302,8 +298,8 @@ export function OverviewView() {
                             <StateMessage
                               kind='partial'
                               layout='inline'
-                              title='Could not read part of the workspace'
-                              description={`Some reminders may be missing: ${listOf(attention.unavailable.map((source) => SOURCE_NAMES[source]))} could not be read.`}
+                              title='Some reminders may be missing'
+                              description={`Couldn’t load ${listOf(attention.unavailable.map((source) => SOURCE_NAMES[source]))}.`}
                               action={<RetryButton queries={failedQueries} />}
                             />
                           </div>

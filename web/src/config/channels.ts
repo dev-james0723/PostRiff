@@ -17,7 +17,7 @@ export interface Channel {
   nameZh?: string;
   group: ChannelGroup;
   capability: CapabilityLevel;
-  /** Shown next to the badge, e.g. "provider review in progress". */
+  /** Shown next to the badge, e.g. "publishing in review". */
   reviewStatus?: string;
   capabilities: Partial<Record<ChannelCapabilityKey, ChannelCapabilityLevel>>;
   description: string;
@@ -26,7 +26,7 @@ export interface Channel {
   notes?: string[];
 }
 
-const hostedPending = 'Production review and non-founder account verification are pending; use export until the connection explicitly supports publishing.';
+const hostedPending = 'Publishing is still in review. Export posts until it opens.';
 
 const local = (
   slug: string,
@@ -39,7 +39,7 @@ const local = (
   name,
   group: 'local',
   capability: 'unsupported',
-  reviewStatus: 'Companion release and account verification pending',
+  reviewStatus: 'Companion not available yet',
   capabilities: { identity: 'Unsupported', publish: 'Unsupported', schedule: 'Unsupported' },
   description,
   formats,
@@ -53,7 +53,7 @@ export const channels: Channel[] = [
     name: 'LinkedIn',
     group: 'hosted',
     capability: 'assisted',
-    reviewStatus: 'production verification pending',
+    reviewStatus: 'publishing in review',
     capabilities: {
       identity: 'Direct',
       publish: 'Assisted',
@@ -62,13 +62,13 @@ export const channels: Channel[] = [
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Text member posts are implemented; hosted image upload and non-founder publishing verification are pending.',
+    description: 'Text posts on your profile. Image posts aren’t available yet.',
     formats: ['Text post'],
     region: 'global',
     notes: [
       hostedPending,
-      'LinkedIn does not issue refresh tokens to standard apps: the connection card shows the 60-day re-authorisation date.',
-      'Company page posting, member analytics and comments need LinkedIn’s Community Management programme and are not offered yet.'
+      'LinkedIn access lasts 60 days. The account card shows when to reconnect.',
+      'Company pages, analytics and comments aren’t available yet; they need LinkedIn’s approval.'
     ]
   },
   {
@@ -76,7 +76,7 @@ export const channels: Channel[] = [
     name: 'Threads',
     group: 'hosted',
     capability: 'assisted',
-    reviewStatus: 'production verification pending',
+    reviewStatus: 'publishing in review',
     capabilities: {
       identity: 'Direct',
       publish: 'Assisted',
@@ -85,17 +85,17 @@ export const channels: Channel[] = [
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Text and single-image publishing are implemented. Carousel and additional account capabilities are not part of the verified launch scope.',
+    description: 'Text and single-image posts. Carousels aren’t available yet.',
     formats: ['Text (500 chars)', 'Single image'],
     region: 'global',
-    notes: [hostedPending, 'Provider quotas can change and may include activity outside Rafii; provider rejection is handled without claiming a complete remote quota count.']
+    notes: [hostedPending, 'Threads limits how often you can post, including posts made outside Rafii.']
   },
   {
     slug: 'instagram',
     name: 'Instagram',
     group: 'hosted',
     capability: 'assisted',
-    reviewStatus: 'production verification pending',
+    reviewStatus: 'publishing in review',
     capabilities: {
       identity: 'Direct',
       publish: 'Assisted',
@@ -104,7 +104,7 @@ export const channels: Channel[] = [
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Single-image posts for professional accounts. Direct publishing remains gated by permissions and release verification.',
+    description: 'Single-image posts for professional accounts. Publishing needs Instagram’s permission first.',
     formats: ['Single image'],
     region: 'global',
     notes: [hostedPending, 'Instagram allows 100 published posts per 24 hours per account.']

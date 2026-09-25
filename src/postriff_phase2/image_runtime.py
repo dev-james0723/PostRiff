@@ -73,7 +73,7 @@ class GatewayImageRuntime:
         if not isinstance(api_key, str) or not api_key:
             raise AlphaError("An image gateway key is required.", 503)
         if not isinstance(model, str) or "/" not in model or len(model) > 160:
-            raise AlphaError("Configure an exact qualified image model.", 503)
+            raise AlphaError("Image generation isn't available yet.", 503)
         if type(estimate_usd_micro) is not int or not 1 <= estimate_usd_micro <= 1_000_000:
             raise AlphaError("Configure a bounded image-generation cost estimate.", 503)
         self.api_key = api_key

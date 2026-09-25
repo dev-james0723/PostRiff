@@ -106,29 +106,33 @@ export function CalendarFilters({
   const filtering = selectedKinds !== null || selectedChannels !== null;
   const channelKeys = channels.map((channel) => channel.key);
   const showFooter = filtering || live || periodNote;
+  // Only states that occur in this period (or are chosen) get a chip; fifteen zero-count chips were noise.
+  const visibleKinds = KINDS.filter((kind) => kindCounts[kind] > 0 || selectedKinds?.includes(kind));
 
   return (
     <div data-tour='calendar-legend' className='flex min-w-0 flex-col gap-1'>
-      <div className='flex min-w-0 items-start gap-2'>
-        <span className='text-muted-foreground mt-1 w-14 shrink-0 py-2 text-xs font-medium max-sm:sr-only'>Status</span>
-        <div role='group' aria-label={`Legend and status filter, counted for this ${unit}`} className={ROW}>
-          {KINDS.map((kind) => {
-            const meta = KIND_META[kind];
-            return (
-              <FilterChip
-                key={kind}
-                label={meta.label}
-                count={kindCounts[kind]}
-                unit={unit}
-                filtering={selectedKinds !== null}
-                selected={selectedKinds?.includes(kind) ?? true}
-                onPress={() => onKindsChange(toggleSelection(KINDS, selectedKinds, kind))}
-                leading={<ToneIcon tone={meta.tone} className='size-3.5' />}
-              />
-            );
-          })}
+      {visibleKinds.length > 0 && (
+        <div className='flex min-w-0 items-start gap-2'>
+          <span className='text-muted-foreground mt-1 w-14 shrink-0 py-2 text-xs font-medium max-sm:sr-only'>Status</span>
+          <div role='group' aria-label={`Legend and status filter, counted for this ${unit}`} className={ROW}>
+            {visibleKinds.map((kind) => {
+              const meta = KIND_META[kind];
+              return (
+                <FilterChip
+                  key={kind}
+                  label={meta.label}
+                  count={kindCounts[kind]}
+                  unit={unit}
+                  filtering={selectedKinds !== null}
+                  selected={selectedKinds?.includes(kind) ?? true}
+                  onPress={() => onKindsChange(toggleSelection(KINDS, selectedKinds, kind))}
+                  leading={<ToneIcon tone={meta.tone} className='size-3.5' />}
+                />
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {channels.length > 1 && (
         <div className='flex min-w-0 items-start gap-2'>
@@ -162,7 +166,7 @@ export function CalendarFilters({
           {live && (
             <span className='flex items-center gap-1.5'>
               <span aria-hidden className='rafii-decorative-motion bg-foreground size-1.5 animate-pulse rounded-full motion-reduce:animate-none' />
-              Checking for updates every {LIVE_REFRESH_MS / 1000} seconds while a post is going out
+              <span title={`Checks every ${LIVE_REFRESH_MS / 1000} seconds while a post goes out`}>Live</span>
             </span>
           )}
         </div>

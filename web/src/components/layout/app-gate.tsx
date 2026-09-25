@@ -24,7 +24,6 @@ function ShellSkeleton() {
       {/* min-w-0: the fixed-width placeholders must not widen the column past a 320px screen. */}
       <div className='flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-8'>
         <Skeleton className='h-8 w-48' />
-        <Skeleton className='h-4 w-80 max-w-full' />
         <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className='rafii-quiet h-28 w-full rounded-[var(--rafii-radius-card)]' />
@@ -36,24 +35,44 @@ function ShellSkeleton() {
   );
 }
 
-/** One gate state on the ambient canvas, in the shared state grammar (§20.4: errors keep the design language). */
+/**
+ * One gate state on the ambient canvas, in the shared state grammar (§20.4: errors keep the design language).
+ * The headline says what happened and the action what to do; the raw error, when there is one, stays
+ * available under Details instead of becoming the message.
+ */
 function Problem({
   kind,
   title,
   description,
+  detail,
   action,
   media
 }: {
   kind: StateKind;
   title: string;
-  description: string;
+  description?: string;
+  detail?: string | null;
   action?: React.ReactNode;
   media?: React.ReactNode;
 }) {
+  // In the action row (a <div>), not the description (a <p>, which cannot hold <details>); basis-full puts it on its own line.
+  const details = detail ? (
+    <details className='text-muted-foreground basis-full text-xs'>
+      <summary className='rafii-focus cursor-pointer rounded-sm'>Details</summary>
+      <p className='mt-1 break-words'>{detail}</p>
+    </details>
+  ) : null;
   return (
     <div className='relative isolate flex min-h-svh items-center justify-center p-6'>
       <div aria-hidden className='rafii-ambient' />
-      <StateMessage kind={kind} title={title} description={description} action={action} media={media} className='rafii-glass w-full max-w-md' />
+      <StateMessage
+        kind={kind}
+        title={title}
+        description={description}
+        action={action || details ? <>{action}{details}</> : undefined}
+        media={media}
+        className='rafii-glass w-full max-w-md'
+      />
     </div>
   );
 }
@@ -91,8 +110,9 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     return (
       <Problem
         kind='offline'
-        title='PostRiff is temporarily unavailable'
-        description={auth.error ?? 'The API did not respond. Please try again in a moment.'}
+        title={`Couldn’t reach ${siteConfig.name}`}
+        description='Check your connection and try again.'
+        detail={auth.error}
         action={
           <Button variant='glass' size='control' onClick={() => window.location.reload()}>
             Try again
@@ -113,7 +133,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
             </span>
           }
           title='Local dev workspace'
-          description='Identity is simulated on this machine. Everything behind it — tenancy, policies, OAuth custody, the ledger — is the real hosted code on a throwaway database.'
+          description='Identity is simulated on this machine. Everything behind it — tenancy, policies, OAuth custody, the ledger — is the real hosted code on a throwaway database.' // copy-audit: allow (local dev mode only)
           action={
             <Button
               variant='action'
@@ -136,12 +156,12 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     return (
       <Problem
         kind='error'
-        title='Your workspace could not be loaded'
-        description={workspace.error ?? 'Please try again.'}
+        title='Couldn’t load your workspace'
+        detail={workspace.error}
         action={
           <>
             <Button variant='action' size='control' onClick={() => void workspace.refresh()}>
-              Retry
+              Try again
             </Button>
             <Button variant='glass' size='control' onClick={() => void auth.signOut()}>
               Sign out

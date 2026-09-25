@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import { StateMessage } from '@/components/rafii';
+import { InfoTip, StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemory, useModels, useRescanModels } from '@/lib/api/hooks';
@@ -19,28 +19,21 @@ import { BillingCard, ConsentCard } from './models/side-cards';
 import { useNowSeconds } from './models/use-saved-choice';
 import { WritingNow } from './models/writing-now';
 
-const PAGE_TITLE = 'Models & providers';
-const PAGE_DESCRIPTION = 'Pick what writes your drafts, see where each writer runs, who pays for it and what it may read.';
-
+const PAGE_TITLE = 'Models';
 const infoContent = {
   title: 'Where drafts are written',
   sections: [
     {
       title: 'Three kinds of writer',
-      description:
-        'A coding CLI signed in on the machine that serves the PostRiff API, paid by its own subscription. PostRiff’s managed model, metered to this workspace in writing batches. The deterministic preview, which calls no model and costs nothing.'
+      description: 'A coding CLI you sign in to, paid by its own subscription. The managed model, which uses writing batches. The free preview, which uses no AI model.'
     },
     {
       title: 'Your pick',
-      description: 'The writer you pick here is used by Home and every conversation in this browser. If it stops being available, PostRiff uses the first available writer and this page says so.'
+      description: 'Used for all drafts in this browser. If it becomes unavailable, the first available writer is used and this page says so.'
     },
     {
-      title: 'Checking again',
-      description: 'Check again refreshes CLI installation and sign-in checks on the machine that serves PostRiff, including CLIs installed since startup.'
-    },
-    {
-      title: 'Hosted service',
-      description: 'On a hosted deployment a CLI will run through a desktop companion on your own computer. That companion is not available yet.'
+      title: 'Your own CLI',
+      description: 'Running a CLI from your own computer isn’t available yet.'
     }
   ]
 };
@@ -50,7 +43,7 @@ function NoEditAccess() {
     <StateMessage
       kind='permission'
       title='Choosing a writer needs edit access'
-      description='This page picks which writer drafts for you, and only people who can edit drafts start a draft. Your role in this workspace can read but not edit, so there is nothing to choose here. Ask a workspace owner if you need edit access.'
+      description='Ask a workspace owner for edit access.'
       action={
         <Link href='/app/account/privacy' className={buttonVariants({ variant: 'glass', size: 'control' })}>
           Privacy &amp; data
@@ -91,7 +84,6 @@ function ModelsBody() {
   return (
     <PageContainer
       pageTitle={PAGE_TITLE}
-      pageDescription={PAGE_DESCRIPTION}
       infoContent={infoContent}
       pageHeaderAction={<CheckAgainButton rescan={rescan.mutateAsync} checking={checking} disabled={loading} />}
     >
@@ -105,8 +97,8 @@ function ModelsBody() {
         <StateMessage
           kind={models.data ? 'stale' : 'error'}
           layout='inline'
-          title='The writer list could not be loaded'
-          description={`${models.error?.message ?? 'The request failed.'}${models.data ? ' The page shows the last list it received.' : ''}`}
+          title='Couldn’t load writers'
+          description={`${models.data ? 'Showing the last list. ' : ''}${models.error?.message ?? ''}`.trim() || undefined}
           action={
             <Button variant='glass' size='sm' className='min-h-9' onClick={() => void models.refetch()}>
               <Icons.refresh className='size-3.5' /> Retry
@@ -130,24 +122,24 @@ function ModelsBody() {
           />
 
           <section data-tour='models-cli' className='flex flex-col gap-3' aria-labelledby='models-cli-heading'>
-            <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1'>
+            <div className='flex flex-wrap items-center gap-x-1 gap-y-1 px-1'>
               <h2 id='models-cli-heading' className='text-foreground text-lg font-medium tracking-tight'>
-                Local CLI{models.data ? ` (${agents.length})` : ''}
+                CLI writers{models.data ? ` (${agents.length})` : ''}
               </h2>
-              <span className='text-muted-foreground text-sm'>Found on the machine that serves the API. PostRiff never reads a CLI’s login.</span>
+              <InfoTip
+                label='About CLI writers'
+                className='-my-2 size-9'
+                description='Your sign-in to a CLI is never read. The same cloud-consent checks apply, and writing samples need permission per writer. Every run records which writer produced it.'
+              />
             </div>
-            {agents.length > 0 && (
-              <p className='text-muted-foreground max-w-prose px-1 text-sm leading-relaxed'>
-                Rafii applies cloud-consent checks to CLI writers too: Claude Code and Codex run on this machine but send selected context to their providers. Writing samples additionally require permission for the exact writer route. Picking one of its models makes it the writer for new drafts in this browser; every run still records which writer produced it.
-              </p>
-            )}
+            {agents.length > 0 && <p className='text-muted-foreground px-1 text-sm'>Claude Code and Codex send selected context to their own AI service.</p>}
             {loading ? (
               <>
                 <Skeleton className='h-40 w-full rounded-[var(--rafii-radius-card)]' />
                 <Skeleton className='h-40 w-full rounded-[var(--rafii-radius-card)]' />
               </>
             ) : !models.data ? (
-              <StateMessage kind='offline' layout='inline' title='Unavailable until the writer list loads.' />
+              <StateMessage kind='offline' layout='inline' title='Unavailable until writers load' />
             ) : agents.length === 0 ? (
               <CliEmpty hosted={hosted} />
             ) : (
@@ -155,7 +147,7 @@ function ModelsBody() {
             )}
             {unlisted.length > 0 && (
               <p className='text-muted-foreground px-1 text-xs'>
-                The API lists {unlisted.length} CLI model{unlisted.length === 1 ? '' : 's'} without a matching CLI description: {unlisted.map((option) => option.label).join(', ')}.
+                {unlisted.length} CLI model{unlisted.length === 1 ? '' : 's'} not shown: {unlisted.map((option) => option.label).join(', ')}
               </p>
             )}
           </section>

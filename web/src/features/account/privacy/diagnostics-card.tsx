@@ -37,12 +37,12 @@ export function DiagnosticsCard({ busy, setBusy }: BusyProps) {
     try {
       const response = await api.dataRequest(workspaceId, { kind: 'diagnostics', consent: true });
       const pkg = response.package;
-      if (!pkg || typeof pkg !== 'object') throw new Error('The server did not return a package.');
+      if (!pkg || typeof pkg !== 'object') throw new Error('Couldn’t create the package. Try again.');
       setResult({ requestId: String(response.requestId ?? ''), package: pkg as Record<string, unknown> });
       setConsent(false);
       setOpen(true);
     } catch (err) {
-      toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'The diagnostics package could not be created.');
+      toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'Couldn’t create the package. Try again.');
     } finally {
       setCreating(false);
       setBusy(null);
@@ -58,7 +58,7 @@ export function DiagnosticsCard({ busy, setBusy }: BusyProps) {
     <SettingsSection
       id='privacy-diagnostics'
       title='Diagnostics'
-      description='A package for support with counts and states only: no prompts, post text, sources, tokens or files.'
+      description='For support. Counts and states only: no prompts, post text, sources, tokens or files.'
       className='h-full'
       bodyClassName='flex-1'
       data-tour='privacy-diagnostics'
@@ -70,9 +70,7 @@ export function DiagnosticsCard({ busy, setBusy }: BusyProps) {
         label='I consent to creating a diagnostics package'
         className='min-h-11 items-start [&>button]:mt-0.5'
       />
-      <p className='text-muted-foreground text-xs leading-relaxed'>
-        Creating it adds a receipt to Data requests and shows you the whole package first. PostRiff does not send it anywhere; downloading it is up to you.
-      </p>
+      <p className='text-muted-foreground text-xs leading-relaxed'>You see it before downloading. Nothing is sent anywhere.</p>
       <div className='mt-auto flex flex-wrap items-center gap-2 pt-1'>
         <StatefulButton
           variant='outline'
@@ -96,8 +94,7 @@ export function DiagnosticsCard({ busy, setBusy }: BusyProps) {
           <DialogHeader className='gap-1.5 pr-8'>
             <DialogTitle className='text-foreground text-xl font-medium tracking-tight'>Your diagnostics package</DialogTitle>
             <DialogDescription className='leading-relaxed'>
-              This is the whole package. PostRiff does not send it anywhere and keeps only a receipt listing what it counts. Download it and attach it when
-              you contact support.
+              This is the whole package. Nothing is sent anywhere; only a receipt is kept. Attach it when you contact support.
             </DialogDescription>
           </DialogHeader>
           <pre className='rafii-quiet max-h-72 min-w-0 overflow-auto rounded-[var(--rafii-radius-control)] p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap'>
@@ -112,7 +109,6 @@ export function DiagnosticsCard({ busy, setBusy }: BusyProps) {
               size='control'
               onClick={() => {
                 downloadBlob(new Blob([json], { type: 'application/json' }), filename);
-                toast.success('Diagnostics package downloaded.');
               }}
             >
               <Icons.download /> Download JSON

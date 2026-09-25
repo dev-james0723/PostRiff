@@ -157,8 +157,8 @@ async function home(page) {
    await row.getByRole('button',{name:'Allow this writer to use style'}).click();
    await row.getByText(/Allowed for.*generation/).waitFor();
    await page.reload();await page.getByText(sample,{exact:true}).waitFor();
-   await page.getByRole('button',{name:'Describe local writing statistics',exact:true}).click();
-   await page.getByText('A provisional voice profile is ready for review. It is not active yet.',{exact:true}).waitFor();
+   await page.getByRole('button',{name:'Analyse locally',exact:true}).click();
+   await page.getByText('Voice proposal ready for review.',{exact:true}).waitFor();
    await row.getByRole('button',{name:'Revoke & remove text',exact:true}).click();
    await row.getByRole('button',{name:'Confirm revoke',exact:true}).click();
    await page.waitForFunction(text => ![...document.querySelectorAll('p,blockquote')].some(el => el.textContent === text),sample);

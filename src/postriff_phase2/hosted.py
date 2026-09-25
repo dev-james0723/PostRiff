@@ -351,7 +351,7 @@ class HostedWorkspaceService:
         self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock)
         from .email import Mailer, NullTransport, Reminders
         # Unconfigured deployments get a recording NullTransport: business actions never depend on email.
-        self.mailer = mailer or Mailer(NullTransport(), "PostRiff <no-reply@postriff.invalid>", self.public_base_url or "https://postriff.invalid")
+        self.mailer = mailer or Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", self.public_base_url or "https://postriff.invalid")
         self.reminders = Reminders(self.mailer, self._email_for, clock=clock)
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport)
@@ -412,7 +412,7 @@ class HostedWorkspaceService:
     def _live_provider(self):
         provider = self.billing.provider
         if getattr(provider, "id", "") != "stripe":
-            raise AlphaError("Billing is not configured for this deployment.", 503)
+            raise AlphaError("Billing isn't available yet.", 503)
         return provider
 
     def billing_checkout(self, workspace_id, token, plan_terms_id, success_path=None, cancel_path=None):
@@ -482,9 +482,10 @@ class HostedWorkspaceService:
             return {"kind": kind, "sent": False, "reason": "no address"}
         billing_url = f"{self.public_base_url}/app/account/billing"
         if kind == "subscription_activated":
+            from .billing import plan_display_label
             cur.execute("SELECT p.label FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
             label = cur.fetchone()
-            outcome = self.mailer.subscription_activated(address, label[0] if label else "PostRiff", billing_url)
+            outcome = self.mailer.subscription_activated(address, plan_display_label(label[0] if label else None), billing_url)
         else:
             cur.execute("SELECT extract(epoch from grace_until) FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
             grace = cur.fetchone()
@@ -582,7 +583,7 @@ class HostedWorkspaceService:
                 revision, state, saved_plan, started, expires, writing_grant, writing_used, artwork_grant, *member = cur.fetchone()
                 state = json.loads(state) if isinstance(state, str) else state
                 if not state or "phase2" not in state:
-                    state = initial_phase2_state(workspace_id, principal, "PostRiff member", saved_plan, float(started), execution="hosted-candidate")
+                    state = initial_phase2_state(workspace_id, principal, "Rafii member", saved_plan, float(started), execution="hosted-candidate")
                     state["phase2"]["trial"].update({"expiresAt": float(expires), "writingGrant": writing_grant, "writingUsed": writing_used, "artworkSets": artwork_grant})
                     cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
                     revision += 1
@@ -1022,7 +1023,7 @@ class HostedWorkspaceService:
 
     def upload_media(self, workspace_id, token, revision, payload):
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
+            raise AlphaError("Media uploads aren't available yet.", 503, code="media_storage_not_configured")
         principal = self.verify_session(token)
         saved = self.repository.get(workspace_id, token)
         require(Membership(saved["membership"]["role"], saved["membership"]), "edit")
@@ -1039,7 +1040,7 @@ class HostedWorkspaceService:
 
     def delete_media(self, workspace_id, token, revision, asset_id):
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
+            raise AlphaError("Media uploads aren't available yet.", 503, code="media_storage_not_configured")
         prepared = self.repository.command(workspace_id, token, revision, lambda state, actor: self.commands.prepare_asset_delete(state, actor, asset_id))
         asset = find(prepared["state"]["phase2"]["assets"], asset_id)
         self.assets.remove(workspace_id, asset)
@@ -1048,7 +1049,7 @@ class HostedWorkspaceService:
 
     def media(self, workspace_id, token, asset_id):
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
+            raise AlphaError("Media uploads aren't available yet.", 503, code="media_storage_not_configured")
         snapshot = self.repository.get(workspace_id, token)
         asset = find(snapshot["state"]["phase2"]["assets"], asset_id)
         if asset.get("deleted") or not asset.get("objectName"):

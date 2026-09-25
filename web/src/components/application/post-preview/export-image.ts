@@ -34,7 +34,7 @@ export async function previewImage(phone: HTMLElement, { channelName, dark }: { 
   if (!context) throw new Error('The phone could not be drawn.');
   const font = `${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   context.font = font;
-  const lines = wrap(context, `${channelName} post preview drawn by PostRiff. Not a screenshot: the app has the final say on layout.`, pictureWidth);
+  const lines = wrap(context, `${channelName} post preview drawn by Rafii. Not a screenshot: the app has the final say on layout.`, pictureWidth);
 
   // Resizing the canvas resets its drawing state, so the font is set again below.
   canvas.width = pictureWidth + pad * 2;

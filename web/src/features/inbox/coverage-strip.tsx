@@ -54,7 +54,7 @@ function Evidence({
       </div>
       <p className='text-muted-foreground text-xs leading-relaxed'>{meaning}</p>
       <p className='text-foreground text-xs leading-relaxed'>{sentence}</p>
-      <p className='text-muted-foreground text-xs'>Verified: {capability?.verifiedAt ? formatDateTime(capability.verifiedAt) : 'not verified yet'}</p>
+      <p className='text-muted-foreground text-xs'>Verified: {capability?.verifiedAt ? formatDateTime(capability.verifiedAt) : 'not yet'}</p>
     </div>
   );
 }
@@ -74,7 +74,7 @@ function LevelChip({
   const capability = channel.capabilities[chip.key];
   const level = capability?.level ?? 'Unsupported';
   const sentence = evidenceSentence(capability, provider?.capabilities[chip.key], channel.platform);
-  const ariaLabel = `${chip.label} for ${channel.account}: ${level}. Show evidence`;
+  const ariaLabel = `${chip.label} for ${channel.account}: ${level}. Show details`;
   const triggerClass = cn(
     'rafii-focus inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium whitespace-nowrap transition-colors',
     'bg-foreground/5 hover:bg-foreground/10',
@@ -134,11 +134,12 @@ export function CoverageStrip({
       <StateMessage
         kind='error'
         layout='inline'
-        title={`Account coverage unavailable${error instanceof ApiError ? `: ${error.message}` : '.'}`}
+        title="Couldn't load accounts"
+        description={error instanceof ApiError ? error.message : undefined}
         action={
           <Button variant='glass' size='control' onClick={onRetry}>
             <Icons.refresh className='size-4' />
-            Retry
+            Try again
           </Button>
         }
       />
@@ -148,10 +149,10 @@ export function CoverageStrip({
       <StateMessage
         kind='empty'
         layout='inline'
-        title='No account is connected yet.'
+        title='No accounts connected'
         action={
           <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
-            Connect an account
+            Connect account
           </Link>
         }
       />
@@ -174,7 +175,7 @@ export function CoverageStrip({
           </span>
           {badge && <ConnectionNote badge={badge} />}
           {channel.capabilities.comments_read?.level === 'Direct' && !commentsReadFor(channel.platform, providers) && (
-            <span className='text-muted-foreground text-xs'>{channel.platform} comments are not read in this release</span>
+            <span className='text-muted-foreground text-xs'>{channel.platform} comments aren&apos;t available yet</span>
           )}
         </Surface>
       );
@@ -184,7 +185,7 @@ export function CoverageStrip({
   return (
     <section aria-label='Accounts that feed this inbox' data-tour='inbox-coverage' className='flex flex-col gap-2'>
       <div className='flex items-center justify-between gap-2'>
-        <h2 className='rafii-eyebrow'>Accounts feeding this inbox</h2>
+        <h2 className='rafii-eyebrow'>Accounts</h2>
         {channels && channels.length > 0 && (
           <Link
             href='/app/channels'

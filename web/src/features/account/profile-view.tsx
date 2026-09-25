@@ -10,7 +10,7 @@ import { rafiiDialog, rafiiDialogFooter, rafiiInput, rafiiMenu } from '@/compone
 import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { CollectionRow, StateMessage, Surface } from '@/components/rafii';
+import { CollectionRow, InfoTip, StateMessage, Surface } from '@/components/rafii';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import {
   AlertDialog,
@@ -59,18 +59,15 @@ const infoContent = {
   sections: [
     {
       title: 'You, not the workspace',
-      description:
-        'Profile covers your identity, how your account is secured and what you can reach. Workspace settings stay on the Workspace pages; this page summarises them and links across.'
+      description: 'Your identity, security and access. Workspace settings live on the Workspace pages.'
     },
     {
       title: 'Two-factor authentication',
-      description:
-        'Once it is on, every sign-in needs Face ID / Touch ID or a code from your authenticator app, and the API refuses sessions without one. Add a second method as a backup: there are no recovery codes.'
+      description: 'Once on, every sign-in needs Face ID / Touch ID or an authenticator code. Add a second method as a backup: there are no recovery codes.'
     },
     {
       title: 'Owner, staff, members',
-      description:
-        'Each workspace has one owner (billing and deletion), staff (the owner plus admins, who manage members, roles and connections) and members (editors, approvers and viewers who do the content work).'
+      description: 'One owner (billing and deletion). Staff: the owner and admins, who manage members, roles and connections. Members: editors, approvers and viewers.'
     }
   ]
 };
@@ -122,7 +119,7 @@ function EmailChangeDialog({
     try {
       const { error: updateError } = await auth.supabase.auth.updateUser({ email: next });
       if (updateError) throw updateError;
-      toast.success(`Confirmation sent to ${next}. Open the links in both inboxes to finish.`);
+      toast.success('Confirmation sent. Open the links in both inboxes.');
       onOpenChange(false);
     } catch (err) {
       setError(message(err, 'The email could not be changed.'));
@@ -138,8 +135,7 @@ function EmailChangeDialog({
           <DialogHeader className='gap-1.5 pr-8'>
             <DialogTitle className={DIALOG_TITLE}>Change sign-in email</DialogTitle>
             <DialogDescription className='leading-relaxed'>
-              A confirmation link goes to the new address{current ? ` and to ${current}` : ''}. Your sign-in email changes only after the links are
-              opened; until then everything keeps working as it does now.
+              We’ll email a link to the new address{current ? ` and to ${current}` : ''}. It changes once the links are opened.
             </DialogDescription>
           </DialogHeader>
           {error && <StateMessage kind='error' layout='inline' title={error} />}
@@ -186,10 +182,9 @@ function IdentityCard() {
         if (error) throw error;
       }
       await client.invalidateQueries({ queryKey: keys.me });
-      toast.success('Name updated.');
       setEditing(false);
     } catch (err) {
-      toast.error(message(err, 'Your name could not be saved.'));
+      toast.error(message(err, 'Couldn’t save your name.'));
     } finally {
       setBusy(false);
     }
@@ -197,14 +192,13 @@ function IdentityCard() {
 
   const method = dev
     ? 'Local dev identity'
-    : (SIGN_IN_METHODS[auth.user?.provider ?? ''] ?? auth.user?.provider ?? 'Sign-in provider');
+    : (SIGN_IN_METHODS[auth.user?.provider ?? ''] ?? auth.user?.provider ?? 'Unknown');
   const since = auth.user?.createdAt ? formatDate(Date.parse(auth.user.createdAt) / 1000) : null;
 
   return (
     <SettingsSection
       id='profile-identity'
       title='Identity'
-      description='Who you are, in every workspace.'
       material='glass'
       action={
         <DropdownMenu>
@@ -289,8 +283,7 @@ function IdentityCard() {
           </div>
           {!dev && auth.user?.pendingEmail && (
             <p className='text-muted-foreground text-xs leading-relaxed'>
-              Changing to <span className='text-foreground font-medium'>{auth.user.pendingEmail}</span> — open the confirmation links sent to
-              both addresses.{' '}
+              Changing to <span className='text-foreground font-medium'>{auth.user.pendingEmail}</span>. Confirm from both inboxes.{' '}
               <Button variant='quiet' size='sm' className='text-foreground h-auto min-h-8 px-1.5 text-xs underline underline-offset-4' onClick={() => setChangingEmail(true)}>
                 Resend
               </Button>
@@ -340,7 +333,7 @@ function ChannelsCard() {
     <SettingsSection
       id='profile-channels'
       title='Connected channels'
-      description='Every account PostRiff can reach, in every workspace you belong to. Connecting and disconnecting happen on each workspace’s Channels page.'
+      description='Across all your workspaces.'
       material='none'
       bodyClassName='gap-5'
     >
@@ -349,7 +342,7 @@ function ChannelsCard() {
       ) : channels.isError ? (
         <StateMessage
           kind='error'
-          title='Channels could not be loaded.'
+          title='Couldn’t load channels'
           action={
             <Button size='sm' variant='glass' className='min-h-9' onClick={() => void channels.refetch()}>
               Retry
@@ -396,8 +389,7 @@ function ChannelsCard() {
                     meta={
                       <>
                         {channel.platform}
-                        {connectedLine(channel, auth.user?.id)}
-                        {channel.expiresAt && badge.status === 'success' ? ` · valid until ${formatDate(channel.expiresAt)}` : ''}
+                        <span className='hidden md:inline'>{connectedLine(channel, auth.user?.id)}</span>
                       </>
                     }
                     state={
@@ -419,18 +411,6 @@ function ChannelsCard() {
         ))
       )}
     </SettingsSection>
-  );
-}
-
-function Tier({ label, count, note }: { label: string; count: number; note: string }) {
-  return (
-    <div className='flex min-w-0 flex-col gap-0.5'>
-      <div className='flex items-baseline justify-between gap-2'>
-        <span className='text-foreground text-sm font-medium'>{label}</span>
-        <span className='text-foreground text-lg font-semibold tabular-nums'>{count}</span>
-      </div>
-      <span className='text-muted-foreground text-xs leading-relaxed'>{note}</span>
-    </div>
   );
 }
 
@@ -467,7 +447,6 @@ function PendingInvitations() {
     setBusy(invitation.invitationId);
     try {
       await api.declineMyInvitation(invitation.invitationId);
-      toast.success(`Declined the invitation to ${invitation.workspaceName}.`);
       await settle();
     } catch (err) {
       toast.error(message(err, 'The invitation could not be declined.'));
@@ -490,11 +469,9 @@ function PendingInvitations() {
             <li key={invitation.invitationId} className='flex flex-wrap items-center justify-between gap-3'>
               <div className='min-w-0'>
                 <div className='text-foreground truncate text-sm font-medium'>{invitation.workspaceName}</div>
-                <div className='text-muted-foreground text-xs'>
-                  {ROLE_LABELS[role] ?? invitation.role} · {ROLE_DESCRIPTIONS[role] ?? ''}
-                </div>
-                <div className='text-muted-foreground text-xs'>
-                  Invited by {invitation.invitedBy.displayName || 'a workspace admin'} · expires {formatDate(invitation.expiresAt)}
+                <div className='text-muted-foreground text-xs' title={ROLE_DESCRIPTIONS[role]}>
+                  {ROLE_LABELS[role] ?? invitation.role} · from {invitation.invitedBy.displayName || 'a workspace admin'}
+                  <span className='hidden md:inline'> · expires {formatDate(invitation.expiresAt)}</span>
                 </div>
               </div>
               <div className='flex gap-2'>
@@ -513,7 +490,7 @@ function PendingInvitations() {
         <AlertDialogContent className={rafiiDialog}>
           <AlertDialogHeader>
             <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Decline the invitation to {declining?.workspaceName}?</AlertDialogTitle>
-            <AlertDialogDescription className='leading-relaxed'>The link stops working. A workspace admin can invite you again later.</AlertDialogDescription>
+            <AlertDialogDescription className='leading-relaxed'>The invitation link stops working.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className={rafiiDialogFooter}>
             <AlertDialogCancel variant='quiet' size='control'>Keep it</AlertDialogCancel>
@@ -548,7 +525,7 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
     setBusy(true);
     try {
       await api.leaveWorkspace(item.workspaceId);
-      toast.success(`You left ${item.name}.`);
+      toast.success(`You left ${item.name}`);
       await refresh();
       void client.invalidateQueries({ queryKey: keys.me });
     } catch (err) {
@@ -560,7 +537,7 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
   }
 
   return (
-    <Surface material={current ? 'selected' : 'quiet'} radius='card' padding='md' className='flex flex-col gap-5'>
+    <Surface material={current ? 'selected' : 'quiet'} radius='card' padding='md' className='flex flex-col gap-4'>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='flex min-w-0 flex-col gap-1'>
           <div className='flex flex-wrap items-center gap-2'>
@@ -570,6 +547,10 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
           </div>
           <div className='text-muted-foreground text-xs'>
             Owned by {owner} · {tiers.total} {tiers.total === 1 ? 'person' : 'people'}
+            <span className='hidden md:inline'>
+              {' '}
+              ({tiers.staff} staff, {tiers.members} {tiers.members === 1 ? 'member' : 'members'})
+            </span>
           </div>
         </div>
         <div className='flex flex-wrap gap-2'>
@@ -587,31 +568,19 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
         </div>
       </div>
 
-      <div className='grid gap-4 sm:grid-cols-3'>
-        <Tier label='Owner' count={tiers.owners} note='Billing, deletion, member roles' />
-        <Tier label='Staff' count={tiers.staff} note='Owner and admins: members, roles, connections' />
-        <Tier label='Members' count={tiers.members} note='Editors, approvers and viewers' />
-      </div>
-
-      <div className='flex flex-col gap-0.5 text-sm'>
-        <div>
-          <span className='text-muted-foreground'>Your role: </span>
+      <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
+        <span className='flex items-center gap-0.5'>
+          <span className='text-muted-foreground'>Your role:&nbsp;</span>
           <span className='text-foreground font-medium'>{ROLE_LABELS[role]}</span>
-          {grants.length > 0 && <span className='text-muted-foreground'> · can also {grants.join(', ')}</span>}
-        </div>
-        <p className='text-muted-foreground text-xs leading-relaxed'>{ROLE_DESCRIPTIONS[role]}</p>
-      </div>
-
-      <div className='flex flex-wrap items-center justify-between gap-2 text-xs'>
+          {grants.length > 0 && <span className='text-muted-foreground'>&nbsp;· can also {grants.join(', ')}</span>}
+          <InfoTip label={`About the ${ROLE_LABELS[role]} role`} className='-my-2 size-9' description={ROLE_DESCRIPTIONS[role]} />
+        </span>
         {canLeave(role) ? (
-          <>
-            <span className='text-muted-foreground'>Leaving removes your access. Drafts you wrote stay in the workspace.</span>
-            <Button size='sm' variant='quiet' className='text-destructive min-h-9' disabled={busy} onClick={() => setConfirmLeave(true)}>
-              Leave workspace
-            </Button>
-          </>
+          <Button size='sm' variant='quiet' className='text-destructive min-h-9' disabled={busy} onClick={() => setConfirmLeave(true)}>
+            Leave workspace
+          </Button>
         ) : (
-          <span className='text-muted-foreground'>You own this workspace. Transfer ownership first if you want to leave it.</span>
+          <span className='text-muted-foreground text-xs'>Transfer ownership to leave.</span>
         )}
       </div>
 
@@ -620,7 +589,7 @@ function WorkspaceRow({ item, current }: { item: WorkspaceListItem; current: boo
           <AlertDialogHeader>
             <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Leave {item.name}?</AlertDialogTitle>
             <AlertDialogDescription className='leading-relaxed'>
-              You lose access immediately and can only return by invitation. Nothing you wrote is deleted.
+              You lose access now and need an invitation to return. Nothing you wrote is deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className={rafiiDialogFooter}>
@@ -641,7 +610,6 @@ function WorkspacesCard() {
     <SettingsSection
       id='profile-workspaces'
       title='Workspaces & access'
-      description='Each workspace has one owner, staff who run it (the owner and admins) and members who do the content work. Your role sets what you can do in each.'
       material='none'
     >
       <PendingInvitations />
@@ -654,11 +622,10 @@ function WorkspacesCard() {
   );
 }
 
-/** Account-level actions in their own, clearly named lower section (DNA §21.15). */
+/** Account-level actions in their own, clearly named lower section (DNA §21.15). Signing out is harmless, so it needs no confirmation. */
 function AccountActions() {
   const auth = useAuth();
   const router = useRouter();
-  const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
 
   function signOut() {
@@ -670,51 +637,27 @@ function AccountActions() {
     <SettingsSection
       id='profile-account'
       title='Account'
-      description='Signing out ends the session on this device only; other devices stay signed in unless you revoke them above.'
       bodyClassName='flex-row flex-wrap items-center gap-3'
     >
-      <Button variant='glass' size='control' disabled={busy} onClick={() => setConfirm(true)}>
+      <Button variant='glass' size='control' disabled={busy} onClick={signOut}>
         <Icons.logout className='size-4' aria-hidden />
-        {busy ? 'Signing out…' : 'Sign out'}
+        {busy ? 'Signing out…' : (
+          <>
+            Sign out<span className='sr-only'> on this device</span>
+          </>
+        )}
       </Button>
       <Link href='/app/account/privacy' className={cn(buttonVariants({ variant: 'quiet', size: 'control' }), 'text-muted-foreground')}>
         Delete account
         <Icons.arrowRight className='size-4' aria-hidden />
       </Link>
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
-        <AlertDialogContent className={rafiiDialog}>
-          <AlertDialogHeader>
-            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Sign out on this device?</AlertDialogTitle>
-            <AlertDialogDescription className='leading-relaxed'>
-              Your drafts, schedule and settings stay exactly where they are. You will need to sign in again here; other devices are not affected.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className={rafiiDialogFooter}>
-            <AlertDialogCancel variant='quiet' size='control'>Stay signed in</AlertDialogCancel>
-            <AlertDialogAction
-              variant='action'
-              size='control'
-              onClick={() => {
-                setConfirm(false);
-                signOut();
-              }}
-            >
-              Sign out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </SettingsSection>
   );
 }
 
 export function ProfileView() {
   return (
-    <PageContainer
-      pageTitle='Profile'
-      pageDescription='Your identity, how your account is secured, and what you can reach.'
-      infoContent={infoContent}
-    >
+    <PageContainer pageTitle='Profile' infoContent={infoContent}>
       <div className='grid gap-8 lg:grid-cols-2'>
         <div className='flex min-w-0 flex-col gap-8'>
           <IdentityCard />

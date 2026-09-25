@@ -33,17 +33,17 @@ export function describeChannelEvent(event: AuditEvent): { label: string; detail
       const parts = [
         capability ? `${capabilityLabel(capability)} requested` : null,
         level ? `publish ${level}` : null,
-        missing.length ? `missing scopes: ${missing.join(', ')}` : null
+        missing.length ? `missing permissions: ${missing.join(', ')}` : null
       ].filter(Boolean);
       return { label: 'Connected', detail: parts.length ? parts.join(' · ') : null, tone: missing.length ? 'warning' : 'neutral' };
     }
     case 'channel.verified': {
       const state = text(meta.state);
       const verified = state === 'publish_verified' || state === 'read_verified';
-      return { label: verified ? 'Re-verified' : 'Re-verify found a problem', detail: state ? state.replace(/_/g, ' ') : null, tone: verified ? 'neutral' : 'warning' };
+      return { label: verified ? 'Re-verified' : 'Not verified', detail: state ? state.replace(/_/g, ' ') : null, tone: verified ? 'neutral' : 'warning' };
     }
     case 'channel.disconnected':
-      return { label: 'Disconnected', detail: meta.remoteRevoked ? 'token revoked at the provider' : 'token wiped here; the provider did not confirm a revoke', tone: 'neutral' };
+      return { label: 'Disconnected', detail: meta.remoteRevoked ? 'access revoked' : "access removed here; the platform didn't confirm", tone: 'neutral' };
     default:
       return { label: event.kind.replace(/[._]/g, ' '), detail: null, tone: 'neutral' };
   }
@@ -76,17 +76,15 @@ export function ChannelHistorySheet({
               {channel.platform} · {channel.account}
             </span>
           </SheetTitle>
-          <SheetDescription className='leading-relaxed'>
-            From the workspace audit trail. The trail returns the last 200 workspace events, so older accounts may show only part of their history.
-          </SheetDescription>
+          <SheetDescription className='leading-relaxed'>From the last 200 workspace events.</SheetDescription>
         </SheetHeader>
         <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5'>
           {audit.isLoading ? (
             <StateMessage kind='loading' title='Loading history…' />
           ) : audit.error ? (
-            <StateMessage kind='error' title='History could not be loaded' description={audit.error instanceof Error ? audit.error.message : 'The audit trail did not respond.'} />
+            <StateMessage kind='error' title="Couldn't load history" description={audit.error instanceof Error ? audit.error.message : undefined} />
           ) : events.length === 0 ? (
-            <StateMessage kind='empty' title='No events for this account' description='Nothing about this account appears in the last 200 workspace events.' />
+            <StateMessage kind='empty' title='No history yet' />
           ) : (
             <ol className='flex flex-col gap-1.5'>
               {events.map((event, index) => {

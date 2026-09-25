@@ -112,7 +112,7 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
         <PopoverHeader>
           <PopoverTitle>Choose an image</PopoverTitle>
           <PopoverDescription>
-            {live.length === 0 ? 'The Library has no images yet.' : `${live.length} ${live.length === 1 ? 'image' : 'images'} in the Library`}
+            {live.length === 0 ? 'No images yet' : `${live.length} ${live.length === 1 ? 'image' : 'images'}`}
           </PopoverDescription>
         </PopoverHeader>
         <div className='-mx-1 grid max-h-72 grid-cols-3 gap-2 overflow-y-auto px-1 py-1'>

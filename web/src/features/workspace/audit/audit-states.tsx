@@ -28,7 +28,7 @@ export function AuditLoadError({ error, hasData, updatedAt, onRetry }: { error: 
       kind={hasData ? 'stale' : 'error'}
       layout={hasData ? 'inline' : 'panel'}
       className={hasData ? 'rafii-quiet rounded-[var(--rafii-radius-card)] px-4 py-3' : undefined}
-      title={hasData ? 'The audit log could not be refreshed.' : 'The audit log could not be loaded.'}
+      title={hasData ? 'Couldn’t refresh the audit log.' : 'Couldn’t load the audit log.'}
       description={description || undefined}
       action={
         <Button
@@ -74,7 +74,6 @@ export function AuditEmpty() {
       <StateMessage
         kind='empty'
         title='No events yet'
-        description='This log fills up as people join, channels are connected, data is exported and privacy choices are made. It records who did what and when — never what was written.'
         action={
           canInvite || canConnect ? (
             <>
@@ -96,12 +95,11 @@ export function AuditEmpty() {
   );
 }
 
-export function AuditFilterEmpty({ loaded, onReset }: { loaded: number; onReset: () => void }) {
+export function AuditFilterEmpty({ onReset }: { loaded: number; onReset: () => void }) {
   return (
     <StateMessage
       kind='empty'
       title='No events match these filters'
-      description={`None of the ${formatNumber(loaded)} loaded event${loaded === 1 ? '' : 's'} fit this kind and person.`}
       action={
         <Button variant='glass' size='default' onClick={onReset}>
           Reset filters
@@ -118,21 +116,18 @@ export function AuditFilterEmpty({ loaded, onReset }: { loaded: number; onReset:
 export function AuditCoverage({ loaded, oldest, showing }: { loaded: number; oldest: number; showing: number }) {
   const capped = loaded >= AUDIT_API_LIMIT;
   const filtered = showing !== loaded;
+  const iso = new Date(oldest * 1000).toISOString();
   return (
     <p data-tour='audit-coverage' className='text-muted-foreground flex items-start gap-2 text-xs'>
       <Icons.info aria-hidden className='mt-px size-3.5 shrink-0' />
       <span>
-        {filtered && `Showing ${formatNumber(showing)} of `}
-        {capped ? (
-          <>
-            {filtered ? 'the' : 'Showing the'} newest {formatNumber(loaded)} events, back to <time dateTime={new Date(oldest * 1000).toISOString()}>{formatDateTime(oldest)}</time>. This page cannot load older events yet, so counts and filters cover these{' '}
-            {formatNumber(loaded)} only.
-          </>
-        ) : (
-          <>
-            {filtered ? 'all' : 'All'} {formatNumber(loaded)} event{loaded === 1 ? '' : 's'} in this workspace, since <time dateTime={new Date(oldest * 1000).toISOString()}>{formatDate(oldest)}</time>.
-          </>
-        )}
+        Showing {filtered ? `${formatNumber(showing)} of ` : ''}
+        {capped ? 'the newest ' : filtered ? '' : 'all '}
+        {formatNumber(loaded)} event{loaded === 1 ? '' : 's'} since{' '}
+        <time dateTime={iso} title={formatDateTime(oldest)}>
+          {formatDate(oldest)}
+        </time>
+        .{capped ? ' Older events aren’t loaded.' : ''}
       </span>
     </p>
   );

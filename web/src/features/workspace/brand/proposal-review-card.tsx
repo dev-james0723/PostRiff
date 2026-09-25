@@ -64,17 +64,17 @@ export function ProposalReviewCard({ state, workspaceRevision, isOwner, sample, 
       await act.mutateAsync({ revision: workspaceRevision, action: 'profile_decide', payload: { decision: 'approve', note: note.trim() } });
       setOpen(false);
       setApproveState('idle');
-      toast.success(`${next ? `Revision ${next}` : 'The proposed revision'} is active. New drafts are written with it.`);
+      toast.success(`${next ? `Revision ${next}` : 'The new revision'} is active.`);
     } catch (err) {
       setApproveState('error');
       if (err instanceof ApiError && err.status === 409) {
         // Someone changed the workspace meanwhile: load the latest state and let the owner look again.
         setOpen(false);
         void query.refetch();
-        toast.error('This workspace changed while you were looking. The latest version is loaded; review the proposal again.');
+        toast.error('The workspace changed. Review the latest proposal.');
         return;
       }
-      toast.error(err instanceof ApiError ? err.message : 'The revision could not be approved.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t approve the revision.');
     }
   }
 
@@ -82,24 +82,16 @@ export function ProposalReviewCard({ state, workspaceRevision, isOwner, sample, 
     <Panel
       material='glass'
       data-tour='brand-proposal'
-      eyebrow='Draft interpretation'
       title={`Proposed ${nextName}`}
       titleId='brand-proposal-heading'
-      description={
-        stale
-          ? 'A supporting sample changed or was revoked. Analyse the current selected samples again.'
-          : canApprove
-            ? `Waiting for your approval. Drafts keep using revision ${status.revision} until you approve it.`
-            : `Waiting for an owner. Drafts keep using revision ${status.revision} until an owner approves it.`
-      }
+      description={stale ? 'A sample changed. Analyse your samples again before approving.' : `Drafts keep using revision ${status.revision} until ${canApprove ? 'you approve' : 'an owner approves'}.`}
       bodyClassName='gap-5 text-sm'
-      footer={`Discarding a proposal is not available yet: today it would also switch off revision ${status.revision}.`}
     >
-      {changes && <p className='text-muted-foreground text-xs'>{changes.length ? `Compared with revision ${status.revision}: ${changes.join(' · ')}` : `Same as revision ${status.revision}.`}</p>}
+      {changes && <p className='text-muted-foreground text-xs'>{changes.length ? `Since revision ${status.revision}: ${changes.join(' · ')}` : `Same as revision ${status.revision}.`}</p>}
       <ProfileDetails profile={provisional} observationsLabel='Observations in this proposal' />
       {canApprove && (
         <label htmlFor='voice-revision-guidance' className='flex flex-col gap-2 text-sm'>
-          <span className='text-foreground font-medium'>Edit the writing guidance before approval (optional)</span>
+          <span className='text-foreground font-medium'>Your guidance (optional)</span>
           <Textarea
             id='voice-revision-guidance'
             aria-label='Edited writing guidance for this voice revision'
@@ -108,10 +100,10 @@ export function ProposalReviewCard({ state, workspaceRevision, isOwner, sample, 
             maxLength={1500}
             rows={3}
             disabled={act.isPending}
-            placeholder='Leave blank to keep the proposed observations, or write your own guidance.'
+            placeholder='Plain, specific, never salesy.'
             className={TEXTAREA_CLASS}
           />
-          <span className='text-muted-foreground text-xs'>Your text replaces the proposed writing observations. Evidence remains visible for review; your edits are not labelled as AI findings.</span>
+          <span className='text-muted-foreground text-xs'>Replaces the proposed observations.</span>
         </label>
       )}
       <div className='flex flex-col items-start gap-2'>
@@ -125,7 +117,7 @@ export function ProposalReviewCard({ state, workspaceRevision, isOwner, sample, 
             }}
           >
             <Button variant='action' size='control' onClick={() => setOpen(true)} disabled={act.isPending}>
-              Review and approve
+              Approve…
             </Button>
             <AlertDialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 md:rounded-[var(--rafii-radius-dialog)] md:p-6'>
               <AlertDialogHeader>
@@ -157,7 +149,7 @@ export function ProposalReviewCard({ state, workspaceRevision, isOwner, sample, 
             </AlertDialogContent>
           </AlertDialog>
         ) : (
-          <p className='text-muted-foreground text-xs'>{sample ? 'This sample workspace is read-only, so the proposal cannot be approved here.' : 'Only an owner can approve a voice revision.'}</p>
+          <p className='text-muted-foreground text-xs'>{sample ? 'Sample workspace: approval isn’t available.' : 'Only an owner can approve.'}</p>
         )}
       </div>
     </Panel>

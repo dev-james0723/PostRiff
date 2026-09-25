@@ -28,9 +28,7 @@ function ChipEvidence({ chip, value }: { chip: CapabilityChipDef; value: Capabil
       <p className='text-foreground text-xs leading-relaxed'>{evidence || LEVEL_MEANING[level] || LEVEL_MEANING.Unsupported}</p>
       <dl className='text-muted-foreground grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs'>
         <dt>Verified</dt>
-        <dd>{value?.verifiedAt ? formatDateTime(value.verifiedAt) : 'Not verified yet'}</dd>
-        <dt>Version</dt>
-        <dd>capability v{value?.capabilityVersion ?? 0}</dd>
+        <dd>{value?.verifiedAt ? formatDateTime(value.verifiedAt) : 'Not yet'}</dd>
       </dl>
     </div>
   );
@@ -73,15 +71,17 @@ export function CapabilityChips({
   'data-tour'?: string;
 }) {
   const canHover = useHoverCapable();
+  const unsupported = CAPABILITY_CHIPS.filter((chip) => levelKey(capabilities[chip.key]?.level) === 'unsupported').length;
   return (
     <ul className={cn('flex flex-wrap gap-1.5', className)} aria-label='Capabilities' {...rest}>
       {CAPABILITY_CHIPS.map((chip) => {
         const value = capabilities[chip.key];
         const level = value?.level;
-        const label = `${chip.label}: ${level ?? 'Unsupported'}. Show evidence`;
+        const label = `${chip.label}: ${level ?? 'Unsupported'}. Show details`;
         const content: ReactNode = <ChipEvidence chip={chip} value={value} />;
         return (
-          <li key={chip.key} className='contents'>
+          // Phones list only what the account can do; the unsupported ones collapse into one count below.
+          <li key={chip.key} className={cn('contents', levelKey(level) === 'unsupported' && 'max-md:hidden')}>
             {canHover ? (
               <HoverCard>
                 <HoverCardTrigger
@@ -109,6 +109,7 @@ export function CapabilityChips({
           </li>
         );
       })}
+      {unsupported > 0 && <li className='text-muted-foreground inline-flex min-h-9 items-center px-1 text-xs md:hidden'>+{unsupported} not supported</li>}
     </ul>
   );
 }

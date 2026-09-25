@@ -33,7 +33,7 @@ export const FLAGS: { key: FlagKey; label: string; short: string; explains: stri
     label: 'Can moderate',
     short: 'Moderate',
     // No hosted action requires the `moderate` class yet (permissions.py ACTION_CLASSES).
-    explains: 'Reserved for comment moderation. Nothing in the workspace uses it yet.'
+    explains: 'For comment moderation. Not used yet.'
   },
   {
     key: 'can_manage_connections',

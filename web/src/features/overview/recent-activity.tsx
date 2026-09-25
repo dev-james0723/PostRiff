@@ -25,7 +25,7 @@ const KIND_LABELS: Record<string, string> = {
   'channel.verified': 'Channel re-verified',
   'channel.disconnected': 'Channel disconnected',
   'oauth.started': 'Connection started',
-  'oauth.denied': 'Connection declined at the provider',
+  'oauth.denied': 'Connection declined',
   'oauth.rejected': 'Connection attempt rejected',
   'invitation.created': 'Invitation sent',
   'invitation.revoked': 'Invitation withdrawn',
@@ -141,25 +141,24 @@ export function RecentActivity({ className }: { className?: string }) {
       className={className}
       title='Recent activity'
       titleId='overview-recent-activity-heading'
-      description='Content-free audit trail of what happened in this workspace.'
       footer={
         canOpenLog ? (
           <Link href='/app/workspace/audit' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }), '-ml-2.5 w-fit')}>
             Full audit log <LearnMoreChevron />
           </Link>
         ) : (
-          'The full log is open to admins; ask one if you need it.'
+          'Ask an admin for the full log.'
         )
       }
     >
       {!canOpenLog ? (
         <StateMessage kind='permission' layout='inline' title='Workspace activity is visible to admins and owners.' />
       ) : audit.isError ? (
-        <SectionUnavailable message='Activity is unavailable right now.' query={audit} />
+        <SectionUnavailable message='Couldn’t load activity.' query={audit} />
       ) : !audit.data ? (
         <Skeleton className='h-32 w-full rounded-[var(--rafii-radius-control)]' />
       ) : events.length === 0 ? (
-        <StateMessage kind='empty' layout='inline' title='No activity recorded yet.' description='The log fills as people join, channels connect and choices are saved.' />
+        <StateMessage kind='empty' layout='inline' title='No activity yet' />
       ) : (
         <ul className='flex flex-col gap-1'>
           {events.slice(0, SHOWN).map((event, index) => {

@@ -15,7 +15,7 @@ import { takeExpectedReconnect } from '@/lib/channels/connect-expect';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 /**
- * Handles the provider's return (`/channels/connect?provider&state&code`) with the authenticated exchange.
+ * Handles the platform's return (`/channels/connect?provider&state&code`) with the authenticated exchange.
  * Only the Rafii-owned surfaces are styled here; the exchange, its query handling and redirects are untouched.
  */
 export function ConnectReturn() {
@@ -34,7 +34,7 @@ export function ConnectReturn() {
     if (handled.current) return;
     handled.current = true;
     if (!provider || !state) {
-      setError('This return link is incomplete. Start the connection again from Channels.');
+      setError('This link is incomplete. Start again from Channels.');
       return;
     }
     api
@@ -49,10 +49,10 @@ export function ConnectReturn() {
         await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         if (value.connected && connectionId) {
           if (value.missingScopes?.length) {
-            toast.warning(`Missing scopes: ${value.missingScopes.join(', ')} — publishing stays Assisted.`);
+            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. Publishing stays Assisted.` });
           }
           if (expected && expected.channelId !== connectionId) {
-            toast.warning(`You connected a different account; ${expected.account} still needs reconnecting.`);
+            toast.warning(`Different account connected. ${expected.account} still needs reconnecting.`);
           }
           // Straight back to Channels: the page scrolls to the new card and plays its check once.
           router.replace(`/app/channels?connected=${encodeURIComponent(connectionId)}`);
@@ -60,7 +60,7 @@ export function ConnectReturn() {
         }
         setResult(value);
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'The connection could not be completed.'));
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Start again from Channels.'));
   }, [api, client, params, provider, router, state, workspaceId]);
 
   const back = (
@@ -70,22 +70,20 @@ export function ConnectReturn() {
   );
 
   return (
-    <PageContainer pageEyebrow='Connections' pageTitle='Finishing connection' pageDescription='Confirming the account the provider returned.' width='reading'>
+    <PageContainer pageTitle='Finishing connection' width='reading'>
       <div className='flex max-w-xl flex-col gap-4'>
-        {!result && !error && <StateMessage kind='loading' title='Confirming the account the provider returned…' />}
-        {error && <StateMessage kind='error' title='Not connected' description={error} action={back} />}
+        {!result && !error && <StateMessage kind='loading' title='Confirming your account…' />}
+        {error && <StateMessage kind='error' title="Couldn't connect" description={error} action={back} />}
         {result &&
           (result.connected ? (
             <StateMessage
               kind='success'
               title={`Connected ${result.account ?? ''}`.trim()}
-              description={`Confirm this is the right account on the Channels page.${
-                result.missingScopes?.length ? ` Missing scopes: ${result.missingScopes.join(', ')} — publishing stays Assisted.` : ''
-              }`}
+              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. Publishing stays Assisted.` : undefined}
               action={back}
             />
           ) : (
-            <StateMessage kind='error' title='Connection was not granted' description={result.reason || 'Nothing was stored.'} action={back} />
+            <StateMessage kind='error' title='Access not granted' description={result.reason || undefined} action={back} />
           ))}
       </div>
     </PageContainer>

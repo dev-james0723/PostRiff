@@ -84,5 +84,5 @@ def invoke(tool_id, version, payload, credits_ok=None):
         raise AlphaError("Paid generation requires an approved credit reservation first.", 402)
     status = isolation_status()
     if not status["publicInvokeEnabled"]:
-        raise AlphaError("Tool execution is blocked: an isolated bounded runner is not qualified for this deployment.", 503)
+        raise AlphaError("Running tools isn't available yet.", 503)
     raise AlphaError("No runner is mounted.", 503)

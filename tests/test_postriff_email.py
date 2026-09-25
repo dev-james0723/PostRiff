@@ -34,7 +34,7 @@ class Templates(unittest.TestCase):
             self.assertIn(f'href="{link}"', html, kind)
             self.assertIn(f"{BASE}/privacy", text, kind)
             self.assertIn(f"{BASE}/privacy", html, kind)
-            self.assertIn("You received this because you have a PostRiff account.", text)
+            self.assertIn("You received this because you have a Rafii account.", text)
             self.assertNotIn("<script>", html, kind)
             if "<script>" in str(ctx):
                 self.assertIn("&lt;script&gt;", html, kind)
@@ -44,10 +44,10 @@ class Templates(unittest.TestCase):
 
     def test_subject_lines(self):
         m = mailer()
-        self.assertEqual(m.render("invitation", **CONTEXTS["invitation"])[0], "You’re invited to a PostRiff workspace")
-        self.assertEqual(m.render("welcome", **CONTEXTS["welcome"])[0], "Welcome to PostRiff")
-        self.assertEqual(m.render("trial_ending", **CONTEXTS["trial_ending"])[0], "Your PostRiff trial ends in 3 days")
-        self.assertEqual(m.render("trial_ended", **CONTEXTS["trial_ended"])[0], "Your PostRiff trial has ended")
+        self.assertEqual(m.render("invitation", **CONTEXTS["invitation"])[0], "You’re invited to a Rafii workspace")
+        self.assertEqual(m.render("welcome", **CONTEXTS["welcome"])[0], "Welcome to Rafii")
+        self.assertEqual(m.render("trial_ending", **CONTEXTS["trial_ending"])[0], "Your Rafii trial ends in 3 days")
+        self.assertEqual(m.render("trial_ended", **CONTEXTS["trial_ended"])[0], "Your Rafii trial has ended")
         self.assertEqual(m.render("payment_failed", **CONTEXTS["payment_failed"])[0], "Action needed: payment failed")
         self.assertEqual(m.render("subscription_activated", plan_label="Studio", billing_url=f"{BASE}/b")[0], "Your Studio plan is active")
 

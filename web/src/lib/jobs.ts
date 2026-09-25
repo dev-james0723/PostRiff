@@ -37,13 +37,14 @@ export function jobGroup(state: string): JobGroup {
 export const FILTER_VALUES = ['all', 'waiting', 'in-flight', 'held', 'done', 'ended'] as const;
 export type Filter = (typeof FILTER_VALUES)[number];
 
-export const FILTERS: { value: Filter; label: string; empty: string }[] = [
-  { value: 'all', label: 'All', empty: 'Approved posts appear here as jobs the worker runs at the approved time.' },
-  { value: 'waiting', label: 'Waiting', empty: 'A waiting job is approved and has not reached the provider yet. It can still be cancelled.' },
-  { value: 'in-flight', label: 'In flight', empty: 'An in-flight job is with the provider. When the provider does not confirm, PostRiff reconciles and never resubmits.' },
-  { value: 'held', label: 'Held', empty: 'A held job needs a new review; nothing publishes from it.' },
-  { value: 'done', label: 'Verified', empty: 'A verified job is one the provider confirmed as published.' },
-  { value: 'ended', label: 'Ended', empty: 'Failed and cancelled jobs end here, with the reason they stopped.' }
+/** Queue filters. The empty state is the screen's own short title ("No scheduled posts"), so no sentence is kept here. */
+export const FILTERS: { value: Filter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'in-flight', label: 'In flight' },
+  { value: 'held', label: 'Held' },
+  { value: 'done', label: 'Verified' },
+  { value: 'ended', label: 'Ended' }
 ];
 
 /** Fields present on every job the API sends (`store.py` approve, `hosted_worker.py`) but not in the shared type. */
@@ -112,39 +113,39 @@ export function jobBadge(job: { state: string; cancelRequested?: boolean; verifi
   // Only a job that has not reached the provider is actually being cancelled; after submission the request
   // turns the job uncertain, and that is what the badge says.
   if (job.cancelRequested && (group === 'waiting' || group === 'held')) {
-    return { status: 'loading', label: 'cancelling', pulse: true, title: `Cancel requested while ${label}` };
+    return { status: 'loading', label: 'cancelling', pulse: true, title: 'Cancel requested' };
   }
   switch (group) {
     case 'waiting':
-      return { status: 'info', label: 'waiting', pulse: false, title: `Approved and waiting for its time (${label})` };
+      return { status: 'info', label: 'waiting', pulse: false, title: 'Approved and waiting for its time' };
     case 'publishing':
-      if (job.state === 'processing') return { status: 'info', label: 'preparing media', pulse: false, title: 'Container processing; publication has not been attempted.' };
-      if (job.state === 'provider_accepted') return { status: 'info', label: 'accepted · checking result', pulse: false, title: 'Provider acceptance is not verified publication.' };
+      if (job.state === 'processing') return { status: 'info', label: 'preparing media', pulse: false, title: 'Preparing media' };
+      if (job.state === 'provider_accepted') return { status: 'info', label: 'accepted · checking result', pulse: false, title: 'Accepted by the platform; checking the result' };
       return job.state === 'published'
-        ? { status: 'loading', label: 'published · verifying', pulse: true, title: 'The provider reported it published; PostRiff has not verified it yet.' }
-        : { status: 'loading', label, pulse: true, title: 'Handed to the provider; waiting for its answer.' };
+        ? { status: 'loading', label: 'published · verifying', pulse: true, title: 'Checking the post is live' }
+        : { status: 'loading', label, pulse: true, title: 'Sent; waiting for the platform' };
     case 'uncertain':
       return {
         status: 'warning',
         label: 'result not confirmed',
         pulse: false,
         title: job.cancelRequested
-          ? 'A cancel was requested after submission, which cannot recall the post. Nothing is retried until it is reconciled.'
-          : 'The provider did not confirm; nothing is retried until it is reconciled.'
+          ? 'The cancel came too late to recall it. Check the platform before trying again.'
+          : 'The platform didn’t confirm. Check it before trying again.'
       };
     case 'held':
-      return { status: 'warning', label: 'needs action', pulse: false, title: 'Something changed after approval. Nothing publishes from this job; prepare a new review.' };
+      return { status: 'warning', label: 'needs action', pulse: false, title: 'Something changed after approval. Prepare it again.' };
     case 'verified':
       return {
         status: 'success',
         label: job.verification?.method ? `verified · ${stateWords(job.verification.method)}` : 'verified',
         pulse: false,
-        title: 'Confirmed by the provider.'
+        title: 'Live on the platform'
       };
     case 'ended':
       return job.state === 'failed' ? { status: 'danger', label: 'failed', pulse: false } : { status: 'neutral', label: 'cancelled', pulse: false };
     default:
-      return { status: 'neutral', label, pulse: false, title: 'A state this page does not recognise yet; open the receipt for its events.' };
+      return { status: 'neutral', label, pulse: false, title: 'Open details for its events.' };
   }
 }
 

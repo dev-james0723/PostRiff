@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { SegmentedControl, StateMessage } from '@/components/rafii';
+import { InfoTip, SegmentedControl, StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { usd } from '@/lib/api/client';
@@ -138,11 +138,11 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
 
   return (
     <section className='@container flex flex-col gap-3' aria-labelledby='ledger-heading' data-tour='billing-ledger'>
-      <div className='px-1'>
-        <h3 id='ledger-heading' className='text-foreground text-lg font-medium tracking-tight'>
+      <div className='flex items-center gap-1 px-1'>
+        <h2 id='ledger-heading' className='text-foreground text-lg font-medium tracking-tight'>
           Recent usage
-        </h3>
-        <p className='text-muted-foreground text-sm'>Each run reserves an estimate, then settles to the real cost or is released if it failed.</p>
+        </h2>
+        <InfoTip label='About usage costs' description='Each run reserves an estimate, then settles to the real cost. Failed runs are released.' />
       </div>
 
       {entries.length === 0 ? (
@@ -155,7 +155,6 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
               </span>
             }
             title='No usage yet'
-            description='Every drafting run appears here: runs with no paid model at $0, paid runs as a reservation that then settles to the real cost.'
             action={
               canEdit ? (
                 <Link href='/app/ideas?new=1' className={buttonVariants({ variant: 'glass', size: 'control' })}>
@@ -190,12 +189,15 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
             />
             <Button variant='glass' size='sm' className='min-h-10 px-3.5' onClick={exportCsv} disabled={filtered.length === 0}>
               <Icons.download className='size-4' />
-              Export {filtered.length.toLocaleString()} {filtered.length === 1 ? 'row' : 'rows'} (CSV)
+              <span>Export CSV</span>
+              <span className='sr-only'>
+                , {filtered.length.toLocaleString()} {filtered.length === 1 ? 'row' : 'rows'}
+              </span>
             </Button>
           </div>
 
           {filtered.length === 0 ? (
-            <StateMessage kind='empty' layout='inline' title={`No ${LEDGER_FILTER_LABELS[filter].toLowerCase()} entries among the latest ${entries.length.toLocaleString()}.`} />
+            <StateMessage kind='empty' layout='inline' title={`No ${LEDGER_FILTER_LABELS[filter].toLowerCase()} usage`} />
           ) : (
             <>
               <StackedRows entries={visible} />
@@ -204,11 +206,7 @@ export function Ledger({ entries, canEdit }: { entries: LedgerEntry[]; canEdit: 
           )}
 
           <div className='text-muted-foreground flex flex-wrap items-center justify-between gap-2 px-1 text-xs'>
-            <span>
-              {filtered.length > 0 && `Showing ${visible.length.toLocaleString()} of ${filtered.length.toLocaleString()} · `}
-              {filtered.length > 0 ? 'the' : 'The'} workspace lists its latest {entries.length.toLocaleString()} {entries.length === 1 ? 'entry' : 'entries'} here
-              (up to 100)
-            </span>
+            <span>{filtered.length > LEDGER_PAGE && !showAll ? `${visible.length.toLocaleString()} of ${filtered.length.toLocaleString()}` : null}</span>
             {filtered.length > LEDGER_PAGE && (
               <Button variant='quiet' size='sm' className='min-h-9' onClick={() => setShowAll((value) => !value)}>
                 {showAll ? `Show latest ${LEDGER_PAGE}` : `Show all ${filtered.length.toLocaleString()}`}

@@ -1,0 +1,73 @@
+# UI simplification audit: channels, inbox, analytics
+
+Scope: `features/channels/**`, `lib/channels/**`, `app/channels/**`, `app/app/channels/**`, `features/inbox/**`, `features/analytics/**`, `config/channels.ts`, `components/channel-icon.tsx`, `app/app/inbox/**`, `app/app/analytics/**`.
+
+## Audit table
+
+| Screen/component | Current copy (short) | Class | New copy / action |
+|---|---|---|---|
+| `lib/channels/state` channelBadge | Connected / Connected · read only / Needs reconnect / Missing permissions / Expiring soon / Disconnected / Identity only | COMPRESS | Reads `STATUS` (Connected, Read only, Needs reconnect, Missing permissions, Expiring soon, Disconnected). `identity_known` → "Account only" (local literal, see requests) |
+| `lib/channels/state` attentionSentence | "Access expired on <date>. Scheduled posts for this account are waiting. 2 scheduled posts are held." | COMPRESS | "Access expired. 2 posts on hold." / "Access revoked." / "No permissions granted." / "Access ends in 3 days." / "Disconnected. 1 post on hold." The held count is kept |
+| Channels page | Eyebrow "Connections" and a description ("Each capability is verified on its own…") | REMOVE | Title "Channels" only |
+| Channels info sidebar | 5 long sections using provider and token language | COMPRESS | 5 one-line sections in plain words (permissions, Direct/Assisted/Local, Re-verify, Reconnect, Disconnect) |
+| Channels summary | "3 connected · 2 direct publish · 1 needs attention · 3 of 5 accounts on your plan · upgrade for more" | COMPRESS | "3 of 5 accounts · 1 needs attention" plus an "Upgrade for more" link only at the limit. Direct count stays on the filter tab. With nothing connected: "5 platforms available" |
+| Channels empty | "No accounts connected" plus a 30-word paragraph and "Connect an account" | COMPRESS | "No accounts connected" + `Connect account` (spec Example A) |
+| Channels filtered empty | Titles with paragraphs ("Tokens are checked when…", "this view is only filtered") | COMPRESS | Title only + `Show all` |
+| Channels error | "Channels could not be loaded" + Retry | COMPRESS | "Couldn't load channels" + error detail + `Try again` |
+| Connect section | "Hosted connectors use the provider's official API…" | REMOVE | Heading "Connect" only |
+| Provider tile | 3 paragraphs (OAuth/presence-only config, review status, publishing-worker scope), setup issues in red, callback URI | MOVE | Readiness label ("Available" / "Review pending" / "Paused" / "Not available yet"). Publishing scope moved to an InfoTip; setup issues and callback moved under a `Details` collapsible |
+| `providerReadinessLabel` | Partial credentials / Invalid configuration / Not configured / Configuration blocked / Configured · review not confirmed | COMPRESS | Not available yet / Paused / Available / Review pending |
+| Desktop companion | 45-word sentence; "Local · not available yet" | COMPRESS | "For platforms without a public API. It will publish from your computer, with your own sign-in — never from our servers." / "Not available yet" |
+| Channel card attention band | Title "Needs attention" + sentence | COMPRESS | The short sentence is the title, next to `Reconnect` |
+| Channel card, reconnect unavailable | "This provider is not configured on this deployment, so it cannot be reconnected here." | COMPRESS | "Reconnect isn't available for <Platform> yet." |
+| Channel card readiness | "Historical import is not currently available…", "Publishing permission is available. Every post still needs your explicit approval." | COMPRESS | "Can publish posts you approve." / "Publishing awaits platform review." / "Can't publish from this account." / "Can import past posts." / "LinkedIn hasn't granted permission to import past posts." + `Add samples manually` |
+| Channel card metadata | "Access until <date> · in 3 weeks · Verified 2h ago · Evidence: oauth callback · 4 scopes" | COMPRESS | "Expires in 3 weeks" (exact date in a tooltip) · "Verified 2h ago" (desktop only, evidence in the title) · "4 permissions" (still expandable) |
+| Channel card activity | "3 scheduled · 0 held · 0 published" | COMPRESS | Non-zero counts only: "3 scheduled" |
+| Re-verify toast | "Verification: publish verified — …" on every run | REMOVE/COMPRESS | No toast on success (the button flashes Verified and the badge updates). On failure: "<Platform> not verified" with the detail |
+| Disconnect toast | "Disconnected. Stored tokens were wiped." | REMOVE | The badge turns to Disconnected |
+| Disconnect confirm | 55-word token/samples/DNA paragraph, "Keep" | COMPRESS (kept) | "Rafii loses access to <account>. Writing samples imported from it are deleted, and Writing DNA built from them must be rebuilt. Manual samples stay. Approved posts are held until you reconnect." `Cancel` / `Disconnect` |
+| Capability hover card | meaning, evidence, "Version capability v3" | COMPRESS | Meaning (≤6 words), evidence, verified time. Version removed |
+| Capability meanings | "PostRiff matched the account the provider returned." | COMPRESS | "The account you signed in with." (and similar for the others) |
+| Connect sheet header | "Connect an account" + "Choose the platform and what you want PostRiff to do… separate grant, verified on its own." | COMPRESS | "Connect account"; description kept as sr-only. Reconnect: "Sign in as <acct> on <Platform>. Another account would be added separately." |
+| Connect sheet options | "Connect account: Verify this account without requesting permission to publish." / "Read my posts for voice learning: Browse… separately approve AI analysis. No publishing permission is requested." | COMPRESS (kept explicit) | "Account only: Confirms the account. No posting." / "Read my posts: To learn your voice. You pick the posts and approve analysis. No posting." / "Publish: Posts only what you approve." / … |
+| Connect sheet platform tile | "Connection available" / "Setup required" | COMPRESS | No label when ready; "Not available yet" / "Paused" otherwise |
+| Connect sheet setup | Red setup issues and "Register this callback" | MOVE | "<Platform> isn't available yet." plus a `Details` disclosure |
+| Connect sheet LinkedIn note | 30-word history paragraph | COMPRESS | "LinkedIn doesn't share past posts yet. Add your own text in Learn my voice." |
+| Connect sheet footer note | 3 variants about review, paused and per-post approval | COMPRESS | Shown only when relevant: "<Platform> is paused." / "Publishing awaits platform review. Test accounts can still connect." |
+| Connect sheet confirm step | "Scopes requested", "You will confirm the exact account after X returns you here.", buttons Back / Not now / Continue | COMPRESS | "Permissions requested" (list kept), "You'll confirm the account when X sends you back.", buttons Back / Continue to X |
+| Connect sheet error | Inline error + duplicate toast | REMOVE toast | "Couldn't start connecting" + detail |
+| Connect return page | Eyebrow + "Confirming the account the provider returned." ×3, "Missing scopes: … — publishing stays Assisted." | COMPRESS | "Finishing connection" / "Confirming your account…" / "Couldn't connect" / "Access not granted" / "Missing permissions: … Publishing stays Assisted." |
+| History sheet | "From the workspace audit trail. The trail returns the last 200 workspace events…" | COMPRESS | "From the last 200 workspace events." Empty state: "No history yet". Disconnect detail: "access revoked" / "access removed here; the platform didn't confirm" |
+| Folders section | "Saved folders" + 35-word paragraph; empty state with its own paragraph and a second New folder button | COMPRESS/MOVE | "Folders" + InfoTip. Empty state: "No folders yet" (the header keeps New folder). Section hidden until an account exists |
+| Folder feedback | "Folder duplicated. Accounts and draft destinations are unchanged.", "…Nothing was lost." | COMPRESS | "Folder duplicated." / "Couldn't change the folder." (the delete confirm still says accounts stay) |
+| Channel Bloom | Hint "Tap to select a group. Use the chevron to look inside."; empty "Keep your usual accounts together." + description | REMOVE/COMPRESS | Hint removed; "No folders yet" + `Create folder` |
+| `publishingSupport` (also used in the Queue schedule dialog) | "…Image upload is not connected to this worker…" | COMPRESS | "Profile posts, text only. Needs publish permission; check the post on LinkedIn afterwards." and similar. Unknown platform: "Publishing isn't available here yet. Draft and export instead." |
+| `historyBlocker` (Brand page) | "This connector needs server configuration…", "Separate provider approval and a granted r_member_social scope are required…" | COMPRESS | "Importing from X isn't available yet." / "LinkedIn hasn't granted permission to import past posts. Add samples manually instead." |
+| `owned-posts` coverage/errors | "Pagination reached the end of the API-visible results…", "The provider repeated a cursor…" | COMPRESS | "Reached the end of the available posts." / "Couldn't load more posts. Reload to try again." |
+| `config/channels` (marketing) | "Production review and non-founder account verification are pending…", "Provider quotas can change…" | COMPRESS | "Publishing is still in review. Export posts until it opens." / "Threads limits how often you can post, including posts made outside Rafii." |
+| Inbox header | Eyebrow "Conversations", accent, 30-word description | REMOVE | Title "Inbox" (policy lives in the info sidebar) |
+| Inbox coverage strip | Heading "Accounts feeding this inbox"; "Account coverage unavailable: …"; "No account is connected yet." | COMPRESS | "Accounts"; "Couldn't load accounts" + `Try again`; "No accounts connected" + `Connect account` |
+| Inbox empty | "No comments yet" + 30-word paragraph + per-account card list that repeated the strip | REMOVE (card soup) | "No comments yet" + one short line; no duplicate account list or second limits line |
+| Inbox notes | "The server does not return reply history yet, so Unanswered and Replied only know about…" | COMPRESS | "Replied counts only replies approved this visit." |
+| Inbox errors | "Could not load comments / The server did not answer." Retry | COMPRESS | "Couldn't load comments" + `Try again`; stale: "Couldn't refresh. Showing the last comments loaded." |
+| Thread detail | "…no longer returns this comment, so replying from here is closed.", "Replies are X for acct, so PostRiff cannot reply here.", "On post 1789…", "Pick a comment to read it and reply." | COMPRESS | "Replying is closed." / "Can't reply from Rafii [level]" + `Reply on X` / post ID moved to the link's title / "Pick a comment." |
+| Thread meta | "acct · Platform · first seen 12 Sep 2026, 10:04" | COMPRESS | "acct · 2 days ago" (exact time in a tooltip; the icon carries the platform) |
+| Reply composer | Permission sentences of about 20 words; "Changed since the last save · a review saves this text first"; approve success toast | COMPRESS/REMOVE | "Approving needs the reply permission. Ask a workspace owner." / "Unsaved changes" / no success toast |
+| Approve dialog | "Approve this reply" + "Check the account, the comment and the exact text…", "Digest 3fa9…", "Approving records your decision. Sending is not switched on yet…" | COMPRESS (kept explicit) | "Approve reply?" / "This exact text, from this account, is what gets approved." / digest removed / "Sending isn't available yet. Approving doesn't post to X." |
+| Reply statuses | "Approved · reconfirm when sending is enabled", "Sent · waiting for the provider to confirm" | COMPRESS | "Approved · not sent", "Sent · awaiting confirmation" (Draft/Approved from `STATUS`) |
+| Analytics header | Description; disabled "Refresh" with a tooltip | REMOVE | Title + state chip + "Last read 2h ago" |
+| Analytics summary | 3 stat tiles (Posts read / Latest read / Accounts reporting), each with hint and footer, plus a "no next reading…" paragraph | COMPRESS (card soup) | One line: "12 posts read · 3 waiting for a first read · 2 of 3 accounts reporting". The latest time appears once, in the header |
+| Analytics empty states | 4 states with 20–35-word paragraphs | COMPRESS | "No accounts connected" + `Connect account`; "No account reports analytics yet" + "Analytics is a separate permission, granted per account."; "No published posts yet" + `Open queue`; "3 posts waiting for a first read" + `See posts` |
+| Analytics below table | "N verified posts have no reading yet and are not listed." | REMOVE | Covered by the summary line |
+| Analytics errors | "Accounts could not be read (HTTP 500)." | COMPRESS | "Couldn't load accounts" + detail + `Try again` |
+| Coverage model | "Not offered by X's API for this app.", "Direct: PostRiff reads the provider's official insights…" | COMPRESS | "X doesn't share analytics.", "Direct: numbers for posts Rafii published." |
+| Post sheet | Readings section ("One reading so far — no trend yet"), "Read · stored" line, Details rows: Provider post id, Job, Platform, Account, Definitions, Observed, Ingested | REMOVE/COMPRESS | Readings section hidden while there is only one read. Details: Post ID (copy), Published, Account (only when unmatched), Content type, Read |
+| Posts table | "Language not recorded", "Account not matched", long metric tooltips | COMPRESS | Omitted when empty; "Unknown account"; "Instagram's own "views" (count, definitions v1). Not comparable across platforms." |
+
+## Structural changes
+
+- Channels: removed the eyebrow and description. The summary line no longer repeats the Direct count from the filter tabs. The folders section is hidden while there are no accounts. Provider tiles lost 3 paragraphs: publishing scope went to an InfoTip, setup detail went under `Details`.
+- Channel card: the attention band is now one line (sentence + Reconnect). The metadata row is compact (one date form, verification time is desktop-only, evidence is in a tooltip). Activity shows only non-zero counts. Success toasts that duplicated the badge are gone. The Disconnect confirmation is kept.
+- Connect sheet: the confirm step has 2 buttons, not 3. Readiness labels show only when blocking. Setup detail is behind a disclosure. The explanatory footer appears only when relevant. The permission list and the per-post approval wording stay visible.
+- Inbox: removed the header copy. The empty state no longer repeats the coverage strip's per-account cards. The limits line is desktop-only. The approve dialog lost the digest row.
+- Analytics: 3 stat cards became one line of numbers. The disabled Refresh button, the "no next reading" paragraph and the duplicate latest-read date are gone. The post sheet dropped the single-reading section and its internal rows (Job, Definitions, Ingested).

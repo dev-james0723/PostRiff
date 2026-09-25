@@ -82,14 +82,14 @@ export function MfaChallenge() {
             <StateMessage kind='loading' title='Checking your sign-in methods' className='bg-transparent p-0' />
           ) : factors.length === 0 ? (
             <p role='alert' className='text-foreground text-sm leading-relaxed'>
-              Your account expects a second factor, but none could be listed. Sign out and try again, or use the sign-in help below.
+              Couldn’t find your second factor. Sign out and try again, or get help below.
             </p>
           ) : showCode ? (
             <form
               className='flex flex-col gap-4'
               onSubmit={(event) => {
                 event.preventDefault();
-                void run(() => verifyTotp(client as NonNullable<typeof client>, code), 'That code did not work. Wait for the next one and try again.');
+                void run(() => verifyTotp(client as NonNullable<typeof client>, code), 'That code didn’t work. Wait for the next one and try again.');
               }}
             >
               <div className='flex flex-col gap-2'>
@@ -119,14 +119,14 @@ export function MfaChallenge() {
                 variant='action'
                 size='control'
                 disabled={busy}
-                onClick={() => void run(() => verifyPasskey(client as NonNullable<typeof client>), 'Your device did not complete the passkey step.')}
+                onClick={() => void run(() => verifyPasskey(client as NonNullable<typeof client>), 'Your device didn’t finish the passkey step. Try again.')}
               >
                 <Icons.key className='size-4' aria-hidden />
                 {busy ? 'Waiting for your device…' : 'Continue with Face ID / Touch ID'}
               </Button>
               {hasCode && (
                 <Button variant='quiet' size='control' disabled={busy} onClick={() => setMode('code')}>
-                  Use a code from my authenticator app instead
+                  Use an authenticator code instead
                 </Button>
               )}
             </div>

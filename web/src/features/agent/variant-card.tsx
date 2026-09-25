@@ -136,7 +136,7 @@ function CompareDrafts({ variants, preview }: { variants: RunVariant[]; preview:
       <DialogContent className='rafii-elevated max-h-[calc(100dvh-2rem)] w-max grid-rows-[auto_minmax(0,1fr)] border-0 sm:max-w-[calc(100%-2rem)]'>
         <DialogHeader>
           <DialogTitle>Compare drafts</DialogTitle>
-          <DialogDescription>Each draft in its app. Scroll sideways when they do not all fit.</DialogDescription>
+          <DialogDescription>Each draft in its app.</DialogDescription>
         </DialogHeader>
         <div className='-mx-4 flex min-w-0 snap-x gap-6 overflow-auto px-4 pb-1'>
           {variants.map((variant, index) => (

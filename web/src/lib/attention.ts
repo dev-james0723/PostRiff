@@ -58,13 +58,13 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
   if (usage.isError) unavailable.push('plan');
 
   if (state?.speaker?.provisional && snapshot.data?.membership?.role === 'owner') {
-    items.push({ id: 'voice-proposal', tone: 'info', title: 'Review your proposed voice', description: 'A proposed voice is waiting for your decision. Approving it sends existing drafts back for review.', href: '/app/workspace/brand', action: 'Review' });
+    items.push({ id: 'voice-proposal', tone: 'info', title: 'Review your proposed voice', description: 'Approving it sends existing drafts back for review.', href: '/app/workspace/brand', action: 'Review' });
   } else if (state && !state.speaker?.activeRevision) {
     items.push({
       id: 'voice',
       tone: 'info',
       title: 'Set up your voice',
-      description: 'Two minutes: what you are building, who it is for, and a tone. You can review and schedule drafts now; a voice profile guides future drafts.',
+      description: 'About two minutes.',
       href: '/app/workspace/brand',
       action: 'Set up'
     });
@@ -75,7 +75,7 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       id: 'past-due',
       tone: 'warning',
       title: 'Payment failed',
-      description: 'Publishing stays on during the grace period. Update your payment method to keep it that way.',
+      description: 'Update your payment method to keep publishing.',
       href: '/app/account/billing',
       action: 'Fix billing'
     });
@@ -115,8 +115,8 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
         tone: reconnect ? 'warning' : 'info',
         title: reconnect ? `Reconnect ${channel.platform}` : `Finish setting up ${channel.platform}`,
         description: reconnect
-          ? `${channel.account}: access has expired or was revoked. Scheduled posts for this account are waiting.`
-          : `${channel.account}: the account still needs to be verified before it can publish.`,
+          ? `${channel.account}: access expired. Posts are on hold.`
+          : `${channel.account}: not verified yet.`,
         href: '/app/channels',
         action: 'Open channels'
       });
@@ -129,7 +129,7 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       id: 'approvals',
       tone: 'info',
       title: `${needsReview} draft${needsReview === 1 ? '' : 's'} waiting for approval`,
-      description: 'Nothing publishes until you approve the exact text, media and time.',
+      description: 'Nothing publishes until you approve.',
       href: '/app/queue',
       action: 'Review now'
     });
@@ -145,7 +145,7 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       id: 'automation-drafts',
       tone: 'info',
       title: `${drafts} automation draft${drafts === 1 ? '' : 's'} ready`,
-      description: `${names.length ? `${names.slice(0, 2).join(', ')}${names.length > 2 ? ` and ${names.length - 2} more` : ''} prepared` : 'Your automations prepared'} drafts for review. Nothing is scheduled until you approve it.`,
+      description: names.length ? `From ${names.slice(0, 2).join(', ')}${names.length > 2 ? ` and ${names.length - 2} more` : ''}.` : 'Nothing is scheduled until you approve.',
       href: '/app/automations',
       action: 'Review drafts'
     });
@@ -157,7 +157,7 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       id: 'trial',
       tone: 'info',
       title: trialDays > 0 ? `Trial ends in ${trialDays} day${trialDays === 1 ? '' : 's'}` : 'Trial has ended',
-      description: 'Your drafts stay readable and exportable either way. Choose a plan to keep publishing.',
+      description: 'Choose a plan to keep publishing.',
       href: '/app/account/billing',
       action: 'See plans'
     });
@@ -172,8 +172,8 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       items.push({
         id: 'export-only',
         tone: 'info',
-        title: `${unreviewed.map((provider) => provider.platform).join(', ')}: publish is export-only for now`,
-        description: 'Provider review is in progress. Until it passes, PostRiff prepares each post and you complete the final step.',
+        title: `${unreviewed.map((provider) => provider.platform).join(', ')}: you post the last step`,
+        description: 'Rafii prepares each post; you publish it.',
         href: '/app/channels',
         action: 'Details'
       });
@@ -182,8 +182,8 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       items.push({
         id: 'first-channel',
         tone: 'info',
-        title: 'Connect your first channel',
-        description: 'Drafts can be written and exported now; connecting an account lets you schedule and publish.',
+        title: 'No accounts connected',
+        description: 'Connect one to schedule and publish.',
         href: '/app/channels',
         action: 'Connect'
       });

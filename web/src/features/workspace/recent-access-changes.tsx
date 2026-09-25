@@ -86,18 +86,16 @@ export function RecentAccessChanges({ you }: { you: string | null }) {
   const [known, setKnown] = useState<Set<string> | null>(null);
   if (known === null && audit.data) setKnown(new Set(ids));
 
-  const searched = all?.length ?? 0;
-  const empty = searched === 0 ? 'Nothing has been recorded in this workspace yet.' : `No access changes among the ${searched === 1 ? 'latest workspace event' : `${searched} latest workspace events`}.`;
 
   return (
     <section className='flex flex-col gap-3' aria-labelledby='roles-recent-heading' data-tour='roles-recent'>
-      <SectionHeading id='roles-recent-heading' title='Recent access changes' description='Role and grant changes, removals and departures, newest first.' />
+      <SectionHeading id='roles-recent-heading' title='Recent access changes' />
       {audit.isPending ? (
         <StateMessage kind='loading' title='Loading recent changes…' />
       ) : audit.error ? (
         <StateMessage
           kind='error'
-          title='Recent changes could not be loaded.'
+          title='Couldn’t load recent changes.'
           action={
             <Button size='default' variant='glass' onClick={() => void audit.refetch()} disabled={audit.isFetching}>
               <Icons.refresh className={cn(audit.isFetching && 'motion-safe:animate-spin')} /> Retry
@@ -105,7 +103,7 @@ export function RecentAccessChanges({ you }: { you: string | null }) {
           }
         />
       ) : events.length === 0 ? (
-        <StateMessage kind='empty' title={empty} />
+        <StateMessage kind='empty' title='No recent access changes' />
       ) : (
         <Surface material='quiet' padding='none' className='py-1'>
           <ul className='flex flex-col'>

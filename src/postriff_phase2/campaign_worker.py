@@ -67,7 +67,7 @@ class CampaignWorker:
             publish_at = (occurrence.get('stages') or {}).get('publishAt')
             if campaigns.is_staged(task) and occurrence['state'] == 'pending' and publish_at is not None and publish_at < now - 60:
                 occurrence.update(state='cancelled', reason='skipped', lifecycle='skipped')
-                campaigns._history(occurrence, now, 'skipped', 'PostRiff was unavailable until after this post\'s time, so the run was skipped.')
+                campaigns._history(occurrence, now, 'skipped', 'Rafii was unavailable until after this post\'s time, so the run was skipped.')
                 campaigns.refresh_next(task, now)
                 self._save(cur, workspace_id, state, actor)
                 return {'skipped': True}
@@ -76,7 +76,7 @@ class CampaignWorker:
                 occurrence.update(state='missed', reason='over_24_hours_late')
                 if occurrence.get('lifecycle'):
                     occurrence['lifecycle'] = 'skipped'
-                    campaigns._history(occurrence, now, 'missed', 'PostRiff was unavailable for more than a day at this run\'s time, so it was skipped.')
+                    campaigns._history(occurrence, now, 'missed', 'Rafii was unavailable for more than a day at this run\'s time, so it was skipped.')
                 campaigns.refresh_next(task, now)
                 self._save(cur, workspace_id, state, actor)
                 return {'missed': True}
