@@ -181,6 +181,55 @@ export const channels: Channel[] = [
     notes: [hostedTesting, 'X charges Rafii for every post and read.']
   },
 
+  {
+    slug: 'facebook',
+    name: 'Facebook Pages',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing in review',
+    capabilities: { ...identityOnly },
+    description: 'Text, a link or one photo on the Facebook Page you choose.',
+    formats: ['Text', 'Link', 'Single photo'],
+    region: 'global',
+    notes: [hostedPending, 'Text posts 10 minutes to 30 days ahead are scheduled on Facebook itself.']
+  },
+  {
+    slug: 'youtube',
+    name: 'YouTube',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing in review',
+    capabilities: { ...identityOnly },
+    description: 'Video uploads with the title, visibility and audience you choose.',
+    formats: ['Video'],
+    region: 'global',
+    notes: [hostedPending, 'Until Google audits Rafii, YouTube keeps every upload private.', 'Rafii can’t upload videos yet, so YouTube posts wait for that.']
+  },
+  {
+    slug: 'tiktok',
+    name: 'TikTok',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing in review',
+    capabilities: { ...identityOnly },
+    description: 'Short vertical video with TikTok’s own privacy, interaction and disclosure choices.',
+    formats: ['Video'],
+    region: 'global',
+    notes: [hostedPending, 'Until TikTok audits Rafii, posts are private: only you can see them.', 'Rafii can’t upload videos yet, so TikTok posts wait for that.']
+  },
+  {
+    slug: 'pinterest',
+    name: 'Pinterest',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing in review',
+    capabilities: { ...identityOnly },
+    description: 'One image Pin with a title and link, on the board you choose for each Pin.',
+    formats: ['Image pin'],
+    region: 'global',
+    notes: [hostedPending, 'While Pinterest reviews Rafii, Pins go to a test area only you can see.']
+  },
+
   /* ---- Desktop companion (signs in on your own machine) ---- */
   local('xiaohongshu', 'Xiaohongshu', 'Notes with images or video for China’s discovery-first community.', ['Image note', 'Video note'], { nameZh: '小紅書', region: 'cn' }),
   local('bilibili', 'Bilibili', 'Video uploads with titles, tags and descriptions tuned for Bilibili’s audience.', ['Video', 'Dynamic'], { nameZh: '哔哩哔哩', region: 'cn' }),
@@ -198,10 +247,6 @@ export const channels: Channel[] = [
   local('kakaotalk-channel', 'KakaoTalk Channel', 'Messages to subscribers of your KakaoTalk channel.', ['Text', 'Image'], { region: 'kr' }),
   local('sharechat', 'ShareChat', 'Regional-language posts for India.', ['Text', 'Image', 'Video'], { region: 'in' }),
   local('moj', 'Moj', 'Short vertical video for India.', ['Video'], { region: 'in' }),
-  local('facebook', 'Facebook Pages', 'Page posts with photos and links.', ['Text', 'Image', 'Link']),
-  local('youtube', 'YouTube', 'Video uploads with titles, descriptions, tags and scheduling.', ['Video', 'Short']),
-  local('tiktok', 'TikTok', 'Short vertical video. TikTok keeps unaudited API posts private, so the companion publishes through your own login.', ['Video', 'Photo']),
-  local('pinterest', 'Pinterest', 'Pins with images, titles and destination links.', ['Image pin', 'Video pin']),
   local('reddit', 'Reddit', 'Text and link posts to subreddits you belong to.', ['Text', 'Link', 'Image']),
   local('pixelfed', 'Pixelfed', 'Photo posts on the fediverse.', ['Image']),
   local('whatsapp-channels', 'WhatsApp Channels', 'Broadcast updates to channel followers.', ['Text', 'Image']),

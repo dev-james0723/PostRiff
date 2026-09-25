@@ -25,6 +25,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { AssetPicker } from '@/components/application/asset-picker';
 import { languageLabel } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
+import { NEEDS_OPTIONS, PublishOptions, type PublishOptionsValue } from './publish-options';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 
 interface ScheduleDialogProps {
@@ -176,6 +177,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const [alt, setAlt] = useState('');
   const [rights, setRights] = useState(false);
   const [acknowledge, setAcknowledge] = useState(false);
+  // TikTok, YouTube and Pinterest need per-post choices; null until every one is made.
+  const [publishOptions, setPublishOptions] = useState<PublishOptionsValue>(null);
   const [resolveUnknowns, setResolveUnknowns] = useState(true);
   const timeZone = useTimeZone();
   const [localTime, setLocalTime] = useState(() => defaultLocalTime(timeZone));
@@ -193,6 +196,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const channelId = variant?.channelId ?? chosenChannelId;
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
   const channel = channelsForVariant.find((c) => c.id === channelId);
+  const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
@@ -202,7 +206,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
       (!asset || alt.trim()) &&
-      (!steps.confirmUnknowns || resolveUnknowns)
+      (!steps.confirmUnknowns || resolveUnknowns) &&
+      (!needsOptions || publishOptions !== null)
   );
 
   async function submit() {
@@ -241,7 +246,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           localTime,
           timeZone,
           acknowledgedWarnings: acknowledge ? current.warnings : [],
-          fold: askFold ? fold : undefined
+          fold: askFold ? fold : undefined,
+          publishOptions: needsOptions ? publishOptions : undefined
         }
       });
       // The Queue (or the Calendar) shows the new review; a short toast says where it went.
@@ -426,6 +432,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               <Label htmlFor='schedule-alt'>Alt text</Label>
               <Input id='schedule-alt' className='text-base md:text-sm' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Hands on piano keys under a warm light' />
             </div>
+          )}
+
+          {channel && needsOptions && (
+            // Keyed by account: switching accounts starts the choices again instead of carrying them over.
+            <PublishOptions key={channel.id} platform={channel.platform} channelId={channel.id} asset={asset} text={variant?.text ?? ''} onChange={setPublishOptions} />
           )}
 
           <Label className='flex items-start gap-2 text-sm font-normal'>

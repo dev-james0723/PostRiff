@@ -379,7 +379,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <Icons.history className='size-4' />
           History
         </Button>
-        {canManage && !disconnected && provider?.hasDestinations && <DestinationPicker channelId={channel.id} platform={channel.platform} disabled={busy} />}
+        {canManage && !disconnected && provider?.hasDestinations && provider.destinationScope !== 'post' && (
+          <DestinationPicker channelId={channel.id} platform={channel.platform} label={provider.destinationLabel ?? 'Channel'} disabled={busy} />
+        )}
         {canManage && !disconnected && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
       </div>
       <ChannelHistorySheet channel={channel} open={historyOpen} onOpenChange={setHistoryOpen} />
