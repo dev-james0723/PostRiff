@@ -41,7 +41,10 @@ def normalize_result(result, job, reconciliation=False):
     reference = result.get("reference", job.get("providerReference"))
     if reference is not None and (not isinstance(reference, str) or not 1 <= len(reference) <= 500):
         return unknown("Invalid provider reference; reconcile before retry")
-    if reconciliation and result["state"] in ("processing", "scheduled", "held", "failed"):
+    # The provider's own record of the submission saying it failed (a TikTok publish FAILED, a YouTube upload
+    # rejected) is proof, not a lookup failure, so it may end the job as failed.
+    provider_failure = result.get("state") == "failed" and result.get("verification") == "provider_lookup"
+    if reconciliation and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure:
         # A lookup failure or retry suggestion cannot prove that a prior POST did not run.
         return unknown("Reconciliation did not resolve the prior submission; manual review required")
     if result["state"] in ("published", "verified") and not reference:

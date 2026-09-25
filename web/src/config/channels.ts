@@ -191,7 +191,7 @@ export const channels: Channel[] = [
     description: 'Text, a link or one photo on the Facebook Page you choose.',
     formats: ['Text', 'Link', 'Single photo'],
     region: 'global',
-    notes: [hostedPending, 'Text posts 10 minutes to 30 days ahead are scheduled on Facebook itself.']
+    notes: [hostedPending, 'Rafii publishes at the time you approve; nothing is scheduled on Facebook itself.']
   },
   {
     slug: 'youtube',

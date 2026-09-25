@@ -7,6 +7,7 @@ import json
 import sys
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -136,13 +137,24 @@ CREATOR = {"data": {"creator_nickname": "James", "creator_username": "jamesau", 
 
 
 class TikTokAdapter(unittest.TestCase):
-    def test_client_key_pkce_scopes_and_creator_info(self):
+    def test_web_flow_uses_state_without_pkce_and_hex_pkce_is_a_switch(self):
+        from postriff_phase2.oauth import pkce_pair
         tiktok = TikTokProvider("clientkey", "secret", transport=Wire([ok({"access_token": "AT", "open_id": "OPEN", "scope": "user.info.basic,video.publish", "expires_in": 86400, "refresh_token": "RT"}),
                                                                        ok({"data": {"user": {"open_id": "OPEN", "display_name": "James"}}}), ok(CREATOR)]))
-        query = parse_qs(urlparse(tiktok.authorize_url(BASE + "/cb", "S", "CHALLENGE", ["user.info.basic", "video.publish"])).query)
-        self.assertEqual((query["client_key"][0], query["scope"][0], query["code_challenge_method"][0]), ("clientkey", "user.info.basic,video.publish", "S256"))
-        grant = tiktok.exchange("CODE", "VERIFIER", BASE + "/cb")
-        self.assertEqual((tiktok.transport.calls[0]["form"]["client_key"], tiktok.transport.calls[0]["form"]["code_verifier"]), ("clientkey", "VERIFIER"))
+        verifier, challenge = pkce_pair()
+        query = parse_qs(urlparse(tiktok.authorize_url(BASE + "/cb", "S", challenge, ["user.info.basic", "video.publish"])).query)
+        self.assertEqual((query["client_key"][0], query["scope"][0], query["state"][0]), ("clientkey", "user.info.basic,video.publish", "S"))
+        self.assertNotIn("code_challenge", query)
+        grant = tiktok.exchange("CODE", verifier, BASE + "/cb")
+        self.assertEqual(tiktok.transport.calls[0]["form"]["client_key"], "clientkey")
+        self.assertNotIn("code_verifier", tiktok.transport.calls[0]["form"])
+        hexed = TikTokProvider("clientkey", "secret", hex_pkce=True, transport=Wire([ok({"access_token": "AT", "scope": "user.info.basic"})]))
+        query = parse_qs(urlparse(hexed.authorize_url(BASE + "/cb", "S", challenge, ["user.info.basic"])).query)
+        self.assertEqual((query["code_challenge"][0], query["code_challenge_method"][0]), (hashlib.sha256(verifier.encode()).hexdigest(), "S256"))
+        hexed.exchange("CODE", verifier, BASE + "/cb")
+        self.assertEqual(hexed.transport.calls[0]["form"]["code_verifier"], verifier)
+        mounted = providers.registry_from_environment({"POSTRIFF_OAUTH_TIKTOK_CLIENT_ID": "k", "POSTRIFF_OAUTH_TIKTOK_CLIENT_SECRET": "s", "POSTRIFF_TIKTOK_HEX_PKCE": "true"})
+        self.assertTrue(mounted["tiktok"].hex_pkce)
         self.assertEqual(tiktok.identity(grant["accessToken"])["providerAccountId"], "OPEN")
         self.assertEqual(tiktok.inspect_scopes(grant["accessToken"], "OPEN"), ["user.info.basic", "video.publish"])
         self.assertIsNone(tiktok.inspect_scopes(grant["accessToken"], "SOMEONE-ELSE"))
@@ -243,15 +255,26 @@ class FacebookPublishing(unittest.TestCase):
         facebook = reviewed(FacebookPagesProvider("app", "secret", transport=wire))
         return HostedSocial(Grants(json.dumps(session or self.session), ["pages_manage_posts", "pages_read_engagement"]), {"facebook": facebook}, storage())
 
-    def test_text_is_scheduled_natively_when_far_enough_ahead_and_read_back(self):
+    def test_text_publishes_at_the_approved_time_and_reads_back(self):
         wire = Wire([ok({"id": "10001_20002"}), ok({"id": "10001_20002", "message": "Rehearsal notes", "is_published": True, "from": {"id": "10001"},
                                                   "permalink_url": "https://www.facebook.com/10001/posts/20002"})])
         social = self.social(wire)
-        later = time.time() + 3600
-        result = social.submit(manifest("Facebook", "777", timing={"timestamp": later}))
-        self.assertEqual((result["state"], wire.calls[0]["form"]["published"], wire.calls[0]["form"]["scheduled_publish_time"]), ("provider_accepted", "false", str(int(later))))
+        result = social.submit(manifest("Facebook", "777", timing={"timestamp": time.time() + 3600}))
+        self.assertEqual(result["state"], "provider_accepted")
+        self.assertFalse({"published", "scheduled_publish_time"} & set(wire.calls[0]["form"]))  # never scheduled on Facebook
+        self.assertFalse(FacebookPagesProvider.native_schedule)
         verified = social.reconcile(manifest("Facebook", "777"), {"providerReference": result["reference"]})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Facebook"}})["state"], "verified")
+        unpublished = self.social(Wire([ok({"id": "10001_20002", "message": "Rehearsal notes", "is_published": False, "from": {"id": "10001"}})]))
+        self.assertEqual(unpublished.reconcile(manifest("Facebook", "777"), {"providerReference": "10001_20002"})["state"], "uncertain")
+
+    def test_a_bare_photo_id_is_read_back_by_its_caption(self):
+        wire = Wire([ok({"id": "30003", "name": "Rehearsal notes", "page_story_id": "10001_20003", "from": {"id": "10001"}})])
+        verified = self.social(wire).reconcile(manifest("Facebook", "777", media=IMAGE), {"providerReference": "30003"})
+        self.assertEqual((verified["state"], verified["reference"]), ("verified", "10001_20003"))
+        self.assertIn("name,page_story_id", parse_qs(urlparse(wire.calls[0]["url"]).query)["fields"][0])
+        wrong = self.social(Wire([ok({"id": "30003", "name": "Something else", "from": {"id": "10001"}})])).reconcile(manifest("Facebook", "777", media=IMAGE), {"providerReference": "30003"})
+        self.assertEqual(wrong["state"], "uncertain")
 
     def test_photo_page_choice_and_graph_errors(self):
         wire = Wire([ok({"id": "30003", "post_id": "10001_20003"})])
@@ -287,18 +310,36 @@ class YouTubePublishing(unittest.TestCase):
         quota = ok({"error": {"code": 403, "message": "quota", "errors": [{"reason": "quotaExceeded"}]}}, 403)
         self.assertEqual(self.social(Wire([quota])).submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))["state"], "held")
         foreign = Wire([ok({}, 200, {"location": "https://evil.example/upload"})])
-        self.assertEqual(self.social(foreign).submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))["state"], "uncertain")
+        self.assertEqual(self.social(foreign).submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))["state"], "failed")
         self.assertEqual(len(foreign.calls), 1)  # nothing was sent to the foreign host
+
+    def test_a_rejected_upload_ends_failed_with_youtubes_reason(self):
+        rejected = ok({"items": [{"snippet": {"channelId": self.channel, "title": self.options["title"]}, "status": {"uploadStatus": "rejected", "rejectionReason": "duplicate"}}]})
+        result = self.social(Wire([rejected])).reconcile(manifest("YouTube", self.channel, options=self.options), {"providerReference": "abcdefghijk"})
+        normalized = normalize_result(result, {"manifest": {"platform": "YouTube"}}, reconciliation=True)
+        self.assertEqual(normalized["state"], "failed")
+        self.assertIn("duplicate", normalized["confirmed"])
 
     def test_readback_and_finding_an_unanswered_upload(self):
         processed = ok({"items": [{"snippet": {"channelId": self.channel, "title": self.options["title"]}, "status": {"uploadStatus": "processed", "privacyStatus": "private"}}]})
         verified = self.social(Wire([processed])).reconcile(manifest("YouTube", self.channel, options=self.options), {"providerReference": "abcdefghijk"})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "YouTube"}})["url"], "https://youtu.be/abcdefghijk")
         self.assertIn("kept it private", verified["confirmed"])
-        found = self.social(Wire([ok({"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UU" + "a" * 22}}}]}),
-                                  ok({"items": [{"snippet": {"title": self.options["title"], "description": "Rehearsal notes", "resourceId": {"videoId": "zyxwvutsrqp"}}}]})])
-                                ).reconcile(manifest("YouTube", self.channel, options=self.options), {})
+    def recover(self, uploads, job):
+        playlist = ok({"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UU" + "a" * 22}}}]})
+        items = [{"snippet": {"title": self.options["title"], "description": "Rehearsal notes", "publishedAt": at, "resourceId": {"videoId": vid}}} for vid, at in uploads]
+        return self.social(Wire([playlist, ok({"items": items})])).reconcile(manifest("YouTube", self.channel, options=self.options), job)
+
+    def test_recovery_adopts_one_upload_made_after_this_attempt_never_an_older_one(self):
+        job = {"attempts": [{"number": 1, "startedAt": 1_790_000_000}]}
+        older = ("olderupload", "2026-09-20T10:00:00Z")
+        newer = ("zyxwvutsrqp", datetime.fromtimestamp(1_790_000_030, timezone.utc).isoformat().replace("+00:00", "Z"))
+        self.assertEqual(self.recover([older], job)["state"], "uncertain")  # same words, but uploaded before this job tried
+        found = self.recover([older, newer], job)
         self.assertEqual((found["state"], found["reference"]), ("provider_accepted", "zyxwvutsrqp"))
+        twin = ("abcdefghijk", datetime.fromtimestamp(1_790_000_040, timezone.utc).isoformat().replace("+00:00", "Z"))
+        self.assertEqual(self.recover([newer, twin], job)["state"], "uncertain")  # two candidates: never guess
+        self.assertEqual(self.social(Wire([])).reconcile(manifest("YouTube", self.channel, options=self.options), {})["state"], "uncertain")  # no attempt time
 
 
 class TikTokPublishing(unittest.TestCase):
@@ -326,7 +367,16 @@ class TikTokPublishing(unittest.TestCase):
         self.assertEqual(refused["state"], "failed")
         self.assertIn("audits Rafii", refused["confirmed"])
 
+    def test_a_foreign_upload_host_sends_nothing_and_fails(self):
+        init = ok({"data": {"publish_id": "v_pub_2", "upload_url": "https://uploads.evil.example/video"}, "error": {"code": "ok"}})
+        wire = Wire([ok(CREATOR), init])
+        self.assertEqual(self.social(wire).submit(manifest("TikTok", "OPEN", media=VIDEO, options=tiktok_options()))["state"], "failed")
+        self.assertEqual(len(wire.calls), 2)  # no bytes went to the foreign host
+
     def test_status_readback(self):
+        failed = self.social(Wire([ok({"data": {"status": "FAILED", "fail_reason": "video_pull_failed"}})])).reconcile(manifest("TikTok", "OPEN", options=tiktok_options()), {"providerReference": "v_pub_1"})
+        normalized = normalize_result(failed, {"manifest": {"platform": "TikTok"}}, reconciliation=True)
+        self.assertEqual((normalized["state"], "video_pull_failed" in normalized["confirmed"]), ("failed", True))
         done = self.social(Wire([ok({"data": {"status": "PUBLISH_COMPLETE"}})])).reconcile(manifest("TikTok", "OPEN", options=tiktok_options()), {"providerReference": "v_pub_1"})
         self.assertEqual(normalize_result(done, {"manifest": {"platform": "TikTok"}})["state"], "verified")
         waiting = self.social(Wire([ok({"data": {"status": "PROCESSING_UPLOAD"}})])).reconcile(manifest("TikTok", "OPEN", options=tiktok_options()), {"providerReference": "v_pub_1"})
@@ -340,14 +390,27 @@ class PinterestPublishing(unittest.TestCase):
         pinterest = reviewed(PinterestProvider("pid", "secret", sandbox=sandbox, transport=wire))
         return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["pins:write", "boards:read"]}), ["pins:write", "boards:read"]), {"pinterest": pinterest}, storage())
 
+    BOARDS = ok({"items": [{"id": "1234567", "name": "Recitals"}]})
+
     def test_pin_in_the_sandbox_rejection_and_readback(self):
-        wire = Wire([ok({"id": "987654321"}, 201)])
+        wire = Wire([self.BOARDS, ok({"id": "987654321"}, 201)])
         result = self.social(wire, sandbox=True).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
-        self.assertEqual((result["state"], wire.calls[0]["url"]), ("provider_accepted", PinterestProvider.SANDBOX + "/v5/pins"))
-        body = wire.calls[0]["body"]
+        self.assertEqual((result["state"], wire.calls[1]["url"]), ("provider_accepted", PinterestProvider.SANDBOX + "/v5/pins"))
+        self.assertTrue(wire.calls[0]["url"].startswith(PinterestProvider.SANDBOX + "/v5/boards"))  # the board is checked where the Pin goes
+        body = wire.calls[1]["body"]
         self.assertEqual((body["board_id"], body["media_source"]["source_type"], body["link"], body["alt_text"]), ("1234567", "image_url", "https://rafii.example/score", "A score page"))
-        refused = self.social(Wire([ok({"code": 1, "message": "Board not found."}, 400)])).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
+        refused = self.social(Wire([self.BOARDS, ok({"code": 1, "message": "Board not found."}, 400)])).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
         self.assertEqual((refused["state"], "Board not found." in refused["confirmed"]), ("failed", True))
+
+    def test_a_board_that_is_not_this_accounts_own_is_refused(self):
+        wire = Wire([ok({"items": [{"id": "7654321", "name": "Other"}], "bookmark": "next"}), ok({"items": [{"id": "5555555", "name": "More"}]})])
+        refused = self.social(wire).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
+        self.assertEqual((refused["state"], len(wire.calls)), ("failed", 2))  # both pages read, and no Pin was attempted
+        self.assertIn("bookmark=next", wire.calls[1]["url"])
+        for status, words in ((404, "can't find that board"), (403, "won't let this account pin")):
+            with self.subTest(status=status):
+                result = self.social(Wire([self.BOARDS, ok({"code": 3, "message": "Board is gone"}, status)])).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
+                self.assertEqual((result["state"], words in result["confirmed"]), ("failed", True))
         verified = self.social(Wire([ok({"id": "987654321", "board_id": "1234567", "description": "Rehearsal notes"})])).reconcile(
             manifest("Pinterest", "jamesau", options=self.options), {"providerReference": "987654321"})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Pinterest"}})["url"], "https://www.pinterest.com/pin/987654321/")
