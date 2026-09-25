@@ -56,7 +56,7 @@ export function PushOptIn({ available, vapidPublicKey }: { available: boolean; v
   }, [refresh]);
 
   async function turnOn() {
-    if (!vapidPublicKey || !isVapidKey(vapidPublicKey)) return toast.error('Push is not configured correctly on this deployment.');
+    if (!vapidPublicKey || !isVapidKey(vapidPublicKey)) return toast.error('Push notifications aren’t set up correctly yet. Try again later.');
     setPhase('busy');
     try {
       const { body } = await subscribe(vapidPublicKey);
@@ -110,7 +110,7 @@ export function PushOptIn({ available, vapidPublicKey }: { available: boolean; v
   }
 
   if (!available) {
-    return <StateMessage kind='unsupported' layout='inline' title='Push notifications are not turned on for this deployment.' description='In-app and email notifications still work.' />;
+    return <StateMessage kind='unsupported' layout='inline' title='Push notifications aren’t available yet.' description='In-app and email notifications still work.' />;
   }
 
   const now = Date.now() / 1000;

@@ -57,7 +57,7 @@ export function ScopeChips({ scope }: { scope: { platform?: string; language?: s
 export function QueryProblem({ error, onRetry, what, hideWhenOff = false }: { error: unknown; onRetry?: () => void; what: string; hideWhenOff?: boolean }) {
   if (isFeatureDisabled(error)) {
     if (hideWhenOff) return null;
-    return <StateMessage kind='unsupported' title={`${what} is not turned on for this workspace yet.`} description='Nothing is missing from your account; this deployment has the feature switched off.' />;
+    return <StateMessage kind='unsupported' title={`${what} is not turned on for this workspace yet.`} description='Nothing is missing from your account; this feature isn’t turned on yet.' />;
   }
   return (
     <StateMessage

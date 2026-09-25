@@ -503,7 +503,7 @@ class CoworkerService:
     def source_campaign(self, workspace_id, token, payload):
         """One source → FactPack → CanonicalBrief → angles → channel drafts (+ quality) → creative briefs → campaign."""
         if not (flags.enabled("RAFII_WEEKLY_OPERATOR_ENABLED") or flags.enabled("RAFII_RESEARCH_BROKER_ENABLED")):
-            raise AlphaError("This Rafii feature is not turned on for this deployment.", 404, code="feature_disabled")
+            raise AlphaError("This Rafii feature isn’t turned on yet.", 404, code="feature_disabled")
         now = self.clock()
         self._require_edit(workspace_id, token)   # before a link is fetched: a viewer never causes egress
         state = self._state(workspace_id, token)
@@ -829,7 +829,7 @@ class CoworkerService:
     def attention(self, workspace_id, token):
         from . import attention as attention_module
         if not attention_enabled():   # with the features it summarises off, there is no attention list (the Overview is unchanged)
-            raise AlphaError("This Rafii feature is not turned on for this deployment.", 404, code="feature_disabled")
+            raise AlphaError("This Rafii feature isn’t turned on yet.", 404, code="feature_disabled")
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             state = self.hosted.ideas._state(row)
             return attention_module.build(cur, workspace_id, principal, self.hosted.ideas._member(row), state, self.clock())

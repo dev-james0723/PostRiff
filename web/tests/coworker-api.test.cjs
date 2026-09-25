@@ -129,7 +129,7 @@ test('ids from the server cannot leave their path segment', async () => {
 });
 
 test('404 feature_disabled is recognised as "feature off", not an error to show', async () => {
-  const { api } = harness([{ status: 404, body: { error: 'This Rafii feature is not turned on for this deployment.', code: 'feature_disabled' } }]);
+  const { api } = harness([{ status: 404, body: { error: 'This Rafii feature isn’t turned on yet.', code: 'feature_disabled' } }]);
   const error = await api.weekly('w1').catch((e) => e);
   assert.ok(error instanceof client.ApiError);
   assert.equal(error.status, 404);

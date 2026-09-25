@@ -271,7 +271,7 @@ function vapidPublicKey() {
     // --- notification settings: real harness (no VAPID key) ---------------------------------------------------------------
     await open(page, '/app/account/notifications', 'Notifications');
     await page.getByRole('heading', { name: 'Push notifications' }).waitFor({ timeout: 60000 });
-    check('notifications: without a VAPID key the page says push is not turned on (no broken button)', (await page.getByText('Push notifications are not turned on for this deployment.').count()) === 1 && (await page.getByRole('button', { name: 'Turn on push notifications' }).count()) === 0);
+    check('notifications: without a VAPID key the page says push is not turned on (no broken button)', (await page.getByText('Push notifications aren’t available yet.').count()) === 1 && (await page.getByRole('button', { name: 'Turn on push notifications' }).count()) === 0);
     check('notifications: per-category choices are labelled', (await page.getByRole('combobox', { name: 'Weekly review by push' }).count()) === 1 && (await page.getByRole('switch', { name: 'Weekly review in the app' }).count()) === 1);
     await page.getByRole('combobox', { name: 'Weekly review by push' }).isDisabled();
     await page.getByRole('switch', { name: 'Comments and mentions in the app' }).click();

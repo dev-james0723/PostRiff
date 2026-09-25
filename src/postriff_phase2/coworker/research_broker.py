@@ -159,7 +159,7 @@ class WebSearchProvider(ResearchProvider):
 
     def readiness(self, state=None):
         if not research.enabled():
-            return {"state": "disabled", "reason": "Web research is switched off on this deployment."}
+            return {"state": "disabled", "reason": "Web research isn’t turned on yet."}
         if research.hosted() and not research.consent(state or {}).get("web") is True:
             return {"state": "consent_required", "reason": "An owner has not allowed web research for this workspace."}
         return {"state": "ready", "reason": ""}

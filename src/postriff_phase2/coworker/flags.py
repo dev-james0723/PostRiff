@@ -70,4 +70,4 @@ def public(values=None):
 def require(name, values=None):
     if not enabled(name, values):
         from postriff_alpha.domain import AlphaError
-        raise AlphaError("This Rafii feature is not turned on for this deployment.", 404, code="feature_disabled")
+        raise AlphaError("This Rafii feature isn’t turned on yet.", 404, code="feature_disabled")

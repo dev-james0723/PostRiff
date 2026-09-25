@@ -105,7 +105,7 @@ function CategoryTable({ prefs, workspaceId, busy, onSave }: { prefs: Notificati
     <SettingsSection
       id='notifications-categories'
       title='What reaches you'
-      description={prefs.email.available ? 'For this workspace. “Default” follows Rafii’s own choice for each kind of message.' : 'For this workspace. Email is not configured on this deployment, so only in-app and push apply.'}
+      description={prefs.email.available ? 'For this workspace. “Default” follows Rafii’s own choice for each kind of message.' : 'For this workspace. Email isn’t set up yet, so only in-app and push apply.'}
       padding='sm'
     >
       <ul className='flex flex-col gap-1' aria-label='Notification categories'>

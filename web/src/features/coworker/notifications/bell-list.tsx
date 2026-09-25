@@ -68,6 +68,7 @@ export function BellNotificationList({ onNavigate }: { onNavigate: () => void })
           {items.map((item) => {
             const isUnread = item.status === 'delivered';
             const detail = describe(item);
+            const weekOf = typeof item.payload?.weekOf === 'string' ? item.payload.weekOf : null;
             return (
               <li key={item.id}>
                 <Link
@@ -83,7 +84,7 @@ export function BellNotificationList({ onNavigate }: { onNavigate: () => void })
                     <span className={cn('block text-sm', isUnread ? 'text-foreground font-medium' : 'text-muted-foreground')}>
                       {isUnread && <span className='sr-only'>Unread: </span>}
                       {typeof item.payload?.title === 'string' && item.payload.title ? item.payload.title : eventLabel(item.type)}
-                      {item.payload?.weekOf ? ` · week of ${item.payload.weekOf}` : ''}
+                      {weekOf ? ` · week of ${weekOf}` : ''}
                     </span>
                     {detail && <span className='text-muted-foreground block text-xs leading-relaxed'>{detail}</span>}
                     <span className='text-muted-foreground block text-[11px]'>{relativeTime(item.createdAt, now)}</span>

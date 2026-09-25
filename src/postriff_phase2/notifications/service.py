@@ -55,7 +55,7 @@ class NotificationService:
 
     def _require(self, push=False):
         if not self.enabled() or (push and not self.push_enabled()):
-            raise AlphaError("This Rafii feature is not turned on for this deployment.", 404, code="feature_disabled")
+            raise AlphaError("This Rafii feature isn’t turned on yet.", 404, code="feature_disabled")
 
     # --- events ----------------------------------------------------------------------------------------------------------------
     def emit(self, cur, **event):
