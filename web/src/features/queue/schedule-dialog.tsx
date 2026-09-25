@@ -40,6 +40,9 @@ interface ScheduleDialogProps {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+/** "an Instagram account", "a LinkedIn account". */
+const withArticle = (word: string) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+
 /** A caution beside a field: icon + plain text in the monochrome system (DNA §11.4, §20.4), never a tinted line. */
 function Note({ children, role, className }: { children: ReactNode; role?: 'status'; className?: string }) {
   return (
@@ -298,8 +301,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             <Label htmlFor='schedule-draft'>Draft</Label>
             <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); }}>
               <SelectTrigger id='schedule-draft' className='h-12 w-full text-base'>
-                {/* The draft's language exactly as stored, never folded into a two-language label. */}
-                <SelectValue>{variant ? `${variant.platform} · ${languageLabel(variant.language)} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</SelectValue>
+                {/* The draft's language exactly as stored, never folded into a two-language label. One line, cut to the field's width. */}
+                <SelectValue className='min-w-0'>
+                  <span className='truncate'>{variant ? `${variant.platform} · ${languageLabel(variant.language)} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</span>
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {drafts.length === 0 && <SelectItem value='__none' disabled>No drafts yet</SelectItem>}
@@ -335,7 +340,9 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             <Label htmlFor='schedule-channel'>Account</Label>
             <Select value={channelId} onValueChange={(value) => setChannelId(String(value))}>
               <SelectTrigger id='schedule-channel' disabled={!variant || Boolean(variant.channelId)} className='h-12 w-full text-base'>
-                <SelectValue>{channelsForVariant.find((c) => c.id === channelId)?.account ?? (variant ? `Choose a ${variant.platform} account` : 'Choose a draft first')}</SelectValue>
+                <SelectValue className='min-w-0'>
+                  <span className='truncate'>{channelsForVariant.find((c) => c.id === channelId)?.account ?? (variant ? `Choose ${withArticle(variant.platform)} account` : 'Choose a draft first')}</span>
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {channelsForVariant.length === 0 && <SelectItem value='__none' disabled>{variant?.channelId ? `The ${variant.platform} account this draft was written for is not connected` : `No ${variant?.platform ?? ''} account connected`}</SelectItem>}
@@ -351,7 +358,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </Select>
             {variant && channelsForVariant.length === 0 && (
               <Link href='/app/channels' className='text-muted-foreground hover:text-foreground w-fit text-xs underline underline-offset-2' onClick={() => onOpenChange(false)}>
-                Connect a {variant.platform} account
+                Connect {withArticle(variant.platform)} account
               </Link>
             )}
             {channel?.displayState && channel.displayState !== 'Ready for posting' ? (
