@@ -38,6 +38,10 @@ class OAuthProvider:
     non_expiring = False
     # True when a connection needs a destination chosen after connecting (a Discord channel).
     has_destinations = False
+    # True when revoking acts on something other workspaces may share (Rafii's bot in a server or channel).
+    shared_remote = False
+    # Renew this many seconds before expiry, so a publish never starts on a token about to lapse (0 = at expiry).
+    refresh_margin = 0
 
     def __init__(self, client_id, client_secret, transport=None, production_reviewed=False):
         if not client_id or not client_secret:

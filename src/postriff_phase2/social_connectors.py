@@ -60,6 +60,7 @@ class XProvider(OAuthProvider):
     account_requirement = "An X account."
     publish_scope = "tweet.write"
     publish_required = frozenset({"tweet.write"})
+    refresh_margin = 300  # X access tokens last two hours
 
     def _basic(self):
         return "Basic " + base64.b64encode(f"{quote(self.client_id, safe='')}:{quote(self.client_secret, safe='')}".encode()).decode()
@@ -222,6 +223,10 @@ class DiscordProvider(OAuthProvider):
     publish_required = frozenset({"bot"})
     non_expiring = True
     has_destinations = True
+    # Revoking removes Rafii's one bot from the server, which every workspace connected to that server shares.
+    shared_remote = True
+    ADMINISTRATOR, VIEW_CHANNEL, SEND_MESSAGES = 1 << 3, 1 << 10, 1 << 11
+    ALL_PERMISSIONS = (1 << 64) - 1
 
     def __init__(self, client_id, client_secret, bot_token, website, transport=None, production_reviewed=False):
         super().__init__(client_id, client_secret, transport=transport, production_reviewed=production_reviewed)
@@ -256,13 +261,18 @@ class DiscordProvider(OAuthProvider):
         guild = body.get("guild") if isinstance(body.get("guild"), dict) else {}
         if not re.fullmatch(r"\d{5,25}", str(guild.get("id", ""))):
             raise AlphaError("Choose a server to add Rafii's bot to.", 409)
+        # Who connected: channel choices are limited to channels this person can see (destinations()).
+        me = self.transport("GET", self.API + "/users/@me", headers={"Authorization": "Bearer " + body["access_token"], "User-Agent": f"DiscordBot ({self.website}, 1)"})
+        user_id = str(me.get("body", {}).get("id", "")) if isinstance(me.get("body"), dict) else ""
+        if me.get("status") != 200 or not re.fullmatch(r"\d{5,25}", user_id):
+            raise AlphaError("Discord did not confirm who is connecting. Try again.", 502)
         try:
             # Rafii posts with its bot; the person's own Discord token is not kept.
             self.transport("POST", self.API + "/oauth2/token/revoke", headers={"Authorization": self._basic()}, form={"token": body["access_token"], "token_type_hint": "access_token"})
         except AlphaError:
             pass
         scopes = body["scope"].split() if isinstance(body.get("scope"), str) else []
-        return {"accessToken": json.dumps({"v": 1, "guild": str(guild["id"]), "channel": None}), "refreshToken": None, "expiresIn": None, "scopes": scopes}
+        return {"accessToken": json.dumps({"v": 1, "guild": str(guild["id"]), "channel": None, "user": user_id}), "refreshToken": None, "expiresIn": None, "scopes": scopes}
 
     @staticmethod
     def session(access_token):
@@ -287,14 +297,67 @@ class DiscordProvider(OAuthProvider):
             return None
         return ["bot", "identify"]
 
-    def destinations(self, access_token):
-        session = self.session(access_token)
-        response = self._bot("GET", f"/guilds/{session['guild']}/channels")
+    def _json(self, response, kind):
         body = response.get("body")
-        channels = body.get("raw") if isinstance(body, dict) and "raw" in body else body
-        if response.get("status") != 200 or not isinstance(channels, list):
-            raise AlphaError("Discord didn't list this server's channels. Try again.", 502)
-        usable = [c for c in channels if isinstance(c, dict) and c.get("type") in (0, 5) and re.fullmatch(r"\d{5,25}", str(c.get("id", "")))]
+        value = body.get("raw") if isinstance(body, dict) and "raw" in body else body
+        if response.get("status") != 200 or not isinstance(value, kind):
+            raise AlphaError("Discord didn't answer. Try again.", 502)
+        return value
+
+    def _permissions(self, guild, member_roles, member_id, channel=None):
+        """Discord's documented permission algorithm: @everyone and member roles, then channel overwrites."""
+        if str(guild.get("owner_id")) == str(member_id):
+            return self.ALL_PERMISSIONS
+        roles = {str(r.get("id")): int(r.get("permissions") or 0) for r in guild.get("roles") or [] if isinstance(r, dict)}
+        base = roles.get(str(guild["id"]), 0)
+        for role in member_roles:
+            base |= roles.get(str(role), 0)
+        if base & self.ADMINISTRATOR:
+            return self.ALL_PERMISSIONS
+        if channel is None:
+            return base
+        overwrites = {str(o.get("id")): o for o in channel.get("permission_overwrites") or [] if isinstance(o, dict)}
+        everyone = overwrites.get(str(guild["id"]))
+        if everyone:
+            base = (base & ~int(everyone.get("deny") or 0)) | int(everyone.get("allow") or 0)
+        allow = deny = 0
+        for role in member_roles:
+            overwrite = overwrites.get(str(role))
+            if overwrite and overwrite.get("type") in (0, "0", "role"):
+                allow |= int(overwrite.get("allow") or 0)
+                deny |= int(overwrite.get("deny") or 0)
+        base = (base & ~deny) | allow
+        member = overwrites.get(str(member_id))
+        if member and member.get("type") in (1, "1", "member"):
+            base = (base & ~int(member.get("deny") or 0)) | int(member.get("allow") or 0)
+        return base
+
+    def _member_roles(self, guild_id, user_id):
+        response = self._bot("GET", f"/guilds/{guild_id}/members/{user_id}")
+        if response.get("status") == 404:
+            return None
+        member = self._json(response, dict)
+        return [str(role) for role in member.get("roles") or []]
+
+    def destinations(self, access_token):
+        """Text and announcement channels where Rafii's bot can view and send and the person who connected can view."""
+        session = self.session(access_token)
+        guild = self._json(self._bot("GET", f"/guilds/{session['guild']}"), dict)
+        bot_id = str(self._json(self._bot("GET", "/users/@me"), dict).get("id", ""))
+        bot_roles = self._member_roles(session["guild"], bot_id) or []
+        user_id = session.get("user")
+        user_roles = self._member_roles(session["guild"], user_id) if user_id else []
+        if user_id and user_roles is None:
+            return []  # the person who connected has left the server
+        channels = self._json(self._bot("GET", f"/guilds/{session['guild']}/channels"), list)
+        usable = []
+        for channel in channels:
+            if not isinstance(channel, dict) or channel.get("type") not in (0, 5) or not re.fullmatch(r"\d{5,25}", str(channel.get("id", ""))):
+                continue
+            bot = self._permissions(guild, bot_roles, bot_id, channel)
+            viewer = self._permissions(guild, user_roles, user_id, channel) if user_id else self._permissions(guild, [], None, channel)
+            if bot & self.VIEW_CHANNEL and bot & self.SEND_MESSAGES and viewer & self.VIEW_CHANNEL:
+                usable.append(channel)
         usable.sort(key=lambda c: (c.get("position") or 0, str(c.get("name"))))
         return [{"id": str(c["id"]), "name": "#" + str(c.get("name") or c["id"]), "kind": "announcement" if c.get("type") == 5 else "text",
                  "selected": str(c["id"]) == str(session.get("channel"))} for c in usable]
@@ -324,6 +387,8 @@ class TelegramConnector(OAuthProvider):
     publish_required = frozenset({"can_post_messages"})
     connect_kind = "bot_code"
     non_expiring = True
+    # Revoking makes Rafii's one bot leave the channel, which every workspace connected to that channel shares.
+    shared_remote = True
 
     def __init__(self, bot_token, webhook_secret, public_base_url, transport=None, production_reviewed=False):
         self.client_id = self.client_secret = None
@@ -345,8 +410,12 @@ class TelegramConnector(OAuthProvider):
         diagnostic = {"configurationState": state, "credentialPresence": presence, "missingVariables": missing}
         return (cls(token, secret, base, transport=transport) if state == "configured" else None), diagnostic
 
+    def request(self, method, payload=None):
+        """The raw Bot API response, so a publisher can tell a definite rejection from an unknown outcome."""
+        return self.transport("POST", f"{self.API}/bot{self.bot_token}/{method}", body=payload or {})
+
     def call(self, method, payload=None):
-        response = self.transport("POST", f"{self.API}/bot{self.bot_token}/{method}", body=payload or {})
+        response = self.request(method, payload)
         body = response.get("body") if isinstance(response.get("body"), dict) else {}
         if response.get("status") != 200 or body.get("ok") is not True:
             raise AlphaError("Telegram didn't accept Rafii's request.", 502 if response.get("status", 500) >= 500 else 409)

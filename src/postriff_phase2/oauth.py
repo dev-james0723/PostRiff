@@ -317,6 +317,20 @@ class OAuthService:
             raise AlphaError("This account has no picture.", 404)
         return found
 
+    def _shared_elsewhere(self, cur, workspace_id, connection_id, provider_id):
+        """True when revoking this connection would also cut off another unrevoked connection, in any workspace,
+        that relies on the same shared remote grant (Rafii's bot in one Discord server or Telegram channel)."""
+        adapter = self.providers.get(provider_id)
+        if adapter is None or not getattr(type(adapter), "shared_remote", False):
+            return False
+        cur.execute("SELECT provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+        own = cur.fetchone()
+        if not own:
+            return False
+        cur.execute("SELECT 1 FROM public.pr_encrypted_credentials WHERE provider=%s AND provider_account_id=%s AND revoked_at IS NULL AND NOT (workspace_id=%s AND connection_id=%s) LIMIT 1",
+                    (provider_id, own[0], workspace_id, connection_id))
+        return cur.fetchone() is not None
+
     # --- destinations (a Discord channel) ------------------------------------------------
     def _destination_credential(self, workspace_id, token, connection_id):
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -446,7 +460,10 @@ class OAuthService:
                 renew_instagram = (provider == 'instagram' and expires and 0 < expires - now <= 7 * 86400
                                    and issued_at is not None and now - issued_at >= 86400
                                    and refresh_supported and refresh_ct)
-                if expired or renew_instagram:
+                # X and Bluesky tokens are short-lived: renew within the adapter's margin, not after a failed call.
+                margin = getattr(type(self._provider(provider)), "refresh_margin", 0) or 0
+                renew_soon = bool(margin and expires and 0 < expires - now <= margin and refresh_supported and refresh_ct)
+                if expired or renew_instagram or renew_soon:
                     if not (refresh_supported and refresh_ct):
                         raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409)
                     grant = self._provider(provider).refresh(self.vault.decrypt(refresh_ct, key_id))
@@ -642,10 +659,13 @@ class OAuthService:
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
             remote = None
-            try:
-                remote = self._provider(stored[0]).revoke(self.vault.decrypt(stored[1], stored[2]))
-            except AlphaError:
-                remote = False
+            if self._shared_elsewhere(cur, workspace_id, connection_id, stored[0]):
+                remote = False  # another connection still uses Rafii's bot there; removing it would disconnect them too
+            else:
+                try:
+                    remote = self._provider(stored[0]).revoke(self.vault.decrypt(stored[1], stored[2]))
+                except AlphaError:
+                    remote = False
             cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Disconnected by the customer.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             from .social_history import revoke_connection_samples

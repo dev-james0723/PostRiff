@@ -116,6 +116,7 @@ class BlueskyProvider(OAuthProvider):
     publish_required = frozenset({"atproto", "transition:generic"})
     start_input = {"name": "handle", "label": "Bluesky handle", "placeholder": "name.bsky.social"}
     requires_issuer = True
+    refresh_margin = 300  # access tokens last at most 15 minutes
     METADATA_PATH = "/api/oauth/bluesky/client-metadata.json"
     JWKS_PATH = "/api/oauth/bluesky/jwks.json"
     RESOLVE_HANDLE = "https://bsky.social/xrpc/com.atproto.identity.resolveHandle"
@@ -219,13 +220,19 @@ class BlueskyProvider(OAuthProvider):
             raise AlphaError("This Bluesky server's sign-in details don't match.", 502)
         for key in ("pushed_authorization_request_endpoint", "authorization_endpoint", "token_endpoint"):
             public_https_url(metadata.get(key), self.resolver)
+        if metadata.get("revocation_endpoint") is not None:
+            public_https_url(metadata.get("revocation_endpoint"), self.resolver)
         if "atproto" not in (metadata.get("scopes_supported") or ["atproto"]) or "ES256" not in (metadata.get("dpop_signing_alg_values_supported") or ["ES256"]):
             raise AlphaError("This Bluesky server doesn't support Rafii's sign-in.", 502)
         return issuer, metadata
 
     # --- DPoP requests --------------------------------------------------------------------------------------------
     def _dpop_post(self, url, form, jwk, nonce=None, audience=None):
-        """POST with DPoP; one retry when the server asks for a nonce. Returns (response, latest nonce)."""
+        """POST with DPoP; one retry when the server asks for a nonce. Returns (response, latest nonce).
+
+        Stored endpoints are re-checked here, at request time: a name that resolved publicly at connect time
+        may not any more."""
+        public_https_url(url, self.resolver)
         for _ in range(2):
             fields = dict(form)
             if audience:
@@ -241,6 +248,7 @@ class BlueskyProvider(OAuthProvider):
         return response, nonce
 
     def _dpop_get(self, url, session):
+        public_https_url(url, self.resolver)
         nonce = session.get("pdsNonce")
         for _ in range(2):
             response = self.transport("GET", url, headers={"Authorization": "DPoP " + session["at"],
@@ -270,8 +278,8 @@ class BlueskyProvider(OAuthProvider):
         if response.get("status") not in (200, 201) or not isinstance(request_uri, str):
             raise AlphaError("Bluesky did not start the sign-in. Try again.", 502)
         authorize = metadata["authorization_endpoint"] + "?" + urlencode({"client_id": self.client_id, "request_uri": request_uri})
-        context = {"issuer": issuer, "tokenEndpoint": metadata["token_endpoint"], "did": did, "handle": handle, "pds": pds,
-                   "dpopJwk": dpop_jwk, "dpopNonce": nonce}
+        context = {"issuer": issuer, "tokenEndpoint": metadata["token_endpoint"], "revocationEndpoint": metadata.get("revocation_endpoint"),
+                   "did": did, "handle": handle, "pds": pds, "dpopJwk": dpop_jwk, "dpopNonce": nonce}
         return {"authorizeUrl": authorize, "context": context}
 
     def _session(self, body, context, nonce):
@@ -281,8 +289,10 @@ class BlueskyProvider(OAuthProvider):
         if body.get("sub") != context["did"]:
             raise AlphaError("The Bluesky account that signed in isn't the one you entered.", 409)
         scopes = body.get("scope").split() if isinstance(body.get("scope"), str) else []
-        common = {"v": 1, "did": context["did"], "pds": context["pds"], "iss": context["issuer"], "tokenEndpoint": context["tokenEndpoint"], "jwk": context["dpopJwk"]}
-        session = {**common, "at": access, "scope": scopes, "nonce": nonce}
+        common = {"v": 1, "did": context["did"], "pds": context["pds"], "iss": context["issuer"], "tokenEndpoint": context["tokenEndpoint"],
+                  "revocationEndpoint": context.get("revocationEndpoint"), "jwk": context["dpopJwk"]}
+        # The refresh token rides along (encrypted like the rest) so disconnecting can revoke the whole grant.
+        session = {**common, "at": access, "rt": refresh if isinstance(refresh, str) else None, "scope": scopes, "nonce": nonce}
         refresh_blob = json.dumps({**common, "rt": refresh, "nonce": nonce}) if isinstance(refresh, str) and refresh else None
         return {"accessToken": json.dumps(session), "refreshToken": refresh_blob, "expiresIn": body.get("expires_in") or 900, "scopes": scopes, "userId": context["did"]}
 
@@ -301,7 +311,8 @@ class BlueskyProvider(OAuthProvider):
 
     def refresh(self, refresh_token):
         stored = json.loads(refresh_token)
-        context = {"issuer": stored["iss"], "tokenEndpoint": stored["tokenEndpoint"], "did": stored["did"], "pds": stored["pds"], "dpopJwk": stored["jwk"]}
+        context = {"issuer": stored["iss"], "tokenEndpoint": stored["tokenEndpoint"], "revocationEndpoint": stored.get("revocationEndpoint"),
+                   "did": stored["did"], "pds": stored["pds"], "dpopJwk": stored["jwk"]}
         response, nonce = self._dpop_post(stored["tokenEndpoint"], {"grant_type": "refresh_token", "refresh_token": stored["rt"]}, stored["jwk"], stored.get("nonce"), audience=stored["iss"])
         if response.get("status") != 200 or not isinstance(response.get("body"), dict):
             raise AlphaError("Bluesky access expired; reconnect the account.", 409, code="reauthorization_required")
@@ -327,9 +338,19 @@ class BlueskyProvider(OAuthProvider):
             return None
         return sorted(set(session.get("scope") or []))
 
+    def revoke(self, token):
+        """Revoke the grant at its authorization server (RFC 7009), refresh token first so the whole grant ends."""
+        session = json.loads(token)
+        endpoint = session.get("revocationEndpoint")
+        if not isinstance(endpoint, str):
+            return False
+        value, hint = (session["rt"], "refresh_token") if session.get("rt") else (session["at"], "access_token")
+        response, _ = self._dpop_post(endpoint, {"token": value, "token_type_hint": hint}, session["jwk"], session.get("nonce"), audience=session["iss"])
+        return response.get("status") == 200
+
     # --- publishing helpers (hosted_social) -------------------------------------------------------------------------
     def xrpc_post(self, session, method, *, body=None, data=None, content_type=None):
-        url = session["pds"] + "/xrpc/" + method
+        url = public_https_url(session["pds"] + "/xrpc/" + method, self.resolver)
         nonce = session.get("pdsNonce")
         for _ in range(2):
             headers = {"Authorization": "DPoP " + session["at"], "DPoP": dpop_proof(session["jwk"], "POST", url, self.clock(), nonce, session["at"])}
