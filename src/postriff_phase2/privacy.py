@@ -23,7 +23,7 @@ RETENTION_CLASSES = {
 SUBPROCESSORS = [
     {"name": "Vercel", "purpose": "hosting / API runtime", "status": "configured hosting provider; release environment to be verified"},
     {"name": "Supabase", "purpose": "authentication, PostgreSQL, private object storage", "status": "configured provider; release environment to be verified", "region": "release region to be verified"},
-    {"name": "Social providers (LinkedIn, Threads, Instagram)", "purpose": "publishing and metrics for accounts the customer connects", "status": "connected only by the customer's own OAuth grant"},
+    {"name": "Social providers (LinkedIn, Threads, Instagram, Bluesky, Mastodon, X, Discord, Telegram)", "purpose": "publishing and metrics for accounts the customer connects", "status": "connected only by the customer's own OAuth grant"},
     {"name": "Vercel Web Analytics; Sentry when configured", "purpose": "website usage and sanitized error diagnostics", "status": "analytics integrated; error delivery depends on configuration"},
     {"name": "Stripe", "purpose": "billing and invoices", "status": "only when an approved plan and payment provider are enabled"},
     {"name": "Resend", "purpose": "transactional email", "status": "only when a reviewed sender is configured"},
