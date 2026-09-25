@@ -1,5 +1,32 @@
 # Agent Runtime — three-way merge plan
 
+## Status (2026-09-25): PR #2, #4 and #5 are released; this branch waits
+
+`consumer-saas` is `b5de49f98a0091c2d395748b771ca65e3c9f6d3a`: PR #4 976430d, PR #2 bed3f62, PR #5 b5de49f (the site agent
+without the runtime). It is deployed to production as `dpl_ReLGVYQymzxuay4EiATcpopaMWuG`; the rollback point is
+`dpl_9E5w8c4zM9gYaDLbtMWAyVD57Dtv`. The release is **not confirmed complete**: signed-in smoke is blocked because
+Supabase Auth returns 500 "Error sending confirmation email". Nothing from this branch merges or deploys until James
+confirms the release. This branch is not rebased: it merges, since the site agent's commits also live on it.
+
+**Trial merge into b5de49f** (built in a scratch directory from `git merge-tree`, resolved as below, no ref touched):
+- conflicts: exactly the ones listed under Step 3, plus `docs/design/site-agent/evidence/browser-webkit/site-agent-browser.json`
+  (modify/delete). The release moved WebKit evidence to CI (`ci-browser-webkit`), so **keep the deletion**;
+- results: unit 916/916, runtime PostgreSQL scenarios 51/51, full PostgreSQL suite 54/54, web contract 97/97 (after
+  3b5873b, which rewords a quiet GPT-Live note that the release's copy audit flagged), `npm run audit:copy -- --check` 0,
+  oxlint 0/0 (726 files), typecheck, production build 95/95.
+
+**When James says go:**
+1. Branch `raffi/agent-runtime-merge` from `b5de49f`, `git merge raffi/site-agent`, and resolve as in Step 3.
+2. Rerun the full suite on that tree.
+3. Push the branch and open a PR to `consumer-saas`.
+4. **PR gates on the merge ref:**
+   - `consumer-ready` / local-gates: session-cache, durable and performance journeys against a production build;
+   - `rafii-browser` scenes, including the site agent journey: Chromium 39/39 and Linux WebKit 39/39.
+5. This branch changes no Home or Channels code. The panel is mounted in the app shell on every page, though, so run
+   `web/tests/launch-journey.cjs` locally in both modes: default, and `RAFII_TEST_CREDITS=1` with `--credit-fixture`. It
+   isn't in CI.
+6. Merging into `consumer-saas` deploys to production with every `RAFII_*` flag off.
+
 Checked with `git merge-tree --write-tree` (no working tree touched) from `raffi/site-agent` at 83575ea on
 2026-09-25. Nothing here has been pushed or merged. Re-run the same commands against the refs of the day before merging:
 branches move.
@@ -25,7 +52,7 @@ done
 | File | Owner | Resolution |
 |---|---|---|
 | `src/postriff_phase2/hosted_app.py` (1 hunk, the `/api/workspaces/…` dispatch) | shared | **Keep both blocks.** The predicates are disjoint (`parts[3] == "agent"` vs `parts[3:] == ["billing", "credit-packs"]`), so the order doesn't matter. See the resolved text below. |
-| `docs/design/site-agent/README.md`, `verification-matrix.md`, `evidence/scenarios.json`, `evidence/browser-*/site-agent-*` | site agent | **Take the `consumer-saas` side** (the release's newer evidence), for everything under `docs/design/site-agent/` **except** `docs/design/site-agent/agent-runtime/**` (the runtime's, which doesn't conflict). |
+| `docs/design/site-agent/README.md`, `verification-matrix.md`, `evidence/scenarios.json`, `evidence/browser-*/site-agent-*` | site agent | **Take the `consumer-saas` side** (the release's newer evidence), for everything under `docs/design/site-agent/` **except** `docs/design/site-agent/agent-runtime/**` (the runtime's, which doesn't conflict). `evidence/browser-webkit/site-agent-browser.json` was deleted in the release (WebKit evidence moved to CI): keep it deleted. |
 
 Resolved `hosted_app.py` hunk:
 
