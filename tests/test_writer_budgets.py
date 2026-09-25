@@ -66,5 +66,42 @@ class SkillByteBudgetTest(unittest.TestCase):
         self.assertLessEqual(skills.budget_for("paid"), model_runtime.MAX_SKILLS_BYTES)
 
 
+
+class ThinkingModelTest(unittest.TestCase):
+    """A thinking model's reasoning tokens share max_tokens; a 2,400 cap ended long drafts mid-JSON in production."""
+
+    def body_for(self, model):
+        calls = []
+
+        def transport(method, url, headers=None, body=None, timeout=None):
+            calls.append(body)
+            return {"status": 200, "body": {"choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}], "usage": {}}}
+        runtime = ServerModelRuntime("key", model=model, models=[model], transport=transport)
+        runtime._call([{"role": "user", "content": "x"}], model)
+        return calls[0]
+
+    def test_openai_reasoning_models_get_low_effort_and_headroom(self):
+        body = self.body_for("openai/gpt-6-sol")
+        self.assertEqual(body["reasoning_effort"], "low")
+        self.assertEqual(body["max_tokens"], model_runtime.THINKING_OUTPUT_TOKENS)
+        self.assertGreater(model_runtime.THINKING_OUTPUT_TOKENS, model_runtime.MAX_OUTPUT_TOKENS)
+
+    def test_other_models_are_sent_as_before(self):
+        body = self.body_for("anthropic/claude-sonnet-5")
+        self.assertNotIn("reasoning_effort", body)
+        self.assertEqual(body["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS)
+        # Gemini thinks by default: headroom, but no OpenAI-only field.
+        self.assertTrue(model_runtime.thinking("google/gemini-3.1-pro-preview"))
+        self.assertNotIn("reasoning_effort", self.body_for("google/gemini-3.1-pro-preview"))
+
+    def test_the_reservation_ceiling_follows_the_larger_cap(self):
+        request = {"context": context(), "idea": "Announce the recital", "destinations": DESTS, "reasoning": "quick"}
+        thinking = ServerModelRuntime("key", model="openai/gpt-6-sol", models=["openai/gpt-6-sol"])
+        plain = ServerModelRuntime("key", model="anthropic/claude-sonnet-5", models=["anthropic/claude-sonnet-5"])
+        # Same $2/$10 price list: the difference is the output allowance only.
+        self.assertGreater(thinking.price_quote(request), plain.price_quote(request))
+        self.assertGreater(thinking.typical_quote(request), plain.typical_quote(request))
+        self.assertLess(thinking.price_quote(request), 1.0, "stays under the $1 per-request policy")
+
 if __name__ == "__main__":
     unittest.main()
