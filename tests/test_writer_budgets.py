@@ -90,7 +90,9 @@ class ThinkingModelTest(unittest.TestCase):
         for model in ("openai/gpt-6-sol", "openai/gpt-6-astra", "anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5", "alibaba/qwen3.6-plus"):
             self.assertEqual(sent[model]["reasoning"], {"effort": "low"}, model)
             self.assertEqual(sent[model]["max_tokens"], model_runtime.THINKING_OUTPUT_TOKENS, model)
-        self.assertEqual(sent["deepseek/deepseek-v4-pro"]["reasoning"], {"effort": "high"}, "no 'low' on its scale: its lowest above none")
+        # Only heavy levels (none/high/max) and a toggle: nothing sent, thinking stays off, no headroom.
+        self.assertNotIn("reasoning", sent["deepseek/deepseek-v4-pro"])
+        self.assertEqual(sent["deepseek/deepseek-v4-pro"]["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS)
         self.assertNotIn("reasoning_effort", sent["openai/gpt-6-sol"])
         self.assertNotIn("response_format", sent["anthropic/claude-opus-5.5"], "only parameters the catalogue lists")
         self.assertNotIn("response_format", sent["alibaba/qwen3.6-plus"])

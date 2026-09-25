@@ -138,12 +138,17 @@ def _lowest(values):
 
 
 def drafting_reasoning(model):
-    """The gateway's unified `reasoning` object for writing (the "Auto" baseline chosen for quality): the lowest real
-    level on the model's effort scale ("low", else "minimal", else its lowest above "none"). Never "none": that is only
-    a person's own choice. A model with no effort scale gets nothing (a toggle-only model stays at its default, off;
-    a budget-only model reasons on its own and only gets headroom). A level the model does not list is never sent."""
+    """The gateway's unified `reasoning` object for writing (the "Auto" baseline chosen for quality): "low" (else
+    "minimal") on the model's effort scale; a model that must reason and lists neither gets its lowest level above
+    "none". Never "none": that is only a person's own choice. Nothing is sent to a model with no effort scale (a
+    toggle-only model stays at its default, off; a budget-only model reasons on its own and only gets headroom), nor
+    to a model whose scale has only heavy levels but can keep thinking off. A level a model does not list is never sent."""
     values = _efforts(model)
     if not values or not supports(model, "reasoning"):
+        return None
+    if "low" not in values and "minimal" not in values and _has_toggle(model):
+        # Only heavy levels on the scale (deepseek-v4-pro: none/high/max) and thinking can stay off: send nothing, as
+        # for a toggle-only model. A caption does not need its slow "high"; the person can choose it in the picker.
         return None
     return {"effort": _lowest(values)}
 
