@@ -35,7 +35,10 @@ const modules=process.env.VERCEL_BUILDER_MODULES || path.join(root,'.codex/consu
  const names=Object.keys(artifact.files);
  assert(names.includes('src/postriff_phase2/locale_catalogue.json'));
  assert(names.some(n=>n.startsWith('skills/postriff-')&&n.endsWith('/SKILL.md')));
- assert.deepEqual(names.filter(n=>forbidden.test(n)),[]);
+ // Third-party packages the builder vendors into _vendor/ may ship their own test modules (jsonschema, referencing, certifi):
+ // those are upstream code, not this repository's tests. Every other private path stays forbidden everywhere, _vendor/ included.
+ const forbiddenVendored=/(^|\/)(\.env[^/]*|broker\.key|\.codex|\.token-pilot|\.claude|\.agents|\.git|node_modules|\.next[^/]*|.*-broker-.*)(\/|$)/;
+ assert.deepEqual(names.filter(n=>n.startsWith('_vendor/')?forbiddenVendored.test(n):forbidden.test(n)),[]);
  const zip=await artifact.createZip(),filename=path.join(work,'function.zip');fs.writeFileSync(filename,zip);
  const record={status:'PASS',execution:'actual local Vercel Python builder output; not deployed or invoked on Vercel',cliVersion,builderVersion,runtime:artifact.runtime,architecture:artifact.architecture,bytes:zip.length,sha256:crypto.createHash('sha256').update(zip).digest('hex'),archive:path.relative(root,filename),files:names.sort(),routes:JSON.parse(fs.readFileSync(path.join(root,'vercel.json'),'utf8')).rewrites};
  fs.writeFileSync(path.join(out,'python-artifact.json'),JSON.stringify(record,null,2));
