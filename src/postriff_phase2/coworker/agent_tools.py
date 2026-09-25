@@ -266,14 +266,15 @@ def _register_workflow_tools(tool_adapter, contracts, untrusted):
                                                                                             "destinations": [{"channelId": c} for c in args["channelIds"] if isinstance(c, str)][:6]})
         except AlphaError as error:
             return _app_error(error)
-        record = result["sourceCampaign"]
+        record, existing = result["sourceCampaign"], bool(result.get("existing"))
         for draft in record["drafts"]:
             if draft.get("variantId"):
                 ctx.ledger.reference("draft", draft["variantId"], f"{draft.get('platform')} draft")
-                ctx.ledger.changed.append({"type": "draft", "id": draft["variantId"], "change": "drafted from the source", "expected": "saved draft", "actual": "saved draft", "verified": True})
+                if not existing:   # an earlier call made these drafts; this one changed nothing
+                    ctx.ledger.changed.append({"type": "draft", "id": draft["variantId"], "change": "drafted from the source", "expected": "saved draft", "actual": "saved draft", "verified": True})
         if record.get("campaignId"):
             ctx.ledger.reference("campaign", record["campaignId"], record["brief"]["goal"][:80])
-        return {"ok": True, "verified": bool(result["verified"]), "status": record["status"], "campaignId": record.get("campaignId"),
+        return {"ok": True, "verified": bool(result["verified"]), "status": record["status"], "campaignId": record.get("campaignId"), "alreadyCreated": existing,
                 "claims": {"usable": sum(1 for c in record["factPack"]["claims"] if c["usableForDraft"]), "excluded": len(record["brief"]["exclusions"])},
                 "drafts": [{k: d.get(k) for k in ("variantId", "platform", "status")} for d in record["drafts"]]}
 

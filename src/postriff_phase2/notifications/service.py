@@ -204,6 +204,11 @@ class NotificationService:
                             (workspace_id, principal, f"notification.{ 'opened' if action == 'read' else action}", json.dumps({"channel": "in_app", "deliveryId": delivery_id}), f"{action}:{delivery_id}"))
             return result
 
+    def mark_all_read(self, workspace_id, token):
+        self._require()
+        with self.hosted.repository.transaction(token, workspace_id) as (cur, _row, principal):
+            return store.mark_all_read(cur, principal, workspace_id)
+
     def preferences(self, workspace_id, token):
         self._require()
         with self.hosted.repository.transaction(token, workspace_id) as (cur, _row, principal):

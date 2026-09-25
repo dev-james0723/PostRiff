@@ -154,6 +154,23 @@ def center(cur, user_id, workspace_id=None, limit=50, before=None, unread_only=F
     return {"items": items, "unread": cur.fetchone()[0]}
 
 
+def mark_all_read(cur, user_id, workspace_id):
+    """Every unread in-app notification of one person in one workspace (plus account-wide ones) becomes read, in one
+    statement, so the bell's count can reach 0 however many arrived. Re-counted so the caller can verify."""
+    cur.execute("SELECT id FROM public.pr_notification_deliveries WHERE user_id=%s AND channel='in_app' AND status='delivered' "
+                "AND (workspace_id=%s OR workspace_id IS NULL) FOR UPDATE", (user_id, workspace_id))
+    ids = [row[0] for row in cur.fetchall()]
+    if not ids:
+        return {"changed": 0, "unread": 0, "verified": True}
+    cur.execute("UPDATE public.pr_notification_deliveries SET status='read', read_at=coalesce(read_at, now()), updated_at=now() "
+                "WHERE id = ANY(%s) AND status='delivered'", (ids,))
+    changed = max(cur.rowcount or 0, 0)
+    # Only the rows this call targeted: one that arrives meanwhile is simply still unread, not a failure.
+    cur.execute("SELECT count(*) FROM public.pr_notification_deliveries WHERE id = ANY(%s) AND status='delivered'", (ids,))
+    unread = cur.fetchone()[0]
+    return {"changed": changed, "unread": unread, "verified": unread == 0}
+
+
 def mark(cur, user_id, delivery_id, action):
     """read | acted | dismissed on one's own in-app notification. Re-read and returned so the caller can verify."""
     if action not in ("read", "acted", "dismissed"):

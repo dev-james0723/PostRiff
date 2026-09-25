@@ -152,7 +152,10 @@ def live_session_check(cfg) -> dict:
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"])
         page = browser.new_page()
-        page.goto("about:blank")
+        # getUserMedia exists only in a secure context, which about:blank is not. An https page answered locally by the
+        # route (no DNS, no network) is one.
+        page.route("https://live-check.rafii.invalid/**", lambda served: served.fulfill(status=200, content_type="text/html", body="<!doctype html><title>Live check</title>"))
+        page.goto("https://live-check.rafii.invalid/")
         offer = page.evaluate("""async () => {
             const stream = await navigator.mediaDevices.getUserMedia({audio: true});
             const pc = new RTCPeerConnection(); window.__pc = pc;

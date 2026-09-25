@@ -80,6 +80,12 @@ export interface MarkResult extends Verified {
   status: string | null;
 }
 
+/** Every unread notification in this workspace marked read; `unread` is the server's recount (verified when 0). */
+export interface MarkAllResult extends Verified {
+  changed: number;
+  unread: number;
+}
+
 export type EmailMode = 'immediate' | 'digest' | 'off';
 export type PushMode = 'immediate' | 'off';
 export type DigestFrequency = 'daily' | 'weekly' | 'off';

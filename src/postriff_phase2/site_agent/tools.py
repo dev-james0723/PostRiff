@@ -279,10 +279,20 @@ def _can_open(ctx, route):
     return True, None
 
 
+# Pages that exist in every build but show their content only when a coworker feature is on.
+_ROUTE_FLAGS = {"weekly": "RAFII_WEEKLY_OPERATOR_ENABLED", "personalization": "RAFII_ADAPTIVE_SKILLS_ENABLED"}
+
+
 def route_describe(ctx, routeId):
     route = routes.by_id(routeId)
     if route is None:
         raise AlphaError("Unknown page.", 404, code="not_found")
+    flag = _ROUTE_FLAGS.get(routeId)
+    if flag:
+        from ..coworker import flags as coworker_flags
+        if not coworker_flags.enabled(flag):
+            off = f"{route['title']} isn't turned on yet."
+            return contracts.result({**routes.describe(routeId), "summary": off, "canOpen": False, "reason": off}, now=ctx.now)
     allowed, reason = _can_open(ctx, route)
     return contracts.result({**routes.describe(routeId), "canOpen": allowed, "reason": reason}, now=ctx.now)
 

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { StateMessage } from '@/components/rafii';
 import { isFeatureDisabled } from '@/lib/coworker/api';
-import { useMarkNotification, useNotificationCenter } from '@/lib/coworker/hooks';
+import { useMarkAllNotifications, useMarkNotification, useNotificationCenter } from '@/lib/coworker/hooks';
 import { safeAppHref } from '@/lib/coworker/safe-href';
 import type { ServerNotification } from '@/lib/coworker/types';
 import { relativeTime } from '@/lib/time';
@@ -36,16 +36,20 @@ function describe(item: ServerNotification): string {
 export function BellNotificationList({ onNavigate }: { onNavigate: () => void }) {
   const center = useNotificationCenter();
   const mark = useMarkNotification();
+  const markAllRead = useMarkAllNotifications();
   if (center.isPending || isFeatureDisabled(center.error)) return null;
   if (center.isError) return <StateMessage kind='partial' layout='inline' title='Recent notifications are unavailable.' />;
   const items = center.data.items.slice(0, 12);
-  const unread = items.filter((item) => item.status === 'delivered');
   const now = Date.now() / 1000;
 
+  // One server call for every unread notification, not only the 12 listed here, so the count can reach 0.
   async function markAll() {
-    const results = await Promise.allSettled(unread.map((item) => mark.mutateAsync({ id: item.id, action: 'read' })));
-    const failed = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.verified)).length;
-    if (failed) toast.warning(`${failed} notification${failed === 1 ? '' : 's'} could not be marked as read.`);
+    try {
+      const result = await markAllRead.mutateAsync();
+      if (!result.verified) toast.warning(`${result.unread} notification${result.unread === 1 ? '' : 's'} could not be marked as read.`);
+    } catch {
+      toast.warning('Notifications could not be marked as read. Try again.');
+    }
   }
 
   return (
@@ -55,8 +59,8 @@ export function BellNotificationList({ onNavigate }: { onNavigate: () => void })
           Recent
           {center.data.unread > 0 && <span className='text-muted-foreground font-normal'> · {center.data.unread} unread</span>}
         </h3>
-        {unread.length > 0 && (
-          <button type='button' onClick={() => void markAll()} disabled={mark.isPending} className='rafii-focus text-muted-foreground hover:text-foreground min-h-8 rounded-sm px-1 text-xs underline underline-offset-4'>
+        {center.data.unread > 0 && (
+          <button type='button' onClick={() => void markAll()} disabled={markAllRead.isPending} className='rafii-focus text-muted-foreground hover:text-foreground min-h-8 rounded-sm px-1 text-xs underline underline-offset-4'>
             Mark all read
           </button>
         )}

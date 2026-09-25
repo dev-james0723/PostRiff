@@ -15,7 +15,7 @@ production deployment. The animated character is **BLOCKED** (see the end of thi
 
 1. **Page context** (`contracts.page_context`). The browser sends a small envelope: route, selected item id, up to 12
    short display values. The DOM, form values and page text are never sent. The route must be in the route manifest
-   (`route_manifest.json`, 25 routes; the web copy `web/src/lib/site-agent/route-manifest.json` must stay byte-identical,
+   (`route_manifest.json`, 27 routes; the web copy `web/src/lib/site-agent/route-manifest.json` must stay byte-identical,
    a test checks it). An unknown route makes the context stale. A selected id is only a hint: the server re-reads it
    inside the workspace and drops it (`entity_not_found`) when this workspace doesn't hold it.
 2. **References** (`references.resolve`, `service._day_reference`, `service._choose`). "this draft" is the page's item;

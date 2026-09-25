@@ -88,6 +88,15 @@ export function useMarkNotification() {
   });
 }
 
+export function useMarkAllNotifications() {
+  const { api, w } = useCoworkerApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.markAllNotificationsRead(w),
+    onSettled: () => client.invalidateQueries({ queryKey: coworkerKeys.notifications(w) })
+  });
+}
+
 export function useNotificationPreferences() {
   const { api, w, enabled } = useCoworkerApi();
   const on = useAnyFlagOn('RAFII_NOTIFICATIONS_V2_ENABLED');

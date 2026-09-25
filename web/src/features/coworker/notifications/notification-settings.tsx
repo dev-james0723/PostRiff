@@ -108,7 +108,13 @@ function CategoryTable({ prefs, workspaceId, busy, onSave }: { prefs: Notificati
     <SettingsSection
       id='notifications-categories'
       title='What reaches you'
-      description={prefs.email.available ? 'For this workspace. “Default” follows Rafii’s own choice for each kind of message.' : 'For this workspace. Email isn’t set up yet, so only in-app and push apply.'}
+      description={
+        prefs.email.available
+          ? 'For this workspace. “Default” follows Rafii’s own choice for each kind of message.'
+          : prefs.push.available
+            ? 'For this workspace. Email isn’t set up yet, so only in-app and push apply.'
+            : 'For this workspace. Email and push aren’t set up yet, so only in-app applies.'
+      }
       padding='sm'
     >
       <ul className='flex flex-col gap-1' aria-label='Notification categories'>
@@ -122,7 +128,10 @@ function CategoryTable({ prefs, workspaceId, busy, onSave }: { prefs: Notificati
             <li key={category} data-category={category} className='flex flex-col gap-3 rounded-[var(--rafii-radius-control)] px-2 py-3 md:flex-row md:items-center md:justify-between md:gap-4'>
               <div className='min-w-0 md:max-w-[16rem]'>
                 <p className='text-foreground text-sm font-medium'>{name}</p>
-                <p className='text-muted-foreground text-xs leading-relaxed'>{meta.hint}</p>
+                <p className='text-muted-foreground text-xs leading-relaxed'>
+                  {meta.hint}
+                  {prefs.email.available && meta.emailNote ? ` ${meta.emailNote}` : ''}
+                </p>
               </div>
               <div className='grid grid-cols-[auto_1fr_1fr] items-end gap-3 md:w-[26rem]'>
                 <Label className='flex min-h-12 flex-col items-start justify-end gap-2 text-xs font-normal'>
@@ -137,12 +146,12 @@ function CategoryTable({ prefs, workspaceId, busy, onSave }: { prefs: Notificati
                 <SelectField
                   label={<span className='text-muted-foreground text-xs font-normal'>Email</span>}
                   aria-label={`${name} by email`}
-                  value={transactional ? 'always' : (own.email_mode ?? '')}
+                  value={transactional ? (prefs.email.available ? 'always' : 'unavailable') : (own.email_mode ?? '')}
                   disabled={busy || transactional || !prefs.email.available}
                   onChange={(e) => void onSave({ scope: 'workspace', category, email_mode: (e.target.value || null) as PreferencePatch['email_mode'] }, `${name}: email updated.`)}
                 >
                   {transactional ? (
-                    <option value='always'>Always</option>
+                    prefs.email.available ? <option value='always'>Always</option> : <option value='unavailable'>Not set up yet</option>
                   ) : (
                     <>
                       <option value=''>Default ({defaultMode(prefs, category, 'email')})</option>
@@ -191,7 +200,13 @@ function QuietHours({ prefs, busy, onSave }: { prefs: NotificationPreferences; b
     <SettingsSection
       id='notifications-quiet'
       title='Quiet hours'
-      description={active ? `On: ${toClock(global.quiet_start)}–${toClock(global.quiet_end)} (${global.time_zone ?? 'UTC'}). Push waits until they end; security alerts still come through.` : 'Off. Push can arrive at any time.'}
+      description={
+        !prefs.push.available
+          ? 'Quiet hours hold push notifications, which aren’t set up yet. In-app notifications are never held.'
+          : active
+            ? `On: ${toClock(global.quiet_start)}–${toClock(global.quiet_end)} (${global.time_zone ?? 'UTC'}). Push waits until they end; security alerts still come through.`
+            : 'Off. Push can arrive at any time.'
+      }
     >
       <div className='grid gap-3 sm:grid-cols-3'>
         <div className='flex flex-col gap-2 text-sm'>
@@ -233,6 +248,13 @@ function QuietHours({ prefs, busy, onSave }: { prefs: NotificationPreferences; b
   );
 }
 
+/** What muting actually pauses: only the channels that are set up. */
+function muteToast(prefs: NotificationPreferences): string {
+  const paused = [prefs.email.available && 'Email', prefs.push.available && (prefs.email.available ? 'push' : 'Push')].filter(Boolean);
+  if (paused.length === 0) return 'Muted. The app still collects notifications.';
+  return `Muted. ${paused.join(' and ')} ${paused.length === 1 ? 'pauses' : 'pause'}; the app still collects notifications.`;
+}
+
 function MuteAndDigest({ prefs, workspaceId, busy, onSave }: { prefs: NotificationPreferences; workspaceId: string; busy: boolean; onSave: Save }) {
   const global = row(prefs, '*', '*');
   const here = row(prefs, workspaceId, '*');
@@ -241,7 +263,11 @@ function MuteAndDigest({ prefs, workspaceId, busy, onSave }: { prefs: Notificati
   const until = mutedUntil ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(mutedUntil * 1000)) : null;
 
   return (
-    <SettingsSection id='notifications-digest' title='Digest and mute' description='A digest gathers the less urgent messages into one email.'>
+    <SettingsSection
+      id='notifications-digest'
+      title='Digest and mute'
+      description={prefs.email.available ? 'A digest gathers the less urgent messages into one email.' : 'A digest gathers the less urgent messages into one email, once email is set up.'}
+    >
       <SelectField
         label='Email digest'
         value={global.digest_frequency ?? ''}
@@ -270,7 +296,7 @@ function MuteAndDigest({ prefs, workspaceId, busy, onSave }: { prefs: Notificati
                   </option>
                 ))}
               </SelectField>
-              <Button variant='glass' size='control' disabled={busy} onClick={() => void onSave({ scope: 'workspace', category: '*', mute_hours: hours }, 'Muted. Email and push pause; the app still collects notifications.')}>
+              <Button variant='glass' size='control' disabled={busy} onClick={() => void onSave({ scope: 'workspace', category: '*', mute_hours: hours }, muteToast(prefs))}>
                 Mute
               </Button>
             </>

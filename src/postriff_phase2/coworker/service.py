@@ -121,15 +121,23 @@ class CoworkerService:
         stored = next((r for r in weekly_operator.view(self._state(workspace_id, token))["recipes"] if r["id"] == recipe_id), None)
         return {"recipe": stored, "verified": bool(stored and stored["status"] == status)}
 
+    def _bound_ideas(self, repository):
+        """A copy of the writing pipeline that reads and writes through `repository`. Its credit checks must use the
+        same repository: the shared `credit_requests` would open the service's original one with the cron capability,
+        which the session verifier cannot read (campaign_worker does the same rebind)."""
+        from ..credit_requests import CreditRequests
+        ideas = copy.copy(self.hosted.ideas)
+        ideas.repository = repository
+        ideas.credit_requests = CreditRequests(ideas)
+        return ideas
+
     def _writer(self, workspace_id, token, actor=None):
         """The writing pipeline as the person (HTTP) or as the recipe's owner (cron capability)."""
-        ideas = copy.copy(self.hosted.ideas)
         if actor is None:
-            return ideas, token
+            return copy.copy(self.hosted.ideas), token
         from ..automation_runs import principal_repository
         repository, capability = principal_repository(self.hosted, workspace_id, actor, "edit")
-        ideas.repository = repository
-        return ideas, capability
+        return self._bound_ideas(repository), capability
 
     def _find_week(self, state, week_id):
         week = next((w for w in weekly_operator.view(state)["weeks"] if w["id"] == week_id), None)
@@ -201,8 +209,7 @@ class CoworkerService:
                 raise
 
     def _advance(self, workspace_id, token, repository, recipe, week_id, actor, max_slots, deadline=None):
-        ideas = copy.copy(self.hosted.ideas)
-        ideas.repository = repository
+        ideas = self._bound_ideas(repository)
         state = repository.get(workspace_id, token)["state"]
         week = self._find_week(state, week_id)
         if week["state"] in ("ready_for_review", "approved", "scheduled"):
@@ -330,6 +337,14 @@ class CoworkerService:
                                                                           "voiceFit": result["stages"].get("voiceFit")},
                                   "creative": {k: creative_plan[k] for k in ("plans", "missingAssets", "compiled")} if creative_plan else None}
 
+        if not checks:
+            unchanged = copy.deepcopy(week)
+            weekly_operator.settle(unchanged, now)
+            if unchanged == week:
+                # Nothing was drafted and the week's state stands: no write, no revision bump, no audit row. `advanced`
+                # stays true: only a week already in review answers false (the web and the agent tool read it that way).
+                return {"week": week, "advanced": True, "drafted": len(drafted_ids), "draftedSlotIds": list(drafted_ids), "verified": True}
+
         def apply_checks(state_, _p):
             target_week = self._find_week(state_, week_id)
             if checks and target_week["state"] == "generating":
@@ -446,6 +461,9 @@ class CoworkerService:
                     done.append({"workspaceId": workspace_id, "recipeId": recipe["id"], "state": result["week"]["state"]})
                 except AlphaError as error:
                     done.append({"workspaceId": workspace_id, "recipeId": recipe["id"], "error": str(error)[:120]})
+                except Exception as error:  # noqa: BLE001 - one recipe's defect never stops the others this minute
+                    log.warning(json.dumps({"event": "coworker.weekly_recipe_failed", "error": type(error).__name__}))
+                    done.append({"workspaceId": workspace_id, "recipeId": recipe["id"], "error": type(error).__name__})
         return {"prepared": done}
 
     # === Research Broker + One Source → Full Campaign ============================================================================
@@ -526,7 +544,9 @@ class CoworkerService:
         if not destinations:
             raise AlphaError("Choose at least one account to write for.", 400)
         usable = [c for c in pack["claims"] if c["usableForDraft"]]
-        record_id = "sc_" + hashlib.sha256(f"{workspace_id}:{pack['hash']}:{brief['hash']}".encode()).hexdigest()[:12]
+        # Content-addressed from inputs that do not change with the clock (the fact pack carries retrieval times, so its
+        # hash would give every repeat a new id): the source's own content-derived id and the brief's goal, audience, CTA.
+        record_id = "sc_" + hashlib.sha256(json.dumps([workspace_id, artifact["id"], goal, audience, brief.get("cta")], ensure_ascii=False).encode()).hexdigest()[:12]
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.hosted.ideas._member(row), "edit")
@@ -538,7 +558,7 @@ class CoworkerService:
             commands = self.hosted.commands
             existing = next((x for x in ((state_.get("coworker") or {}).get("sourceCampaigns") or []) if x["id"] == record_id), None)
             if existing:
-                box["record"] = existing
+                box["record"], box["existing"] = existing, True
                 return existing
             source_id = None
             if pack["claims"]:
@@ -565,11 +585,22 @@ class CoworkerService:
 
         self._command(workspace_id, token, create, "edit", "source_campaign.created", record_id, {"claims": len(pack["claims"]), "usable": len(usable)})
         record = box["record"]
+        if box.get("existing") and record.get("status") != "drafting":
+            # The same source and brief already made this campaign: answer with it and never draft over it (the
+            # record id is content-addressed, so a repeat would otherwise replace its drafts with an error).
+            return {"sourceCampaign": record, "verified": True, "existing": True, "creative": None}
         drafts = []
         if usable and record.get("sourceId"):
             ideas = copy.copy(self.hosted.ideas)
-            conversation = ideas.create_conversation(workspace_id, token, f"Campaign: {artifact['title'][:80]}")
-            conversation_id = conversation["conversationId"]
+            conversation_id = record.get("conversationId")
+            if not conversation_id:
+                # One conversation per campaign, kept on the record: a retry after an interruption reuses it, so the
+                # writer's idempotency key finds the same run instead of refusing a changed request.
+                conversation_id = ideas.create_conversation(workspace_id, token, f"Campaign: {artifact['title'][:80]}")["conversationId"]
+
+                def keep(state_, _p):
+                    next(x for x in state_["coworker"]["sourceCampaigns"] if x["id"] == record_id)["conversationId"] = conversation_id
+                self._command(workspace_id, token, keep, "edit", "source_campaign.updated", record_id, {"conversation": True})
             angle = angles[0] if angles else None
             material = json.dumps({"brief": {k: brief[k] for k in ("goal", "audience", "coreMessage", "cta")}, "angle": angle,
                                    "claims": [c["text"] for c in usable if not angle or c["claimId"] in angle["claimIds"] or len(angle["claimIds"]) > 1][:8],
@@ -809,11 +840,11 @@ class CoworkerService:
             db.commit()
         return {"productEventsRemoved": removed}
 
-    def listening_cron(self, max_workspaces=20):
+    def listening_cron(self, max_workspaces=20, deadline=None):
         if not flags.enabled("RAFII_LISTENING_ENABLED"):
             return {"status": "disabled"}
         from . import listening
-        return listening.cron(self, max_workspaces)
+        return listening.cron(self, max_workspaces, deadline=deadline)
 
     def engagement_triage(self, workspace_id, token):
         self._require("RAFII_ENGAGEMENT_COPILOT_ENABLED")
