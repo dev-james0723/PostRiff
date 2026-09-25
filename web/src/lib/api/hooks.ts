@@ -7,13 +7,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
-import type { Snapshot } from './types';
+import type { ActiveTimeBeat, Snapshot, TimeSavingsCalibrationInput, TimeSavingsRange } from './types';
 
 export const keys = {
   snapshot: (w: string) => ['snapshot', w] as const,
   usage: (w: string) => ['usage', w] as const,
   channels: (w: string) => ['channels', w] as const,
   analytics: (w: string) => ['analytics', w] as const,
+  timeSavings: (w: string, range: string) => ['time-savings', w, range] as const,
   audience: (w: string) => ['audience', w] as const,
   members: (w: string) => ['members', w] as const,
   invitations: (w: string) => ['invitations', w] as const,
@@ -62,6 +63,28 @@ export function useChannels() {
 export function useAnalytics() {
   const { api, w, enabled } = useScoped();
   return useQuery({ queryKey: keys.analytics(w), queryFn: () => api.analytics(w), enabled });
+}
+
+/** Time back for the signed-in person. Separate from `useAnalytics`: that is how posts performed, this is work removed. */
+export function useTimeSavings(range: TimeSavingsRange = '30d', options: { enabled?: boolean } = {}) {
+  const { api, w, enabled } = useScoped();
+  return useQuery({ queryKey: keys.timeSavings(w, range), queryFn: () => api.timeSavings(w, range), enabled: enabled && options.enabled !== false });
+}
+
+/** Sends one cumulative active-time heartbeat; `useActiveWorkTimer` is the usual caller. */
+export function useRecordActiveTime() {
+  const { api, w } = useScoped();
+  return useMutation({ mutationFn: (beat: ActiveTimeBeat) => api.recordActiveTime(w, beat) });
+}
+
+/** Answers or dismisses a calibration prompt, or sets an explicit estimate; every range refreshes. */
+export function useTimeSavingsCalibration() {
+  const { api, w } = useScoped();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TimeSavingsCalibrationInput) => api.calibrateTimeSavings(w, input),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['time-savings', w] })
+  });
 }
 
 export function useAudience() {
@@ -174,6 +197,8 @@ export function useAct() {
       void client.invalidateQueries({ queryKey: keys.channels(w) });
       void client.invalidateQueries({ queryKey: keys.audit(w) });
       void client.invalidateQueries({ queryKey: keys.memory(w) });
+      // An approval can complete a draft, so Time back may have grown.
+      void client.invalidateQueries({ queryKey: ['time-savings', w] });
     }
   });
 }

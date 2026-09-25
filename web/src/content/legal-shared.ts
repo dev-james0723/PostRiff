@@ -11,6 +11,7 @@ export const RETENTION = [
   { data: 'Approval receipts', retention: 'Retained as records after publication', note: 'Limited deletion, trial and audit records remain after account deletion; workspace publication records are removed.' },
   { data: 'Post metrics', retention: 'Until workspace deletion; release policy pending review', note: 'Native metric observations; never sold or aggregated across customers with content.' },
   { data: 'Audience comments', retention: 'Until the provider or you delete them', note: 'Tombstones are preserved when a provider requires deletion.' },
+  { data: 'Time back estimates', retention: 'Until you delete your account or the workspace', note: 'Estimated minutes saved per completed task, your answers about how long tasks usually take, and seconds of active use in Rafii. No text, keystrokes, pointer positions or browsing outside Rafii.' },
   { data: 'Logs and traces', retention: '30 days — candidate', note: 'Sanitised: no prompts, post bodies, tokens or files by default.' },
   { data: 'Backups', retention: '30-day rotation — candidate', note: 'Database and object-storage backup coverage must be verified separately for the release environment.' }
 ];

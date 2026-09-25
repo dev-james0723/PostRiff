@@ -10,6 +10,8 @@ import { ChannelIcon, resolveChannelSlug } from '@/components/channel-icon';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { languageLabel, textAttributes } from '@/lib/locales';
+import { workflowKey } from '@/lib/time-back/active-time';
+import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 
 /* Elevated glass dialog on the existing primitive (DNA §12.2); the editor is a readable, regular 15–16px surface (DNA §21.2). */
 const DIALOG = 'rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 sm:max-w-xl md:p-6';
@@ -22,6 +24,8 @@ const EDITOR = 'rafii-field min-h-48 rounded-[var(--rafii-radius-control)] borde
 export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const snapshot = useSnapshot();
   const act = useAct();
+  // Time back: editing this draft is part of its work; measured only while the dialog is open.
+  useActiveWorkTimer({ workflowKey: workflowKey('variant', variantId), taskKind: 'draft', enabled: open });
   const variant = snapshot.data?.state.variants?.find((v) => v.id === variantId);
   const [text, setText] = useState(variant?.text ?? '');
   const notes = variant ? limitNotes({channel: resolveChannelSlug(undefined, variant.platform), channelName: variant.platform, account: '', text, media: [], publishAt: new Date(), timeZone: 'UTC'}) : [];

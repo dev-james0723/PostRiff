@@ -28,6 +28,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/012_channel_pictures.sql
 \ir ../../migrations/postriff/018_raffi_planning.sql
 \ir ../../migrations/postriff/019_research_requests.sql
+\ir ../../migrations/postriff/023_time_savings.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000002','assist') as two \gset

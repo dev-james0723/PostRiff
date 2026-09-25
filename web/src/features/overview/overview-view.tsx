@@ -14,11 +14,11 @@ import { NumberTicker } from '@/components/motion/number-ticker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
-import { useChannels, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { useChannels, useSnapshot, useTimeSavings, useUsage } from '@/lib/api/hooks';
+import { completedLabel, CONFIDENCE, formatMinutes, spokenMinutes } from '@/features/time-back/time-back-copy';
 import type { Job } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
-import { relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { deriveAttention, type AttentionItem, type AttentionSource } from '@/lib/attention';
 import { ChannelsCard, publishCounts } from './channels-card';
@@ -33,6 +33,7 @@ const infoContent = {
   title: 'How the overview counts',
   sections: [
     { title: 'Real numbers only', description: 'If a number can’t be read, it says “Unavailable”, never zero.' },
+    { title: 'Time back', description: 'Estimated time saved on work you completed in the last 30 days. Analytics shows how it’s calculated. Your plan’s allowances are under Billing.' },
     { title: 'Direct · Assisted · Local', description: 'Direct posts for you. Assisted: you finish the post. Local: posts from your computer.' },
     { title: 'Next up', description: 'Approved posts only. Drafts waiting for approval are under Needs your attention.' }
   ]
@@ -144,7 +145,7 @@ function StatStrip({ stats }: { stats: Stat[] }) {
     <Surface as='dl' material='quiet' padding='none' data-tour='overview-stats' className='grid grid-cols-2 overflow-hidden lg:grid-cols-4'>
       {stats.map((stat, index) => (
         <div key={index} className='flex min-w-0 flex-col gap-1 p-4 md:p-5'>
-          <dt className='text-muted-foreground order-2 flex items-center gap-2 text-xs font-medium'>
+          <dt className='text-muted-foreground order-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium'>
             {stat.label}
             {stat.badge}
           </dt>
@@ -189,6 +190,7 @@ export function OverviewView() {
   const snapshot = useSnapshot();
   const usage = useUsage();
   const channels = useChannels();
+  const timeBack = useTimeSavings('30d');
   const access = useWorkspaceAccess();
   const reduce = useReducedMotion();
   const now = Date.now() / 1000;
@@ -209,7 +211,6 @@ export function OverviewView() {
   const counts = publishCounts(channels.data?.channels ?? []);
 
   const entitlement = usage.data?.entitlement;
-  const subscription = usage.data?.subscription;
 
   const attention = deriveAttention({ snapshot, channels, usage, now });
   const failedQueries = [snapshot.isError ? snapshot : null, channels.isError ? channels : null, usage.isError ? usage : null].filter(
@@ -224,14 +225,28 @@ export function OverviewView() {
     ? unavailableStat('Couldn’t read scheduled posts', snapshot)
     : { value: scheduled, hint: sending ? `${sending} sending now` : undefined };
   const publishedStat = snapshot.isError ? unavailableStat('Couldn’t read published posts', snapshot) : { value: publishedRecently };
-  // Money stays explicit: when the allowance runs out, nothing extra is charged.
-  const batchesStat = usage.isError
-    ? unavailableStat('Couldn’t read your plan', usage)
-    : {
-        value: entitlement ? entitlement.writingBatchesRemaining : '—',
-        hint: entitlement?.resetsAt ? `Resets ${relativeTime(entitlement.resetsAt, now)}` : undefined,
-        footer: usage.data?.overage === 'stop' ? <span className='text-muted-foreground'>No overage charges</span> : undefined
-      };
+  // Time back: completed work only, an estimate never shown as a measurement, and no "0h" before any work
+  // completed. Plan allowances live under Billing; running low or out is under Needs your attention.
+  const howLink = (
+    <Link href='/app/analytics#time-back' className='text-muted-foreground hover:text-foreground rafii-focus underline underline-offset-2'>
+      How is this calculated?
+    </Link>
+  );
+  const timeBackData = timeBack.data;
+  const timeBackStat = timeBack.isError
+    ? unavailableStat('Couldn’t read time back', timeBack)
+    : !timeBackData || timeBackData.state === 'empty'
+      ? { value: 'None yet', hint: 'Counts completed work only', footer: howLink }
+      : {
+          value: (
+            <>
+              <span aria-hidden>{formatMinutes(timeBackData.totalMinutes)}</span>
+              <span className='sr-only'>{spokenMinutes(timeBackData.totalMinutes)}</span>
+            </>
+          ),
+          hint: completedLabel(timeBackData.completedTasks),
+          footer: howLink
+        };
   const channelsStat = channels.isError
     ? unavailableStat('Couldn’t read channels', channels)
     : {
@@ -271,7 +286,12 @@ export function OverviewView() {
           stats={[
             { label: 'Scheduled', loading: snapshot.isPending, ...scheduledStat },
             { label: 'Published · 30 days', loading: snapshot.isPending, ...publishedStat },
-            { label: 'Writing batches left', loading: usage.isPending, badge: !usage.isError && subscription ? <StatusChip icon={null}>{subscription.label}</StatusChip> : undefined, ...batchesStat },
+            {
+              label: 'Time back · 30 days',
+              loading: timeBack.isPending,
+              badge: timeBackData?.state === 'ready' && timeBackData.basis && !timeBack.isError ? <StatusChip icon={null} title={CONFIDENCE[timeBackData.basis].meaning}>{CONFIDENCE[timeBackData.basis].badge}</StatusChip> : undefined,
+              ...timeBackStat
+            },
             { label: 'Channels connected', loading: channels.isPending, ...channelsStat }
           ]}
         />

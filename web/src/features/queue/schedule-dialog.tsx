@@ -24,6 +24,8 @@ import type { Asset, SnapshotVariant } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { AssetPicker } from '@/components/application/asset-picker';
 import { languageLabel } from '@/lib/locales';
+import { workflowKey } from '@/lib/time-back/active-time';
+import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 
 interface ScheduleDialogProps {
   open: boolean;
@@ -167,6 +169,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const staleDrafts = (state?.variants ?? []).filter((v) => !v.blockedByRetraction && !usable(v)).length;
 
   const [variantId, setVariantId] = useState<string>(preselected ?? '');
+  // Time back: reviewing and scheduling this draft is part of its work; measured only while the dialog is open.
+  useActiveWorkTimer({ workflowKey: workflowKey('variant', variantId || preselected), taskKind: 'draft', enabled: open });
   const [chosenChannelId, setChannelId] = useState<string>('');
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
