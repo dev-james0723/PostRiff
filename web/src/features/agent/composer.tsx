@@ -15,6 +15,10 @@ import { cn } from '@/lib/utils';
 import { ModelPicker } from './model-picker';
 import type { ChannelLanguages } from './use-channel-languages';
 
+/** A conversation turn's message text, mirroring the server's cap (ideas.MAX_TEXT). Unlike the Home quick
+ *  start, which seeds a new idea and allows up to 20,000 characters, a turn is a follow-up message. */
+export const MESSAGE_MAX = 6000;
+
 /** Platforms the drafting runtime can write for today (mirrors `agent_runtime.PLATFORMS`). X is draftable but never
  *  publishable: PostRiff has no X publisher, so X drafts are copied and posted by hand. */
 export const DRAFT_PLATFORMS = ['LinkedIn', 'Instagram', 'Threads', 'Xiaohongshu', 'X'] as const;
@@ -112,7 +116,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
         rows={compact ? 2 : 4}
-        maxLength={20000}
+        maxLength={MESSAGE_MAX}
         disabled={disabled}
         aria-label='Message'
         placeholder={placeholder}
@@ -181,6 +185,12 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
             </button>
           )}
         </div>
+        {/* The limit only matters near it. */}
+        {value.length > MESSAGE_MAX * 0.8 && (
+          <span className='text-muted-foreground shrink-0 text-xs tabular-nums' aria-live='polite'>
+            {value.length.toLocaleString()} / {MESSAGE_MAX.toLocaleString()}
+          </span>
+        )}
         <Button variant='action' size='icon-control' className='shrink-0 rounded-full' disabled={!canSend} onClick={onSubmit} aria-label={submitLabel ?? 'Send'}>
           <ActionSwapIcon value={busy ? 'busy' : 'send'} animation='blur' className='size-4'>
             {busy ? <Icons.spinner className='size-4 animate-spin motion-reduce:animate-none' /> : <Icons.send className='size-4' />}
