@@ -620,7 +620,8 @@ class AgentRuntimeService:
                 "language": language, "blocks": blocks, "citations": result.get("citations") or [], "grounding": {"required": False, "sufficient": True, "missing": []},
                 "proposals": proposals, "context": {"route": None, "entity": None, "read": [a["label"] for a in result.get("toolActivity") or [] if a.get("status") == "verified" and a.get("effect") == "READ"][:12],
                                                     "withheld": ["passwords, tokens and keys", "other workspaces"], "stale": False},
-                "model": {"id": result.get("usage", {}).get("route"), "composedBy": "model" if result["composedBy"] == "manager" else "grounded"},
+                # 'agent': the Manager phrased it (not the person's chosen writer); 'grounded': composed from verified tool results only.
+                "model": {"id": result.get("usage", {}).get("route"), "composedBy": "agent" if result["composedBy"] == "manager" else "grounded"},
                 "followUps": list(follow_ups)[:3], "feedback": None, "refs": [r for r in refs if isinstance(r, dict) and r.get("id")][:12]}
         if pending:
             site["pending"] = pending

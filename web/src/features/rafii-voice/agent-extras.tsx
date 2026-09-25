@@ -84,7 +84,7 @@ export function AgentExtras({ result, conversationId }: { result: AgentResult; c
       {specialists.length > 0 && (
         <p className='text-muted-foreground text-[11px]'>Worked with: {specialists.map((s) => String(s).replace(/_/g, ' ')).join(', ')}</p>
       )}
-      {process.env.NODE_ENV !== 'production' && <p className='text-muted-foreground/70 text-[10px]' data-rafii-trace={result.traceId}>trace {result.traceId}</p>}
+      {process.env.NODE_ENV !== 'production' && <p className='text-muted-foreground text-[11px]' data-rafii-trace={result.traceId}>trace {result.traceId}</p>}
     </div>
   );
 }

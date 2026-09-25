@@ -67,12 +67,41 @@ function png(width = 480, height = 480) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
+/** Fixture (as in the PostgreSQL suites): an owner's approved spending budget, written to the harness's own database. Budget approval
+ *  is an operator data decision in this product, not an API; without it every paid route (voice included) is refused with 402. */
+/** Fixture (as in the PostgreSQL suites): the harness's canned LinkedIn consent grants no publishing scope, so no harness account is ever
+ *  "Ready for posting". This marks that account server-verified with the publish scope, through the same command the scenarios use. */
+function verifyLinkedIn(workspaceId) {
+  const { execFileSync } = require('node:child_process');
+  const root = path.resolve(__dirname, '../..');
+  const code = [
+    'import psycopg, time',
+    'from postriff_phase2.hosted import HostedWorkspaceService',
+    `dsn = "host=127.0.0.1 port=${process.env.RAFII_HARNESS_PG_PORT || '55622'} dbname=postgres"`,
+    `svc = HostedWorkspaceService(lambda: psycopg.connect(dsn), lambda token: ${JSON.stringify(principal)})`,
+    `snap = svc.repository.get(${JSON.stringify(workspaceId)}, "fixture")`,
+    'ch = next(c for c in snap["state"]["phase2"]["channels"] if c["platform"] == "LinkedIn")',
+    'rec = {"id": ch["id"], "platform": "LinkedIn", "account": ch["account"], "accountType": ch.get("accountType") or "member", "scopes": ["w_member_social"], "verifiedAt": time.time(), "expiresAt": time.time() + 10**7, "capabilityVersion": ch.get("capabilityVersion") or 1, "providerAccountId": ch.get("providerAccountId") or "urn:dev:fixture"}',
+    `svc.repository.command(${JSON.stringify(workspaceId)}, "fixture", snap["revision"], lambda s, a: svc.commands.upsert_verified_channel(s, a, rec))`
+  ].join('\n');
+  execFileSync(process.env.RAFII_PYTHON || 'python3', ['-c', code], { cwd: root, env: { ...process.env, PYTHONPATH: 'src:tests' }, stdio: 'inherit' });
+}
+
+function approveBudget(workspaceId) {
+  const { execFileSync } = require('node:child_process');
+  const root = path.resolve(__dirname, '../..');
+  const code = `import psycopg\nfrom consumer_fixtures import approve_budgets\napprove_budgets(lambda: psycopg.connect("host=127.0.0.1 port=${process.env.RAFII_HARNESS_PG_PORT || '55622'} dbname=postgres"), ${JSON.stringify(workspaceId)})`;
+  execFileSync(process.env.RAFII_PYTHON || 'python3', ['-c', code], { cwd: root, env: { ...process.env, PYTHONPATH: 'src:tests' }, stdio: 'inherit' });
+}
+
 async function seed() {
   const { workspaceId } = await call('POST', '/api/auth/verify', {});
+  approveBudget(workspaceId);
   const start = await call('POST', `/api/workspaces/${workspaceId}/channels/linkedin/oauth/start`, { capability: 'publish' });
   const state = new URL(start.authorizeUrl).searchParams.get('state');
   const done = await call('POST', `/api/workspaces/${workspaceId}/channels/linkedin/oauth/complete`, { state, code: 'good-code' });
   if (!done.connected) throw new Error('LinkedIn did not connect in the harness');
+  verifyLinkedIn(workspaceId);
   let snapshot = await call('GET', `/api/workspaces/${workspaceId}`);
   snapshot = await call('POST', `/api/workspaces/${workspaceId}/actions`, {
     expectedRevision: snapshot.revision, action: 'raffi_campaign_create',
@@ -132,6 +161,24 @@ async function say(page, text, options) {
   await waitAnswers(page, before + 1);
   await page.waitForFunction((n) => (window.rafiiLiveHarness?.sent ?? []).filter((e) => e.type === 'session.commentary.append').length >= n, 1, { timeout: 60000 });
   return answers(page).nth(before);
+}
+
+/** Type a question and send it. The local Playwright WebKit build (2359) aborts inside AppKit's text-input hook
+ *  (NSTextInputContext textInputClientDidUpdateSelection, unrecognised on this macOS) when a field is filled after a
+ *  client-side navigation; on WebKit the value is set through the DOM with a real input event (React's own change path)
+ *  and sent with the Send button. Chromium types normally. Either way the app's real submit path runs. */
+async function askTyped(page, text) {
+  if (args.browser === 'webkit') {
+    await composer(page).evaluate((el, value) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, text);
+    await panel(page).getByRole('button', { name: 'Send' }).click();
+  } else {
+    await composer(page).fill(text);
+    await composer(page).press('Enter');
+  }
 }
 
 async function axe(page) {
@@ -210,7 +257,8 @@ async function axe(page) {
     check('V-A17/MM02: an image attached during voice goes to the backend (GPT-Live is told it can’t see it)', thought && Boolean(imageAnswer));
 
     // The compound request: image, copy, links, schedule proposal (shown and spoken).
-    const compound = await say(page, 'Make a matching LinkedIn asset, write the copy, add them to the campaign and schedule it Thursday at 18:00');
+    // “next Thursday”: the harness runs on the real clock, and the app refuses a time in the past (as it should).
+    const compound = await say(page, 'Make a matching LinkedIn asset, write the copy, add them to the campaign and schedule it next Thursday at 18:00');
     await page.waitForFunction(() => [...document.querySelectorAll('#rafii-panel figure[data-rafii-asset] img')].some((img) => img.src.startsWith('blob:')), null, { timeout: 60000 }).catch(() => null);
     const compoundText = compound ? await compound.innerText() : '';
     const applyButton = compound ? compound.getByRole('button', { name: /^Apply/ }) : null;
@@ -241,8 +289,7 @@ async function axe(page) {
 
     // Type while the call is on: the typed turn is answered and Live gets it as context.
     const typedBefore = await answers(page).count();
-    await composer(page).fill('What is still open?');
-    await composer(page).press('Enter');
+    await askTyped(page, 'What is still open?');
     await waitAnswers(page, typedBefore + 1);
     check('typing during voice works in the same conversation; Live gets the exchange as context',
       (await sent(page)).some((e) => e.type === 'session.thinking.append' && /The user typed/.test(e.content)));
@@ -262,8 +309,7 @@ async function axe(page) {
     await panel(page).getByRole('button', { name: 'End voice' }).click();
     await page.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'ended', null, { timeout: 30000 });
     const endBefore = await answers(page).count();
-    await composer(page).fill('Thanks. What did we just schedule?');
-    await composer(page).press('Enter');
+    await askTyped(page, 'Thanks. What did we just schedule?');
     await waitAnswers(page, endBefore + 1);
     check('V-A09: after voice ends, text continues the same conversation', (await answers(page).count()) === endBefore + 1);
     await shot(page, 'voice-desktop-ended.png');
@@ -271,7 +317,7 @@ async function axe(page) {
 
     // --- microphone denied: the real WebRTC transport, no fake; text still works ------------------------------------------
     if (args.browser !== 'webkit') {
-      const deniedBrowser = await engine.launch({ headless: true, executablePath, args: [] });
+      const deniedBrowser = await engine.launch({ headless: true, executablePath, args: ['--deny-permission-prompts'] });
       const deniedCtx = await context(deniedBrowser, { width: 1280, height: 860 }, { fakeLive: false });
       await deniedCtx.grantPermissions([], { origin: base });
       const dp = await deniedCtx.newPage();
@@ -281,8 +327,7 @@ async function axe(page) {
       await panel(dp).getByRole('button', { name: 'Talk to Rafii' }).click();
       await dp.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'error', null, { timeout: 30000 });
       const deniedText = await panel(dp).innerText();
-      await composer(dp).fill('What page am I on?');
-      await composer(dp).press('Enter');
+      await askTyped(dp, 'What page am I on?');
       await waitAnswers(dp, 1);
       check('V-A14: microphone denied → a plain explanation, and typing still works', /Microphone|microphone|voice calls/.test(deniedText) && (await answers(dp).count()) >= 1, deniedText.slice(0, 300));
       await deniedBrowser.close();
@@ -303,8 +348,11 @@ async function axe(page) {
     check('phone: nothing scrolls sideways with voice on', await pp.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1));
     await live(pp, () => window.rafiiLiveHarness.userSays('幫我睇下呢個 campaign 仲欠啲乜'));
     await pp.waitForFunction(() => (window.rafiiLiveHarness?.sent ?? []).some((e) => e.type === 'session.commentary.append'), null, { timeout: 120000 });
+    await waitAnswers(pp, 1).catch(() => null);
     check('V-A11: a Cantonese request is delegated and answered in the same conversation', (await answers(pp).count()) >= 1);
     await shot(pp, 'voice-phone.png');
+    await panel(pp).getByRole('button', { name: 'End voice' }).click();
+    await pp.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'ended', null, { timeout: 30000 }).catch(() => null);
     await phone.close();
 
     // --- tablet: sheet with voice ------------------------------------------------------------------------------------------
@@ -318,6 +366,8 @@ async function axe(page) {
     await tp.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'live', null, { timeout: 60000 });
     check('tablet: Voice Mode runs in the sheet; nothing scrolls sideways', await tp.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1));
     await shot(tp, 'voice-tablet.png');
+    await panel(tp).getByRole('button', { name: 'End voice' }).click();
+    await tp.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'ended', null, { timeout: 30000 }).catch(() => null);
     await tablet.close();
   } catch (error) {
     check('browser run completed', false, String(error?.stack ?? error).slice(0, 800));

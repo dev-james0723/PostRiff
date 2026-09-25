@@ -139,6 +139,7 @@ class VoiceSessions:
             else:
                 cur.execute("INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,%s) RETURNING id::text", (workspace_id, principal, "Voice conversation with Rafii"))
                 conversation_id = cur.fetchone()[0]
+            self._reap(cur, workspace_id, principal)
             cur.execute("SELECT count(*) FROM public.pr_agent_runs WHERE workspace_id=%s AND actor=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
                         "AND created_at>now()-make_interval(mins=>%s)", (workspace_id, principal, self._cap_minutes()))
             if cur.fetchone()[0] >= MAX_ACTIVE_SESSIONS:
@@ -177,6 +178,20 @@ class VoiceSessions:
             ideas._insert_event(cur, workspace_id, voice_session_id, safe_event("run.started", agent="voice", model=route.model, modality="voice", locale=locale))
         return {"voiceSessionId": voice_session_id, "liveSessionId": live_id, "conversationId": conversation_id, "sdp": answer, "dataChannel": DATA_CHANNEL,
                 "model": route.model, "locale": locale, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
+
+    def _reap(self, cur, workspace_id, principal):
+        """A tab closed mid-call never ends its session: this member's sessions past the cap are closed and their
+        reservation is held as unknown (never settled as free) until reconciled against the provider's usage."""
+        cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND actor=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
+                    "AND created_at<=now()-make_interval(mins=>%s) FOR UPDATE", (workspace_id, principal, self._cap_minutes() + 5))
+        for run_id, artifact in cur.fetchall():
+            artifact = artifact or {}
+            voice = artifact.setdefault("voice", {})
+            if voice.get("reservationId"):
+                self.service.ledger.settle(cur, workspace_id, voice["reservationId"], "unknown")
+            voice.update({"state": "ended", "reason": "not_ended_by_client", "endedAt": self._now(), "billingBasis": "unknown until reconciled"})
+            self._save(cur, workspace_id, run_id, artifact, status="completed")
+            self.service.ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed", usage={"provenance": "voice", "seconds": None}))
 
     def _now(self) -> float:
         return self.runtime.clock()

@@ -178,7 +178,7 @@ export function VoiceMode({
       {transcript.length > 0 && (
         <details className='text-xs' open={state === 'live'}>
           <summary className='rafii-focus text-muted-foreground cursor-pointer'>Transcript</summary>
-          <ol className='mt-1 flex flex-col gap-0.5' aria-label='Voice transcript' data-rafii-voice-transcript>
+          <ol className='mt-1 flex max-h-28 flex-col gap-0.5 overflow-y-auto overscroll-contain' aria-label='Voice transcript' data-rafii-voice-transcript>
             {transcript.map((l) => (
               <li key={l.id} data-role={l.role}>
                 <span className='font-medium'>{l.role === 'user' ? 'You' : 'Rafii'}: </span>

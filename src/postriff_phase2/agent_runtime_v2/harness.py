@@ -141,7 +141,9 @@ def manager_step(call):
         if "ask_campaign" not in called and asset and draft:
             return _call("ask_campaign", {"input": f"Link draft={draft} asset={asset} to campaignId={campaign}. Step s3."})
         if "schedule_propose" not in called and draft:
-            return _call("schedule_propose", {"draftId": draft, "when": "Thursday 18:00", **({"assetId": asset, "alt": "Harness image for the launch post"} if asset else {}), "stepId": "s4"})
+            when = re.search(r"((?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)\s+(?:at\s+)?\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)", request, re.I)
+            return _call("schedule_propose", {"draftId": draft, "when": when.group(1) if when else "Thursday 18:00",
+                                              **({"assetId": asset, "alt": "Harness image for the launch post"} if asset else {}), "stepId": "s4"})
         return _reply("Here is where each step stands; the scheduling proposal is below for you to apply or leave.",
                       "The image and copy are ready and linked. The Thursday post is waiting for your go-ahead — shall I apply it?")
     if any(word in lower for word in ("image", "picture", "photo", "reference", "look at", "圖")) and not called:

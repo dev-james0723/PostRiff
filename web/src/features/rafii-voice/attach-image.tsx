@@ -4,7 +4,7 @@
  * Add an image to the conversation (typed or during Voice Mode). The server decodes it, stores it privately in this
  * workspace and records it on the conversation, so "the second image" means the same thing to everyone.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IconPhoto } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
@@ -27,6 +27,12 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState(false);
+  useEffect(() => {
+    if (!justAdded) return;
+    const timer = setTimeout(() => setJustAdded(false), 6000);
+    return () => clearTimeout(timer);
+  }, [justAdded]);
   if (!status?.imageAvailable && !status?.manager.available) return null;
 
   async function onFile(file: File | undefined) {
@@ -40,6 +46,7 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
       onAttached({ assetId: attached.assetId, index: attached.index });
       voiceSession.imageAttached(attached.assetId, attached.index);
       setMessage(`Image ${attached.index ?? ''} added. Ask Rafii about it.`);
+      setJustAdded(true);
     } catch (error) {
       setMessage(error instanceof ApiError ? error.message : 'The image could not be added.');
     } finally {
@@ -51,22 +58,24 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
   return (
     <>
       <input ref={input} type='file' accept='image/png,image/jpeg' className='sr-only' tabIndex={-1} aria-hidden onChange={(event) => void onFile(event.target.files?.[0])} />
-      <Button
-        type='button'
-        variant='quiet'
-        size='icon-sm'
-        aria-label={conversationId ? 'Add an image' : 'Add an image (send a message first)'}
-        title='Add an image'
-        disabled={disabled || busy || !conversationId}
-        onClick={() => input.current?.click()}
-      >
-        <IconPhoto className='size-4' aria-hidden />
-      </Button>
-      {message && (
-        <span className='text-muted-foreground text-[11px]' role='status'>
-          {message}
-        </span>
-      )}
+      <span className='relative inline-flex shrink-0'>
+        <Button
+          type='button'
+          variant='quiet'
+          size='icon-sm'
+          aria-label={conversationId ? 'Add an image' : 'Add an image (send a message first)'}
+          title={message ?? 'Add an image'}
+          disabled={disabled || busy || !conversationId}
+          onClick={() => input.current?.click()}
+        >
+          <IconPhoto className='size-4' aria-hidden />
+        </Button>
+        {justAdded && <span aria-hidden className='pointer-events-none absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500' />}
+      </span>
+      {/* The result is announced without taking space from the composer. */}
+      <span className='sr-only' role='status' aria-live='polite'>
+        {message ?? ''}
+      </span>
     </>
   );
 }

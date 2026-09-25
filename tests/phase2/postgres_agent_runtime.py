@@ -1098,6 +1098,20 @@ def _():
     return {"actual": {"status": code, "turn": body["runId"], "voice": started["voiceSessionId"]}}
 
 
+@scenario("R13", "A voice session the tab never ended is reaped: closed, its reservation held as unknown (never free)", "(tab closed mid-call)",
+          "on the member's next start, their session past the cap is ended with reason not_ended_by_client and its cost stays estimated_unknown")
+def _():
+    stale = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET created_at=now()-interval '2 hours' WHERE id=%s", (stale["voiceSessionId"],))
+    fresh = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
+    status, artifact = one("SELECT status,artifact FROM public.pr_agent_runs WHERE id::text=%s", stale["voiceSessionId"])
+    settled = one("SELECT cost_state FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='settle' AND run_id::text=%s", wid, stale["voiceSessionId"])
+    voice.end(wid, OWNER, fresh["voiceSessionId"], {"usageSeconds": 2, "reason": "user_ended"})
+    assert status == "completed" and artifact["voice"]["reason"] == "not_ended_by_client" and settled and settled[0] == "estimated_unknown", (status, artifact["voice"], settled)
+    return {"actual": {"status": status, "reason": artifact["voice"]["reason"], "cost": settled[0]}}
+
+
 # --- write evidence ------------------------------------------------------------------------------------------------------------
 out_dir = ROOT / "docs/design/site-agent/agent-runtime/evidence"
 out_dir.mkdir(parents=True, exist_ok=True)
