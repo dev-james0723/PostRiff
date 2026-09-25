@@ -54,7 +54,9 @@ def open_proposals(cur, workspace_id: str, conversation_id: str, now: float) -> 
     for message_id, seq, at, site in _answers(cur, workspace_id, conversation_id):
         for proposal in site.get("proposals") or []:
             if isinstance(proposal, dict) and proposal.get("status") == "proposed" and proposal.get("expiresAt", 0) > now:
-                items.append({"proposalId": proposal["id"], "messageId": message_id, "seq": seq, "presentedAt": at, "type": proposal.get("type"),
+                # When Rafii presented it: the proposal's own creation time (the same clock that checks the window), else the message's.
+                presented = proposal.get("createdAt") if isinstance(proposal.get("createdAt"), (int, float)) else at
+                items.append({"proposalId": proposal["id"], "messageId": message_id, "seq": seq, "presentedAt": float(presented), "type": proposal.get("type"),
                               "summary": proposal.get("summary") or [], "digest": proposal.get("digest"), "expiresAt": proposal.get("expiresAt"),
                               "requiredPermission": proposal.get("requiredPermission"), "proposal": proposal})
     return items

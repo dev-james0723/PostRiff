@@ -28,6 +28,9 @@ _NEVER = re.compile(
 _PASSIVE_EFFECT = re.compile(
     r"\b(?:has|have)\s+been\s+(?:scheduled|published|posted|approved|applied|sent)\b|\b(?:is|are)\s+now\s+(?:scheduled|published|live|approved)\b"
     r"|已(?:經)?(?:排程|排好|發佈|發布|批准|套用)", re.I)
+# "I've prepared / proposed / set up …" claims a proposal (or a verified change) exists this turn.
+_PREPARED = re.compile(r"\b(?:i(?:'ve|\s+have)?|we(?:'ve|\s+have)?|rafii\s+(?:has\s+)?)\s*(?:just\s+|now\s+|already\s+)?(?:prepared|proposed|set\s+up|queued|lined\s+up|drafted|written|wrote)\b"
+                       r"|(?:我|rafii)\s*(?:已經|已)?(?:幫你)?(?:準備好|准备好|預備好|擬好|拟好|寫好|写好)", re.I)
 _DID = re.compile(
     r"\b(?:i(?:'ve|\s+have)?|we(?:'ve|\s+have)?|rafii\s+(?:has\s+)?)\s*(?:just\s+|now\s+|already\s+|successfully\s+)?"
     r"(?:created|linked|added|attached|generated|saved|changed|updated|edited|rewrote|rewritten|shortened|made|removed|moved)\b"
@@ -54,6 +57,8 @@ def check(answer: str, ledger: EffectLedger) -> str | None:
     verified = [c for c in ledger.changed if c.get("verified")] + [a for a in ledger.assets if a.get("verified")]
     if _DID.search(answer) and not verified:
         return "claims_unverified_change"
+    if _PREPARED.search(answer) and not ledger.proposals and not verified:
+        return "claims_missing_proposal"
     for match in _ID_LIKE.findall(answer):
         if match.lower() not in ledger.known_ids:
             return "unknown_id"

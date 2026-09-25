@@ -88,13 +88,19 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         code = error.code or ("not_found" if error.status == 404 else "forbidden" if error.status == 403 else "conflict" if error.status == 409 else "failed")
         status = "blocked" if code in ("tool_input", "tool_forbidden", "forbidden", "run_cancelled") else "failed"
         ctx.activity(spec.name, tool.label, spec.effect, status, started, code=code)
+        if status == "failed":
+            ctx.ledger.error(code, str(error)[:300])
         return {"ok": False, "code": code, "error": str(error)}
     except Exception as error:  # noqa: BLE001 — a broken tool is a failed step, never a crashed turn
         log.error(json.dumps({"event": "agent_tool.failed", "tool": spec.name, "errorClass": type(error).__name__, "traceId": ctx.trace_id}))
         ctx.activity(spec.name, tool.label, spec.effect, "failed", started, code="tool_error")
         return {"ok": False, "code": "tool_error", "error": "The tool failed. Nothing was reported as done."}
     status = "verified" if result.get("verified", result.get("ok", True)) else ("unverified" if result.get("ok", True) else "failed")
-    ctx.activity(spec.name, tool.label, spec.effect, status, started)
+    # A refusal keeps its code in the trace (why a step did not happen), never its free text.
+    ctx.activity(spec.name, tool.label, spec.effect, status, started, **({"code": str(result["code"])[:60]} if result.get("code") else {}))
+    if not result.get("ok", True) and not result.get("needsUser") and result.get("error"):
+        # The app's own reason (a user-facing message) is what the answer reports when the Manager's words can't be used.
+        ctx.ledger.error(str(result.get("code") or "failed")[:60], str(result["error"])[:300])
     return result
 
 

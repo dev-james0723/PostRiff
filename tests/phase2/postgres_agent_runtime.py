@@ -922,6 +922,83 @@ def _():
     return {"actual": result["result"]["answerText"]}
 
 
+# ===========================================================================================================================
+# Modality switches around approvals (§29)
+# ===========================================================================================================================
+
+
+def fresh_draft(conversation):
+    """A new Instagram draft from the writing pipeline (preview writer), written against the current voice and brief."""
+    started = service.ideas.turn(wid, OWNER, conversation, {"text": "", "intentText": "A short post about slow practice", "idea": "A short post about slow practice",
+                                                            "material": "Slow practice builds fast hands. One bar, three times, eyes closed.",
+                                                            "destinations": [{"platform": "Instagram", "language": "en", "channelId": instagram["id"]}],
+                                                            "idempotencyKey": uuid.uuid4().hex, "timeZone": HK, "model": "deterministic-preview"})
+    events = service.ideas.events(wid, OWNER, started["runId"])
+    service.ideas.apply(wid, OWNER, service.get(wid, OWNER)["revision"], started["runId"], events["artifactHash"], separate=True)
+    return next(v["id"] for v in service.get(wid, OWNER)["state"]["variants"] if (v.get("provenance") or {}).get("runId") == started["runId"])
+
+
+def schedule_proposal(conversation, when):
+    """A real schedule proposal made by a voice turn (the Manager calls schedule_propose on a current draft with its image)."""
+    STATE["mod_draft"] = fresh_draft(conversation)
+    # Instagram needs its image (decoded, with alt text, rights confirmed by the person's apply).
+    SCRIPTS.set(rafii_manager=[[function_call("schedule_propose", {"draftId": STATE["mod_draft"], "when": when, "assetId": STATE["asset"], "alt": "Warm overhead piano keyboard"}, call_id="m1")],
+                               [reply(f"I've prepared the post for {when}. Shall I apply it?")]])
+    result = turn(f"Schedule it {when}", conversationId=conversation, modality="voice")
+    SCRIPTS.complete()
+    pending = result["result"]["pendingApprovals"]
+    assert len(pending) == 1, ([(a["tool"], a["status"], a.get("code")) for a in result["result"]["toolActivity"]], result["result"]["errors"], result["result"]["composedBy"])
+    return pending[0]
+
+
+@scenario("S-MOD2", "Voice request → text approval: a proposal made by voice is approved by typing “yes” (same proposal store, same checks)", "(typed) yes",
+          "the typed yes binds to the voice-presented proposal; applied through the site agent's path; verified")
+def _():
+    conversation = fresh_conversation("voice→text")
+    pending = schedule_proposal(conversation, "Saturday 10:00")
+    result = turn("yes", conversationId=conversation, modality="text")
+    reviews = [r for r in service.get(wid, OWNER)["state"]["phase2"]["reviews"] if r["manifest"]["timing"]["local"].endswith("T10:00")]
+    assert reviews and result["result"]["changedEntities"][0]["verified"] is True, result["result"]["answerText"]
+    return {"actual": result["result"]["answerText"], "proposal": pending["proposalId"]}
+
+
+@scenario("S-MOD3", "A stale approval (presented more than 10 minutes ago) is re-stated, not applied, after a reconnect or a pause", "yes (11 minutes later)",
+          "restates the proposal and asks again; nothing applied")
+def _():
+    conversation = fresh_conversation("stale approval")
+    schedule_proposal(conversation, "Sunday 11:00")
+    clock[0] += 11 * 60
+    before = service.get(wid, OWNER)["revision"]
+    result = turn("yes", conversationId=conversation, modality="voice")
+    assert "Just to be sure" in result["result"]["answerText"], result["result"]["answerText"]
+    assert service.get(wid, OWNER)["revision"] == before
+    return {"actual": result["result"]["answerText"]}
+
+
+@scenario("S-MOD4", "The panel's Apply (agent decide) applies the same proposal, re-reads it and closes the task step", "(click Apply)",
+          "decide → site apply path → verified checks; the waiting step becomes done; a second Apply is refused as closed")
+def _():
+    conversation = fresh_conversation("panel apply")
+    draft = fresh_draft(conversation)
+    SCRIPTS.set(rafii_manager=[[function_call("task_plan", {"title": "Weekend post", "steps": [{"label": "Schedule Monday 08:00"}]}, call_id="m0")],
+                               [function_call("schedule_propose", {"draftId": draft, "when": "Monday 08:00", "assetId": STATE["asset"], "alt": "Warm overhead piano keyboard",
+                                                                   "stepId": "s1"}, call_id="m1")],
+                               [reply("Prepared for Monday at 08:00; apply it when you're ready.")]])
+    result = turn("Plan and schedule it Monday 08:00", conversationId=conversation)
+    SCRIPTS.complete()
+    assert result["result"]["pendingApprovals"], [(a["tool"], a["status"], a.get("code")) for a in result["result"]["toolActivity"]]
+    pending = result["result"]["pendingApprovals"][0]
+    decided = runtime_service.decide(runtime, wid, OWNER, {"conversationId": conversation, "messageId": pending["messageId"], "proposalId": pending["proposalId"],
+                                                          "digest": pending["digest"], "decision": "apply"})
+    assert decided["outcome"] == "applied" and decided["verified"] is True, decided
+    state = runtime_service.conversation_task(runtime, wid, OWNER, conversation)
+    task = one("SELECT artifact->'task'->'steps' FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%'", conversation)[0]
+    assert task[0]["state"] == "done" and task[0]["verified"] is True, task
+    again = denied(lambda: runtime_service.decide(runtime, wid, OWNER, {"conversationId": conversation, "messageId": pending["messageId"], "proposalId": pending["proposalId"],
+                                                                        "digest": pending["digest"], "decision": "apply"}), 409)
+    return {"actual": decided["speakableSummary"], "checks": [c["what"] for c in decided["checks"]], "secondApply": str(again), "state": bool(state)}
+
+
 # --- write evidence ------------------------------------------------------------------------------------------------------------
 out_dir = ROOT / "docs/design/site-agent/agent-runtime/evidence"
 out_dir.mkdir(parents=True, exist_ok=True)
