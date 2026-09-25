@@ -55,7 +55,8 @@ class FacebookPagesProvider(OAuthProvider):
     account_requirement = "A Facebook Page where you can create content."
     publish_scope = "pages_manage_posts"
     publish_required = frozenset({"pages_manage_posts", "pages_read_engagement"})
-    native_schedule = True
+    # Rafii's worker publishes at the approved time; nothing is scheduled on Facebook itself.
+    native_schedule = False
     non_expiring = True
     has_destinations = True
     destination_scope, destination_label = "connection", "Page"
@@ -261,10 +262,30 @@ class TikTokProvider(OAuthProvider):
     UPLOAD_HOSTS = (".tiktokapis.com",)
     MIN_CHUNK, MAX_CHUNK = 5 * 1024 * 1024, 64 * 1024 * 1024
 
+    def __init__(self, client_id, client_secret, hex_pkce=False, transport=None, production_reviewed=False):
+        super().__init__(client_id, client_secret, transport=transport, production_reviewed=production_reviewed)
+        # TikTok's Web Login Kit documents no PKCE; its desktop PKCE hex-encodes SHA-256(verifier) instead of RFC 7636's
+        # base64url. Off by default; POSTRIFF_TIKTOK_HEX_PKCE=true turns the hex form on if the Sandbox shows it is needed.
+        self.hex_pkce = bool(hex_pkce)
+
+    @classmethod
+    def mount(cls, values, transport=None):
+        client_id, secret, valid, diagnostic = cls.credential_pair(values)
+        hex_pkce = str(values.get("POSTRIFF_TIKTOK_HEX_PKCE", "")).lower() == "true"
+        return (cls(client_id, secret, hex_pkce=hex_pkce, transport=transport) if valid else None), diagnostic
+
+    @staticmethod
+    def hex_challenge(challenge):
+        """The same SHA-256 digest as the RFC 7636 challenge Rafii made, written in hex the way TikTok's desktop flow wants."""
+        return base64.urlsafe_b64decode(challenge + "=" * (-len(challenge) % 4)).hex()
+
     def authorize_url(self, redirect, state, challenge, scopes):
-        # The env names say CLIENT_ID; TikTok calls the same value client_key.
-        return self.AUTH + "?" + urlencode({"client_key": self.client_id, "scope": ",".join(scopes), "response_type": "code", "redirect_uri": redirect,
-                                            "state": state, "code_challenge": challenge, "code_challenge_method": "S256"})
+        # The env names say CLIENT_ID; TikTok calls the same value client_key. `state` is bound server-side to the
+        # transaction (member, workspace, single use), which is what protects this redirect without PKCE.
+        params = {"client_key": self.client_id, "scope": ",".join(scopes), "response_type": "code", "redirect_uri": redirect, "state": state}
+        if self.hex_pkce:
+            params.update(code_challenge=self.hex_challenge(challenge), code_challenge_method="S256")
+        return self.AUTH + "?" + urlencode(params)
 
     @staticmethod
     def _grant(body, refresh_token=None):
@@ -273,9 +294,10 @@ class TikTokProvider(OAuthProvider):
                 "refreshToken": body.get("refresh_token") or refresh_token, "expiresIn": body.get("expires_in"), "scopes": scopes}
 
     def exchange(self, code, verifier, redirect):
-        body = self._ok(self.transport("POST", f"{self.API}/v2/oauth/token/", form={"client_key": self.client_id, "client_secret": self.client_secret, "code": code,
-                                                                                   "grant_type": "authorization_code", "redirect_uri": redirect, "code_verifier": verifier}), "access_token")
-        return self._grant(body)
+        form = {"client_key": self.client_id, "client_secret": self.client_secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect}
+        if self.hex_pkce:
+            form["code_verifier"] = verifier
+        return self._grant(self._ok(self.transport("POST", f"{self.API}/v2/oauth/token/", form=form), "access_token"))
 
     def refresh(self, refresh_token):
         body = self._ok(self.transport("POST", f"{self.API}/v2/oauth/token/", form={"client_key": self.client_id, "client_secret": self.client_secret,
@@ -415,11 +437,21 @@ class PinterestProvider(OAuthProvider):
             return None
         return sorted(set(scopes)) if isinstance(scopes, list) and all(isinstance(s, str) for s in scopes) else None
 
+    MAX_BOARD_PAGES = 10
+
     def destinations(self, access_token):
-        """This person's own boards (sandbox boards while in Trial), for choosing one per Pin."""
-        response = self.api(access_token, "GET", "/v5/boards?" + urlencode({"page_size": "100"}), content=True)
-        body = response.get("body") if isinstance(response.get("body"), dict) else {}
-        if response.get("status") != 200 or not isinstance(body.get("items"), list):
-            raise AlphaError("Pinterest didn't list your boards. Try again.", 502)
-        return [{"id": str(b["id"]), "name": str(b.get("name") or b["id"]), "kind": "board", "selected": False}
-                for b in body["items"] if isinstance(b, dict) and re.fullmatch(r"\d{1,30}", str(b.get("id", "")))]
+        """This person's own boards (sandbox boards while in Trial), for choosing one per Pin. Follows Pinterest's
+        bookmark pagination, so checking a chosen board never misses one past the first page."""
+        boards, bookmark = [], None
+        for _ in range(self.MAX_BOARD_PAGES):
+            query = {"page_size": "100", **({"bookmark": bookmark} if bookmark else {})}
+            response = self.api(access_token, "GET", "/v5/boards?" + urlencode(query), content=True)
+            body = response.get("body") if isinstance(response.get("body"), dict) else {}
+            if response.get("status") != 200 or not isinstance(body.get("items"), list):
+                raise AlphaError("Pinterest didn't list your boards. Try again.", 502)
+            boards += [{"id": str(b["id"]), "name": str(b.get("name") or b["id"]), "kind": "board", "selected": False}
+                       for b in body["items"] if isinstance(b, dict) and re.fullmatch(r"\d{1,30}", str(b.get("id", "")))]
+            bookmark = body.get("bookmark") if isinstance(body.get("bookmark"), str) and body.get("bookmark") else None
+            if not bookmark:
+                break
+        return boards
