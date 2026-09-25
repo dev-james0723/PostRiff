@@ -177,7 +177,7 @@ class GatewayCall:
         from .model_runtime import NO_TEMPERATURE
         # Thinking off where the model allows it (as these short structured calls always ran); a model that must
         # reason gets its lowest level and headroom, since its reasoning shares max_tokens.
-        reasoning = gateway_catalog.drafting_reasoning(self.model)
+        reasoning = gateway_catalog.structured_reasoning(self.model)
         reasons = bool(reasoning) and reasoning.get("effort") != "none"
         body = {"model": self.model, "max_tokens": 4000 if reasons else 1200,
                 "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}],

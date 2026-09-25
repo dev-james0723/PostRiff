@@ -50,7 +50,9 @@ MAX_OUTPUT_TOKENS = 2_400
 # the optional parameters come from the gateway catalogue (gateway_catalog), not from model names. Thinking models get
 # output headroom, trimmed per request so the reservation stays inside the budget policy's per-request limit, and a
 # longer timeout. Headroom changes only the cap and the reservation ceiling, never which model runs.
-THINKING_OUTPUT_TOKENS = 8_000
+# 4,500 holds a full 2,400-token draft plus low-effort reasoning, and keeps a deep caption on a $2/$10 model under the
+# 50 credits a new workspace has (tests/test_final_deep_ceiling.py): three calls at 8,000 would reserve about 81.
+THINKING_OUTPUT_TOKENS = 4_500
 TYPICAL_REASONING_TOKENS = 800   # per call, for the displayed typical cost of a low-effort thinking model
 THINKING_TIMEOUT_SECONDS = 90    # 3 calls on a deep turn stay inside the 300 s function limit
 # The idea field carries the typed instruction (ideas.IDEA_LIMIT, 3,000) plus any handed-in material (ideas.MAX_TEXT,

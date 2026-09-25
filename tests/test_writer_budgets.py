@@ -84,20 +84,17 @@ class ThinkingModelTest(unittest.TestCase):
         return calls[0]
 
     def test_catalogue_driven_reasoning_per_family(self):
-        sent = {m: self.call(m)["body"] for m in ("openai/gpt-6-sol", "openai/gpt-6-astra", "anthropic/claude-opus-5.5", "deepseek/deepseek-v4-pro",
-                                                   "anthropic/claude-haiku-4.5", "alibaba/qwen3.6-plus", "openai/gpt-4.1-mini")}
-        # Thinking off wherever the model can switch it off: no reasoning tokens, no headroom needed.
-        for model in ("openai/gpt-6-sol", "deepseek/deepseek-v4-pro", "alibaba/qwen3.6-plus"):
-            self.assertEqual(sent[model]["reasoning"], {"effort": "none"}, model)
-            self.assertEqual(sent[model]["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS, model)
-        self.assertNotIn("reasoning_effort", sent["openai/gpt-6-sol"])
-        # A model that must reason gets its lowest level and headroom.
-        for model in ("openai/gpt-6-astra", "anthropic/claude-opus-5.5"):
+        sent = {m: self.call(m)["body"] for m in ("openai/gpt-6-sol", "openai/gpt-6-astra", "anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5",
+                                                   "deepseek/deepseek-v4-pro", "anthropic/claude-haiku-4.5", "alibaba/qwen3.6-plus", "openai/gpt-4.1-mini")}
+        # The drafting baseline is the lowest real level on the model's scale, never "none", with headroom.
+        for model in ("openai/gpt-6-sol", "openai/gpt-6-astra", "anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5", "alibaba/qwen3.6-plus"):
             self.assertEqual(sent[model]["reasoning"], {"effort": "low"}, model)
             self.assertEqual(sent[model]["max_tokens"], model_runtime.THINKING_OUTPUT_TOKENS, model)
+        self.assertEqual(sent["deepseek/deepseek-v4-pro"]["reasoning"], {"effort": "high"}, "no 'low' on its scale: its lowest above none")
+        self.assertNotIn("reasoning_effort", sent["openai/gpt-6-sol"])
         self.assertNotIn("response_format", sent["anthropic/claude-opus-5.5"], "only parameters the catalogue lists")
         self.assertNotIn("response_format", sent["alibaba/qwen3.6-plus"])
-        # A toggle with no effort levels (thinking off unless asked): nothing sent, no headroom.
+        # A toggle with no effort scale (thinking off unless asked): nothing sent, no headroom.
         self.assertNotIn("reasoning", sent["anthropic/claude-haiku-4.5"])
         self.assertEqual(sent["anthropic/claude-haiku-4.5"]["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS)
         self.assertNotIn("reasoning", sent["openai/gpt-4.1-mini"])
@@ -105,8 +102,8 @@ class ThinkingModelTest(unittest.TestCase):
         self.assertEqual(sent["openai/gpt-4.1-mini"]["response_format"], {"type": "json_object"})
 
     def test_thinking_models_get_a_longer_timeout(self):
-        self.assertEqual(self.call("openai/gpt-6-astra")["timeout"], model_runtime.THINKING_TIMEOUT_SECONDS)
-        self.assertIsNone(self.call("openai/gpt-6-sol")["timeout"], "thinking off: the transport default")
+        self.assertEqual(self.call("openai/gpt-6-sol")["timeout"], model_runtime.THINKING_TIMEOUT_SECONDS)
+        self.assertIsNone(self.call("openai/gpt-4.1-mini")["timeout"], "others keep the transport default")
 
     def big_deep_request(self):
         # Near every limit at once: a full skills slot, 16 kB of memory and a user payload just under MAX_CONTEXT_BYTES.
@@ -122,7 +119,8 @@ class ThinkingModelTest(unittest.TestCase):
     def test_headroom_is_trimmed_to_fit_the_per_request_budget(self):
         import os
         from unittest import mock
-        runtime = ServerModelRuntime("key", model="openai/gpt-6-astra", models=["openai/gpt-6-astra"], prices=self.ASTRA)
+        # Priced with expensive output ($2/$20): the full headroom no longer fits the $1 launch policy, a trimmed one does.
+        runtime = ServerModelRuntime("key", model="openai/gpt-6-astra", models=["openai/gpt-6-astra"], prices={"openai/gpt-6-astra": (2.0, 20.0)})
         request = self.big_deep_request()
         self.assertLess(len(json.dumps(runtime._user_payload(request), ensure_ascii=False).encode()), model_runtime.MAX_CONTEXT_BYTES)
         with mock.patch.dict(os.environ, {"POSTRIFF_BUDGET_POLICY": ""}):
@@ -142,7 +140,7 @@ class ThinkingModelTest(unittest.TestCase):
     def test_the_reservation_ceiling_follows_the_larger_cap(self):
         request = {"context": context(), "idea": "Announce the recital", "destinations": DESTS, "reasoning": "quick"}
         thinking = ServerModelRuntime("key", model="openai/gpt-6-astra", models=["openai/gpt-6-astra"], prices=self.ASTRA)
-        plain = ServerModelRuntime("key", model="openai/gpt-6-sol", models=["openai/gpt-6-sol"])   # same price list, thinking off
+        plain = ServerModelRuntime("key", model="openai/gpt-4.1-mini", models=["openai/gpt-4.1-mini"], prices={"openai/gpt-4.1-mini": (2.0, 10.0)})   # same prices, no reasoning
         self.assertGreater(thinking.price_quote(request), plain.price_quote(request))
         self.assertGreater(thinking.typical_quote(request), plain.typical_quote(request))
         self.assertLess(thinking.price_quote(request), 1.0, "stays under the $1 per-request policy")

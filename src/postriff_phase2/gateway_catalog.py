@@ -98,8 +98,8 @@ def entry(model):
 
 def thinking(model):
     """True when a drafting call to this model will spend reasoning tokens inside max_tokens, with the reasoning we send
-    (drafting_reasoning): a model that must reason (no way to switch it off) or one we ask for a level above "none". A
-    model we switch off, or whose thinking is off unless asked (a toggle with no effort levels), needs no headroom."""
+    (drafting_reasoning): a level above "none", or a model that reasons without an effort scale (budget-only). A
+    toggle-only model (thinking off unless asked) needs no headroom."""
     known = entry(model)
     if known is None:
         return isinstance(model, str) and model.startswith(FALLBACK_THINKING_PREFIXES)
@@ -130,19 +130,28 @@ def _has_toggle(model):
     return any(option.get("type") == "toggle" for option in (entry(model) or {}).get("reasoning") or [])
 
 
-def drafting_reasoning(model):
-    """The gateway's unified `reasoning` object for writing calls (drafts, replies, structured side calls; the "Auto"
-    baseline). Thinking off ("none") wherever the model offers it; a model with a toggle but no effort levels is left
-    at its default, which is off; a model that must reason gets the lowest level it lists ("low", else "minimal",
-    else its first). None means nothing is sent. A level the model does not list is never sent."""
-    values = _efforts(model)
-    if not supports(model, "reasoning"):
-        return None
-    if "none" in values:
-        return {"effort": "none"}
-    if _has_toggle(model) or not values:
-        return None
+def _lowest(values):
     for wanted in ("low", "minimal"):
         if wanted in values:
-            return {"effort": wanted}
-    return {"effort": values[0]}
+            return wanted
+    return next((v for v in values if v != "none"), values[0])
+
+
+def drafting_reasoning(model):
+    """The gateway's unified `reasoning` object for writing (the "Auto" baseline chosen for quality): the lowest real
+    level on the model's effort scale ("low", else "minimal", else its lowest above "none"). Never "none": that is only
+    a person's own choice. A model with no effort scale gets nothing (a toggle-only model stays at its default, off;
+    a budget-only model reasons on its own and only gets headroom). A level the model does not list is never sent."""
+    values = _efforts(model)
+    if not values or not supports(model, "reasoning"):
+        return None
+    return {"effort": _lowest(values)}
+
+
+def structured_reasoning(model):
+    """The `reasoning` object for short structured side calls (request reading, extraction): thinking off ("none")
+    where the model offers it, as these calls always ran; otherwise the lowest level; nothing without a scale."""
+    values = _efforts(model)
+    if not values or not supports(model, "reasoning"):
+        return None
+    return {"effort": "none"} if "none" in values else {"effort": _lowest(values)}

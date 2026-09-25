@@ -41,7 +41,7 @@ Tests: `tests/phase2/postgres_budget_policy.py`, 8 checks on disposable PostgreS
 
 | Risk | Protection |
 |---|---|
-| Runaway agent turn | 2 attempts at most (+1 revise pass on deep); 2,400 output tokens (up to 8,000 for models that think first, trimmed so the reservation fits `requestMax`); 45 s (90 s for thinking models); 60 kB context; interrupted runs are never retried |
+| Runaway agent turn | 2 attempts at most (+1 revise pass on deep); 2,400 output tokens (up to 4,500 for models that reason when drafting, trimmed so the reservation fits `requestMax`); 45 s (90 s for thinking models); 60 kB context; interrupted runs are never retried |
 | Retried requests | same idempotency key → same reservation, never a second charge |
 | Automation runaway | per-run cost limit; paid-writer automations wait for the owner; ≤ 5 runs / 90 s per cron tick; runs > 24 h late are missed, not replayed; failed runs are held, not retried; plus the workspace, person and service stops above |
 | Recursive calls | automation runs cannot read requests or create automations; creating an automation makes no model call |
