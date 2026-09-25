@@ -288,4 +288,16 @@ with connection() as db:
 provider.identity = base_identity
 checks.append('scope re-verification persists downgraded authority, fails closed on unknown grants, and fences a reauthorization race')
 
+# The picture download runs after the connection is saved: an unexpected fault in it (a TypeError on the
+# 2026-09-25 production build) must not report the saved connection as failed.
+def broken_fetch(url):
+    raise TypeError('picture download broke')
+oauth.picture_fetch = broken_fetch
+request = oauth.start(wid_a, 'one', 'linkedin', 'publish')
+state = parse_qs(urlparse(request['authorizeUrl']).query)['state'][0]
+again = oauth.complete(wid_a, 'one', 'linkedin', state, 'good-code')
+assert again['connected'] and again['connectionId'] == cid
+oauth.picture_fetch = fetch_picture
+checks.append('an unexpected picture download fault never fails a connection that was saved')
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))

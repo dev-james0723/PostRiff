@@ -245,7 +245,10 @@ class OAuthService:
 
     def _keep_picture(self, workspace_id, token, connection_id, identity):
         """Download outside any transaction, then store: the account's picture for previews (account_pictures.py)."""
-        outcome = account_pictures.picture_from_identity(identity, self.picture_fetch)
+        try:
+            outcome = account_pictures.picture_from_identity(identity, self.picture_fetch)
+        except Exception:  # noqa: BLE001 - runs after the connection is saved; a picture fault must not report it as failed
+            return
         if outcome[0] == "unavailable":
             return  # keep whatever picture was stored before
         try:
@@ -301,7 +304,8 @@ class OAuthService:
         """Server-only token custody. Instagram renews while valid, never after expiry."""
         with self.repository.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT provider,access_ciphertext,refresh_ciphertext,key_id,extract(epoch from access_expires_at),refresh_supported,revoked_at IS NOT NULL,scopes,provider_account_id,extract(epoch from coalesce(rotated_at,updated_at,created_at)) FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s FOR UPDATE", (workspace_id, connection_id))
+                # float8: extract() is numeric (a Decimal) since PostgreSQL 14, and Decimal - float raises TypeError.
+                cur.execute("SELECT provider,access_ciphertext,refresh_ciphertext,key_id,extract(epoch from access_expires_at)::float8,refresh_supported,revoked_at IS NOT NULL,scopes,provider_account_id,extract(epoch from coalesce(rotated_at,updated_at,created_at))::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s FOR UPDATE", (workspace_id, connection_id))
                 row = cur.fetchone()
                 if not row or row[6]:
                     raise AlphaError("Connection unavailable.", 404)
@@ -347,6 +351,9 @@ class OAuthService:
         grant = None
         reported = []
         identity = None
+        # A read proof (Instagram Login) never observes write scopes. When it sees a strict subset of the stored
+        # grant, the grant is kept as stored and trust is not extended, as in reverify_for_worker.
+        lower_bound = False
         try:
             grant = self.token_for_worker(workspace_id, connection_id)
             identity = adapter.identity(grant["accessToken"])
@@ -355,9 +362,10 @@ class OAuthService:
             reported = grant["scopes"] if inspected and not drift else []
             if not drift and not inspected and hasattr(adapter, 'verify_read_access'):
                 reported = adapter.verify_read_access(grant['accessToken'], account_id)
+                lower_bound = bool(reported) and set(reported) < set(scopes)
             changed = set(reported) != set(scopes)
-            result = {"connectionId": connection_id, "identityVerified": not drift, "scopes": reported,
-                      "state": "reauthorization_required" if drift else "scope_missing" if not reported else "scope_changed" if changed else "read_verified"}
+            result = {"connectionId": connection_id, "identityVerified": not drift, "scopes": list(scopes) if lower_bound else reported,
+                      "state": "reauthorization_required" if drift else "scope_missing" if not reported else "read_verified" if lower_bound or not changed else "scope_changed"}
         except AlphaError:
             # Do not leak provider responses, nor label a transient network failure as token expiry.
             result = {"connectionId": connection_id, "identityVerified": False, "scopes": [], "state": "verification_unavailable"}
@@ -372,7 +380,10 @@ class OAuthService:
             channel = next((c for c in state.get("phase2", {}).get("channels", []) if c["id"] == connection_id), None)
             if channel is None:
                 raise AlphaError("Connection unavailable.", 404)
-            channel.update(scopes=reported, identityVerified=result["identityVerified"], verifiedAt=self.clock())
+            if lower_bound:
+                channel["identityVerified"] = True
+            else:
+                channel.update(scopes=reported, identityVerified=result["identityVerified"], verifiedAt=self.clock())
             if grant:
                 channel["expiresAt"] = float(grant["expiresAt"]) if grant["expiresAt"] else channel.get("expiresAt", 0)
             if result["state"] != "read_verified":
@@ -380,7 +391,8 @@ class OAuthService:
                 cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Permissions changed or could not be verified; reconnect and review.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND capability<>'identity'", (workspace_id, connection_id))
             if result["state"] == "reauthorization_required":
                 channel["revoked"] = True
-            cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (reported, workspace_id, connection_id))
+            if not lower_bound:
+                cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (reported, workspace_id, connection_id))
             self.commands.engine.invalidate(state)
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             audit(cur, workspace_id, principal, "channel.verified", connection_id, {"state": result["state"]})

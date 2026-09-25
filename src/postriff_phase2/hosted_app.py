@@ -665,7 +665,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            return self._json(start_response, 500, {"error": "The hosted service could not complete this request. Saved state remains authoritative.", "code": "internal_error"})
+            return self._json(start_response, 500, {"error": "Something went wrong on our side. Check what was saved before trying again.", "code": "internal_error"})
 
 
 app = HostedApplication()

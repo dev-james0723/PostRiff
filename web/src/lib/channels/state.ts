@@ -30,6 +30,14 @@ export function disconnectedByCustomer(channel: ChannelStateInput) {
   return Object.values(channel.capabilities).some((value) => value?.evidence === DISCONNECTED_EVIDENCE);
 }
 
+/**
+ * Whether the Channels list shows this account. A disconnected account leaves the list; it stays only while
+ * posts for it are on hold, so the person can reconnect it and release them.
+ */
+export function listedOnChannels(channel: ChannelStateInput, heldJobs = 0) {
+  return !disconnectedByCustomer(channel) || heldJobs > 0;
+}
+
 /** Access that ends within a week is called out before it turns into a failure. */
 export const EXPIRING_SOON_SECONDS = 7 * 86400;
 

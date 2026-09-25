@@ -298,7 +298,23 @@ before = channel_of(state, ig)
 assert oauth.reverify_for_worker(wid, ig) == {"connectionId": ig, "state": "verification_unavailable", "ready": False}
 revision_now, state = stored()
 assert revision_now == revision and channel_of(state, ig) == before and levels(ig)["publish"] == "Direct"
+with connection() as db:
+    reason = db.execute("SELECT meta FROM public.pr_audit_events WHERE workspace_id=%s AND kind=%s AND subject=%s ORDER BY at DESC LIMIT 1", (wid, KIND, ig)).fetchone()[0]
+assert reason == {"state": "verification_unavailable", "reason": "grant_not_observable"}, reason  # the read proof ran; not a caught crash
 checks.append("a read-only proof (Instagram) neither extends trust nor destroys the stored publish grant")
+
+# A person's Re-verify on the same account: the token's epoch values are floats (extract() is numeric since
+# PostgreSQL 14, and Instagram's renewal check subtracts the clock from them), identity and read access are
+# confirmed, and the stored grant, its levels and the trust window stay as they were.
+assert isinstance(oauth.token_for_worker(wid, ig)["expiresAt"], float)
+revision, state = stored()
+before = channel_of(state, ig)
+out = oauth.verify(wid, "one", ig)
+assert out == {"connectionId": ig, "identityVerified": True, "scopes": ["instagram_business_basic", "instagram_business_content_publish"], "state": "read_verified"}, out
+after = channel_of(stored()[1], ig)
+assert after["scopes"] == before["scopes"] and after["verifiedAt"] == before["verifiedAt"] and after["capabilityVerified"] is before["capabilityVerified"] is True
+assert levels(ig)["publish"] == "Direct" and credential_scopes(ig) == ["instagram_business_basic", "instagram_business_content_publish"]
+checks.append("a person's Re-verify on a read-proof account (Instagram) confirms it without a TypeError and keeps the stored publish grant")
 
 with connection() as db:
     audited = [row[0]["state"] for row in db.execute("SELECT meta FROM public.pr_audit_events WHERE workspace_id=%s AND kind=%s ORDER BY at", (wid, KIND)).fetchall()]
