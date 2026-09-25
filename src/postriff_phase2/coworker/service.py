@@ -556,7 +556,7 @@ class CoworkerService:
             commands = self.hosted.commands
             existing = next((x for x in ((state_.get("coworker") or {}).get("sourceCampaigns") or []) if x["id"] == record_id), None)
             if existing:
-                box["record"] = existing
+                box["record"], box["existing"] = existing, True
                 return existing
             source_id = None
             if pack["claims"]:
@@ -583,11 +583,22 @@ class CoworkerService:
 
         self._command(workspace_id, token, create, "edit", "source_campaign.created", record_id, {"claims": len(pack["claims"]), "usable": len(usable)})
         record = box["record"]
+        if box.get("existing") and record.get("status") != "drafting":
+            # The same source and brief already made this campaign: answer with it and never draft over it (the
+            # record id is content-addressed, so a repeat would otherwise replace its drafts with an error).
+            return {"sourceCampaign": record, "verified": True, "existing": True, "creative": None}
         drafts = []
         if usable and record.get("sourceId"):
             ideas = copy.copy(self.hosted.ideas)
-            conversation = ideas.create_conversation(workspace_id, token, f"Campaign: {artifact['title'][:80]}")
-            conversation_id = conversation["conversationId"]
+            conversation_id = record.get("conversationId")
+            if not conversation_id:
+                # One conversation per campaign, kept on the record: a retry after an interruption reuses it, so the
+                # writer's idempotency key finds the same run instead of refusing a changed request.
+                conversation_id = ideas.create_conversation(workspace_id, token, f"Campaign: {artifact['title'][:80]}")["conversationId"]
+
+                def keep(state_, _p):
+                    next(x for x in state_["coworker"]["sourceCampaigns"] if x["id"] == record_id)["conversationId"] = conversation_id
+                self._command(workspace_id, token, keep, "edit", "source_campaign.updated", record_id, {"conversation": True})
             angle = angles[0] if angles else None
             material = json.dumps({"brief": {k: brief[k] for k in ("goal", "audience", "coreMessage", "cta")}, "angle": angle,
                                    "claims": [c["text"] for c in usable if not angle or c["claimId"] in angle["claimIds"] or len(angle["claimIds"]) > 1][:8],

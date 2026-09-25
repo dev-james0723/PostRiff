@@ -119,51 +119,81 @@ def view(state, now):
             "now": now}
 
 
+def _due(watchlist, now):
+    return bool(watchlist.get("active")) and (watchlist.get("lastRunAt") or 0) <= now - 86400
+
+
 def cron(service, max_workspaces=20, max_seconds=30):
-    """Run due watchlists (once a day each) for workspaces whose owner allowed web research."""
+    """Run due watchlists (once a day each) for workspaces whose owner allowed web research.
+
+    The searches run outside any transaction: the workspace row is read without a lock, searched, then locked only
+    to write the results (re-checking consent and that each watchlist is still due). A workspace with nothing due is
+    never written, so its revision does not move every minute."""
+    import json as _json
     from .. import research
     from .research_broker import ResearchBroker
+    if not research.enabled():
+        return {"status": "research_disabled", "workspaces": []}
     started, out = time.monotonic(), []
     with service.hosted.connection_factory() as db, db.cursor() as cur:
-        cur.execute("""SELECT id::text FROM public.pr_workspaces WHERE jsonb_array_length(coalesce(state->'coworker'->'listening'->'watchlists','[]'::jsonb)) > 0
-                       AND NOT state ? 'accountDeletion' LIMIT %s""", (max_workspaces,))
+        # Only workspaces with a watchlist that is active and due; the LIMIT is never used up by idle ones.
+        cur.execute("""SELECT id::text FROM public.pr_workspaces w WHERE NOT state ? 'accountDeletion'
+                       AND EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(w.state->'coworker'->'listening'->'watchlists','[]'::jsonb)) l
+                                   WHERE coalesce((l->>'active')::boolean, false) AND coalesce((l->>'lastRunAt')::float8, 0) <= extract(epoch from now()) - 86400)
+                       LIMIT %s""", (max_workspaces,))
         workspaces = [r[0] for r in cur.fetchall()]
     for workspace_id in workspaces:
         if time.monotonic() - started > max_seconds:
             break
         with service.hosted.connection_factory() as db, db.cursor() as cur:
-            cur.execute("SELECT state, revision FROM public.pr_workspaces WHERE id=%s FOR UPDATE SKIP LOCKED", (workspace_id,))
+            cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
+            row = cur.fetchone()
+        if row is None:
+            continue
+        state, now = row[0], service.clock()
+        if not research.allowed(state):
+            out.append({"workspaceId": workspace_id, "skipped": "research_not_allowed"})
+            continue
+        due = [w for w in root(state)["watchlists"] if _due(w, now)]
+        if not due:
+            out.append({"workspaceId": workspace_id, "skipped": "not_due"})
+            continue
+        broker = ResearchBroker(state=state)
+        outcomes = {w["id"]: broker.search_items(w["query"], {"limit": 6}) for w in due}   # no lock held while searching
+        with service.hosted.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE SKIP LOCKED", (workspace_id,))
             row = cur.fetchone()
             if row is None:
+                db.rollback()
+                out.append({"workspaceId": workspace_id, "skipped": "busy"})
                 continue
-            state, revision = row
-            if not research.allowed(state):
+            state = row[0]
+            if not research.allowed(state):   # consent withdrawn while searching: the results are dropped
+                db.rollback()
                 out.append({"workspaceId": workspace_id, "skipped": "research_not_allowed"})
                 continue
-            now = service.clock()
-            broker = ResearchBroker(state=state)
-            new_high = []
+            new_high, ran = [], 0
             for watchlist in root(state)["watchlists"]:
-                if not watchlist.get("active") or (watchlist.get("lastRunAt") or 0) > now - 86400:
+                outcome = outcomes.get(watchlist.get("id"))
+                if outcome is None or not _due(watchlist, now):   # removed, paused or already run elsewhere meanwhile
                     continue
-                outcome = broker.search_items(watchlist["query"], {"limit": 6})
+                ran += 1
                 if outcome["status"] != "ok":
                     watchlist["lastError"] = "; ".join(e["error"] for e in outcome["errors"])[:200]
                     watchlist["lastRunAt"] = now
                     continue
                 new_high += ingest(state, watchlist, outcome["items"], now)
-            import json as _json
-            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb, revision=revision+1 WHERE id=%s AND revision=%s", (_json.dumps(state), workspace_id, revision))
-            if cur.rowcount == 1:
-                notifications = getattr(service.hosted, "notifications", None)
-                for opportunity in new_high[:3]:
-                    if notifications is not None:
-                        notifications.emit(cur, workspace_id=workspace_id, event_type="opportunity.detected", dedupe_key=f"opportunity:{opportunity['id']}",
-                                           entity_type="opportunity", entity_id=opportunity["id"],
-                                           payload={"title": opportunity["title"][:120], "why": opportunity["why"][:160], "confidence": opportunity["confidence"], "href": "/app/weekly?tab=opportunities"})
-                db.commit()
-                out.append({"workspaceId": workspace_id, "new": len(new_high)})
-            else:
+            if not ran:
                 db.rollback()
-                out.append({"workspaceId": workspace_id, "skipped": "revision_changed"})
+                out.append({"workspaceId": workspace_id, "skipped": "not_due"})
+                continue
+            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb, revision=revision+1 WHERE id=%s", (_json.dumps(state), workspace_id))
+            notifications = getattr(service.hosted, "notifications", None)
+            for opportunity in new_high[:3]:
+                if notifications is not None:
+                    notifications.emit(cur, workspace_id=workspace_id, event_type="opportunity.detected", dedupe_key=f"opportunity:{opportunity['id']}",
+                                       entity_type="opportunity", entity_id=opportunity["id"],
+                                       payload={"title": opportunity["title"][:120], "why": opportunity["why"][:160], "confidence": opportunity["confidence"], "href": "/app/weekly?tab=opportunities"})
+            db.commit()
+            out.append({"workspaceId": workspace_id, "new": len(new_high)})
     return {"workspaces": out}

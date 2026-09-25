@@ -286,6 +286,115 @@ class RouteDescribeTest(unittest.TestCase):
         self.assertIn("recipes", data["summary"])
 
 
+class SourceCampaignRepeatTest(unittest.TestCase):
+    NOW = 1_790_000_000
+    payload = {"format": "text", "title": "Spring recital", "text": "The spring recital is on 12 April at the Town Hall. Tickets are free.",
+               "goal": "Fill the hall", "audience": "Local families", "destinations": [{"channelId": "ch1"}]}
+
+    def record_id(self):
+        import hashlib
+        from postriff_phase2.coworker import fact_pack, source_intake
+        artifact = source_intake.normalize("text", self.payload, now=self.NOW)
+        pack = fact_pack.build([artifact], self.NOW)
+        brief = fact_pack.canonical_brief(pack, goal="Fill the hall", audience="Local families", cta=None)
+        return "sc_" + hashlib.sha256(f"w1:{pack['hash']}:{brief['hash']}".encode()).hexdigest()[:12]
+
+    def run_with(self, record):
+        state = {"phase2": {"channels": [{"id": "ch1", "platform": "LinkedIn", "language": "en"}]}, "coworker": {"sourceCampaigns": [record]}}
+
+        @contextlib.contextmanager
+        def transaction(_token, _workspace_id):
+            yield object(), ({},), "owner-1"
+
+        ideas = mock.Mock()
+        ideas.turn.side_effect = AlphaError("stop here", 409)
+        hosted = type("Hosted", (), {"ideas": ideas, "commands": None, "repository": type("Repo", (), {"transaction": staticmethod(transaction)})()})()
+        service = CoworkerService(hosted, clock=lambda: self.NOW)
+        with FlagsOn("RAFII_WEEKLY_OPERATOR_ENABLED"), mock.patch("postriff_phase2.permissions.require"), \
+                mock.patch.object(service, "_require_edit"), mock.patch.object(service, "_state", return_value=state), \
+                mock.patch.object(service, "_store_evidence", return_value="ev1"), \
+                mock.patch.object(service, "_command", side_effect=lambda _w, _t, fn, *a, **k: fn(state, "owner-1")):
+            result = service.source_campaign("w1", "token", self.payload)
+        return result, ideas
+
+    def test_a_finished_campaign_is_returned_as_it_is_and_never_drafted_over(self):
+        drafts = [{"variantId": "v1", "platform": "LinkedIn", "status": "ready"}]
+        record = {"id": self.record_id(), "status": "ready_for_review", "drafts": drafts, "sourceId": "s1", "campaignId": "c1"}
+        result, ideas = self.run_with(record)
+        self.assertTrue(result["existing"])
+        self.assertEqual(result["sourceCampaign"]["drafts"], drafts)
+        ideas.turn.assert_not_called()
+        ideas.create_conversation.assert_not_called()
+
+    def test_an_interrupted_campaign_resumes_in_its_own_conversation(self):
+        record = {"id": self.record_id(), "status": "drafting", "drafts": [], "sourceId": "s1", "campaignId": "c1", "conversationId": "conv-1"}
+        _result, ideas = self.run_with(record)
+        ideas.create_conversation.assert_not_called()
+        self.assertEqual(ideas.turn.call_args.args[2], "conv-1")
+
+
+class ListeningCronTest(unittest.TestCase):
+    NOW = 1_790_000_000
+
+    def run_cron(self, watchlists, log):
+        from postriff_phase2.coworker import listening
+        state = {"coworker": {"listening": {"watchlists": watchlists, "opportunities": []}}}
+
+        class Cursor:
+            rowcount = 1
+
+            def execute(self, sql, params=None):
+                log.append(" ".join(sql.split())[:160])
+
+            def fetchall(self):
+                return [("w1",)]
+
+            def fetchone(self):
+                return (copy.deepcopy(state),)
+
+        @contextlib.contextmanager
+        def connection():
+            db = mock.Mock()
+            db.cursor.return_value = contextlib.nullcontext(Cursor())
+            db.commit.side_effect = lambda: log.append("commit")
+            yield db
+
+        class Broker:
+            def __init__(self, state=None):
+                pass
+
+            def search_items(self, query, _options):
+                log.append("search")
+                return {"status": "ok", "items": []}
+
+        hosted = type("Hosted", (), {"connection_factory": staticmethod(connection)})()
+        service = type("Service", (), {"hosted": hosted, "clock": staticmethod(lambda: self.NOW)})()
+        with mock.patch("postriff_phase2.research.enabled", return_value=True), mock.patch("postriff_phase2.research.allowed", return_value=True), \
+                mock.patch("postriff_phase2.coworker.research_broker.ResearchBroker", Broker):
+            return listening.cron(service)
+
+    def test_the_search_runs_before_the_row_is_locked(self):
+        log = []
+        self.run_cron([{"id": "wl1", "query": "piano recital", "active": True, "lastRunAt": None}], log)
+        self.assertIn("search", log)
+        locked = next(i for i, entry in enumerate(log) if "FOR UPDATE" in entry)
+        self.assertLess(log.index("search"), locked)
+        self.assertTrue(any(entry.startswith("UPDATE public.pr_workspaces") for entry in log[locked:]))
+        self.assertEqual(log[-1], "commit")
+
+    def test_a_workspace_with_nothing_due_is_never_locked_or_written(self):
+        log = []
+        result = self.run_cron([{"id": "wl1", "query": "piano recital", "active": True, "lastRunAt": self.NOW - 60}], log)
+        self.assertEqual(result["workspaces"], [{"workspaceId": "w1", "skipped": "not_due"}])
+        self.assertFalse(any("FOR UPDATE" in entry or entry.startswith("UPDATE") for entry in log))
+        self.assertNotIn("search", log)
+
+    def test_research_off_means_no_database_work_at_all(self):
+        from postriff_phase2.coworker import listening
+        with mock.patch("postriff_phase2.research.enabled", return_value=False):
+            self.assertEqual(listening.cron(object()), {"status": "research_disabled", "workspaces": []})
+
+
 class RouteManifestTest(unittest.TestCase):
     def test_the_coworker_pages_are_known_to_the_site_agent(self):
         server = (ROOT / "src/postriff_phase2/site_agent/route_manifest.json").read_bytes()
