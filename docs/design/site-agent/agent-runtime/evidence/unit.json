@@ -1,6 +1,6 @@
 {
- "generatedAt": "2026-09-25T02:22:37Z",
- "ran": 41,
+ "generatedAt": "2026-09-25T02:39:31Z",
+ "ran": 42,
  "failures": 0,
  "errors": 0,
  "skipped": 0,
@@ -23,6 +23,7 @@
   "ContractsTest.test_registry_invariants": "PASS",
   "ContractsTest.test_result_contract_always_has_every_key": "PASS",
   "ContractsTest.test_speakable_strips_markdown_links_and_ids": "PASS",
+  "ExtensionPointsTest.test_scopes_and_hooks_extend_without_importing_extensions": "PASS",
   "GateTest.test_campaign_link_is_a_real_relation_verified_by_rereading": "PASS",
   "GateTest.test_graph_edges_come_from_stored_fields": "PASS",
   "GateTest.test_memory_layers_respect_cloud_consent": "PASS",
