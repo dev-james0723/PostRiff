@@ -110,7 +110,7 @@ export function ChatAutomationCard({
     }
   }
 
-  async function run(action: 'raffi_recurrence_pause' | 'raffi_recurrence_cancel', done: string) {
+  async function run(action: 'raffi_recurrence_pause' | 'raffi_recurrence_cancel', done: string | null) {
     try {
       await act(
         action,
@@ -118,12 +118,12 @@ export function ChatAutomationCard({
           ? { taskId: automation.taskId, confirmed: true }
           : { taskId: automation.taskId }
       );
-      toast.success(done);
+      if (done) toast.success(done);
     } catch (error) {
       toast.error(
         error instanceof ApiError
           ? error.message
-          : 'That did not go through. Try again from Automations.'
+          : 'Couldn’t update this automation. Try again from Automations.'
       );
     }
   }
@@ -333,7 +333,8 @@ export function ChatAutomationCard({
               variant='quiet'
               size='sm'
               disabled={busy}
-              onClick={() => run('raffi_recurrence_pause', 'Automation paused.')}
+              // The status chip shows the pause; no toast.
+              onClick={() => run('raffi_recurrence_pause', null)}
             >
               Pause
             </Button>
@@ -350,10 +351,7 @@ export function ChatAutomationCard({
               size='sm'
               disabled={busy}
               onClick={() =>
-                run(
-                  'raffi_recurrence_cancel',
-                  'Automation cancelled. Nothing more will be drafted.'
-                )
+                run('raffi_recurrence_cancel', 'Automation cancelled')
               }
             >
               Undo
@@ -368,7 +366,7 @@ export function ChatAutomationCard({
         </div>
         {status === 'draft' && !isOwner && (
           <p className='text-muted-foreground text-xs'>
-            An owner of this workspace turns it on in Automations.
+            An owner turns it on in Automations.
           </p>
         )}
       </Surface>

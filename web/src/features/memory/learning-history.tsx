@@ -110,7 +110,7 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
       {tab === 'waiting' ? (
         <div role='tabpanel' id={panelIds[0]} tabIndex={0} className='rafii-focus rounded-[var(--rafii-radius-control)]'>
           {pending.length === 0 ? (
-            <p className='text-muted-foreground text-xs'>Nothing is waiting for a decision.</p>
+            <p className='text-muted-foreground text-xs'>Nothing waiting.</p>
           ) : (
             <div className='flex flex-col gap-2'>
               {pending.map((proposal) => (
@@ -122,7 +122,7 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
       ) : (
         <div role='tabpanel' id={panelIds[1]} tabIndex={0} className='rafii-focus rounded-[var(--rafii-radius-control)]'>
           {decided.length === 0 ? (
-            <p className='text-muted-foreground text-xs'>No decisions yet. Suggestions an owner remembers, rewords or dismisses appear here, and so do retired preferences.</p>
+            <p className='text-muted-foreground text-xs'>No decisions yet.</p>
           ) : (
             <div className='flex flex-col gap-3'>
               <ul className='flex flex-col'>
@@ -130,7 +130,7 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
                   <Row key={row.key} statement={row.statement} badge={row.label} meta={[row.scope, row.when].filter(Boolean).join(' · ')} />
                 ))}
               </ul>
-              <p className='text-muted-foreground text-xs'>Newest first. {total !== null ? `Showing ${decided.length} of ${total} decisions and retired preferences.` : 'Showing the latest decisions and retired preferences. The total is unavailable.'}</p>
+              {total !== null && total > decided.length && <p className='text-muted-foreground text-xs'>Latest {decided.length} of {total}</p>}
             </div>
           )}
         </div>
@@ -147,7 +147,7 @@ export function LearningHistory({ data }: { data: MemoryProposals }) {
   return (
     <section aria-labelledby='learning-history-title' className='flex flex-col gap-3 pt-1'>
       <h3 id='learning-history-title' className='text-foreground text-sm font-medium'>
-        Suggestions and decisions
+        Suggestions
       </h3>
       <HistoryTabs data={data} />
     </section>

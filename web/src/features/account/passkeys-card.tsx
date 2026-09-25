@@ -69,7 +69,7 @@ function RenameDialog({ passkey, onOpenChange, onRenamed }: { passkey: SignInPas
         <form onSubmit={submit} className='flex flex-col gap-5'>
           <DialogHeader className='gap-1.5 pr-8'>
             <DialogTitle className='text-foreground text-xl font-medium tracking-tight'>Rename passkey</DialogTitle>
-            <DialogDescription className='leading-relaxed'>A name you will recognise later, such as the device it lives on.</DialogDescription>
+            <DialogDescription className='leading-relaxed'>For example, the device it lives on.</DialogDescription>
           </DialogHeader>
           {error && <StateMessage kind='error' layout='inline' title={error} />}
           <div className='flex flex-col gap-2'>
@@ -113,7 +113,6 @@ function PasskeysCardBody() {
     setBusy(true);
     try {
       await registerSignInPasskey(auth.supabase);
-      toast.success('Passkey added. Next time, sign in with it.');
       await refresh();
     } catch (err) {
       toast.error(message(err, 'Your device did not complete the passkey setup.'));
@@ -127,7 +126,6 @@ function PasskeysCardBody() {
     setBusy(true);
     try {
       await deleteSignInPasskey(auth.supabase, passkey.id);
-      toast.success(`${passkey.name} removed.`);
       await refresh();
     } catch (err) {
       toast.error(message(err, 'The passkey could not be removed.'));
@@ -141,10 +139,10 @@ function PasskeysCardBody() {
     <SettingsSection
       id='profile-passkeys'
       title='Passkeys for sign-in'
-      description='Sign in with Face ID, Touch ID or a security key instead of an email code. Separate from the two-factor methods above: if two-factor authentication is on, you still confirm with it after a passkey sign-in.'
+      description='Sign in with Face ID, Touch ID or a security key. Two-factor still applies.'
     >
       {dev ? (
-        <StateMessage kind='unsupported' layout='inline' title='Not available with a dev identity.' description='Passkeys need a real sign-in provider.' />
+        <StateMessage kind='unsupported' layout='inline' title='Not available with a dev identity' />
       ) : passkeys.isLoading ? (
         <StateMessage kind='loading' title='Loading passkeys' className='bg-transparent p-0' />
       ) : passkeys.isError ? (
@@ -159,7 +157,7 @@ function PasskeysCardBody() {
           }
         />
       ) : list.length === 0 ? (
-        <StateMessage kind='empty' layout='inline' title='No passkeys yet.' description='Add one on this device to skip the email code next time.' />
+        <StateMessage kind='empty' layout='inline' title='No passkeys yet' />
       ) : (
         <ul className='flex flex-col gap-1.5'>
           {list.map((passkey) => (
@@ -196,10 +194,16 @@ function PasskeysCardBody() {
       {!dev && (
         <Button variant='glass' size='control' className='w-fit' disabled={busy || !passkeysSupported()} onClick={() => void add()}>
           <Icons.add className='size-4' aria-hidden />
-          {busy ? 'Waiting for your device…' : 'Add a passkey on this device'}
+          {busy ? (
+            'Waiting for your device…'
+          ) : (
+            <>
+              Add passkey<span className='sr-only'> on this device</span>
+            </>
+          )}
         </Button>
       )}
-      {!dev && !passkeysSupported() && <p className='text-muted-foreground text-xs'>This browser cannot create passkeys.</p>}
+      {!dev && !passkeysSupported() && <p className='text-muted-foreground text-xs'>This browser can’t create passkeys.</p>}
 
       <RenameDialog passkey={renaming} onOpenChange={(open) => !open && setRenaming(null)} onRenamed={refresh} />
       <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
@@ -207,8 +211,7 @@ function PasskeysCardBody() {
           <AlertDialogHeader>
             <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Remove {removing?.name ?? 'this passkey'}?</AlertDialogTitle>
             <AlertDialogDescription className='leading-relaxed'>
-              That device can no longer sign you in with it. Your email code and Google sign-in keep working; delete the passkey from the device
-              too if you want it gone everywhere.
+              That device can’t sign you in with it anymore. Email and Google sign-in keep working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className={rafiiDialogFooter}>

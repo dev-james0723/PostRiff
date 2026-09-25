@@ -683,8 +683,8 @@ async function drafts(browser) {
     await dialog.waitFor({ state: 'hidden', timeout: 15000 });
     await page.getByRole('tab', { name: /^Queue/ }).click();
     await page.waitForURL((url) => !url.search.includes('view=drafts'), { timeout: 30000 });
-    // With no jobs yet the Queue tab explains the three steps instead of an empty list.
-    const queued = page.locator('#queue-jobs-list').or(page.getByText('Nothing publishes on its own')).first();
+    // With no jobs yet the Queue tab shows one empty state instead of an empty list.
+    const queued = page.locator('#queue-jobs-list').or(page.getByText('Nothing scheduled')).first();
     await queued.waitFor({ timeout: 30000 });
     check('the Queue tab still shows approvals and jobs', await queued.isVisible());
     await page.setViewportSize({ width: 390, height: 844 });

@@ -1,5 +1,6 @@
 'use client';
 
+import type { SurfaceMaterial } from '@/components/rafii';
 import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import type { SnapshotState, VoiceProfile } from '@/lib/api/types';
 import { ApprovedDate, Caption, ExpandableText, SectionUnavailable, type Refetchable } from './brand-parts';
@@ -25,10 +26,10 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
       <div className='flex flex-col gap-1.5'>
         {profile.analysisMethod && (
           <StatusChip icon={profile.analysisMethod === 'ai' ? 'sparkles' : 'ruler'} className='h-auto min-h-7 w-fit max-w-full py-1 whitespace-normal'>
-            {profile.analysisMethod === 'ai' ? `Draft interpretation · AI analysis · ${profile.analysisModel ?? 'managed model'} · evidence excerpts checked; needs human review` : 'Local text statistics, not AI semantic tone analysis'}
+            {profile.analysisMethod === 'ai' ? `AI analysis · ${profile.analysisModel ?? 'managed model'} · needs your review` : 'Local writing statistics (no AI)'}
           </StatusChip>
         )}
-        <Caption>Starting tone</Caption>
+        <Caption>Tone</Caption>
         <div className='flex flex-wrap items-center gap-2'>
           <StatusChip icon={null}>{toneLabel(profile.tone) ?? 'Not set'}</StatusChip>
           {tone && <span className='text-muted-foreground text-xs'>{tone.note}</span>}
@@ -52,7 +53,7 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
 
       {dimensions.length > 0 && (
         <div className='flex flex-col gap-2'>
-          <Caption>Evidence by writing dimension</Caption>
+          <Caption>Evidence</Caption>
           <ul className='flex flex-col gap-2'>
             {dimensions.map((item) => (
               <li key={item.id} className='rafii-quiet rounded-[var(--rafii-radius-control)] p-3'>
@@ -83,8 +84,8 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
         {sample ? (
           <>
             <ExpandableText as='blockquote' text={sample} lines={6} className='border-foreground/20 border-l-2 pl-3' />
-            {/* memory.py puts the sample in VOICE.md, so every writing route reads it; PostRiff itself never analyses it. */}
-            <span className='text-muted-foreground text-xs leading-snug'>This explicitly supplied writing example is shared through VOICE.md. Samples supplied only for analysis are not copied into this field.</span>
+            {/* memory.py puts the sample in VOICE.md, so every writing route reads it; analysis-only samples never land here. */}
+            <span className='text-muted-foreground text-xs leading-snug'>Every draft reads this sample.</span>
           </>
         ) : (
           <p className='text-muted-foreground'>No sample supplied.</p>
@@ -92,7 +93,7 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
       </div>
 
       <div className='flex flex-col gap-1.5'>
-        <Caption>Unknowns kept explicit</Caption>
+        <Caption>Unknowns</Caption>
         {unknowns.length ? (
           <ul className='text-muted-foreground flex list-disc flex-col gap-1 pl-5 text-xs'>
             {unknowns.map((item, index) => (
@@ -107,8 +108,8 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
   );
 }
 
-/** How the workspace sounds: the active revision behind VOICE.md. Read-only here. */
-export function VoiceCard({ state, query, isOwner }: { state: SnapshotState | undefined; query: Refetchable; isOwner: boolean }) {
+/** How the workspace sounds: the active revision behind VOICE.md. Read-only here; a waiting proposal has its own card. */
+export function VoiceCard({ state, query, material, className }: { state: SnapshotState | undefined; query: Refetchable; isOwner: boolean; material?: SurfaceMaterial; className?: string }) {
   const status = voiceStatus(state);
   const record = status.kind === 'active' ? status.record : null;
   const profile = record?.profile;
@@ -121,26 +122,18 @@ export function VoiceCard({ state, query, isOwner }: { state: SnapshotState | un
       description={
         record ? (
           <>
-            Revision {record.revision} · approved <ApprovedDate iso={record.approvedAt} />. Writing routes receive it as VOICE.md.
+            Revision {record.revision} · approved <ApprovedDate iso={record.approvedAt} />
           </>
-        ) : (
-          'How drafts sound. Writing routes receive it as VOICE.md.'
-        )
+        ) : undefined
       }
-      footer='Use Learn my voice to propose a new revision. Review and approve it separately; every approved revision stays listed under Revisions.'
+      material={material}
+      className={className}
       bodyClassName='gap-5 text-sm'
     >
       {!profile ? (
-        <SectionUnavailable message='The active voice revision could not be read from this workspace.' query={query} />
+        <SectionUnavailable message='Couldn’t load the active voice.' query={query} />
       ) : (
-        <>
-          {status.kind === 'active' && status.waiting && (
-            <StatusChip icon='hourglass' className='w-fit'>
-              {isOwner ? 'A proposed revision is waiting for your approval' : 'A proposed revision is waiting for an owner'}
-            </StatusChip>
-          )}
-          <ProfileDetails profile={profile} observationsLabel='Observations approved with this revision' />
-        </>
+        <ProfileDetails profile={profile} observationsLabel='Observations' />
       )}
     </Panel>
   );

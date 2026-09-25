@@ -77,6 +77,10 @@ jobs:
         run: node web/tests/rafii-workflow.cjs --only=workflow,library,drafts
       - name: Theme bars (header and phone tab bar match light and dark under any stored theme)
         run: node web/tests/rafii-theme-bars.cjs
+      - name: UI simplification (first-run empty states own one action; shared connection status words)
+        run: node web/tests/ui-simplification-browser.cjs
+      - name: Home with a synthetic API (composer, Writing Voice, Automations link, suggestions)
+        run: node web/tests/raffi-browser.mjs
       - name: Keep the evidence for this commit
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

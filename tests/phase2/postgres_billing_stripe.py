@@ -95,9 +95,9 @@ with connection() as db:
 
 service = HostedWorkspaceService(connection, verify, clock=lambda: clock[0], identity=Identity(), public_base_url="https://app.postriff.test/", billing_provider=provider, mailer=mailer)
 service.bootstrap("one", "studio")
-assert any(m["subject"] == "Welcome to PostRiff" and m["to"] == "owner@example.com" for m in mail.sent), [m["subject"] for m in mail.sent]
+assert any(m["subject"] == "Welcome to Rafii" and m["to"] == "owner@example.com" for m in mail.sent), [m["subject"] for m in mail.sent]
 service.bootstrap("one", "studio")
-assert sum(1 for m in mail.sent if m["subject"] == "Welcome to PostRiff") == 1
+assert sum(1 for m in mail.sent if m["subject"] == "Welcome to Rafii") == 1
 checks.append("first bootstrap sends one welcome email; later sign-ins do not")
 
 # 1. Proposed plan terms are not purchasable; usage reports the live provider with no checkout yet.
@@ -177,7 +177,7 @@ with connection() as db:
     db.execute("UPDATE public.pr_trials SET expires_at=to_timestamp(%s) WHERE workspace_id=%s", (clock[0] + 2.5 * 86400, wid))
 first, second = service.run_reminders(), service.run_reminders()
 assert first == {"sent": 1, "skipped": 0} and second == {"sent": 0, "skipped": 1}, (first, second)
-assert any(m["subject"].startswith("Your PostRiff trial ends in") for m in mail.sent)
+assert any(m["subject"].startswith("Your Rafii trial ends in") for m in mail.sent)
 with connection() as db:
     rows = db.execute("SELECT kind,sent FROM public.pr_notifications WHERE workspace_id=%s ORDER BY created_at", (wid,)).fetchall()
 assert [r[0] for r in rows] == ["subscription_activated", "payment_failed", "subscription_activated", "trial_ending"] and all(r[1] for r in rows), rows

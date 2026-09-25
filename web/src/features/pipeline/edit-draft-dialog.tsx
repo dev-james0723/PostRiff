@@ -31,10 +31,10 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
     if (!variant || !snapshot.data) return;
     try {
       await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: variant.revision, text } });
-      toast.success('Draft updated. Schedule it to review the exact text.');
+      toast.success('Draft saved');
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The draft could not be saved.');
+      toast.error('Couldn’t save the draft', { description: err instanceof ApiError ? err.message : undefined });
     }
   }
 
@@ -46,7 +46,7 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
             Edit draft{variant ? ` · ${variant.platform} · ${languageLabel(variant.language)}` : ''}
           </DialogTitle>
-          <DialogDescription>Your words, your call. Edits stay in the draft history; PostRiff learns from how you edit only through preferences you accept on the Memory page.</DialogDescription>
+          <DialogDescription className='sr-only'>Edit the text of this draft.</DialogDescription>
         </DialogHeader>
         {variant ? (
           <>
@@ -56,7 +56,7 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
 
           </>
         ) : (
-          <p className='text-muted-foreground text-sm'>This draft is no longer in the workspace.</p>
+          <p className='text-muted-foreground text-sm'>This draft is gone.</p>
         )}
         <DialogFooter>
           <Button variant='glass' size='control' onClick={() => onOpenChange(false)} disabled={act.isPending}>

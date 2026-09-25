@@ -46,10 +46,10 @@ function Details({ request }: { request: DataRequest }): ReactNode {
     case 'retraction':
       // The receipt's `dependentVariantsBlocked` counts every blocked draft in the workspace, not this source's, so it is not shown.
       // `retract_source` also marks every draft stale (domain.py `_mark_stale`), so the row says so in the past tense.
-      return <span>Text and facts blanked; drafts that used it blocked; every draft sent back to be drafted again</span>;
+      return <span>Text and facts blanked; drafts need drafting again</span>;
     case 'deletion':
       // The receipt's note names the API route; say the same thing in words.
-      return <span>Finished with Delete account on this page, once every publication has an outcome</span>;
+      return <span>Finish with Delete account below</span>;
     default:
       return <span className='text-muted-foreground'>—</span>;
   }
@@ -67,10 +67,9 @@ export function RequestsSection({ requests }: { requests: Refetchable & { data?:
     <PrivacySection
       id='privacy-requests'
       title='Data requests'
-      description='Every export, diagnostics package and retraction adds a row here with its receipt.'
       action={
         <Link href='/app/account/profile' className={linkClass}>
-          Also in your account history <LearnMoreChevron className='size-3.5' />
+          Account history <LearnMoreChevron className='size-3.5' />
         </Link>
       }
       data-tour='privacy-requests'
@@ -78,7 +77,7 @@ export function RequestsSection({ requests }: { requests: Refetchable & { data?:
       {requests.isPending ? (
         <StateMessage kind='loading' title='Loading data requests' />
       ) : !requests.data ? (
-        <Unavailable query={requests} fallback='Data requests could not be loaded.' />
+        <Unavailable query={requests} fallback='Couldn’t load data requests.' />
       ) : rows.length === 0 ? (
         <StateMessage
           kind='empty'
@@ -88,7 +87,6 @@ export function RequestsSection({ requests }: { requests: Refetchable & { data?:
             </span>
           }
           title='No requests yet'
-          description='Exports, diagnostics packages and retractions each add a row here with a receipt.'
         />
       ) : (
         <div className='rafii-quiet min-w-0 overflow-hidden rounded-[var(--rafii-radius-card)] px-2'>

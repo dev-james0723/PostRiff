@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useState, type ReactNode } from 'react';
-import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
@@ -22,16 +21,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
-import { keys, useAct, useUsage } from '@/lib/api/hooks';
+import { keys, useAct } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { STATUS } from '@/lib/status-labels';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
 import { AssetDetail } from './asset-detail';
@@ -42,21 +41,20 @@ const infoContent = {
   title: 'Library',
   sections: [
     {
-      title: 'Private by default',
-      description: 'Images live in private storage and are served only to members of this workspace, through the API.'
+      title: 'Private',
+      description: 'Only members of this workspace can see these images.'
     },
     {
-      title: 'Provenance',
-      description: 'Every image is stored with its hash. A post records the exact hash it was approved with, so what publishes is what was reviewed.'
+      title: 'What you approve is what publishes',
+      description: 'Each image is stored with a fingerprint (hash), and a post publishes exactly the image it was approved with.'
     },
     {
-      title: 'What is accepted',
-      description:
-        'JPEG or PNG, up to 8 MB, 320–4096 px per side and at most 16.7 megapixels. Each image is fully decoded and re-encoded as JPEG with its metadata removed. Video is not accepted in this release.'
+      title: 'What’s accepted',
+      description: 'JPEG or PNG, up to 8 MB, 320–4096 px per side. Images are re-saved as JPEG with metadata removed. No video yet.'
     },
     {
-      title: 'Used and unused',
-      description: 'An image counts as used when a publishing job in any state, or a review waiting for approval, records it.'
+      title: 'Used',
+      description: 'Used by a scheduled or published post, or one waiting for review. Only the 20 most recent reviews count.'
     }
   ]
 };
@@ -80,20 +78,20 @@ const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 tex
 
 function rejectionMessage({ file, errors }: FileRejection) {
   const code = errors[0]?.code;
-  if (code === 'file-too-large') return `${file.name} is larger than 8 MB, so it was not added.`;
-  if (code === 'file-too-small') return `${file.name} is empty, so it was not added.`;
-  if (code === 'file-invalid-type') return `${file.name} is not a JPEG or PNG, so it was not added.`;
-  return `${file.name} was not added: ${errors[0]?.message ?? 'it cannot be uploaded'}.`;
+  if (code === 'file-too-large') return `${file.name} is over 8 MB`;
+  if (code === 'file-too-small') return `${file.name} is empty`;
+  if (code === 'file-invalid-type') return `${file.name} isn’t a JPEG or PNG`;
+  return `Couldn’t add ${file.name}`;
 }
 
 /** Waiting, reading, sending, uploaded, failed and not sent stay distinct states (DNA §21.9), in words. */
 const UPLOAD_BADGE: Record<UploadStatus, { status: AnimatedBadgeStatus; label: string }> = {
-  waiting: { status: 'neutral', label: 'waiting' },
-  reading: { status: 'loading', label: 'reading' },
-  sending: { status: 'loading', label: 'sending' },
-  done: { status: 'success', label: 'uploaded' },
-  failed: { status: 'danger', label: 'failed' },
-  skipped: { status: 'neutral', label: 'not sent' }
+  waiting: { status: 'neutral', label: 'Waiting' },
+  reading: { status: 'loading', label: 'Reading' },
+  sending: { status: 'loading', label: 'Uploading' },
+  done: { status: 'success', label: 'Uploaded' },
+  failed: { status: 'danger', label: STATUS.failed },
+  skipped: { status: 'neutral', label: 'Not sent' }
 };
 
 function uploadingText(progress: UploadProgress | null) {
@@ -164,7 +162,6 @@ export function LibraryView() {
   const client = useQueryClient();
   const { workspaceId } = useWorkspaceApi();
   const act = useAct();
-  const usage = useUsage();
   const upload = useUploadQueue();
 
   const [filter, setFilter] = useState<LibraryFilter>('all');
@@ -203,7 +200,6 @@ export function LibraryView() {
   // The asset stays in state while the sheet closes; it only counts as open while the image still exists.
   const current = detail ? (assets.find((asset) => asset.id === detail.id) ?? detail) : null;
   const detailVisible = detailOpen && detail !== null && assets.some((asset) => asset.id === detail.id);
-  const storageMb = usage.data?.entitlement?.storageMb;
   const uploadStorageMissing = saysStorageNotConfigured(upload.blocker);
   const storageMissing = mediaStorageMissing || uploadStorageMissing;
 
@@ -223,9 +219,9 @@ export function LibraryView() {
     setDeletingIds((ids) => new Set(ids).add(asset.id));
     try {
       await act.mutateAsync({ revision, action: 'p2_media_delete', payload: { assetId: asset.id } });
-      toast.success('Image deleted.');
+      // The card leaves the grid, so success needs no toast.
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'The image could not be deleted.');
+      toast.error('Couldn’t delete this image', { description: error instanceof ApiError ? error.message : undefined });
       if (error instanceof ApiError && error.status === 409) {
         void client.refetchQueries({ queryKey: keys.snapshot(workspaceId), exact: true });
       }
@@ -262,12 +258,12 @@ export function LibraryView() {
     content = (
       <StateMessage
         kind='error'
-        title='Could not load the library'
-        description={snapshot.error instanceof Error ? snapshot.error.message : 'The workspace did not respond.'}
+        title='Couldn’t load the library'
+        description={snapshot.error instanceof Error ? snapshot.error.message : undefined}
         action={
           <Button variant='glass' size='control' disabled={snapshot.isFetching} onClick={() => void snapshot.refetch()}>
             <Icons.refresh className={cn(snapshot.isFetching && 'animate-spin')} aria-hidden />
-            Retry
+            Try again
           </Button>
         }
       />
@@ -290,25 +286,14 @@ export function LibraryView() {
             </span>
           }
           title='No images yet'
-          description='Upload JPEG or PNG, up to 8 MB and 320–4096 px per side. Each image is fully decoded, stripped of metadata and stored with its hash. Attach it when you prepare a post from a draft.'
+          description={canEdit ? undefined : 'Only editors can upload images.'}
           action={
-            <>
-              {canEdit ? (
-                <>
-                  <Button variant='action' size='control' onClick={openPicker} disabled={library.revision === null}>
-                    <Icons.upload aria-hidden />
-                    Upload images
-                  </Button>
-                  <span className='text-muted-foreground self-center text-xs'>or drop files anywhere on this page</span>
-                </>
-              ) : (
-                <span className='text-muted-foreground self-center text-xs'>Ask a workspace editor to add images.</span>
-              )}
-              <Link href='/app/ideas' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'control' }))}>
-                Open Ideas
-                <LearnMoreChevron />
-              </Link>
-            </>
+            canEdit ? (
+              <Button variant='action' size='control' onClick={openPicker} disabled={library.revision === null} title='Or drop JPEG or PNG files anywhere on this page'>
+                <Icons.upload aria-hidden />
+                Upload images
+              </Button>
+            ) : undefined
           }
         />
       </motion.div>
@@ -321,7 +306,7 @@ export function LibraryView() {
         <Workbar
           search={query}
           onSearch={setQuery}
-          searchPlaceholder='Hash or size, e.g. 1080x1350'
+          searchPlaceholder='1080x1350'
           searchLabel='Search images by hash prefix or dimensions'
           tabs={
             <div data-tour='library-filter' className='sm:w-fit'>
@@ -349,9 +334,10 @@ export function LibraryView() {
           count={
             <span data-tour='library-stats' className='inline-flex items-center gap-1'>
               <DigitSwap value={totals.count} />
-              <span>{totals.count === 1 ? 'image' : 'images'} ·</span>
-              <span>{formatBytes(totals.bytes)}</span>
-              {totals.unknownBytes > 0 && <span>({totals.unknownBytes} without a size)</span>}
+              <span>{totals.count === 1 ? 'image' : 'images'}</span>
+              <span className='hidden md:inline' title={totals.unknownBytes > 0 ? `${totals.unknownBytes} without a size` : undefined}>
+                · {formatBytes(totals.bytes)}
+              </span>
             </span>
           }
           summary={<ActiveFilters count={sortActive} summary={SORT_LABELS[library.sort]} onClear={() => setSort(defaultSort)} clearLabel='Reset sort' />}
@@ -368,7 +354,6 @@ export function LibraryView() {
                   ? 'Every image is used in a post'
                   : 'No image is used in a post yet'
             }
-            description={normalizedQuery ? 'Search matches the start of a hash, or dimensions such as 1080x1350.' : 'Switch to All to see every image.'}
             action={
               <Button
                 variant='glass'
@@ -405,13 +390,6 @@ export function LibraryView() {
           </div>
         )}
 
-        <div className='text-muted-foreground flex flex-col gap-1 text-xs leading-relaxed'>
-          {!library.hasTimestamps && (
-            <p>Images appear in the order the workspace returns them. Upload times are not recorded yet, so newest first is not offered.</p>
-          )}
-          <p>“Used” counts publishing jobs in any state and reviews waiting for approval. The workspace keeps its 20 most recent reviews.</p>
-          {typeof storageMb === 'number' && <p>Your plan lists {storageMb} MB of storage. Uploads are not measured against it yet.</p>}
-        </div>
       </div>
     );
   }
@@ -419,7 +397,6 @@ export function LibraryView() {
   return (
     <PageContainer
       pageTitle='Library'
-      pageDescription='Images for your posts. Private to this workspace; each one is stored with its hash and attached when you prepare a post.'
       infoContent={infoContent}
       pageHeaderAction={uploadButton}
     >
@@ -428,16 +405,12 @@ export function LibraryView() {
 
         {/* Unsupported, offline and refused are different states (DNA §20.1), each with its own reason. */}
         {storageMissing ? (
-          <StateMessage
-            kind='unsupported'
-            title='Private media storage is not configured for this deployment'
-            description={`${uploadStorageMissing && upload.blocker ? upload.blocker.message : 'Image previews could not load for this reason.'} Images cannot be uploaded, previewed or deleted until it is.`}
-          />
+          <StateMessage kind='unsupported' layout='inline' title='Media uploads aren’t available yet.' />
         ) : upload.blocker ? (
           <StateMessage
             kind={upload.blocker.status === 503 ? 'offline' : 'error'}
-            title={upload.blocker.status === 503 ? 'Uploads stopped because the workspace was unavailable' : 'The workspace refused the upload'}
-            description={`${upload.blocker.message}${upload.blocker.status === 503 ? ' Files that were not sent can be uploaded again.' : ''}`}
+            title='Couldn’t upload'
+            description={upload.blocker.status === 503 ? 'Files that weren’t sent can be uploaded again.' : upload.blocker.message}
           />
         ) : null}
 
@@ -496,10 +469,9 @@ export function LibraryView() {
             <AlertDialogTitle>Delete this image?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete && library.usesOf(pendingDelete.id).length > 0
-                ? `It is used in ${library.usesOf(pendingDelete.id).length} ${library.usesOf(pendingDelete.id).length === 1 ? 'post' : 'posts'}. `
+                ? `Used in ${library.usesOf(pendingDelete.id).length} ${library.usesOf(pendingDelete.id).length === 1 ? 'post' : 'posts'}. `
                 : ''}
-              Its bytes are removed from private storage. Posts that already published keep what the platform received; reviews and scheduled
-              posts that use it stop being valid and need a new review.
+              This permanently deletes the image. Scheduled posts using it will need a new review; published posts aren’t affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

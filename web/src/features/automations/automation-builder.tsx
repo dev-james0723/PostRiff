@@ -6,10 +6,9 @@ import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { LanguagePicker } from '@/components/application/language-picker/language-picker';
 import { Checkbox } from '@/components/motion/checkbox';
-import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, SegmentedControl, SemanticIllustration, Surface } from '@/components/rafii';
+import { InfoTip, RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, SegmentedControl, SemanticIllustration, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { DRAFT_PLATFORMS } from '@/features/agent/composer';
@@ -25,6 +24,7 @@ import type { AutomationWorkflow, RaffiCampaign, RecurringDestination, Recurring
 import { selectionLabel, type FolderContext } from '@/lib/channels/folders';
 import { languageLabel, locales } from '@/lib/locales';
 import { useTimeZone } from '@/lib/preferences';
+import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 import type { Automation } from './use-automations';
 import { SOURCE_KINDS, WEEKDAYS, WEEKDAY_SHORT, ceilingText, daysBeforeOf, isFixedForm, kindOf, missingFacts, monthDaysOf, nextRuns, parseTime, runLabel, scheduleSummary, usd, validTimeZone, weekdaysOf, type MonthDay, type ScheduleKind, type ScheduleValue, type Weekday } from './schedule';
@@ -312,12 +312,12 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
     ...(!name.trim() ? [{ step: 'what' as Step, text: 'Name the automation.' }] : []),
     ...(!goal.trim() ? [{ step: 'what' as Step, text: 'Describe what the drafts should be about.' }] : []),
     ...(!audience.trim() ? [{ step: 'what' as Step, text: 'Describe who the drafts are for.' }] : []),
-    ...(workflow && trigger ? [{ step: 'when' as Step, text: 'This automation publishes on a plan, so it needs a clock schedule: weekly, monthly or a countdown.' }] : []),
+    ...(workflow && trigger ? [{ step: 'when' as Step, text: 'Choose weekly, monthly or countdown. Publishing plans need a clock schedule.' }] : []),
     ...(clockChecks && kind === 'weekly' && !weekdays.length ? [{ step: 'when' as Step, text: 'Choose at least one day.' }] : []),
     ...(clockChecks && kind === 'monthly' && !monthDays.length ? [{ step: 'when' as Step, text: 'Choose at least one day of the month.' }] : []),
     ...(clockChecks && kind === 'countdown' && !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? [{ step: 'when' as Step, text: 'Choose the event date.' }] : []),
     ...(clockChecks && kind === 'countdown' && !daysBefore.length ? [{ step: 'when' as Step, text: 'Choose when the countdown drafts.' }] : []),
-    ...(clockChecks && kind === 'countdown' && scheduleReady && parseTime(localTime) && validTimeZone(timeZone) && !runs.length ? [{ step: 'when' as Step, text: 'Every countdown date has passed. Choose a later event date.' }] : []),
+    ...(clockChecks && kind === 'countdown' && scheduleReady && parseTime(localTime) && validTimeZone(timeZone) && !runs.length ? [{ step: 'when' as Step, text: 'All countdown dates have passed. Choose a later event date.' }] : []),
     ...(clockChecks && !trigger && !parseTime(localTime) ? [{ step: 'when' as Step, text: 'Choose a time.' }] : []),
     ...(clockChecks && kind === 'on_new_source' && !sourceKinds.length ? [{ step: 'when' as Step, text: 'Choose what starts a run.' }] : []),
     ...(!validTimeZone(schedule.timeZone) ? [{ step: 'when' as Step, text: 'Choose a time zone.' }] : []),
@@ -328,10 +328,10 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
     ...(!costValid ? [{ step: 'review' as Step, text: 'Set a cost limit between $0 and $10 a run.' }] : [])
   ];
   const reminders = [
-    ...(missing.length ? [`Add the event ${missing.join(' and ')} before it can be activated. You can still save it as a draft.`] : []),
-    ...(fixed && fixed.kind === 'once' && !runs.length ? ['Its date has passed, so it will not run again. Ask Rafii in chat for a new date.'] : []),
-    ...(noPolicy ? ['How its posts go out is not chosen yet, so it can be saved but not activated. Answer Rafii in chat first.'] : []),
-    ...(writer?.costClass === 'paid' && costMicro === 0 ? ['This writer charges per run. With a $0 limit every run is held, so set a limit above $0.'] : [])
+    ...(missing.length ? [`Add the event ${missing.join(' and ')} to activate. You can still save a draft.`] : []),
+    ...(fixed && fixed.kind === 'once' && !runs.length ? ['Its date has passed. Ask Rafii in chat for a new date.'] : []),
+    ...(noPolicy ? ['Choose how posts go out in chat before activating.'] : []),
+    ...(writer?.costClass === 'paid' && costMicro === 0 ? ['This writer charges per run. At a $0 limit every run is held; set a limit above $0.'] : [])
   ];
   const stepIndex = STEPS.findIndex((s) => s.value === step);
   const draftsPerRun = destinations.length;
@@ -446,15 +446,15 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
         try {
           await act('raffi_recurrence_activate', { taskId, confirmed: true, ...(autoPolicy ? { publishAuthority: { confirmed: true, sourceUse: Boolean(workflow?.research) && allowSourceUse } } : {}) });
         } catch (err) {
-          setError(`Saved as a draft, but it could not be activated: ${err instanceof ApiError ? err.message : 'try again.'}`);
+          setError(`Saved as a draft, but couldn’t activate: ${err instanceof ApiError ? err.message : 'try again.'}`);
           return;
         }
       }
-      toast.success(!activate ? 'Automation saved as a draft.' : autoPolicy ? 'Automation saved and active. Posts that pass every check publish at their time.' : workflow?.policy === 'review' ? 'Automation saved and active. Each post waits for your approval.' : 'Automation saved and active. Drafts will wait for your review.');
+      toast.success(activate ? 'Automation active' : 'Saved as draft');
       if (taskId) onSaved?.(taskId);
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Rafii could not save this automation.');
+      setError(err instanceof ApiError ? err.message : 'Couldn’t save this automation. Try again.');
     } finally {
       setSaving(false);
     }
@@ -464,7 +464,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   return (
       <RafiiDialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
         <RafiiDialogContent size='lg' className='md:h-[min(52rem,92dvh)]'>
-          <RafiiDialogHeader eyebrow='Automations' title={title} accent='automation' intro={workflow ? `Rafii prepares posts on your schedule. ${policy?.label}.` : 'Rafii prepares drafts on your schedule. Nothing publishes: every draft waits for your review.'} />
+          <RafiiDialogHeader title={title} accent='automation' intro={workflow ? policy?.label : undefined} />
           <div className='px-5 pb-1 md:px-7'>
             <SegmentedControl options={STEPS.map((s) => ({ value: s.value, label: s.label }))} value={step} onChange={setStep} pattern='tabs' label='Automation steps' size='sm' panelIds={STEPS.map((s) => `automation-step-${s.value}`)} />
           </div>
@@ -473,7 +473,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
               <section id='automation-step-what' role='tabpanel' aria-label='What' className='flex flex-col gap-4'>
                 {!savedTaskId && !initial.campaignId && (
                   <fieldset className='flex flex-col gap-2'>
-                    <legend className={cn(LABEL, 'mb-1')}>Start from a template (optional)</legend>
+                    <legend className={cn(LABEL, 'mb-1')}>Start from a template</legend>
                     <div className='grid grid-cols-2 gap-2 sm:grid-cols-3'>
                       {TEMPLATES.map((template) => {
                         const Icon = Icons[template.icon];
@@ -489,30 +489,30 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         );
                       })}
                     </div>
-                    {templateId && <p className={HINT}>{TEMPLATES.find((t) => t.id === templateId)?.note}. Everything below stays editable.</p>}
+                    {templateId && <p className={HINT}>{TEMPLATES.find((t) => t.id === templateId)?.note}</p>}
                   </fieldset>
                 )}
-                <Field label='Name' htmlFor='automation-name' hint='Shown on the Automations page and as the title of each run’s conversation.'>
+                <Field label='Name' htmlFor='automation-name'>
                   <Input id='automation-name' value={name} onChange={(e) => setName(e.target.value)} placeholder='Weekly tip' maxLength={120} className={FIELD} />
                 </Field>
-                <Field label='What should each draft be about?' htmlFor='automation-goal' hint='This brief is sent to the writer each run. Names of apps, times or instructions inside it are treated as text, never as settings.'>
+                <Field label='What should each draft be about?' htmlFor='automation-goal' tip='Sent to the writer each run. Apps, times or instructions in it are read as text, not settings.' tipLabel='About the brief'>
                   <Textarea id='automation-goal' value={goal} onChange={(e) => setGoal(e.target.value)} placeholder='One practical tip for my audience, drawn from this week’s work.' maxLength={1200} className='rafii-field min-h-24 rounded-[var(--rafii-radius-control)] px-3.5 py-3 text-base md:text-sm' />
                 </Field>
                 <Field label='Who is it for?' htmlFor='automation-audience'>
                   <Input id='automation-audience' value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Beginners who follow my work, and the people who support them' maxLength={800} className={FIELD} />
                 </Field>
-                <Label className='flex min-h-11 items-center justify-between gap-3 text-sm font-normal'>
-                  <span className='flex flex-col gap-0.5'>
-                    <span>Write in my voice</span>
-                    <span className='text-muted-foreground text-xs'>Uses the writing samples you allowed for this writer. Without one, a draft is neutral and says so.</span>
+                <div className='flex min-h-11 items-center justify-between gap-3 text-sm'>
+                  <span className='inline-flex items-center'>
+                    Write in my voice
+                    <InfoTip label='About writing in my voice' className='-my-3' description='Uses the writing samples you allowed for this writer. Without them, drafts are neutral.' />
                   </span>
                   <Switch checked={voiceMode === 'personalized'} onCheckedChange={(checked) => setVoiceMode(checked ? 'personalized' : 'neutral')} aria-label='Write each draft in my voice' />
-                </Label>
+                </div>
                 <div className='grid gap-3 sm:grid-cols-2'>
-                  <Field label='Event date' htmlFor='automation-date' hint={missing.includes('date') ? 'Needed before an event automation can be activated.' : 'Only for event briefs.'}>
+                  <Field label='Event date' htmlFor='automation-date' hint={missing.includes('date') ? 'Needed to activate.' : undefined}>
                     <Input id='automation-date' value={date} onChange={(e) => setDate(e.target.value)} placeholder='18 April, 7:30 pm' maxLength={400} className={FIELD} />
                   </Field>
-                  <Field label='Venue' htmlFor='automation-venue' hint={missing.includes('venue') ? 'Needed before an event automation can be activated.' : 'Only for event briefs.'}>
+                  <Field label='Venue' htmlFor='automation-venue' hint={missing.includes('venue') ? 'Needed to activate.' : undefined}>
                     <Input id='automation-venue' value={venue} onChange={(e) => setVenue(e.target.value)} placeholder='Venue name and city' maxLength={400} className={FIELD} />
                   </Field>
                 </div>
@@ -533,10 +533,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         <Icons.page className='size-4' />
                       </span>
                     )}
-                    <span className='flex min-w-0 flex-[1_1_10rem] flex-col'>
-                      <span className='text-sm font-medium'>{content ? content.label : 'General writing'}</span>
-                      <span className={HINT}>{content ? 'The automation always writes as this type, whatever Home has selected.' : 'No specific content type or checks.'}</span>
-                    </span>
+                    <span className='min-w-0 flex-[1_1_10rem] text-sm font-medium'>{content ? content.label : 'General writing'}</span>
                     <span className='flex gap-1'>
                       <Button variant='glass' size='sm' className='min-h-11' onClick={() => setInner('library')}>
                         {content ? 'Change' : 'Choose'}
@@ -551,7 +548,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                 </div>
                 <div className='flex flex-col gap-1'>
                   <Checkbox checked={recentPostsDays !== null} onCheckedChange={(checked) => setRecentPostsDays(checked ? 31 : null)} label='Include my published posts from the last month' className='min-h-11 gap-2.5 [&>span]:text-sm' />
-                  <p className={HINT}>For recaps and follow-ups. Each run reads up to ten posts this workspace published in the 31 days before it; nothing else.</p>
+                  <p className={cn(HINT, 'pl-7')}>Reads up to 10 posts from the 31 days before each run.</p>
                 </div>
                 {!trigger && (
                   <div className='flex flex-col gap-1'>
@@ -562,15 +559,15 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         <select value={evergreenDays} onChange={(e) => setEvergreenDays(Number(e.target.value))} aria-label='Minimum age of the post to reshare' className='rafii-field rafii-focus h-9 rounded-md px-2 text-sm'>
                           {[30, 60, 90, 180, 365].map((d) => <option key={d} value={d}>{d} days</option>)}
                         </select>
-                        old · the one that started the most conversation first, never the same post twice.
+                        old, never the same one twice
                       </label>
                     )}
                   </div>
                 )}
                 {sources.length > 0 && (
                   <fieldset className='flex flex-col gap-2'>
-                    <legend className={cn(LABEL, 'mb-1')}>Sources to draw from (optional)</legend>
-                    <p className={HINT}>Only the sources you tick are read on each run. Leave all unticked to write from the brief alone.</p>
+                    <legend className={cn(LABEL, 'mb-1')}>Sources to draw from</legend>
+                    <p className={HINT}>Only ticked sources are read.</p>
                     <div className='flex flex-col gap-1.5'>
                       {sources.map((source) => (
                         <Checkbox key={source.id} checked={sourceIds.includes(source.id)} onCheckedChange={(checked) => setSourceIds((ids) => (checked ? [...ids, source.id] : ids.filter((id) => id !== source.id)))} label={source.title || 'Untitled source'} className='min-h-11 gap-2.5 [&>span]:text-sm' />
@@ -596,14 +593,14 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         ))}
                       </ul>
                     )}
-                    <p className={HINT}>{fixed.kind === 'once' ? 'A single date' : 'Each day has its own time'}, set up with Rafii in chat. Change these by asking Rafii in chat; saving here keeps them as they are.</p>
+                    <p className={HINT}>Set up in chat. Ask Rafii there to change it.</p>
                   </Surface>
                 ) : (
                 <>
                 <div className='flex flex-col gap-2'>
                   <span className={LABEL}>Repeats</span>
                   <SegmentedControl options={workflow ? KINDS.map((option) => ({ ...option, disabled: option.value === 'on_new_source' || option.value === 'on_strong_post' })) : KINDS} value={kind} onChange={chooseKind} label='Schedule type' size='sm' widths='content' className='self-start' />
-                  {workflow && <p className={HINT}>This automation publishes on a plan, so it runs on a clock schedule, not on new ideas or strong posts.</p>}
+                  {workflow && <p className={HINT}>Publishing plans run on a clock schedule.</p>}
                 </div>
                 {kind === 'on_new_source' && (
                   <fieldset className='flex flex-col gap-2'>
@@ -618,12 +615,15 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         );
                       })}
                     </div>
-                    <p className={HINT}>Each new item runs once and is read as the run’s source. Items added before the automation is activated are not included. Recordings are not supported yet: the Library holds images only.</p>
+                    <p className={HINT}>Each new item runs once. Items added before activation are skipped.</p>
                   </fieldset>
                 )}
                 {kind === 'on_strong_post' && (
                   <div className='flex flex-col gap-2'>
-                    <p className={HINT}>Runs when one of your published posts gets clearly more replies (Threads) or comments (Instagram) than your comparable posts: same app, language and content type, at least three measured. LinkedIn does not report these yet. This is an observation, not proof of what caused it.</p>
+                    <p className={HINT}>
+                      When a post gets clearly more replies or comments than your similar posts. Threads and Instagram only.
+                      <InfoTip label='How a strong post is measured' className='-my-3 inline-flex align-middle' description='Compared with posts on the same app, language and content type, at least three measured. LinkedIn doesn’t report these yet. An observation, not proof of cause.' />
+                    </p>
                     <label className='flex flex-wrap items-center gap-2 text-sm'>
                       Look at posts from the last
                       <select value={withinDays} onChange={(e) => setWithinDays(Number(e.target.value))} aria-label='How far back to look for strong posts' className='rafii-field rafii-focus h-11 rounded-md px-2 text-sm'>
@@ -638,7 +638,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                     <select value={maxPerDay} onChange={(e) => setMaxPerDay(Number(e.target.value))} aria-label='Most runs a day' className='rafii-field rafii-focus h-11 rounded-md px-2 text-sm'>
                       {[1, 2, 3, 5, 10].map((d) => <option key={d} value={d}>{d}</option>)}
                     </select>
-                    run{maxPerDay === 1 ? '' : 's'} a day. More than that on one day are skipped, not saved for later.
+                    run{maxPerDay === 1 ? '' : 's'} a day. Extra ones are skipped.
                   </label>
                 )}
                 {kind === 'monthly' && (
@@ -655,12 +655,12 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         );
                       })}
                     </div>
-                    <p className={HINT}>A day a month does not have (like the 31st) runs on that month’s last day.</p>
+                    <p className={HINT}>A missing day (like the 31st) runs on the month’s last day.</p>
                   </fieldset>
                 )}
                 {kind === 'countdown' && (
                   <div className='flex flex-col gap-3'>
-                    <Field label='Event date' htmlFor='automation-event-date' hint='The countdown runs before this date in the time zone below. The date is also added to the brief.'>
+                    <Field label='Event date' htmlFor='automation-event-date' hint='Also added to the brief.'>
                       <Input id='automation-event-date' type='date' value={eventDate} onChange={(e) => setEventDate(e.target.value)} className={cn(FIELD, 'sm:max-w-[14rem]')} />
                     </Field>
                     <fieldset className='flex flex-col gap-2'>
@@ -727,7 +727,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                 </div>
                 <Surface material='quiet' radius='control' padding='sm' aria-live='polite'>
                   <p className='text-sm font-medium'>{scheduleReady && (trigger || parseTime(localTime)) ? scheduleSummary(schedule) : kind === 'countdown' ? 'Choose the event date and days' : trigger ? 'Choose what starts a run' : 'Choose days and a time'}</p>
-                  {kind === 'countdown' && scheduleReady && parseTime(localTime) && runs.length === 0 && <p className='text-muted-foreground mt-1 text-xs'>Every countdown date has passed. Choose a later event date.</p>}
+                  {kind === 'countdown' && scheduleReady && parseTime(localTime) && runs.length === 0 && <p className='text-muted-foreground mt-1 text-xs'>All countdown dates have passed. Choose a later event date.</p>}
                   {runs.length > 0 && (
                     <ul className='mt-2 flex flex-col gap-1'>
                       {runs.map((run, index) => (
@@ -738,7 +738,6 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                       ))}
                     </ul>
                   )}
-                  <p className={cn(HINT, 'mt-2')}>{trigger ? 'Rafii checks about once a minute while the automation is active. ' : kind === 'countdown' ? 'After the last date the countdown finishes on its own. ' : ''}A run that is more than a day late, for example after a pause, is skipped rather than caught up.</p>
                 </Surface>
                 </>
                 )}
@@ -752,7 +751,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                         </li>
                       ))}
                     </ol>
-                    <p className={HINT}>Change these by asking Rafii in chat.</p>
+                    <p className={HINT}>Ask Rafii in chat to change these.</p>
                   </Surface>
                 )}
               </section>
@@ -762,7 +761,6 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
               <section id='automation-step-where' role='tabpanel' aria-label='Where' className='flex flex-col gap-4'>
                 {draftable.length > 0 ? (
                   <div className='flex flex-wrap items-center justify-between gap-2'>
-                    <p className={HINT}>Each account gets its own draft in each of its languages. Two accounts on one app get two drafts.</p>
                     <Button variant='glass' size='control' onClick={() => setInner('channels')}>
                       <Icons.broadcast />
                       Choose accounts or folders
@@ -770,7 +768,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </div>
                 ) : (
                   <div className='flex flex-col gap-2'>
-                    <p className={HINT}>No account is connected yet, so drafts are written per app. Connect an account on the Channels page to draft for it.</p>
+                    <p className={HINT}>No accounts connected. Choose apps to draft for, or connect an account on Channels.</p>
                     <div className='flex flex-wrap gap-1.5'>
                       {DRAFT_PLATFORMS.map((platform) => {
                         const on = targets.some((t) => !t.channelId && t.platform === platform);
@@ -797,7 +795,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                           <ChannelIcon platform={target.platform} size='sm' />
                           <span className='flex min-w-0 flex-[1_1_9rem] flex-col'>
                             <span className='truncate text-sm font-medium'>{accountName(target)}</span>
-                            <span className={HINT}>{accountConnected(target) ? target.platform : 'No longer connected: remove it or reconnect it on Channels.'}</span>
+                            <span className={HINT}>{accountConnected(target) ? target.platform : `${STATUS.disconnected}. Remove it or reconnect on Channels.`}</span>
                           </span>
                           <span className='flex flex-wrap items-center gap-1'>
                             {target.languages.map((tag, index) => (
@@ -849,7 +847,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
             {step === 'review' && (
               <section id='automation-step-review' role='tabpanel' aria-label='Review' className='flex flex-col gap-5'>
                 <div className='grid gap-3 sm:grid-cols-2'>
-                  <Field label='Writer' htmlFor='automation-writer' hint={writer?.egress === 'cloud' ? 'The brief and the ticked sources are sent to this writer’s provider on every run.' : writer ? 'Runs without sending the brief to a cloud provider.' : undefined}>
+                  <Field label='Writer' htmlFor='automation-writer' hint={writer?.egress === 'cloud' ? 'Each run sends the brief and ticked sources to this cloud writer.' : writer ? 'Runs without sending the brief to the cloud.' : undefined}>
                     <select id='automation-writer' value={route ?? ''} onChange={(e) => setRoute(e.target.value || null)} className={cn(FIELD, 'rafii-focus w-full min-w-0')}>
                       {!route && <option value=''>Choose a writer</option>}
                       {writers.map((m) => (
@@ -859,7 +857,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                       ))}
                     </select>
                   </Field>
-                  <Field label='Cost limit per run (USD)' htmlFor='automation-cost' hint={writer?.costClass === 'paid' ? 'A run whose quote is above this limit is held, never charged.' : 'This writer has no per-run charge.'}>
+                  <Field label='Cost limit per run (USD)' htmlFor='automation-cost' hint={writer?.costClass === 'paid' ? 'A run quoted above this limit is held, never charged.' : 'No per-run charge.'}>
                     <Input id='automation-cost' type='number' inputMode='decimal' min='0' max='10' step='0.01' value={maxCost} onChange={(e) => setMaxCost(e.target.value)} className={FIELD} />
                   </Field>
                 </div>
@@ -872,7 +870,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   <p className='text-sm'>
                     Up to <span className='font-medium'>{usd(costValid ? costMicro : 0)}</span> a run · {ceilingText(costValid ? costMicro : 0, schedule)}.
                   </p>
-                  <p className={HINT}>Charges come from your workspace credits, the same as drafting on Home.</p>
+                  <p className={HINT}>Paid from workspace credits.</p>
                 </Surface>
                 <dl className='grid gap-x-4 gap-y-3 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]'>
                   <Summary term='What' onEdit={() => setStep('what')}>
@@ -886,9 +884,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   </Summary>
                   <Summary term='When' onEdit={() => setStep('when')}>
                     <span>{scheduleReady ? scheduleSummary(schedule) : 'Not complete yet'}</span>
-                    {fixed && <span className='text-muted-foreground'>Set up with Rafii in chat; change it by asking Rafii.</span>}
                     {runs[0] && <span className='text-muted-foreground'>First run after activation: {runLabel(runs[0], timeZone)}</span>}
-                    {trigger && <span className='text-muted-foreground'>Starts watching when it is activated.</span>}
+                    {trigger && <span className='text-muted-foreground'>Starts when activated.</span>}
                   </Summary>
                   <Summary term='Where' onEdit={() => setStep('where')}>
                     {targets.length ? (
@@ -925,7 +922,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                       </p>
                     ))}
                     {initial.intent && <p className='text-muted-foreground text-xs'>You asked: “{initial.intent}”</p>}
-                    <p className={HINT}>Change these by asking Rafii in chat. Saving here keeps them as they are.</p>
+                    <p className={HINT}>Ask Rafii in chat to change these.</p>
                   </Surface>
                 )}
                 {autoPolicy && isOwner && (
@@ -934,7 +931,6 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                     {workflow?.research && (
                       <Checkbox checked={allowSourceUse} onCheckedChange={setAllowSourceUse} label='Also publish posts built on sources Rafii finds, without asking me about each source (optional).' className='min-h-11 items-start gap-2.5 [&>span]:text-sm' />
                     )}
-                    <p className={HINT}>Only posts that pass every safety check publish on their own. The rest wait for your approval, with the reason.</p>
                   </div>
                 )}
                 {(blockers.length > 0 || reminders.length > 0) && (
@@ -957,13 +953,13 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                 )}
                 <p className={HINT}>
                   {!isOwner
-                    ? 'Saving creates a draft. The workspace owner activates it before any run.'
+                    ? 'Saves a draft. An owner activates it.'
                     : autoPolicy
-                      ? 'Activating lets Rafii publish posts that pass every safety check at their time; anything else waits for your approval.'
+                      ? 'Posts that pass every safety check publish at their time; the rest wait for your approval.'
                       : workflow?.policy === 'drafts'
-                        ? 'Activating lets Rafii prepare drafts on this schedule. Nothing is published.'
-                        : 'Activating lets Rafii prepare drafts on this schedule. Every draft still needs your review and approval before anything is published.'}
-                  {initial.wasActive ? ' Changing anything except the name returns it to draft until the owner activates it again.' : ''}
+                        ? 'Drafts only. Nothing is published.'
+                        : 'Every draft waits for your approval before anything is published.'}
+                  {initial.wasActive ? ' Editing anything but the name returns it to draft.' : ''}
                 </p>
               </section>
             )}
@@ -1004,12 +1000,16 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
   );
 }
 
-function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: string; hint?: string; children: React.ReactNode }) {
+/** A labelled field; `hint` is one short line under it, `tip` a longer explanation behind an info button. */
+function Field({ label, htmlFor, hint, tip, tipLabel, children }: { label: string; htmlFor: string; hint?: string; tip?: string; tipLabel?: string; children: React.ReactNode }) {
   return (
     <div className='flex min-w-0 flex-col gap-1.5'>
-      <label htmlFor={htmlFor} className={LABEL}>
-        {label}
-      </label>
+      <span className='flex items-center'>
+        <label htmlFor={htmlFor} className={LABEL}>
+          {label}
+        </label>
+        {tip && <InfoTip label={tipLabel ?? 'More about this field'} className='-my-3' description={tip} />}
+      </span>
       {children}
       {hint && <p className={HINT}>{hint}</p>}
     </div>

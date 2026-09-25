@@ -25,7 +25,7 @@ import { isCancellable } from './job-state';
 import { badgeClass, canSetAside, cardBadge, copyText, REVISION_ORIGIN, scheduleGate, type CardActions, type CardPermissions } from './pipeline-card';
 import { reasonLabel } from './set-aside-dialog';
 
-const KIND_LABEL: Record<BoardCard['kind'], string> = { source: 'Source', draft: 'Draft', review: 'Review', job: 'Publishing job' };
+const KIND_LABEL: Record<BoardCard['kind'], string> = { source: 'Source', draft: 'Draft', review: 'Review', job: 'Post' };
 
 function Section({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
@@ -77,20 +77,20 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
     <>
       <Section title='Preview'>
         <DraftPreview platform={variant.platform} text={card.body} account={channel?.account ?? state?.speaker?.label ?? variant.platform} channelId={channel?.id} scale={0.5} className='self-center' />
-        {!channel && <p className='text-muted-foreground text-xs'>No {variant.platform} channel is connected, so the preview uses the workspace’s name.</p>}
+        {!channel && <p className='text-muted-foreground text-xs'>No {variant.platform} account connected.</p>}
       </Section>
       {variant.proposedUpdate ? (
         <>
           <Section title='Proposed update'>
             <TextBlock text={variant.proposedUpdate.text} />
-            <p className='text-muted-foreground text-xs'>Scheduling or editing accepts this update first.</p>
+            <p className='text-muted-foreground text-xs'>Scheduling or editing accepts it.</p>
           </Section>
-          <Section title={`Current text · revision ${variant.revision}`}>
+          <Section title='Current text'>
             <TextBlock text={variant.text} />
           </Section>
         </>
       ) : (
-        <Section title={`Text · revision ${variant.revision}`}>
+        <Section title='Text'>
           <TextBlock text={variant.text} />
         </Section>
       )}
@@ -106,7 +106,7 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
           </ul>
           {outcomeJob && (
             <Button variant='link' size='sm' className='h-auto self-start p-0' onClick={() => onShow(outcomeJob)}>
-              Open the {situation.outcome} job
+              Open the {situation.outcome} post
             </Button>
           )}
           {outcomeReview && (
@@ -115,7 +115,7 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
             </Button>
           )}
           {situation.setAsideBlocked && !situation.setAside && (
-            <p className='text-muted-foreground text-xs'>A job for this draft is still waiting, held or published, so it cannot be set aside until that job is cancelled.</p>
+            <p className='text-muted-foreground text-xs'>Can’t be set aside while its post is scheduled or published.</p>
           )}
         </Section>
       )}
@@ -135,7 +135,7 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
       )}
       <Section title='Sources'>
         {variant.sourceIds.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>Written without a source.</p>
+          <p className='text-muted-foreground text-sm'>No sources</p>
         ) : (
           <ul className='flex flex-col gap-1 text-sm'>
             {variant.sourceIds.map((id) => {
@@ -143,8 +143,8 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
               return (
                 <li key={id} className='flex items-center gap-1.5'>
                   <Icons.page className='text-muted-foreground size-3.5 shrink-0' aria-hidden />
-                  <span className='truncate'>{source ? source.title || source.kind : 'A source no longer in the workspace'}</span>
-                  {source && !source.active && <span className='text-destructive text-xs'>retracted</span>}
+                  <span className='truncate'>{source ? source.title || source.kind : 'Removed source'}</span>
+                  {source && !source.active && <span className='text-destructive text-xs'>withdrawn</span>}
                 </li>
               );
             })}
@@ -162,11 +162,12 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
                 <li key={`${revision.revision}-${revision.origin}`} className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3 py-2'>
                   <p className='text-sm'>
                     <span className='font-medium'>{REVISION_ORIGIN[revision.origin] ?? revision.origin.replace(/-/g, ' ')}</span>
-                    <span className='text-muted-foreground'>
-                      {' '}
-                      · revision {revision.revision}
-                      {at ? ` · ${formatDateTime(at)}` : ''}
-                    </span>
+                    {at ? (
+                      <span className='text-muted-foreground' title={formatDateTime(at)}>
+                        {' '}
+                        · {relativeTime(at)}
+                      </span>
+                    ) : null}
                   </p>
                   <p className='text-muted-foreground line-clamp-2 text-xs whitespace-pre-wrap'>{revision.text}</p>
                 </li>
@@ -186,8 +187,8 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
                   ))}
                 </span>
                 {entry.note && <span className='text-sm'>{entry.note}</span>}
-                <span className='text-muted-foreground text-xs'>
-                  Revision {entry.revision} · {formatDateTime(toEpoch(entry.at))}
+                <span className='text-muted-foreground text-xs' title={formatDateTime(toEpoch(entry.at))}>
+                  {relativeTime(toEpoch(entry.at))}
                 </span>
               </li>
             ))}
@@ -207,12 +208,12 @@ function ManifestDetails({ card, board, onShow }: { card: BoardCard; board: Boar
       <Section title='Preview'>
         <ManifestPreview manifest={manifest} scale={0.5} className='self-center' />
       </Section>
-      <Section title={`Exact text · revision ${manifest.contentRevision}`}>
+      <Section title='Exact text'>
         <TextBlock text={manifest.payload.text} />
-        {manifest.voiceRevision === null && <p className='text-foreground text-xs font-medium'>This draft has no approved voice profile. Review its wording carefully before approving.</p>}
+        {manifest.voiceRevision === null && <p className='text-foreground text-xs font-medium'>No voice profile. Check the wording before approving.</p>}
         {draft && (
           <Button variant='link' size='sm' className='h-auto self-start p-0' onClick={() => onShow(draft)}>
-            Open the draft it came from
+            Open draft
           </Button>
         )}
       </Section>
@@ -235,9 +236,8 @@ function ReviewDetails({ card, permissions }: { card: BoardCard; permissions: Ca
           {manifest.platform} · {manifest.account}
         </Row>
         <Row label='Publish at'>
-          <When at={toEpoch(manifest.timing.utc)} />
-          <span className='text-muted-foreground block text-xs'>
-            Chosen as {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone})
+          <span title={`${manifest.timing.local.replace('T', ' ')} (${manifest.timing.timeZone})`}>
+            <When at={toEpoch(manifest.timing.utc)} />
           </span>
         </Row>
         <Row label='Prepared'>
@@ -247,19 +247,16 @@ function ReviewDetails({ card, permissions }: { card: BoardCard; permissions: Ca
           <When at={toEpoch(manifest.expiresAt)} />
         </Row>
         <Row label='Language'>{manifest.payload.language}</Row>
-        <Row label='Media'>{manifest.media.length === 0 ? 'None' : `${manifest.media.length} attached`}</Row>
-        <Row label='Digest' mono>
-          {review.digest.slice(0, 8)}
-        </Row>
+        {manifest.media.length > 0 && <Row label='Media'>{manifest.media.length} attached</Row>}
       </dl>
       <p className={cn('text-xs', expired ? 'text-destructive' : 'text-muted-foreground')}>
         {permissions.readOnly
-          ? 'This is a sample workspace, so nothing here can be approved.'
+          ? 'Sample workspace · read only'
           : expired
-            ? 'The approval deadline passed, so this review can no longer be approved. Schedule… the draft again to prepare a new one.'
+            ? 'Not approved in time. Schedule the draft again.'
             : permissions.canApprove
-              ? 'Approve exactly this text, media, account and time.'
-              : 'An approver approves this exact review in the Queue.'}
+              ? 'Approves this exact text, media, account and time.'
+              : 'Waiting for an approver.'}
       </p>
       {snapshot.data && <ReviewApproveButton review={review} revision={snapshot.data.revision} allowed={!permissions.readOnly && permissions.canApprove} nowSeconds={Date.now() / 1000} onReload={() => void snapshot.refetch()} onOpenJob={(id) => router.push(`/app/queue?job=${encodeURIComponent(id)}`)} />}
       {!permissions.readOnly && !expired && (
@@ -292,7 +289,7 @@ function SourceDetails({ card }: { card: BoardCard }) {
       </Section>
       <Section title={`Facts · ${facts.filter((f) => f.approved).length} of ${facts.length} approved`}>
         {facts.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>No facts were extracted from this source.</p>
+          <p className='text-muted-foreground text-sm'>No facts</p>
         ) : (
           <ul className='flex flex-col gap-1.5 text-sm'>
             {facts.map((fact) => (
@@ -326,7 +323,7 @@ function SheetActions({ card, permissions, actions, cancelPending, holdEpoch }: 
   if (!readOnly && card.kind === 'job' && card.job && !canApprove && isCancellable(card.job)) {
     buttons.push(
       <span key='cancel' className='text-muted-foreground text-xs'>
-        Someone who can approve may cancel this job.
+        Only approvers can cancel.
       </span>
     );
   }
@@ -455,8 +452,9 @@ export function DetailSheet({
                   </AnimatedBadge>
                 )}
               </SheetTitle>
+              {/* Kind and language; the column only when the card sits in its footer group (set aside, expired…). */}
               <SheetDescription>
-                {[KIND_LABEL[card.kind], card.kind === 'draft' ? null : card.platform, card.language, current && column ? `${column.title}${card.footer ? ` · ${FOOTER_WORDS[card.column]}` : ''}` : null]
+                {[KIND_LABEL[card.kind], card.kind === 'draft' ? null : card.platform, card.language, current && card.footer ? FOOTER_WORDS[card.column] : null]
                   .filter(Boolean)
                   .join(' · ')}
               </SheetDescription>
@@ -467,13 +465,13 @@ export function DetailSheet({
                   {/* Stale is a state, not an error (DNA §20.1): say where the item went and offer the way there. */}
                   <StateMessage
                     kind='stale'
-                    title={successor ? 'This item moved' : 'This item is gone from the board'}
+                    title={successor ? 'This item moved' : 'This item is gone'}
                     description={
                       successor
-                        ? `It is now in ${COLUMN_META[successor.column].title}${successor.footer ? ` (${FOOTER_WORDS[successor.column]})` : ''}, as the ${KIND_LABEL[successor.kind].toLowerCase()}.`
+                        ? `Now in ${COLUMN_META[successor.column].title}${successor.footer ? ` (${FOOTER_WORDS[successor.column]})` : ''}.`
                         : card.kind === 'source'
-                          ? 'The source is no longer active, so it is off the board.'
-                          : 'This item is no longer in the workspace.'
+                          ? 'The source was withdrawn.'
+                          : undefined
                     }
                     action={
                       successor ? (

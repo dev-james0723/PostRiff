@@ -104,6 +104,8 @@ export function SegmentedControl<V extends string>({ options, value, onChange, p
           className: cn(
             'rafii-focus relative z-10 inline-flex min-w-0 items-center justify-center gap-1.5 rounded-[calc(var(--rafii-radius-segment)-4px)] font-medium whitespace-nowrap transition-colors duration-200 disabled:opacity-40',
             SIZE[size],
+            // Content-width segments keep their text; a row wider than the screen scrolls instead of overlapping.
+            widths === 'content' && 'shrink-0',
             active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
           )
         } as const;

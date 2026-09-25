@@ -38,6 +38,7 @@ import type { ChatAutomation, GeneratedImage, MemoryBinding, MemoryProposal, Mes
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { ProposalCard } from '@/features/memory/proposal-card';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { STATUS } from '@/lib/status-labels';
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
@@ -60,7 +61,7 @@ const STAGE_LABELS: Record<string, string> = {
 
 /** `queued` is emitted for every background runtime: name the local CLI only when the run's model belongs to one. */
 function queuedLabel(route: string | undefined) {
-  return route && ROUTE_LABELS[route] ? `Waiting for ${ROUTE_LABELS[route]} on this machine…` : 'Queued…';
+  return route && ROUTE_LABELS[route] ? `Waiting for ${ROUTE_LABELS[route]}…` : 'Queued…';
 }
 
 interface AssistantBody {
@@ -231,7 +232,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       return; // The reviewed sample workflow is separate from draft generation.
     }
     if (languages.selection.length === 0) {
-      if (override !== undefined) toast.error('Choose at least one channel below, then send your answer again.');
+      if (override !== undefined) toast.error('Choose a channel below, then send again.');
       return;
     }
     if (creditInvalid || (creditMode && imageRequested) || !gate.enter()) return;
@@ -256,7 +257,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
       await client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
     } catch (err) {
-      if (gate.alive()) toast.error(err instanceof Error ? err.message : 'The message could not be sent.');
+      if (gate.alive()) toast.error(err instanceof Error ? err.message : 'Couldn’t send your message.');
     } finally {
       gate.leave();
       if (gate.alive()) setBusy(false);
@@ -291,7 +292,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                         className={cn('rafii-focus flex min-h-11 flex-col justify-center gap-0.5 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm', c.conversationId === conversationId && 'text-foreground font-medium')}
                       >
                         <span className='line-clamp-1'>{c.title || 'Untitled'}</span>
-                        <span className='text-muted-foreground text-xs font-normal'>{formatDate(c.updatedAt)}</span>
+                        <span className='text-muted-foreground text-xs font-normal' title={formatDate(c.updatedAt)}>
+                          {relativeTime(c.updatedAt)}
+                        </span>
                       </Link>
                     </li>
                   ))}
@@ -305,16 +308,15 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
         <section className='flex min-w-0 flex-col gap-5'>
           <div className='flex flex-wrap items-end justify-between gap-3'>
             <div className='flex min-w-0 flex-col gap-1'>
-              <span className='rafii-eyebrow'>Conversation</span>
               <h1 className='text-foreground truncate text-[26px] leading-[1.15] font-normal tracking-[-0.02em]'>{title}</h1>
             </div>
             <div className='flex flex-wrap items-center gap-2'>
               {plan && (
                 <AnimatedBadge status={planApplied ? 'success' : 'warning'} size='sm' pulse={!planApplied}>
-                  {planApplied ? 'Plan applied' : 'Plan awaiting your approval'}
+                  {planApplied ? 'Plan applied' : STATUS.needsReview}
                 </AnimatedBadge>
               )}
-              <Badge variant='outline' className='gap-1 font-normal'>
+              <Badge variant='outline' className='hidden gap-1 font-normal md:inline-flex' title='Model'>
                 <Icons.sparkles className='size-3' />
                 <span className='font-mono text-[11px]'>{runModelLabel}</span>
               </Badge>
@@ -404,7 +406,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                             </Surface>
                           )}
                           {run.status === 'failed' && !(message.body as { failed?: boolean }).failed && (
-                            <StateMessage kind='error' title='The run did not complete.' description={run.events.findLast((e) => e.type === 'run.failed')?.message} />
+                            <StateMessage kind='error' title='Couldn’t finish the drafts' description={run.events.findLast((e) => e.type === 'run.failed')?.message} />
                           )}
                           {variants.length > 0 && (
                             <VariantCard
@@ -418,9 +420,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                           {plan && snapshot.data && <PlanCard run={run} plan={plan} snapshot={snapshot.data} />}
                           {!plan && variants.length > 0 && (
                             <p className='text-muted-foreground text-xs'>
-                              No times were named, so nothing is scheduled. Say when each post should go out, or{' '}
+                              Not scheduled. Say when, or{' '}
                               <Link href='/app/queue' className='underline underline-offset-2'>
-                                schedule a draft in the Queue
+                                schedule in the Queue
                               </Link>
                               .
                             </p>
@@ -458,7 +460,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               busy={busy || running}
               submitDisabled={creditInvalid || (creditMode && imageRequested)}
               compact
-              placeholder={imageRequested ? 'Describe the image you want to generate…' : 'Ask for another angle, a shorter version, or a different time…'}
+              placeholder={imageRequested ? 'A grand piano on an empty stage, warm light' : 'Make it shorter and post Tuesday at 9'}
               chips={chips}
               languages={languages}
               models={choice.options}
@@ -473,14 +475,14 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               imageGeneration={{
                 enabled: imageRequested,
                 available: !creditMode && Boolean(imageCapability?.available),
-                detail: imageCapability?.detail ?? 'Checking the managed image route…',
+                detail: imageCapability?.detail ?? 'Checking…',
                 onChange: setImageRequested
               }}
-              hint={imageRequested ? 'Uses the managed image route and one media credit · independent of the writing model' : '⌘↵ to send · channels and times you name in the message win over the chips'}
+              hint={imageRequested ? 'Uses 1 media credit' : '⌘↵ to send'}
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
             />
           ) : (
-            <StateMessage kind='permission' title='Viewing only.' description='You need the edit permission to draft in this workspace.' />
+            <StateMessage kind='permission' title='Viewing only.' description='Ask an owner for edit access.' />
           )}
           {busy && imageRequested && <ImageGenerationCard running className='mx-auto' />}
         </section>
@@ -505,16 +507,15 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                   <p className='text-muted-foreground w-full text-xs'>{destinationLabel(variants[variantIndex])}</p>
                   {/* Keyed by draft so switching tabs draws the other app instead of morphing this one. */}
                   <DraftPreview key={`${variantIndex}:${variants[variantIndex].platform}:${variants[variantIndex].channelId ?? ''}`} scale={0.7} {...draftFor(variants[variantIndex])} />
-                  <p className='text-muted-foreground w-full text-xs'>An illustrative layout, not a published post.</p>
                 </>
               ) : (
-                <StateMessage kind='empty' title='Nothing to preview yet.' description='The selected draft renders here as it would look in its app.' />
+                <StateMessage kind='empty' title='Nothing to preview yet' />
               )}
             </div>
           ) : (
             <div role='tabpanel' id='conversation-inspector-sources' aria-label='Sources' className='mt-3 flex flex-col gap-2'>
               {sources.length === 0 ? (
-                <StateMessage kind='empty' title='No usable sources yet.' description='Sources you add and mark usable appear here for the agent to read.' />
+                <StateMessage kind='empty' title='No sources yet' />
               ) : (
                 sources.slice(0, 12).map((s) => (
                   <Surface key={s.id} material='quiet' radius='control' padding='sm' className='flex flex-col gap-1 text-xs'>

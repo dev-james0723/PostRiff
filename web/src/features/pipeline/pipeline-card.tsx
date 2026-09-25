@@ -14,7 +14,9 @@ import { EASE_OUT } from '@/lib/ease';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { COLUMN_META, reviewExpired, toEpoch, type BoardCard, type CardChip, type ChipTone, type PipelineJob } from './board';
-import { isCancellable, jobBadge, stateWords, type JobBadge } from './job-state';
+import { jobStatus } from '@/features/queue/job-status';
+import { STATUS } from '@/lib/status-labels';
+import { isCancellable, stateWords, type JobBadge } from './job-state';
 
 export interface CardPermissions {
   canEdit: boolean;
@@ -43,13 +45,13 @@ export function scheduleGate(card: BoardCard, permissions: CardPermissions): Sch
   const variant = card.variant;
   const needsEditStep = Boolean(variant?.needsReview) || Boolean(variant?.unknowns.length) || Boolean(card.draft?.voiceStale || card.draft?.updateRequired);
   if (!permissions.canApprove) {
-    return { allowed: false, reason: 'Needs an approver to schedule', title: 'Scheduling prepares an exact review, which needs the approve permission.' };
+    return { allowed: false, reason: 'Needs an approver', title: 'Only approvers can schedule posts.' };
   }
   if (needsEditStep && !permissions.canEdit) {
     return {
       allowed: false,
-      reason: 'Needs an editor to prepare',
-      title: (card.draft?.voiceStale || card.draft?.updateRequired) ? 'A current voice revision must be prepared first, which needs the edit permission.' : 'The unknown details must be confirmed first, which needs the edit permission.'
+      reason: 'Needs an editor',
+      title: (card.draft?.voiceStale || card.draft?.updateRequired) ? 'An editor needs to update it to your current voice first.' : 'An editor needs to confirm its unknown details first.'
     };
   }
   return { allowed: true };
@@ -93,19 +95,19 @@ export const REVISION_ORIGIN: Record<string, string> = {
 export async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard.');
+    toast.success('Copied');
   } catch {
-    toast.error('Could not copy the text.');
+    toast.error('Couldn’t copy');
   }
 }
 
 /** The card's one status badge: the job's state, the review's state, or the draft's first situation. */
 export function cardBadge(card: BoardCard, now: number): JobBadge | null {
-  if (card.job) return jobBadge(card.job);
+  if (card.job) return jobStatus(card.job);
   if (card.review) {
     return reviewExpired(card.review, now)
-      ? { status: 'danger', label: 'expired', pulse: false, title: 'The approval deadline passed, so it can no longer be approved. Schedule… the draft again.' }
-      : { status: 'warning', label: 'needs approval', pulse: false, title: 'Approve this exact review in the Queue.' };
+      ? { status: 'danger', label: STATUS.expired, pulse: false, title: 'Not approved in time. Schedule the draft again.' }
+      : { status: 'warning', label: STATUS.needsReview, pulse: false, title: 'Approve it in the Queue.' };
   }
   const first = card.chips[0];
   if (card.kind === 'draft' && first) return { status: TONE_STATUS[first.tone], label: first.label, pulse: false, title: first.title };
@@ -133,17 +135,34 @@ export function cardWhen(card: BoardCard): string | null {
   }
   if (card.kind === 'review') {
     const at = toEpoch(card.review?.manifest.timing.utc);
-    return at ? `for ${formatDateTime(at)}` : null;
+    return at ? `posts ${relativeTime(at)}` : null;
   }
   const job = card.job;
   if (!job) return null;
   if (card.jobGroup === 'waiting') {
     const at = toEpoch(job.manifest.timing.utc);
-    return at ? `scheduled for ${formatDateTime(at)}` : null;
+    return at ? `posts ${relativeTime(at)}` : null;
   }
-  if (card.jobGroup === 'verified' && job.verification?.at) return `verified ${relativeTime(job.verification.at)}`;
+  if (card.jobGroup === 'verified' && job.verification?.at) return `published ${relativeTime(job.verification.at)}`;
   const last = job.events.at(-1);
   return last ? `${stateWords(last.state)} ${relativeTime(last.at)}` : null;
+}
+
+/** The exact time behind `cardWhen`'s relative one, for the tooltip. */
+function exactWhen(card: BoardCard): string | null {
+  const at =
+    card.kind === 'review'
+      ? toEpoch(card.review?.manifest.timing.utc)
+      : card.kind === 'job'
+        ? card.jobGroup === 'waiting'
+          ? toEpoch(card.job?.manifest.timing.utc)
+          : card.jobGroup === 'verified'
+            ? toEpoch(card.job?.verification?.at)
+            : toEpoch(card.job?.events.at(-1)?.at)
+        : card.kind === 'draft'
+          ? toEpoch(card.variant?.revisions?.at(-1)?.at)
+          : toEpoch(card.source?.createdAt);
+  return at ? formatDateTime(at) : null;
 }
 
 /** Tertiary text actions (DNA §9.2) with a visible focus ring and a comfortable hit area. */
@@ -209,16 +228,16 @@ function CardActionsRow({
   if (card.kind === 'review' && !readOnly) {
     items.push(
       card.footer ? (
-        <span key='queue' className='text-muted-foreground' title='The approval deadline passed. Schedule… the draft again to prepare a new review.'>
-          Can no longer be approved
+        <span key='queue' className='text-muted-foreground' title='Schedule the draft again.'>
+          Can’t be approved now
         </span>
       ) : canApprove ? (
         <Link key='queue' href='/app/queue' className={LINK_CLASS}>
-          Approve in the Queue
+          Review in Queue
         </Link>
       ) : (
         <span key='queue' className='text-muted-foreground'>
-          An approver must approve
+          Waiting for an approver
         </span>
       )
     );
@@ -319,7 +338,11 @@ export function PipelineCard({
               </AnimatedBadge>
             )}
           </div>
-          {meta && <p className='text-muted-foreground truncate text-xs'>{meta}</p>}
+          {meta && (
+            <p className='text-muted-foreground truncate text-xs' title={exactWhen(card) ?? undefined}>
+              {meta}
+            </p>
+          )}
           <p className='text-muted-foreground line-clamp-3 text-[13px] leading-relaxed break-words whitespace-pre-wrap'>{card.body}</p>
           {chips.length > 0 && (
             <ul className='relative flex flex-wrap gap-x-2 gap-y-0.5 text-xs' aria-label='Situation'>

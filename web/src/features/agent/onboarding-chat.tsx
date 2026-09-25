@@ -27,10 +27,10 @@ export function StartVoiceInterview() {
       await client.invalidateQueries({ queryKey: keys.conversations(workspaceId) });
       router.push(`/app/agent/${encodeURIComponent(conversation.conversationId)}`);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'The voice interview could not be started.');
+      toast.error(error instanceof ApiError ? error.message : 'Couldn’t start the voice interview.');
     } finally { setBusy(false); }
   }
-  return <Button variant='outline' size='sm' disabled={busy} onClick={() => void start()}>{busy ? 'Starting…' : 'Set up my voice in chat'}</Button>;
+  return <Button variant='outline' size='sm' disabled={busy} onClick={() => void start()}>{busy ? 'Starting…' : 'Set up voice in chat'}</Button>;
 }
 
 export function OnboardingAnswer({ message, conversationId, canEdit }: { message: Message; conversationId: string; canEdit: boolean }) {
@@ -47,7 +47,7 @@ export function OnboardingAnswer({ message, conversationId, canEdit }: { message
       await Promise.all([keys.messages(workspaceId, conversationId), keys.snapshot(workspaceId), keys.memory(workspaceId), keys.audit(workspaceId)].map(queryKey => client.invalidateQueries({ queryKey })));
       setAnswer('');
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'The answer could not be saved.');
+      toast.error(error instanceof ApiError ? error.message : 'Couldn’t save your answer.');
       if (error instanceof ApiError && error.status === 409) await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
     } finally { setBusy(false); }
   }
@@ -60,7 +60,7 @@ export function OnboardingAnswer({ message, conversationId, canEdit }: { message
       <Textarea aria-label={question.question} value={answer} maxLength={question.limit ?? 1500} onChange={event => setAnswer(event.target.value)} disabled={busy} />
       <div className='flex gap-2'><Button disabled={busy || !answer.trim()} onClick={() => void send(answer)}>Save answer</Button>{question.optional && <Button variant='ghost' disabled={busy} onClick={() => void send('')}>Skip sample</Button>}</div>
     </>}
-    <p className='text-muted-foreground text-xs'>Answers are saved in this workspace conversation. No model is called. Your current voice stays active until an owner approves the proposal.</p>
+    <p className='text-muted-foreground text-xs'>Saved in this chat without an AI call. Your voice changes only when an owner approves.</p>
     <Link href='/app' className='text-sm underline'>Return to drafting</Link>
   </section>;
 }

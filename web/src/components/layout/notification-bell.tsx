@@ -24,10 +24,10 @@ export function NotificationBell() {
         )}
       </PopoverTrigger>
       <PopoverContent align='end' className={cn(rafiiMenu, 'max-h-[70dvh] w-80 max-w-[calc(100vw-2rem)] gap-3 overflow-y-auto p-4')}>
-        <PopoverTitle className='text-foreground text-sm font-medium'>Needs your attention</PopoverTitle>
-        {attention.loading && <StateMessage kind='loading' layout='inline' title='Loading current status…' />}
-        {attention.unavailable.length > 0 && <StateMessage kind='partial' layout='inline' title='Some status is unavailable.' description='Open the Overview to retry.' />}
-        {readable && attention.items.length === 0 && <StateMessage kind='empty' layout='inline' title='Nothing needs your attention right now.' />}
+        <PopoverTitle className='text-foreground text-sm font-medium'>Needs attention</PopoverTitle>
+        {attention.loading && <StateMessage kind='loading' layout='inline' title='Loading…' />}
+        {attention.unavailable.length > 0 && <StateMessage kind='partial' layout='inline' title='Some updates couldn’t load.' description='Open Overview to try again.' />}
+        {readable && attention.items.length === 0 && <StateMessage kind='empty' layout='inline' title='All caught up' />}
         {attention.items.map((item) => (
           <Link
             key={item.id}

@@ -126,12 +126,12 @@ function editSteps(variant: SnapshotVariant | undefined, activeVoice: number | n
   const steps = { updateWaiting: Boolean(update), usesUpdate, unknowns, warnings, confirmUnknowns };
   if (canEdit) return { ...steps, needsEditor: [], blocked: false };
   const needsEditor: string[] = [];
-  if (acceptRequired) needsEditor.push('accept the version written with your current voice profile');
+  if (acceptRequired) needsEditor.push('accept the updated version');
   if (confirmUnknowns) {
     needsEditor.push(
       unknowns.length > 0
-        ? `confirm ${unknowns.length === 1 ? 'its unknown detail stays' : `its ${unknowns.length} unknown details stay`} out of the draft`
-        : 'confirm the draft is reviewed as written'
+        ? `confirm ${unknowns.length === 1 ? 'its unknown detail stays' : `its ${unknowns.length} unknown details stay`} out`
+        : 'confirm the draft as written'
     );
   }
   return { ...steps, needsEditor, blocked: needsEditor.length > 0 };
@@ -222,7 +222,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         current = reviewed.state.variants?.find((v) => v.id === current.id) ?? current;
       }
       // 3. Freeze text, media, account and time into a review.
-      const result = await act.mutateAsync({
+      await act.mutateAsync({
         revision: currentRevision,
         action: 'p2_review',
         payload: {
@@ -237,18 +237,18 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           fold: askFold ? fold : undefined
         }
       });
-      const created = result.state.phase2?.reviews.at(-1);
-      toast.success(created ? 'Review prepared. Approve it in the Queue to schedule.' : 'Review prepared.');
+      // The Queue (or the Calendar) shows the new review; a short toast says where it went.
+      toast.success('Ready for review');
       onOpenChange(false);
       if (onPrepared) onPrepared();
       else if (pathname !== '/app/queue') router.push('/app/queue');
     } catch (err) {
       if (err instanceof ApiError && /occurs twice/i.test(err.message)) {
         setServerAsksFold(true);
-        toast.error('This time happens twice that day because clocks change. Choose the first or second occurrence, then prepare the review again.');
+        toast.error('This time happens twice that day. Pick one, then try again.');
         return;
       }
-      toast.error(err instanceof ApiError ? err.message : 'The review could not be prepared.');
+      toast.error('Couldn’t prepare this post', { description: err instanceof ApiError ? err.message : undefined });
     }
   }
 
@@ -257,15 +257,18 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
           <DialogTitle className='text-lg font-medium tracking-tight'>Schedule a draft</DialogTitle>
-          <DialogDescription>Choose the draft, the account and the exact time. This prepares a review; nothing publishes until you approve it.</DialogDescription>
+          <DialogDescription>Nothing publishes until you approve it.</DialogDescription>
         </DialogHeader>
         {!state ? (
           // Without the workspace there is nothing to choose from yet, and no reason to ask for a voice profile.
           snapshot.isError ? (
             <div className='flex flex-col items-start gap-2 text-sm'>
-              <p>The workspace could not be loaded{snapshot.error instanceof ApiError ? `: ${snapshot.error.message}` : '.'}</p>
+              <p>
+                Couldn’t load your drafts
+                {snapshot.error instanceof ApiError && <span className='text-muted-foreground block text-xs'>{snapshot.error.message}</span>}
+              </p>
               <Button variant='glass' size='control' className='h-11' onClick={() => void snapshot.refetch()}>
-                Retry
+                Try again
               </Button>
             </div>
           ) : (
@@ -279,16 +282,17 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         <div className='flex flex-col gap-4'>
           {!voiceActive && (
             <Note className='text-sm'>
-              No voice profile is active. You can continue; review the wording carefully.{' '}
+              No voice profile yet. Check the wording.{' '}
               <Link href='/app/workspace/brand' onClick={() => onOpenChange(false)} className='text-foreground underline underline-offset-2'>
                 Set up your voice
-              </Link>{' '}
-              to guide future drafts.
+              </Link>
             </Note>
           )}
-          {!canPrepare && <Note>Preparing a review is for the owner, approvers and members who can approve publications. Ask one of them to schedule this draft.</Note>}
+          {!canPrepare && <Note>Only approvers can schedule posts.</Note>}
           {staleDrafts > 0 && (
-            <p className='text-muted-foreground text-xs'>{staleDrafts} draft{staleDrafts === 1 ? '' : 's'} were written before your current voice profile and cannot be scheduled; draft them again from Ideas.</p>
+            <p className='text-muted-foreground text-xs'>
+              {staleDrafts} draft{staleDrafts === 1 ? ' uses' : 's use'} an older voice and can’t be scheduled.
+            </p>
           )}
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='schedule-draft'>Draft</Label>
@@ -298,7 +302,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 <SelectValue>{variant ? `${variant.platform} · ${languageLabel(variant.language)} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {drafts.length === 0 && <SelectItem value='__none' disabled>No drafts yet — add candidates from Ideas</SelectItem>}
+                {drafts.length === 0 && <SelectItem value='__none' disabled>No drafts yet</SelectItem>}
                 {drafts.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
                     <span className='flex items-center gap-2'>
@@ -309,28 +313,19 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 ))}
               </SelectContent>
             </Select>
-            {steps.updateWaiting && canEdit && (
-              <p className='text-muted-foreground text-xs'>A version written with your current voice profile is waiting; it will be accepted as the draft text when you prepare the review.</p>
-            )}
-            {steps.updateWaiting && !canEdit && !steps.blocked && (
-              <p className='text-muted-foreground text-xs'>
-                A version written with your current voice profile is waiting for someone who can edit drafts to accept it. This review uses the draft as it is now.
-              </p>
-            )}
+            {steps.updateWaiting && canEdit && <p className='text-muted-foreground text-xs'>Uses the updated version in your current voice.</p>}
+            {steps.updateWaiting && !canEdit && !steps.blocked && <p className='text-muted-foreground text-xs'>Uses the draft as it is; an editor can accept the update.</p>}
             {canPrepare && steps.blocked && (
               // Accepting a version and confirming unknowns are edits, which this person cannot make; nothing is sent.
-              <Note role='status'>
-                Before this draft can be scheduled, someone who can edit drafts (the owner, an admin or an editor) needs to {steps.needsEditor.join(' and ')}. Ask
-                one of them, then prepare the review.
-              </Note>
+              <Note role='status'>An editor needs to {steps.needsEditor.join(' and ')} first.</Note>
             )}
             {variant && canEdit && steps.confirmUnknowns && (
               <Label className='flex items-start gap-2 text-xs font-normal'>
                 <Checkbox checked={resolveUnknowns} onCheckedChange={(v) => setResolveUnknowns(v === true)} />
                 <span>
                   {steps.unknowns.length > 0
-                    ? `Confirm the ${steps.unknowns.length} unknown${steps.unknowns.length === 1 ? ' stays' : 's stay'} out of the draft (required before review)`
-                    : 'Confirm this draft is reviewed as written (required before review)'}
+                    ? `Leave out ${steps.unknowns.length === 1 ? 'the unknown detail' : `the ${steps.unknowns.length} unknown details`} (required)`
+                    : 'Confirm the draft as written (required)'}
                 </span>
               </Label>
             )}
@@ -359,14 +354,15 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 Connect a {variant.platform} account
               </Link>
             )}
-            {channel && <p className='text-muted-foreground text-xs'>{publishingSupport(channel.platform)}</p>}
-            {channel?.displayState && channel.displayState !== 'Ready for posting' && (
+            {channel?.displayState && channel.displayState !== 'Ready for posting' ? (
               <Note>
-                This account shows “{channel.displayState}”. A review can only be prepared for an account that is ready for posting.{' '}
+                Not ready to post ({channel.displayState}).{' '}
                 <Link href='/app/channels' className='text-foreground underline underline-offset-2' onClick={() => onOpenChange(false)}>
                   Open Channels
                 </Link>
               </Note>
+            ) : (
+              channel && <p className='text-muted-foreground text-xs'>{publishingSupport(channel.platform)}</p>
             )}
           </div>
 
@@ -384,8 +380,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 }}
               />
               <span className='text-muted-foreground text-xs'>{timeZone}</span>
-              {timePassed && <Note>This time has already passed. Reviews are prepared for a future time.</Note>}
-              {wallTime.kind === 'gap' && <Note>Clocks skip this time in {timeZone}. Choose a time before or after the change.</Note>}
+              {timePassed && <Note>Pick a future time.</Note>}
+              {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-asset'>Image (optional)</Label>
@@ -411,14 +407,13 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                   );
                 })}
               </RadioGroup>
-              <span className='text-muted-foreground text-xs'>Clocks go back in {timeZone}, so the review needs to know which one you mean.</span>
             </div>
           )}
 
           {asset && (
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-alt'>Alt text</Label>
-              <Input id='schedule-alt' className='text-base md:text-sm' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Describe the image for people who cannot see it' />
+              <Input id='schedule-alt' className='text-base md:text-sm' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Hands on piano keys under a warm light' />
             </div>
           )}
 

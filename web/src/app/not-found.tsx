@@ -34,10 +34,9 @@ export default function NotFound() {
             ))}
           </div>
           <div className='flex flex-col items-center gap-2'>
-            <h1 className='text-foreground text-[1.625rem] leading-[1.15] font-medium tracking-[-0.02em] text-balance md:text-[1.875rem]'>This page does not exist</h1>
+            <h1 className='text-foreground text-[1.625rem] leading-[1.15] font-medium tracking-[-0.02em] text-balance md:text-[1.875rem]'>Page not found</h1>
             <p className='text-muted-foreground max-w-sm text-sm leading-relaxed text-pretty'>
-              The link may be out of date, or the page may have moved. Try the channel list or head
-              back to the start.
+              The link may be out of date.
             </p>
           </div>
           <div className='flex flex-wrap items-center justify-center gap-3'>

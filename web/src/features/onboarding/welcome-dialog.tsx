@@ -8,9 +8,9 @@ import { cn } from '@/lib/utils';
 import { WelcomeClip } from './welcome-clip';
 
 const POINTS: { icon: keyof typeof Icons; text: string }[] = [
-  { icon: 'sparkles', text: 'Say what you want to put out: a topic, a link, your notes. Drafts come back in your voice, one per channel.' },
-  { icon: 'shieldCheck', text: 'You approve the exact text, media and time. Nothing publishes on its own.' },
-  { icon: 'broadcast', text: 'Every channel shows what it can really do, capability by capability, with the evidence.' }
+  { icon: 'sparkles', text: 'Say what you want to post. Drafts come back in your voice.' },
+  { icon: 'shieldCheck', text: 'You approve every post. Nothing publishes on its own.' },
+  { icon: 'broadcast', text: 'Each channel shows what it can really do.' }
 ];
 
 /**
@@ -26,7 +26,7 @@ export function WelcomeDialog({ open, onStart, onDismiss }: { open: boolean; onS
           <DialogTitle className='text-foreground text-xl font-medium tracking-tight'>
             Welcome to <em className='rafii-serif'>Rafii</em>
           </DialogTitle>
-          <DialogDescription className='leading-relaxed'>Three things worth knowing before you write anything.</DialogDescription>
+          <DialogDescription className='leading-relaxed'>Three things to know.</DialogDescription>
         </DialogHeader>
         <WelcomeClip />
         <ul className='flex flex-col gap-3'>
@@ -47,7 +47,7 @@ export function WelcomeDialog({ open, onStart, onDismiss }: { open: boolean; onS
             Not now
           </Button>
           <Button variant='action' size='control' onClick={onStart}>
-            Take the two-minute tour
+            Take the tour
             <Icons.chevronRight className='size-4' />
           </Button>
         </DialogFooter>

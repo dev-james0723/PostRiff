@@ -17,10 +17,10 @@ function BatchesLeft() {
   const usage = useUsage();
   if (usage.isLoading) return <span aria-hidden className='t-skel-pulse bg-muted inline-block h-4 w-24 rounded-md align-middle' />;
   const remaining = usage.data?.entitlement?.writingBatchesRemaining;
-  if (typeof remaining !== 'number') return <span>Writing batches left: unavailable</span>;
+  if (typeof remaining !== 'number') return null;
   return (
     <span>
-      {formatNumber(remaining)} writing batch{remaining === 1 ? '' : 'es'} left this period
+      {formatNumber(remaining)} writing batch{remaining === 1 ? '' : 'es'} left
     </span>
   );
 }
@@ -57,8 +57,7 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
         <StateMessage
           kind='error'
           layout='inline'
-          title='Unavailable'
-          description='The writer list could not be loaded, so this page cannot say which writer Home will use.'
+          title='Couldn’t load writers'
           action={
             <Button variant='glass' size='sm' className='min-h-9' onClick={onRetry}>
               <Icons.refresh className='size-3.5' /> Retry
@@ -68,10 +67,10 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
       );
     }
     if (!option && saved && options.length > 0) {
-      return <StateMessage kind='stale' layout='inline' title={`Your saved writer (${shortLabel(undefined, saved)}) is not offered here`} description='Choose another writer below. Drafting waits until you do; nothing is switched for you.' />;
+      return <StateMessage kind='stale' layout='inline' title={`${shortLabel(undefined, saved)} isn’t available`} description='Drafting waits until you choose another writer below. Nothing is switched for you.' />;
     }
     if (!option) {
-      return <StateMessage kind='empty' layout='inline' title='No writer listed' description='This deployment returned no writers. Drafting cannot start until one is listed.' />;
+      return <StateMessage kind='empty' layout='inline' title='No writer available' description='Drafting can’t start until one is. Try Check again.' />;
     }
 
     const kind = routeKind(option, agents);
@@ -85,16 +84,11 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
           {!option.qualified && <Badge variant='secondary'>Not available</Badge>}
         </div>
         <p className='text-muted-foreground flex flex-wrap gap-x-2 text-sm'>
-          <span>{option.costClass === 'none' ? 'No model request · $0' : option.costClass === 'subscription' ? 'Your CLI subscription pays · PostRiff records $0' : cost.line}</span>
-          {option.costClass === 'paid' && (
-            <>
-              <span aria-hidden>·</span>
-              <BatchesLeft />
-            </>
-          )}
+          <span>{option.costClass === 'none' ? 'Free' : option.costClass === 'subscription' ? 'Paid by your CLI subscription' : cost.line}</span>
+          {option.costClass === 'paid' && <BatchesLeft />}
         </p>
-        {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} description='Choose another writer below. Drafting waits until you do; nothing is switched for you.' />}
-        <p className='text-muted-foreground text-xs leading-relaxed'>Used by Home and every conversation. Saved in this browser only, so another browser or device can have a different writer.</p>
+        {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} description='Drafting waits until you choose another writer below. Nothing is switched for you.' />}
+        <p className='text-muted-foreground text-xs leading-relaxed'>Used for all drafts. Saved in this browser only.</p>
       </div>
     );
   };

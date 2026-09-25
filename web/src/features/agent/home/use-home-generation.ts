@@ -128,7 +128,7 @@ export function useHomeGeneration(restoreRunId: string | null = null) {
         ]);
         return result;
       } catch (err) {
-        if (gate.alive() && mine === ticket.current) setError(err instanceof Error ? err.message : 'The drafts could not be started.');
+        if (gate.alive() && mine === ticket.current) setError(err instanceof Error ? err.message : 'Check your connection and try again.');
         return null;
       } finally {
         gate.leave();
@@ -143,7 +143,7 @@ export function useHomeGeneration(restoreRunId: string | null = null) {
     try {
       await api.cancelRun(workspaceId, run.runId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The run could not be cancelled.');
+      setError(err instanceof ApiError ? err.message : 'Couldn’t cancel the drafts.');
     }
   }, [api, run, workspaceId]);
 
@@ -205,7 +205,7 @@ export function useHomeGeneration(restoreRunId: string | null = null) {
       setSeed((value) => (value ? { ...value, status: 'applied' } : value));
       await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The drafts could not be saved.');
+      setError(err instanceof Error ? err.message : 'Couldn’t save the drafts.');
     } finally {
       saveLock.current = false;
       setSaving(false);

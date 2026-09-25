@@ -128,7 +128,7 @@ const draftsReady=page=>page.waitForFunction(()=>/ready · yours to edit/.test(d
    await card.getByRole('button',{name:'Pause'}).click();await card.getByRole('button',{name:'Resume'}).waitFor();
    await card.getByRole('button',{name:'Resume'}).click();await card.getByRole('button',{name:'Pause'}).waitFor();
    await card.getByRole('button',{name:'Cancel automation'}).click();
-   const confirm=page.getByRole('dialog').filter({hasText:'No further drafts will be prepared'});await confirm.waitFor();
+   const confirm=page.getByRole('dialog').filter({hasText:'No more drafts will be prepared'});await confirm.waitFor();
    await confirm.getByRole('button',{name:'Cancel automation'}).click();await confirm.waitFor({state:'hidden'});
    await page.reload();await page.getByRole('heading',{name:'Automations',level:1}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -153,9 +153,9 @@ const draftsReady=page=>page.waitForFunction(()=>/ready · yours to edit/.test(d
    await sampleRow.getByRole('button',{name:'Allow this writer to use style'}).click();
    await sampleRow.getByText(/Allowed for.*generation/).waitFor();
    await page.reload();await page.getByText(sample,{exact:true}).waitFor();
-   await hydrated(page,page.getByRole('button',{name:'Describe local writing statistics',exact:true}));
-   await page.getByRole('button',{name:'Describe local writing statistics',exact:true}).click();
-   await page.getByText('A provisional voice profile is ready for review. It is not active yet.',{exact:true}).waitFor();
+   await hydrated(page,page.getByRole('button',{name:'Analyse locally',exact:true}));
+   await page.getByRole('button',{name:'Analyse locally',exact:true}).click();
+   await page.getByText('Voice proposal ready for review.',{exact:true}).waitFor();
    await sampleRow.getByRole('button',{name:'Revoke & remove text',exact:true}).click();
    await sampleRow.getByRole('button',{name:'Confirm revoke',exact:true}).click();
    await page.waitForFunction(text => ![...document.querySelectorAll('p,blockquote')].some(el => el.textContent === text),sample);

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Switch } from '@/components/motion/switch';
-import { StateMessage } from '@/components/rafii';
+import { InfoTip, StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Band, Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import { ApiError } from '@/lib/api/client';
@@ -52,22 +52,17 @@ export function LearningPanel() {
 
   const update = useMutation({
     mutationFn: (input: { id: string; status: 'active' | 'paused' | 'retired' }) => api.updateLearnedItem(workspaceId, input.id, input.status, revision),
-    onSuccess: (_result, input) => {
-      invalidate('snapshot', 'memory', 'memoryProposals');
-      toast.success(input.status === 'paused' ? 'Paused. It stays here but leaves your drafts.' : input.status === 'active' ? 'Back in your drafts.' : 'Retired.');
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The change could not be saved.')
+    // The list shows the new state (struck through when paused, gone when retired); no toast.
+    onSuccess: () => invalidate('snapshot', 'memory', 'memoryProposals'),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Couldn’t save. Try again.')
   });
 
   function setEnabled(enabled: boolean) {
     act.mutate(
       { revision, action: 'learning_settings', payload: { enabled } },
       {
-        onSuccess: () => {
-          invalidate('memory', 'memoryProposals');
-          toast.success(enabled ? 'Rafii learns from what you tell it and how you edit again.' : 'Learning is off. Nothing new is recorded or proposed.');
-        },
-        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
+        onSuccess: () => invalidate('memory', 'memoryProposals'),
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Couldn’t save the setting.')
       }
     );
   }
@@ -76,15 +71,8 @@ export function LearningPanel() {
     act.mutate(
       { revision, action: 'learning_settings', payload: { cloudExtraction } },
       {
-        onSuccess: () => {
-          invalidate('memory', 'memoryProposals');
-          toast.success(
-            cloudExtraction
-              ? 'Cloud extraction permission is on. The configured extractor and memory sharing determine whether a model reads edit pairs.'
-              : 'Cloud extraction permission is off. Counting rules can still run. Claude CLI also needs cloud permission.'
-          );
-        },
-        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
+        onSuccess: () => invalidate('memory', 'memoryProposals'),
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Couldn’t save the setting.')
       }
     );
   }
@@ -93,11 +81,8 @@ export function LearningPanel() {
     act.mutate(
       { revision, action: 'learning_settings', payload: { teamEdits } },
       {
-        onSuccess: () => {
-          invalidate('memory', 'memoryProposals');
-          toast.success(teamEdits ? 'Edits by every member now count as evidence.' : 'Only owners’ edits count as evidence now.');
-        },
-        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The setting could not be saved.')
+        onSuccess: () => invalidate('memory', 'memoryProposals'),
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Couldn’t save the setting.')
       }
     );
   }
@@ -109,10 +94,10 @@ export function LearningPanel() {
         onSuccess: () => {
           setConfirmReset(false);
           invalidate('memory', 'memoryProposals');
-          toast.success('Forgotten. Learned preferences, proposals and the edit history are gone.');
+          toast.success('Learned preferences forgotten');
         },
         onSettled: () => setResetEpoch((value) => value + 1),
-        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The reset could not be saved.')
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Couldn’t reset. Try again.')
       }
     );
   }
@@ -126,16 +111,9 @@ export function LearningPanel() {
         <span className='flex flex-wrap items-center gap-2'>
           Learned preferences
           {learning && <StatusChip icon={learning.enabled ? 'sparkles' : 'pause'}>{learning.enabled ? `${listed.filter((i) => i.status === 'active').length} in your drafts` : 'Learning off'}</StatusChip>}
-          {learning && learning.revision > 0 && <StatusChip icon={null}>style rev {learning.revision}</StatusChip>}
         </span>
       }
-      description={
-        <>
-          When you tell the agent how to write, or your edits show a pattern, Rafii proposes a preference. Nothing changes until you accept it, a preference is about form only (length, openings, hashtags, how a post closes), and it shapes future drafts
-          without touching anything already scheduled.
-          <span className='mt-1 block text-xs'>{isOwner ? 'You decide proposals and can pause, retire or forget any of them.' : 'Only an owner can decide proposals or change these.'}</span>
-        </>
-      }
+      description={`Rafii suggests writing preferences from what you say and how you edit. ${isOwner ? 'You decide.' : 'An owner decides.'}`}
       actions={learning && <Switch checked={learning.enabled} disabled={!isOwner || busy} onCheckedChange={setEnabled} ariaLabel='Learn from what I say and how I edit' label='Learn' />}
     >
       {learning && learning.enabled && (
@@ -145,9 +123,13 @@ export function LearningPanel() {
               <span className='text-foreground text-sm font-medium'>Learn with a cloud model</span>
               <StatusChip status={learning.cloudExtraction && cloudAccess ? 'success' : 'neutral'}>{learning.cloudExtraction && cloudAccess ? 'On' : 'Off'}</StatusChip>
             </div>
-            <p className='text-muted-foreground max-w-prose text-sm leading-relaxed'>
-              Counting rules read your edits. This permits a configured cloud extractor to read redacted before/after pairs, only for drafts whose sources allow cloud use. Claude CLI sends text to a cloud provider and needs the same permission.
-              {!cloudAccess ? ' It needs “Cloud model access” above to be on.' : ''}
+            <p className='text-muted-foreground flex max-w-prose items-center text-sm leading-relaxed'>
+              {cloudAccess ? 'A cloud model may read redacted edits.' : 'Needs Cloud model access on first.'}
+              <InfoTip
+                label='About learning with a cloud model'
+                className='-my-3'
+                description='Counting rules always read your edits locally. On, a cloud model may also read redacted before/after pairs, only for drafts whose sources allow cloud use. Claude CLI sends text to the cloud and needs this too.'
+              />
             </p>
           </div>
           <Switch checked={learning.cloudExtraction} disabled={!isOwner || busy || !cloudAccess} onCheckedChange={setCloudExtraction} ariaLabel='Learn from my edits with a cloud model' label='Allow' />
@@ -161,27 +143,26 @@ export function LearningPanel() {
               <span className='text-foreground text-sm font-medium'>Learn from teammates’ edits</span>
               <StatusChip status={learning.teamEdits ? 'success' : 'neutral'}>{learning.teamEdits ? 'On' : 'Owners only'}</StatusChip>
             </div>
-            <p className='text-muted-foreground max-w-prose text-sm leading-relaxed'>Until this is on, only an owner’s edits and approvals count as evidence for a proposal. What anyone says to the agent is always proposed to you.</p>
+            <p className='text-muted-foreground max-w-prose text-sm leading-relaxed'>Count every member’s edits as evidence, not only owners’.</p>
           </div>
           <Switch checked={learning.teamEdits} disabled={!isOwner || busy} onCheckedChange={setTeamEdits} ariaLabel='Count teammates’ edits as evidence' label='Allow' />
         </Band>
       )}
 
       {proposals.isLoading && <StateMessage kind='loading' title='Loading learned preferences…' />}
-      {!proposals.data && proposals.isError && <Unavailable message='Learned preferences are unavailable right now.' query={proposals} />}
+      {!proposals.data && proposals.isError && <Unavailable message='Couldn’t load learned preferences.' query={proposals} />}
       {proposals.data && proposals.isRefetchError && <StaleNotice query={proposals} />}
 
       {latest && (
         <p className='text-muted-foreground text-xs leading-relaxed'>
-          {latest.styleRevision > 0 ? `Since style rev ${latest.styleRevision}: ` : 'Before any learned preference: '}
-          {latest.approvals} approved draft{latest.approvals === 1 ? '' : 's'}, {pct(latest.meanEditDistance)} of the text changed before approval on average, {pct(latest.uneditedShare)} approved untouched
-          {previous ? ` (rev ${previous.styleRevision}: ${pct(previous.meanEditDistance)} changed, ${pct(previous.uneditedShare)} untouched)` : ''}
-          {latest.approvals < 5 ? ' · small sample' : ''}.
+          {latest.approvals} approval{latest.approvals === 1 ? '' : 's'} · {pct(latest.meanEditDistance)} edited on average · {pct(latest.uneditedShare)} untouched
+          {previous ? <span className='hidden md:inline'>{` (before: ${pct(previous.meanEditDistance)} edited, ${pct(previous.uneditedShare)} untouched)`}</span> : ''}
+          {latest.approvals < 5 ? ' · small sample' : ''}
         </p>
       )}
 
       {learning && listed.length === 0 && pending.length === 0 && !proposals.isLoading && (
-        <StateMessage kind='empty' layout='inline' title='Nothing learned yet.' description='Try telling the agent “from now on, no hashtags on Instagram”.' />
+        <StateMessage kind='empty' layout='inline' title='Nothing learned yet' description='Try: “From now on, no hashtags on Instagram.”' />
       )}
 
       {listed.length > 0 && (

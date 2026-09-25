@@ -15,7 +15,7 @@ def unsupported_matrix():
     return {name: {"level": "Unsupported", "evidence": "", "verifiedAt": None, "capabilityVersion": 0} for name in CAPABILITIES}
 
 
-def assisted_matrix(reason="Native drafting and export only; PostRiff does not claim execution."):
+def assisted_matrix(reason="Rafii prepares the post; you publish it."):
     matrix = unsupported_matrix()
     matrix["publish"] = {"level": "Assisted", "evidence": reason, "verifiedAt": None, "capabilityVersion": 0}
     return matrix

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "format": "oxfmt --write . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
+    "audit:copy": "node scripts/copy-audit.mjs",
     "test:browser:durable": "node tests/consumer-durable-browser.cjs"
   },
   "dependencies": {

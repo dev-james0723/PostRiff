@@ -344,7 +344,7 @@ async function build(browser) {
 
     // Cancel needs a confirmation and moves it to the cancelled list.
     await card(page).getByRole('button', { name: 'Cancel automation' }).click();
-    const confirm = page.getByRole('dialog').filter({ hasText: 'No further drafts will be prepared' });
+    const confirm = page.getByRole('dialog').filter({ hasText: 'No more drafts will be prepared' });
     await confirm.waitFor();
     await shot(page, dir, '10-cancel-confirm');
     await confirm.getByRole('button', { name: 'Cancel automation' }).click();
@@ -462,7 +462,7 @@ async function triggers(browser) {
         const pressed = async (name) => (await builder.getByRole('button', { name, exact: true }).getAttribute('aria-pressed')) === 'true';
         check('trigger: ideas, notes and links start a run; documents do not', (await pressed('Ideas')) && (await pressed('Notes')) && (await pressed('Links')) && !(await pressed('Documents')));
         check('trigger: no time to pick', (await builder.getByLabel('At', { exact: true }).count()) === 0);
-        check('trigger: summary names the daily limit', /When you add a new idea, note or link to Ideas · up to 3 runs a day/.test(await builder.innerText()), (await builder.innerText()).slice(0, 400));
+        check('trigger: summary names the daily limit', /New idea, note or link in Ideas · up to 3 runs a day/.test(await builder.innerText()), (await builder.innerText()).slice(0, 400));
         await shot(page, dir, '01-trigger-when');
       }
       await builder.getByRole('tab', { name: /Where/ }).click();
@@ -583,7 +583,7 @@ async function chat(browser) {
     await thread.waitFor({ timeout: 120000 });
     check('the conversation shows the request and the reply', await page.getByText(request).first().isVisible() && /Every Tuesday at 09:00/.test(await thread.innerText()));
     await thread.getByRole('button', { name: 'Undo' }).click();
-    await page.getByText('Automation cancelled.').first().waitFor({ timeout: 30000 });
+    await page.getByText('Automation cancelled').first().waitFor({ timeout: 30000 });
     await thread.getByText('Cancelled', { exact: true }).waitFor({ timeout: 30000 });
     const after = (await snapshot(page)).raffi?.campaignPlanning?.recurringTasks?.find((item) => item.id === reply.automation?.taskId);
     check('Undo cancels it', after?.status === 'cancelled', after?.status);

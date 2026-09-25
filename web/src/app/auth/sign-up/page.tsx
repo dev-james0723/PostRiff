@@ -4,7 +4,7 @@ import { AuthForm } from '@/components/auth/auth-form';
 
 export const metadata: Metadata = {
   title: 'Start your free trial',
-  description: 'Create a PostRiff workspace. 14-day trial, no card required.',
+  description: 'Create a Rafii workspace. 14-day trial, no card required.',
   robots: { index: false }
 };
 

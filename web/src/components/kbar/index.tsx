@@ -35,7 +35,6 @@ export default function KBar({ children }: { children: React.ReactNode }) {
               shortcut: navItem.shortcut,
               keywords: navItem.title.toLowerCase(),
               section: 'Navigation',
-              subtitle: `Go to ${navItem.title}`,
               perform: () => navigateTo(navItem.url)
             }
           : null;
@@ -48,7 +47,6 @@ export default function KBar({ children }: { children: React.ReactNode }) {
           shortcut: childItem.shortcut,
           keywords: childItem.title.toLowerCase(),
           section: navItem.title,
-          subtitle: `Go to ${childItem.title}`,
           perform: () => navigateTo(childItem.url)
         })) ?? [];
 
@@ -80,7 +78,7 @@ function useHelpActions() {
         name: 'Take the tour',
         keywords: 'help tour onboarding tutorial guide walkthrough',
         section: 'Help',
-        subtitle: 'A two-minute walk through the app',
+        subtitle: 'Two minutes',
         perform: () => tourStore.start('welcome')
       },
       {
@@ -88,7 +86,7 @@ function useHelpActions() {
         name: 'Reset tips',
         keywords: 'help tips tour reset onboarding show again',
         section: 'Help',
-        subtitle: 'Show the welcome and page tips again',
+        subtitle: 'Show tips again',
         perform: () => tourStore.reset()
       },
       ...(pageTour

@@ -8,14 +8,14 @@ import { runLabel, timeLabel } from './schedule';
 export const POLICY_TEXT: Record<'auto' | 'review' | 'drafts' | 'unset', { label: string; detail: string }> = {
   auto: {
     label: 'Publishes automatically',
-    detail: 'Drafts that pass every safety check publish at their time. A post that does not is held for your approval, with the reason.'
+    detail: 'Posts that pass every safety check publish at their time. Others wait for your approval, with the reason.'
   },
   review: {
     label: 'Waits for your approval',
-    detail: 'Nothing publishes until someone who can approve posts approves that exact draft. Silence never approves.'
+    detail: 'Nothing publishes until someone approves that exact draft.'
   },
-  drafts: { label: 'Drafts only', detail: 'Rafii prepares drafts; nothing is published. Schedule the ones you like yourself.' },
-  unset: { label: 'Not chosen yet', detail: 'Answer Rafii in chat: publish automatically, wait for your approval, or just prepare drafts.' }
+  drafts: { label: 'Drafts only', detail: 'Nothing is published. Schedule the drafts you like yourself.' },
+  unset: { label: 'Not chosen yet', detail: 'Tell Rafii in chat: publish automatically, wait for approval, or drafts only.' }
 };
 
 export function policyText(policy: string | null | undefined): { label: string; detail: string } {

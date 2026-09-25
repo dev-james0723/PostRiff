@@ -22,29 +22,23 @@ const infoContent: InfobarContent = {
   sections: [
     {
       title: 'What it records',
-      description:
-        'People joining, leaving and changing roles; ownership transfers; invitations; channels connected, re-checked and disconnected; data exports; the cloud memory and web research choices; billing checkouts; and approved replies. Each row says who, what and when.'
+      description: 'Members, roles and ownership; invitations; channel connections; data exports; privacy choices; billing checkouts; approved replies.'
     },
     {
-      title: 'Not recorded here yet',
-      description: 'Post approvals, cancellations and publishing results. The Queue shows where each post stands.'
+      title: 'Not here yet',
+      description: 'Post approvals and publishing results. The Queue shows where each post stands.'
     },
     {
-      title: 'Content-free by design',
-      description: 'Events carry ids, kinds, counts and times — never post text, prompts, access tokens or email addresses. They cannot be edited.'
-    },
-    {
-      title: 'How much this page shows',
-      description: `The newest ${AUDIT_API_LIMIT} events. Counts and filters cover what is loaded, and the line under the filters says how far back that reaches.`
+      title: 'Never the content',
+      description: 'Events hold ids, kinds, counts and times — never post text, prompts, tokens or email addresses. They can’t be edited.'
     },
     {
       title: 'People',
-      description:
-        '"You" marks your own actions. Other members appear by the name on their profile, or by their role and the start of their id if they have not set one. The log itself stores ids; names and roles come from today’s member list. Sign-ins and two-factor changes stay on each person’s own Profile page.'
+      description: 'Names and roles come from today’s member list. Sign-ins and two-factor changes stay on each person’s Profile.'
     },
     {
       title: 'Retention',
-      description: 'Kept for the life of the workspace. Deleting the workspace deletes its log.'
+      description: `Kept for the life of the workspace. This page shows the newest ${AUDIT_API_LIMIT} events.`
     }
   ]
 };
@@ -198,7 +192,6 @@ export function AuditView() {
       <div data-tour='audit-title' className='min-w-0'>
         <PageHeader
           title='Audit log'
-          description='Who did what in this workspace, newest first. Never the content itself.'
           infoContent={infoContent}
           actions={
             <Button variant='glass' size='control' onClick={refresh} disabled={!loaded && !audit.isError} aria-label='Refresh the audit log'>
@@ -229,10 +222,10 @@ export function AuditView() {
         {loaded && lookupsFailed && (
           <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs'>
             {members.isError && channels.isError
-              ? 'Member names, roles and channel names could not be read, so some rows show less.'
+              ? 'Couldn’t load member and channel names.'
               : members.isError
-                ? 'Member names and roles could not be read, so people show as the start of their id.'
-                : 'Channel names could not be read, so some channel rows name only the provider.'}
+                ? 'Couldn’t load member names.'
+                : 'Couldn’t load channel names.'}
             <Button variant='link' size='xs' className='text-foreground h-auto px-0' onClick={refresh}>
               Try again
             </Button>

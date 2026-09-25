@@ -105,27 +105,21 @@ export function DeleteCard({
     <SettingsSection
       id='privacy-delete'
       title='Delete account'
-      description='Removes this workspace, its media, its memberships and your sign-in. A deletion receipt and a trial record stay, so the trial cannot be restarted. Cancel any renewing subscription and transfer other workspace ownership first.'
+      description='Permanently removes this workspace, its media, its memberships and your sign-in. A receipt and a trial record stay, so the trial can’t restart. Cancel any renewing subscription and transfer your other workspaces first.'
       bodyClassName='gap-5'
       data-tour='privacy-delete'
     >
       {Boolean(snapshot.data?.state.accountDeletion) && (
-        <StateMessage kind='partial' layout='inline' title='Deletion is pending' description='This workspace is frozen. Retry deletion to finish cleanup; some private files may already have been removed.' />
+        <StateMessage kind='partial' layout='inline' title='Deletion is pending' description='This workspace is frozen. Delete again to finish; some files may already be gone.' />
       )}
       <div className='flex flex-col gap-4'>
-        <Check
-          label='Who can delete'
-          badge={owner ? { text: 'You are the owner', status: 'success' } : { text: `You are ${ROLE_LABEL[role] ?? role}`, status: 'neutral' }}
-        >
-          Only the workspace owner.
-        </Check>
         {snapshot.isPending ? (
           <div className='flex flex-col gap-2' aria-hidden>
             <Skeleton className='h-9 w-full' />
             <Skeleton className='h-9 w-full' />
           </div>
         ) : !counts ? (
-          <StateMessage kind='error' layout='inline' title='Publications could not be read. Reload them before deleting.' action={<RetryButton query={snapshot} />} />
+          <StateMessage kind='error' layout='inline' title='Couldn’t check publications. Retry before deleting.' action={<RetryButton query={snapshot} />} />
         ) : (
           <>
             <Check
@@ -134,14 +128,12 @@ export function DeleteCard({
             >
               {counts.inFlight > 0 ? (
                 <>
-                  A post already sent to a platform cannot be recalled. Deletion unlocks once each one is confirmed or marked failed.{' '}
+                  Posts sent to a platform can’t be recalled. Deletion unlocks once each is confirmed or failed.{' '}
                   <Link href='/app/queue' className={linkClass}>
                     See Queue <LearnMoreChevron className='size-3.5' />
                   </Link>
                 </>
-              ) : (
-                'Nothing has been handed to a platform without an outcome.'
-              )}
+              ) : null}
             </Check>
             <Check
               label='Posts waiting to publish'
@@ -149,7 +141,7 @@ export function DeleteCard({
             >
               {counts.waiting > 0
                 ? `${plural(counts.waiting, 'approved post')} not sent yet ${counts.waiting === 1 ? 'is' : 'are'} removed with the workspace and never published.`
-                : 'No approved post is waiting to be sent.'}
+                : null}
             </Check>
           </>
         )}
@@ -209,7 +201,7 @@ export function DeleteCard({
             </AlertDialogContent>
           </AlertDialog>
         ) : (
-          <p className='text-muted-foreground text-sm'>Only the workspace owner can delete the account and workspace.</p>
+          <p className='text-muted-foreground text-sm'>Only the workspace owner can delete the account. You are {ROLE_LABEL[role] ?? role}.</p>
         )}
         {owner && counts && counts.inFlight > 0 && <p className='text-muted-foreground text-xs'>Available once every publication has an outcome.</p>}
       </div>

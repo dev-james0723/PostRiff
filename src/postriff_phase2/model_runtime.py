@@ -50,7 +50,7 @@ RESPONSE_CAP = 1_048_576
 
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *_):
-        raise AlphaError("The model provider redirected the request; refusing to follow.", 502)
+        raise AlphaError("Couldn't reach the AI writer. Try again.", 502)
 
 
 def model_transport(method, url, headers=None, body=None, timeout=TIMEOUT_SECONDS):
@@ -66,7 +66,7 @@ def model_transport(method, url, headers=None, body=None, timeout=TIMEOUT_SECOND
     except HTTPError as error:
         raw, status = error.read(RESPONSE_CAP), error.code
     except (URLError, TimeoutError, OSError) as error:
-        raise AlphaError("The model provider is temporarily unreachable.", 503) from error
+        raise AlphaError("Couldn't reach the AI writer. Try again.", 503) from error
     if len(raw) > RESPONSE_CAP:
         raise AlphaError("Model response limit exceeded.", 502)
     try:
@@ -142,8 +142,8 @@ class ServerModelRuntime(AgentRuntime):
 
     # --- catalogue -----------------------------------------------------------------------
     def list_supported_models(self):
-        return [{"id": m, "label": f"{m.split('/')[-1]} · PostRiff managed", "qualified": True, "costClass": "paid", "provider": self.provider,
-                 "detail": "Runs on PostRiff's server through Vercel AI Gateway. Only sources with cloud consent are sent; the cost is metered to your workspace."} for m in self.models]
+        return [{"id": m, "label": f"{m.split('/')[-1]} · Rafii managed", "qualified": True, "costClass": "paid", "provider": self.provider,
+                 "detail": "Runs on Rafii's servers. Only sources you allowed for the cloud are sent; usage counts toward your plan."} for m in self.models]
 
     def list_supported_reasoning(self):
         return [{"id": "quick", "available": True, "detail": "One pass, shortest answer."},
@@ -278,7 +278,7 @@ class ServerModelRuntime(AgentRuntime):
         if status is None or status >= 500:
             raise _Unknown("The model request outcome is unknown. Check usage before starting another run.", 502)
         if status != 200 or not isinstance(data, dict):
-            raise _Rejected("The model provider rejected the request.", 502)
+            raise _Rejected("The AI writer couldn't take this request. Try again.", 502)
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
@@ -318,7 +318,7 @@ class ServerModelRuntime(AgentRuntime):
             raise AlphaError("Choose a reasoning level.", 400)
         model = request.get("model") or self.model
         if model not in self.models:
-            raise AlphaError("This exact model is not configured; no fallback was used.", 400)
+            raise AlphaError("That writer isn't available. Choose another.", 400)
         if len(json.dumps(self._user_payload(request), ensure_ascii=False).encode()) > MAX_CONTEXT_BYTES:
             raise AlphaError("Reduce the selected sources: the drafting context is over the 60 kB limit.", 413)
 

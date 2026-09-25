@@ -24,11 +24,11 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 const DECIDED_TEXT: Record<string, string> = {
-  remembered: 'Remembered. It shapes your next drafts; nothing already scheduled changes.',
-  edited: 'Remembered with your wording. It shapes your next drafts; nothing already scheduled changes.',
-  dismissed: 'Dismissed. PostRiff will not suggest this again for a while.',
-  post_only: 'Applied to that draft only. Your preferences are unchanged.',
-  expired: 'Expired without a decision.'
+  remembered: 'Remembered. Applies to new drafts.',
+  edited: 'Remembered with your wording. Applies to new drafts.',
+  dismissed: 'Dismissed.',
+  post_only: 'Applied to that draft only.',
+  expired: 'Expired.'
 };
 
 /**
@@ -49,14 +49,14 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
 
   const decide = useMutation({
     mutationFn: (input: { decision: 'remember' | 'edit' | 'dismiss' | 'post_only'; statement?: string }) => api.decideProposal(workspaceId, proposal.id, { ...input, expectedRevision: snapshot.data?.revision ?? 0 }),
-    onSuccess: (result) => {
+    // The card itself switches to the decision, so success needs no toast.
+    onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
       void client.invalidateQueries({ queryKey: keys.memory(workspaceId) });
       void client.invalidateQueries({ queryKey: keys.memoryProposals(workspaceId) });
       setEditing(false);
-      toast.success(DECIDED_TEXT[result.status] ?? 'Saved.');
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'The decision could not be saved.')
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Couldn’t save. Try again.')
   });
 
   const pending = status === 'pending';
@@ -72,18 +72,22 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
         <StatusChip icon={null}>{proposal.scopeLabel}</StatusChip>
         <StatusChip icon={null}>{SOURCE_LABEL[proposal.source] ?? proposal.source}</StatusChip>
         {proposal.op === 'update' && <StatusChip icon='refresh'>Replaces an earlier preference</StatusChip>}
-        {!pending && <StatusChip icon='check'>{status.replace('_', ' ')}</StatusChip>}
       </div>
       {editing ? (
         <div className='flex flex-col gap-2'>
           <Textarea value={wording} onChange={(e) => setWording(e.target.value)} rows={2} className={cn(TEXTAREA_CLASS, 'min-h-20')} aria-label='Preference wording' maxLength={160} />
-          <p className='text-muted-foreground text-xs'>One sentence about how you write. Facts and numbers belong in Sources or Brand.</p>
+          <p className='text-muted-foreground text-xs'>One sentence about how you write.</p>
         </div>
       ) : (
         <p className='text-foreground text-base leading-snug font-medium text-balance'>{live?.statement ?? proposal.statement}</p>
       )}
-      {expiry && <p className='text-muted-foreground text-xs'>{expiry}</p>}
-      {why && <p className='text-muted-foreground text-xs'>{why}</p>}
+      {(expiry || why) && (
+        <p className='text-muted-foreground text-xs'>
+          {why}
+          {why && expiry ? ' ' : ''}
+          {expiry && <span title={expiry.exact}>{expiry.text}</span>}
+        </p>
+      )}
       {proposal.performance && (
         <p className='text-muted-foreground text-xs leading-relaxed'>
           {proposal.performance.direction === 'supports' ? 'In line with this: ' : proposal.performance.direction === 'contradicts' ? 'Against this: ' : 'No clear difference: '}
@@ -93,9 +97,6 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
       )}
       {pending ? (
         <>
-          <p className='text-muted-foreground text-xs leading-relaxed'>
-            If you remember it, future drafts for {proposal.scopeLabel.toLowerCase().replace('all channels', 'every channel')} follow it. What you ask for in a message still wins, and nothing already scheduled changes.
-          </p>
           {isOwner ? (
             <div className='flex flex-wrap items-center gap-2'>
               {editing ? (
@@ -127,7 +128,7 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
               )}
             </div>
           ) : (
-            <p className='text-muted-foreground text-xs'>Only a workspace owner can decide this.</p>
+            <p className='text-muted-foreground text-xs'>Only an owner can decide.</p>
           )}
         </>
       ) : (

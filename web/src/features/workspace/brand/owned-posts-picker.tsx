@@ -20,7 +20,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 export function OwnedPostsPicker({ revision, isOwner, preferredPlatform, autoPropose = false }: { revision: number; isOwner: boolean; preferredPlatform?: string; autoPropose?: boolean }) {
   const { workspaceId } = useWorkspaceApi();
-  if (!isOwner || !workspaceId) return <p className='text-muted-foreground text-xs'>An owner can import posts from a connected account.</p>;
+  if (!isOwner || !workspaceId) return <p className='text-muted-foreground text-xs'>Only an owner can import posts.</p>;
   // A workspace switch destroys previews and selection receipts, not just the account dropdown.
   return <PickerSession key={workspaceId} workspaceId={workspaceId} revision={revision} preferredPlatform={preferredPlatform} autoPropose={autoPropose} />;
 }
@@ -53,6 +53,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
   const provider = channels.data?.providers.find((item) => item.platform === account?.platform);
   const blocker = historyBlocker(account, provider);
   const posts = loadedPosts(pages);
+  const skipped = pages.reduce((sum, item) => sum + item.skippedCount, 0);
   const visible = posts.filter((post) => post.text.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) && (!mediaType || post.mediaType === mediaType));
 
   const load = useCallback(
@@ -82,7 +83,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
         }
         setConfirmed(false);
       } catch (err) {
-        if (request.current === current) setError(err instanceof Error ? err.message : 'Posts could not be loaded. No samples were imported.');
+        if (request.current === current) setError(err instanceof Error ? err.message : 'Couldn’t load posts. Try again.');
       } finally {
         if (request.current === current) setBusy(null);
       }
@@ -110,10 +111,10 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
       void cache.invalidateQueries({ queryKey: keys.audit(workspaceId) });
       setSelected([]);
       setConfirmed(false);
-      toast.success('Selected posts retained. Select the samples below and grant their analysis use separately.');
+      toast.success('Posts retained. Select them below to allow analysis.');
     } catch (err) {
       if (request.current === current) {
-        setError(err instanceof Error ? err.message : 'Selected posts could not be retained.');
+        setError(err instanceof Error ? err.message : 'Couldn’t retain these posts. Try again.');
         if (err instanceof ApiError && err.status === 409) void cache.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
       }
     } finally {
@@ -123,14 +124,15 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
 
   return (
     <Band as='section' data-tour='owned-posts-picker' aria-label='Import my social posts'>
-      <h3 className='text-foreground text-sm font-medium'>{autoPropose ? 'Review Rafii’s proposed sample set' : 'Choose from my social posts'}</h3>
-      {autoPropose && <p className='text-muted-foreground text-xs'>Your request authorizes read-only retrieval. Up to 10 dated posts from the loaded results are proposed, not retained or analyzed. Change this selection, confirm authorship, then separately allow an analysis route.</p>}
-      <p className='text-muted-foreground text-xs'>Read your connected account, choose your own writing, then decide how it may be analysed. Loading posts never starts AI analysis.</p>
+      <h3 className='text-foreground text-sm font-medium'>{autoPropose ? 'Review the suggested posts' : 'Choose from my social posts'}</h3>
+      <p className='text-muted-foreground text-xs'>
+        {autoPropose ? 'Rafii picked up to 10 recent posts. Nothing is kept or analysed until you confirm.' : 'Read-only. Nothing is published or analysed.'}
+      </p>
       {channels.isError && (
         <StateMessage
           kind='error'
           layout='inline'
-          title='Accounts could not be loaded.'
+          title='Couldn’t load accounts.'
           action={
             <Button variant='glass' size='sm' onClick={() => void channels.refetch()}>
               <Icons.refresh /> Retry
@@ -164,7 +166,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
         <p role='status' className='text-muted-foreground text-xs'>
           {blocker}{' '}
           <a href='#manual-writing-samples' className='rafii-focus text-foreground rounded-sm underline underline-offset-4'>
-            Import writing samples manually
+            Add writing manually
           </a>
         </p>
       )}
@@ -175,7 +177,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
               <Icons.spinner className='motion-safe:animate-spin' /> Reading posts…
             </>
           ) : (
-            'Load my posts (read-only)'
+            'Load my posts'
           )}
         </Button>
         <Link className='rafii-focus text-foreground rounded-sm text-sm underline underline-offset-4' href='/app/channels'>
@@ -186,12 +188,13 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
       {page && (
         <div className='flex flex-col gap-3'>
           <p role='status' className='text-muted-foreground text-xs'>
-            {coverageSummary(pages)} {pages.length} pages · {pages.reduce((sum, item) => sum + item.scannedCount, 0)} records read · {pages.reduce((sum, item) => sum + item.skippedCount, 0)} excluded by the adapter.
+            {coverageSummary(pages)}
+            {skipped > 0 ? ` ${skipped} skipped.` : ''}
           </p>
           <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]'>
-            <Input aria-label='Search retrieved posts' placeholder='Search only the posts loaded here…' value={query} onChange={(event) => setQuery(event.target.value)} className={FIELD_CLASS} />
+            <Input aria-label='Search retrieved posts' placeholder='Search loaded posts' value={query} onChange={(event) => setQuery(event.target.value)} className={FIELD_CLASS} />
             <SelectField label='Media type' hideLabel aria-label='Filter retrieved posts by media type' value={mediaType} onChange={(event) => setMediaType(event.target.value)}>
-              <option value=''>All retrieved media types</option>
+              <option value=''>All media</option>
               {[...new Set(posts.map((post) => post.mediaType).filter(Boolean))].map((type) => (
                 <option key={type} value={type}>
                   {type}
@@ -209,9 +212,9 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
               setConfirmed(false);
             }}
           >
-            Select visible posts (up to 50)
+            Select all shown
           </Button>
-          {!visible.length && <StateMessage kind='empty' layout='inline' title={posts.length ? 'No matching captions in the loaded results.' : 'No eligible captions in the retrieved pages.'} description={posts.length ? undefined : 'This is not a claim about your entire history.'} />}
+          {!visible.length && <StateMessage kind='empty' layout='inline' title={posts.length ? 'No matching posts' : 'No captions in the loaded posts'} />}
           <ul className='grid gap-3 sm:grid-cols-2'>
             {visible.map((post) => (
               <li key={post.id} className='rafii-glass flex min-w-0 flex-col gap-3 rounded-[var(--rafii-radius-card)] p-4'>
@@ -256,7 +259,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
                     setConfirmed(false);
                   }}
                 >
-                  Exclude from selection
+                  Deselect
                 </Button>
                 <div className='text-muted-foreground flex flex-wrap gap-2 text-xs'>
                   <span>{post.publishedAt || 'Date unavailable'}</span>
@@ -271,7 +274,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
           </ul>
           <label htmlFor='owned-post-authorship-consent' className='text-foreground flex items-start gap-2 text-xs leading-relaxed'>
             <Checkbox id='owned-post-authorship-consent' className='mt-0.5' checked={confirmed} disabled={Boolean(busy) || selected.length === 0} onCheckedChange={(checked) => setConfirmed(checked === true)} aria-label='Confirm selected captions are my own writing' />
-            I wrote the selected captions and consent to retaining them as private samples. Guest writing, quoted third-party text and posts that do not represent my voice should be excluded. This does not grant AI use.
+            I wrote the selected captions and consent to retaining them as private samples. Leave out guest, quoted or unrepresentative posts. This doesn’t allow AI use.
           </label>
           <div className='flex flex-wrap gap-2'>
             <Button size='control' variant='action' disabled={Boolean(busy) || !selected.length || !confirmed || Boolean(blocker)} onClick={() => void retain()}>
@@ -298,10 +301,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
               Load more posts
             </Button>
           </div>
-          <p className='text-muted-foreground text-xs leading-relaxed'>
-            {selected.length} selected across {pages.length} loaded pages. Each preview is bounded to 4 pages (up to 100 records); retain at most 50 samples at once. Reaching that bound is not complete history. Preview receipts expire after ten minutes; reload expired
-            selections. Sponsored, outdated and AI-generated classifications are shown, not silently treated as representative.
-          </p>
+          <p className='text-muted-foreground text-xs leading-relaxed'>{selected.length} selected · up to 50 at once · reload after 10 minutes</p>
         </div>
       )}
     </Band>

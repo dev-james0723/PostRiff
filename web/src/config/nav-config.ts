@@ -163,7 +163,7 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
-        title: 'Models & providers',
+        title: 'Models',
         url: '/app/account/models',
         icon: 'adjustments',
         items: [],

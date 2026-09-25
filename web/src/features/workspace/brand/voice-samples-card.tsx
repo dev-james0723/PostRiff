@@ -3,7 +3,7 @@
 import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
-import { StateMessage } from '@/components/rafii';
+import { InfoTip, StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import type { SnapshotSource, SnapshotState } from '@/lib/api/types';
 import { OwnedPostsPicker } from './owned-posts-picker';
 
 function errorMessage(error: unknown) {
-  return error instanceof ApiError ? error.message : 'The writing sample could not be updated.';
+  return error instanceof ApiError ? error.message : 'Couldn’t update the sample. Try again.';
 }
 
 function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: SnapshotSource; revision: number; isOwner: boolean; analysisRoute?: string }) {
@@ -46,13 +46,16 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
             <StatusChip icon={source.voiceOrigin === 'official_api' ? 'badgeCheck' : 'edit'}>{source.voiceOrigin === 'official_api' ? 'Official account import' : 'User-provided text'}</StatusChip>
           </div>
           <p className='text-muted-foreground mt-1 text-xs'>
-            {[source.platform, source.account, source.language, source.publishedAt].filter(Boolean).join(' · ') || 'Manual sample'} · revision {source.revision ?? 1}
+            {[source.platform, source.account, source.language, source.publishedAt].filter(Boolean).join(' · ') || 'Manual sample'}
+            {(source.revision ?? 1) > 1 && <span className='hidden md:inline'> · revision {source.revision}</span>}
           </p>
         </div>
         <Checkbox aria-label={`Select ${source.title || 'writing sample'}`} checked={source.selected === true} disabled={act.isPending || !source.active} onCheckedChange={(checked) => void update('voice_sample_select', { selected: checked === true })} />
       </div>
       <p className='text-foreground text-sm whitespace-pre-wrap'>{source.text}</p>
-      <p className='text-muted-foreground text-xs'>{allowed ? `Allowed for ${(source.purposeGrants ?? []).join(' and ')} via ${(source.routeGrants ?? []).join(', ')}.` : 'Retained only. It is not allowed for analysis or drafting yet.'}</p>
+      <p className='text-muted-foreground text-xs' title={allowed ? (source.routeGrants ?? []).join(', ') : undefined}>
+        {allowed ? `Allowed for ${(source.purposeGrants ?? []).join(' and ')}.` : 'Not allowed for analysis or writing yet.'}
+      </p>
       <div className='flex flex-wrap gap-2'>
         {isOwner && source.active && (
           <Button
@@ -71,7 +74,7 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
             disabled={act.isPending || aiAllowed}
             onClick={() => void update('voice_sample_grant', { grants: [...(source.useGrants ?? []).filter((grant) => !(grant.purpose === 'analysis' && grant.route === analysisRoute)), { purpose: 'analysis', route: analysisRoute }], confirmed: true })}
           >
-            {aiAllowed ? 'Selected AI model allowed' : 'Allow selected AI model to analyse this text'}
+            {aiAllowed ? 'AI analysis allowed' : 'Allow AI analysis'}
           </Button>
         )}
         <Button size='default' variant='quiet' disabled={act.isPending || !source.active} onClick={() => void update('voice_sample_exclude', {})}>
@@ -100,7 +103,7 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
               </option>
             ))}
           </SelectField>
-          <p className='text-muted-foreground text-xs'>Cloud processing includes Claude Code and Codex CLI. Only bounded style signals from this sample are sent for writing; sample facts are excluded. Permission applies only to the selected route.</p>
+          <p className='text-muted-foreground text-xs'>Only style signals reach this writer, never the sample’s facts. Cloud writers include Claude Code and Codex CLI.</p>
           <Button
             size='default'
             variant='glass'
@@ -141,7 +144,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
       await act.mutateAsync({ revision, action: 'voice_samples_import', payload: format === 'pasted' ? { format, text, platform } : { format, data: text } });
       setText('');
       setManualConsent(false);
-      toast.success('Writing sample retained. Choose it and approve how Rafii may use it.');
+      toast.success('Sample retained. Select it to allow analysis.');
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -152,7 +155,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
     try {
       await act.mutateAsync({ revision, action: 'voice_profile_analyze', payload: { sourceIds: selected.map((source) => source.id), route: selectedModel.voiceRoute, model: selectedModel.id, instructions, confirmed: true, requestId: crypto.randomUUID() } });
       setConfirmedAI('');
-      toast.success('AI writing-DNA proposal ready. Review the evidence and approve it before use.');
+      toast.success('Voice proposal ready for review.');
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -161,7 +164,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
   async function analyzeSelected() {
     try {
       await act.mutateAsync({ revision, action: 'voice_profile_analyze', payload: { sourceIds: analyzable.map((source) => source.id), route: 'local-rules' } });
-      toast.success('A provisional voice profile is ready for review. It is not active yet.');
+      toast.success('Voice proposal ready for review.');
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -172,13 +175,20 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
       data-tour='voice-samples'
       title='Learn my voice'
       titleId='voice-samples-heading'
-      description='Retain writing you choose, then separately select it and approve its use. Sample facts never become current brand facts. Analysis consent does not grant future generation consent.'
+      description='Add writing you own. Each use needs your permission.'
+      actions={
+        <InfoTip
+          label='How writing samples are used'
+          className='-mt-2 -mr-2'
+          description='Samples stay private. Keeping a sample, analysing it and letting a writer use its style are separate permissions. Facts in a sample never become brand facts.'
+        />
+      }
     >
       <OwnedPostsPicker revision={revision} isOwner={isOwner} preferredPlatform={preferredPlatform} autoPropose={autoPropose} />
 
       <Band aria-labelledby='manual-writing-samples'>
         <h3 id='manual-writing-samples' className='text-foreground text-sm font-medium'>
-          Import writing samples manually
+          Add writing manually
         </h3>
         <SelectField
           label='Import format'
@@ -236,15 +246,14 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
                 'Retain samples'
               )}
             </Button>
-            {format !== 'pasted' && <p className='text-muted-foreground text-xs'>Up to 50 records, 8,000 characters per text, 512 KiB total. Each record needs text; platform, language and label are optional. Validation is atomic.</p>}
-            <p className='text-muted-foreground text-xs'>This is labelled user-provided text, not a verified platform import. It also works when LinkedIn history permission is unavailable.</p>
+            {format !== 'pasted' && <p className='text-muted-foreground text-xs'>Up to 50 items of 8,000 characters. One invalid item stops the import.</p>}
           </div>
         </div>
       </Band>
 
       {isOwner && (
         <Band aria-label='AI voice analysis'>
-          <h3 className='text-foreground text-sm font-medium'>Ask Rafii to analyse my writing DNA</h3>
+          <h3 className='text-foreground text-sm font-medium'>AI analysis</h3>
           <SelectField
             label='Analysis model'
             aria-label='Voice analysis model'
@@ -255,20 +264,18 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
               setConfirmedAI('');
             }}
           >
-            <option value=''>Choose a configured analysis model</option>
+            <option value=''>Choose a model</option>
             {analysisModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.label} · {model.provider}
               </option>
             ))}
           </SelectField>
-          {!analysisModels.length && <StateMessage kind='unsupported' layout='inline' title='No managed AI analysis model is configured and qualified.' description='Local writing statistics remain available; they are not AI tone analysis.' />}
+          {!analysisModels.length && <StateMessage kind='unsupported' layout='inline' title='AI analysis isn’t available yet.' description='Local analysis still works.' />}
           <Textarea aria-label='What should Rafii analyse about my writing?' value={instructions} onChange={(event) => setInstructions(event.target.value)} maxLength={1500} rows={3} className={TEXTAREA_CLASS} />
-          <p className='text-muted-foreground text-xs break-all'>
-            Choose samples below and grant analysis to this exact route: {selectedModel?.voiceRoute ?? 'no model selected'}. Raw sample text is sent to this processing route for analysis. Rafii does not fine-tune a model. Interpretation remains provisional.
-          </p>
+          <p className='text-muted-foreground text-xs'>The selected samples’ text is sent to this model. Allow it on each sample below.</p>
           <label htmlFor='voice-ai-processing-consent' className='text-foreground flex items-start gap-2 text-xs leading-relaxed'>
-            <Checkbox id='voice-ai-processing-consent' className='mt-0.5' aria-label='Confirm AI sample processing and writing allowance use' checked={confirmedAI === confirmationKey} onCheckedChange={(checked) => setConfirmedAI(checked === true ? confirmationKey : '')} disabled={!selectedModel || act.isPending} />I agree to send the selected, permitted text to this model route for one analysis. It uses writing allowance and metered model usage within approved budgets. It does not publish or activate a voice.
+            <Checkbox id='voice-ai-processing-consent' className='mt-0.5' aria-label='Confirm AI sample processing and writing allowance use' checked={confirmedAI === confirmationKey} onCheckedChange={(checked) => setConfirmedAI(checked === true ? confirmationKey : '')} disabled={!selectedModel || act.isPending} />I agree to send the selected samples to this model for one analysis. It uses writing allowance.
           </label>
           <div className='flex flex-wrap items-center gap-3'>
             <Button variant='action' size='control' disabled={act.isPending || confirmedAI !== confirmationKey || !selectedModel || !selected.length || aiAllowed.length !== selected.length} onClick={() => void analyzeWithAI()}>
@@ -281,7 +288,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
               )}
             </Button>
             <p className='text-muted-foreground text-xs'>
-              {aiAllowed.length} of {selected.length} selected samples allowed for this model. All selected samples need permission before analysis starts.
+              {aiAllowed.length} of {selected.length} selected allowed
             </p>
           </div>
         </Band>
@@ -301,16 +308,16 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
                   <Icons.spinner className='motion-safe:animate-spin' /> Analysing…
                 </>
               ) : (
-                'Describe local writing statistics'
+                'Analyse locally'
               )}
             </Button>
             <p className='text-muted-foreground text-xs'>
-              {analyzable.length} selected sample{analyzable.length === 1 ? '' : 's'} allowed for local analysis.
+              {analyzable.length} allowed for local analysis
             </p>
           </div>
         </>
       ) : (
-        <StateMessage kind='empty' layout='inline' title='No retained writing samples.' description='A few samples can produce a provisional profile later; there is no minimum guarantee.' />
+        <StateMessage kind='empty' layout='inline' title='No samples yet' />
       )}
     </Panel>
   );

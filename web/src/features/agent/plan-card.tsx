@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { TodoList, type TodoItem, type TodoItemStatus } from '@/components/agents/todo-list';
 import { Icons } from '@/components/icons';
 import { LevelBadge } from '@/components/app/level-badge';
-import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import { AnimatedBadge } from '@/components/motion/animated-badge';
 import { StatefulButton } from '@/components/motion/button';
 import { Checkbox } from '@/components/motion/checkbox';
 import { Surface } from '@/components/rafii';
@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SuccessCheck } from '@/components/ui/success-check';
 import { keys } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
+import { jobStatus } from '@/features/queue/job-status';
+import { STATUS } from '@/lib/status-labels';
 import type { Run, SchedulePlan, Snapshot } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
@@ -48,20 +50,6 @@ const READY = 'Ready for posting';
 /** How long the finished checklist stays before the done row replaces it. */
 const SUCCESS_HOLD_MS = 900;
 
-/** Badge tone per job state; the label is always the job's own state. */
-const JOB_STATUS: Record<string, AnimatedBadgeStatus> = {
-  scheduled: 'info',
-  approved: 'info',
-  claimed: 'info',
-  submitting: 'loading',
-  provider_accepted: 'loading',
-  uncertain: 'loading',
-  published: 'success',
-  verified: 'success',
-  failed: 'danger',
-  canceled: 'neutral'
-};
-
 /** Acknowledgement checkboxes: the motion Checkbox renders its own label, sized down to the card's small print. */
 const ACK = 'items-start gap-2 [&>span]:pt-0.5 [&>span]:text-xs';
 
@@ -80,8 +68,8 @@ function describeWhen(localTime: string) {
 function approvalItems(approval: Approval): TodoItem[] {
   const count = approval.rows.length;
   const items: TodoItem[] = [
-    ...(approval.apply ? [{ id: 'apply', title: 'Save the candidates as drafts' }] : []),
-    ...approval.rows.map((row, index) => ({ id: `row-${index}`, title: `Prepare the exact ${row.platform} review`, detail: describeWhen(row.localTime) })),
+    ...(approval.apply ? [{ id: 'apply', title: 'Save drafts' }] : []),
+    ...approval.rows.map((row, index) => ({ id: `row-${index}`, title: `Prepare ${row.platform}`, detail: describeWhen(row.localTime) })),
     { id: 'approve', title: `Approve ${count} destination${count === 1 ? '' : 's'}` }
   ];
   const offset = approval.apply ? 1 : 0;
@@ -209,7 +197,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
       client.setQueryData(keys.snapshot(workspaceId), result.snapshot);
       void client.invalidateQueries({ queryKey: keys.usage(workspaceId) });
       onApproved?.(result.jobs);
-      toast.success(`${result.jobs} post${result.jobs === 1 ? '' : 's'} scheduled. See them in the Queue and Calendar.`);
+      // No toast: the card's done row says how many were scheduled and links to the Queue and Calendar.
       // Every step is done: hold the finished checklist a moment, then the done row takes over.
       setProgress(null);
       setApproval((current) => (current ? { ...current, outcome: 'succeeded' } : current));
@@ -220,7 +208,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
       // A row that could not start names itself on the error; otherwise the chain stopped at its latest step.
       const failedAt = err instanceof Error && 'step' in err ? (err.step as ApproveStep) : null;
       setApproval((current) => (current ? { ...current, step: failedAt ?? current.step, outcome: 'failed' } : current));
-      toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'The plan could not be approved.');
+      toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'Couldn’t approve the plan.');
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } finally {
       inFlight.current = false;
@@ -233,13 +221,13 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
     inFlight.current = true;
     clearFailed();
     setSaving(true);
-    setProgress('Adding the candidates to your drafts…');
+    setProgress('Saving drafts…');
     try {
       const result = await api.applyRun(workspaceId, run.runId, snapshot.revision, run.artifactHash);
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
-      toast.success(`${result.variants ?? ''} candidate${result.variants === 1 ? '' : 's'} saved as drafts. Nothing is scheduled.`);
+      toast.success(result.variants ? `${result.variants} saved as drafts` : 'Saved as drafts');
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The drafts could not be saved.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t save the drafts.');
     } finally {
       inFlight.current = false;
       setProgress(null);
@@ -250,14 +238,11 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
   return (
     <Surface material='glass' padding='none' className='flex flex-col overflow-hidden' data-tour='plan-card'>
       <div className='flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-3'>
-        <span className='flex flex-col gap-1'>
-          <span className='rafii-eyebrow'>Schedule plan</span>
-          <span className='text-foreground flex items-center gap-2 text-base'>
-            <Icons.calendar className='size-4' />
-            {plan.destinations.length} post{plan.destinations.length === 1 ? '' : 's'}, <em className='rafii-serif'>each its own job.</em>
-          </span>
+        <span className='text-foreground flex items-center gap-2 text-base'>
+          <Icons.calendar className='size-4' />
+          {plan.destinations.length} post{plan.destinations.length === 1 ? '' : 's'} to schedule
         </span>
-        <span className='text-muted-foreground text-xs'>{timeZone} · nothing publishes until you approve</span>
+        <span className='text-muted-foreground text-xs'>{timeZone.replace(/_/g, ' ')}</span>
       </div>
 
       <div className='divide-border/60 flex flex-col divide-y'>
@@ -268,6 +253,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
           const blocker = blockers[index];
           const job = scheduled[index];
           if (job) {
+            const badge = jobStatus(job);
             return (
               <RowReveal key={`${d.platform}-${index}`} index={index} className='flex flex-wrap items-center justify-between gap-3 px-4 py-3'>
                 <div className='flex items-center gap-3'>
@@ -276,8 +262,8 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                     <span className='flex flex-wrap items-center gap-2 text-sm font-medium'>
                       {d.platform}
                       <span className='text-muted-foreground font-normal'>{job.manifest.account}</span>
-                      <AnimatedBadge status={JOB_STATUS[job.state] ?? 'neutral'} size='sm'>
-                        {job.state.replace(/_/g, ' ')}
+                      <AnimatedBadge status={badge?.status ?? 'neutral'} size='sm' pulse={badge?.pulse} title={badge?.title}>
+                        {badge?.label}
                       </AnimatedBadge>
                     </span>
                     <span className='text-muted-foreground text-xs'>{describeWhen(job.manifest.timing.local)}</span>
@@ -314,7 +300,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                       </span>
                     </span>
                   ) : (
-                    <span className='text-muted-foreground text-xs'>{describeWhen(row.localTime)}{d.assumed ? ' · time assumed from your message' : ''}</span>
+                    <span className='text-muted-foreground text-xs'>{describeWhen(row.localTime)}{d.assumed ? ' · time from your message' : ''}</span>
                   )}
                 </div>
               </div>
@@ -377,7 +363,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
           {plan.unsupported.map((platform) => (
             <li key={platform} className='flex items-start gap-2'>
               <Icons.info className='mt-0.5 size-3.5 shrink-0' />
-              {platform} is not available for drafting yet, so it was left out of this plan.
+              {platform} isn’t available yet, so it was left out.
             </li>
           ))}
           {plan.warnings.map((warning, i) => (
@@ -395,8 +381,8 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
             <span className='flex items-center gap-2 text-sm'>
               {/* transitions.dev success check: it celebrates an approval made in this view; a reload shows it at rest. */}
               <SuccessCheck animate={justApproved !== null} className='text-foreground size-4' />
-              {done.jobs} post{done.jobs === 1 ? '' : 's'} approved and waiting for their time.
-              {count > 0 && <span className='text-muted-foreground'> {count} row{count === 1 ? '' : 's'} still unscheduled.</span>}
+              {done.jobs} {STATUS.scheduled.toLowerCase()}
+              {count > 0 && <span className='text-muted-foreground'> · {count} not scheduled</span>}
             </span>
             <div className='flex gap-2'>
               <Link href='/app/queue' className={buttonVariants({ size: 'control', variant: 'glass' })}>
@@ -409,9 +395,9 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
           </div>
         ) : !voiceActive ? (
           <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
-            <span>Scheduling needs an active voice profile, so every post is checked against whose words it carries.</span>
+            <span>Set up your voice to schedule.</span>
             <Link href='/app/workspace/brand' className={buttonVariants({ size: 'control', variant: 'action' })}>
-              Set up your voice
+              Set up voice
             </Link>
           </div>
         ) : (
@@ -457,7 +443,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <span className='text-muted-foreground flex items-center gap-1.5 text-xs'>
                 <Icons.shieldCheck className='size-3.5' />
-                {progress ?? 'Approval binds the exact text, media, account and time of each row.'}
+                {progress ?? 'You approve the exact text, media, account and time.'}
               </span>
               <div className='flex gap-2'>
                 <StatefulButton
@@ -469,7 +455,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                   disabled={Boolean(progress) || holding || run.status === 'applied' || !run.artifactHash}
                   onClick={() => void saveDrafts()}
                 >
-                  {run.status === 'applied' ? 'Saved as drafts' : 'Just save drafts'}
+                  {run.status === 'applied' ? 'Saved as drafts' : 'Save as drafts'}
                 </StatefulButton>
                 {canApprove ? (
                   <StatefulButton
@@ -482,10 +468,10 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
                     disabled={!ready || Boolean(progress) || holding}
                     onClick={() => void approve()}
                   >
-                    {count > 0 ? `Review & approve all ${count}` : 'Review & approve'}
+                    {count > 0 ? `Approve & schedule ${count}` : 'Approve & schedule'}
                   </StatefulButton>
                 ) : (
-                  <Badge variant='outline'>Ask an approver to schedule</Badge>
+                  <Badge variant='outline'>Needs an approver</Badge>
                 )}
               </div>
             </div>

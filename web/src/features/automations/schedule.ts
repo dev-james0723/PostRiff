@@ -303,14 +303,14 @@ export function slotsLabel(schedule: Pick<ScheduleValue, 'kind' | 'slots'>, loca
   return parts.length ? (parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]) : 'No days chosen';
 }
 
-/** "When you add an idea or a link · up to 3 a day" for triggers. */
+/** "New idea or link in Ideas · up to 3 runs a day" for triggers. */
 export function triggerLabel(schedule: ScheduleValue): string {
   const perDay = schedule.maxPerDay ?? 1;
   const limit = `up to ${perDay} run${perDay === 1 ? '' : 's'} a day`;
-  if (schedule.kind === 'on_strong_post') return `After a post gets more replies or comments than usual (last ${schedule.withinDays ?? 7} days) · ${limit}`;
+  if (schedule.kind === 'on_strong_post') return `After a strong post (last ${schedule.withinDays ?? 7} days) · ${limit}`;
   const names = SOURCE_KINDS.filter((k) => (schedule.sourceKinds ?? SOURCE_KINDS.map((s) => s.value)).includes(k.value)).map((k) => k.label.toLowerCase().replace(/s$/, ''));
   const what = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : (names[0] ?? 'item');
-  return `When you add a new ${what} to Ideas · ${limit}`;
+  return `New ${what} in Ideas · ${limit}`;
 }
 
 /** "Mondays and Thursdays at 9:00 AM · Hong Kong time" style summary, for every schedule kind. */
@@ -370,10 +370,10 @@ export function weeklyCeilingMicro(maxCostUsdMicro: number | undefined, schedule
 }
 
 const HELD: Record<string, string> = {
-  writer_failed_or_unavailable: 'The writer was unavailable, so no drafts were made.',
-  new_preview_required: 'The automation needs a new review before it can run.',
-  owner_authority_unavailable: 'The owner who activated it no longer has access.',
-  destinations_unavailable: 'None of its accounts is connected any more.'
+  writer_failed_or_unavailable: 'Writer unavailable, so no drafts.',
+  new_preview_required: 'Needs a new review before it runs.',
+  owner_authority_unavailable: 'The owner who activated it lost access.',
+  destinations_unavailable: 'No connected accounts.'
 };
 
 /** Plain words for one run: a short state and, when useful, why. */
@@ -382,41 +382,45 @@ export function runText(run: { state: string; reason?: string }): { label: strin
     case 'completed':
       return { label: 'Drafts ready', tone: 'success' };
     case 'running':
-      return { label: 'Writing now', tone: 'quiet' };
+      return { label: 'Drafting', tone: 'quiet' };
     case 'pending':
       return { label: 'Queued', tone: 'quiet' };
     case 'held':
-      return { label: 'Held', detail: HELD[run.reason ?? ''] ?? 'Rafii held this run for review.', tone: 'attention' };
+      return { label: 'Held', detail: HELD[run.reason ?? ''] ?? 'Held for review.', tone: 'attention' };
     case 'missed':
-      return { label: 'Missed', detail: 'The run was more than a day late, so it was skipped.', tone: 'attention' };
+      return { label: 'Missed', detail: 'Over a day late, so skipped.', tone: 'attention' };
     case 'cancelled':
-      return { label: 'Cancelled', detail: run.reason === 'definition_changed' ? 'The automation was edited before this run.' : 'The automation was paused or cancelled before this run.', tone: 'quiet' };
+      return { label: 'Cancelled', detail: run.reason === 'definition_changed' ? 'Edited before this run.' : 'Paused or cancelled before this run.', tone: 'quiet' };
     case 'failed':
-      return { label: 'Failed', detail: 'The run did not finish.', tone: 'failure' };
+      return { label: 'Failed', detail: 'Didn’t finish.', tone: 'failure' };
     default:
       return { label: run.state, tone: 'quiet' };
   }
 }
 
 const PAUSED: Record<string, string> = {
-  destinations_unavailable: 'Paused: none of its accounts is connected. Edit it to choose new destinations.',
-  new_preview_required: 'Paused: it needs a new review. Edit and save it, then activate it again.',
-  campaign_changed: 'Paused: its brief changed. Edit and save it, then activate it again.'
+  destinations_unavailable: 'No connected accounts. Edit it to choose new ones.',
+  new_preview_required: 'Edit and save it, then activate it again.',
+  campaign_changed: 'Its brief changed. Edit and save it, then activate it again.'
 };
 
-/** The automation's status in words; `needsOwner` when only an owner can move it forward. */
+/**
+ * The automation's status in words; `needsOwner` when only an owner can move it forward. Labels use the shared
+ * status vocabulary (`STATUS` in `src/lib/status-labels.ts`: Active, Draft, Paused, Needs review); they are literal
+ * here because this file has no runtime imports (node:test loads it directly).
+ */
 export function statusText(task: { status: string; pauseReason?: string }): { label: string; detail: string; needsOwner: boolean; needsEdit: boolean } {
   switch (task.status) {
     case 'active':
-      return { label: 'Active', detail: 'Preparing drafts on schedule.', needsOwner: false, needsEdit: false };
+      return { label: 'Active', detail: 'Drafting on schedule.', needsOwner: false, needsEdit: false };
     case 'draft':
-      return { label: 'Draft', detail: 'Waiting for the workspace owner to activate it.', needsOwner: true, needsEdit: false };
+      return { label: 'Draft', detail: 'An owner activates it.', needsOwner: true, needsEdit: false };
     case 'paused':
       return task.pauseReason
-        ? { label: 'Needs review', detail: PAUSED[task.pauseReason] ?? 'Paused until it is reviewed again.', needsOwner: false, needsEdit: true }
-        : { label: 'Paused', detail: 'No drafts are prepared until it is resumed.', needsOwner: true, needsEdit: false };
+        ? { label: 'Needs review', detail: PAUSED[task.pauseReason] ?? 'Paused until reviewed.', needsOwner: false, needsEdit: true }
+        : { label: 'Paused', detail: 'Resume it to keep drafting.', needsOwner: true, needsEdit: false };
     case 'cancelled':
-      return { label: 'Cancelled', detail: 'No further drafts will be prepared.', needsOwner: false, needsEdit: false };
+      return { label: 'Cancelled', detail: 'No more drafts.', needsOwner: false, needsEdit: false };
     default:
       return { label: task.status, detail: '', needsOwner: false, needsEdit: false };
   }

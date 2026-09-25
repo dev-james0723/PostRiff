@@ -71,7 +71,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
       current = contextResult.revision;
       await act.mutateAsync({ revision: current, action: 'profile_propose', payload: { writing: writing.trim(), tone } });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The voice profile could not be proposed.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t save your voice. Try again.');
     }
   }
 
@@ -80,11 +80,11 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
     try {
       await act.mutateAsync({ revision, action: 'profile_decide', payload: { decision, note: decision === 'approve' ? note.trim() : '' } });
       if (decision === 'approve') {
-        toast.success('Voice profile active. New drafts will be written and scheduled against it.');
+        toast.success('Voice active');
         onDone?.();
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The decision could not be saved.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t save. Try again.');
     } finally {
       setDeciding(null);
     }
@@ -94,27 +94,26 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
     return (
       <Panel
         material='glass'
-        eyebrow='Draft interpretation'
-        title='Review your provisional voice'
+        title='Review your voice'
         titleId='voice-provisional-heading'
         description={
           proposalStale
-            ? 'A supporting sample changed or was revoked. Analyse the current selected samples again before approval.'
+            ? 'A sample changed. Analyse your samples again before approving.'
             : provisional.analysisRoute
               ? provisional.analysisMethod === 'ai'
-                ? 'Proposed by your selected AI model from consented samples. Review and edit it before activation.'
-                : 'Local writing statistics from selected samples, not AI tone analysis. Review them before activation.'
-              : 'This is what drafts will be checked against. Approve it or start again.'
+                ? 'Proposed by AI from the samples you allowed.'
+                : 'From local writing statistics, not AI.'
+              : undefined
         }
         bodyClassName='gap-5 text-sm'
       >
         <ProfileDetails profile={provisional} observationsLabel='Observations in this proposal' />
         <div className='flex flex-col gap-2'>
-          <Label htmlFor='voice-note'>Optional: replace the proposed observations with your own writing guidance</Label>
-          <Input id='voice-note' value={note} onChange={(e) => setNote(e.target.value)} maxLength={1500} placeholder='e.g. Plain, specific, never salesy.' className={FIELD_CLASS} />
+          <Label htmlFor='voice-note'>Your guidance (optional)</Label>
+          <Input id='voice-note' value={note} onChange={(e) => setNote(e.target.value)} maxLength={1500} placeholder='Plain, specific, never salesy.' className={FIELD_CLASS} />
         </div>
         <div className='flex flex-col gap-3'>
-          {!isOwner && <p className='text-muted-foreground text-xs'>Only an owner can approve this voice or start again.</p>}
+          {!isOwner && <p className='text-muted-foreground text-xs'>Only an owner can approve or start again.</p>}
           <div className='flex flex-wrap gap-2'>
             <Button variant='action' size='control' disabled={act.isPending || !isOwner || proposalStale} aria-busy={deciding === 'approve' || undefined} onClick={() => void decide('approve')}>
               {deciding === 'approve' ? (
@@ -140,7 +139,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
           <AlertDialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 md:rounded-[var(--rafii-radius-dialog)] md:p-6'>
             <AlertDialogHeader>
               <AlertDialogTitle>Start the voice setup again?</AlertDialogTitle>
-              <AlertDialogDescription>This discards the proposal and clears the active voice. Existing drafts need review, and waiting posts are held until approved again.</AlertDialogDescription>
+              <AlertDialogDescription>This discards the proposal and clears the active voice. Drafts need review, and waiting posts are held until approved again.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel variant='glass' size='control'>
@@ -157,7 +156,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <Panel material='glass' title='Set up your voice' titleId='voice-setup-heading' description='Two minutes to guide how future drafts sound.' bodyClassName='gap-6'>
+    <Panel material='glass' title='Set up your voice' titleId='voice-setup-heading' bodyClassName='gap-6'>
       <fieldset className='flex flex-col gap-2'>
         <legend className='text-foreground mb-2 text-sm font-medium'>1. What are you building?</legend>
         <RadioGroup value={mode} onValueChange={(value) => setMode(value as BrandMode)} className='grid gap-2 sm:grid-cols-2'>
@@ -171,11 +170,11 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
         <legend className='text-foreground mb-2 text-sm font-medium'>2. Purpose and people</legend>
         <div className='flex flex-col gap-2'>
           <Label htmlFor='voice-purpose'>{interview.questions.find((q) => q.key === 'purpose')?.question}</Label>
-          <Input id='voice-purpose' value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={1500} placeholder='e.g. Help beginners build a useful daily habit.' className={FIELD_CLASS} />
+          <Input id='voice-purpose' value={purpose} onChange={(e) => setPurpose(e.target.value)} maxLength={1500} placeholder='Help beginners build a daily habit' className={FIELD_CLASS} />
         </div>
         <div className='flex flex-col gap-2'>
           <Label htmlFor='voice-audience'>{interview.questions.find((q) => q.key === 'audience')?.question}</Label>
-          <Input id='voice-audience' value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={1500} placeholder='e.g. Curious people getting started.' className={FIELD_CLASS} />
+          <Input id='voice-audience' value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={1500} placeholder='Curious people getting started' className={FIELD_CLASS} />
         </div>
         <AnimatePresence initial={false}>
           {needsSubject && (
@@ -187,7 +186,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
           {mode === 'hybrid' && (
             <motion.div key='speaker' initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={fieldTransition} className='flex flex-col gap-2'>
               <Label htmlFor='voice-speaker'>Who speaks in the first post?</Label>
-              <Input id='voice-speaker' value={speaker} onChange={(e) => setSpeaker(e.target.value)} maxLength={1500} placeholder='e.g. Me, as the founder' className={FIELD_CLASS} />
+              <Input id='voice-speaker' value={speaker} onChange={(e) => setSpeaker(e.target.value)} maxLength={1500} placeholder='Me, as the founder' className={FIELD_CLASS} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -195,7 +194,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
 
       <fieldset className='flex flex-col gap-3'>
         <legend className='text-foreground mb-2 text-sm font-medium'>3. Tone and a sample</legend>
-        <p className='text-muted-foreground text-xs'>Choose a tone explicitly. This is your preference, not a learned conclusion. Evidence-backed analysis is available in Learn my voice.</p>
+        <p className='text-muted-foreground text-xs'>Your preference, not a learned conclusion.</p>
         <RadioGroup value={tone} onValueChange={(value) => setTone(value as 'warm' | 'direct' | 'reflective')} className='grid gap-2 sm:grid-cols-3'>
           {TONES.map((option) => (
             <RadioGroupItem key={option.id} id={`tone-${option.id}`} value={option.id} label={option.label} description={option.note} className={CHOICE_CLASS} />
@@ -203,7 +202,7 @@ export function VoiceSetup({ onDone }: { onDone?: () => void }) {
         </RadioGroup>
         <div className='flex flex-col gap-2'>
           <Label htmlFor='voice-writing'>Paste something you wrote (optional)</Label>
-          <Textarea id='voice-writing' rows={4} value={writing} onChange={(e) => setWriting(e.target.value)} maxLength={6000} placeholder='A paragraph is enough. Writing routes receive it in VOICE.md as an example of how you write.' className={TEXTAREA_CLASS} />
+          <Textarea id='voice-writing' rows={4} value={writing} onChange={(e) => setWriting(e.target.value)} maxLength={6000} placeholder='A paragraph is enough.' className={TEXTAREA_CLASS} />
         </div>
       </fieldset>
 

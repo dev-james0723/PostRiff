@@ -160,7 +160,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
               aria-pressed={voiceMode === 'personalized'}
               disabled={disabled || busy || !voiceAvailable}
               onClick={() => onVoiceMode(voiceMode === 'personalized' ? 'neutral' : 'personalized')}
-              title={voiceAvailable ? 'Use only the selected writing samples allowed for this writer' : 'Select writing samples and allow this writer on the Brand page'}
+              title={voiceAvailable ? 'Uses only samples you approved for this model' : 'Approve writing samples on the Brand page first'}
               className={cn(TOOL, ICON_ON_PHONES, voiceMode === 'personalized' ? 'rafii-glass-selected text-foreground' : 'rafii-glass text-muted-foreground hover:text-foreground')}
             >
               <IconWaveSine aria-hidden className='size-4' />
@@ -202,7 +202,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
               ))}
             </span>
           )}
-          {reminder.more > 0 && <span>{reminder.more} more in the plan.</span>}
+          {reminder.more > 0 && <span>+{reminder.more} more</span>}
         </div>
       )}
       {consent && (
@@ -224,10 +224,10 @@ function reminderFor(rows: { chip: ChannelChip; effective: ChipLanguage[] }[], l
     for (const language of effective) {
       const entry = locales.entry(language.tag);
       if (!entry) continue;
-      if (entry.regionless) found.push({ platform: chip.platform, tag: language.tag, text: 'has no region. Pick one so spelling and wording match your readers.', tone: 'amber' });
-      else if (!entry.guide) found.push({ platform: chip.platform, tag: language.tag, text: 'isn’t tuned yet. PostRiff still writes it; check the wording before you post.', tone: 'amber' });
+      if (entry.regionless) found.push({ platform: chip.platform, tag: language.tag, text: 'has no region. Pick one.', tone: 'amber' });
+      else if (!entry.guide) found.push({ platform: chip.platform, tag: language.tag, text: 'isn’t tuned yet. Check the wording.', tone: 'amber' });
       else if (entry.gendered && !languages.settings.selfReference)
-        found.push({ platform: chip.platform, tag: language.tag, text: 'shows the writer’s gender in some words. How do you refer to yourself?', tone: 'quiet', choices: true });
+        found.push({ platform: chip.platform, tag: language.tag, text: 'uses gendered words. How do you refer to yourself?', tone: 'quiet', choices: true });
     }
   }
   const unique = found.filter((item, i) => found.findIndex((other) => other.tag === item.tag && other.text === item.text) === i);

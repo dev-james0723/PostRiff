@@ -17,11 +17,11 @@ export interface QuickStart {
   formatId: string;
   group: QuickStartGroup;
   title: string;
-  /** The footnote: what this kind of post is, in plain words. */
+  /** The footnote: what this kind of post is, in one short sentence. */
   explanation: string;
   /** Starter text placed in the composer; brackets mark what the writer replaces. */
   example: string;
-  /** How people usually present this kind of post. */
+  /** How people usually present this kind of post: two or three formats. */
   usually: string;
   /** Default draft targets among the platforms the runtime can write for today. */
   platforms: ('LinkedIn' | 'Instagram' | 'Threads')[];
@@ -45,9 +45,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'short_text',
     group: 'thoughts',
     title: 'Quick thought',
-    explanation: 'One observation, contradiction or question, said once in your own words. No setup, no list, no conclusion required.',
+    explanation: 'One observation or question, in your own words.',
     example: 'One thing I keep noticing: the tasks I put off are never the hard ones, they are the ones with no obvious first step. Turn this into a short post in my words.',
-    usually: 'Text-only on Threads, X or Bluesky · a quote card on Instagram or 小紅書',
+    usually: 'Text on Threads, X or Bluesky · a quote card',
     platforms: ['Threads', 'LinkedIn'],
     mode: 'thread'
   },
@@ -57,9 +57,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'image_caption',
     group: 'thoughts',
     title: 'Personal reflection',
-    explanation: 'A true moment from your week and what it stirred up. It does not need a lesson at the end; a precise observation is enough.',
+    explanation: 'A true moment from your week and what it stirred up.',
     example: 'This morning I finally did the thing I had been avoiding for a month, and it took twenty minutes. Write a reflection on what the avoiding was really about, without tying it up too neatly.',
-    usually: 'Photo + caption · plain text · a diary-style note · a short video voice-over',
+    usually: 'Photo + caption · a diary-style note',
     platforms: ['Instagram', 'Threads'],
     mode: 'post'
   },
@@ -69,9 +69,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'short_text',
     group: 'perspective',
     title: 'News + my view',
-    explanation: 'What happened, why it matters to the people you write for, and what you think or still wonder. The source stays separate from your view.',
+    explanation: 'What happened, why it matters, and what you think.',
     example: 'I read this today: [paste the link or the key points]. First say what actually happened in two lines. Then my take: [what it changes for people like my readers, and one thing I am not sure about].',
-    usually: 'A quick take or thread · a longer LinkedIn post · a carousel · a link post on Facebook',
+    usually: 'A quick take · a LinkedIn post · a carousel',
     platforms: ['LinkedIn', 'Threads'],
     mode: 'post'
   },
@@ -81,9 +81,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'article',
     group: 'perspective',
     title: 'Deep point of view',
-    explanation: 'A position you can defend: the claim, your reasons and evidence, and the strongest argument against it, answered honestly.',
+    explanation: 'A claim, your reasons, and the best argument against it.',
     example: 'My position: [one clear claim about your field]. My reasons: [two or three, with an example each]. The best argument against it: [state it fairly] and why I still hold the position. Write this as a longer piece.',
-    usually: 'A long post or article · a newsletter issue · a blog on 知乎, note or Naver · a video essay',
+    usually: 'A long post or article · a newsletter',
     platforms: ['LinkedIn'],
     mode: 'post'
   },
@@ -93,9 +93,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'image_caption',
     group: 'work',
     title: 'Building in public',
-    explanation: 'Progress, decisions, dead ends and what they cost. Real numbers where you have them, and no pretending a draft is a launch.',
+    explanation: 'Progress, decisions and dead ends, with real numbers.',
     example: 'This week on [what you are building]: what I tried, what broke, the decision I made and why, and what comes next. Keep it plain and specific.',
-    usually: 'Screenshot + note · a build log · a carousel · a short demo clip · behind-the-scenes video',
+    usually: 'Screenshot + note · a build log · a demo clip',
     platforms: ['LinkedIn', 'Threads'],
     mode: 'post'
   },
@@ -105,9 +105,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'carousel',
     group: 'work',
     title: 'How-to',
-    explanation: 'One repeatable method you have actually used, in numbered steps: what you need before you start, the steps, the one mistake to avoid.',
+    explanation: 'One method you’ve used, in numbered steps.',
     example: 'Step by step, how I [do one specific task] using [a tool, a routine or a method]. Start with what you need before you begin, then the steps, then the mistake most people make.',
-    usually: 'Step-by-step notes on 小紅書 · an Instagram carousel · a LinkedIn document · a short tutorial · a YouTube video',
+    usually: 'A carousel · step-by-step notes · a short tutorial',
     platforms: ['Instagram', 'LinkedIn'],
     mode: 'carousel'
   },
@@ -117,9 +117,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'image_caption',
     group: 'work',
     title: 'Launch',
-    explanation: 'Why it exists, who it is for, what is available today (and what is not yet), and how to try it. One launch becomes several posts with different jobs, not the same ad repeated.',
+    explanation: 'Why it exists, who it’s for and how to try it.',
     example: 'We just released [the product, feature, service or offer]. Why we built it, who it is for, what is included right now, what is still coming, and how to try it. Draft the announcement first.',
-    usually: 'An announcement · a demo clip · a behind-the-decision post · a getting-started guide · a reply to early feedback',
+    usually: 'An announcement · a demo clip · a getting-started guide',
     platforms: ['LinkedIn', 'Instagram', 'Threads'],
     mode: 'schedule'
   },
@@ -129,9 +129,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'image_caption',
     group: 'craft',
     title: 'Practice & performance',
-    explanation: 'Something from today’s practice, session or class: what you worked on, what changed, what still feels hard. For any craft, from music to cooking to sport.',
+    explanation: 'What you worked on today, what changed, what’s still hard.',
     example: 'From today’s [practice, session, rehearsal or class]: what I was working on, the one thing that changed, and what still feels hard. Say it the way I would tell a friend, not a student.',
-    usually: 'A performance or process clip · a studio photo + caption · a short lesson · a longer video · a reflective essay',
+    usually: 'A process clip · a photo + caption · a short lesson',
     platforms: ['Instagram', 'Threads'],
     mode: 'post'
   },
@@ -141,9 +141,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'short_text',
     group: 'craft',
     title: 'Video extension',
-    explanation: 'Turn one long video into several native entry points: the question it answers, the best moment, the making-of, the follow-up discussion.',
+    explanation: 'Turn one long video into several short posts.',
     example: 'My latest video is about [topic]. The core question it answers is [question]. The best moment is [quote or scene]. Draft a community post, a short teaser, and a conversation starter.',
-    usually: 'A community post · a Short or Reel · a conversation post on Threads or X · a preview with the link on Facebook',
+    usually: 'A community post · a Short or Reel · a teaser',
     platforms: ['Threads', 'Instagram'],
     mode: 'video'
   },
@@ -153,9 +153,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'community_post',
     group: 'community',
     title: 'Answer a question',
-    explanation: 'Answer a real question you were asked, or ask for feedback on something specific. Say what you would do, what you are unsure about, and invite better answers.',
+    explanation: 'Answer a real question, and say where you’re unsure.',
     example: 'Someone asked me: [the question, as they asked it]. Answer it plainly, say what I would actually do and where I am unsure, and invite people with more experience to correct me.',
-    usually: 'A Reddit or 知乎 answer · a forum reply · a Discord or Telegram message · a poll on YouTube or LinkedIn',
+    usually: 'A forum answer · a community message · a poll',
     platforms: ['Threads', 'LinkedIn'],
     mode: 'thread'
   },
@@ -165,9 +165,9 @@ export const QUICK_STARTS: QuickStart[] = [
     formatId: 'image_caption',
     group: 'community',
     title: 'Event or service update',
-    explanation: 'A confirmed date, place, offer or collaboration with everything people need to act: who it is for, what happens, how to join, where to ask.',
+    explanation: 'A confirmed date, place or offer, with how to join.',
     example: 'On [date] at [place] we are hosting [the event, class, opening or service]. Who it is for, what happens, how to join or book, and where to ask questions. Draft the announcement.',
-    usually: 'A post on Facebook, Instagram or LinkedIn · a Google Business update · a broadcast to your community channel',
+    usually: 'A social post · a Google Business update',
     platforms: ['LinkedIn', 'Instagram'],
     mode: 'schedule'
   }

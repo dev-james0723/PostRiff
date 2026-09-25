@@ -21,7 +21,7 @@ import { FAILED, stateWords } from './job-state';
 /** `FEEDBACK_REASONS` in `src/postriff_phase2/store.py`, with plain labels. */
 export const SET_ASIDE_REASONS: { id: string; label: string }[] = [
   { id: 'wrong_facts', label: 'The facts are wrong' },
-  { id: 'not_my_voice', label: 'It does not sound right' },
+  { id: 'not_my_voice', label: 'Doesn’t sound like me' },
   { id: 'too_long', label: 'Too long' },
   { id: 'too_short', label: 'Too short' },
   { id: 'wrong_angle', label: 'Wrong angle' },
@@ -71,12 +71,12 @@ export function SetAsideDialog({ variantId, open, onOpenChange }: { variantId: s
       {
         onSuccess: () => {
           flash('success');
-          toast.success('Draft set aside. Edit it to use it again.');
+          toast.success('Set aside');
           onOpenChange(false);
         },
         onError: (err) => {
           flash('error');
-          toast.error(err instanceof ApiError ? err.message : 'The draft could not be set aside.');
+          toast.error('Couldn’t set this draft aside', { description: err instanceof ApiError ? err.message : undefined });
           // "This draft changed" or "Workspace changed": read the workspace again so the dialog shows what is true now.
           if (err instanceof ApiError && err.status === 409 && workspaceId) void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         }
@@ -92,13 +92,10 @@ export function SetAsideDialog({ variantId, open, onOpenChange }: { variantId: s
             {variant && <ChannelIcon platform={variant.platform} name={variant.platform} size='sm' />}
             Set this draft aside?
           </DialogTitle>
-          <DialogDescription>
-            It stays in the “Set aside” group under Drafts and cannot be scheduled until someone edits it. Nothing is deleted. PostRiff learns from this only through
-            preferences you accept on the Memory page.
-          </DialogDescription>
+          <DialogDescription>It moves to Set aside until someone edits it. Nothing is deleted.</DialogDescription>
         </DialogHeader>
         {!variant ? (
-          <p className='text-muted-foreground text-sm'>This draft is no longer in the workspace.</p>
+          <p className='text-muted-foreground text-sm'>This draft is gone.</p>
         ) : (
           <div className='flex flex-col gap-4'>
             <p className='rafii-quiet text-muted-foreground line-clamp-4 rounded-[var(--rafii-radius-control)] px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap'>{variant.proposedUpdate?.text ?? variant.text}</p>
@@ -106,8 +103,8 @@ export function SetAsideDialog({ variantId, open, onOpenChange }: { variantId: s
               <StateMessage
                 kind='unsupported'
                 layout='inline'
-                title={`A job for this draft is ${stateWords(blocking.state)}.`}
-                description='Cancel it in the Queue first; a draft that is scheduled or published cannot be set aside.'
+                title={`Its post is ${stateWords(blocking.state)}.`}
+                description='Cancel it in the Queue first.'
               />
             )}
             <fieldset className='flex flex-col gap-1'>

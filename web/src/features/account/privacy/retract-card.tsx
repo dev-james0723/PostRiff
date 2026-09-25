@@ -49,16 +49,15 @@ export function RetractCard({
 
   async function retract() {
     if (!source || !snapshot.data || !impact) return;
-    // Counted from the snapshot the server checks against (expectedRevision), so they match what it did.
-    const done = impact;
     setBusy('retract');
     setRetracting(true);
     try {
       await api.dataRequest(workspaceId, { kind: 'retraction', sourceId: source.id, expectedRevision: snapshot.data.revision });
       setPicked(null);
-      toast.success(`Source retracted. ${retractionLines(done).join(' ')}`);
+      // The impact lines were shown before the hold; the toast only confirms the irreversible step.
+      toast.success('Source retracted');
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The source could not be retracted.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t retract the source. Try again.');
       if (err instanceof ApiError && err.status === 409) void snapshot.refetch();
     } finally {
       setRetracting(false);
@@ -75,7 +74,7 @@ export function RetractCard({
     <SettingsSection
       id='privacy-retract'
       title='Retract a source'
-      description='Blanks a source’s text and facts. Drafts that used it keep their text but stay blocked until you draft them again. Their posts waiting in the Queue are held until approved again. This cannot be undone.'
+      description='Blanks a source’s text and facts. Drafts that used it are blocked until drafted again. This can’t be undone.'
       className='h-full'
       bodyClassName='flex-1'
       data-tour='privacy-retract'
@@ -83,9 +82,9 @@ export function RetractCard({
       {snapshot.isPending ? (
         <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)]' />
       ) : !state ? (
-        <Unavailable query={snapshot} fallback='Sources could not be read.' />
+        <Unavailable query={snapshot} fallback='Couldn’t read sources.' />
       ) : sources.length === 0 ? (
-        <StateMessage kind='empty' layout='inline' title='No active sources in this workspace.' />
+        <StateMessage kind='empty' layout='inline' title='No sources yet' />
       ) : (
         <>
           <Select value={picked ?? ''} onValueChange={(value) => setPicked(value ? String(value) : null)}>
@@ -115,7 +114,7 @@ export function RetractCard({
               {impact.resetsIdea && <li>Your current idea came from this source and will be reset.</li>}
             </ul>
           ) : (
-            !canEdit && <p className='text-muted-foreground text-xs'>Ask an editor or the owner to retract a source.</p>
+            !canEdit && <p className='text-muted-foreground text-xs'>Only editors and the owner can retract.</p>
           )}
         </>
       )}
@@ -140,7 +139,7 @@ export function RetractCard({
           </HoldActionButton>
         )}
         <Link href='/app/ideas' className={linkClass}>
-          Review sources in Ideas <LearnMoreChevron className='size-3.5' />
+          Sources in Ideas <LearnMoreChevron className='size-3.5' />
         </Link>
       </div>
     </SettingsSection>

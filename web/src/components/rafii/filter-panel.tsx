@@ -27,7 +27,7 @@ export interface FilterPanelProps {
  * The labelled Filters trigger and its temporary panel (DNA §10.5, §12.3). Closing restores
  * focus to the trigger (Popover behaviour); Escape closes the panel before any parent dialog.
  */
-export function FilterPanel({ count, children, title = 'Filters & display', eyebrow = 'Refine your view', onClear, doneLabel = 'Done', triggerLabel = 'Filters', className, open: controlled, onOpenChange }: FilterPanelProps) {
+export function FilterPanel({ count, children, title = 'Filters', eyebrow, onClear, doneLabel = 'Done', triggerLabel = 'Filters', className, open: controlled, onOpenChange }: FilterPanelProps) {
   const [uncontrolled, setUncontrolled] = useState(false);
   const open = controlled ?? uncontrolled;
   const setOpen = (next: boolean) => {
@@ -48,7 +48,7 @@ export function FilterPanel({ count, children, title = 'Filters & display', eyeb
       <PopoverContent align='end' className='rafii-elevated w-[min(23rem,calc(100vw-1.5rem))] gap-0 rounded-[1.375rem] p-5'>
         <div className='mb-4 flex items-start justify-between gap-3'>
           <div className='flex flex-col gap-1'>
-            <span className='rafii-eyebrow'>{eyebrow}</span>
+            {eyebrow && <span className='rafii-eyebrow'>{eyebrow}</span>}
             <h3 className='text-foreground text-lg font-medium tracking-tight'>{title}</h3>
           </div>
           <Button variant='action' size='sm' onClick={() => setOpen(false)} className='gap-1.5'>

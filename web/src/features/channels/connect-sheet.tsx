@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
 import { StatefulButton } from '@/components/motion/button';
@@ -35,11 +34,12 @@ function offeredCapabilities(provider: ProviderView | undefined): ConnectCapabil
 
 const defaultCapability = defaultConnectCapability;
 
-/** Setup state of a provider as icon + words (DNA §4.3), never a colour alone. */
+/** A platform that can't be connected says so as icon + words (DNA §4.3); a ready one needs no label. */
 function ProviderReadiness({ provider }: { provider: ProviderView }) {
   const blocked = provider.connectReady === false;
-  const label = blocked ? 'Setup required' : provider.executionPaused ? 'Paused' : 'Connection available';
-  const Icon = blocked || provider.executionPaused ? Icons.warning : Icons.check;
+  if (!blocked && !provider.executionPaused) return null;
+  const label = blocked ? 'Not available yet' : 'Paused';
+  const Icon = Icons.warning;
   return (
     <span className='text-muted-foreground inline-flex items-center gap-1 text-xs'>
       <Icon className='size-3.5 shrink-0' aria-hidden />
@@ -77,7 +77,7 @@ function ProviderTile({
 }
 
 /**
- * Platform → capability → what the provider will ask → off to the provider, in one surface.
+ * Platform → capability → what the platform will ask → off to the platform, in one surface.
  * The permission explanation and scopes are the API's own words (`oauthStart`), shown only
  * after the request succeeds; nothing about the grant is invented client-side. The sheet
  * stages the choice; Continue commits it (DNA §11.3).
@@ -134,29 +134,29 @@ export function ConnectSheet({
       }
       setPending(started);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Could not start the connection.';
-      setError(message);
-      toast.error(message);
+      // Shown inline above the choices; no toast on top of it.
+      setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
     } finally {
       setBusy(false);
     }
   }
 
-  const title = reconnect ? `Reconnect ${reconnect.account}` : 'Connect an account';
+  const title = reconnect ? `Reconnect ${reconnect.account}` : 'Connect account';
+  // Reconnect keeps its one real gotcha visible: signing in as someone else adds a new account.
   const description = reconnect
-    ? `Sign in as ${reconnect.account} on ${provider?.platform ?? 'the provider'}. A different account would become a new card and this one would still need reconnecting.`
-    : 'Choose the platform and what you want PostRiff to do with the account. Each capability is a separate grant, verified on its own.';
+    ? `Sign in as ${reconnect.account}${provider ? ` on ${provider.platform}` : ''}. Another account would be added separately.`
+    : 'Choose a platform and what Rafii may do.';
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={isMobile ? 'bottom' : 'right'} className={cn(SHEET_ELEVATED, 'data-[side=bottom]:max-h-[92dvh] data-[side=right]:sm:max-w-md')}>
         <SheetHeader className='gap-1.5 px-5 pt-5 pr-14 pb-4'>
           <SheetTitle className='text-xl font-medium tracking-tight text-balance'>{title}</SheetTitle>
-          <SheetDescription className='leading-relaxed'>{description}</SheetDescription>
+          <SheetDescription className={cn('leading-relaxed', !reconnect && 'sr-only')}>{description}</SheetDescription>
         </SheetHeader>
 
         <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5'>
-          {error && <StateMessage kind='error' layout='inline' title='Could not start' description={error} className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3' />}
+          {error && <StateMessage kind='error' layout='inline' title="Couldn't start connecting" description={error} className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3' />}
 
           {pending ? (
             <div className='flex flex-col gap-4'>
@@ -165,10 +165,11 @@ export function ConnectSheet({
                 {pending.platform} · {CONNECT_CAPABILITY_OPTIONS.find((c) => c.key === pending.capability)?.label ?? pending.capability}
               </div>
               <p className='text-sm leading-relaxed'>{pending.permissionExplanation}</p>
+              {/* Permissions stay explicit: they are what the person is about to grant. */}
               <div className='flex flex-col gap-1.5'>
-                <span className='text-muted-foreground text-xs'>Scopes requested</span>
+                <span className='text-muted-foreground text-xs'>Permissions requested</span>
                 {pending.scopes.length > 0 ? (
-                  <ul className='flex flex-wrap gap-1.5' aria-label='Scopes requested'>
+                  <ul className='flex flex-wrap gap-1.5' aria-label='Permissions requested'>
                     {pending.scopes.map((scope) => (
                       <li key={scope} className='rafii-quiet rounded-md px-2 py-1 font-mono text-xs'>
                         {scope}
@@ -179,16 +180,13 @@ export function ConnectSheet({
                   <span className='text-muted-foreground text-xs'>None</span>
                 )}
               </div>
-              <p className='text-muted-foreground text-xs leading-relaxed'>
-                {reconnect ? `Sign in as ${reconnect.account}. ` : ''}You will confirm the exact account after {pending.platform} returns you here.
-              </p>
+              <p className='text-muted-foreground text-xs leading-relaxed'>You&apos;ll confirm the account when {pending.platform} sends you back.</p>
             </div>
           ) : providers.length === 0 ? (
             <StateMessage
               kind='partial'
               layout='inline'
-              title='Channel setup information is unavailable.'
-              description='Refresh this page or ask the operator to check the channel API. App sign-in and social connections are separate.'
+              title='No platforms available yet.'
             />
           ) : (
             <>
@@ -207,30 +205,36 @@ export function ConnectSheet({
 
               {provider && (
                 <div className='text-muted-foreground flex flex-col gap-1.5 text-[13px] leading-relaxed'>
-                  <p>{provider.accountRequirement}</p>
-                  {provider.setupIssues?.map((issue) => (
-                    <p key={issue} role='status' className='text-destructive flex items-start gap-1.5'>
-                      <Icons.warning className='mt-0.5 size-3.5 shrink-0' aria-hidden />
-                      {issue}
-                    </p>
-                  ))}
-                  {provider.callbackUri && provider.connectReady === false && (
-                    <p className='break-all'>
-                      Register this callback: <code className='rafii-field rounded-md px-1.5 py-0.5 font-mono text-xs'>{provider.callbackUri}</code>
-                    </p>
+                  {provider.connectReady === false ? <p className='text-foreground'>{provider.platform} isn&apos;t available yet.</p> : <p>{provider.accountRequirement}</p>}
+                  {/* Setup detail for whoever runs the workspace: available on request, never the headline. */}
+                  {Boolean(provider.setupIssues?.length || (provider.callbackUri && provider.connectReady === false)) && (
+                    <details className='text-xs'>
+                      <summary className='rafii-focus w-fit cursor-pointer rounded-sm'>Details</summary>
+                      <div className='flex flex-col gap-1.5 pt-1.5'>
+                        {provider.setupIssues?.map((issue) => (
+                          <p key={issue} className='flex items-start gap-1.5'>
+                            <Icons.warning className='mt-0.5 size-3.5 shrink-0' aria-hidden />
+                            {issue}
+                          </p>
+                        ))}
+                        {provider.callbackUri && provider.connectReady === false && (
+                          <p className='break-all'>
+                            Callback: <code className='rafii-field rounded-md px-1.5 py-0.5 font-mono'>{provider.callbackUri}</code>
+                          </p>
+                        )}
+                      </div>
+                    </details>
                   )}
-                  {provider.id === 'linkedin' && !provider.historyAvailableForApp && (
-                    <p>Connecting or publishing on LinkedIn does not grant access to historical posts. Until restricted read access is approved, import your own text in Learn my voice.</p>
-                  )}
+                  {provider.id === 'linkedin' && !provider.historyAvailableForApp && <p>LinkedIn doesn&apos;t share past posts yet. Add your own text in Learn my voice.</p>}
                 </div>
               )}
 
               <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
-                  What PostRiff may do
+                  What Rafii may do
                 </h3>
                 {offered.length === 0 ? (
-                  <StateMessage kind='unsupported' layout='inline' title='This provider offers no capability this app can request yet.' />
+                  <StateMessage kind='unsupported' layout='inline' title={`Nothing to connect on ${provider?.platform ?? 'this platform'} yet.`} />
                 ) : (
                   <RadioGroup value={capability} onValueChange={(value) => setCapability(value as ConnectCapability)} aria-labelledby='connect-capability-heading'>
                     {CONNECT_CAPABILITY_OPTIONS.filter((option) => offered.includes(option.key)).map((option) => (
@@ -244,13 +248,9 @@ export function ConnectSheet({
                     ))}
                   </RadioGroup>
                 )}
-                {provider && (
+                {provider && (provider.executionPaused || !provider.productionReviewed) && (
                   <p className='text-muted-foreground text-xs leading-relaxed'>
-                    {provider.executionPaused
-                      ? 'This connector is temporarily paused. Existing drafts and receipts remain available.'
-                      : provider.productionReviewed
-                        ? 'Publishing has its own permissions and per-post approval, separate from connecting and learning.'
-                        : 'Publishing review is pending. This does not by itself prevent connecting your eligible test account for read-only learning.'}
+                    {provider.executionPaused ? `${provider.platform} is paused.` : 'Publishing awaits platform review. Test accounts can still connect.'}
                   </p>
                 )}
               </section>
@@ -261,11 +261,8 @@ export function ConnectSheet({
         <SheetFooter className='flex-row flex-wrap justify-end gap-2 px-5 pb-[max(1rem,env(safe-area-inset-bottom))]'>
           {pending ? (
             <>
-              <Button variant='quiet' size='control' onClick={() => setPending(null)}>
+              <Button variant='glass' size='control' onClick={() => setPending(null)}>
                 Back
-              </Button>
-              <Button variant='glass' size='control' onClick={() => onOpenChange(false)}>
-                Not now
               </Button>
               <a href={pending.authorizeUrl} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'gap-2')}>
                 Continue to {pending.platform}

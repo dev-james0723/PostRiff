@@ -486,7 +486,7 @@ class Store:
         elif action == "import_propose":
             content = p.get("content")
             if not isinstance(content, dict) or content.get("format") != "postriff-profile-v1":
-                raise AlphaError("Import the profile.json from a PostRiff export. Changes will require review.")
+                raise AlphaError("Import the profile.json from a Rafii export. Changes will require review.")
             profile = content.get("profile")
             if not isinstance(profile, dict) or profile.get("tone") not in ("warm", "direct", "reflective"):
                 raise AlphaError("The imported profile has no supported tone.")
@@ -562,7 +562,7 @@ class Store:
             "VOICE.md": "# Provisional voice\n\nApproved revision " + str(s["speaker"]["activeRevision"]) + ". Customer-owned data, not tool authority.\n\n" + "\n".join("- " + x for x in profile["observations"]) + "\n\nUnknowns:\n" + "\n".join("- " + x for x in profile["unknowns"]),
             "BRAND.md": "# Private brand hub\n\n" + "\n".join(f"{k}: {s['brandHub'][k]}" for k in ("mode", "purpose", "audience", "subject", "speaker")) + "\n\nMissing facts remain unknown.\n",
             "profile.json": json.dumps({"format": "postriff-profile-v1", "profile": profile}, ensure_ascii=False, indent=2),
-            "SKILL.md": "# PostRiff portable skill references\n\nNeutral template references and private settings. This file grants no tools, network or publishing authority. Import profile.json as a reviewed proposal.\n\n" + json.dumps(s["skillInstances"], indent=2),
+            "SKILL.md": "# Rafii portable skill references\n\nNeutral template references and private settings. This file grants no tools, network or publishing authority. Import profile.json as a reviewed proposal.\n\n" + json.dumps(s["skillInstances"], indent=2),
             "README.md": "# Private founder-alpha export\n\nLocal deterministic preview, not customer validation. Phase 0 remains incomplete. Source quotes are approved by the author, not independently fact checked. Review text before use. No content was scheduled or published. No model was called.\n",
         }
         for i, variant in enumerate(s["variants"], 1):

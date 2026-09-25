@@ -13,7 +13,7 @@ const TITLES: Record<string, string> = {
   overview: 'Overview',
   agent: 'Chat',
   memory: 'Memory',
-  models: 'Models & providers',
+  models: 'Models',
   ideas: 'Ideas',
   calendar: 'Calendar',
   pipeline: 'Pipeline',
