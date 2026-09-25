@@ -5,6 +5,11 @@ present; it prints model ids, usage, latency and outcomes, never a key. Output: 
 
     RAFII_LIVE_CHECKS=1 OPENAI_API_KEY=… python scripts/agent_runtime_live.py --reasoning --vision --images --live-session [--budget-usd 0.50]
 
+Spend is capped, not just reported: the reasoning check refuses its next model call once the priced estimate reaches
+--budget-usd (at most 6 turns, 4,000 output tokens each, reasoning included) and a reached cap is a FAIL; vision is one call; images are
+exactly two 1024×1024 calls (one Flare generation, one Sunburst edit); the Live session is closed as soon as it starts
+(at most ~35 s). The report lists these caps. Output goes to the evidence file the matrix reads unless --out says otherwise.
+
 --reasoning     One Manager turn on the configured provider with read tools only (in-memory workspace; no DB).
 --vision        One image read by the vision model (visible text, including an injected instruction, is returned as data).
 --images        One Flare generation and one Sunburst edit of it through the Responses image tool (or the gateway).
@@ -33,27 +38,66 @@ def blocked(check: str, reason: str) -> dict:
     return {"check": check, "result": "BLOCKED", "reason": reason}
 
 
+MAX_TURNS = 6
+MAX_OUTPUT_TOKENS = 4000
+
+
+class BudgetReached(RuntimeError):
+    pass
+
+
 def reasoning_check(cfg, budget_usd: float) -> dict:
-    from agents import RunConfig, Runner
+    from agents import ModelSettings, RunConfig, Runner
+    from agents.models.interface import Model
     from test_agent_runtime import FakeService, make_ctx  # an in-memory workspace; the model is the live one
     from postriff_phase2.agent_runtime_v2 import manager
     route = cfg.route("standard_reasoning", reason="live check")
     if not route.available:
         return blocked("reasoning", route.blocker)
+    if cfg.estimate_usd_micro(route.model, 1, 1) is None:
+        return blocked("reasoning", f"{route.model} has no price in config.py, so the spend cap can't be enforced")
     ctx = make_ctx(FakeService())
     ctx.config = cfg
-    agent, routes = manager.build(ctx, workload="standard_reasoning")
+
+    def spent_micro() -> int:
+        return cfg.estimate_usd_micro(route.model, sum(s.get("inputTokens", 0) for s in ctx.ledger.spans),
+                                      sum(s.get("outputTokens", 0) for s in ctx.ledger.spans)) or 0
+
+    live_model, live_settings = manager.provider_model, manager.settings_for
+
+    def capped_model(c, workload):
+        inner = live_model(c, workload)
+
+        class Capped(Model):
+            async def get_response(self, *args, **kwargs):
+                if spent_micro() >= budget_usd * 1_000_000:
+                    raise BudgetReached(f"spend cap ${budget_usd:.2f} reached before model call {ctx.ledger.model_requests + 1}")
+                return await inner.get_response(*args, **kwargs)
+
+            def stream_response(self, *args, **kwargs):
+                raise BudgetReached("streaming is not used by the live check")
+
+        return Capped()
+
+    manager.provider_model = capped_model
+    manager.settings_for = lambda c, workload: live_settings(c, workload).resolve(ModelSettings(max_tokens=MAX_OUTPUT_TOKENS))
     started = time.monotonic()
-    result = asyncio.run(Runner.run(agent, "Which campaign do we have, and what is missing in it? Answer briefly.", context=ctx, max_turns=6,
-                                    run_config=RunConfig(workflow_name="rafii.live_check", trace_include_sensitive_data=False, tracing_disabled=not cfg.openai_tracing)))
+    try:
+        agent, routes = manager.build(ctx, workload="standard_reasoning")
+        result = asyncio.run(Runner.run(agent, "Which campaign do we have, and what is missing in it? Answer briefly.", context=ctx, max_turns=MAX_TURNS,
+                                        run_config=RunConfig(workflow_name="rafii.live_check", trace_include_sensitive_data=False, tracing_disabled=not cfg.openai_tracing)))
+        reply, error = result.final_output, None
+    except BudgetReached as reached:
+        routes, reply, error = [], None, str(reached)
+    finally:
+        manager.provider_model, manager.settings_for = live_model, live_settings
     tokens_in = sum(s.get("inputTokens", 0) for s in ctx.ledger.spans)
     tokens_out = sum(s.get("outputTokens", 0) for s in ctx.ledger.spans)
-    cost = cfg.estimate_usd_micro(route.model, tokens_in, tokens_out)
-    reply = result.final_output
-    return {"check": "reasoning", "result": "PASS" if getattr(reply, "answer", None) else "FAIL", "provider": route.provider, "model": route.model, "routes": routes,
-            "tools": [a["tool"] for a in ctx.ledger.tool_activity], "modelRequests": ctx.ledger.model_requests, "inputTokens": tokens_in, "outputTokens": tokens_out,
-            "estimatedUsd": (cost or 0) / 1_000_000, "overBudget": bool(cost and cost / 1_000_000 > budget_usd), "latencyMs": round((time.monotonic() - started) * 1000),
-            "answer": getattr(reply, "answer", None), "speakable": getattr(reply, "speakable", None)}
+    cost = spent_micro()
+    return {"check": "reasoning", "result": "PASS" if getattr(reply, "answer", None) and not error else "FAIL", "error": error, "provider": route.provider,
+            "model": route.model, "routes": routes, "tools": [a["tool"] for a in ctx.ledger.tool_activity], "modelRequests": ctx.ledger.model_requests,
+            "inputTokens": tokens_in, "outputTokens": tokens_out, "estimatedUsd": cost / 1_000_000, "budgetUsd": budget_usd,
+            "latencyMs": round((time.monotonic() - started) * 1000), "answer": getattr(reply, "answer", None), "speakable": getattr(reply, "speakable", None)}
 
 
 def images_check(cfg) -> dict:
@@ -143,10 +187,14 @@ def main(argv=None) -> int:
     parser.add_argument("--live-session", action="store_true")
     parser.add_argument("--vision", action="store_true")
     parser.add_argument("--budget-usd", type=float, default=0.50)
-    parser.add_argument("--out")
+    parser.add_argument("--out", default=str(ROOT / "docs/design/site-agent/agent-runtime/evidence/live-checks.json"))
     args = parser.parse_args(argv)
+    if not 0 < args.budget_usd <= 2:
+        parser.error("--budget-usd must be above 0 and at most 2.00")
     from postriff_phase2.agent_runtime_v2 import config
-    report = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "checks": []}
+    report = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "checks": [],
+              "caps": {"reasoningBudgetUsd": args.budget_usd, "reasoningMaxTurns": MAX_TURNS, "reasoningMaxOutputTokens": MAX_OUTPUT_TOKENS,
+                       "visionCalls": 1, "imageCalls": 2, "imageSize": "1024x1024", "liveSessions": 1, "liveSessionMaxSeconds": 35}}
     if os.environ.get("RAFII_LIVE_CHECKS") != "1":
         report["checks"].append(blocked("all", "RAFII_LIVE_CHECKS=1 is not set (live checks are opt-in and cost money)"))
     else:

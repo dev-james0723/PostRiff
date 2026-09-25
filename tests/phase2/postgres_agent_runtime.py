@@ -312,6 +312,8 @@ def _():
     user = one("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND role='user' ORDER BY seq DESC LIMIT 1", STATE["conversation"])[0]
     assert user["agent"]["modality"] == "voice" and user["agent"]["delegationId"] == "item_deleg_1"
     assert contracts.valid_trace_id(body["traceId"])
+    stored = one("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND role='assistant' ORDER BY seq DESC LIMIT 1", STATE["conversation"])[0]
+    assert stored["siteAgent"]["model"] == {"id": body["usage"]["route"], "composedBy": "agent", "phrasedBy": body["usage"]["route"]}, stored["siteAgent"]["model"]
     return {"actual": body["answerText"], "speakable": body["speakableSummary"], "tools": body["toolActivity"]}
 
 
@@ -655,6 +657,8 @@ def _():
     assert body["composedBy"] == "deterministic", "the false claim was rejected"
     assert "published every" not in body["answerText"]
     assert service.get(wid, OWNER)["revision"] == before and not body["pendingApprovals"]
+    stored = one("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND role='assistant' ORDER BY seq DESC LIMIT 1", STATE["conversation"])[0]
+    assert stored["siteAgent"]["model"]["composedBy"] == "grounded" and "phrasedBy" not in stored["siteAgent"]["model"], "no model phrased the fallback"
     return {"actual": body["answerText"], "composedBy": body["composedBy"]}
 
 

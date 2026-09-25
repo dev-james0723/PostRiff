@@ -299,6 +299,36 @@ class AnswerPolicyTest(unittest.TestCase):
         ledger.proposals.append({"id": "p1", "summary": ["prepare the post"]})
         self.assertIsNone(answer_policy.check("I've prepared the post for Saturday at 10:00. Shall I apply it?", ledger))
 
+    def test_claims_in_every_answer_language(self):
+        """Mandarin in Simplified, subject-dropped Cantonese, 將/把 objects and typographic apostrophes are claims too;
+        refusals, offers, questions and history are not."""
+        ledger = rt_context.EffectLedger()
+        waiting = rt_context.EffectLedger()
+        waiting.proposals.append({"id": "p1", "summary": ["schedule the post"]})
+        rejected = [
+            ("我已经帮你发布了。", ledger, "claims_forbidden_effect"), ("已經幫你發佈咗。", ledger, "claims_forbidden_effect"),
+            ("搞掂，幫你發佈咗！", ledger, "claims_forbidden_effect"), ("我已經將篇帖發佈咗。", ledger, "claims_forbidden_effect"),
+            ("我已经把帖子发布到 Instagram 了。", ledger, "claims_forbidden_effect"), ("I’ve published it.", ledger, "claims_forbidden_effect"),
+            ("I went ahead and published it.", ledger, "claims_forbidden_effect"), ("I've also scheduled it.", ledger, "claims_forbidden_effect"),
+            ("帖子已经排程了。", waiting, "claims_pending_proposal_applied"),
+            ("我创建了一个草稿。", ledger, "claims_unverified_change"), ("我建立咗一個草稿。", ledger, "claims_unverified_change"),
+            ("已经帮你生成了一张图片。", ledger, "claims_unverified_change"), ("I’ve created a draft.", ledger, "claims_unverified_change"),
+            ("我已经准备好了排程，请确认。", ledger, "claims_missing_proposal"),
+            # code-switching
+            ("我已經幫你 publish 咗個 post。", ledger, "claims_forbidden_effect"), ("幫你 schedule 咗喇！", ledger, "claims_forbidden_effect"),
+            ("Rafii 已經幫你 post 咗上 IG。", ledger, "claims_forbidden_effect"), ("個 post 已經 schedule 咗。", waiting, "claims_pending_proposal_applied"),
+            ("我已經 create 咗個 draft。", ledger, "claims_unverified_change"), ("我已经帮你 prepare 好了 schedule。", ledger, "claims_missing_proposal"),
+        ]
+        for text, where, reason in rejected:
+            self.assertEqual(answer_policy.check(text, where), reason, text)
+        for text in ("我不能帮你发布，请在排程页面发布。", "我唔可以幫你發佈咗。", "你想我幫你排程嗎？", "要我帮你排程吗？", "我發佈前會先問你。",
+                     "这篇帖子上周一已经发布了。", "我建议把它排在周六上午十点。", "我可以帮你写一个草稿吗？", "That post was published on Monday.",
+                     "你想我幫你 schedule 嗎？", "我唔可以幫你 publish。", "我 publish 之前會問你。", "個 post 上個禮拜已經 publish 咗。",
+                     "I'll have Rafii send it once you approve.", "Should Rafii schedule it for Saturday?", "I can post a summary here if you like."):
+            self.assertIsNone(answer_policy.check(text, ledger), text)
+        self.assertIsNone(answer_policy.check("我把它保存为草稿而没有发布。", waiting))
+        self.assertIsNone(answer_policy.check("我已經幫你將個 post 準備好，等你確認。", waiting))
+
     def test_unknown_ids_and_secrets(self):
         ledger = rt_context.EffectLedger()
         self.assertEqual(answer_policy.check("See draft 3f2b1c4d-0000-4000-8000-000000000000.", ledger), "unknown_id")
@@ -534,6 +564,33 @@ class ExtensionPointsTest(unittest.TestCase):
             specialists.INSTRUCTION_HOOKS.clear()
             specialists.EXTRA_SCOPES.pop("research", None)
             tool_adapter.REGISTRY.pop("ext_probe_read", None)
+
+
+@unittest.skipUnless(HAVE_SDK, "openai-agents not installed")
+class LiveCheckCapTest(unittest.TestCase):
+    def test_live_reasoning_check_stops_at_the_spend_cap(self):
+        """The opt-in live script refuses the next model call once the priced estimate reaches --budget-usd (no network here)."""
+        import importlib.util
+        from agents.usage import Usage
+        from postriff_phase2.agent_runtime_v2 import manager
+        spec = importlib.util.spec_from_file_location("agent_runtime_live", Path(__file__).resolve().parents[1] / "scripts/agent_runtime_live.py")
+        live_script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(live_script)
+        cfg = config.RuntimeConfig.from_environment({"OPENAI_API_KEY": "sk-test-key-value-000000000000"})
+        # 300k input tokens on gpt-6-sol ($2 per million) is $0.60: over a $0.50 cap after the first call.
+        scripted = ScriptedModel([[function_call("workspace_summary", {}, call_id="c1")], [assistant_message("never reached")]],
+                                 default_usage=Usage(requests=1, input_tokens=300_000, output_tokens=0, total_tokens=300_000))
+        original = manager.provider_model
+        manager.provider_model = lambda c, workload: scripted
+        try:
+            report = live_script.reasoning_check(cfg, 0.50)
+        finally:
+            manager.provider_model = original
+        self.assertEqual(report["result"], "FAIL")
+        self.assertIn("spend cap $0.50 reached before model call 2", report["error"])
+        self.assertEqual(report["modelRequests"], 1)
+        self.assertAlmostEqual(report["estimatedUsd"], 0.60)
+        self.assertIs(manager.provider_model, original)
 
 
 class HarnessGuardTest(unittest.TestCase):

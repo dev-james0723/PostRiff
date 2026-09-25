@@ -19,22 +19,58 @@ from .context import EffectLedger
 
 MAX_ANSWER = 2400
 _ID_LIKE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[0-9a-f]{24,64}\b", re.I)
+# English first person ("I've", "I’ve", "we have", "Rafii has") with the adverbs a claim is usually dressed in.
+_EN_I = r"\b(?:i(?:['’]ve|\s+have)?|we(?:['’]ve|\s+have)?|rafii\s+(?:has\s+)?)\s*(?:(?:just|now|already|also|then|successfully|gone\s+ahead\s+and|went\s+ahead\s+and)\s+){0,2}"
+# Chinese (Cantonese in Traditional, Mandarin in Simplified or Traditional) often drops the subject, so a claim is first person
+# (我/我哋/我們/Rafii) or "for you" (幫你/帮你/為你…) after a completion marker (已經/已经/成功…), and 將/把 may move the object
+# before the verb ("我已經將篇帖發佈咗"). The object gap never crosses punctuation or a negation ("保存为草稿而没有发布").
+_ZH_I = r"(?:我哋|我們|我们|我|rafii(?=\s*[㐀-鿿]))"
+_ZH_DONE = r"(?:已經|已经|已|成功|啱啱|剛剛|刚刚)"
+_ZH_FOR = r"(?:幫你|帮你|為你|为你|替你|同你)"
+_ZH_OBJ = r"(?:(?:將|将|把)[^。，、,.!?！？；;：:\n不冇沒没未唔無无別别]{0,12}?)?"
+# Code-switching puts English verbs in Chinese sentences ("我已經幫你 publish 咗"); CJK letters are word characters, so the
+# English verbs end at a lookahead rather than \b. "post", "schedule" and "reply" are also nouns here ("將個 post 準備好"), so
+# they count as verbs only before a completion or direction word ("post 咗", "schedule 喺星期六").
+_ZH_FORBIDDEN = (r"發佈|發布|发布|出咗|發咗|发咗|發送|发送|排程|排好|排期|批准|刪除|删除|斷開|断开|付款|購買|购买|回覆|回复"
+                 r"|(?:publish(?:ed)?|posted|scheduled|approv(?:e|ed)|send|sent|delet(?:e|ed)|replied|disconnect(?:ed)?|buy|bought)(?![a-z])"
+                 r"|(?:post|schedule|reply)(?=\s*(?:咗|了|好|埋|上|喺|在|到))")
+_ZH_PREPARED = r"準備好|准备好|預備好|预备好|擬好|拟好|寫好|写好|(?:prepare|prepared|draft|drafted|set\s*up)\s*好"
+_ZH_CHANGED = (r"建立|創建|创建|生成|整咗|整好|加咗|加入|連結|连结|鏈接|链接|連接|连接|儲存|储存|保存|更新|修改|改咗|改好|改短|縮短|缩短|"
+               r"編輯|编辑|重寫|重写|製作|制作"
+               r"|(?:creat(?:e|ed)|generat(?:e|ed)|sav(?:e|ed)|link(?:ed)?|add(?:ed)?|edit(?:ed)?|updat(?:e|ed)|rewr(?:ite|ote)|shorten(?:ed)?)(?![a-z])")
+_ZH_COMPLETE = r"(?:咗|了|好|完)"
 # First-person claims of effects no Rafii tool can have (or, for "scheduled", that only a person's approval can have).
 _NEVER = re.compile(
-    r"\b(?:i(?:'ve|\s+have)?|we(?:'ve|\s+have)?|rafii\s+(?:has\s+)?)\s*(?:just\s+|now\s+|already\s+|successfully\s+|gone\s+ahead\s+and\s+)?"
-    r"(?:published|posted|approved|sent|replied|deleted|disconnected|bought|purchased|scheduled)\b"
-    r"|(?:我|rafii)\s*(?:已經|已|成功)?(?:幫你)?(?:發佈|發布|出咗|發咗|排程|排好|批准|刪除|删除|斷開|断开|付款|購買|购买|回覆|回复|發送|发送)", re.I)
+    _EN_I + r"(?:published|posted|approved|sent|replied|deleted|disconnected|bought|purchased|scheduled)\b"
+    rf"|{_ZH_I}\s*{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_FORBIDDEN})"
+    rf"|{_ZH_DONE}\s*{_ZH_FOR}\s*{_ZH_OBJ}(?:{_ZH_FORBIDDEN})", re.I)
+# Without a completion marker ("我幫你發佈咗", "幫你發佈咗") it is a claim unless its clause negates, offers or asks
+# ("我唔可以幫你發佈咗", "你想我幫你排程嗎？", "我發佈前會先問你").
+_ZH_UNMARKED = re.compile(rf"{_ZH_I}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_FORBIDDEN})|{_ZH_FOR}\s*{_ZH_OBJ}(?:{_ZH_FORBIDDEN})\s*{_ZH_COMPLETE}", re.I)
+_ZH_NOT_A_CLAIM = re.compile(r"不|冇|沒|没|未|唔|無|无|別|别|能|可以|會|会|要|想|應該|应该|如果|若")
 # Passive claims that a pending proposal already took effect ("your post has been scheduled").
 _PASSIVE_EFFECT = re.compile(
     r"\b(?:has|have)\s+been\s+(?:scheduled|published|posted|approved|applied|sent)\b|\b(?:is|are)\s+now\s+(?:scheduled|published|live|approved)\b"
-    r"|已(?:經)?(?:排程|排好|發佈|發布|批准|套用)", re.I)
+    r"|已(?:經|经)?\s*(?:排程|排好|排期|發佈|發布|发布|批准|套用|應用|应用|發送|发送|(?:schedul(?:e|ed)|publish(?:ed)?|approv(?:e|ed)|appl(?:y|ied))(?![a-z]))", re.I)
 # "I've prepared / proposed / set up …" claims a proposal (or a verified change) exists this turn.
-_PREPARED = re.compile(r"\b(?:i(?:'ve|\s+have)?|we(?:'ve|\s+have)?|rafii\s+(?:has\s+)?)\s*(?:just\s+|now\s+|already\s+)?(?:prepared|proposed|set\s+up|queued|lined\s+up|drafted|written|wrote)\b"
-                       r"|(?:我|rafii)\s*(?:已經|已)?(?:幫你)?(?:準備好|准备好|預備好|擬好|拟好|寫好|写好)", re.I)
+_PREPARED = re.compile(_EN_I + r"(?:prepared|proposed|set\s+up|queued|lined\s+up|drafted|written|wrote)\b"
+                       rf"|{_ZH_I}\s*{_ZH_DONE}?\s*{_ZH_FOR}?\s*(?:{_ZH_PREPARED})", re.I)
 _DID = re.compile(
-    r"\b(?:i(?:'ve|\s+have)?|we(?:'ve|\s+have)?|rafii\s+(?:has\s+)?)\s*(?:just\s+|now\s+|already\s+|successfully\s+)?"
-    r"(?:created|linked|added|attached|generated|saved|changed|updated|edited|rewrote|rewritten|shortened|made|removed|moved)\b"
-    r"|(?:已經|已|成功)(?:幫你)?(?:建立|創建|创建|生成|整咗|加咗|加入|連結|链接|儲存|保存|更新|修改|改咗)", re.I)
+    _EN_I + r"(?:created|linked|added|attached|generated|saved|changed|updated|edited|rewrote|rewritten|shortened|made|removed|moved)\b"
+    rf"|{_ZH_I}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})\s*{_ZH_COMPLETE}"
+    rf"|{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})", re.I)
+
+
+def _claims_forbidden(text: str) -> bool:
+    if _NEVER.search(text):
+        return True
+    for match in _ZH_UNMARKED.finditer(text):
+        start = max(text.rfind(p, 0, match.start()) for p in "。，,.!?！？；;\n")
+        end = min([i for i in (text.find(p, match.end()) for p in "。，,.!?！？；;\n") if i >= 0] or [len(text)])
+        tail = text[match.end():end + 1]
+        if not _ZH_NOT_A_CLAIM.search(text[start + 1:match.start()]) and not re.search(r"[嗎吗呢未?？]|^\s*(?:之)?前", tail):
+            return True
+    return False
 
 
 def _secret(text: str) -> bool:
@@ -50,7 +86,7 @@ def check(answer: str, ledger: EffectLedger) -> str | None:
         return "too_long"
     if _secret(answer):
         return "secret_like"
-    if _NEVER.search(answer):
+    if _claims_forbidden(answer):
         return "claims_forbidden_effect"
     if ledger.proposals and _PASSIVE_EFFECT.search(answer):
         return "claims_pending_proposal_applied"

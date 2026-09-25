@@ -13,7 +13,7 @@ deterministic piece is FAIL; a row whose deterministic evidence passed but whose
 blocker; nothing is PASS on mocks alone when a live check is required.
 """
 
-VERSION = "agent-runtime-evals/1"
+VERSION = "agent-runtime-evals/2"
 
 CATEGORIES = {
     "text regression": ["pg:R01", "pg:R02", "pg:R03", "pg:R04", "site:C01", "site:S01", "site:Z01"],
@@ -50,12 +50,12 @@ SCENARIOS = [
     ("V-A08", "Two pending proposals: a generic yes applies neither", ["pg:V-A08", "pg:V-A08b", "pg:V-A08c"], None),
     ("V-A09", "Voice ends; text continues the same conversation", ["pg:VS07", "browser:V-A09"], None),
     ("V-A10", "Text starts a task; voice continues it", ["pg:S-MOD5", "pg:R11"], None),
-    ("V-A11", "Cantonese conversation", ["pg:V-A07b", "pg:V-A07c", "browser:V-A11", "unit:LivePromptTest.test_prompt_follows_the_live_template_and_is_short"], "live-session"),
-    ("V-A12", "Mandarin conversation", ["unit:ConfirmationPhrasesTest.test_confirmations_in_three_languages", "pg:V-A07c"], "live-session"),
-    ("V-A13", "Code-switching", ["pg:R11", "unit:ConfirmationPhrasesTest.test_a_yes_with_more_words_is_not_a_bare_confirmation"], "live-session"),
+    ("V-A11", "Cantonese conversation", ["pg:V-A07b", "pg:V-A07c", "browser:V-A11", "unit:LivePromptTest.test_prompt_follows_the_live_template_and_is_short", "unit:AnswerPolicyTest.test_claims_in_every_answer_language"], "live-session"),
+    ("V-A12", "Mandarin conversation", ["unit:ConfirmationPhrasesTest.test_confirmations_in_three_languages", "pg:V-A07c", "unit:AnswerPolicyTest.test_claims_in_every_answer_language"], "live-session"),
+    ("V-A13", "Code-switching", ["pg:R11", "unit:ConfirmationPhrasesTest.test_a_yes_with_more_words_is_not_a_bare_confirmation", "unit:AnswerPolicyTest.test_claims_in_every_answer_language"], "live-session"),
     ("V-A14", "Microphone denied; text fallback works", ["browser:V-A14", "pg:R10"], None),
     ("V-A15", "Live disconnect; the UI recovers truthfully", ["browser:V-A15", "pg:R10", "pg:R11"], "live-session"),
-    ("V-A16", "Backend model error; voice doesn't claim completion", ["pg:R07", "pg:MM13", "unit:ManagerOrchestrationTest.test_model_error_is_not_a_success"], None),
+    ("V-A16", "Backend model error; voice doesn't claim completion", ["pg:R07", "pg:MM13", "unit:ManagerOrchestrationTest.test_model_error_is_not_a_success", "unit:AnswerPolicyTest.test_claims_in_every_answer_language"], None),
     ("V-A17", "The person speaks while image generation runs", ["pg:VS04", "browser:X04/MM03", "browser:V-A17/MM02"], "live-session"),
     ("V-A18", "A voice-made approval survives page navigation", ["browser:V-A18", "pg:S-MOD3"], None),
     ("V-A19", "Reduced motion and screen-reader labels", ["browser:V-A19: axe", "browser:V-A19: reduced motion"], None),
@@ -65,8 +65,8 @@ SCENARIOS = [
     ("MM03", "Generate an image from the campaign brief", ["pg:VS04", "browser:X04/MM03"], "images"),
     ("MM04", "Edit a generated image, one change, the rest preserved", ["pg:MM04"], "images"),
     ("MM05", "Edit an uploaded image", ["pg:MM05"], "images"),
-    ("MM06", "Fast variants with Flare", ["pg:MM06"], "images"),
-    ("MM07", "Final-quality asset with Sunburst", ["pg:VS04"], "images"),
+    ("MM06", "Fast variants with Flare", ["pg:MM06", "unit:ConfigTest.test_aliases_default_and_override"], "images"),
+    ("MM07", "Final-quality asset with Sunburst", ["pg:VS04", "pg:MM04", "unit:ConfigTest.test_aliases_default_and_override"], "images"),
     ("MM08", "A generated asset is saved with provenance", ["pg:VS04", "pg:R09"], None),
     ("MM09", "The generated asset goes with the draft (post image, campaign link)", ["pg:VS04", "pg:VS06"], None),
     ("MM10", "“The second image” later", ["pg:MM04"], None),
@@ -92,5 +92,5 @@ DONE = [
     ("DoD-4", "Live image generation and editing", ["pg:VS04", "pg:MM04"], "images"),
     ("DoD-5", "Specialist delegation with scoped tools", ["unit:ManagerOrchestrationTest.test_specialist_runs_as_a_tool_with_its_own_scope_and_shared_ledger", "unit:ManagerOrchestrationTest.test_specialist_cannot_reach_a_tool_outside_its_scope"], None),
     ("DoD-6", "Proactive recommendations cite evidence", ["pg:A01-agent"], None),
-    ("DoD-7", "Tenant isolation, forbidden actions, cross-modal injection, secrets", ["pg:MM14", "pg:R03", "pg:MM12", "pg:S-MOD1", "unit:AnswerPolicyTest.test_unknown_ids_and_secrets"], None),
+    ("DoD-7", "Tenant isolation, forbidden actions, cross-modal injection, secrets", ["pg:MM14", "pg:R03", "pg:MM12", "pg:S-MOD1", "unit:AnswerPolicyTest.test_unknown_ids_and_secrets", "unit:AnswerPolicyTest.test_claims_in_every_answer_language"], None),
 ]
