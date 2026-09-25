@@ -433,6 +433,17 @@ class HostedApplication:
                 return self._json(start_response, 200, model_catalog())
             if path == "/api/tools" and method == "GET":
                 return self._json(start_response, 200, {"tools": tools.catalog(), "isolation": tools.isolation_status()})
+            if path in ("/api/oauth/bluesky/client-metadata.json", "/api/oauth/bluesky/jwks.json") and method == "GET":
+                # Bluesky servers fetch Rafii's client identity here (client_id is this URL).
+                return self._json(start_response, 200, self._runtime().oauth.bluesky_document(path.rsplit("/", 1)[1]))
+            if path == "/api/telegram/webhook" and method == "POST":
+                # Authenticated by the secret token Telegram echoes, before the origin guard (like the billing webhook).
+                service = self._runtime()
+                length = int(environ.get("CONTENT_LENGTH") or "0")
+                if not 0 < length <= 65536:
+                    raise AlphaError("Webhook body size invalid.", 413)
+                raw = environ["wsgi.input"].read(length)
+                return self._json(start_response, 200, service.oauth.telegram_webhook(environ.get("HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN", ""), raw))
             oauth_parts = path.strip("/").split("/")
             if len(oauth_parts) == 4 and oauth_parts[:2] == ["api", "oauth"] and oauth_parts[3] == "callback" and method == "GET":
                 # Public provider callback: redirect state/code to the signed-in app; never exchange here.
@@ -603,10 +614,17 @@ class HostedApplication:
                     return self._json(start_response, 200, oauth.channels(parts[2], token))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
-                    return self._json(start_response, 201, oauth.start(parts[2], token, parts[4], body.get("capability", "identity")))
+                    extra = {"inputs": body["input"]} if body.get("input") is not None else {}
+                    return self._json(start_response, 201, oauth.start(parts[2], token, parts[4], body.get("capability", "identity"), **extra))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "complete" and method == "POST":
                     body = self._body(environ)
-                    return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error")))
+                    extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
+                    return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
+                if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
+                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
+                if len(parts) == 6 and parts[5] == "destination" and method == "POST":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, oauth.choose_destination(parts[2], token, parts[4], body.get("destinationId")))
                 if len(parts) == 6 and parts[5] == 'posts' and method == 'POST':
                     return self._json(start_response, 200, oauth.history.preview(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) == 7 and parts[5:] == ['posts', 'import'] and method == 'POST':
