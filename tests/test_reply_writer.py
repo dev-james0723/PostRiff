@@ -180,6 +180,20 @@ class ReviewFixesTest(unittest.TestCase):
         self.assertEqual(written["provenance"]["evaluators"], [], "no evaluator runs on a reply")
         self.assertTrue(written["provenance"]["route"]["methodApplied"])
 
+    def test_workspace_preferences_reach_the_writer_only_with_memory_consent(self):
+        def view(state, scope, cloud_allowed=True, now=None):
+            return {"text": "WORKSPACE PREFERENCES:\n- PRIVATE-PREFERENCE" if cloud_allowed else "WORKSPACE PREFERENCES: withheld", "items": [], "revisions": {}}
+        for egress, shared in ((None, False), ({"cloud": False}, False), ({"cloud": True}, True)):
+            seen = {}
+
+            def call(system, user, schema):
+                seen["system"] = system
+                return ModelResponse({"reply": "Yes, entry is free.", "needs": []}, 800)
+            state = {**STATE, **({"memoryEgress": egress} if egress is not None else {})}
+            with mock.patch("postriff_phase2.coworker.overlays.effective_view", side_effect=view):
+                reply_writer.write(service(managed(), state=state), "ws", "tok", "th1", call=call)
+            self.assertEqual("PRIVATE-PREFERENCE" in seen["system"], shared, egress)
+
     def test_the_reply_language_follows_the_comment_and_the_workspace(self):
         state = {**STATE, "languageSettings": {"default": "zh-Hant-HK", "channels": {}}}
         svc = service(managed(), state=state)

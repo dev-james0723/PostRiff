@@ -123,8 +123,9 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
         fact_sources = [s.get("id") for s in usable if s.get("facts") and s.get("id")]
         shared = memory.projection(state, "cloud", destinations)
         bound = ideas.skills.bind(destinations, intent="engagement_reply", max_chars=SKILL_BUDGET)
-        # The reply method for this language; the channel adapter comes from `bound`, so it is not compiled twice.
-        method = skill_compiler.compile({**METHOD_TASK, "locales": [language]}, state=state)
+        # The reply method for this language; the channel adapter comes from `bound`, so it is not compiled twice. The
+        # workspace's preference overlays reach the cloud writer only with the same Memory-page consent as its memory.
+        method = skill_compiler.compile({**METHOD_TASK, "locales": [language], "cloudAllowed": memory.egress(state).get("cloud") is True}, state=state)
         system = SYSTEM.format(limit=REPLY_LIMIT)
         files = [f for f in shared.get("files") or [] if isinstance(f, dict) and isinstance(f.get("body"), str) and f.get("name")]
         if files:
