@@ -19,6 +19,7 @@ import type { WorkspaceBootstrap } from '@/lib/workspace/bootstrap';
 import type { AuthMode } from '@/lib/api/types';
 import { assurance } from '@/lib/auth/mfa';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
+import { forgetPushOnSignOut } from '@/lib/coworker/push-signout';
 
 export interface AuthUser {
   id: string;
@@ -226,6 +227,8 @@ export function AuthProvider({ children, initial }: { children: ReactNode; initi
   }, [initial]);
 
   const signOut = useCallback(async () => {
+    // A shared browser must not keep receiving the signed-out person's push notifications.
+    await forgetPushOnSignOut();
     try {
       await api.logout();
     } catch {
