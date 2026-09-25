@@ -87,8 +87,10 @@ CHANNEL_SKILLS = {
     "Pixelfed": "postriff-channel-pixelfed", "ShareChat": "postriff-channel-sharechat",
     "Tencent QQ": "postriff-channel-tencent-qq", "WhatsApp Channels": "postriff-channel-whatsapp-channels",
 }
-# Budget per route. The paid cloud route keeps 60k characters (about 15k prompt tokens a draft);
-# the routes a person's own subscription pays for get room for every file a turn selects.
+# Budget per route, measured in UTF-8 bytes: the paid cloud writer cuts its skill slot in bytes
+# (model_runtime.MAX_SKILLS_BYTES), so a character budget let CJK-heavy turns lose the last channel adapter
+# silently. The paid route keeps 60k (about 15k prompt tokens a draft); the routes a person's own subscription
+# pays for get room for every file a turn selects. (The names keep "CHARS" for the callers that pass them.)
 MAX_TEXT_CHARS = 60_000
 SUBSCRIPTION_TEXT_CHARS = 120_000
 MAX_FILE_CHARS = 20_000
@@ -98,6 +100,11 @@ _SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,80}$")
 # Only product skills are loadable by the hosted binder. Customer- or person-specific packages (for example the
 # local Studio's own skills) are classified private in `skills/rafii-registry.json` and never reach a hosted run.
 PRODUCT_PREFIXES = ("postriff-", "rafii-")
+
+
+def _size(text):
+    """The unit every skill budget is measured in: UTF-8 bytes."""
+    return len(text.encode())
 
 
 def budget_for(cost_class):
@@ -254,18 +261,18 @@ class SkillLibrary:
         workflow_extras = [(skill_id, None) for skill_id, _ in extras if skill_id.startswith("rafii-") and "humanizer" not in skill_id]
         knowledge_extras = [(skill_id, None) for skill_id, _ in reversed(extras) if (skill_id, None) not in workflow_extras]
         for skill_id, reference in tuple(knowledge_extras) + DROP_ORDER + tuple(workflow_extras):
-            if len(composed()) <= budget:
+            if _size(composed()) <= budget:
                 break
             drop(skill_id, reference)
         guides = sorted((r for entry in selected if entry[0] == ENGINE_SKILL for r in entry[1] if r.startswith(ENGINE_LOCALES)),
                         key=lambda path: 0 if path.endswith("/_generic.md") else (1 if "/_family-" in path else 2))
         fallback = FALLBACK_ORDER[:4] + tuple((ENGINE_SKILL, path) for path in guides) + FALLBACK_ORDER[4:]
         for skill_id, reference in fallback:
-            if len(composed()) <= budget:
+            if _size(composed()) <= budget:
                 break
             if drop(skill_id, reference):
                 what = f"{skill_id}/{reference}" if reference else f"the whole {skill_id} skill"
-                warnings.append(f"Left out {what}: the skills this turn selected exceed {budget} characters on this route. Review the draft against those rules.")
+                warnings.append(f"Left out {what}: the skills this turn selected exceed this route's skill budget ({budget} bytes). Review the draft against those rules.")
 
         bindings = []
         for _, _, loaded in selected:
@@ -276,11 +283,11 @@ class SkillLibrary:
                 if len(reference["text"]) > MAX_FILE_CHARS:
                     warnings.append(f"Skill {loaded['id']}: {reference['path']} was cut at {MAX_FILE_CHARS} characters.")
         text = composed()
-        if len(text) > budget:
+        if _size(text) > budget:
             # The editorial core, voice pass, adapter contract and adapters alone exceed the budget:
             # the last resort, never reached by a normal turn. The cut lands on the last adapters.
-            text = text[:budget]
-            warnings.append(f"Skill text was cut at {budget} characters, so a channel adapter may be incomplete. Review the draft against the platform rules before scheduling.")
+            text = text.encode()[:budget].decode(errors="ignore")
+            warnings.append(f"Skill text was cut at {budget} bytes, so a channel adapter may be incomplete. Review the draft against the platform rules before scheduling.")
         return {"bindings": bindings, "text": text, "warnings": warnings, "omitted": omitted, "budget": budget}
 
     @staticmethod

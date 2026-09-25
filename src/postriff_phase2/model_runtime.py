@@ -45,6 +45,10 @@ MAX_CONTEXT_BYTES = 60_000
 MAX_SKILLS_BYTES = 60_000       # composed skill text (IdeasService binds it); method only, never identity or policy
 MAX_MEMORY_BYTES = 16_000       # memory files the workspace allowed a cloud model to read (memory.projection)
 MAX_OUTPUT_TOKENS = 2_400
+# The idea field carries the typed instruction (ideas.IDEA_LIMIT, 3,000) plus any handed-in material (ideas.MAX_TEXT,
+# 6,000) under generation.MATERIAL_LABEL. A 3,000 cap here refused every draft_create brief over ~1,500 characters,
+# every rewrite of a long draft and every weekly/campaign brief with a 400 on the cloud writer.
+MAX_IDEA_CHARS = 9_200
 TIMEOUT_SECONDS = 45
 ATTEMPTS = 2
 RATE_LIMIT_BACKOFF_SECONDS = 1.5
@@ -218,7 +222,7 @@ class ServerModelRuntime(AgentRuntime):
         facts = [{"id": f["id"], "sourceId": f["sourceId"], "text": f["text"]} for s in context["sources"] for f in s["facts"]]
         destinations = request.get("destinations") or [dict(d) for d in DEFAULT_REQUEST_DESTINATIONS]
         return {
-            "idea": clean(request.get("idea", ""), 3000),
+            "idea": clean(request.get("idea", ""), MAX_IDEA_CHARS),
             "tone": request.get("tone", "warm"),
             "styleDirectives": bounded_style_directives(request.get("styleDirectives")),
             "voice": {k: v for k, v in (request.get("voice") or {}).items() if k in ("observations", "note")},
