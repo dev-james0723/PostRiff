@@ -184,30 +184,46 @@ class DiscordAdapter(unittest.TestCase):
 
     def test_bot_install_needs_a_server_keeps_no_user_token_and_resolves_through_the_bot(self):
         wire = Wire([ok({"access_token": "UT", "scope": "identify bot", "guild": {"id": "555555", "name": "Rafii HQ"}}),
-                     ok({}), ok({"id": "555555", "name": "Rafii HQ", "icon": "abc123"})])
+                     ok({"id": "4242424"}), ok({}), ok({"id": "555555", "name": "Rafii HQ", "icon": "abc123"})])
         discord = self.adapter(wire)
         query = parse_qs(urlparse(discord.authorize_url(BASE + "/api/oauth/discord/callback", "STATE", "C", ["identify", "bot"])).query)
         self.assertEqual((query["scope"][0], query["permissions"][0]), ("identify bot", str(DiscordProvider.PERMISSIONS)))
         grant = discord.exchange("CODE", "V", BASE + "/api/oauth/discord/callback")
-        self.assertEqual(json.loads(grant["accessToken"]), {"v": 1, "guild": "555555", "channel": None})
-        self.assertIn("/oauth2/token/revoke", wire.calls[1]["url"])  # the person's own token is revoked, not stored
+        self.assertEqual(json.loads(grant["accessToken"]), {"v": 1, "guild": "555555", "channel": None, "user": "4242424"})
+        self.assertEqual((wire.calls[1]["url"].endswith("/users/@me"), wire.calls[1]["headers"]["Authorization"]), (True, "Bearer UT"))
+        self.assertIn("/oauth2/token/revoke", wire.calls[2]["url"])  # the person's own token is revoked, not stored
         identity = discord.identity(grant["accessToken"])
         self.assertEqual((identity["providerAccountId"], identity["accountType"]), ("555555", "server"))
-        self.assertEqual(wire.calls[2]["headers"]["Authorization"], "Bot bot.token")
-        self.assertTrue(wire.calls[2]["headers"]["User-Agent"].startswith("DiscordBot ("))
+        self.assertEqual(wire.calls[3]["headers"]["Authorization"], "Bot bot.token")
+        self.assertTrue(wire.calls[3]["headers"]["User-Agent"].startswith("DiscordBot ("))
         with self.assertRaises(AlphaError):
             self.adapter(Wire([ok({"access_token": "UT", "scope": "identify bot"})])).exchange("CODE", "V", BASE + "/cb")
 
-    def test_destinations_list_text_channels_and_choice_is_validated(self):
+    def test_destinations_need_the_bot_to_send_and_the_connecting_person_to_see(self):
+        VIEW, SEND = DiscordProvider.VIEW_CHANNEL, DiscordProvider.SEND_MESSAGES
+        guild = {"id": "555555", "owner_id": "1000001", "roles": [{"id": "555555", "permissions": str(VIEW | SEND)}, {"id": "7000001", "permissions": "0"}]}
+        hidden = [{"id": "555555", "type": 0, "allow": "0", "deny": str(VIEW)}, {"id": "9000009", "type": 1, "allow": str(VIEW | SEND), "deny": "0"}]
         channels = [{"id": "7777777", "name": "general", "type": 0, "position": 1}, {"id": "8888888", "name": "voice", "type": 2},
-                    {"id": "9999999", "name": "news", "type": 5, "position": 0}]
-        discord = self.adapter(Wire([ok(channels), ok(channels), ok(channels)]))
-        token = json.dumps({"v": 1, "guild": "555555", "channel": None})
-        listed = discord.destinations(token)
-        self.assertEqual([d["id"] for d in listed], ["9999999", "7777777"])
-        self.assertEqual(json.loads(discord.with_destination(token, "7777777"))["channel"], "7777777")
-        with self.assertRaises(AlphaError):
-            discord.with_destination(token, "8888888")  # a voice channel is not a destination
+                    {"id": "9999999", "name": "news", "type": 5, "position": 0},
+                    {"id": "6666666", "name": "staff", "type": 0, "position": 2, "permission_overwrites": hidden + [{"id": "7000001", "type": 0, "allow": str(VIEW), "deny": "0"}]},
+                    {"id": "5555556", "name": "readonly", "type": 0, "position": 3, "permission_overwrites": [{"id": "555555", "type": 0, "allow": "0", "deny": str(SEND)}]}]
+        token = json.dumps({"v": 1, "guild": "555555", "channel": None, "user": "4242424"})
+        outsider = self.adapter(Wire(discord_listing(guild, channels, user_roles=[])))
+        self.assertEqual([d["id"] for d in outsider.destinations(token)], ["9999999", "7777777"])  # staff is hidden from this person
+        staff = self.adapter(Wire(discord_listing(guild, channels, user_roles=["7000001"])))
+        self.assertEqual([d["id"] for d in staff.destinations(token)], ["9999999", "7777777", "6666666"])
+        chooser = self.adapter(Wire(discord_listing(guild, channels, user_roles=[])))
+        self.assertEqual(json.loads(chooser.with_destination(token, "7777777"))["channel"], "7777777")
+        for refused in ("8888888", "5555556", "6666666"):  # voice, bot cannot send, hidden from this person
+            with self.subTest(channel=refused), self.assertRaises(AlphaError):
+                self.adapter(Wire(discord_listing(guild, channels, user_roles=[]))).with_destination(token, refused)
+        left = self.adapter(Wire([ok(guild), ok({"id": "9000009"}), ok({"roles": []}), ok({"message": "Unknown Member"}, 404)]))
+        self.assertEqual(left.destinations(token), [])  # the person who connected has left the server
+
+
+def discord_listing(guild, channels, user_roles):
+    """Bot-token answers destinations() reads: the server, the bot user, the bot and the person as members, the channels."""
+    return [ok(guild), ok({"id": "9000009"}), ok({"roles": []}), ok({"roles": user_roles}), ok(channels)]
 
 
 # --- Telegram -----------------------------------------------------------------------------------------------------
@@ -313,7 +329,7 @@ class Database:
 
 class Cursor:
     def __init__(self, db):
-        self.db, self.result, self.rowcount = db, None, 0
+        self.db, self.result, self.rowcount, self.rows = db, None, 0, []
 
     def execute(self, sql, params=()):
         s, db = " ".join(sql.split()), self.db
@@ -339,7 +355,20 @@ class Cursor:
             db.txns[params[0]]["consumed"] = True
         elif s.startswith("INSERT INTO public.pr_encrypted_credentials"):
             workspace, connection, provider, account, access, refresh, key_id, scopes, expires, refresh_supported = params
-            db.credentials[connection] = {"provider": provider, "account": account, "access": access, "key_id": key_id, "scopes": scopes, "expires": expires, "revoked": False}
+            db.credentials[connection] = {"workspace": workspace, "provider": provider, "account": account, "access": access, "key_id": key_id, "scopes": scopes, "expires": expires, "revoked": False}
+        elif s.startswith("SELECT provider_account_id FROM public.pr_encrypted_credentials"):
+            found = db.credentials.get(params[1])
+            self.result = (found["account"],) if found and found.get("workspace", "workspace") == params[0] else None
+        elif s.startswith("SELECT 1 FROM public.pr_encrypted_credentials"):
+            provider, account, workspace, connection = params
+            self.result = next(((1,) for key, c in db.credentials.items() if c["provider"] == provider and c["account"] == account and not c["revoked"]
+                                and not (c.get("workspace", "workspace") == workspace and key == connection)), None)
+        elif s.startswith("SELECT provider,access_ciphertext,key_id,connection_id FROM public.pr_encrypted_credentials"):
+            self.rows = [(c["provider"], c["access"], c["key_id"], key) for key, c in db.credentials.items() if c.get("workspace", "workspace") == params[0] and not c["revoked"]]
+        elif s.startswith("UPDATE public.pr_encrypted_credentials SET revoked_at=now()"):
+            db.credentials[params[1]]["revoked"] = True
+        elif s.startswith("UPDATE public.pr_channel_capabilities"):
+            self.result = None
         elif s.startswith("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials"):
             found = db.credentials.get(params[1])
             self.result = None if not found or found["revoked"] else (found["provider"], found["access"], found["key_id"])
@@ -359,6 +388,9 @@ class Cursor:
 
     def fetchone(self):
         return self.result
+
+    def fetchall(self):
+        return self.rows
 
 
 class Repository:
@@ -380,6 +412,12 @@ class Repository:
         require(Membership("owner"), requirement)
         self.state, self.revision = command(copy.deepcopy(self.state), "owner"), self.revision + 1
         return {"state": self.state, "revision": self.revision}
+
+    def assert_fresh(self, token, principal):
+        return None
+
+    def mutate(self, workspace, token, revision, action, payload):
+        raise AlphaError("Channel unavailable.", 404)
 
     @contextmanager
     def connection_factory(self):
@@ -444,11 +482,12 @@ class ServiceFlows(unittest.TestCase):
         self.assertEqual((query["iss"][0], "other" in query), ("https://auth.example.com", False))
 
     def test_destination_choice_is_compare_and_swap_on_the_stored_grant(self):
+        guild = {"id": "555555", "owner_id": "1", "roles": [{"id": "555555", "permissions": str(DiscordProvider.VIEW_CHANNEL | DiscordProvider.SEND_MESSAGES)}]}
         channels = [{"id": "7777777", "name": "general", "type": 0}]
-        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire([ok(channels), ok(channels), ok(channels)]))
+        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire(discord_listing(guild, channels, []) * 2))
         service = self.service({"discord": discord})
-        ciphertext, key_id = service.vault.encrypt(json.dumps({"v": 1, "guild": "555555", "channel": None}))
-        self.repo.db.credentials["conn"] = {"provider": "discord", "account": "555555", "access": ciphertext, "key_id": key_id, "scopes": ["bot"], "expires": None, "revoked": False}
+        ciphertext, key_id = service.vault.encrypt(json.dumps({"v": 1, "guild": "555555", "channel": None, "user": "4242424"}))
+        self.repo.db.credentials["conn"] = {"workspace": "workspace", "provider": "discord", "account": "555555", "access": ciphertext, "key_id": key_id, "scopes": ["bot"], "expires": None, "revoked": False}
         self.assertEqual(service.destinations("workspace", "session", "conn")["destinations"][0]["id"], "7777777")
         service.choose_destination("workspace", "session", "conn", "7777777")
         stored = self.repo.db.credentials["conn"]
@@ -489,7 +528,7 @@ class Publishing(unittest.TestCase):
     def test_bluesky_post_with_link_facet_then_readback(self):
         session = {"v": 1, "at": "AT", "did": DID, "pds": "https://pds.example.com", "iss": "https://auth.example.com", "tokenEndpoint": "x", "jwk": generate_jwk(), "scope": ["atproto", "transition:generic"]}
         wire = Wire([])
-        bluesky = self.reviewed(BlueskyProvider(client_jwk(), BASE, transport=wire))
+        bluesky = self.reviewed(BlueskyProvider(client_jwk(), BASE, transport=wire, resolver=PUBLIC))
         social = HostedSocial(Grants(json.dumps(session), ["atproto", "transition:generic"]), {"bluesky": bluesky})
 
         def create(method, url, headers=None, form=None, body=None, data=None):
@@ -539,6 +578,7 @@ class Publishing(unittest.TestCase):
         social = HostedSocial(Grants(json.dumps({"v": 1, "guild": "555555", "channel": "7777777"}), ["bot", "identify"]), {"discord": discord})
         result = social.submit(manifest("Discord", "555555"))
         self.assertEqual(wire.calls[0]["body"]["allowed_mentions"], {"parse": []})
+        self.assertEqual((wire.calls[0]["body"]["nonce"], wire.calls[0]["body"]["enforce_nonce"]), ("k" * 25, True))  # Discord dedupes a repeat
         verified = social.reconcile(manifest("Discord", "555555"), {"providerReference": result["reference"]})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Discord"}})["state"], "verified")
 
@@ -554,6 +594,215 @@ class Publishing(unittest.TestCase):
         verified = social.reconcile(manifest("X", "42"), {"providerReference": result["reference"]})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "X"}})["state"], "verified")
         self.assertEqual(verified["url"], "https://x.com/james/status/1800000000000000001")
+
+
+
+# --- review fixes -------------------------------------------------------------------------------------------------
+class DefiniteRejections(unittest.TestCase):
+    """A provider refusal that posted nothing ends failed with the provider's own reason, never uncertain."""
+    def x(self, *responses):
+        adapter = XProvider("c", "s", transport=Wire(responses))
+        adapter.production_reviewed = True
+        return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": adapter})
+
+    def test_x_bad_request_duplicate_and_permission(self):
+        refused = self.x(ok({"detail": "Your Tweet text is too long."}, 400)).submit(manifest("X", "42"))
+        self.assertEqual(refused["state"], "failed")
+        self.assertIn("Your Tweet text is too long.", refused["confirmed"])
+        duplicate = self.x(ok({"detail": "You are not allowed to create a Tweet with duplicate content.", "status": 403}, 403)).submit(manifest("X", "42"))
+        self.assertEqual(duplicate["state"], "failed")
+        self.assertTrue(duplicate["confirmed"].startswith("Duplicate content"))
+        self.assertNotIn("re-authorization", duplicate["confirmed"])
+        self.assertEqual(self.x(ok({"detail": "Forbidden"}, 403)).submit(manifest("X", "42"))["state"], "held")
+
+    def test_telegram_error_codes(self):
+        cases = ((400, {"ok": False, "error_code": 400, "description": "Bad Request: message text is empty"}, "failed"),
+                 (403, {"ok": False, "error_code": 403, "description": "Forbidden: bot is not a member of the channel chat"}, "failed"),
+                 (429, {"ok": False, "error_code": 429, "description": "Too Many Requests", "parameters": {"retry_after": 5}}, "scheduled"),
+                 (502, {"raw": "Bad Gateway"}, "uncertain"))
+        for status, body, state in cases:
+            with self.subTest(status=status):
+                telegram = TelegramConnector(BOT, SECRET, BASE, transport=Wire([ok(body, status)]))
+                telegram.production_reviewed = True
+                result = HostedSocial(Grants(json.dumps({"v": 1, "chat": -100123}), ["can_post_messages"]), {"telegram": telegram}).submit(manifest("Telegram", "-100123"))
+                self.assertEqual(result["state"], state)
+                if state == "failed":
+                    self.assertIn(body["description"], result["confirmed"])
+
+    def test_discord_and_bluesky_bad_requests(self):
+        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire([ok({"message": "Invalid Form Body", "code": 50035}, 400)]))
+        discord.production_reviewed = True
+        result = HostedSocial(Grants(json.dumps({"v": 1, "guild": "555555", "channel": "7777777"}), ["bot"]), {"discord": discord}).submit(manifest("Discord", "555555"))
+        self.assertEqual((result["state"], "Invalid Form Body" in result["confirmed"]), ("failed", True))
+        session = {"v": 1, "at": "AT", "did": DID, "pds": "https://pds.example.com", "iss": "https://auth.example.com", "tokenEndpoint": "x", "jwk": generate_jwk()}
+        bluesky = BlueskyProvider(client_jwk(), BASE, transport=Wire([ok({"error": "InvalidRequest", "message": "Record/text must not be longer than 300 graphemes"}, 400),
+                                                                     ok({"error": "RecordNotFound"}, 400)]), resolver=PUBLIC)
+        bluesky.production_reviewed = True
+        result = HostedSocial(Grants(json.dumps(session), ["atproto", "transition:generic"]), {"bluesky": bluesky}).submit(manifest("Bluesky", DID))
+        self.assertEqual(result["state"], "failed")
+        self.assertIn("300 graphemes", result["confirmed"])
+
+
+class XWeightedPreflight(unittest.TestCase):
+    """Approval measures X length the way X counts, so an over-length post never reaches X."""
+    import test_postriff_phase2 as _phase2
+    setUp, tearDown = _phase2.Phase2Acceptance.setUp, _phase2.Phase2Acceptance.tearDown
+    channel, draft = _phase2.Phase2Acceptance.channel, _phase2.Phase2Acceptance.draft
+
+    def manifest(self, text):
+        from datetime import datetime, timezone
+        if not hasattr(self, "prepared"):
+            self.prepared = (self.draft(), self.channel())
+        variant, channel = self.prepared
+        state = copy.deepcopy(self.j.state)
+        state["variants"][0].update(platform="X", text=text)
+        next(c for c in state["phase2"]["channels"] if c["id"] == channel["id"])["platform"] = "X"  # the fixture store cannot add X
+        payload = {"channelId": channel["id"], "variantId": variant["id"], "localTime": datetime.fromtimestamp(self.now + 60, timezone.utc).replace(tzinfo=None).isoformat(),
+                   "timeZone": "UTC", "acknowledgedWarnings": variant["warnings"]}
+        return self.store.build_manifest(state, payload, "actor")
+
+    def test_cjk_counts_double(self):
+        with self.assertRaises(AlphaError):
+            self.manifest("練" * 141)  # 141 code points, 282 by X's count
+        self.assertEqual(self.manifest("練" * 140)["platform"], "X")
+
+
+class BlueskyIdempotency(unittest.TestCase):
+    session = {"v": 1, "at": "AT", "did": DID, "pds": "https://pds.example.com", "iss": "https://auth.example.com", "tokenEndpoint": "x"}
+
+    def social(self, wire):
+        bluesky = BlueskyProvider(client_jwk(), BASE, transport=wire, resolver=PUBLIC)
+        bluesky.production_reviewed = True
+        return HostedSocial(Grants(json.dumps({**self.session, "jwk": generate_jwk()}), ["atproto", "transition:generic"]), {"bluesky": bluesky})
+
+    def test_record_key_is_fixed_by_the_job_and_kept_on_an_uncertain_answer(self):
+        job = {**manifest("Bluesky", DID), "timing": {"timestamp": 1_790_000_000}}
+        rkey = HostedSocial.bluesky_rkey(job)
+        self.assertRegex(rkey, r"^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$")
+        self.assertEqual(rkey, HostedSocial.bluesky_rkey(copy.deepcopy(job)))
+        self.assertNotEqual(rkey, HostedSocial.bluesky_rkey({**job, "idempotencyKey": "j" * 64}))
+
+        def timeout(*args, **kwargs):
+            raise AlphaError("The provider is temporarily unreachable.", 503)
+        result = self.social(timeout).submit(job)
+        self.assertEqual((result["state"], result["reference"]), ("uncertain", f"at://{DID}/app.bsky.feed.post/{rkey}"))
+        self.assertEqual(normalize_result(result, {"manifest": job})["reference"], result["reference"])
+
+    def test_a_retry_that_finds_its_own_earlier_record_is_accepted_not_duplicated(self):
+        job = manifest("Bluesky", DID)
+        wire = Wire([ok({"error": "InvalidRequest", "message": "Record already exists"}, 400), ok({"value": {"text": job["payload"]["text"]}})])
+        result = self.social(wire).submit(job)
+        self.assertEqual(result["state"], "provider_accepted")
+        self.assertEqual(wire.calls[0]["body"]["rkey"], wire.calls[1]["url"].split("rkey=")[1])
+
+
+class SharedRemoteGrants(unittest.TestCase):
+    """Rafii's one bot in a server or channel stays while another unrevoked connection, in any workspace, uses it."""
+    def setUp(self):
+        self.revoked = []
+        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire([]))
+        discord.revoke = lambda token: self.revoked.append(token) or True
+        flows = ServiceFlows()
+        self.service = flows.service({"discord": discord})
+        self.repo = flows.repo
+        for key, workspace in (("conn", "workspace"), ("other", "workspace-2")):
+            ciphertext, key_id = self.service.vault.encrypt(json.dumps({"v": 1, "guild": "555555", "channel": None}))
+            self.repo.db.credentials[key] = {"workspace": workspace, "provider": "discord", "account": "555555", "access": ciphertext, "key_id": key_id, "scopes": ["bot"], "expires": None, "revoked": False}
+
+    def test_disconnect_keeps_the_bot_while_another_workspace_uses_it(self):
+        result = self.service.disconnect("workspace", "session", "conn")
+        self.assertEqual((result["disconnected"], result["remoteRevoked"], self.revoked), (True, False, []))
+        self.assertTrue(self.repo.db.credentials["conn"]["revoked"])
+
+    def test_the_last_connection_removes_the_bot(self):
+        self.repo.db.credentials["other"]["revoked"] = True
+        self.assertTrue(self.service.disconnect("workspace", "session", "conn")["remoteRevoked"])
+        self.assertEqual(len(self.revoked), 1)
+
+    def test_account_deletion_applies_the_same_rule(self):
+        from postriff_phase2.account_deletion import revoke_remote_grants
+        deleting = SimpleNamespace(connection_factory=self.repo.connection_factory, oauth=self.service)
+        self.assertEqual((revoke_remote_grants(deleting, "workspace"), self.revoked), ([], []))
+        self.repo.db.credentials["other"]["revoked"] = True
+        self.assertEqual(revoke_remote_grants(deleting, "workspace"), [])
+        self.assertEqual(len(self.revoked), 1)
+
+
+class StoredEndpointGuard(unittest.TestCase):
+    """Stored Bluesky endpoints are re-checked when used: a name that now resolves privately gets no request."""
+    def test_pds_token_and_revocation_endpoints(self):
+        wire = Wire([])
+        bluesky = BlueskyProvider(client_jwk(), BASE, transport=wire, resolver=PRIVATE)
+        stored = {"v": 1, "at": "AT", "rt": "RT", "did": DID, "pds": "https://pds.example.com", "iss": "https://auth.example.com",
+                  "tokenEndpoint": "https://auth.example.com/oauth/token", "revocationEndpoint": "https://auth.example.com/oauth/revoke", "jwk": generate_jwk()}
+        for call in (lambda: bluesky.identity(json.dumps(stored)), lambda: bluesky.refresh(json.dumps(stored)),
+                     lambda: bluesky.revoke(json.dumps(stored)), lambda: bluesky.xrpc_post(dict(stored), "com.atproto.repo.createRecord", body={})):
+            with self.assertRaises(AlphaError):
+                call()
+        self.assertEqual(wire.calls, [])
+
+    def test_revoke_ends_the_whole_grant(self):
+        wire = Wire([ok({})])
+        bluesky = BlueskyProvider(client_jwk(), BASE, transport=wire, resolver=PUBLIC)
+        stored = {"v": 1, "at": "AT", "rt": "RT", "did": DID, "pds": "https://pds.example.com", "iss": "https://auth.example.com",
+                  "tokenEndpoint": "https://auth.example.com/oauth/token", "revocationEndpoint": "https://auth.example.com/oauth/revoke", "jwk": generate_jwk()}
+        self.assertTrue(bluesky.revoke(json.dumps(stored)))
+        self.assertEqual((wire.calls[0]["form"]["token"], wire.calls[0]["form"]["token_type_hint"]), ("RT", "refresh_token"))
+
+
+class XReconcile(unittest.TestCase):
+    def social(self, wire):
+        x = XProvider("c", "s", transport=wire)
+        x.production_reviewed = True
+        return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": x})
+
+    def test_links_are_expanded_entities_decoded_and_the_media_link_dropped(self):
+        text = "Recital & rehearsal notes https://rafii.example/notes"
+        stored = {"id": "1800000000000000001", "author_id": "42", "text": "Recital &amp; rehearsal notes https://t.co/abc123 https://t.co/media99",
+                  "entities": {"urls": [{"start": 30, "url": "https://t.co/abc123", "expanded_url": "https://rafii.example/notes"},
+                                        {"start": 50, "url": "https://t.co/media99", "expanded_url": "https://x.com/james/status/1800000000000000001/photo/1", "media_key": "3_1"}]}}
+        wire = Wire([ok({"data": stored})])
+        verified = self.social(wire).reconcile(manifest("X", "42", text=text), {"providerReference": stored["id"], "checks": 1})
+        self.assertEqual(verified["state"], "verified")
+        self.assertIn("entities", wire.calls[0]["url"])
+
+    def test_billed_reads_stop_after_a_few_inconclusive_checks(self):
+        wire = Wire([])
+        result = self.social(wire).reconcile(manifest("X", "42"), {"providerReference": "1800000000000000001", "checks": HostedSocial.X_RECONCILE_LIMIT + 1})
+        self.assertEqual((result["state"], wire.calls), ("uncertain", []))
+
+
+class MinorFixes(unittest.TestCase):
+    def test_mastodon_polls_the_same_media_instead_of_uploading_again(self):
+        image = [{"id": "m1", "mime": "image/png", "alt": "score"}]
+        storage = SimpleNamespace(storage=SimpleNamespace(get=lambda *a: b"\x89PNG"))
+        wire = Wire([ok({"id": "990"}, 202), ok({"id": "990", "url": None}, 206), ok({"id": "990", "url": "https://files.example/990.png"}), ok({"id": "111"})])
+        mastodon = MastodonProvider(BASE, transport=wire, resolver=PUBLIC)
+        mastodon.production_reviewed = True
+        token = json.dumps({"v": 1, "at": "MT", "instance": "mastodon.social", "clientId": "c", "clientSecret": "s", "scope": ["write:statuses", "write:media"]})
+        social = HostedSocial(Grants(token, ["write:statuses", "write:media"]), {"mastodon": mastodon}, storage, sleep=lambda seconds: None)
+        self.assertEqual(social.submit(manifest("Mastodon", "1099@mastodon.social", media=image))["state"], "provider_accepted")
+        self.assertEqual([c["method"] for c in wire.calls], ["POST", "GET", "GET", "POST"])  # one upload, two polls, the post
+        self.assertEqual(wire.calls[-1]["body"]["media_ids"], ["990"])
+        slow = Wire([ok({"id": "991"}, 202)] + [ok({"id": "991", "url": None}, 206)] * HostedSocial.MASTODON_MEDIA_POLLS)
+        mastodon.transport = slow
+        self.assertEqual(social.submit(manifest("Mastodon", "1099@mastodon.social", media=image))["state"], "scheduled")
+        self.assertEqual(sum(1 for c in slow.calls if c["method"] == "POST"), 1)
+
+    def test_short_lived_tokens_renew_within_the_margin(self):
+        import test_social_voice_services as fixtures
+        from unittest.mock import Mock
+        for seconds_left, renewed in ((100, True), (1000, False)):
+            with self.subTest(seconds_left=seconds_left):
+                repo, vault = fixtures.Repository(), CredentialVault(CredentialVault.generate_key())
+                access, key = vault.encrypt(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}))
+                refresh = vault.encrypt("RT")[0]
+                now = 1_800_000_000
+                repo.credential = ("x", access, refresh, key, now + seconds_left, True, False, ["tweet.write"], "42", now - 3600)
+                x = XProvider("c", "s", transport=Wire([]))
+                x.refresh = Mock(return_value={"accessToken": json.dumps({"v": 1, "at": "AT2", "scope": ["tweet.write"]}), "refreshToken": "RT2", "expiresIn": 7200})
+                OAuthService(repo, None, vault, {"x": x}, BASE, clock=lambda: now).token_for_worker("workspace", "conn")
+                self.assertEqual(x.refresh.called, renewed)
 
 
 if __name__ == "__main__":
