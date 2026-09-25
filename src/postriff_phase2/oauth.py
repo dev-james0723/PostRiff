@@ -170,7 +170,8 @@ class OAuthService:
         if not scopes:
             raise AlphaError(f"{adapter.platform} does not offer '{capability}' through its official API for this app.", 409)
         redirect = self.callback_uri(provider_id)
-        if getattr(adapter, "connect_kind", "oauth") != "oauth" or hasattr(adapter, "begin"):
+        # Class attributes, so a mocked adapter keeps the plain redirect path.
+        if getattr(type(adapter), "connect_kind", "oauth") != "oauth" or callable(getattr(type(adapter), "begin", None)):
             return self._start_prepared(workspace_id, token, provider_id, adapter, capability, list(scopes), redirect, inputs)
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit, throttle
@@ -226,7 +227,7 @@ class OAuthService:
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
         adapter = self._provider(provider_id)
-        bot_code = getattr(adapter, "connect_kind", "oauth") == "bot_code"
+        bot_code = getattr(type(adapter), "connect_kind", "oauth") == "bot_code"
         if not getattr(adapter, "execution_enabled", True):
             raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
@@ -260,7 +261,7 @@ class OAuthService:
             verifier = self.vault.decrypt(verifier_ct, key_id)
             if bot_code:
                 grant = adapter.grant_from_context(context)
-            elif getattr(adapter, "requires_issuer", False):
+            elif getattr(type(adapter), "requires_issuer", False) is True:
                 grant = adapter.exchange(code, verifier, redirect, iss=iss)
             else:
                 grant = adapter.exchange(code, verifier, redirect)
