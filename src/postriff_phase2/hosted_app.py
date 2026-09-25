@@ -94,6 +94,10 @@ def client_label(environ):
     return label or "unknown"
 
 
+# Legacy alpha actions that wrote drafts with the template writer directly; refused on the hosted HTTP route.
+RETIRED_WRITING_ACTIONS = frozenset({"generate", "preview_update"})
+
+
 def ideas_runtime_from_environment(values):
     """Mount the paid model route only with a gateway key (AI_GATEWAY_API_KEY); never by default.
     POSTRIFF_MODEL_ID picks the default model; POSTRIFF_MODEL_IDS (comma list) the selectable set;
@@ -670,6 +674,10 @@ class HostedApplication:
                 if len(parts) == 4 and parts[3] == "actions" and method == "POST":
                     body = self._body(environ)
                     action, payload, revision = body.get("action"), body.get("payload", {}), body.get("expectedRevision")
+                    if action in RETIRED_WRITING_ACTIONS:
+                        # The alpha template writer (FixtureAdapter) behind these bypassed Rafii's writer; drafts come from
+                        # ideas turns, which choose the writer the person picked (or the managed default).
+                        raise AlphaError("This way of drafting was retired. Write from Home or ask Rafii.", 410, code="action_retired")
                     if action == "p2_media_upload":
                         result = service.upload_media(workspace_id, token, revision, payload)
                     elif action == "p2_media_delete":
