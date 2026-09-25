@@ -233,13 +233,13 @@ def _register_workflow_tools(tool_adapter, contracts, untrusted):
         if not flags.enabled("RAFII_ENGAGEMENT_COPILOT_ENABLED"):
             return _disabled("RAFII_ENGAGEMENT_COPILOT_ENABLED")
         try:
-            result = _service(ctx).coworker.engagement_draft(ctx.workspace_id, ctx.token, args["threadId"])
+            result = _service(ctx).coworker.engagement_draft(ctx.workspace_id, ctx.token, args["threadId"], model=getattr(ctx, "writer_model", None))
         except AlphaError as error:
             return _app_error(error)
         if result.get("drafted"):
             ctx.ledger.changed.append({"type": "reply_draft", "id": result["draftId"], "change": "suggested reply saved as a draft (not sent)", "expected": "draft",
                                        "actual": result["status"], "verified": bool(result["verified"])})
-        return {"ok": bool(result.get("drafted")), "verified": bool(result.get("verified")), **{k: result.get(k) for k in ("draftId", "category", "text", "placeholders", "sending", "reason")}}
+        return {"ok": bool(result.get("drafted")), "verified": bool(result.get("verified")), **{k: result.get(k) for k in ("draftId", "category", "text", "needs", "sending", "reason")}}
 
     @tool_adapter.register(contracts.ToolSpec("creative_plan", contracts.READ, "read",
                                               "Plan the visual for a post per platform: size, safe area, source type, carousel/thumbnail structure, CTA check, alt text and brand fit. Generates nothing."),

@@ -18,6 +18,7 @@ class AudienceService:
     def __init__(self, repository, oauth, clock, transport=None, reply_sender_enabled=False):
         self.repository, self.oauth, self.clock, self.transport = repository, oauth, clock, transport
         self.reply_sender_enabled = reply_sender_enabled
+        self._service = None   # set by HostedWorkspaceService; the writer for reply suggestions
 
     @staticmethod
     def _member(row):
@@ -77,24 +78,32 @@ class AudienceService:
             return {"counts": {"all": total, "replied": answered, "unanswered": total - answered}, "replySendingEnabled": self.reply_sender_enabled, "threads": items, "capabilities": capability, "limits": "Automated or bulk replies and moderation are not available in this release; each reply is approved individually."}
 
     def draft_reply(self, workspace_id, token, thread_id, payload):
+        """`manual`: the person's own text. `ai` (or the retired `ai_fixture`): a suggestion written by Rafii's managed
+        AI writer (reply_writer), saved as origin `copilot`; never fixed text."""
         origin = payload.get("origin", "manual")
-        if origin not in ("manual", "ai_fixture"):
-            raise AlphaError("Choose a manual draft or starter line.")
+        if origin not in ("manual", "ai", "ai_fixture"):
+            raise AlphaError("Choose your own reply or a suggestion from Rafii.")
+        if origin != "manual":
+            from . import reply_writer
+            if self._service is None:
+                raise AlphaError("Rafii's AI writer isn't available here, so no reply was suggested. Write the reply yourself.", 409, code="reply_writer_unavailable")
+            written = reply_writer.write(self._service, workspace_id, token, thread_id, model=payload.get("model") if isinstance(payload.get("model"), str) else None)
+            with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                require(self._member(row), "edit")
+                cur.execute("INSERT INTO public.pr_reply_drafts(workspace_id,thread_id,author,origin,text,status,events) VALUES(%s,%s,%s,'copilot',%s,'draft',%s::jsonb) RETURNING id::text",
+                            (workspace_id, thread_id, principal, written["text"], json.dumps([{"at": self.clock(), "state": "draft", "by": "inbox_suggestion", "provenance": written["provenance"]}])))
+                draft_id = cur.fetchone()[0]
+            return {"draftId": draft_id, "origin": "copilot", "text": written["text"], "needs": written["needs"], "label": "Suggested by Rafii's AI writer"}
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
-            cur.execute("SELECT text,author_handle FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL", (thread_id, workspace_id))
-            thread = cur.fetchone()
-            if not thread:
+            cur.execute("SELECT 1 FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL", (thread_id, workspace_id))
+            if not cur.fetchone():
                 raise AlphaError("Thread unavailable.", 404)
-            if origin == "manual":
-                text = clean(payload.get("text", ""), REPLY_LIMIT)
-                if not text:
-                    raise AlphaError("Write a reply first.")
-            else:
-                # Deterministic labelled draft; no model call. The user's own text is never overwritten.
-                text = clean(f"Thanks for adding this, @{thread[1] or 'there'}. What would you want to see next?", REPLY_LIMIT)
+            text = clean(payload.get("text", ""), REPLY_LIMIT)
+            if not text:
+                raise AlphaError("Write a reply first.")
             cur.execute("INSERT INTO public.pr_reply_drafts(workspace_id,thread_id,author,origin,text,status) VALUES(%s,%s,%s,%s,%s,'draft') RETURNING id::text", (workspace_id, thread_id, principal, origin, text))
-            return {"draftId": cur.fetchone()[0], "origin": origin, "text": text, "label": "Starter line (not written by AI)" if origin == "ai_fixture" else "Your reply"}
+            return {"draftId": cur.fetchone()[0], "origin": origin, "text": text, "label": "Your reply"}
 
     def reply_preview(self, workspace_id, token, draft_id):
         with self.repository.transaction(token, workspace_id) as (cur, _, _):

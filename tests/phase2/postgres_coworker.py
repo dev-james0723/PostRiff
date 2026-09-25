@@ -579,18 +579,37 @@ def _():
     triage = service.coworker.engagement_triage(wid, OWNER)
     by_text = {i["summary"][:12]: i for i in triage["items"]}
     question = next(i for i in triage["items"] if i["category"] == "lead")
-    drafted = service.coworker.engagement_draft(wid, EDITOR, question["threadId"])
-    spam = next(i for i in triage["items"] if i["category"] == "spam")
-    spam_draft = service.coworker.engagement_draft(wid, OWNER, spam["threadId"])
+    # Without Rafii's managed AI writer nothing is drafted and no fixed text is offered: the reason is returned.
+    unwritten = service.coworker.engagement_draft(wid, EDITOR, question["threadId"])
+    # With the managed writer (a synthetic gateway answer; no network), the reply is the model's text, saved as a draft.
+    from postriff_phase2.model_runtime import ServerModelRuntime
+    reply = "Thank you for asking! I'll share the price and how to preorder here soon."
+    sent = []
+
+    def gateway(method, url, headers=None, body=None, timeout=None):
+        sent.append(body)
+        return {"status": 200, "body": {"choices": [{"message": {"content": json.dumps({"reply": reply, "needs": ["price", "how to preorder"], "language": "en"})}}],
+                                        "usage": {"prompt_tokens": 900, "completion_tokens": 60, "cost": 0.0012}}}
+    writer = ServerModelRuntime("synthetic-key", model="openai/gpt-6-sol", models=["openai/gpt-6-sol"], transport=gateway)
+    service.ideas.runtimes.append(writer)
     try:
-        service.coworker.engagement_draft(wid, VIEWER, question["threadId"])
-        viewer = "drafted"
-    except AlphaError as error:
-        viewer = error.status
+        drafted = service.coworker.engagement_draft(wid, EDITOR, question["threadId"])
+        spam = next(i for i in triage["items"] if i["category"] == "spam")
+        spam_draft = service.coworker.engagement_draft(wid, OWNER, spam["threadId"])
+        try:
+            service.coworker.engagement_draft(wid, VIEWER, question["threadId"])
+            viewer = "drafted"
+        except AlphaError as error:
+            viewer = error.status
+    finally:
+        service.ideas.runtimes.remove(writer)
     with connection() as db:
-        row = db.execute("SELECT status, origin FROM pr_reply_drafts WHERE id::text=%s", (drafted["draftId"],)).fetchone()
-    return (not any(i["urgent"] for i in triage["items"]) and drafted["verified"] and row == ("draft", "copilot") and spam_draft["drafted"] is False and viewer == 403
-            and {i["category"] for i in triage["items"]} >= {"lead", "praise", "spam", "complaint"}), {"categories": sorted({i["category"] for i in triage["items"]}), "draft": row, "viewer": viewer, "n": len(by_text)}
+        row = db.execute("SELECT status, origin, text FROM pr_reply_drafts WHERE id::text=%s", (drafted["draftId"],)).fetchone()
+    comment_sent = bool(sent) and "pumpkin tart" in sent[0]["messages"][1]["content"]
+    return (not any(i["urgent"] for i in triage["items"]) and unwritten["drafted"] is False and unwritten.get("code") == "reply_writer_unavailable"
+            and drafted["verified"] and row == ("draft", "copilot", reply) and drafted["needs"] == ["price", "how to preorder"] and comment_sent
+            and len(sent) == 1 and spam_draft["drafted"] is False and viewer == 403
+            and {i["category"] for i in triage["items"]} >= {"lead", "praise", "spam", "complaint"}), {"categories": sorted({i["category"] for i in triage["items"]}), "draft": row[:2] if row else None, "viewer": viewer, "n": len(by_text), "writerCalls": len(sent)}
 
 
 # === P: performance learning ===============================================================================================

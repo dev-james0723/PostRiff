@@ -165,11 +165,13 @@ class GatewayCall:
     """One JSON answer from the managed cloud route (Vercel AI Gateway, OpenAI-compatible)."""
     local = False
 
-    def __init__(self, api_key, model=CLOUD_MODEL, endpoint=None, transport=None, allowed_providers=None):
+    def __init__(self, api_key, model=CLOUD_MODEL, endpoint=None, transport=None, allowed_providers=None, drafting=False):
         from .model_runtime import DEFAULT_ENDPOINT, model_transport
         self.api_key, self.model, self.endpoint, self.transport = api_key, model, endpoint or DEFAULT_ENDPOINT, transport or model_transport
         # Same approved-provider restriction as drafting: routing and fallbacks stay inside this list.
         self.allowed_providers = [str(p) for p in allowed_providers] if allowed_providers else [model.split("/", 1)[0]]
+        # A call that writes text people read (a reply) reasons like drafting; extraction and reading stay minimal.
+        self.drafting = drafting
 
     def __call__(self, system, user, schema):
         cost_usd_micro = None
@@ -177,7 +179,7 @@ class GatewayCall:
         from .model_runtime import NO_TEMPERATURE
         # Thinking off where the model allows it (as these short structured calls always ran); a model that must
         # reason gets its lowest level and headroom, since its reasoning shares max_tokens.
-        reasoning = gateway_catalog.structured_reasoning(self.model)
+        reasoning = (gateway_catalog.drafting_reasoning if self.drafting else gateway_catalog.structured_reasoning)(self.model)
         reasons = bool(reasoning) and reasoning.get("effort") != "none"
         body = {"model": self.model, "max_tokens": 4000 if reasons else 1200,
                 "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}],
