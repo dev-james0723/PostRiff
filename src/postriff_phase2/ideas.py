@@ -169,10 +169,14 @@ class IdeasService:
             info = runtime.describe()
             if info:
                 agents.append(info)
+        if any(m.get("qualified") and m.get("costClass") == "paid" and m.get("id") != "server-openai" for m in models):
+            # The fixture lists a "Rafii managed model · not available yet" placeholder; next to a real managed writer
+            # it only confuses the choice.
+            models = [m for m in models if m.get("id") != "server-openai"]
         image_available = self.image_runtime is not None and self.assets is not None
         return {
             "models": models,
-            "reasoning": self.runtime.list_supported_reasoning(),
+            "reasoning": self.default_runtime().list_supported_reasoning(),
             "agents": agents,
             "imageGeneration": {
                 "available": image_available,
@@ -211,9 +215,17 @@ class IdeasService:
             return general, (), "This automation's content type is no longer available, so these drafts use general writing. Edit the automation to choose another type."
         return {"contentTypeId": item["id"], "contentTypeVersion": item["version"], "formatId": chosen.get("formatId")}, tuple(item.get("preflightRuleIds", ())), None
 
+    def default_runtime(self):
+        """The writer for a request that names no model. When a managed cloud writer is mounted, that one: the owner's
+        rule is that no draft comes from templates unless the person chose them ("Templates (no AI model)" is the
+        fixture's own id, so an explicit choice still reaches it). Otherwise the local default. This is a default for an
+        absent choice, never a fallback: an unknown or refused model still raises, and a paid gate that refuses is
+        never answered with template text."""
+        return next((r for r in self.runtimes if getattr(r, "cost_class", None) == "paid" and getattr(r, "provider_class", None) == "cloud"), self.runtime)
+
     def _select_runtime(self, model_id):
         if not model_id:
-            return self.runtime
+            return self.default_runtime()
         for runtime in self.runtimes:
             if runtime.owns(model_id):
                 listed = next((m for m in runtime.list_supported_models() if m["id"] == model_id), None)

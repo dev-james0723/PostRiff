@@ -49,7 +49,7 @@ export function routeLabel(model: ModelOption) {
   if (model.route && !['fixture', 'managed'].includes(model.route))
     return `${model.route} · Local CLI`;
   return model.route === 'fixture' || model.id === 'deterministic-preview'
-    ? 'Deterministic preview'
+    ? 'Templates (no AI model)'
     : 'Rafii · Managed';
 }
 

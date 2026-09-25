@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ModelCatalog, ModelOption } from '@/lib/api/types';
 import { mapReasoning, normaliseLevel, type ReasoningLevel } from './reasoning-map';
 
-const STORAGE_KEY = 'postriff-agent-model';
+const STORAGE_KEY = 'postriff-agent-model-v2';
+/** Before 2026-09-25 the fixture was often the only writer offered, so a saved fixture there is not a choice of templates. */
+const LEGACY_STORAGE_KEY = 'postriff-agent-model';
 /** Reasoning preference per model id (`{ [modelId]: 'low' | 'medium' | 'high' | 'xhigh' | 'max' }`). */
 const REASONING_KEY = 'postriff-agent-reasoning';
 
@@ -13,14 +15,14 @@ export const FIXTURE_MODEL = 'deterministic-preview';
 /** Human names for the CLI routes the API can drive (`route` on a model option). */
 export const ROUTE_LABELS: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex CLI' };
 
-/** Short pill label: "Claude Code · sonnet", "Codex · default", "Deterministic preview". */
+/** Short pill label: "Claude Code · sonnet", "Codex · default", "Templates (no AI model)". */
 export function shortLabel(option: ModelOption | undefined, id: string) {
   const route = option?.route;
   if (route && ROUTE_LABELS[route]) {
     const alias = id.startsWith(`${route}:`) ? id.slice(route.length + 1) : id;
     return `${route === 'codex' ? 'Codex' : ROUTE_LABELS[route]} · ${alias || 'default'}`;
   }
-  if (id === FIXTURE_MODEL) return 'Deterministic preview';
+  if (id === FIXTURE_MODEL) return 'Templates (no AI model)';
   return option?.label ?? id;
 }
 
@@ -51,7 +53,19 @@ export function resolveModelChoice(options: readonly ModelOption[], stored: stri
   // A remembered unavailable writer is an explicit choice, never permission to substitute another.
   if (stored) return stored;
   const cloud = options.find((m) => m.qualified && m.costClass === 'paid' && (!m.route || m.route === 'managed'));
-  return (cloud ?? options.find((m) => m.qualified && m.id === FIXTURE_MODEL) ?? options.find((m) => m.qualified))?.id ?? FIXTURE_MODEL;
+  // With no catalogue yet, no model at all: the server then uses its default writer (the managed one when mounted),
+  // never templates the person did not choose.
+  return (cloud ?? options.find((m) => m.qualified && m.id === FIXTURE_MODEL) ?? options.find((m) => m.qualified))?.id ?? '';
+}
+
+/**
+ * The remembered writer: the current key, else a legacy one unless it is the fixture. Templates were often the
+ * only writer offered before a managed one existed, so an old saved fixture counts as no choice; choosing
+ * "Templates (no AI model)" now is saved under the current key and kept.
+ */
+export function storedModelChoice(current: string | null, legacy: string | null): string | null {
+  if (current) return current;
+  return legacy && legacy !== FIXTURE_MODEL ? legacy : null;
 }
 
 export function useModelChoice(catalog: ModelCatalog | undefined) {
@@ -59,7 +73,7 @@ export function useModelChoice(catalog: ModelCatalog | undefined) {
   const [preferences, setPreferences] = useState<Record<string, ReasoningLevel>>({});
   useEffect(() => {
     try {
-      setStored(localStorage.getItem(STORAGE_KEY));
+      setStored(storedModelChoice(localStorage.getItem(STORAGE_KEY), localStorage.getItem(LEGACY_STORAGE_KEY)));
     } catch {
       /* private mode: stay with the default */
     }

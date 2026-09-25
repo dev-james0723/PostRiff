@@ -20,7 +20,7 @@ On [Models & providers](/app/account/models) you choose where drafts are written
 
 - A coding CLI (Claude Code or Codex) signed in on the machine that serves the Rafii API, paid by its own subscription.
 - Rafii's managed model, metered to this workspace in writing batches.
-- The deterministic preview, which calls no model and costs nothing.
+- Templates (no AI model), which calls no model and costs nothing. Rafii uses it only when you choose it.
 
 The writer you pick is used by Home, every conversation and the Rafii panel in this browser. On a hosted deployment a CLI will run through a desktop companion on your own computer; that companion is not available yet.
 
