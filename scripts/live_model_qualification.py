@@ -247,9 +247,28 @@ def s_research(rt, m):
     return checks, result, dt, {'text': v['text'][:500], 'unknowns': v['unknowns'], 'warnings': v['warnings']}
 
 
+# What an automation reading may carry: the fields the request schema lets the model send, plus the ones the app
+# derives from its schedule (request_model._automation). Anything else would be an invented field.
+DERIVED_AUTOMATION_FIELDS = {'weekdays', 'monthDays', 'countdown', 'localTime'}
+
+
+def automation_fields(state=None):
+    node = request_model.schema(state or {})['properties']['automation']
+    node = next((n for n in node.get('anyOf', []) if n.get('type') == 'object'), node)
+    return set(node.get('properties') or {})
+
+
+def invented_automation_fields(answer, reading, state=None):
+    """Fields in the model's raw automation answer or in the app's reading that the schema does not define."""
+    allowed = automation_fields(state)
+    raw = (answer or {}).get('automation') if isinstance(answer, dict) else None
+    read = (reading or {}).get('automation') or {}
+    return sorted((set(raw or {}) - allowed) | (set(read) - allowed - DERIVED_AUTOMATION_FIELDS))
+
+
 def s_campaign(rt, m):
     call = GatewayCall(TOKEN, model=m, transport=rt.transport, allowed_providers=rt.allowed_for(m))
-    reading, _ = understand(call, 'Count down to my recital on 18 October on LinkedIn: a post two weeks before, one week before and on the day.', {})
+    reading, answer = understand(call, 'Count down to my recital on 18 October on LinkedIn: a post two weeks before, one week before and on the day.', {})
     a = (reading or {}).get('automation') or {}
     idea = 'Autumn recital countdown: one week to go.'
     result, _, dt = draft(rt, m, context(RECITAL), [{'platform': 'LinkedIn', 'language': 'en-GB'}], idea)
@@ -257,10 +276,10 @@ def s_campaign(rt, m):
     counted = a.get('countdown') or {}
     checks = {'countdown read as a countdown (or left as a draft), never as repeating days': (reading or {}).get('action') == 'draft'
               or (counted.get('eventDate', '').endswith('-10-18') and set(counted.get('daysBefore', [])) == {14, 7, 0} and not a.get('weekdays') and not a.get('monthDays')),
-              'no invented schedule fields beyond the schema': set(a) <= {'weekdays', 'monthDays', 'countdown', 'localTime', 'topic', 'goal', 'name', 'contentTypeId', 'formatId', 'voice', 'assumptions'},
+              'no invented schedule fields beyond the schema': not invented_automation_fields(answer, reading),
               'countdown draft keeps date and venue': '18' in text and 'City Hall' in text,
               'no invented numbers': not invented_numbers(text, facts_text(context(RECITAL)), idea)}
-    return checks, result, dt, {'reading': reading, 'text': text[:400]}
+    return checks, result, dt, {'reading': reading, 'text': text[:400], 'invented': invented_automation_fields(answer, reading)}
 
 
 VOICE = ("# VOICE.md\nI write short, plain sentences. I open with one concrete observation from the practice room. "
