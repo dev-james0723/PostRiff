@@ -50,8 +50,8 @@ SOURCES = {
     "C05": "campaign.get (the selected automation's campaign)", "C06": "route.describe + help (Calendar article)",
     "B01": "brand.summary", "B02": "brand.summary (audience)", "B03": "brand.summary (boundaries, learned avoid rules)", "B04": "brand.summary + draft.get (derived check)",
     "B05": "brand.summary (empty Brand Brain)", "V01": "voice.profile", "V02": "voice.profile + learned preferences", "V03": "voice.profile (per-platform preferences)",
-    "V04": "voice.profile (judgement needs a writer model)", "D01": "content.search (draft listing)", "D02": "content.search", "D03": "campaign.get (drafts)",
-    "D04": "writing pipeline (IdeasService.turn) with the draft as material", "D05": "writing pipeline, destination Instagram", "D06": "writing pipeline + ideas.apply",
+    "V04": "voice.check (measured against the stored profile)", "D01": "content.search (draft listing)", "D02": "content.search", "D03": "campaign.get (drafts)",
+    "D04": "writing pipeline with the draft as material → apply (proposed update on that draft) → accept_update", "D05": "writing pipeline, destination Instagram", "D06": "writing pipeline + ideas.apply",
     "D07": "writing pipeline (rework)", "K01": "campaign.get", "K02": "campaign.get + derived coverage", "K03": "campaign.get (derived observations)",
     "K04": "campaign.get (last week's runs)", "K05": "writing pipeline with the campaign brief as material", "S01": "schedule proposal → p2_review (apply_proposal)",
     "S02": "apply_proposal with the approve permission", "S03": "calendar.range", "S04": "calendar.range (Friday)", "S05": "calendar.range (derived: close together)",
@@ -61,7 +61,7 @@ SOURCES = {
     "P03": "publishing.summary (failed)", "P04": "job.get diagnosis", "P05": "entity.status (uncertain job)", "Q01": "content.search + provenance links",
     "Q02": "campaign.list (no match)", "Q03": "content.search (exact phrase)", "Q04": "content.search (dated)", "X01": "writing pipeline with campaign material (LinkedIn)",
     "X02": "day reference → clarifying question", "X02b": "pending choice → writing pipeline (Instagram)", "X03": "schedule intent + unsupported campaign link stated",
-    "X04": "compound: campaign.list + calendar.range + writing pipeline", "M01": "conversation reference → campaign.get", "M02": "ordinal reference → entity.status",
+    "X04": "compound: campaign → gaps → writing pipeline → apply → link → schedule attempt", "M01": "conversation reference → campaign.get", "M02": "ordinal reference → entity.status",
     "M03": "'that draft' reference → entity.status", "M04": "no reference in a new conversation", "A01": "attention.summary", "A02": "attention.summary (neglected rule)",
     "A03": "attention.summary (repetition rule)", "H01": "content.search (unknown id)", "H02": "campaign.list (no match)", "H03": "publishing.summary (empty date)",
     "H04": "job.get in another workspace (not found)", "H05": "publishing.summary + person guard", "Z01": "policy: publishing from chat refused",
@@ -69,6 +69,12 @@ SOURCES = {
     "Z06": "automation edit: owner permission", "Z07": "role check: viewer cannot draft", "T01": "clarifying question (ambiguous reference)", "T02": "policy: publishing refused",
     "T03": "schedule: the app's own refusal (review first)", "T04": "schedule: the app's own refusal (Instagram image)",
     "I01": "route manifest + stored ids (every answer's links)",
+    "L01": "raffi_campaign_link (campaign's own action)", "L02": "campaign.membership", "L03": "plural reference → raffi_campaign_link (posts)",
+    "L03b": "campaign.list (no match)", "L04": "raffi_campaign_unlink", "L05": "role check (edit)", "L06": "campaign.list (no match)",
+    "X05": "compound: campaign → writing pipeline → apply → link → schedule proposal", "X06": "compound: rework → apply → link → schedule proposal (uses the rewrite)",
+    "X06b": "apply_proposal: accept_update → p2_variant_review → p2_review", "H06": "member.activity (review records + audit log)", "H07": "record.attribution (post record)",
+    "H08": "record.attribution (automation record)", "H09": "member.activity (no such member)", "H10": "member.activity (viewer: no audit log)",
+    "T05": "schedule proposal with review confirmation", "T05b": "apply_proposal: p2_variant_review → p2_review", "T05c": "apply_proposal permission (edit + approve)",
 }
 
 
@@ -101,6 +107,10 @@ for token, role in ((VIEWER, "viewer"), (APPROVER, "approver"), (EDITOR, "editor
                    (wid, USERS[token], role))
 approve_budgets(connection, wid)
 agent, ideas = service.site_agent, service.ideas
+NAMES = {OWNER: "Jamie Studio", EDITOR: "Alex Editor", APPROVER: "Pat Approver", VIEWER: "Vic Viewer"}
+with connection() as db:
+    for token, name in NAMES.items():
+        db.execute("UPDATE public.pr_profiles SET display_name=%s WHERE user_id=%s", (name, USERS[token]))
 
 
 def state(workspace=None):
@@ -188,6 +198,20 @@ def add_copy(s, actor):
 
 command(add_copy)
 F = state()["variants"][-1]
+
+
+# A second Threads draft on C's account, newer than C: a rework of C must still land on C, not on the newest draft.
+def add_threads_twin(s, actor):
+    source = next(v for v in s["variants"] if v["id"] == C["id"])
+    twin = copy.deepcopy(source)
+    twin.update(id=uuid.uuid4().hex, text="Slow practice, one bar at a time: the journal's first exercise.", revision=1,
+                revisions=[{"revision": 1, "text": "Slow practice, one bar at a time: the journal's first exercise.", "origin": "test-copy"}])
+    s["variants"].append(twin)
+    return s
+
+
+command(add_threads_twin)
+G = state()["variants"][-1]
 
 
 # --- seed: automation (campaign) through the builder's action, then one past run as a fixture ---------------------------
@@ -345,6 +369,17 @@ def record(sid, area, prompt, result, expected, ok, *, state_checked="read only:
         print(f"FAIL {sid} {prompt!r}: expected {expected}\n--- got ---\n{REPORT[-1]['actual']}\n", flush=True)
 
 
+def campaign_items(kind="draft"):
+    key = {"draft": "variantId", "post": "jobId"}[kind]
+    campaign = next(c for c in state()["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)
+    return {i.get(key) for i in campaign.get("items") or [] if i.get("kind") == kind}
+
+
+def compound_of(result):
+    site = (result.get("message") or {}).get("siteAgent") or {}
+    return site.get("compound") or {}, site.get("proposals") or []
+
+
 def links_ok(result):
     return all(routes.match(h.split("?")[0].split("#")[0]) for h in hrefs(result))
 
@@ -392,8 +427,13 @@ r = ask("How does my LinkedIn voice differ from Instagram?")
 record("V03", "voice", "How does my LinkedIn voice differ from Instagram?", r, "LinkedIn emoji rule; Instagram has none learned",
        "**LinkedIn:** Never use emoji on LinkedIn" in said(r) and "**Instagram:** no platform-specific preferences learned" in said(r))
 r = ask("Why does this sentence not sound like me?", "/app/queue", {"type": "draft", "id": C["id"]})
-record("V04", "voice", "Why does this sentence not sound like me?", r, "says a writer model is needed to judge; shows only what is stored", "needs a writer model" in said(r),
-       partial="No writer model in this run (preview writer): the judgement itself is not made; the stored profile is shown.")
+checks = next((b for b in r["message"]["siteAgent"]["blocks"] if b["type"] == "result_list" and b["title"] == "Checked against your stored voice"), {"items": []})
+opening = next((i for i in checks["items"] if "Opens with a short question" in i["title"]), None)
+record("V04", "voice", "Why does this sentence not sound like me? (Threads draft selected)", r,
+       "measured findings against the stored profile, each with its basis; tone left to a writer, and said so; the draft is never quoted",
+       intent(r) == "voice_check" and ("voice.check", "verified") in tools_ran(r) and opening is not None and opening["title"].startswith("✗") and "Measured" in (opening["meta"] or "")
+       and "Tone and word choice weren't judged" in said(r) and "Needs a writer's judgement" in said(r) and variant(C["id"])["text"][:40] not in json.dumps(checks),
+       state_checked="the draft's stored text measured; the live-writer run covers the model's judgement")
 
 # === §5 drafts and content operations ===================================================================================
 r = ask("Show me my unfinished drafts.")
@@ -418,10 +458,18 @@ events = ideas.events(wid, OWNER, run_id)
 variants = events["artifact"]["variants"]
 ok = r.get("delegated") and len(runs) == before + 1 and [v["platform"] for v in variants] == ["Threads"] and variants[0].get("channelId") == TH
 applied = ideas.apply(wid, OWNER, revision(), run_id, events["artifactHash"])
-updated = variant(C["id"])
-record("D04", "drafts", "Shorten this draft (Threads draft selected)", r, "a writing run for the same Threads account; saving refreshes that draft",
-       ok and applied["status"] == "applied" and (updated.get("proposedUpdate") or updated["revision"] > C["revision"]), state_checked="writing run + draft proposedUpdate",
-       partial="Real writing run through the existing pipeline with the draft as material. The preview writer cannot actually shorten; wording quality needs a live model.")
+updated, twin = variant(C["id"]), variant(G["id"])
+original_text = C["text"]
+targeted = [(item["variantId"], item.get("proposedUpdate")) for item in applied["variantIds"]] == [(C["id"], True)]
+kept = updated["text"] == original_text and updated["revision"] == C["revision"] and not twin.get("proposedUpdate")
+act("accept_update", {"variantId": C["id"]})
+accepted = variant(C["id"])
+history = accepted["revision"] == C["revision"] + 1 and accepted["revisions"][0]["text"] == original_text and accepted["revisions"][-1]["text"] == events["artifact"]["variants"][0]["text"]
+record("D04", "drafts", "Shorten this draft (Threads draft selected; a newer Threads draft on the same account exists)", r,
+       "a writing run with the draft as material; saving puts a proposed update on exactly that draft (not the newer one); the text changes only when accepted, and the old text stays in its history",
+       ok and applied["status"] == "applied" and targeted and kept and history and events["artifact"].get("reworkOf") == C["id"],
+       state_checked="run artifact reworkOf; C.proposedUpdate (G untouched); after accept_update: revision +1, revisions[0] = original text")
+C = variant(C["id"])
 r = ask("Adapt this draft for Instagram", "/app/queue", {"type": "draft", "id": A["id"]})
 events = ideas.events(wid, OWNER, r["runId"])
 record("D05", "drafts", "Adapt this draft for Instagram (LinkedIn draft selected)", r, "a run for Instagram, not LinkedIn", [v["platform"] for v in events["artifact"]["variants"]] == ["Instagram"],
@@ -430,7 +478,9 @@ r = ask("Write posts for LinkedIn and Threads about practising slowly")
 events = ideas.events(wid, OWNER, r["runId"])
 platforms = sorted(v["platform"] for v in events["artifact"]["variants"])
 before_variants = len(state()["variants"])
-ideas.apply(wid, OWNER, revision(), r["runId"], events["artifactHash"])
+d06 = ideas.apply(wid, OWNER, revision(), r["runId"], events["artifactHash"])
+D06_LI = next(item["variantId"] for item in d06["variantIds"] if item["platform"] == "LinkedIn")
+D06_TH = next(item["variantId"] for item in d06["variantIds"] if item["platform"] == "Threads")
 record("D06", "drafts", "Write posts for LinkedIn and Threads about practising slowly", r, "one idea → two platform drafts, saved as real drafts",
        platforms == ["LinkedIn", "Threads"] and len(state()["variants"]) >= before_variants, state_checked="variants after apply")
 r = ask("Create alternate hooks for this draft", "/app/queue", {"type": "draft", "id": B["id"]})
@@ -449,8 +499,41 @@ r = ask("What happened in this campaign last week?", "/app/automations", AUTOMAT
 record("K04", "campaign", "What happened in this campaign last week?", r, "last week's run with its items", "LinkedIn: rejected" in said(r))
 r = ask("Create a new post for this campaign", "/app/automations", AUTOMATION)
 user_message = ideas.messages(wid, OWNER, r["conversationId"])["messages"][0]["body"]
-record("K05", "campaign", "Create a new post for this campaign", r, "a writing run with the campaign brief as material", bool(r.get("delegated")) and user_message.get("material", {}).get("type") == "campaign",
-       state_checked="user message material ref", partial="The drafts are real but the product has no draft→campaign link outside automation runs, so they are not tagged to the campaign.")
+events = ideas.events(wid, OWNER, r["runId"])
+saved = ideas.apply(wid, OWNER, revision(), r["runId"], events["artifactHash"])
+made = [item["variantId"] for item in saved["variantIds"]]
+k05_items = campaign_items()
+r_in = ask("Which campaign is this draft in?", "/app/queue", {"type": "draft", "id": made[0]})
+record("K05", "campaign", "Create a new post for this campaign → save → Which campaign is this draft in?", r,
+       "a writing run with the campaign brief as material; saving links the new draft to that campaign; Rafii then names the campaign",
+       bool(r.get("delegated")) and user_message.get("material", {}).get("type") == "campaign" and saved["campaignId"] == CAMPAIGN_ID and set(made) <= k05_items
+       and not any(item.get("proposedUpdate") for item in saved["variantIds"])
+       and intent(r_in) == "campaign_membership" and "Autumn product launch of the practice journal" in said(r_in),
+       state_checked="campaign.items contains the saved draft (kind draft, addedBy the owner)")
+
+# --- campaign links: a real domain action, attributable and reversible ------------------------------------------------
+r = ask("Add this draft to the launch campaign", "/app/queue", {"type": "draft", "id": F["id"]})
+record("L01", "campaign", "Add this draft to the launch campaign (LinkedIn draft selected)", r, "the campaign's own action links it; the answer names the draft and links to both",
+       intent(r) == "campaign_link" and said(r).startswith("Added the LinkedIn draft to “Autumn product launch") and F["id"] in campaign_items() and links_ok(r),
+       state_checked="campaign.items has the draft (addedBy the owner); audit campaign.items_linked_by_agent")
+with connection() as db:
+    audited = db.execute("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s AND kind='campaign.items_linked_by_agent' AND subject=%s", (wid, CAMPAIGN_ID)).fetchone()[0]
+link_conv = r["conversationId"]
+r = ask("Which campaign is this draft in?", "/app/queue", {"type": "draft", "id": F["id"]})
+record("L02", "campaign", "Which campaign is this draft in?", r, "the linked campaign, labelled as linked", intent(r) == "campaign_membership"
+       and "Autumn product launch of the practice journal" in said(r) and "linked" in said(r) and audited >= 1, state_checked="read of campaign.items")
+r = ask("Remove this draft from that campaign", "/app/queue", {"type": "draft", "id": F["id"]}, conversation=link_conv)
+log = next(c for c in state()["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)["itemLog"]
+record("L04", "campaign", "Remove this draft from that campaign (same conversation)", r, "unlinked; the draft itself unchanged; the removal is recorded with who did it",
+       intent(r) == "campaign_unlink" and said(r).startswith("Removed") and F["id"] not in campaign_items() and log[-1]["op"] == "unlink" and log[-1]["by"] == USERS[OWNER]
+       and variant(F["id"])["text"] == F["text"], state_checked="campaign.items without the draft; itemLog unlink by the owner")
+before_items = campaign_items()
+r = ask("Add this draft to the launch campaign", "/app/queue", {"type": "draft", "id": F["id"]}, token=VIEWER)
+record("L05", "permissions", "Viewer: Add this draft to the launch campaign", r, "refused by role; nothing changes", intent(r) == "forbidden" and campaign_items() == before_items,
+       state_checked="campaign.items unchanged")
+r = ask("Add this draft to the Black Friday campaign", "/app/queue", {"type": "draft", "id": F["id"]})
+record("L06", "hallucination", "Add this draft to the Black Friday campaign (no such campaign)", r, "no campaign matches; nothing linked; the real campaigns listed",
+       "No campaign matches “Black Friday”" in said(r) and campaign_items() == before_items, state_checked="campaign.items unchanged")
 
 # === §7 calendar and scheduling ==========================================================================================
 r = ask("Schedule this draft for Friday at 16:30", "/app/queue", {"type": "draft", "id": A["id"]})
@@ -480,6 +563,14 @@ record("S03", "calendar", "What is scheduled this week?", r, "the two approved F
        and "Published and verified (this week)" in said(r) and "Failed, held or uncertain" in said(r) and "2 scheduled or waiting" not in said(r))
 r = ask("What is scheduled Friday?", "/app/calendar")
 record("S04", "calendar", "What is scheduled Friday?", r, "Friday entries only", "Fri 2026-09-25" in said(r) and "Thu 2026-09-24" not in said(r))
+friday_conv = r["conversationId"]
+friday_jobs = [ref["id"] for ref in r["message"]["siteAgent"]["refs"] if ref["type"] == "job"]
+r = ask("Put these two posts into my September campaign", "/app/calendar", conversation=friday_conv)
+record("L03b", "hallucination", "Put these two posts into my September campaign (no such campaign)", r, "no campaign matches; nothing linked", "No campaign matches “September”" in said(r)
+       and not (set(friday_jobs) & campaign_items("post")), state_checked="no post items")
+r = ask("Put these two posts into the launch campaign", "/app/calendar", conversation=friday_conv)
+record("L03", "campaign", "Put these two posts into the launch campaign (after a list of the two Friday posts)", r, "both posts from the list are linked, by id",
+       len(friday_jobs) == 2 and set(friday_jobs) <= campaign_items("post") and said(r).startswith("Added"), state_checked="campaign.items has both jobs (kind post)")
 r = ask("Are any posts scheduled too close together?", "/app/calendar")
 record("S05", "calendar", "Are any posts scheduled too close together?", r, "the 30-minute pair, labelled as a derived observation", "30 minutes apart" in said(r) and "Rule:" in said(r))
 r = ask("Do I have a content gap next week?", "/app/calendar")
@@ -560,14 +651,53 @@ events = ideas.events(wid, OWNER, r["runId"]) if r.get("delegated") and r.get("r
 record("X02b", "cross-surface", "…the second one (answering Rafii's question)", r, "the 16:30 post becomes an Instagram writing run",
        [v["platform"] for v in events["artifact"]["variants"]] == ["Instagram"] and len(writing_runs()) == before + 1, state_checked="one writing run for Instagram")
 r = ask("Add this to the current campaign and schedule it next week", "/app/queue", {"type": "draft", "id": B["id"]})
-record("X03", "cross-surface", "From a draft: Add this to the current campaign and schedule it next week", r, "says the campaign part can't be done; asks for the exact day and time; changes nothing",
-       said(r).startswith("I can't add a draft to a campaign") and "day and time" in said(r) and not r["message"]["siteAgent"]["proposals"],
-       partial="Adding a draft to a campaign has no backing object in the product; scheduling asks for an exact day and time.")
+comp, props = compound_of(r)
+st = comp.get("status") or {}
+record("X03", "compound", "From a draft: Add this to the current campaign and schedule it next week (Instagram draft, no image)", r,
+       "linked to the campaign (done); scheduling tried for the first free day next week and reported with the app's own reason; nothing scheduled",
+       st.get("link", {}).get("state") == "done" and B["id"] in campaign_items() and st.get("schedule", {}).get("state") == "needs_you"
+       and "Instagram requires a decoded image" in st["schedule"]["detail"] and not props and not any(rv["manifest"]["variantId"] == B["id"] for rv in state()["phase2"]["reviews"]),
+       state_checked="campaign.items has the draft; no review for it")
 r = ask("Find my launch campaign, tell me what is missing, create an Instagram post in my usual voice for the biggest gap, and schedule it in the next suitable empty slot")
-steps = said(r)
-record("X04", "compound", "Find the launch campaign, what is missing, create an Instagram post, schedule it", r, "each step reported: found, gaps, draft started, scheduling needs you",
-       "Find the campaign: done" in steps and "What is missing:" in steps and "Create the post: started" in steps and "Schedule it: not done" in steps,
-       state_checked="writing run exists", partial="Scheduling is not chained: it needs a saved draft and a confirmed time (by design).")
+comp, props = compound_of(r)
+st = comp.get("status") or {}
+made = [d["id"] for d in comp.get("drafts") or []]
+record("X04", "compound", "Find the launch campaign, what is missing, create an Instagram post, schedule it in the next suitable slot", r,
+       "found, gaps listed, post created and saved, linked to the campaign; scheduling reported with the app's reason (an Instagram post needs an image)",
+       [st.get(k, {}).get("state") for k in ("find", "gaps", "create", "save", "link")] == ["done"] * 5 and st.get("schedule", {}).get("state") == "needs_you"
+       and "Instagram requires" in st["schedule"]["detail"] and made and all(variant(d)["platform"] == "Instagram" for d in made) and set(made) <= campaign_items(),
+       state_checked="the saved Instagram draft exists and is in campaign.items")
+r = ask("Find my launch campaign, create a LinkedIn post about the practice journal and schedule it in the next suitable empty slot")
+comp, props = compound_of(r)
+st = comp.get("status") or {}
+made = [d["id"] for d in comp.get("drafts") or []]
+proposal = props[0] if props else {}
+record("X05", "compound", "Find the launch campaign, create a LinkedIn post, schedule it in the next suitable slot", r,
+       "every safe step done (found, created, saved, linked); scheduling is a proposal waiting for approval, with the rule that picked the slot; nothing scheduled",
+       [st.get(k, {}).get("state") for k in ("find", "create", "save", "link")] == ["done"] * 4 and st.get("schedule", {}).get("state") == "waiting" and len(props) == 1
+       and proposal.get("type") == "schedule_draft" and proposal.get("variantId") in made and "picked by Rafii" in " ".join(proposal.get("summary") or [])
+       and not any(rv["manifest"]["variantId"] in made for rv in state()["phase2"]["reviews"]) and set(made) <= campaign_items(),
+       state_checked="proposal stored on the answer; no review or job for the new draft; draft in campaign.items")
+a_before = variant(A["id"])
+r = ask("Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM", "/app/queue", {"type": "draft", "id": A["id"]})
+comp, props = compound_of(r)
+st = comp.get("status") or {}
+proposal = props[0] if props else {}
+record("X06", "compound", "Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM (LinkedIn draft selected)", r,
+       "revised as a proposed update on this draft, saved, linked; scheduling for Thu 18:00 is a proposal that uses the rewrite, waiting for approval",
+       [st.get(k, {}).get("state") for k in ("revise", "save", "link")] == ["done"] * 3 and st.get("schedule", {}).get("state") == "waiting"
+       and proposal.get("localTime") == "2026-09-24T18:00" and "use the rewrite" in " ".join(proposal.get("summary") or [])
+       and (variant(A["id"]).get("proposedUpdate") or {}).get("runId") == comp.get("runId") and variant(A["id"])["text"] == a_before["text"] and A["id"] in campaign_items(),
+       state_checked="A.proposedUpdate from this run, A's text unchanged, A in campaign.items, proposal stored")
+applied = agent.apply_proposal(wid, OWNER, {"conversationId": r["conversationId"], "messageId": r["messageId"], "proposalId": proposal["id"], "digest": proposal["digest"],
+                                             "expectedRevision": revision()})
+a_after = variant(A["id"])
+review = next(x for x in state()["phase2"]["reviews"] if x["id"] == applied["proposal"]["result"]["reviewId"])
+record("X06b", "compound", "…apply that proposal", r, "the rewrite is used (revision +1, the earlier text kept in history), the review confirmed, and an exact review for Thu 18:00 waits for approval; nothing published",
+       not a_after.get("proposedUpdate") and a_after["revision"] == a_before["revision"] + 1 and a_after["revisions"][-2]["text"] == a_before["text"]
+       and review["status"] == "needs_review" and review["manifest"]["timing"]["local"] == "2026-09-24T18:00" and review["manifest"]["payload"]["text"] == a_after["text"]
+       and not any(j["manifest"].get("variantId") == A["id"] and j["state"] not in ("canceled", "failed") for j in state()["phase2"]["jobs"]),
+       state_checked="variant revision and history; review manifest time and text; no live job")
 
 # === §12 conversation continuity ================================================================================================
 first = ask("Find my launch campaign")
@@ -606,9 +736,25 @@ record("H03", "hallucination", "What published on 2026-01-01?", r, "nothing on t
 r = ask("Why didn't this publish?", "/app/queue", {"type": "job", "id": FIXTURES["failed"]["id"]}, token=OTHER, workspace=other_wid)
 record("H04", "isolation", "Another workspace asks about this workspace's post", r, "not found; nothing leaked", "entity_not_found" in json.dumps(r["message"]) and "Studio page" not in json.dumps(r))
 r = ask("What did Alex post last week?")
-record("H05", "hallucination", "What did Alex post last week? (no such person)", r, "says it can't attribute posts to a person; lists last week's workspace posts unattributed",
-       said(r).startswith("I can't tell which posts Alex made") and "last week" in said(r),
-       partial="No member-activity reader: Rafii cannot say what a given person posted, and says so instead of guessing.")
+record("H05", "hallucination", "What did Alex post last week? (Alex is the editor, who approved and prepared nothing)", r,
+       "names the member; no post approved or prepared by them; never credits drafts; says what isn't attributed",
+       intent(r) == "member_activity" and said(r).startswith("No post was approved or prepared by Alex Editor last week.") and "Not attributed" in said(r))
+r = ask("What has Pat done this week?")
+record("H06", "attribution", "What has Pat done this week? (the approver prepared a post through Rafii)", r, "the approver's own records, each act once, with where it came from",
+       intent(r) == "member_activity" and said(r).count("Pat Approver prepared") == 1 and "Pat Approver prepared a LinkedIn post for Studio page at 2026-09-25 17:00 for approval" in said(r)
+       and "review record" in said(r))
+job_f = next(j for j in state()["phase2"]["jobs"] if j["manifest"].get("variantId") == F["id"] and j["state"] in ("approved", "scheduled"))
+r = ask("Who approved this?", "/app/queue", {"type": "job", "id": job_f["id"]})
+record("H07", "attribution", "Who approved this? (a post the owner approved, prepared by the approver)", r, "the approver and the preparer from the post's own records, with times",
+       said(r).startswith("You approved a LinkedIn post for Studio page") and "Pat Approver prepared a LinkedIn post" in said(r))
+r = ask("Who changed this automation?", "/app/automations", AUTOMATION)
+record("H08", "attribution", "Who changed this automation?", r, "leads with the automation's own change record (who created it or turned it on), not campaign activity",
+       re.match(r"^You (?:created|turned) “Autumn launch reflections”", said(r)) is not None and "turned “Autumn launch reflections” on" in said(r))
+r = ask("What did Robin post?")
+record("H09", "hallucination", "What did Robin post? (no such member)", r, "no such member; nothing attributed; no guess", "No member of this workspace is called “Robin”" in said(r)
+       and "Alex Editor" in said(r))
+r = ask("What has Alex done this week?", token=VIEWER)
+record("H10", "permissions", "Viewer: What has Alex done this week?", r, "workspace records only; says the audit log is for owners and admins", "owners and admins only" in said(r))
 
 # === §16 permissions and destructive actions ==========================================================================================
 def guarded():
@@ -639,14 +785,38 @@ r = ask("Publish the post")
 record("T02", "ambiguity", "Publish the post", r, "refused", intent(r) == "forbidden")
 reviews_before = len(state()["phase2"]["reviews"])
 r = ask("Schedule this draft for Saturday at 11:00", "/app/queue", {"type": "draft", "id": B["id"]})
-record("T03", "truthful", "Schedule this draft for Saturday at 11:00 (Instagram draft not reviewed yet)", r, "not prepared; the app's own reason (review first)",
-       "can't prepare" in said(r) and "Resolve draft review" in said(r) and not r["message"]["siteAgent"]["proposals"] and len(state()["phase2"]["reviews"]) == reviews_before,
+record("T03", "truthful", "Schedule this draft for Saturday at 11:00 (Instagram draft not reviewed yet, no image)", r,
+       "not prepared; confirming the review would be part of the proposal, but the app's next rule stops it (Instagram needs an image)",
+       "can't prepare" in said(r) and "Instagram requires a decoded image" in said(r) and not r["message"]["siteAgent"]["proposals"] and len(state()["phase2"]["reviews"]) == reviews_before,
        state_checked="reviews unchanged")
 confirm(B["id"])
 r = ask("Schedule this draft for Saturday at 11:00", "/app/queue", {"type": "draft", "id": B["id"]})
 record("T04", "truthful", "Schedule this draft for Saturday at 11:00 (reviewed Instagram draft, no image)", r, "not prepared; the app's own reason (Instagram needs an image)",
        "can't prepare" in said(r) and "Instagram requires a decoded image" in said(r) and not r["message"]["siteAgent"]["proposals"] and len(state()["phase2"]["reviews"]) == reviews_before,
        state_checked="reviews unchanged")
+
+r = ask("Schedule this draft for Saturday at 11:00", "/app/queue", {"type": "draft", "id": D06_LI})
+proposal = (r["message"]["siteAgent"]["proposals"] or [{}])[0]
+record("T05", "truthful", "Schedule this draft for Saturday at 11:00 (LinkedIn draft with unknown details, not reviewed)", r,
+       "a proposal whose first step confirms the draft review, listing the details kept out; nothing prepared until applied",
+       proposal.get("type") == "schedule_draft" and "confirm the draft review" in " ".join(proposal.get("summary") or []) and proposal.get("needsEdit") is True
+       and len(state()["phase2"]["reviews"]) == reviews_before, state_checked="no review yet")
+applied = agent.apply_proposal(wid, OWNER, {"conversationId": r["conversationId"], "messageId": r["messageId"], "proposalId": proposal["id"], "digest": proposal["digest"], "expectedRevision": revision()})
+reviewed = variant(D06_LI)
+review = next(x for x in state()["phase2"]["reviews"] if x["id"] == applied["proposal"]["result"]["reviewId"])
+record("T05b", "truthful", "…apply it", r, "the review confirmation is recorded with who confirmed it; the exact review for Sat 11:00 waits for approval",
+       (reviewed.get("uncertaintyReview") or {}).get("actor") == USERS[OWNER] and not reviewed.get("needsReview") and review["status"] == "needs_review"
+       and review["manifest"]["timing"]["local"] == "2026-09-26T11:00", state_checked="variant uncertaintyReview; review manifest")
+r = ask("Schedule this draft for Sunday at 10:00", "/app/queue", {"type": "draft", "id": D06_TH})
+proposal = (r["message"]["siteAgent"]["proposals"] or [{}])[0]
+try:
+    agent.apply_proposal(wid, APPROVER, {"conversationId": r["conversationId"], "messageId": r["messageId"], "proposalId": proposal["id"], "digest": proposal["digest"], "expectedRevision": revision()})
+    refused = None
+except AlphaError as error:
+    refused = error
+record("T05c", "permissions", "Approver applies a proposal that also confirms a draft review", r, "refused: confirming a draft review needs the edit permission; nothing changes",
+       refused is not None and refused.status == 403 and not any(x["manifest"]["variantId"] == D06_TH for x in state()["phase2"]["reviews"]) and variant(D06_TH).get("needsReview"),
+       state_checked="no review for the draft; the draft still needs review")
 
 # === §13 inspectability: every link any answer above offered opens a real page and, when it names one, a real item ========
 final = state()

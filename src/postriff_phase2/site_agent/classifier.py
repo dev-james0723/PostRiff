@@ -19,7 +19,8 @@ from . import routes
 
 INTENTS = ("greeting", "page", "navigate", "diagnose", "capability", "review", "memory", "privacy", "billing", "models",
            "support", "explain", "unknown", "operate", "edit", "forbidden", "status", "attention", "reviews", "publishing", "campaign",
-           "calendar", "brand", "voice", "drafts", "search", "schedule", "compound", "clarify")
+           "calendar", "brand", "voice", "drafts", "search", "schedule", "compound", "clarify", "voice_check", "member_activity", "attribution",
+           "campaign_link", "campaign_unlink", "campaign_membership")
 RISKS = ("read", "client_action", "workspace_mutation", "paid", "external_representation", "destructive", "secret")
 GUIDE = ("greeting", "page", "navigate", "diagnose", "capability", "review", "memory", "privacy", "billing", "models", "support", "explain", "unknown",
          "status", "attention", "reviews", "publishing", "campaign", "calendar", "brand", "voice", "drafts", "search")
@@ -82,8 +83,23 @@ CALENDAR = re.compile(r"\bwhat(?:'s|\s+is|\s+do\s+i\s+have)\s+(?:scheduled|plann
                       r"|\bcontent\s+gaps?\b|\bgaps?\s+(?:this|next|in)\b|\btoo\s+close\s+together\b|\bclose\s+together\b|排咗(?:咩|啲咩)|空檔|太近|有冇(?:位|空)", _I)
 CAMPAIGN = re.compile(r"\bcampaigns?\b|推廣活動|宣傳活動", _I)
 # "What did Alex post last week?": Rafii has no reader for members' activity, so it never attributes posts to a person.
-PERSON_ACTIVITY = re.compile(r"\bwhat\s+(?:did|has|have)\s+(?!(?:i|we|you|rafii|it|they|he|she|the|this|that|my|our)\b)([A-Za-z][\w'-]{1,30})\s+"
-                             r"(?:post|posted|write|written|wrote|publish|published|schedule|scheduled|draft|drafted|approve|approved|share|shared)\b", _I)
+PERSON_ACTIVITY = re.compile(r"\bwhat\s+(?:did|has|have)\s+(?!(?:we|you|rafii|it|they|he|she|the|this|that|my|our)\b)([A-Za-z][\w'-]{0,30})\s+"
+                             r"(?:post|posted|write|written|wrote|publish|published|schedule|scheduled|draft|drafted|approve|approved|share|shared|done|do|change|changed"
+                             r"|edit|edited|been\s+(?:doing|up\s+to|working\s+on))\b|\b([A-Z][\w'-]{1,30})'s\s+(?:activity|posts|changes|work)\b", _I)
+PERSON_POSTS = re.compile(r"\b(?:post|posted|publish|published|share|shared|approve|approved)\b|'s\s+posts\b", _I)
+# "Who approved this?", "Who changed this automation?": the stored record of who acted on the item.
+ATTRIBUTION = re.compile(r"\bwho\s+(?:approved|scheduled|prepared|changed|edited|created|made|paused|resumed|cancel(?:l)?ed|deleted|added|linked|wrote|drafted"
+                         r"|published|posted|activated|turned\s+(?:on|off)|set\s+up|updated|modified|started)\b|\bwho\s+(?:is|was)\s+(?:responsible|behind)\b|邊個(?:批准|改|整|寫|加)", _I)
+# "Does this sound like me?": a draft or a quoted sentence against the stored voice.
+VOICE_CHECK = re.compile(r"\b(?:sound|sounds|read|reads|feel|feels)\s+(?:like\s+me|like\s+my\s+(?:voice|writing)|like\s+us)\b|\b(?:on|off)[- ]voice\b"
+                         r"|\b(?:match|matches|fit|fits)\s+my\s+(?:voice|writing|style)\b|\bcheck\b[^.?!\n]{0,30}\bagainst\s+my\s+voice\b|似唔似我|似唔似我把聲", _I)
+# Drafts and posts join or leave a campaign ("Add this draft to the launch campaign", "Remove it from that campaign").
+CAMPAIGN_LINK = re.compile(r"\b(?:add|put|move|attach|link|assign|include|file|place)\b[^.?!\n]{0,80}?\b(?:to|into|in|under|with)\s+(?:the\s+|this\s+|that\s+|my\s+|our\s+|a\s+)?"
+                           r"[^.?!\n]{0,40}?\bcampaigns?\b|(?:加|放)(?:入|落|進).{0,12}(?:活動|campaign)", _I)
+CAMPAIGN_UNLINK = re.compile(r"\b(?:remove|take|detach|unlink|drop|pull|delete)\b[^.?!\n]{0,80}?\b(?:from|out\s+of|off)\s+(?:the\s+|this\s+|that\s+|my\s+|our\s+|its\s+|a\s+)?"
+                             r"[^.?!\n]{0,40}?\bcampaigns?\b|(?:由|從).{0,12}(?:活動|campaign).{0,6}(?:移除|拎走|攞走)", _I)
+CAMPAIGN_OF = re.compile(r"\b(?:which|what)\s+campaigns?\b[^.?!\n]{0,40}\b(?:is|are|was|were|does|do)\b[^.?!\n]{0,40}\b(?:in|part\s+of|linked\s+to|belong(?:s|ing)?(?:\s+to)?)\b"
+                         r"|\b(?:is|are)\s+(?:this|that|it|these|those)\b[^.?!\n]{0,30}\b(?:in|part\s+of)\s+(?:a|any)\s+campaigns?\b|屬於邊個(?:活動|campaign)", _I)
 # A campaign question stays a read of the campaign unless it asks why something broke or asks for a change.
 CAMPAIGN_WHY = re.compile(r"\bwhy\b|點解|\bfail(?:ed|ing|s|ure)?\b|\berror\b|\bstuck\b|\bbroken\b", _I)
 # "Explain what I'm looking at" with nothing selected is about the page; "what am I working on" is about recent drafts.
@@ -99,6 +115,8 @@ COMPOUND_FIND = re.compile(r"\b(?:find|look\s+up|locate|pull\s+up)\b", _I)
 COMPOUND_CREATE = re.compile(r"\b(?:create|write|draft|make|generate|prepare)\b[^.?!\n,]{0,48}\b(?:post|draft|caption|version|thread)\b", _I)
 COMPOUND_SCHEDULE = re.compile(r"\b(?:schedule|place|put|slot|book)\b[^.?!\n]{0,48}\b(?:slot|day|time|next\s+week|this\s+week|calendar|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
                                r"|\b(?:next|first|earliest)\s+(?:suitable\s+|available\s+|empty\s+|open\s+|free\s+)?(?:slot|day)\b", _I)
+COMPOUND_REVISE = re.compile(r"\b(?:shorten|trim|tighten|rewrite|rephrase|revise|rework|edit|polish|condense)\b[^.?!\n,]{0,30}\b(?:this|that|the|my|it)\b", _I)
+COMPOUND_LINK = re.compile(r"\b(?:add|put|link|attach|file)\b[^.?!\n]{0,40}\b(?:to|into|in|under)\s+(?:the\s+|this\s+|that\s+|my\s+|our\s+)?[^.?!\n]{0,30}?\bcampaign\b", _I)
 COMPOUND_GAPS = re.compile(r"\bwhat(?:'s|\s+is)\s+(?:still\s+)?missing\b|\b(?:content\s+)?gaps?\b", _I)
 EDIT_ZH = re.compile(r"(?:改|轉|移|暫停|停|恢復|刪除|取消).{0,10}(?:自動化|個自動|嗰個自動)|(?:自動化).{0,10}(?:改|轉|移|暫停|停|恢復)", _I)
 
@@ -156,10 +174,28 @@ def classify(text: str, page: dict, *, automation_names=(), in_automation_contex
     # Questions about what Rafii remembers are not standing instructions to remember something.
     if MEMORY.search(text) and question:
         return {**base, "intent": "memory", "risk": "read"}
+    if ATTRIBUTION.search(text):
+        # "Who approved this?": the selected or referenced item's stored actors (member_activity.attribution).
+        return {**base, "intent": "attribution", "risk": "read"}
     person = PERSON_ACTIVITY.search(text)
-    if person and not platforms(person.group(1)):
-        entities["person"] = person.group(1)[:40]
-        return {**base, "intent": "publishing", "risk": "read"}
+    name = (person.group(1) or person.group(2)) if person else None
+    if name and not platforms(name):
+        entities["person"] = "me" if name.lower() in ("i", "me") else name[:40]
+        entities["only"] = "posts" if PERSON_POSTS.search(text) else None
+        return {**base, "intent": "member_activity", "risk": "read"}
+    steps = [kind for kind, pattern in (("find", COMPOUND_FIND), ("gaps", COMPOUND_GAPS), ("revise", COMPOUND_REVISE), ("create", COMPOUND_CREATE), ("link", COMPOUND_LINK),
+                                        ("schedule", COMPOUND_SCHEDULE)) if pattern.search(text)]
+    if len(steps) >= 2 and any(step in steps for step in ("create", "revise", "link", "schedule")) and len(text) > 30:
+        # Several steps in one message: each runs, or is proposed, or is reported on its own (service._compound_plan).
+        return {**base, "intent": "compound", "risk": "workspace_mutation", "steps": steps}
+    if CAMPAIGN_UNLINK.search(text):
+        return {**base, "intent": "campaign_unlink", "risk": "workspace_mutation"}
+    if CAMPAIGN_LINK.search(text) and not CAMPAIGN_POST.search(text):
+        return {**base, "intent": "campaign_link", "risk": "workspace_mutation"}
+    if CAMPAIGN_OF.search(text):
+        return {**base, "intent": "campaign_membership", "risk": "read"}
+    if VOICE_CHECK.search(text) and (question or re.search(r"^\s*(?:check|compare)\b", text, _I)):
+        return {**base, "intent": "voice_check", "risk": "read"}
     if (CAMPAIGN.search(text) and question and not CAMPAIGN_WHY.search(text) and not CAMPAIGN_POST.search(text)
             and not (EDIT_EN.search(text) or EDIT_ZH.search(text) or workflow_parse.is_edit(text))):
         # "What is still missing in this campaign?", "What happened in this campaign last week?": the campaign's own
@@ -169,10 +205,6 @@ def classify(text: str, page: dict, *, automation_names=(), in_automation_contex
     if about_automation and question and (workflow_parse.is_explain(text) or DIAGNOSE.search(text)):
         entities["automation"] = "explain"
         return {**base, "intent": "diagnose", "risk": "read"}
-    steps = [kind for kind, pattern in (("find", COMPOUND_FIND), ("gaps", COMPOUND_GAPS), ("create", COMPOUND_CREATE), ("schedule", COMPOUND_SCHEDULE)) if pattern.search(text)]
-    if len(steps) >= 2 and ("create" in steps or "schedule" in steps) and len(text) > 40:
-        # Several steps in one message: each runs or is reported on its own (service._compound); nothing is guessed.
-        return {**base, "intent": "compound", "risk": "workspace_mutation", "steps": steps}
     item = focus if focus and focus.get("type") in ("draft", "job", "review") else None
     automation_focus = (focus or {}).get("type") in ("automation", "campaign") or (not item and workflow_parse.refers_to_automation(text, list(automation_names), in_automation_context))
     if TRANSFORM.search(text) and not re.search(r"\bwhy\b|點解", text, _I) and (item or _THIS.search(text) or entities["platforms"]) and not automation_focus:

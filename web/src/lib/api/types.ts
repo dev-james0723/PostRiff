@@ -159,7 +159,7 @@ export interface SnapshotVariant {
   contentTypeId?: string;
   customized?: boolean;
   /** Which Ideas run produced this variant (set by `apply`). */
-  provenance?: { runId?: string; contextDigest?: string; policyEpoch?: number; model?: string };
+  provenance?: { runId?: string; contextDigest?: string; policyEpoch?: number; model?: string; derivedFrom?: string };
   /** A regenerated version (for example after a voice change) waiting to be accepted. */
   proposedUpdate?: {
     text: string;
@@ -705,7 +705,7 @@ export interface Run {
   conversationId: string;
   status: string;
   artifactHash: string | null;
-  artifact: { variants: RunVariant[]; plan?: SchedulePlan | null; images?: GeneratedImage[]; imageModel?: string } | null;
+  artifact: { variants: RunVariant[]; plan?: SchedulePlan | null; images?: GeneratedImage[]; imageModel?: string; reworkOf?: string } | null;
   usage: Record<string, unknown>;
   model: string;
   reasoning: string;

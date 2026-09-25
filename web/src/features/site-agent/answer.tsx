@@ -13,6 +13,7 @@ import { Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
 import { ReviewApproveButton } from '@/components/jobs/review-approve-button';
+import { useRun } from '@/features/agent/use-run';
 import { keys, useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import type { Snapshot } from '@/lib/api/types';
@@ -89,6 +90,9 @@ export function SiteAgentAnswer({ body, actions }: { body: SiteAgentBody; action
   const blocks = body.blocks ?? [];
   return (
     <div className='flex min-w-0 flex-col gap-3'>
+      {body.compound?.pending && body.compound.runId && actions.messageId && actions.conversationId && (
+        <CompoundWatcher runId={body.compound.runId} messageId={actions.messageId} conversationId={actions.conversationId} />
+      )}
       {blocks.map((block, index) => (
         <AnswerBlock key={`${block.type}-${index}`} block={block} actions={actions} />
       ))}
@@ -370,6 +374,15 @@ function ProposalCard({ proposal, actions }: { proposal: SiteAgentProposalView; 
         <PlanLines title='Now' plan={view.preview.before} />
         <PlanLines title='After' plan={view.preview.after} />
       </div>
+      {scheduling && view.text && (
+        <details className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm'>
+          <summary className='rafii-focus text-muted-foreground cursor-pointer text-xs font-medium'>The exact post ({view.text.length} characters)</summary>
+          <p className='mt-2 break-words whitespace-pre-wrap'>{view.text}</p>
+        </details>
+      )}
+      {scheduling && view.needsEdit && view.status === 'proposed' && (
+        <p className='text-muted-foreground text-[11px]'>Applying also changes the draft as listed above, so it needs the edit permission as well as approve.</p>
+      )}
       {view.status !== 'proposed' || !open ? (
         <div className='flex flex-col gap-2'>
           <p ref={result} tabIndex={-1} role='status' className='text-sm font-medium outline-none'>
@@ -395,6 +408,36 @@ function ProposalCard({ proposal, actions }: { proposal: SiteAgentProposalView; 
         </p>
       )}
     </Surface>
+  );
+}
+
+/**
+ * A compound request whose writing run was still going when Rafii answered (a local CLI writer): when the run ends,
+ * ask the server to finish the steps after it (save, link, propose scheduling). The server does the work and is
+ * idempotent; this only says "the run has ended" once.
+ */
+function CompoundWatcher({ runId, messageId, conversationId }: { runId: string; messageId: string; conversationId: string }) {
+  const run = useRun(runId);
+  const { api, workspaceId } = useWorkspaceApi();
+  const client = useQueryClient();
+  const asked = useRef(false);
+  const ended = run && !['running', 'queued'].includes(run.status);
+  useEffect(() => {
+    if (!ended || asked.current) return;
+    asked.current = true;
+    void api
+      .siteAgentCompoundContinue(workspaceId, { conversationId, messageId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+      .catch(() => undefined)
+      .finally(() => {
+        void client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
+        void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+      });
+  }, [ended, api, workspaceId, conversationId, messageId, client]);
+  return (
+    <p role='status' className='text-muted-foreground flex items-center gap-2 text-xs'>
+      <Icons.spinner className='size-3.5 animate-spin motion-reduce:animate-none' aria-hidden />
+      {ended ? 'The writer finished; finishing the remaining steps…' : 'The writer is working; the remaining steps run when it finishes.'}
+    </p>
   );
 }
 

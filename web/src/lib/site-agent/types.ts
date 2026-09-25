@@ -43,6 +43,20 @@ export interface SiteAgentProposalView {
   result?: { taskId?: string; status?: string; version?: number; summary?: string[]; needs?: string[]; reviewId?: string | null; localTime?: string; timeZone?: string; cancelledJobId?: string | null } | null;
   appliedAt?: number;
   closedReason?: string;
+  /** Scheduling: the exact post text the review will carry. */
+  text?: string;
+  /** Scheduling that also uses a rewrite or confirms the draft review: needs edit as well as approve. */
+  needsEdit?: boolean;
+  media?: { assetId: string; alt: string; rightsConfirmed: boolean } | null;
+}
+
+/** A compound request's steps and their real state (site_agent/compound.py). */
+export interface SiteAgentCompound {
+  steps: string[];
+  status: Record<string, { state: 'done' | 'waiting' | 'running' | 'needs_you' | 'not_done' | 'failed'; detail: string; href?: string | null }>;
+  runId?: string | null;
+  pending?: boolean;
+  conversationId?: string;
 }
 
 export interface SiteAgentPlanView {
@@ -99,6 +113,7 @@ export interface SiteAgentBody {
   followUps?: string[];
   feedback?: { value: 'helpful' | 'not_helpful'; reason?: string | null; at: string } | null;
   refs?: { type: string; id: string; title?: string }[];
+  compound?: SiteAgentCompound | null;
   /** Rafii's own question: a reply that picks an option ("the second one") runs `request` on that item. */
   pending?: { request: string; candidates: { type: string; id: string; title?: string }[] } | null;
   role?: 'question';

@@ -164,8 +164,9 @@ def _campaign(get, classification, text):
         lines.append("**Platforms covered:** " + (", ".join(detail["platforms"]) if detail["platforms"] else "none yet"))
         blocks = [result_list("Automations", [_item("automation", a["name"] or "Automation", meta=f"{a['status']} · {a.get('schedule') or ''} · posts: {a['policy']}" + (f" · next run {a['nextRun']}" if a.get("nextRun") else ""),
                                                      href=routes.href("automations", query={"edit": a["automationId"]})) for a in detail["automations"]], empty="No automation belongs to this campaign.")]
-        blocks.append(result_list(f"Drafts from this campaign ({detail['draftCount']})", [_item("draft", f"{d['platform']} draft" + (f" · {d['account']}" if d.get("account") else ""), excerpt=d["excerpt"], href=d["href"]) for d in detail["drafts"]],
-                                  empty="No drafts came from this campaign's automations yet."))
+        blocks.append(result_list(f"Drafts in this campaign ({detail['draftCount']})", [_item("draft", f"{d['platform']} draft" + (f" · {d['account']}" if d.get("account") else ""), excerpt=d["excerpt"],
+                                                                                              meta="linked by a person" if d.get("linked") else "made by its automation", href=d["href"]) for d in detail["drafts"]],
+                                  empty="No drafts are in this campaign yet: none were linked, and its automations haven't made any."))
         if detail["lastWeek"]:
             blocks.append(result_list("Last week", [_item("run", f"Run {r['when']}", meta=r["status"], excerpt="; ".join(f"{i['platform']}: {i['state']}" for i in r["items"]) or None) for r in detail["lastWeek"]]))
         derived = detail["derived"]
@@ -374,5 +375,108 @@ def _search(get, classification, text):
     return {"lines": lines, "blocks": [result_list("Results", items)] if items else [], "refs": [r for r in refs if r], "grounded": True}
 
 
+BASIS = {"measured": "Measured", "heuristic": "Rule of thumb", "needs_writer": "Needs a writer's judgement"}
+
+
+def _voice_check(get, classification, text):
+    data = get("voice.check")
+    if not data:
+        return {"lines": ["Select a draft, or put the sentence in quotes, and I'll compare it with your stored voice."], "blocks": [], "refs": [], "grounded": True}
+    if data["empty"]:
+        return {"lines": ["There's no approved voice profile or learned preference to compare with, so I won't judge this. Approve writing samples on Brand to build one."],
+                "blocks": [], "refs": [], "grounded": True, "nav": data.get("profileHref")}
+    s = data["summary"]
+    lines = [f"I compared {data['subject']} with your stored voice: {s['matches']} match, {s['differs']} differ, and {s['unclear']} need a writer's judgement."]
+    checked = [f for f in data["findings"] if f["basis"] != "needs_writer"]
+    judged = [f for f in data["findings"] if f["basis"] == "needs_writer"]
+    differs = [f for f in checked if f["verdict"] == "differs"]
+    if differs:
+        lines.append("Where it differs: " + "; ".join(f"{f['trait'].rstrip('.')} ({f['evidence'].rstrip('.')})" for f in differs[:3]) + ".")
+    lines.append("Tone and word choice weren't judged here: that needs a writer model, and none phrased this answer.")
+    rows = [_item(f["verdict"], f"{'✓' if f['verdict'] == 'matches' else '✗'} {f['trait']}", excerpt=f["evidence"], meta=f"{BASIS[f['basis']]} · {f['source']}") for f in checked]
+    blocks = [result_list("Checked against your stored voice", rows, empty="Nothing in your profile can be measured in this text.")]
+    if judged:
+        blocks.append(result_list("Needs a writer's judgement", [_item("unclear", f["trait"], meta=f["source"]) for f in judged]))
+    refs = [_ref("draft", data["draftId"], data["subject"])] if data.get("draftId") else []
+    return {"lines": lines, "blocks": blocks, "refs": [r for r in refs if r], "grounded": True, "nav": data.get("href") or data.get("profileHref")}
+
+
+def _member_activity(get, classification, text):
+    data = get("member.activity")
+    if not data:
+        return None
+    person = classification["entities"].get("person") or ""
+    found = data.get("match") or {}
+    if found.get("none"):
+        known = found.get("known") or []
+        return {"lines": [f"No member of this workspace is called “{person}”, so there's nothing to attribute to them. I won't guess who you mean."
+                          + (f" Members with a display name: {', '.join(known)}." if known else " No member has a display name yet.")], "blocks": [], "refs": [], "grounded": True,
+                "nav": routes.href("members")}
+    if found.get("ambiguous"):
+        return {"lines": [f"More than one member matches “{person}”. Which one do you mean?"], "blocks": [contracts.question("Which member?", found["ambiguous"])],
+                "refs": [], "grounded": True}
+    who = (data.get("member") or {}).get("name") or "your team"
+    window = (data.get("range") or {}).get("label") or "recently"
+    posts_only = classification["entities"].get("only") == "posts"
+    events = data["events"]
+    if not events:
+        lead = (f"No post was approved or prepared by {who} {window}." if posts_only else f"Nothing in the stored records names {who} {window}.")
+    else:
+        lead = (f"Posts {who} approved or prepared {window}: {data['total']}." if posts_only else f"{data['total']} record(s) name {who} {window}, newest first.")
+    lines = [lead]
+    if posts_only and events:
+        lines.append("Rafii's publisher sends a post after it is approved, so the records say who approved or prepared it, not who \"posted\" it.")
+    blocks = [result_list(f"Activity ({window})", [_item(e["kind"], f"{e['who'][:1].upper() + e['who'][1:]} {e['summary']}", meta=f"{e['when']} · {e['source']}", href=e.get("href"))
+                                                   for e in events])] if events else []
+    blocks.append(result_list("Not attributed", [_item("note", note) for note in data["notAttributed"]]))
+    return {"lines": lines, "blocks": blocks, "refs": [], "grounded": True}
+
+
+def _attribution(get, classification, text):
+    data = get("record.attribution")
+    if not data:
+        focus = classification["entities"].get("focus")
+        if not focus:
+            return {"lines": ["Select the post, draft or automation first, and I'll tell you who acted on it from its records."], "blocks": [], "refs": [], "grounded": True}
+        return None
+    events = data["events"]
+    wanted = re.search(r"\bwho\s+(\w+)", text, re.I)
+    verb = (wanted.group(1).lower() if wanted else "")
+    changes = tuple(e["kind"] for e in events if e["kind"].startswith("automation.") or e["kind"] in ("campaign.updated", "draft.edited", "draft.update_accepted"))
+    kinds = {"approved": ("post.approved", "automation_post.approve"), "prepared": ("post.prepared",), "scheduled": ("post.prepared", "post.approved"),
+             "linked": ("campaign.link",), "added": ("campaign.link",), "created": ("automation.created", "campaign.created", "draft.run"),
+             "paused": ("automation.paused",), "resumed": ("automation.resumed",), "activated": ("automation.turned",),
+             "changed": changes, "edited": changes, "updated": changes, "modified": changes}.get(verb)
+    pick = next((e for e in events if e["kind"] in kinds), None) if kinds is not None else (events[0] if events else None)
+    noun = {"job": "post", "draft": "draft", "automation": "automation"}.get(data.get("kind"), "item")
+    if pick:
+        lead = f"{pick['who'][:1].upper() + pick['who'][1:]} {pick['summary']} ({pick['when']}; from the {pick['source']})."
+    elif kinds:
+        lead = f"No record names who {verb} this {noun}" + (": it hasn't been approved yet." if verb == "approved" else ".")
+    else:
+        lead = f"No stored record names anyone for this {noun}."
+    blocks = [result_list("Who acted on it (newest first)", [_item(e["kind"], f"{e['who'][:1].upper() + e['who'][1:]} {e['summary']}", meta=f"{e['when']} · {e['source']}",
+                                                                   href=e.get("href")) for e in events])] if events else []
+    if data.get("notAttributed"):
+        blocks.append(result_list("Not attributed", [_item("note", note) for note in data["notAttributed"]]))
+    return {"lines": [lead], "blocks": blocks, "refs": [], "grounded": True}
+
+
+def _campaign_membership(get, classification, text):
+    data = get("campaign.membership")
+    if not data:
+        return {"lines": ["Select the draft or post first, and I'll tell you which campaigns it belongs to."], "blocks": [], "refs": [], "grounded": True}
+    noun = "draft" if data["kind"] == "draft" else "post"
+    if not data["campaigns"]:
+        return {"lines": [f"This {noun} isn't in any campaign: nobody linked it, and no campaign's automation made it. "
+                          f"You can say “Add this {noun} to the … campaign”."], "blocks": [], "refs": [], "grounded": True}
+    rows = [_item("campaign", c["goal"][:90] if c.get("goal") else "Campaign",
+                  meta=(f"linked {c['at']}" if c["how"] == "linked" else f"made by its automation “{c.get('automation') or 'automation'}”"), href=c["href"]) for c in data["campaigns"]]
+    names = "; ".join(f"“{(c.get('goal') or 'Campaign')[:60]}”" for c in data["campaigns"])
+    refs = [_ref("campaign", c["campaignId"], (c.get("goal") or "")[:60]) for c in data["campaigns"]]
+    return {"lines": [f"This {noun} is in {len(data['campaigns'])} campaign(s): {names}."], "blocks": [result_list("Campaigns", rows)], "refs": [r for r in refs if r], "grounded": True}
+
+
 HANDLERS = {"status": _status, "attention": _attention, "reviews": _reviews, "publishing": _publishing, "campaign": _campaign, "calendar": _calendar,
-            "brand": _brand, "voice": _voice, "drafts": _search, "search": _search}
+            "brand": _brand, "voice": _voice, "drafts": _search, "search": _search, "voice_check": _voice_check, "member_activity": _member_activity,
+            "attribution": _attribution, "campaign_membership": _campaign_membership}

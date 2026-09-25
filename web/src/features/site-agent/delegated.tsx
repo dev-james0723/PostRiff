@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
 import { useRun } from '@/features/agent/use-run';
 import { ApiError } from '@/lib/api/client';
-import { keys } from '@/lib/api/hooks';
+import { keys, useSnapshot } from '@/lib/api/hooks';
 import type { Snapshot } from '@/lib/api/types';
 import type { SiteAgentMessageBody } from '@/lib/site-agent/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -24,6 +24,7 @@ const STAGES: Record<string, string> = { queued: 'Waiting for the writer', writi
 
 function WritingRun({ runId, conversationId, onNavigate }: { runId: string; conversationId: string | null; onNavigate?: () => void }) {
   const run = useRun(runId);
+  const snapshot = useSnapshot();
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -32,6 +33,9 @@ function WritingRun({ runId, conversationId, onNavigate }: { runId: string; conv
   if (!run) return <p className='text-muted-foreground text-xs'>Loading the draft run…</p>;
   const variants = run.artifact?.variants ?? [];
   const stage = run.events.filter((e) => e.type === 'progress.updated').at(-1)?.stage;
+  const rework = Boolean(run.artifact?.reworkOf);
+  // The drafts this run saved: a proposed update on the reworked draft, or new drafts (read from the workspace, so a reload keeps them).
+  const results = (snapshot.data?.state.variants ?? []).filter((v) => v.proposedUpdate?.runId === runId || (!v.proposedUpdate && v.runId === runId));
 
   async function save() {
     if (!run?.artifactHash) return;
@@ -65,12 +69,24 @@ function WritingRun({ runId, conversationId, onNavigate }: { runId: string; conv
           <span className='text-sm font-medium'>
             {variants.length} draft{variants.length === 1 ? '' : 's'} ready: {Array.from(new Set(variants.map((v) => v.account ? `${v.platform} · ${v.account}` : v.platform))).join(', ')}
           </span>
-          <p className='text-muted-foreground text-xs'>They are candidates until you save them. Saving adds them to your drafts; nothing is scheduled or published.</p>
+          <p className='text-muted-foreground text-xs'>
+            {rework
+              ? 'Saving adds this as a proposed update to your draft: the current text stays until you accept it. Nothing is scheduled or published.'
+              : 'They are candidates until you save them. Saving adds them to your drafts; nothing is scheduled or published.'}
+          </p>
           <div className='flex flex-wrap items-center gap-2'>
             {run.status === 'applied' || saved !== null ? (
-              <Link href='/app/queue?view=drafts' onClick={onNavigate} className='rafii-focus text-sm font-medium underline underline-offset-2'>
-                Saved{saved !== null ? ` (${saved})` : ''} · Open Drafts
-              </Link>
+              results.length > 0 ? (
+                results.map((v) => (
+                  <Link key={v.id} href={`/app/queue?view=drafts&draft=${encodeURIComponent(v.id)}`} onClick={onNavigate} className='rafii-focus text-sm font-medium underline underline-offset-2'>
+                    {v.proposedUpdate?.runId === runId ? `Review the update to your ${v.platform} draft` : `Open the ${v.platform} draft`}
+                  </Link>
+                ))
+              ) : (
+                <Link href='/app/queue?view=drafts' onClick={onNavigate} className='rafii-focus text-sm font-medium underline underline-offset-2'>
+                  Saved{saved !== null ? ` (${saved})` : ''} · Open Drafts
+                </Link>
+              )
             ) : (
               <Button type='button' variant='action' size='sm' className='min-h-9 px-3' disabled={saving || !run.artifactHash} onClick={() => void save()}>
                 {saving ? 'Saving…' : 'Save to drafts'}

@@ -23,7 +23,7 @@ from postriff_alpha.domain import AlphaError, clean, uid
 from .. import automation_edit, intent as writing_intent, request_model
 from ..agent_runtime import safe_event
 from ..contracts import digest
-from ..permissions import require
+from ..permissions import Membership, require
 from . import classifier, compose as composer, contracts, knowledge, policy, procedures, prompts, proposals, references, routes, tools
 
 KEY_PREFIX = "site:"
@@ -112,7 +112,7 @@ class SiteAgentService:
         model_id = payload.get("model") if isinstance(payload.get("model"), str) and payload.get("model") else None
         zone = writing_intent.safe_zone(payload.get("timeZone"))
         now = self.clock()
-        delegate = reading = focus = None
+        delegate = reading = focus = after_turn = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self._member(row)
             require(member, "read")
@@ -158,10 +158,16 @@ class SiteAgentService:
                     # Several items fit "it" / "Thursday's post": ask instead of guessing a target for a change.
                     reading = {**reading, "intent": "clarify", "clarify": {"ask": "Which one do you mean?", "candidates": resolved["candidates"]}}
                 if reading["intent"] == "compound":
-                    compound = self._compound_plan(state, member, principal, workspace_id, text, now, zone, reading)
+                    compound = self._compound_setup(state, member, principal, workspace_id, text, now, zone, reading, focus, history, conversation_id)
                     reading = {**reading, "compound": compound}
+                    after_turn = "compound"
                     if compound.get("delegate"):
-                        delegate = {"conversationId": conversation_id, "kind": "campaign_post", **compound["delegate"]}
+                        delegate = {"conversationId": conversation_id, "kind": "compound", **compound["delegate"]}
+                if reading["intent"] in ("campaign_link", "campaign_unlink"):
+                    linking = self._link_setup(state, member, text, focus, history, reading)
+                    reading = {**reading, **linking.get("reading", {}), "link": linking}
+                    if linking.get("execute"):
+                        after_turn = "link"
                 if reading["intent"] == "operate":
                     if not member.allows("edit"):
                         reading = {**reading, "intent": "forbidden", "risk": "workspace_mutation", "forbidden": {"category": "role", "routeId": "roles"}}
@@ -173,17 +179,26 @@ class SiteAgentService:
                             delegate = {"conversationId": conversation_id, "kind": reading["operate"], **prepared}
                     else:
                         delegate = {"conversationId": conversation_id, "kind": reading["operate"]}
-            if delegate is None:
+            if delegate is None and after_turn is None:
                 return self._guide(cur, workspace_id, principal, member, state, conversation_id, text, page, reading, model_id, zone, now, run_key, names, focus, shown=shown)
-        delegated = self._delegate(workspace_id, token, delegate, text, key, model_id, zone, payload)
-        if reading is None or reading.get("intent") != "compound":
-            return delegated
-        # A compound request: the draft run exists; now report every step, without a second copy of the message.
-        reading["compound"]["run"] = {"runId": delegated.get("runId"), "status": delegated.get("status")}
-        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
-            member = self._member(row)
-            return self._guide(cur, workspace_id, principal, member, self.ideas._state(row), delegate["conversationId"], text, page, reading, model_id, zone, now,
-                               run_key, [], focus, append_user=False)
+        if after_turn == "link":
+            # The campaign's own action, as the person; the edit permission is checked again when it runs.
+            reading["link"]["result"] = self._run_link(workspace_id, token, reading["link"])
+            with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                return self._guide(cur, workspace_id, principal, self._member(row), self.ideas._state(row), conversation_id, text, page, reading, model_id, zone, now,
+                                   run_key, names, focus, shown=shown)
+        if after_turn == "compound":
+            from . import compound as flow
+            plan = reading["compound"]
+            if delegate is not None:
+                # The writing step goes through the writing pipeline; its message is the person's message in this conversation.
+                delegated = self._delegate(workspace_id, token, delegate, delegate.get("text") or text, key, model_id, zone, payload)
+                plan["runId"] = delegated.get("runId")
+            plan = flow.advance(self, workspace_id, token, plan, principal=principal, now=now, zone=zone, text=text)
+            with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                return self._guide(cur, workspace_id, principal, self._member(row), self.ideas._state(row), conversation_id, text, page, {**reading, "compound": plan},
+                                   model_id, zone, now, run_key, names, focus, append_user=delegate is None, shown=shown)
+        return self._delegate(workspace_id, token, delegate, text, key, model_id, zone, payload)
 
     _DAY_ITEM = re.compile(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)'?s\s+(post|draft)\b"
                            r"|\bthe\s+(post|draft)\s+(?:scheduled|planned|going\s+out|for)\s+(?:on\s+|for\s+)?((?:next\s+|this\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow))\b", re.I)
@@ -205,7 +220,6 @@ class SiteAgentService:
             return {"entity": refs[0], "source": "calendar", "candidates": [], "ambiguous": False}
         return {"entity": None, "source": None, "candidates": refs[:5], "ambiguous": bool(refs)}
 
-    _ADD_TO_CAMPAIGN = re.compile(r"\b(?:add|attach|link|assign|move|put)\b[^.?!\n]{0,40}\b(?:to|into|with)\s+(?:the\s+|this\s+|my\s+|our\s+|a\s+)?(?:current\s+|same\s+)?campaign\b", re.I)
     _CHOICE = re.compile(r"^\s*(?:(?:the|number|option|no\.?)\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th|[1-5])(?:\s+(?:one|option|post|draft|item))?\s*[.!。]?\s*$"
                          r"|^\s*(第[一二三四五]|最後)(?:個|篇|項)?\s*$", re.I)
     _CHOICE_INDEX = {"first": 0, "1st": 0, "1": 0, "second": 1, "2nd": 1, "2": 1, "third": 2, "3rd": 2, "3": 2, "fourth": 3, "4th": 3, "4": 3,
@@ -319,9 +333,9 @@ class SiteAgentService:
         elif reading["intent"] in ("clarify", "schedule"):
             plan = {"procedures": ["clarify" if reading["intent"] == "clarify" else "schedule_draft"], "tools": [], "navigate": None}
         elif reading["intent"] == "compound":
-            from . import timeframe
-            week = timeframe.parse("next week", now, zone)
-            plan = {"procedures": ["compound_request"], "tools": [("calendar.range", {"start": week["start"], "end": week["end"], "label": week["label"]})], "navigate": None}
+            plan = {"procedures": ["compound_request"], "tools": [], "navigate": None}
+        elif reading["intent"] in ("campaign_link", "campaign_unlink"):
+            plan = {"procedures": ["campaign_link"], "tools": [], "navigate": None}
         else:
             plan = procedures.select(reading, page, text, automation_count=len(names), now=now, zone=zone)
         ctx = tools.Context(state=state, membership=member, principal=principal, workspace_id=workspace_id, cur=cur, service=self.service, now=now,
@@ -363,22 +377,19 @@ class SiteAgentService:
             answer, proposal_list = self._proposal_answer(state, text, principal, member, now, zone, page, answer, reading["language"])
         elif reading["intent"] == "schedule":
             answer, proposal_list = self._schedule_answer(state, text, principal, member, now, zone, focus, reading, answer)
-            if self._ADD_TO_CAMPAIGN.search(text):
-                # Every part of the request gets an outcome: this one has no backing operation, so it is said, not skipped.
-                note = ("I can't add a draft to a campaign: in PostRiff a draft belongs to a campaign only when that campaign's automation wrote it. "
-                        "Nothing was changed for that part.")
-                answer = {**answer, "blocks": [contracts.text(note), *answer["blocks"]], "text": note + "\n\n" + answer["text"]}
         elif reading["intent"] == "clarify":
             answer = self._clarify_answer(reading["clarify"], answer, request=text)
         elif reading["intent"] == "compound":
-            answer = self._compound_answer(reading["compound"], results, answer, conversation_id)
+            answer, proposal_list = self._compound_answer(reading["compound"], answer)
+        elif reading["intent"] in ("campaign_link", "campaign_unlink"):
+            answer = self._link_answer(reading["link"], answer, text)
         elif (reading.get("reference") or {}).get("ambiguous") and reading["intent"] in ("status",) and not focus:
             answer = self._clarify_answer({"ask": "Which one do you mean?", "candidates": reading["reference"]["candidates"]}, answer)
         for proposal in proposal_list:
             self._emit(cur, workspace_id, run_id, "action.proposed", action=proposal["type"], proposalId=proposal["id"], status="proposed")
         runtime, note = self._runtime(model_id)
         call = request_model.call_for(runtime, self.model, model_tier) if runtime is not None else None
-        wants_model = reading["intent"] not in ("forbidden", "greeting", "edit", "schedule", "clarify", "compound") and member.allows("edit") and call is not None
+        wants_model = reading["intent"] not in ("forbidden", "greeting", "edit", "schedule", "clarify", "compound", "campaign_link", "campaign_unlink") and member.allows("edit") and call is not None
         read_labels = [r["label"] for r in records if r["status"] == "verified" and r["effect"] == "read"]
         withheld = list(WITHHELD) + ([] if "memory.summary" in results else ["private memory"])
         summary = {"route": page.get("title"), "entity": page.get("selectedEntity"), "read": read_labels, "withheld": withheld, "stale": bool(page.get("stale"))}
@@ -443,77 +454,281 @@ class SiteAgentService:
             blocks.append(contracts.navigation("Open Automations", routes.href("automations"), "automations"))
         return {**answer, "blocks": blocks, "text": built["refuse"], "grounding": {"required": False, "sufficient": True, "missing": []}}, []
 
-    _CAMPAIGN_NAME = re.compile(r"\b(?:find|look\s+up|locate|pull\s+up|open)\s+(?:(?:my|our|the)\s+)?([^,.;?!\n]{1,60}?)\s+campaigns?\b"
-                                r"|\b(?:my|our|the)\s+([^,.;?!\n]{1,60}?)\s+campaigns?\b", re.I)
+    _CLAUSE = re.compile(r",\s*|;\s*|\s+and\s+then\s+|\s+then\s+|\s+and\s+(?=(?:add|put|link|schedule|tell|find|create|write|draft|make|shorten|rewrite|post)\b)", re.I)
+    _PLURAL = re.compile(r"\b(?:these|those|both|all\s+(?:of\s+)?(?:these|those|them))\b(?:\s+(two|three|four|five|\d))?", re.I)
+    _COUNT = {"two": 2, "three": 3, "four": 4, "five": 5}
 
-    def _compound_plan(self, state, member, principal, workspace_id, text, now, zone, reading):
-        """Run the find step now and decide whether the create step may start; scheduling always waits for the person."""
-        from . import reads
+    def _instruction(self, text, pattern):
+        """The clause of a compound message that is the writing request ("shorten this draft"), without the other steps."""
+        for clause in self._CLAUSE.split(text or ""):
+            if clause and pattern.search(clause):
+                return clause.strip().rstrip(".") or text
+        return text
+
+    def _focus_draft(self, state, focus):
+        variants = [v for v in state.get("variants", []) if isinstance(v, dict)]
+        if focus and focus.get("type") == "draft":
+            return next((v for v in variants if v.get("id") == focus["id"]), None)
+        if focus and focus.get("type") in ("job", "review"):
+            p2 = state.get("phase2") or {}
+            item = next((i for i in p2.get("jobs", []) + p2.get("reviews", []) if i.get("id") == focus["id"]), None)
+            return next((v for v in variants if v.get("id") == ((item or {}).get("manifest") or {}).get("variantId")), None)
+        return None
+
+    def _compound_setup(self, state, member, principal, workspace_id, text, now, zone, reading, focus, history, conversation_id):
+        """Resolve each step of a compound request without guessing; the find and gap steps are reads done now."""
+        from . import compound as flow, reads
+        steps = reading["steps"]
         ctx = tools.Context(state=state, membership=member, principal=principal, workspace_id=workspace_id, now=now, zone=zone)
-        plan = {"steps": reading["steps"], "campaign": None, "candidates": [], "delegate": None, "createBlocked": None}
-        if re.search(r"\bcampaigns?\b|活動", text, re.I):
-            # Only the words that name the campaign ("my launch campaign") search for it, not the other steps' words.
-            named = self._CAMPAIGN_NAME.search(text)
-            listing = reads.campaign_list(ctx, query=next((g for g in named.groups() if g), "") if named else "")["data"]
-            if listing.get("detail") and listing.get("matched") is not False:
-                plan["campaign"] = listing["detail"]
+        plan = {"steps": steps, "status": {}, "conversationId": conversation_id, "proposals": []}
+        wants_campaign = bool(re.search(r"\bcampaigns?\b|活動", text, re.I)) or "link" in steps or "gaps" in steps
+        campaign = None
+        if wants_campaign:
+            found = flow.resolve_campaign(state, text, focus, history)
+            campaign = found.get("campaign")
+            if campaign:
+                detail = reads._campaign_view(ctx, campaign, detail=True)
+                plan.update(campaignId=campaign["id"], campaignTitle=(campaign.get("goal") or "")[:80])
+                if "find" in steps:
+                    plan["status"]["find"] = flow.status("done", f"“{plan['campaignTitle']}”, covering {', '.join(detail['platforms']) or 'no platform yet'}", detail.get("href"))
+                if "gaps" in steps:
+                    derived = detail["derived"]
+                    gaps = ([f"missing facts: {', '.join(detail['missingFacts'])}"] if detail["missingFacts"] else []) + \
+                           ([f"connected but not covered: {', '.join(derived['platformsNotCovered']['items'])}"] if derived["platformsNotCovered"]["items"] else []) + \
+                           (["no automation is set to run next"] if derived["noUpcomingRun"]["value"] else [])
+                    plan["status"]["gaps"] = flow.status("done", ("; ".join(gaps) if gaps else "nothing stored is missing") + " (derived from the campaign's records)", detail.get("href"))
+                    plan["gaps"] = gaps
             else:
-                plan["candidates"] = [{"type": "campaign", "id": c["campaignId"], "title": (c.get("goal") or "")[:80]} for c in listing["campaigns"]][:5]
-        if "create" in reading["steps"]:
-            if not member.allows("edit"):
-                plan["createBlocked"] = "Your role can't create drafts."
-            elif plan["candidates"] or (re.search(r"\bcampaigns?\b", text, re.I) and plan["campaign"] is None):
-                plan["createBlocked"] = "I need to know which campaign first."
+                problem = (f"no campaign matches “{found['none']}”" if found.get("none")
+                           else "more than one campaign could be meant: " + "; ".join(c["title"] for c in found.get("candidates") or []))
+                plan["campaignProblem"] = problem
+                if "find" in steps:
+                    plan["status"]["find"] = flow.status("needs_you", problem)
+                if "gaps" in steps:
+                    plan["status"]["gaps"] = flow.status("not_done", "no single campaign was found")
+        writing = "revise" if "revise" in steps else ("create" if "create" in steps else None)
+        delegate = None
+        if writing and not member.allows("edit"):
+            plan["status"][writing] = flow.status("needs_you", "your role can't create or change drafts")
+        elif writing == "revise":
+            draft = self._focus_draft(state, focus)
+            if draft is None:
+                plan["status"]["revise"] = flow.status("needs_you", "select the draft to revise (or say which one)")
             else:
-                campaign = plan["campaign"]
+                plan["focusDraftId"] = draft["id"]
+                delegate = {"text": self._instruction(text, classifier.COMPOUND_REVISE), "material": draft.get("text") or "",
+                            "materialRef": {"type": "draft", "id": draft["id"], "title": f"{draft.get('platform')} draft"},
+                            "destinations": [{"platform": draft.get("platform"), "language": draft.get("language") or "en", **({"channelId": draft["channelId"]} if draft.get("channelId") else {})}]}
+        elif writing == "create":
+            if wants_campaign and campaign is None:
+                plan["status"]["create"] = flow.status("needs_you", "I need to know which campaign first")
+            else:
+                material = ""
+                if campaign:
+                    facts = "; ".join(f"{k}: {v}" for k, v in (campaign.get("facts") or {}).items())
+                    material = (f"Campaign goal: {campaign.get('goal')}\nAudience: {campaign.get('audience')}" + (f"\nFacts: {facts}" if facts else "")
+                                + (f"\nWhat the campaign is missing: {'; '.join(plan.get('gaps') or [])}" if plan.get("gaps") else ""))
                 platforms = reading["entities"]["platforms"]
-                material = (f"Campaign goal: {campaign['goal']}\nAudience: {campaign.get('audience')}" + (f"\nStill missing in the campaign: {', '.join(campaign['missingFacts'])}" if campaign and campaign["missingFacts"] else "")) if campaign else ""
-                plan["delegate"] = {"material": material or None, "materialRef": {"type": "campaign", "id": campaign["campaignId"], "title": campaign["goal"][:80]} if campaign else None,
-                                    "destinations": [{"platform": p, "language": "en"} for p in platforms] or None}
-                samples = any(s.get("kind") == "voice_sample" and s.get("active") and s.get("selected") for s in state.get("sources", []) if isinstance(s, dict))
+                delegate = {"text": self._instruction(text, classifier.COMPOUND_CREATE), "material": material or None,
+                            "materialRef": {"type": "campaign", "id": campaign["id"], "title": (campaign.get("goal") or "")[:80]} if campaign else None,
+                            "destinations": [{"platform": p, "language": "en"} for p in platforms] or None}
+                samples = any(x.get("kind") == "voice_sample" and x.get("active") and x.get("selected") for x in state.get("sources", []) if isinstance(x, dict))
                 if re.search(r"\bmy\s+(?:own\s+)?(?:usual\s+)?voice\b|sounds?\s+like\s+me", text, re.I) and samples:
-                    plan["delegate"]["voiceMode"] = "personalized"
+                    delegate["voiceMode"] = "personalized"
+                plan["linkImplied"] = bool(campaign)
+        elif "link" in steps or "schedule" in steps:
+            draft = self._focus_draft(state, focus)
+            if draft is not None:
+                plan["focusDraftId"] = draft["id"]
+                plan["drafts"] = [{"id": draft["id"], "update": False}]
+            else:
+                for step in ("link", "schedule"):
+                    if step in steps:
+                        plan["status"][step] = flow.status("needs_you", "select the draft first (or say which one)")
+                plan["done"] = [step for step in ("link", "schedule") if step in steps]
+        if "link" in steps and not member.allows("edit"):
+            plan["status"]["link"] = flow.status("needs_you", "your role can't change campaigns")
+            plan.setdefault("done", []).append("link")
+        if "schedule" in steps and not member.allows("approve"):
+            plan["status"]["schedule"] = flow.status("needs_you", "preparing a post for approval needs the approve permission")
+            plan.setdefault("done", []).append("schedule")
+        plan["delegate"] = delegate
         return plan
 
-    def _compound_answer(self, compound, results, answer, conversation_id):
-        """One line per step with its real status: done, started, needs you, not done."""
+    def _compound_answer(self, compound, answer):
+        """One line per step with its real state: done, waiting for your approval, running, needs you, not done, failed."""
+        from . import compound as flow
         from .compose_reads import result_list
-        items, refs = [], []
-        campaign = compound.get("campaign")
-        steps = compound["steps"]
-        if "find" in steps or campaign or compound["candidates"]:
-            if campaign:
-                items.append({"kind": "done", "title": f"Find the campaign: done — “{campaign['goal'][:80]}”", "excerpt": f"Platforms covered: {', '.join(campaign['platforms']) or 'none'}", "meta": "Done", "href": campaign.get("href")})
-                refs.append({"type": "campaign", "id": campaign["campaignId"], "title": campaign["goal"][:60]})
-            elif compound["candidates"]:
-                items.append({"kind": "needs_you", "title": "Find the campaign: several match or none matched exactly", "excerpt": "; ".join(c["title"] for c in compound["candidates"]), "meta": "Needs you", "href": None})
-                refs += compound["candidates"]
-            else:
-                items.append({"kind": "not_done", "title": "Find: nothing matched in this workspace", "excerpt": None, "meta": "Not done", "href": None})
-        if "gaps" in steps:
-            if campaign:
-                derived = campaign["derived"]
-                gaps = ([f"missing facts: {', '.join(campaign['missingFacts'])}"] if campaign["missingFacts"] else []) + \
-                       ([f"connected but not covered: {', '.join(derived['platformsNotCovered']['items'])}"] if derived["platformsNotCovered"]["items"] else []) + \
-                       (["no automation is set to run next"] if derived["noUpcomingRun"]["value"] else [])
-                items.append({"kind": "done", "title": "What is missing: " + ("; ".join(gaps) if gaps else "nothing stored is missing"), "excerpt": "Observations derived from the campaign's records, not a judgement of its content.", "meta": "Done", "href": campaign.get("href")})
-            else:
-                items.append({"kind": "not_done", "title": "What is missing: not checked, no single campaign was found", "excerpt": None, "meta": "Not done", "href": None})
-        if "create" in steps:
-            run = compound.get("run") or {}
-            if run.get("runId") or run.get("status"):
-                items.append({"kind": "started", "title": "Create the post: started — the drafts appear as candidates in this conversation", "excerpt": "Save them to keep them; nothing is scheduled or published.",
-                              "meta": "Started", "href": routes.href("conversation", params={"conversationId": conversation_id})})
-            else:
-                items.append({"kind": "not_done", "title": f"Create the post: not started — {compound.get('createBlocked') or 'the writer did not start'}", "excerpt": None, "meta": "Not done", "href": None})
-        if "schedule" in steps:
-            calendar = (results.get("calendar.range") or {}).get("data") if (results.get("calendar.range") or {}).get("ok") else None
-            empty = (calendar or {}).get("derived", {}).get("emptyDays", {}).get("days", [])
-            items.append({"kind": "needs_you", "title": "Schedule it: not done — save the draft first, then tell me the day and time; I don't pick a slot without you.",
-                          "excerpt": ("Empty days next week (observation): " + ", ".join(empty[:7])) if empty else "Next week has no empty days.", "meta": "Needs you", "href": routes.href("calendar", query={"view": "week"})})
-        done = sum(1 for i in items if i["kind"] == "done")
-        lead = f"I did {done} of {len(items)} step(s). Here is where each one stands."
-        return {**answer, "blocks": [contracts.text(lead), result_list("Steps", items)], "text": lead, "refs": refs, "grounding": {"required": False, "sufficient": True, "missing": []}}
+        words = {"done": "Done", "waiting": "Waiting for your approval", "running": "Running", "needs_you": "Needs you", "not_done": "Not done", "failed": "Failed"}
+        order = [step for step in ("find", "gaps", "revise", "create", "save", "link", "schedule")
+                 if step in compound["status"] or step in compound["steps"] or (step == "link" and compound.get("linkImplied"))
+                 or (step == "save" and ("revise" in compound["steps"] or "create" in compound["steps"]))]
+        items = []
+        for step in order:
+            st = compound["status"].get(step) or (flow.status("running", "after the writer finishes") if compound.get("pending") else flow.status("not_done", "not reached"))
+            items.append({"kind": st["state"], "title": f"{flow.STEP_LABELS[step]} — {st['detail']}", "excerpt": None, "meta": words[st["state"]], "href": st.get("href")})
+        count = lambda state: sum(1 for i in items if i["kind"] == state)  # noqa: E731
+        lead = f"{count('done')} of {len(items)} steps are done."
+        if count("waiting"):
+            lead += " Scheduling is prepared as a proposal: nothing is scheduled until you apply it, and the post still needs approval."
+        if count("running") or compound.get("pending"):
+            lead += " The writer is still working; the remaining steps run when it finishes."
+        if count("needs_you") or count("failed"):
+            lead += " Some steps need you; each says why."
+        blocks = [contracts.text(lead), result_list("Steps", items)]
+        blocks += [{"type": "proposal_diff", "proposal": proposals.view(p, self.clock())} for p in compound.get("proposals") or []]
+        refs = ([{"type": "campaign", "id": compound["campaignId"], "title": compound.get("campaignTitle") or "campaign"}] if compound.get("campaignId") else [])
+        refs += [{"type": "draft", "id": d["id"], "title": "draft"} for d in compound.get("drafts") or []]
+        answer = {**answer, "blocks": blocks, "text": lead, "refs": refs, "compound": compound, "grounding": {"required": False, "sufficient": True, "missing": []}}
+        return answer, list(compound.get("proposals") or [])
+
+    def _link_setup(self, state, member, text, focus, history, reading):
+        """What to link (or unlink) and to which campaign: {"execute", ...}, or a question / a refusal. Nothing is guessed."""
+        from . import compound as flow
+        unlink = reading["intent"] == "campaign_unlink"
+        if not member.allows("edit"):
+            return {"reading": {"intent": "forbidden", "risk": "workspace_mutation", "forbidden": {"category": "role", "routeId": "roles"}}}
+        p2 = state.get("phase2") or {}
+        items = []
+        plural = self._PLURAL.search(text)
+        if plural and history:
+            wanted = self._COUNT.get((plural.group(1) or "").lower()) or (int(plural.group(1)) if (plural.group(1) or "").isdigit() else None)
+            mentions_posts = bool(re.search(r"\bposts?\b", text, re.I))
+            kinds = ("job", "review") if mentions_posts else ("draft", "job", "review")
+            # The most recent answer that listed such items (an answer in between may have listed none).
+            latest = next(([r for r in refs if r.get("type") in kinds] for refs in history if any(r.get("type") in kinds for r in refs)), [])
+            if wanted is not None and len(latest) != wanted:
+                return {"ask": f"Your last list has {len(latest)} item(s), not {wanted}. Which ones do you mean?", "candidates": latest[:5]}
+            if not latest or len(latest) > 5:
+                return {"ask": "Which drafts or posts do you mean?", "candidates": latest[:5]}
+            items = latest
+        elif focus:
+            items = [focus]
+        if not items:
+            return {"ask": "Which draft or post do you mean? Select it, or say “this draft”.", "candidates": []}
+        draft_ids, job_ids, labels = [], [], []
+        variants = {v.get("id"): v for v in state.get("variants", []) if isinstance(v, dict)}
+        for item in items:
+            if not item.get("title") and item.get("type") == "draft" and item.get("id") in variants:
+                item = {**item, "title": f"the {variants[item['id']].get('platform')} draft"}
+            if item.get("type") == "draft":
+                draft_ids.append(item["id"])
+            elif item.get("type") == "job":
+                job_ids.append(item["id"])
+            elif item.get("type") == "review":
+                review = next((r for r in p2.get("reviews", []) if r.get("id") == item["id"]), None)
+                if review and (review.get("manifest") or {}).get("variantId"):
+                    draft_ids.append(review["manifest"]["variantId"])
+            labels.append(item.get("title") or item.get("type"))
+        found = flow.resolve_campaign(state, text, focus if (focus or {}).get("type") in ("automation", "campaign") else None, history)
+        campaign = found.get("campaign")
+        if campaign is None and unlink and not flow.campaign_name(text):
+            # "Remove this draft from its campaign": the campaigns it is linked to.
+            from .. import campaigns as campaign_records
+            linked = {c["campaign"]["id"]: c["campaign"] for kind, ids in (("draft", draft_ids), ("post", job_ids)) for i in ids
+                      for c in campaign_records.linked_campaigns(state, kind, i)}
+            if len(linked) == 1:
+                campaign = next(iter(linked.values()))
+            elif linked:
+                found = {"candidates": [{"type": "campaign", "id": c["id"], "title": (c.get("goal") or "")[:80]} for c in linked.values()]}
+        if campaign is None:
+            if found.get("none"):
+                return {"none": found["none"], "candidates": found.get("candidates") or []}
+            return {"ask": "Which campaign do you mean?", "candidates": found.get("candidates") or []}
+        return {"execute": True, "op": "unlink" if unlink else "link", "campaignId": campaign["id"], "campaignTitle": (campaign.get("goal") or "")[:80],
+                "draftIds": draft_ids, "jobIds": job_ids, "labels": labels[:5]}
+
+    def _run_link(self, workspace_id, token, link):
+        from ..hosted import audit
+        from .. import campaigns as campaign_actions
+        result = {}
+        action = "raffi_campaign_unlink" if link["op"] == "unlink" else "raffi_campaign_link"
+
+        def command(state, actor):
+            result.update(campaign_actions.apply_action(state, action, {"campaignId": link["campaignId"], "draftIds": link["draftIds"], "jobIds": link["jobIds"]}, actor, self.clock()) or {})
+            return state
+
+        def after(cur, state, actor):
+            kind = "campaign.items_unlinked_by_agent" if link["op"] == "unlink" else "campaign.items_linked_by_agent"
+            audit(cur, workspace_id, actor, kind, link["campaignId"], {"drafts": len(link["draftIds"]), "posts": len(link["jobIds"])})
+
+        for attempt in range(2):
+            try:
+                self.repository.command(workspace_id, token, self.service.get(workspace_id, token)["revision"], command, requirement="edit", after=after)
+                return {"ok": True, **result}
+            except AlphaError as error:
+                if error.code == "workspace_revision_conflict" and not attempt:
+                    continue
+                return {"ok": False, "error": str(error), "status": error.status}
+        return {"ok": False, "error": "The workspace kept changing; nothing was linked.", "status": 409}
+
+    def _link_answer(self, link, answer, text=None):
+        from .compose_reads import result_list
+
+        def reply(message, blocks=(), refs=()):
+            return {**answer, "blocks": [contracts.text(message), *blocks], "text": message, "refs": list(refs), "grounding": {"required": False, "sufficient": True, "missing": []}}
+
+        if "ask" in link:
+            return self._clarify_answer({"ask": link["ask"], "candidates": link.get("candidates") or []}, answer, request=text)
+        if "none" in link:
+            options = link.get("candidates") or []
+            return reply(f"No campaign matches “{link['none']}”, so nothing was linked." + (" These are your campaigns:" if options else " There are no campaigns yet."),
+                         blocks=[result_list("Campaigns", [{"kind": "campaign", "title": c["title"], "excerpt": None, "meta": None, "href": routes.href("automations", query={"campaign": c["id"]})}
+                                                           for c in options])] if options else [])
+        result = link.get("result") or {}
+        href = routes.href("automations", query={"campaign": link["campaignId"]})
+        things = ", ".join(link.get("labels") or []) or "it"
+        if not result.get("ok"):
+            return reply(f"Nothing was changed: {result.get('error') or 'the campaign could not be updated'}.", blocks=[contracts.navigation("Open the campaign", href, "automations")])
+        if link["op"] == "unlink":
+            message = (f"Removed {things} from “{link['campaignTitle']}”. The drafts and posts themselves are unchanged." if result.get("removed")
+                       else f"{things[:1].upper() + things[1:]} wasn't in “{link['campaignTitle']}”, so nothing changed.")
+        else:
+            added, already = len(result.get("added") or []), result.get("alreadyLinked", 0)
+            message = (f"Added {things} to “{link['campaignTitle']}”." if added and not already else
+                       f"Added {added} and {already} {'was' if already == 1 else 'were'} already in “{link['campaignTitle']}”." if added else
+                       f"{things[:1].upper() + things[1:]} {'is' if already == 1 else 'are'} already in “{link['campaignTitle']}”; nothing changed.")
+            message += " Nothing was scheduled or published."
+        blocks = [contracts.navigation("Open the campaign", href, "automations")]
+        blocks += [contracts.navigation("Open the draft", routes.href("queue", query={"view": "drafts", "draft": d}), "queue") for d in link["draftIds"][:1]]
+        refs = [{"type": "campaign", "id": link["campaignId"], "title": link["campaignTitle"]}] + [{"type": "draft", "id": d, "title": "draft"} for d in link["draftIds"]]
+        return reply(message, blocks=blocks, refs=refs)
+
+    def compound_continue(self, workspace_id, token, payload):
+        """Finish a compound request whose writing run ended after the turn: save, link, propose scheduling. Idempotent."""
+        from . import compound as flow
+        now = self.clock()
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self._member(row), "edit")
+            body = self._message_body(cur, workspace_id, payload)
+            site = body.get("siteAgent") or {}
+            plan = site.get("compound")
+            if not plan or not plan.get("pending"):
+                return {"message": body, "status": "unchanged"}
+        zone = writing_intent.safe_zone(payload.get("timeZone"))
+        plan = flow.advance(self, workspace_id, token, {**plan, "proposals": []}, principal=principal, now=now, zone=zone, text=plan.get("text") or "")
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            body = self._message_body(cur, workspace_id, payload, lock=True)
+            site = dict(body.get("siteAgent") or {})
+            if not (site.get("compound") or {}).get("pending"):
+                return {"message": body, "status": "unchanged"}
+            answer, proposal_list = self._compound_answer(plan, {"blocks": [], "text": "", "citations": [], "grounding": {}})
+            site.update(blocks=answer["blocks"], proposals=proposal_list, refs=answer["refs"], compound={k: v for k, v in plan.items() if k not in ("proposals", "delegate")})
+            body = {**body, "text": answer["text"], "siteAgent": site}
+            cur.execute("UPDATE public.pr_messages SET body=%s::jsonb WHERE id::text=%s AND workspace_id=%s", (json.dumps(body, ensure_ascii=False), payload["messageId"], workspace_id))
+            return {"message": body, "status": "advanced"}
+
+    def _message_body(self, cur, workspace_id, payload, lock=False):
+        conversation_id, message_id = payload.get("conversationId"), payload.get("messageId")
+        if not isinstance(conversation_id, str) or not isinstance(message_id, str):
+            raise AlphaError("Choose the answer to continue.", 400)
+        self.ideas._conversation(cur, workspace_id, conversation_id)
+        cur.execute("SELECT body FROM public.pr_messages WHERE id::text=%s AND conversation_id::text=%s AND workspace_id=%s AND role='assistant'" + (" FOR UPDATE" if lock else ""),
+                    (message_id, conversation_id, workspace_id))
+        row = cur.fetchone()
+        if not row:
+            raise AlphaError("Answer unavailable.", 404)
+        return row[0] if isinstance(row[0], dict) else json.loads(row[0])
 
     @staticmethod
     def _clarify_answer(clarify, answer, request=None):
@@ -635,6 +850,8 @@ class SiteAgentService:
                                                                        "refs": refs}}
         if answer.get("pending"):
             body["siteAgent"]["pending"] = answer["pending"]
+        if answer.get("compound"):
+            body["siteAgent"]["compound"] = {k: v for k, v in answer["compound"].items() if k not in ("proposals", "delegate")}
         self.ideas._settle_message(cur, workspace_id, conversation_id, run_id, body)
         self._emit(cur, workspace_id, run_id, "run.completed", usage={k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "billing") if k in usage})
 
@@ -823,15 +1040,20 @@ class SiteAgentService:
             scheduling = proposal.get("type") in proposals.SCHEDULE_TYPES
             # Preparing a review is approve-class in the app (permissions.ACTION_CLASSES); an automation change is edit-class.
             require(member, "approve" if scheduling else "edit")
+            if scheduling and proposal.get("needsEdit"):
+                # Using a rewrite or confirming a draft review are edits of the draft (Queue → Drafts); preparing it is approve-class.
+                require(member, "edit")
             proposals.check(proposal, digest_value=payload.get("digest"), now=now)
             owner = member.allows("owner")
+            can_edit = member.allows("edit")
             task = next((t for t in automation_edit.live_tasks(self.ideas._state(row)) if t.get("id") == proposal.get("taskId")), None)
             paid = self._paid_route(task.get("route")) if task else False
             zone = proposal.get("timeZone") or zone
         outcome = {}
 
         def command(state, actor):
-            outcome.update(proposals.apply(state, proposal, actor=actor, now=now, owner=owner, paid=paid, zone=zone, commands=self.service.commands, can_approve=scheduling))
+            outcome.update(proposals.apply(state, proposal, actor=actor, now=now, owner=owner, paid=paid, zone=zone, commands=self.service.commands, can_approve=scheduling,
+                                           can_edit=can_edit))
             return state
 
         def after(cur, state, actor):
@@ -842,6 +1064,12 @@ class SiteAgentService:
                 role = cur.fetchone()
                 if not role or role[0] != "owner":
                     raise AlphaError("Only an owner of this workspace can apply this change.", 403, code="owner_required")
+            if scheduling and stored.get("needsEdit"):
+                cur.execute("SELECT m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections FROM public.pr_memberships m WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active'",
+                            (workspace_id, actor))
+                role = cur.fetchone()
+                if not role or not Membership.from_row(*role).allows("edit"):
+                    raise AlphaError("Using the rewrite or confirming the draft review needs the edit permission as well.", 403, code="edit_required")
             if scheduling:
                 from ..billing import require_publishing
                 require_publishing(cur, workspace_id, self.clock())  # the same plan gate as preparing a review in the Queue

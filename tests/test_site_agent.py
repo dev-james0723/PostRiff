@@ -451,10 +451,14 @@ class VerificationFixTest(unittest.TestCase):
         self.assertEqual((reading["intent"], reading["forbidden"]["routeId"]), ("forbidden", "queue"))
         self.assertEqual(classifier.classify("Delete all my data", page("/app"))["forbidden"]["routeId"], "privacy")
 
-    def test_a_person_is_never_credited_with_posts(self):
+    def test_person_questions_read_member_activity(self):
         reading = classifier.classify("What did Alex post last week?", page("/app"))
-        self.assertEqual((reading["intent"], reading["entities"]["person"]), ("publishing", "Alex"))
-        self.assertNotIn("person", classifier.classify("What did I post last week?", page("/app"))["entities"])
+        self.assertEqual((reading["intent"], reading["entities"]["person"], reading["entities"]["only"]), ("member_activity", "Alex", "posts"))
+        mine = classifier.classify("What did I post last week?", page("/app"))
+        self.assertEqual((mine["intent"], mine["entities"]["person"]), ("member_activity", "me"))
+        self.assertIsNone(classifier.classify("What has Alex done this week?", page("/app"))["entities"]["only"])
+        for text in ("Who approved this?", "Who changed this automation?"):
+            self.assertEqual(classifier.classify(text, page("/app/queue", selectedEntity={"type": "job", "id": "job-held"}))["intent"], "attribution", text)
 
     def test_a_reply_to_rafiis_question_picks_the_option(self):
         from postriff_phase2.site_agent.service import SiteAgentService
@@ -487,6 +491,89 @@ class VerificationFixTest(unittest.TestCase):
         dated = tools.EXECUTORS["content.search"](ctx(state), query="launch", since=NOW - 86400, until=NOW, label="yesterday")["data"]
         self.assertEqual(dated["results"], [], "a source from 1 September is not yesterday's")
         self.assertEqual(dated["undated"], {"draft": 1}, "a draft with no writing run has no time to check: left out, and counted so the answer says so")
+
+
+class GapClosureTest(unittest.TestCase):
+    """The capabilities that closed the six PARTIAL scenarios: links, voice checks, intents and time slots."""
+
+    def test_campaign_link_is_a_real_idempotent_action(self):
+        state, task_id = automation_state()
+        campaign_id = campaigns._root(state)["recurringTasks"][0]["campaignId"]
+        version = campaigns._root(state)["campaigns"][0]["version"]
+        first = campaigns.apply_action(state, "raffi_campaign_link", {"campaignId": campaign_id, "draftIds": ["v3"], "jobIds": ["job-wait"]}, "owner-1", NOW)
+        self.assertEqual((len(first["added"]), first["alreadyLinked"]), (2, 0))
+        again = campaigns.apply_action(state, "raffi_campaign_link", {"campaignId": campaign_id, "draftIds": ["v3"]}, "owner-1", NOW + 1)
+        self.assertEqual((again["added"], again["alreadyLinked"]), ([], 1))
+        with self.assertRaises(AlphaError) as refused:
+            campaigns.apply_action(state, "raffi_campaign_link", {"campaignId": campaign_id, "draftIds": ["not-here"]}, "owner-1", NOW)
+        self.assertEqual(refused.exception.status, 404)
+        self.assertEqual([x["item"]["addedBy"] for x in campaigns.linked_campaigns(state, "draft", "v3")], ["owner-1"])
+        removed = campaigns.apply_action(state, "raffi_campaign_unlink", {"campaignId": campaign_id, "draftIds": ["v3"]}, "editor-2", NOW + 2)
+        self.assertEqual(removed["removed"], 1)
+        campaign = campaigns._root(state)["campaigns"][0]
+        self.assertEqual([(e["op"], e["by"]) for e in campaign["itemLog"]], [("link", "owner-1"), ("link", "owner-1"), ("unlink", "editor-2")])
+        self.assertEqual(campaign["version"], version, "linking never changes the brief, so no automation pauses")
+        state["phase2"]["assets"] = [{"id": "img-1", "deleted": False}, {"id": "img-gone", "deleted": True}]
+        self.assertEqual(len(campaigns.apply_action(state, "raffi_campaign_link", {"campaignId": campaign_id, "assetIds": ["img-1"]}, "owner-1", NOW)["added"]), 1)
+        with self.assertRaises(AlphaError):
+            campaigns.apply_action(state, "raffi_campaign_link", {"campaignId": campaign_id, "assetIds": ["img-gone"]}, "owner-1", NOW)
+        self.assertEqual(len(campaigns.linked_campaigns(state, "asset", "img-1")), 1)
+        view = tools.EXECUTORS["campaign.membership"](ctx(state), type="job", id="job-wait")["data"]
+        self.assertEqual([(c["campaignId"], c["how"]) for c in view["campaigns"]], [(campaign_id, "linked")])
+
+    def test_voice_check_measures_and_never_quotes(self):
+        from postriff_alpha import learning
+        from postriff_phase2.site_agent import voice_check
+        state = workspace_state()
+        state["speaker"]["revisions"] = [{"revision": 1, "profile": {"tone": "warm", "writingExample": "Stuck at the piano? Pick one bar. Play it slowly.",
+                                                                    "observations": ["Opens with a short question to the reader.", "Keeps paragraphs to two sentences.",
+                                                                                     "Ends with one practical step to try today.", "Uses concrete musical examples."]}}]
+        state["speaker"]["activeRevision"] = 1
+        learning.remember(state, {"type": "writing_preference", "ruleKey": "emoji.use", "polarity": "avoid", "scope": {"platform": "LinkedIn"}, "statement": "Never use emoji on LinkedIn",
+                                  "source": "chat"}, "owner-1", NOW)
+        on = voice_check.analyze(state, "Stuck at the piano?\n\nPick one bar. Play it slowly.\n\nTry three slow passes today.", "LinkedIn")
+        off = voice_check.analyze(state, "I have been thinking about practice a lot lately, and it is hard. 🎹 Also there is much to learn. And you forget things.", "LinkedIn")
+        verdict = lambda result, trait: next(f for f in result["findings"] if f["trait"].startswith(trait))  # noqa: E731
+        self.assertEqual([verdict(on, t)["verdict"] for t in ("Opens with", "Keeps paragraphs", "Ends with", "Never use emoji")], ["matches"] * 4)
+        self.assertEqual([verdict(off, t)["verdict"] for t in ("Opens with", "Keeps paragraphs", "Ends with", "Never use emoji")], ["differs"] * 4)
+        self.assertEqual((verdict(on, "Ends with")["basis"], verdict(on, "Uses concrete")["basis"], verdict(on, "Tone")["basis"]), ("heuristic", "needs_writer", "needs_writer"))
+        self.assertTrue(all("piano" not in f["evidence"] and "practice" not in f["evidence"] for f in on["findings"] + off["findings"]), "evidence describes, never quotes")
+        other = voice_check.analyze(state, "Stuck? 🎹", "Threads")
+        self.assertFalse(any(f["trait"].startswith("Never use emoji") for f in other["findings"]), "a LinkedIn preference is not applied to Threads")
+        empty = voice_check.analyze(workspace_state(), "Anything at all.", "LinkedIn")
+        self.assertTrue(empty["empty"])
+
+    def test_new_intents_route_to_their_tools(self):
+        draft = page("/app/queue", selectedEntity={"type": "draft", "id": "v3"})
+        cases = {("Does this sound like me?", "voice_check"): ("voice.check", {"draftId": "v3"}),
+                 ("Which campaign is this draft in?", "campaign_membership"): ("campaign.membership", {"type": "draft", "id": "v3"}),
+                 ("Who approved this?", "attribution"): ("record.attribution", {"type": "draft", "id": "v3"})}
+        for (text, intent), tool in cases.items():
+            reading = classifier.classify(text, draft)
+            self.assertEqual(reading["intent"], intent, text)
+            self.assertIn(tool, procedures.select(reading, draft, text)["tools"], text)
+        quoted = classifier.classify('Does "Pick one bar and play it slowly" sound like me?', page("/app"))
+        self.assertIn(("voice.check", {"text": "Pick one bar and play it slowly"}), procedures.select(quoted, page("/app"), 'Does "Pick one bar and play it slowly" sound like me?')["tools"])
+        for text, intent in (("Add this draft to the launch campaign", "campaign_link"), ("Remove this draft from that campaign", "campaign_unlink"),
+                             ("Delete this draft from the campaign", "campaign_unlink"), ("Delete all my drafts", "forbidden"), ("Write a LinkedIn post in my voice", "operate")):
+            self.assertEqual(classifier.classify(text, draft)["intent"], intent, text)
+        compound = classifier.classify("Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM", draft)
+        self.assertEqual((compound["intent"], compound["steps"]), ("compound", ["revise", "link", "schedule"]))
+
+    def test_times_are_exact_or_picked_by_a_stated_rule(self):
+        from postriff_phase2.site_agent import compound
+        state = workspace_state()
+        exact = compound.resolve_time(state, "schedule it for Thursday at 6 PM", NOW, HK, platform="LinkedIn", channel_id="li")
+        self.assertTrue(exact["local"].endswith("T18:00") and exact["picked"] is None, exact)
+        self.assertIn("ask", compound.resolve_time(state, "schedule it Thursday", NOW, HK, platform="LinkedIn", channel_id="li"))
+        picked = compound.resolve_time(state, "schedule it in the next suitable empty slot", NOW, HK, platform="LinkedIn", channel_id="li")
+        self.assertIn("picked", picked)
+        self.assertIn("usual", picked["picked"], "the account's own posting time, learned from its posts")
+        busy = {(j["manifest"].get("timing") or {}).get("local", "")[:10] for j in state["phase2"]["jobs"]}
+        self.assertNotIn(picked["local"][:10], busy, "never a day that already has a post on this account")
+        self.assertEqual(picked["local"][11:], "17:30", "the median of this account's posts at 16:30 and 18:30")
+        week = compound.resolve_time(state, "schedule it next week", NOW, HK, platform="LinkedIn", channel_id="li")
+        self.assertIn("next week", week["picked"])
 
 
 class ProposalTest(unittest.TestCase):

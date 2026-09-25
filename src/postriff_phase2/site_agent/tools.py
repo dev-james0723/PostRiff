@@ -66,6 +66,15 @@ _DEFINITIONS = (
     ("attention.summary", "read", "What needs attention: stored facts and derived observations, each traceable.", {}, ()),
     ("entity.status", "read", "The status of the item selected on the page and what it still needs.",
      {"type": {"type": "string", "maxLength": 40}, "id": {"type": "string", "pattern": _ID}}, ("type", "id")),
+    ("voice.check", "read", "Compare a draft or a sentence with the stored voice profile and learned preferences: measured, heuristic or needs a writer.",
+     {"draftId": {"type": "string", "pattern": _ID}, "text": {"type": "string", "maxLength": 3000}, "platform": {"type": "string", "maxLength": 40}}, ()),
+    ("member.activity", "read", "What a member (or everyone) did, from records that name the person; says what is not attributed.",
+     {"member": {"type": "string", "maxLength": 60}, "since": {"type": "number"}, "until": {"type": "number"}, "label": {"type": "string", "maxLength": 60},
+      "only": {"type": "string", "maxLength": 20}}, ()),
+    ("record.attribution", "read", "Who acted on one post, draft or automation, from its stored records.",
+     {"type": {"type": "string", "maxLength": 40}, "id": {"type": "string", "pattern": _ID}}, ("type", "id")),
+    ("campaign.membership", "read", "The campaigns a draft or post belongs to: linked by a person, or made by the campaign's automation.",
+     {"type": {"type": "string", "maxLength": 40}, "id": {"type": "string", "pattern": _ID}}, ("type", "id")),
 )
 REQUIREMENT = {"automation.patch_propose": "edit"}
 
@@ -163,6 +172,8 @@ LABELS = {
     "brand.summary": "Read your Brand Brain", "voice.profile": "Read your voice profile", "content.search": "Searched your workspace",
     "calendar.range": "Read the calendar", "campaign.list": "Listed your campaigns", "campaign.get": "Read the campaign", "reviews.list": "Checked reviews and returns",
     "publishing.summary": "Checked publishing results", "attention.summary": "Checked what needs attention", "entity.status": "Read the selected item",
+    "voice.check": "Compared the text with your voice", "member.activity": "Read who did what", "record.attribution": "Read who acted on this",
+    "campaign.membership": "Checked which campaigns it belongs to",
 }
 
 # --- redaction ---------------------------------------------------------------------------------------------------------
@@ -552,6 +563,7 @@ from . import reads  # noqa: E402 — reads builds on the helpers above
 EXECUTORS.update({
     "brand.summary": reads.brand_summary, "voice.profile": reads.voice_profile, "content.search": reads.content_search, "calendar.range": reads.calendar_range,
     "campaign.list": reads.campaign_list, "campaign.get": reads.campaign_get, "reviews.list": reads.reviews_list, "publishing.summary": reads.publishing_summary,
-    "attention.summary": reads.attention_summary, "entity.status": reads.entity_status,
+    "attention.summary": reads.attention_summary, "entity.status": reads.entity_status, "voice.check": reads.voice_check, "member.activity": reads.member_activity,
+    "record.attribution": reads.record_attribution, "campaign.membership": reads.campaign_membership,
 })
 assert set(EXECUTORS) == set(CATALOG)

@@ -42,7 +42,7 @@ import type {
   Usage,
   WorkspaceListItem
 } from './types';
-import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
+import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentMessageBody, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -241,6 +241,8 @@ export function createApi(getToken: TokenSource) {
       send<{ runId: string; status: string; note?: string }>('POST', `${ws(w)}/site-agent/runs/${encodeURIComponent(runId)}/cancel`),
     siteAgentEvents: (w: string, runId: string, cursor = 0) =>
       get<SiteAgentTurnResult>(`${ws(w)}/site-agent/runs/${encodeURIComponent(runId)}/events?cursor=${cursor}`),
+    siteAgentCompoundContinue: (w: string, body: { conversationId: string; messageId: string; timeZone?: string }) =>
+      send<{ message: SiteAgentMessageBody; status: 'advanced' | 'unchanged' }>('POST', `${ws(w)}/site-agent/compound/continue`, body),
     siteAgentApplyProposal: (w: string, body: Record<string, unknown>) =>
       send<{ proposal: SiteAgentProposalView; revision: number }>('POST', `${ws(w)}/site-agent/proposals/apply`, body),
     siteAgentDismissProposal: (w: string, body: Record<string, unknown>) =>

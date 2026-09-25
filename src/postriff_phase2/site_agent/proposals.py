@@ -40,8 +40,13 @@ WAITING_JOBS = ("approved", "scheduled", "claimed")
 
 
 def proposal_digest(proposal: dict) -> str:
-    return digest({key: proposal.get(key) for key in ("type", "taskId", "changes", "before", "createdBy", "variantId", "variantRevision", "channelId", "localTime",
-                                                      "timeZone", "jobId", "acknowledgedWarnings")})
+    fields = {key: proposal.get(key) for key in ("type", "taskId", "changes", "before", "createdBy", "variantId", "variantRevision", "channelId", "localTime",
+                                                 "timeZone", "jobId", "acknowledgedWarnings")}
+    # Later steps join the digest only when present, so proposals stored before them still verify.
+    for extra in ("acceptUpdate", "confirmReview", "media"):
+        if proposal.get(extra):
+            fields[extra] = proposal[extra]
+    return digest(fields)
 
 
 def build(state: dict, text: str, *, actor: str, now: float, owner: bool, paid: bool, zone: str, conversation_task_id: str | None,
@@ -82,8 +87,29 @@ def build(state: dict, text: str, *, actor: str, now: float, owner: bool, paid: 
 
 
 def _review_payload(proposal: dict) -> dict:
-    return {"variantId": proposal["variantId"], "channelId": proposal["channelId"], "localTime": proposal["localTime"], "timeZone": proposal["timeZone"],
-            "acknowledgedWarnings": list(proposal.get("acknowledgedWarnings") or [])}
+    payload = {"variantId": proposal["variantId"], "channelId": proposal["channelId"], "localTime": proposal["localTime"], "timeZone": proposal["timeZone"],
+               "acknowledgedWarnings": list(proposal.get("acknowledgedWarnings") or [])}
+    media = proposal.get("media")
+    if media:
+        payload.update(assetId=media.get("assetId"), alt=media.get("alt"), rightsConfirmed=media.get("rightsConfirmed") is True)
+    return payload
+
+
+def _variant(state: dict, variant_id: str) -> dict | None:
+    return next((v for v in state.get("variants", []) if isinstance(v, dict) and v.get("id") == variant_id), None)
+
+
+def _prepare(state: dict, proposal: dict, actor: str, commands) -> None:
+    """The steps a scheduling proposal takes, in order, with the app's own commands (on a copy when building)."""
+    if proposal.get("jobId"):
+        commands(state, actor, "p2_cancel", {"jobId": proposal["jobId"]})
+    if proposal.get("acceptUpdate"):
+        commands(state, actor, "accept_update", {"variantId": proposal["variantId"]})
+    if proposal.get("confirmReview"):
+        variant = _variant(state, proposal["variantId"]) or {}
+        commands(state, actor, "p2_variant_review", {"variantId": proposal["variantId"], "variantRevision": variant.get("revision"), "confirmed": True,
+                                                     "excludedUnknowns": list(proposal["confirmReview"]["excludedUnknowns"])})
+    commands(state, actor, "p2_review", _review_payload(proposal))
 
 
 def _newest_review(state: dict, variant_id: str, local_time: str) -> dict | None:
@@ -91,18 +117,40 @@ def _newest_review(state: dict, variant_id: str, local_time: str) -> dict | None
     return next((r for r in reversed(reviews) if (r.get("manifest") or {}).get("variantId") == variant_id and ((r.get("manifest") or {}).get("timing") or {}).get("local") == local_time), None)
 
 
-def build_schedule(state: dict, *, variant: dict, channel: dict, local_time: str, zone: str, actor: str, now: float, commands, job: dict | None = None) -> dict:
+def build_schedule(state: dict, *, variant: dict, channel: dict, local_time: str, zone: str, actor: str, now: float, commands, job: dict | None = None,
+                   accept_update: bool = False, media: dict | None = None, picked: str | None = None) -> dict:
     """Propose preparing the exact review of a draft at a time on an account (and, for a move, cancelling the waiting
     job first). Checked by running the same commands on a copy; nothing changes until the proposal is applied, and
-    even then the post waits for a separate approval of that exact review."""
+    even then the post waits for a separate approval of that exact review.
+
+    Two earlier steps join when the draft needs them, each shown to the person before they apply: using the rewrite
+    Rafii just wrote (`accept_update`, the draft's pending proposed update; the earlier text stays in its history), and
+    confirming the draft review (the unknown details listed stay out of the post). A retracted or out-of-policy
+    source still refuses, as it does in the Queue."""
     if job is not None and job.get("state") not in WAITING_JOBS:
         return {"refuse": "Only a post that is approved and waiting can be moved. A held or failed post is prepared again from its draft.", "code": "not_waiting"}
     proposal = {"type": "reschedule_post" if job else "schedule_draft", "variantId": variant["id"], "variantRevision": variant.get("revision"), "channelId": channel["id"],
                 "localTime": local_time, "timeZone": zone, "jobId": (job or {}).get("id"), "acknowledgedWarnings": list(variant.get("warnings") or [])}
+    update = variant.get("proposedUpdate") if accept_update else None
+    if accept_update and not update:
+        return {"refuse": "That draft has no rewrite waiting to be used.", "code": "no_update"}
+    if update:
+        proposal["acceptUpdate"] = {"runId": update.get("runId"), "textDigest": digest(update.get("text") or "")}
+        # After the rewrite is accepted, its own warnings are the ones to acknowledge.
+        proposal["acknowledgedWarnings"] = list(update.get("warnings") or [])
+    if media:
+        proposal["media"] = {"assetId": media.get("assetId"), "alt": str(media.get("alt") or "")[:1000], "rightsConfirmed": media.get("rightsConfirmed") is True}
     trial = copy.deepcopy(state)
     try:
         if job:
             commands(trial, actor, "p2_cancel", {"jobId": job["id"]})
+        if update:
+            commands(trial, actor, "accept_update", {"variantId": variant["id"]})
+        drafted = _variant(trial, variant["id"]) or {}
+        if drafted.get("needsReview") or drafted.get("unknowns"):
+            proposal["confirmReview"] = {"excludedUnknowns": list(drafted.get("unknowns") or [])}
+            commands(trial, actor, "p2_variant_review", {"variantId": variant["id"], "variantRevision": drafted.get("revision"), "confirmed": True,
+                                                         "excludedUnknowns": list(drafted.get("unknowns") or [])})
         commands(trial, actor, "p2_review", _review_payload(proposal))
     except AlphaError as error:
         return {"refuse": str(error), "code": error.code or "not_possible"}
@@ -111,8 +159,17 @@ def build_schedule(state: dict, *, variant: dict, channel: dict, local_time: str
     before_time = ((job or {}).get("manifest") or {}).get("timing", {}).get("local")
     warnings = proposal["acknowledgedWarnings"]
     summary = [f"prepare the exact {channel.get('platform')} post for {channel.get('account')} at {local_time.replace('T', ' ')} ({zone})"]
+    if picked:
+        summary.append(f"the time was picked by Rafii: {picked}")
     if job:
         summary.insert(0, f"cancel the waiting post at {(before_time or '').replace('T', ' ')}")
+    if proposal.get("confirmReview"):
+        unknowns = proposal["confirmReview"]["excludedUnknowns"]
+        summary.insert(0, "confirm the draft review: " + ("these details stay out of the post: " + "; ".join(unknowns)[:300] if unknowns else "you've read this exact text"))
+    if update:
+        summary.insert(0, "use the rewrite Rafii wrote (it replaces the current text; the earlier version stays in the draft's history)")
+    if proposal.get("media"):
+        summary.append(f"attach the image “{proposal['media']['alt'][:60]}” (you confirm you hold the rights to use it)")
     if warnings:
         summary.append("acknowledge its warnings: " + "; ".join(warnings)[:300])
     proposal.update({"id": uid(), "status": "proposed", "name": f"{channel.get('platform')} · {channel.get('account')}", "summary": summary,
@@ -121,8 +178,9 @@ def build_schedule(state: dict, *, variant: dict, channel: dict, local_time: str
                                            "plan": [{"when": local_time.replace("T", " "), "text": "Publishes only after someone with the approve permission approves this exact post."}],
                                            "platforms": [{"platform": channel.get("platform"), "canPublish": None}], "needs": []}},
                      "before": {"variantRevision": variant.get("revision"), "jobState": (job or {}).get("state")},
-                     "requiredPermission": "approve", "createdBy": actor, "createdAt": now, "expiresAt": now + TTL_SECONDS,
-                     "characters": len((manifest.get("payload") or {}).get("text") or variant.get("text") or "")})
+                     "requiredPermission": "approve", "needsEdit": bool(update or proposal.get("confirmReview")), "createdBy": actor, "createdAt": now,
+                     "expiresAt": now + TTL_SECONDS, "characters": len((manifest.get("payload") or {}).get("text") or variant.get("text") or ""),
+                     "text": (manifest.get("payload") or {}).get("text") or ""})
     proposal["digest"] = proposal_digest(proposal)
     return {"proposal": proposal}
 
@@ -137,20 +195,26 @@ def check(proposal: dict, *, digest_value: str, now: float) -> None:
         raise AlphaError("This proposal does not match what Rafii prepared.", 409, code="proposal_digest")
 
 
-def apply(state: dict, proposal: dict, *, actor: str, now: float, owner: bool, paid: bool, zone: str, commands=None, can_approve: bool = False) -> dict:
+def apply(state: dict, proposal: dict, *, actor: str, now: float, owner: bool, paid: bool, zone: str, commands=None, can_approve: bool = False, can_edit: bool = False) -> dict:
     """Apply a checked proposal to `state` in place with the same code the app uses; stale targets are refused."""
     if proposal.get("type") in SCHEDULE_TYPES:
         if not can_approve:
             raise AlphaError("Preparing a post for approval needs the approve permission.", 403, code="approve_required")
-        variant = next((v for v in state.get("variants", []) if isinstance(v, dict) and v.get("id") == proposal.get("variantId")), None)
+        if proposal.get("needsEdit") and not can_edit:
+            raise AlphaError("Using the rewrite or confirming the draft review needs the edit permission as well.", 403, code="edit_required")
+        variant = _variant(state, proposal.get("variantId"))
         if variant is None or variant.get("revision") != proposal.get("variantRevision"):
             raise AlphaError("The draft changed since Rafii proposed this. Ask again for a fresh proposal.", 409, code="proposal_stale")
+        accept = proposal.get("acceptUpdate")
+        if accept:
+            update = variant.get("proposedUpdate") or {}
+            if update.get("runId") != accept.get("runId") or digest(update.get("text") or "") != accept.get("textDigest"):
+                raise AlphaError("The rewrite changed since Rafii proposed this. Ask again for a fresh proposal.", 409, code="proposal_stale")
         if proposal.get("jobId"):
             job = next((j for j in (state.get("phase2") or {}).get("jobs", []) if j.get("id") == proposal["jobId"]), None)
             if job is None or job.get("state") not in WAITING_JOBS:
                 raise AlphaError("That post is no longer waiting, so it can't be moved.", 409, code="proposal_stale")
-            commands(state, actor, "p2_cancel", {"jobId": proposal["jobId"]})
-        commands(state, actor, "p2_review", _review_payload(proposal))
+        _prepare(state, proposal, actor, commands)
         review = _newest_review(state, proposal["variantId"], proposal["localTime"]) or {}
         return {"reviewId": review.get("id"), "status": review.get("status"), "localTime": proposal["localTime"], "timeZone": proposal["timeZone"],
                 "cancelledJobId": proposal.get("jobId"), "summary": proposal.get("summary") or []}
@@ -176,5 +240,5 @@ def view(proposal: dict, now: float) -> dict:
     if status == "proposed" and proposal.get("expiresAt", 0) <= now:
         status = "expired"
     keep = ("id", "type", "taskId", "name", "changes", "summary", "preview", "requiredPermission", "expiresAt", "digest", "result", "appliedAt", "closedReason",
-            "variantId", "channelId", "localTime", "timeZone", "jobId")
+            "variantId", "channelId", "localTime", "timeZone", "jobId", "media", "needsEdit", "text")
     return {**{k: proposal.get(k) for k in keep}, "status": status}

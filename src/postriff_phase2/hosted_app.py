@@ -304,6 +304,9 @@ class HostedApplication:
                 return self._json(start_response, 200, agent.apply_proposal(workspace_id, token, body))
             if parts[5] == "dismiss":
                 return self._json(start_response, 200, agent.dismiss_proposal(workspace_id, token, body))
+        if resource == "compound" and len(parts) == 6 and parts[5] == "continue" and method == "POST":
+            # A compound request whose writing run finished after the turn: save, link and propose scheduling now.
+            return self._json(start_response, 200, agent.compound_continue(workspace_id, token, self._body(environ)))
         if resource == "feedback" and len(parts) == 5 and method == "POST":
             return self._json(start_response, 200, agent.feedback(workspace_id, token, self._body(environ)))
         if resource == "help" and method == "GET":

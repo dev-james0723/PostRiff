@@ -6,6 +6,8 @@ because live state outranks documentation (§6.3). The model never adds a write 
 """
 from __future__ import annotations
 
+import re
+
 from . import routes, timeframe
 
 CATALOG = {
@@ -37,6 +39,11 @@ CATALOG = {
     "draft_listing": "List recent and unfinished drafts with what each still needs.",
     "workspace_search": "Find matching drafts, sources, campaigns, automations and posts.",
     "schedule_draft": "Propose preparing an exact review of a draft at a time; approval stays a separate step.",
+    "voice_check": "Compare a draft or a quoted sentence with the stored voice: measured, heuristic, or left to a writer model.",
+    "member_activity": "List what a member did from records that name the person, and say what is not attributed.",
+    "record_attribution": "Say who acted on one post, draft or automation, from its stored records.",
+    "campaign_membership": "Say which campaigns a draft or post belongs to, and how it got there.",
+    "campaign_link": "Link or unlink drafts and posts to a campaign through the campaign's own action.",
     "greeting": "Say hello and what Rafii can do here.",
 }
 
@@ -216,6 +223,31 @@ def select(classification: dict, page: dict, text: str, *, automation_count: int
         add("brand.summary")
         if entity.get("type") == "draft":
             add("draft.get", {"draftId": entity["id"]})
+    elif intent == "voice_check":
+        procedures.append("voice_check")
+        quoted = re.search(r"[\"“‘']([^\"”’']{8,600})[\"”’']", text)
+        if entity.get("type") == "draft":
+            add("voice.check", {"draftId": entity["id"]})
+            add("draft.get", {"draftId": entity["id"]})
+        elif quoted:
+            add("voice.check", {"text": quoted.group(1)})
+        add("voice.profile", {})
+    elif intent == "member_activity":
+        procedures.append("member_activity")
+        args = {"member": classification["entities"].get("person") or ""}
+        if frame:
+            args.update(since=frame["start"], until=frame["end"], label=frame["label"])
+        if classification["entities"].get("only"):
+            args["only"] = classification["entities"]["only"]
+        add("member.activity", args)
+    elif intent == "attribution":
+        procedures.append("record_attribution")
+        if entity.get("type") in ("job", "review", "draft", "automation"):
+            add("record.attribution", {"type": entity["type"], "id": entity["id"]})
+    elif intent == "campaign_membership":
+        procedures.append("campaign_membership")
+        if entity.get("type") in ("job", "review", "draft"):
+            add("campaign.membership", {"type": entity["type"], "id": entity["id"]})
     elif intent == "voice":
         procedures.append("voice_explanation")
         platforms = classification["entities"]["platforms"]

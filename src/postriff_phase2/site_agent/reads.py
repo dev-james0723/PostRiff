@@ -139,6 +139,18 @@ def _epoch(value):
     return None
 
 
+def _snippet(text, words, phrases, width=160):
+    """An excerpt that shows where the match is: the start, or the words around the first phrase or word found."""
+    flat = " ".join((text or "").split())
+    lower = flat.lower()
+    spots = [lower.find(p) for p in phrases if p in lower] or [lower.find(w) for w in words if w in lower]
+    at = min(spots) if spots else -1
+    if at < 0 or at + 40 <= width:
+        return _excerpt(flat, width)
+    start = max(0, at - 50)
+    return "…" + _excerpt(flat[start:], width - 1)
+
+
 def content_search(ctx, query, kinds=None, platform=None, since=None, until=None, label=None):
     """Words or a quoted phrase across drafts, sources, campaigns, automations and posts. Without a quoted phrase, what
     was made from a match (a draft from a matching source, a campaign's automation and drafts) is included and marked
@@ -192,7 +204,7 @@ def content_search(ctx, query, kinds=None, platform=None, since=None, until=None
         if passes(score):
             source_hits[s.get("id")] = score
         if "source" in wanted:
-            keep("source", score, {"id": s.get("id"), "title": s.get("title") or "Source", "excerpt": _excerpt(s.get("text")), "href": routes.href("ideas")}, at=_epoch(s.get("createdAt")))
+            keep("source", score, {"id": s.get("id"), "title": s.get("title") or "Source", "excerpt": _snippet(s.get("text"), words, phrases), "href": routes.href("ideas")}, at=_epoch(s.get("createdAt")))
     for c in root["campaigns"]:
         if c.get("status") == "cancelled":
             continue
@@ -219,7 +231,7 @@ def content_search(ctx, query, kinds=None, platform=None, since=None, until=None
             draft_hits[v.get("id")] = score
         if "draft" in wanted:
             keep("draft", score, {"id": v.get("id"), "title": f"{v.get('platform')} draft" + (f" · {_account(ctx, v.get('channelId'))}" if v.get("channelId") else ""),
-                                  "excerpt": _excerpt(v.get("text")), "href": _draft_href(v.get("id")), "order": index, "setAside": bool(v.get("rejected"))},
+                                  "excerpt": _snippet(v.get("text"), words, phrases), "href": _draft_href(v.get("id")), "order": index, "setAside": bool(v.get("rejected"))},
                  via, at=run_times.get((v.get("provenance") or {}).get("runId")))
     if "automation" in wanted:
         for t in automation_edit.live_tasks(ctx.state):
@@ -237,7 +249,7 @@ def content_search(ctx, query, kinds=None, platform=None, since=None, until=None
             score, via = _match((manifest.get("payload") or {}).get("text"), words, phrases), None
             if not passes(score) and link and draft_hits.get(manifest.get("variantId")):
                 score, via = draft_hits[manifest["variantId"]], "a post of a matching draft"
-            keep("post", score, {"id": j.get("id"), "title": f"{manifest.get('platform')} post · {manifest.get('account')}", "excerpt": _excerpt((manifest.get("payload") or {}).get("text")),
+            keep("post", score, {"id": j.get("id"), "title": f"{manifest.get('platform')} post · {manifest.get('account')}", "excerpt": _snippet((manifest.get("payload") or {}).get("text"), words, phrases),
                                  "state": j.get("state"), "when": timeframe.local(at, zone), "href": routes.href("queue", query={"job": j["id"]})}, via, at=at)
     # Direct matches first, then what is linked to one.
     results.sort(key=lambda r: (r.get("via") is not None, -r["score"], -(r.get("order") or 0)))
@@ -340,9 +352,11 @@ def _campaign_view(ctx, campaign, detail=False):
             "platforms": platforms, "href": routes.href("automations", query={"campaign": campaign["id"]})}
     if not detail:
         return view
-    drafts = [v for v in _variants(ctx) if (v.get("automation") or {}).get("taskId") in task_ids]
+    linked_drafts = {item.get("variantId") for item in campaign.get("items") or [] if item.get("kind") == "draft"}
+    linked_posts = {item.get("jobId") for item in campaign.get("items") or [] if item.get("kind") == "post"}
+    drafts = [v for v in _variants(ctx) if (v.get("automation") or {}).get("taskId") in task_ids or v.get("id") in linked_drafts]
     variant_ids = {v.get("id") for v in drafts}
-    jobs = [j for j in _jobs(ctx) if (j.get("manifest") or {}).get("variantId") in variant_ids or (j.get("automation") or {}).get("taskId") in task_ids]
+    jobs = [j for j in _jobs(ctx) if (j.get("manifest") or {}).get("variantId") in variant_ids or (j.get("automation") or {}).get("taskId") in task_ids or j.get("id") in linked_posts]
     week_ago = ctx.now - 7 * 86400
     runs = []
     for occurrence in root.get("occurrences", []):
@@ -358,7 +372,7 @@ def _campaign_view(ctx, campaign, detail=False):
                "noUpcomingRun": {"rule": "no active automation with a next run", "value": not any(a["status"] == "active" and a["nextRun"] for a in view["automations"])},
                "failedOrSkippedLastWeek": {"rule": "runs in the last 7 days that failed or were skipped", "items": [r for r in runs if (r["at"] or 0) >= week_ago and r["status"] in ("failed", "skipped", "source_unavailable")][:4]}}
     return {**view, "drafts": [{"draftId": v.get("id"), "platform": v.get("platform"), "account": _account(ctx, v.get("channelId")), "excerpt": _excerpt(v.get("text"), 100),
-                                "href": _draft_href(v.get("id"))} for v in drafts][:10],
+                                "href": _draft_href(v.get("id")), "linked": v.get("id") in linked_drafts} for v in drafts][:10],
             "draftCount": len(drafts), "posts": [_job_view(ctx, j) for j in jobs][:6],
             "lastWeek": [r for r in runs if week_ago <= (r["at"] or 0) < ctx.now][:6], "upcomingRuns": upcoming[:3], "derived": derived}
 
@@ -546,3 +560,74 @@ def entity_status(ctx, type, id):  # noqa: A002 — mirrors the page context's f
         return contracts.result({"kind": "source", "summary": {"title": source.get("title"), "policy": source.get("sourcePolicy"), "approvedFacts": approved, "active": source.get("active")},
                                  "stillNeeded": still}, now=ctx.now)
     raise AlphaError("Rafii can't describe that item yet.", 404, code="not_found")
+
+
+# --- voice check, member activity, campaign membership ------------------------------------------------------------------
+def voice_check(ctx, draftId=None, text=None, platform=None):
+    """A draft (by id) or a sentence from the message, compared with the stored voice. Findings never quote the text."""
+    from . import voice_check as checker
+    variant = None
+    if draftId:
+        variant = next((v for v in _variants(ctx) if v.get("id") == draftId), None)
+        if variant is None:
+            raise AlphaError("That draft is not in this workspace.", 404, code="not_found")
+    body = (variant or {}).get("text") if variant else (text or "")
+    if not (body or "").strip():
+        raise AlphaError("Select a draft or quote the sentence to compare.", 400, code="tool_input")
+    platform = platform or (variant or {}).get("platform")
+    result = checker.analyze(ctx.state, body, platform)
+    return contracts.result({**result, "draftId": draftId, "platform": platform, "subject": f"{platform} draft" if variant else "the quoted text",
+                             "href": _draft_href(draftId) if draftId else None, "profileHref": routes.href("brand")},
+                            now=ctx.now, verified=not result["empty"])
+
+
+def member_activity(ctx, member=None, since=None, until=None, label=None, only=None):
+    from . import member_activity as activity
+    if ctx.cur is None:
+        raise AlphaError("Member activity needs the workspace's records.", 503, code="unavailable")
+    data = activity.read(ctx.cur, ctx.workspace_id, ctx.state, role=ctx.membership.role, principal=ctx.principal, member=member, since=since, until=until,
+                         now=ctx.now, zone=_zone(ctx), only=only if only in ("posts",) else None, window=label)
+    return contracts.result(data, now=ctx.now)
+
+
+def record_attribution(ctx, type, id):  # noqa: A002 — the tool contract's names
+    from . import member_activity as activity
+    if ctx.cur is None:
+        raise AlphaError("Attribution needs the workspace's records.", 503, code="unavailable")
+    kind = {"review": "job"}.get(type, type)
+    if kind not in ("job", "draft", "automation"):
+        raise AlphaError("Ask about a post, a draft or an automation.", 400, code="tool_input")
+    data = activity.attribution(ctx.cur, ctx.workspace_id, ctx.state, kind, id, role=ctx.membership.role, principal=ctx.principal, zone=_zone(ctx))
+    if not data.get("found"):
+        raise AlphaError("That item is not in this workspace.", 404, code="not_found")
+    return contracts.result(data, now=ctx.now)
+
+
+def campaign_membership(ctx, type, id):  # noqa: A002
+    """Campaigns a draft or post is in: linked by someone (who, when), or made by the campaign's own automation."""
+    root = campaigns._root(ctx.state)
+    kind = {"job": "post", "review": "draft"}.get(type, type)
+    target = id
+    if type == "review":
+        review = next((r for r in _reviews(ctx) if r.get("id") == id), None)
+        target = ((review or {}).get("manifest") or {}).get("variantId")
+    if kind not in ("draft", "post") or not target:
+        raise AlphaError("Ask about a draft or a post.", 400, code="tool_input")
+    known = _variants(ctx) if kind == "draft" else _jobs(ctx)
+    item = next((x for x in known if x.get("id") == target), None)
+    if item is None:
+        raise AlphaError("That item is not in this workspace.", 404, code="not_found")
+    found = []
+    for entry in campaigns.linked_campaigns(ctx.state, kind, target):
+        c = entry["campaign"]
+        found.append({"campaignId": c["id"], "goal": c.get("goal"), "how": "linked", "at": timeframe.local(entry["item"].get("addedAt"), _zone(ctx)),
+                      "addedBy": entry["item"].get("addedBy"), "href": routes.href("automations", query={"campaign": c["id"]})})
+    variant = item if kind == "draft" else next((v for v in _variants(ctx) if v.get("id") == (item.get("manifest") or {}).get("variantId")), None)
+    task_id = ((variant or {}).get("automation") or {}).get("taskId")
+    task = next((t for t in root["recurringTasks"] if t.get("id") == task_id), None) if task_id else None
+    if task:
+        c = next((x for x in root["campaigns"] if x.get("id") == task.get("campaignId")), None)
+        if c and all(f["campaignId"] != c["id"] for f in found):
+            found.append({"campaignId": c["id"], "goal": c.get("goal"), "how": "automation", "automation": task.get("name"), "href": routes.href("automations", query={"campaign": c["id"]})})
+    return contracts.result({"kind": kind, "id": target, "campaigns": found}, now=ctx.now)
+
