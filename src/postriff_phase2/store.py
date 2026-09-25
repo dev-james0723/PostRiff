@@ -15,6 +15,7 @@ from .media import decode_upload
 from .content_types import apply_content_action, content_preflight, ensure_content_state, projection as content_projection
 from .outcomes import normalize_result, unknown
 from . import learning_signals as signals, locales, source_policy, channel_folders
+from .text_measure import measure
 
 TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("processing", "submitting", "provider_accepted", "published", "uncertain")
@@ -374,7 +375,8 @@ class Phase2Store(Store):
         if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"]:
             raise AlphaError("The variant and current speaker must match this destination.")
         text = v["text"]
-        if not text.strip() or len(text) > LIMITS[c["platform"]]["characters"]:
+        # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
+        if not text.strip() or measure(c["platform"], text)["used"] > LIMITS[c["platform"]]["characters"]:
             raise AlphaError("The content exceeds this destination's versioned text limit.")
         # Threads rejects a post with more than 5 links (official posts guide, from 2025-12-22).
         if c["platform"] == "Threads" and len(re.findall(r"https?://", text)) > 5:
