@@ -148,14 +148,7 @@ async function connectionStatus(browser) {
     { name: 'read-only access', state: (c) => ({ ...c, connectionState: 'read_verified', expiresAt: month() }), label: STATUS.readOnly, reconnect: false, line: null },
     { name: 'expired access', state: (c) => ({ ...c, connectionState: 'token_expired', expiresAt: Date.now() / 1000 - 3600 }), label: STATUS.reconnect, reconnect: true, line: 'Access expired.' },
     { name: 'revoked access', state: (c) => ({ ...c, connectionState: 'reauthorization_required' }), label: STATUS.reconnect, reconnect: true, line: 'Access revoked.' },
-    { name: 'missing permissions', state: (c) => ({ ...c, connectionState: 'scope_missing' }), label: STATUS.missingPermissions, reconnect: true, line: 'No permissions granted.' },
-    {
-      name: 'disconnected on purpose',
-      state: (c) => ({ ...c, connectionState: 'reauthorization_required', capabilities: Object.fromEntries(Object.entries(c.capabilities).map(([k, v]) => [k, { ...v, evidence: 'Disconnected by the customer.' }])) }),
-      label: STATUS.disconnected,
-      reconnect: false,
-      line: null
-    }
+    { name: 'missing permissions', state: (c) => ({ ...c, connectionState: 'scope_missing' }), label: STATUS.missingPermissions, reconnect: true, line: 'No permissions granted.' }
   ];
   for (const scene of scenes) {
     rewrite = scene.state;
@@ -165,6 +158,40 @@ async function connectionStatus(browser) {
     if (scene.line) check(`${scene.name}: one short line says what happened`, (await card.getByText(scene.line, { exact: true }).count()) === 1);
     if (scene.reconnect) check(`${scene.name}: Reconnect is offered`, (await card.getByRole('button', { name: /Reconnect/ }).count()) >= 1);
   }
+
+  // Disconnected on purpose: the account leaves the list, unless posts for it are on hold. Then it stays with
+  // Reconnect and History only (`listedOnChannels`). The held post is set on the one snapshot response.
+  let held = null;
+  await page.route(`**/api/workspaces/${boot.workspaceId}`, async (route) => {
+    if (!held || route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    body.state.phase2.jobs = [...(body.state.phase2.jobs ?? []), held];
+    return route.fulfill({ response, json: body });
+  });
+  rewrite = (c) => ({ ...c, connectionState: 'reauthorization_required', capabilities: Object.fromEntries(Object.entries(c.capabilities).map(([k, v]) => [k, { ...v, evidence: 'Disconnected by the customer.' }])) });
+  await page.goto(`${base}/app/channels`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('No accounts connected', { exact: true }).waitFor();
+  check('disconnected on purpose: the account leaves the list', (await card.count()) === 0);
+  check('disconnected on purpose: the LinkedIn tile offers Connect, not another account', (await page.getByRole('button', { name: 'Connect another account' }).count()) === 0);
+
+  const at = Date.now() / 1000 + 86400;
+  const utc = new Date(at * 1000).toISOString();
+  held = {
+    id: 'held-scene', state: 'held', cancelRequested: false, events: [], attempts: [],
+    manifest: {
+      actor: principal, channelId: channel.id, account: channel.account, platform: channel.platform, operation: 'publish', variantId: 'held-scene', contentRevision: 1,
+      payload: { text: 'A post waiting for its account.', language: 'en-US' }, media: [], timing: { local: utc.slice(0, 16), timeZone: 'UTC', utc, timestamp: at },
+      expiresAt: at + 3600, idempotencyKey: 'held-scene', execution: 'dev-synthetic'
+    }
+  };
+  await page.goto(`${base}/app/channels`, { waitUntil: 'domcontentloaded' });
+  await card.getByText(STATUS.disconnected, { exact: true }).waitFor();
+  check(`disconnected with a post on hold: badge reads "${STATUS.disconnected}"`, (await badge()).includes(STATUS.disconnected), await badge());
+  check('disconnected with a post on hold: one short line says what happened', (await card.getByText('Disconnected. 1 post on hold.', { exact: true }).count()) === 1);
+  const actions = (await card.getByRole('button').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+  check('disconnected with a post on hold: only Reconnect and History', actions.length === 2 && /Reconnect/.test(actions[0]) && /History/.test(actions[1]), actions);
+  held = null;
 
   // Overview's Channels card reads the same words.
   rewrite = (c) => ({ ...c, connectionState: 'publish_verified', expiresAt: month() });
