@@ -9,6 +9,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from urllib.parse import urlencode, urlparse
@@ -107,6 +108,7 @@ class OAuthService:
                             'historyAvailableForApp': history,
                             'accountRequirement': cls.account_requirement,
                             'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
+                            'destinationScope': getattr(cls, 'destination_scope', 'connection'), 'destinationLabel': getattr(cls, 'destination_label', 'Channel'),
                             'capabilities': {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}})
         # Keep explicitly injected/test providers visible without changing their authority.
         for pid, adapter in self.providers.items():
@@ -332,37 +334,60 @@ class OAuthService:
         return cur.fetchone() is not None
 
     # --- destinations (a Discord channel) ------------------------------------------------
-    def _destination_credential(self, workspace_id, token, connection_id):
+    def _member_grant(self, workspace_id, token, connection_id, requirement):
+        """(adapter, fresh grant) for a member with `requirement`. The grant comes from token_for_worker, so a
+        short-lived token (Pinterest, TikTok, YouTube) is renewed before Rafii asks the provider anything."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership
-            require(_membership(row), "manage_connections")
-            cur.execute("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
+            require(_membership(row), requirement)
+            cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
             stored = cur.fetchone()
         if not stored:
             raise AlphaError("Connection unavailable.", 404)
         adapter = self._provider(stored[0])
-        if not getattr(adapter, "has_destinations", False):
-            raise AlphaError("This account has nothing to choose.", 409)
-        return adapter, stored
+        return adapter, self.token_for_worker(workspace_id, connection_id)
 
     def destinations(self, workspace_id, token, connection_id):
-        adapter, stored = self._destination_credential(workspace_id, token, connection_id)
-        return {"connectionId": connection_id, "destinations": adapter.destinations(self.vault.decrypt(stored[1], stored[2]))}
+        """Where this account can post: a Discord channel or Facebook Page (chosen once), or a Pinterest board (per Pin)."""
+        adapter, grant = self._member_grant(workspace_id, token, connection_id, "approve")
+        if not getattr(adapter, "has_destinations", False):
+            raise AlphaError("This account has nothing to choose.", 409)
+        return {"connectionId": connection_id, "scope": getattr(type(adapter), "destination_scope", "connection"),
+                "destinations": adapter.destinations(grant["accessToken"])}
 
     def choose_destination(self, workspace_id, token, connection_id, destination_id):
-        if not isinstance(destination_id, str) or not destination_id.isdigit() or not 5 <= len(destination_id) <= 25:
-            raise AlphaError("Choose a channel.", 400)
-        adapter, stored = self._destination_credential(workspace_id, token, connection_id)
-        ciphertext, key_id = self.vault.encrypt(adapter.with_destination(self.vault.decrypt(stored[1], stored[2]), destination_id))
+        # Connection-level destinations (Discord channels, Facebook Pages) are numeric ids; refuse anything else before any request.
+        if not isinstance(destination_id, str) or not re.fullmatch(r"\d{5,30}", destination_id):
+            raise AlphaError("Choose where Rafii posts.", 400)
+        adapter, grant = self._member_grant(workspace_id, token, connection_id, "manage_connections")
+        if not getattr(adapter, "has_destinations", False) or getattr(type(adapter), "destination_scope", "connection") != "connection":
+            raise AlphaError("This account's destination is chosen for each post.", 409)
+        updated = adapter.with_destination(grant["accessToken"], destination_id)
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
-            # Compare-and-swap on the ciphertext read above: a reconnect or a second choice meanwhile wins.
+            cur.execute("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+            stored = cur.fetchone()
+            # Compare-and-swap on the grant the choice was based on: a reconnect or a second choice meanwhile wins.
+            if not stored or self.vault.decrypt(stored[1], stored[2]) != grant["accessToken"]:
+                raise AlphaError("This account changed meanwhile. Reload and choose again.", 409)
+            ciphertext, key_id = self.vault.encrypt(updated)
             cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, key_id, workspace_id, connection_id, stored[1]))
             if cur.rowcount != 1:
                 raise AlphaError("This account changed meanwhile. Reload and choose again.", 409)
             audit(cur, workspace_id, principal, "channel.destination_chosen", connection_id, {"provider": stored[0]})
         return {"connectionId": connection_id, "destinationId": destination_id}
+
+    def creator_info(self, workspace_id, token, connection_id):
+        """TikTok's creator info for the composer, fresh each time it renders (Content Sharing Guidelines)."""
+        adapter, grant = self._member_grant(workspace_id, token, connection_id, "approve")
+        query = getattr(adapter, "creator_info", None)
+        if query is None:
+            raise AlphaError("This account has no creator settings to read.", 409)
+        info = query(grant["accessToken"])
+        if not info.get("ok"):
+            raise AlphaError("TikTok says this account can't post right now" + (f": {info['message']}" if isinstance(info.get("message"), str) and info["message"] else "."), 409)
+        return {key: info[key] for key in ("nickname", "username", "avatarUrl", "privacyLevelOptions", "commentDisabled", "duetDisabled", "stitchDisabled", "maxVideoPostDurationSec")}
 
     # --- Telegram: Rafii's bot sees a connect code in a channel -------------------------
     def telegram_webhook(self, secret, raw):

@@ -18,7 +18,8 @@ from postriff_alpha.domain import AlphaError
 from .providers import _NoRedirect
 
 # Where LinkedIn (userinfo `picture`), Threads and Instagram (Graph `…profile_picture_url`) serve pictures.
-PICTURE_HOSTS = ("media.licdn.com", ".fbcdn.net", ".cdninstagram.com", "pbs.twimg.com", "cdn.discordapp.com")
+PICTURE_HOSTS = ("media.licdn.com", ".fbcdn.net", ".cdninstagram.com", "pbs.twimg.com", "cdn.discordapp.com",
+                 "yt3.ggpht.com", "yt3.googleusercontent.com", ".tiktokcdn.com", ".tiktokcdn-us.com", "i.pinimg.com")
 MAX_DOWNLOAD = 2 * 1024 * 1024
 SIDE = 200
 

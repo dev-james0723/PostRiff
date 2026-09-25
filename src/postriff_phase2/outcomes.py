@@ -16,6 +16,10 @@ def valid_receipt_url(url, platform):
             'Bluesky': ({'bsky.app'}, r'/profile/[A-Za-z0-9.:_-]{3,253}/post/[a-z2-7]{13}/?'),
             'Discord': ({'discord.com'}, r'/channels/[0-9]{5,25}/[0-9]{5,25}/[0-9]{5,25}/?'),
             'Telegram': ({'t.me'}, r'/[A-Za-z0-9_]{4,32}/[0-9]{1,15}/?'),
+            'Facebook': ({'www.facebook.com', 'facebook.com'}, r'/[A-Za-z0-9.]{1,100}/posts/[A-Za-z0-9_]{1,100}/?'),
+            'YouTube': ({'youtu.be'}, r'/[A-Za-z0-9_-]{11}'),
+            'TikTok': ({'www.tiktok.com'}, r'/@[A-Za-z0-9_.]{1,24}/video/[0-9]{5,25}/?'),
+            'Pinterest': ({'www.pinterest.com'}, r'/pin/[0-9]{5,30}/?'),
         }.get(platform, (set(), r'(?!)'))
         return bool(parsed.scheme == 'https' and parsed.hostname in hosts and parsed.port is None
                     and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
