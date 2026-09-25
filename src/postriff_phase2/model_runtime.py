@@ -45,10 +45,32 @@ MAX_CONTEXT_BYTES = 60_000
 MAX_SKILLS_BYTES = 60_000       # composed skill text (IdeasService binds it); method only, never identity or policy
 MAX_MEMORY_BYTES = 16_000       # memory files the workspace allowed a cloud model to read (memory.projection)
 MAX_OUTPUT_TOKENS = 2_400
+# Models that think before answering count their reasoning tokens inside max_tokens, so a 2,400 cap could end a draft
+# mid-JSON (finish_reason "length", then "The writer did not finish"). They get output headroom; OpenAI's reasoning
+# models are also asked for low reasoning effort (the gateway takes reasoning_effort, as agent_runtime_v2 already sends).
+# Headroom changes only the cap and the reservation ceiling, never which model runs.
+THINKING_MODEL_PREFIXES = ("openai/gpt-6", "openai/gpt-5", "openai/o", "google/gemini-2.5", "google/gemini-3", "deepseek/", "qwen/qwen3")
+EFFORT_MODEL_PREFIXES = ("openai/gpt-6", "openai/gpt-5", "openai/o")
+THINKING_OUTPUT_TOKENS = 8_000
+TYPICAL_REASONING_TOKENS = 800   # per call, for the displayed typical cost of a low-effort thinking model
+# The idea field carries the typed instruction (ideas.IDEA_LIMIT, 3,000) plus any handed-in material (ideas.MAX_TEXT,
+# 6,000) under generation.MATERIAL_LABEL. A 3,000 cap here refused every draft_create brief over ~1,500 characters,
+# every rewrite of a long draft and every weekly/campaign brief with a 400 on the cloud writer.
+MAX_IDEA_CHARS = 9_200
 TIMEOUT_SECONDS = 45
 ATTEMPTS = 2
 RATE_LIMIT_BACKOFF_SECONDS = 1.5
 RESPONSE_CAP = 1_048_576
+
+
+def thinking(model):
+    """True for models whose reasoning tokens share the output cap (see THINKING_MODEL_PREFIXES)."""
+    return isinstance(model, str) and model.startswith(THINKING_MODEL_PREFIXES)
+
+
+def output_cap(model):
+    """max_tokens for one call: the visible draft's cap, plus reasoning headroom for thinking models."""
+    return THINKING_OUTPUT_TOKENS if thinking(model) else MAX_OUTPUT_TOKENS
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -184,10 +206,11 @@ class ServerModelRuntime(AgentRuntime):
         # The revise pass re-reads the first draft, which `max_tokens` bounds on every call; twice that
         # allows for re-serialising it. (Counting the 1 MB transport cap as tokens made deep unaffordable.)
         critique = 2 * MAX_OUTPUT_TOKENS if request.get('reasoning') == 'deep' else 0
-        return self._cost(model, prompt_tokens * calls + critique, MAX_OUTPUT_TOKENS * calls)
+        return self._cost(model, prompt_tokens * calls + critique, output_cap(model) * calls)
 
-    ESTIMATE_BASIS = ("one attempt (two with the deep revise pass), about 3 bytes of request per input token and "
-                      "400 output tokens per destination; a formula, not measured on real samples")
+    ESTIMATE_BASIS = ("one attempt (two with the deep revise pass), about 3 bytes of request per input token, "
+                      "400 output tokens per destination and, for models that think first, 800 reasoning tokens a call; "
+                      "a formula, not measured on real samples")
 
     def typical_quote(self, request, model=None):
         """A usual cost for display, clearly below the reservation ceiling; see ESTIMATE_BASIS."""
@@ -196,7 +219,7 @@ class ServerModelRuntime(AgentRuntime):
         calls = 2 if request.get('reasoning') == 'deep' else 1
         prompt_tokens = math.ceil(len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode()) / 3)
         destinations = len(request.get('destinations') or DEFAULT_REQUEST_DESTINATIONS)
-        completion_tokens = min(MAX_OUTPUT_TOKENS, 400 * destinations)
+        completion_tokens = min(MAX_OUTPUT_TOKENS, 400 * destinations) + (TYPICAL_REASONING_TOKENS if thinking(model) else 0)
         return self._cost(model, prompt_tokens * calls, completion_tokens * calls)
 
     def _cost(self, model, prompt_tokens, completion_tokens):
@@ -218,7 +241,7 @@ class ServerModelRuntime(AgentRuntime):
         facts = [{"id": f["id"], "sourceId": f["sourceId"], "text": f["text"]} for s in context["sources"] for f in s["facts"]]
         destinations = request.get("destinations") or [dict(d) for d in DEFAULT_REQUEST_DESTINATIONS]
         return {
-            "idea": clean(request.get("idea", ""), 3000),
+            "idea": clean(request.get("idea", ""), MAX_IDEA_CHARS),
             "tone": request.get("tone", "warm"),
             "styleDirectives": bounded_style_directives(request.get("styleDirectives")),
             "voice": {k: v for k, v in (request.get("voice") or {}).items() if k in ("observations", "note")},
@@ -264,7 +287,9 @@ class ServerModelRuntime(AgentRuntime):
     def _call(self, messages, model, progress=None):
         # Public catalogue 2026-09-20: Sonnet 5 does not accept temperature.
         # Leave sampling at each provider's default rather than sending an unsupported field.
-        body = {"model": model, "messages": messages, "max_tokens": MAX_OUTPUT_TOKENS, "response_format": {"type": "json_object"}}
+        body = {"model": model, "messages": messages, "max_tokens": output_cap(model), "response_format": {"type": "json_object"}}
+        if model.startswith(EFFORT_MODEL_PREFIXES):
+            body["reasoning_effort"] = "low"
         allowed = self.allowed_for(model)
         if allowed:
             # `only` limits routing and fallbacks to these providers; no model fallback (`models`) is sent.

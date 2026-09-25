@@ -46,10 +46,10 @@ def messages(runtime, projection, model, instructions=''):
 
 
 def quote(runtime, projection, model, instructions=''):
-    from .model_runtime import MAX_OUTPUT_TOKENS  # The same ceiling used by _call.
+    from .model_runtime import output_cap  # The same ceiling _call sends (reasoning headroom for thinking models).
     request = messages(runtime, projection, model, instructions)
     # Bytes conservatively upper-bound tokens; exact configured model pricing is required.
-    return math.ceil(runtime._cost(model, len(json.dumps(request, ensure_ascii=False).encode()) + 256, MAX_OUTPUT_TOKENS) * 1_000_000)
+    return math.ceil(runtime._cost(model, len(json.dumps(request, ensure_ascii=False).encode()) + 256, output_cap(model)) * 1_000_000)
 
 
 def analyze(runtime, projection, model, instructions=''):
