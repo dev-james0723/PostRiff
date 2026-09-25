@@ -562,7 +562,7 @@ def proposal_apply(ctx: RafiiRunContext, args: dict) -> dict:
 
 def ensure_registered() -> None:
     """Import side effects in one place (the registry is filled at import)."""
-    from . import creative  # noqa: F401
+    from . import creative, specialists  # noqa: F401 — both register tools at import (image_*, web_research)
     from .tool_adapter import register_site_tools
     register_site_tools()
 
