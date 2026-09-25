@@ -258,7 +258,7 @@ class AgentRuntimeService:
         if "none" in target:
             answer = "That proposal is no longer open, so nothing was changed."
             result.update({"answerText": answer, "speakableSummary": answer})
-            return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, [site_contracts.text(answer)], ask=text)
+            return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, [site_contracts.text(answer)], ask=self._chips_for(text, modality))
         item = target["bind"]
         proposal = item.get("proposal") or {}
         try:
@@ -271,7 +271,7 @@ class AgentRuntimeService:
             # who may apply it can still do so, and the step follows the stored proposal (_sync_task). It is still open, so this
             # answer presents it again.
             return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, [site_contracts.warning(answer, error.code or "not_applied")],
-                                       site_extra={"presents": {"proposalIds": [item["proposalId"]], "at": self.clock()}}, ask=text)
+                                       site_extra={"presents": {"proposalIds": [item["proposalId"]], "at": self.clock()}}, ask=self._chips_for(text, modality))
         summary = "; ".join(proposal.get("summary") or [])[:300]
         if decided["outcome"] == "applied" and decided["verified"]:
             answer = f"Done and checked: {summary}." + (" The post now waits for approval of that exact post before it can publish." if proposal.get("type") in ("schedule_draft", "reschedule_post") else "")
@@ -302,7 +302,7 @@ class AgentRuntimeService:
                                                zone=zone, approved=result["changedEntities"])
             if resumed is not None:
                 return resumed
-        return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, blocks, trace_extra=approval_trace, ask=text)
+        return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, blocks, trace_extra=approval_trace, ask=self._chips_for(text, modality))
 
     def _resolve_task_steps(self, workspace_id, token, conversation_id, proposal_id, outcome, *, verified, outputs=(), reason=None):
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
@@ -611,7 +611,7 @@ class AgentRuntimeService:
         usage, chips, settle = {"provenance": "deterministic", "modelRequests": 0}, {"followUps": [], "skipped": "not_offered"}, None
         if ask is not None and not pending and result.get("answerText"):
             # The answer itself is deterministic; its follow-up suggestions come from the light model, reserved on this run.
-            chips, settle = self._simple_follow_ups(workspace_id, token, run_id, trace_id, ask, result)
+            chips, settle = self._simple_follow_ups(workspace_id, token, conversation_id, run_id, trace_id, ask, result)
             if chips.get("span"):
                 usage.update({"modelRequests": 1, "costUsd": settle["cost"] / 1_000_000 if settle and settle["cost"] is not None else None,
                               "billing": "metered" if settle and settle["reservation"] else None})
@@ -627,51 +627,71 @@ class AgentRuntimeService:
         _ = site_contracts
         return out
 
-    def _follow_ups(self, *, message, answer, work, language, room, seconds_left=None) -> dict:
-        """Chips from the light model (followups.suggest). A scripted run never reaches a provider."""
+    @staticmethod
+    def _chips_for(text, modality):
+        """The message follow-ups build on after a decision; none for a spoken reply, which should be answered at once."""
+        return None if modality == "voice" else text
+
+    def _follow_ups(self, *, message, answer, work, language, room, seconds_left=None, timeout=followups.TIMEOUT_SECONDS) -> dict:
+        """Chips from the light model (followups.suggest). A scripted run never reaches a provider. Never raises."""
         if self.model_factory is not None and self.followup_transport is None:
             return {"followUps": [], "span": None, "skipped": "scripted"}
-        return followups.suggest(self.cfg, self.followup_transport or creative.https_json, message=message, answer=answer, work=work, language=language,
-                                 room_usd_micro=room, seconds_left=seconds_left)
+        try:
+            return followups.suggest(self.cfg, self.followup_transport or creative.https_json, message=message, answer=answer, work=work, language=language,
+                                     room_usd_micro=room, seconds_left=seconds_left, timeout=timeout)
+        except Exception:  # noqa: BLE001 - chips are optional; the answer stands
+            return {"followUps": [], "span": None, "skipped": "error"}
 
     def _manager_follow_ups(self, ctx, run_id, reservation, answer, language, default_model) -> dict:
         """Chips after a Manager answer. A metered turn pays for them from its own reservation: the call is made only when
         its ceiling fits what the turn has not spent (the reservation is never exceeded). A stopped run gets none."""
         if self.model_factory is not None and self.followup_transport is None:
             return {"followUps": [], "span": None, "skipped": "scripted"}
-        if self.model_factory is None:
-            spent = self._spend(ctx.ledger, default_model)
-            if reservation is None or spent is None or not isinstance(reservation.get("estimateUsdMicro"), int):
-                return {"followUps": [], "span": None, "skipped": "unmetered"}
-            room = reservation["estimateUsdMicro"] - spent
-        else:
-            room = None
-        if self._is_cancelled(ctx.workspace_id, ctx.token, run_id):
-            return {"followUps": [], "span": None, "skipped": "cancelled"}
-        return self._follow_ups(message=ctx.request_text, answer=answer, work=followups.open_work(ctx.task, ctx.ledger.proposals), language=language,
-                                room=room, seconds_left=ctx.remaining())
+        try:
+            if self.model_factory is None:
+                spent = self._spend(ctx.ledger, default_model)
+                if reservation is None or spent is None or not isinstance(reservation.get("estimateUsdMicro"), int):
+                    return {"followUps": [], "span": None, "skipped": "unmetered"}
+                room = reservation["estimateUsdMicro"] - spent
+            else:
+                room = None
+            if self._is_cancelled(ctx.workspace_id, ctx.token, run_id):
+                return {"followUps": [], "span": None, "skipped": "cancelled"}
+            work = followups.open_work(ctx.task, ctx.ledger.proposals)
+        except Exception:  # noqa: BLE001 - a failure here means no chips, never a failed answer
+            return {"followUps": [], "span": None, "skipped": "error"}
+        return self._follow_ups(message=ctx.request_text, answer=answer, work=work, language=language, room=room, seconds_left=ctx.remaining())
 
-    def _simple_follow_ups(self, workspace_id, token, run_id, trace_id, ask, result):
-        """Follow-ups after a deterministic answer: the call's ceiling is reserved on this run first (a refusal means no
-        chips, quietly), then settled with its metered cost. → (chips, {"reservation", "cost"} | None)."""
+    def _simple_follow_ups(self, workspace_id, token, conversation_id, run_id, trace_id, ask, result):
+        """Follow-ups after a deterministic answer, built on the conversation's open task and proposals: the call's
+        ceiling is reserved on this run first (a refusal means no chips, quietly), then settled with its metered cost.
+        Never raises; a reservation made is always returned for settling. → (chips, {"reservation", "cost"} | None)."""
         if self.model_factory is not None and self.followup_transport is None:
             return {"followUps": [], "span": None, "skipped": "scripted"}, None
-        planned = followups.plan(self.cfg, message=ask, answer=result["answerText"], language=result.get("language"))
-        if planned is None:
-            return {"followUps": [], "span": None, "skipped": "route_unavailable"}, None
-        route, reservation = planned["route"], None
-        if self.model_factory is None:
-            try:
-                with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
-                    reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", planned["ceilingUsdMicro"], f"agent-follow-ups:{run_id}",
-                                                              charge_batch=False, provider=route.provider or "", model=route.model or "", run_id=run_id,
-                                                              meta={"via": "rafii_follow_ups", "traceId": trace_id})
-            except AlphaError:
-                return {"followUps": [], "span": None, "skipped": "budget"}, None
-        chips = self._follow_ups(message=ask, answer=result["answerText"], work=(), language=result.get("language"), room=planned["ceilingUsdMicro"])
-        span = chips.get("span")
-        cost = self.cfg.estimate_usd_micro(span["model"], span["inputTokens"], span["outputTokens"]) if span else 0
-        return chips, {"reservation": reservation, "cost": cost}
+        reservation = None
+        try:
+            with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+                work = followups.open_work(task_state.active(cur, workspace_id, conversation_id),
+                                           [{"summary": p.get("summary"), "type": p.get("type")} for p in approvals.open_proposals(cur, workspace_id, conversation_id, self.clock())])
+            planned = followups.plan(self.cfg, message=ask, answer=result["answerText"], work=work, language=result.get("language"))
+            if planned is None:
+                return {"followUps": [], "span": None, "skipped": "route_unavailable"}, None
+            route = planned["route"]
+            if self.model_factory is None:
+                try:
+                    with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
+                        reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", planned["ceilingUsdMicro"], f"agent-follow-ups:{run_id}",
+                                                                  charge_batch=False, provider=route.provider or "", model=route.model or "", run_id=run_id,
+                                                                  meta={"via": "rafii_follow_ups", "traceId": trace_id})
+                except AlphaError:
+                    return {"followUps": [], "span": None, "skipped": "budget"}, None
+            chips = self._follow_ups(message=ask, answer=result["answerText"], work=work, language=result.get("language"), room=planned["ceilingUsdMicro"],
+                                     timeout=followups.APPROVAL_TIMEOUT_SECONDS)
+            span = chips.get("span")
+            cost = self.cfg.estimate_usd_micro(span["model"], span["inputTokens"], span["outputTokens"]) if span else 0
+            return chips, {"reservation": reservation, "cost": cost}
+        except Exception:  # noqa: BLE001 - no chips; a reservation already made is settled as unknown, never left open
+            return {"followUps": [], "span": None, "skipped": "error"}, ({"reservation": reservation, "cost": None} if reservation else None)
 
     def _finalize(self, ctx: RafiiRunContext, run_id, reservation, *, reply, note, fallback_reason, interruptions, state_json, routes, workload, why, spans, elapsed_ms, superseded):
         from ..site_agent import contracts as site_contracts
