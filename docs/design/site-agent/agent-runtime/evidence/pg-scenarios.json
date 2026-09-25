@@ -1,0 +1,617 @@
+{
+ "generatedAt": "2026-09-25T04:22:12Z",
+ "execution": "local disposable PostgreSQL; real hosted services; ScriptedModel reasoning; fake Live/vision/image transports",
+ "summary": {
+  "PASS": 51,
+  "PARTIAL": 0,
+  "FAIL": 0
+ },
+ "scenarios": [
+  {
+   "id": "VS01",
+   "title": "Start Voice Mode in a conversation (GPT-Live WebRTC broker)",
+   "prompt": "POST voice/sessions {sdp}",
+   "expected": "server creates the Live session with the project key; browser gets only the SDP answer; allowlisted data channel; client delegation; store false",
+   "result": "PASS",
+   "actual": {
+    "voiceSessionId": "b47fda36-250a-4c90-b6af-73b7016c85fc",
+    "model": "gpt-live-1",
+    "allowedClientEvents": 6,
+    "reservedUsdMicro": 1500000
+   },
+   "evidence": "fake Live endpoint recorded the server request",
+   "ms": 21
+  },
+  {
+   "id": "VS02",
+   "title": "Ask what is missing, by voice, from the campaign (Manager → Campaign specialist)",
+   "prompt": "What is still missing in the autumn launch campaign?",
+   "expected": "delegated voice turn in the same conversation; Manager asks the Campaign specialist; answer + speakable summary; nothing changed",
+   "result": "PASS",
+   "actual": "The launch campaign has no linked drafts yet and nothing is planned for Instagram.",
+   "speakable": "It has no drafts linked yet, and nothing is planned for Instagram.",
+   "tools": [
+    {
+     "tool": "campaign_get",
+     "label": "Read the campaign",
+     "effect": "READ",
+     "status": "verified",
+     "latencyMs": 4.1,
+     "specialist": "campaign"
+    }
+   ],
+   "ms": 191
+  },
+  {
+   "id": "VS03",
+   "title": "Attach a reference image during voice; the backend vision model reads it (MM01, MM02)",
+   "prompt": "(uploads image) What do you think of this reference?",
+   "expected": "image stored privately, recorded on the conversation as image 1; vision runs on the backend; findings returned; GPT-Live never gets pixels",
+   "result": "PASS",
+   "actual": "It's a warm top-down keyboard shot; the headline reads well, but there is no call to action.",
+   "visionModel": "gpt-6-sol",
+   "ms": 192
+  },
+  {
+   "id": "VS04",
+   "title": "Compound request by voice: generate a matching asset, write the copy, link both, schedule Thursday 18:00 (X04)",
+   "prompt": "Make a matching Instagram asset in our style, write the copy, add them to the campaign and schedule it Thursday at 18:00",
+   "expected": "task plan with every step; image (Sunburst) and draft saved and re-read; draft linked to the campaign; scheduling stops at the person's approval: a proposal that shows the draft-review confirmation and the image — nothing is dropped and nothing is scheduled",
+   "result": "PASS",
+   "actual": "I made the image and the copy and linked the draft to the campaign. The post for Thursday at 18:00 is ready for your approval.",
+   "steps": {
+    "s1": [
+     "done",
+     null
+    ],
+    "s2": [
+     "done",
+     null
+    ],
+    "s3": [
+     "done",
+     null
+    ],
+    "s4": [
+     "needs_user",
+     "Waiting for you to apply the proposal."
+    ]
+   },
+   "asset": "dbaa9500ef534335a410d9772b0b9a97",
+   "draft": "fe5d3580cfa44870956653dc35d7b3be",
+   "ms": 885
+  },
+  {
+   "id": "VS05",
+   "title": "The proposal is shown on screen and said aloud; nothing changes before the person decides",
+   "prompt": "(panel + voice)",
+   "expected": "the answer carries a proposal_diff block and a pending approval; the spoken summary names the exact action; state unchanged",
+   "result": "PASS",
+   "actual": "I confirmed 5 changes in your workspace. I've prepared this for your approval: prepare the exact Instagram post for @studio.ig at Thursday 24 September at 18:00 (the panel lists what else you're confirming). Say yes to apply it, or no to leave it.",
+   "blocks": [
+    "text",
+    "proposal_diff",
+    "result_list"
+   ],
+   "ms": 48
+  },
+  {
+   "id": "VS06",
+   "title": "Spoken “yes” binds to exactly that proposal; server re-checks; applied through the normal path; re-read; verified (§7.4)",
+   "prompt": "yes",
+   "expected": "the one presented proposal is applied by the site agent's apply path; a real review exists for Thu 18:00 with the image; nothing published; verified answer",
+   "result": "PASS",
+   "actual": "Done and checked: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.; prepare the exact Instagram post for @studio.i. The post now waits for approval of that exact post before it can publish.",
+   "review": "499cf35f9b194d3d94361812409f712b",
+   "taskSteps": [
+    [
+     "Generate the matching image",
+     "done"
+    ],
+    [
+     "Write the Instagram copy",
+     "done"
+    ],
+    [
+     "Add the draft and the image to the campaign",
+     "done"
+    ],
+    [
+     "Schedule Thursday 18:00",
+     "done"
+    ]
+   ],
+   "ms": 458
+  },
+  {
+   "id": "VS07",
+   "title": "End Voice Mode; continue the same task by text with everything intact (V-A09)",
+   "prompt": "(text) What's left for this launch?",
+   "expected": "voice session settled on the server's clock (the client's 90 s is kept for reference); the text turn sees the same conversation, task and references",
+   "result": "PASS",
+   "actual": "The draft is in the campaign and its post waits for approval on Thursday at 18:00; that's the only open item.",
+   "ms": 498
+  },
+  {
+   "id": "V-A08",
+   "title": "Two open proposals: a generic “yes” applies neither and asks which",
+   "prompt": "yes",
+   "expected": "a question naming both; nothing applied; revision unchanged",
+   "result": "PASS",
+   "actual": "There are several changes waiting for you. Which one do you mean?",
+   "ms": 279
+  },
+  {
+   "id": "V-A08b",
+   "title": "…“the second one” then binds exactly the second (and the stale one is refused by the app)",
+   "prompt": "the second one",
+   "expected": "the chosen proposal goes through the apply path; its stale target is refused truthfully; the other stays open",
+   "result": "PASS",
+   "actual": "I didn't apply it: That automation no longer exists.",
+   "statuses": [
+    "proposed",
+    "superseded"
+   ],
+   "ms": 573
+  },
+  {
+   "id": "V-A08c",
+   "title": "After Rafii asks which proposal, an unrelated follow-up applies nothing (no fuzzy binding)",
+   "prompt": "What's left for this launch?",
+   "expected": "only an explicit position selects a proposal; any other text goes on as conversation",
+   "result": "PASS",
+   "actual": "Two automation changes are still waiting for you.",
+   "ms": 870
+  },
+  {
+   "id": "V-A07b",
+   "title": "A “yes” to a proposal that is not the latest answer is not bound; Rafii restates it",
+   "prompt": "yes (after another answer)",
+   "expected": "restates the proposal and asks; nothing applied",
+   "result": "PASS",
+   "actual": "Just to be sure, do you want me to apply this: pause automation 1?",
+   "ms": 179
+  },
+  {
+   "id": "V-A07c",
+   "title": "Cantonese / Mandarin confirmations and a rejection",
+   "prompt": "好的 / 唔好",
+   "expected": "phrases bind the same way; “唔好” dismisses; nothing applied",
+   "result": "PASS",
+   "actual": "Left it: pause automation 1. Nothing was changed.",
+   "proposalStatus": "dismissed",
+   "ms": 215
+  },
+  {
+   "id": "S-MOD1",
+   "title": "Text proposal → voice approval, and a viewer can't approve by voice",
+   "prompt": "(viewer) yes",
+   "expected": "the same proposal store and permission checks apply to every modality; a viewer's yes applies nothing",
+   "result": "PASS",
+   "actual": "I didn't apply it: This action needs the 'edit' permission in this workspace.",
+   "ms": 199
+  },
+  {
+   "id": "MM04",
+   "title": "Edit the generated image: a NEW asset linked to its original; the original is unchanged; “the second image” resolves",
+   "prompt": "Make the headline quieter on the second image",
+   "expected": "Sunburst edit; lineage parent; original hash unchanged; ordinal resolved deterministically",
+   "result": "PASS",
+   "actual": "I made a new version with a quieter headline; the original is unchanged.",
+   "edited": "fe4ff654491748a0995a5a0b9eefdf89",
+   "ms": 276
+  },
+  {
+   "id": "MM05",
+   "title": "Edit an uploaded image: a new version linked to the upload; the upload itself is untouched",
+   "prompt": "Crop the first image to a portrait",
+   "expected": "Sunburst edit of image 1 (the person's upload); lineage parent = the upload; the upload's bytes and record unchanged",
+   "result": "PASS",
+   "actual": "Here's a portrait version; your upload is unchanged.",
+   "edit": "b5d5012cca994fec93b342e4dcb19e6a",
+   "ms": 418
+  },
+  {
+   "id": "MM06",
+   "title": "Fast variants on Flare",
+   "prompt": "Give me a quick variant of it",
+   "expected": "variant on gpt-image-2.5-flare, linked to its parent",
+   "result": "PASS",
+   "actual": "Here's a quick variant.",
+   "ms": 158
+  },
+  {
+   "id": "MM12",
+   "title": "Text inside an image tries to instruct Rafii; policy is unchanged",
+   "prompt": "What does this image say?",
+   "expected": "visible text returned as data; no proposal, no change, no forbidden tool; the model's claim that it published is rejected",
+   "result": "PASS",
+   "actual": "I checked: Looked at the image. I couldn't put together an answer I can stand behind, so I'm not guessing. Could you say a bit more about what you need?",
+   "composedBy": "deterministic",
+   "ms": 89
+  },
+  {
+   "id": "MM13",
+   "title": "Image generation fails: no asset id, no success claim, spend held as unknown",
+   "prompt": "Generate a poster",
+   "expected": "provider 500 → failed step, no asset, ledger unknown",
+   "result": "PASS",
+   "actual": "Not done: The provider's outcome is unknown; usage is held until it is reconciled.",
+   "ms": 82
+  },
+  {
+   "id": "MM14",
+   "title": "Another workspace's image is unreachable",
+   "prompt": "(other workspace) analyze asset X",
+   "expected": "404 for attach, analyze and media; nothing leaks",
+   "result": "PASS",
+   "actual": "404/403 everywhere",
+   "ms": 93
+  },
+  {
+   "id": "R01",
+   "title": "Runtime off → the verified site agent answers, unchanged (safe fallback)",
+   "prompt": "What is scheduled this week?",
+   "expected": "site agent run; no agent run; no model spend",
+   "result": "PASS",
+   "actual": "This week: 1 scheduled or waiting, 0 published and verified.",
+   "ms": 50
+  },
+  {
+   "id": "R02",
+   "title": "A viewer gets grounded answers with no model spend",
+   "prompt": "(viewer) What should I pay attention to?",
+   "expected": "site agent path; no text_model reservation",
+   "result": "PASS",
+   "actual": "1 item(s) need you, and I noticed 1 pattern(s) worth a look.",
+   "ms": 26
+  },
+  {
+   "id": "R03",
+   "title": "Forbidden effects never reach the Manager",
+   "prompt": "Publish all scheduled posts now",
+   "expected": "the site agent's refusal; no model call",
+   "result": "PASS",
+   "actual": "I can't publish or approve anything from a chat. A post goes out only after someone with the approve permission approves that exact post.",
+   "ms": 31
+  },
+  {
+   "id": "R04",
+   "title": "Idempotent turns: the same key returns the same run",
+   "prompt": "(retry)",
+   "expected": "one run, one answer",
+   "result": "PASS",
+   "actual": "c80e40b1-0c9b-4273-9c90-0426e3861587",
+   "ms": 78
+  },
+  {
+   "id": "R05",
+   "title": "“Cancel that”: running work stops in the backend and it is confirmed before Rafii says so (V-A06)",
+   "prompt": "cancel that",
+   "expected": "running agent run cancelled; open task steps cancelled; finished work untouched",
+   "result": "PASS",
+   "actual": "Stopped 1 request(s) that were still running. Anything already finished stays as it is; nothing more was changed.",
+   "ms": 80
+  },
+  {
+   "id": "R06",
+   "title": "Refining a request while it runs supersedes the earlier spoken one — never a typed turn (V-A05)",
+   "prompt": "(voice) Actually make it LinkedIn instead",
+   "expected": "the earlier running spoken request is cancelled before its next change and handed to the Manager as superseded; a typed turn still running is left alone",
+   "result": "PASS",
+   "actual": "superseded",
+   "ms": 71
+  },
+  {
+   "id": "R07",
+   "title": "The Manager's false claim is replaced by what the ledger confirms (§23)",
+   "prompt": "Link the draft",
+   "expected": "composedBy deterministic; answer lists only verified changes",
+   "result": "PASS",
+   "actual": "I couldn't put together an answer I can stand behind, so I'm not guessing. Could you say a bit more about what you need?",
+   "fallback": "guardrail_output",
+   "ms": 61
+  },
+  {
+   "id": "R08",
+   "title": "SDK human-in-the-loop: proposal_apply pauses; the person's yes applies via the app; the run resumes and verifies (ADR-H1)",
+   "prompt": "apply the automation change",
+   "expected": "interruption stored server-side (no token); yes → site apply path → resumed tool verifies; one answer",
+   "result": "PASS",
+   "actual": "This waits for your decision: pause automation 1. Say yes to apply it, or no to leave it.",
+   "stored": [
+    "state",
+    "storedAt",
+    "proposalIds"
+   ],
+   "ms": 80
+  },
+  {
+   "id": "R09",
+   "title": "Correlation id across browser → delegation → Manager → tool → audit → asset (§30)",
+   "prompt": "(trace)",
+   "expected": "the client's trace id is the run's, the audit's and the lineage's",
+   "result": "PASS",
+   "actual": {
+    "traceId": "trace_ac30b5e3959bd7fe6983a6b7a567c886",
+    "audits": [
+     "campaign.items_unlinked",
+     "campaign.items_linked"
+    ]
+   },
+   "ms": 161
+  },
+  {
+   "id": "R10",
+   "title": "Voice Mode refuses cleanly: flag off, no OpenAI key, viewer, Live busy (V-A14/V-A15)",
+   "prompt": "(start voice)",
+   "expected": "truthful errors; nothing reserved on failure",
+   "result": "PASS",
+   "actual": "voice_disabled / 503 no key / viewer 403 / live_busy",
+   "ms": 27
+  },
+  {
+   "id": "R11",
+   "title": "Voice transcripts are text only and live on the voice session (no raw audio)",
+   "prompt": "(transcript)",
+   "expected": "stored text; no audio fields",
+   "result": "PASS",
+   "actual": "transcript stored as text; usage billed on the server clock",
+   "ms": 33
+  },
+  {
+   "id": "GAP-V04",
+   "title": "“Does this sound like me?” — Brand Intelligence uses the deterministic voice check with evidence; no “exactly your voice”",
+   "prompt": "Does this draft sound like me?",
+   "expected": "voice.check runs on the draft; findings with their basis and evidence are shown; the answer makes no exact-match claim",
+   "result": "PASS",
+   "actual": "Some traits match your profile and some differ; each finding shows what it is based on. This isn't a claim that it is exactly your voice.",
+   "evidenceBlocks": [
+    "Checked against your stored voice",
+    "Needs a writer's judgement"
+   ],
+   "findings": [
+    [
+     "✗ Opens with a short question to the reader.",
+     "Measured · voice profile (revision 1)"
+    ],
+    [
+     "✓ Keeps paragraphs to two sentences.",
+     "Measured · voice profile (revision 1)"
+    ]
+   ],
+   "ms": 73
+  },
+  {
+   "id": "GAP-D04",
+   "title": "Shorten a draft through the writing pipeline: a proposed update on that exact draft; its text unchanged until accepted",
+   "prompt": "Shorten this draft",
+   "expected": "a writing run with the draft as material; proposedUpdate.runId on the same draft; current text unchanged; verified",
+   "result": "PASS",
+   "actual": "I wrote a shorter version as a proposed update on the draft; the current text stays until you accept it.",
+   "proposedRun": "85f98321-0608-428e-9e2d-659e2f993e05",
+   "ms": 129
+  },
+  {
+   "id": "GAP-H05",
+   "title": "Who linked the draft to the campaign? — attribution only from stored evidence; an unknown person is not guessed",
+   "prompt": "Who added this draft to the campaign? / What did Alex do this week?",
+   "expected": "record.attribution names the member from audit/records; “Alex” gets no invented activity",
+   "result": "PASS",
+   "actual": "The records show who acted on this draft; nothing in the records names anyone called Alex.",
+   "evidence": [
+    "Who acted on it (newest first)"
+   ],
+   "ms": 69
+  },
+  {
+   "id": "A01-agent",
+   "title": "“What should I pay attention to?” — stored facts and derived observations with their rules, shown under the answer (§22)",
+   "prompt": "What should I pay attention to this week?",
+   "expected": "attention.summary read; evidence blocks (stored state; derived observations with rules); no action taken",
+   "result": "PASS",
+   "actual": "A post waits for approval on Thursday; the other items are observations from your data, each with the rule that produced it.",
+   "evidence": [
+    "Needs attention (stored state)",
+    "Observations (derived from your data)"
+   ],
+   "ms": 67
+  },
+  {
+   "id": "MM15",
+   "title": "Image publishing checks stay enforced: an image without alt text can't be attached to a scheduled post",
+   "prompt": "schedule with the reference image",
+   "expected": "the proposal tool refuses without alt text; no proposal; nothing changed",
+   "result": "PASS",
+   "actual": "I couldn't prepare that yet; the image needs a short description first.",
+   "code": "needs_alt",
+   "ms": 84
+  },
+  {
+   "id": "MEM01",
+   "title": "Layered memory with provenance: explicit vs inferred, confidence, and cloud consent respected (§14)",
+   "prompt": "What do you remember about my style?",
+   "expected": "memory_context returns layers; without cloud consent the content is withheld and said so",
+   "result": "PASS",
+   "actual": "Your Brand Brain content isn't shared with the agent model until an owner allows cloud memory; here is what exists.",
+   "ms": 55
+  },
+  {
+   "id": "S-MOD2",
+   "title": "Voice request → text approval: a proposal made by voice is approved by typing “yes” (same proposal store, same checks)",
+   "prompt": "(typed) yes",
+   "expected": "the typed yes binds to the voice-presented proposal; applied through the site agent's path; verified",
+   "result": "PASS",
+   "actual": "Done and checked: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.; prepare the exact Instagram post for @studio.i. The post now waits for approval of that exact post before it can publish.",
+   "proposal": "4d480796d9ce476cbe571406127f015c",
+   "ms": 174
+  },
+  {
+   "id": "S-MOD3",
+   "title": "A stale approval (presented more than 10 minutes ago) is re-stated, not applied, after a reconnect or a pause",
+   "prompt": "yes (11 minutes later)",
+   "expected": "restates the proposal and asks again; nothing applied",
+   "result": "PASS",
+   "actual": "Just to be sure, do you want me to apply this: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied?",
+   "ms": 156
+  },
+  {
+   "id": "S-MOD5",
+   "title": "Text starts a task; voice continues it (V-A10)",
+   "prompt": "(typed) plan + propose → (voice) yes",
+   "expected": "the plan and its waiting step come from a text turn; a new voice session gets the conversation; a spoken yes closes the step, verified",
+   "result": "PASS",
+   "actual": "Done and checked: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual s",
+   "voiceHistoryHasTask": true,
+   "ms": 348
+  },
+  {
+   "id": "S-MOD4",
+   "title": "The panel's Apply (agent decide) applies the same proposal, re-reads it and closes the task step",
+   "prompt": "(click Apply)",
+   "expected": "decide → site apply path → verified checks; the waiting step becomes done; a second Apply is refused as closed",
+   "result": "PASS",
+   "actual": "Done, and I checked it in your workspace.",
+   "checks": [
+    "a review exists for the exact post",
+    "the draft",
+    "the time",
+    "the account",
+    "state",
+    "the image"
+   ],
+   "secondApply": "This proposal was already applied.",
+   "state": true,
+   "ms": 233
+  },
+  {
+   "id": "R12",
+   "title": "Voice sessions belong to the person who started them; at most two live sessions per member",
+   "prompt": "(other member) end my session; a third session",
+   "expected": "another member can't write the transcript of, or end, my session (404); a third concurrent session is refused (429) with nothing reserved",
+   "result": "PASS",
+   "actual": "Voice Mode is already on in another tab. End it there first.",
+   "ms": 135
+  },
+  {
+   "id": "HTTP01",
+   "title": "The agent routes over HTTP: session, request guard, JSON, status, a turn, a decision, voice start — and no API-token access",
+   "prompt": "GET status · POST turns · POST approvals/decide · POST voice/sessions (through HostedApplication)",
+   "expected": "201/200 with the guard; 403 without it; API tokens refused; the voice response carries no credential",
+   "result": "PASS",
+   "actual": {
+    "status": 404,
+    "turn": "3d530f56-11fd-4cf1-a83e-c9c662f8d9fd",
+    "voice": "69834adc-eb72-4337-a234-c41342e61a5f"
+   },
+   "ms": 232
+  },
+  {
+   "id": "R13",
+   "title": "A voice session the tab never ended is reaped: closed and billed to its last activity (never free, never held forever)",
+   "prompt": "(tab closed mid-call)",
+   "expected": "on the next start in the workspace, a session past the cap is ended with reason not_ended_by_client and settled from start to last activity plus a minute",
+   "result": "PASS",
+   "actual": {
+    "status": "completed",
+    "reason": "not_ended_by_client",
+    "cost": "actual",
+    "usdMicro": 62500
+   },
+   "ms": 85
+  },
+  {
+   "id": "R08b",
+   "title": "After a paused run, the person's “yes” binds to the proposal it named; the app applies it; the paused Manager resumes (ADR-H1)",
+   "prompt": "yes",
+   "expected": "the paused answer names the proposal; the yes binds (no endless restating); applied through the site path; the stored run is consumed; the Manager finishes",
+   "result": "PASS",
+   "actual": "Done. The post now waits for its own approval before it can publish.",
+   "pausedSpoken": "This waits for your decision: prepare the exact Instagram post for @studio.ig at Friday 25 September at 09:00 (the panel lists what else you're confirming). Say yes to apply it, or no to leave it.",
+   "ms": 625
+  },
+  {
+   "id": "R14",
+   "title": "A “yes” the application refuses leaves the waiting step waiting; the owner can still apply it",
+   "prompt": "(viewer) yes → (owner) yes",
+   "expected": "the viewer's yes is refused (role); the step stays needs_user, not failed; the owner's yes applies it and the step closes, verified",
+   "result": "PASS",
+   "actual": "I didn't apply it: This action needs the 'approve' permission in this workspace.",
+   "afterOwner": "done",
+   "ms": 483
+  },
+  {
+   "id": "R15",
+   "title": "Cancelling needs edit and reaches only your own requests",
+   "prompt": "(viewer / other editor) cancel that",
+   "expected": "a viewer's “cancel that” stops nothing; another editor's stops nothing of mine; cancelling my run by id as someone else is 404; I can cancel it",
+   "result": "PASS",
+   "actual": {
+    "afterOthers": "running",
+    "afterMine": "cancelled"
+   },
+   "ms": 575
+  },
+  {
+   "id": "R16",
+   "title": "Voice is billed on the server's clock: a client reporting 0 seconds doesn't make a call free",
+   "prompt": "(end voice, usageSeconds 0)",
+   "expected": "the session's reservation is on its row from the start; it settles at the server's elapsed time (+15 s) and keeps the client figure only for reference",
+   "result": "PASS",
+   "actual": {
+    "billedSeconds": 135.0,
+    "usdMicro": 112500
+   },
+   "ms": 139
+  },
+  {
+   "id": "R17",
+   "title": "The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation",
+   "prompt": "(cron) recover stalled runs → (next turn) reap",
+   "expected": "an old writing run is recovered; task, voice and agent rows are not; the next turn fails the dead agent turn with a message and settles its reservation",
+   "result": "PASS",
+   "actual": {
+    "cron": {
+     "writer": "failed",
+     "task": "running",
+     "agent": "running",
+     "voice": "running"
+    },
+    "reaped": "failed",
+    "settled": "actual"
+   },
+   "ms": 527
+  },
+  {
+   "id": "R18",
+   "title": "Whatever fails after a turn opens, the run ends closed with a truthful answer (never stuck “running”)",
+   "prompt": "(an internal error while finishing)",
+   "expected": "run failed; a plain answer says it stopped; the error is logged without content",
+   "result": "PASS",
+   "actual": "Something went wrong on Rafii's side before this finished, so I stopped. Anything already finished stays as it is; nothing more was changed.",
+   "ms": 119
+  },
+  {
+   "id": "MM16",
+   "title": "Images on the OpenAI route are booked at the configured price; the same image asked twice in a turn is made once",
+   "prompt": "Make a square poster (twice in one turn)",
+   "expected": "one provider call; the second is refused as a duplicate; the ledger books the configured per-image price (not unknown)",
+   "result": "PASS",
+   "actual": {
+    "providerCalls": 1,
+    "ledger": "actual",
+    "basis": "configured per-image price"
+   },
+   "ms": 189
+  },
+  {
+   "id": "R19",
+   "title": "What a spoken “yes” would apply is said in the application's words; model text is trimmed, never turned into an error",
+   "prompt": "Schedule it Thursday 11:00 (a long follow-up from the model)",
+   "expected": "speakable = the stored proposal's summary + how to answer; a 300-character follow-up is cut, not refused",
+   "result": "PASS",
+   "actual": "I've prepared this for your approval: prepare the exact Instagram post for @studio.ig at Thursday 24 September at 11:00 (the panel lists what else you're confirming). Say yes to apply it, or no to leave it.",
+   "ms": 191
+  }
+ ]
+}

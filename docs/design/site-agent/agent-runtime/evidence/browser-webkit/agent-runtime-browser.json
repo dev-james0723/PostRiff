@@ -1,0 +1,123 @@
+{
+ "browser": "webkit",
+ "base": "http://localhost:3290",
+ "at": "2026-09-25T04:26:11.554Z",
+ "results": [
+  {
+   "name": "seed: workspace, LinkedIn account, a campaign; the agent runtime reports voice available (harness)",
+   "ok": true
+  },
+  {
+   "name": "V-A01: Voice Mode is offered in the panel with a privacy note",
+   "ok": true
+  },
+  {
+   "name": "V-A01: voice connects (server-created Live session; the browser only sent its offer)",
+   "ok": true
+  },
+  {
+   "name": "V-A20: the voice session response carries no credential",
+   "ok": true
+  },
+  {
+   "name": "status reads Listening, from session events",
+   "ok": true
+  },
+  {
+   "name": "V-A02/V-A04: the spoken request became a backend turn; the answer is in the panel and spoken back with the delegation id",
+   "ok": true
+  },
+  {
+   "name": "the transcript shows what was said, in the same panel",
+   "ok": true
+  },
+  {
+   "name": "V-A03: interrupting stops Rafii mid-sentence (no more speech after the person talks)",
+   "ok": true
+  },
+  {
+   "name": "V-A03: “Stop talking” stops the audio and tells Live to listen",
+   "ok": true
+  },
+  {
+   "name": "mute / unmute controls the microphone",
+   "ok": true
+  },
+  {
+   "name": "V-A17/MM02: an image attached during voice goes to the backend (GPT-Live is told it can’t see it)",
+   "ok": true
+  },
+  {
+   "name": "X04/MM03: the compound request made the image and the draft, linked them, and stopped at a proposal shown and spoken",
+   "ok": true
+  },
+  {
+   "name": "nothing is prepared before the person decides",
+   "ok": true
+  },
+  {
+   "name": "V-A02: moving to Calendar keeps Voice Mode live, and Live hears about the page change",
+   "ok": true
+  },
+  {
+   "name": "V-A18/V-A07: after moving pages, the spoken “yes” applied exactly the presented proposal; a review now waits for approval at 18:00 with the image; nothing published",
+   "ok": true
+  },
+  {
+   "name": "typing during voice works in the same conversation; Live gets the exchange as context",
+   "ok": true
+  },
+  {
+   "name": "long call: past 60 transcript lines, a spoken request still carries exactly its own words",
+   "ok": true
+  },
+  {
+   "name": "a brief drop that recovers returns to live by itself; End voice stays available while reconnecting",
+   "ok": true
+  },
+  {
+   "name": "V-A15: a dropped connection shows a truthful reconnect state; reconnecting resumes voice",
+   "ok": true
+  },
+  {
+   "name": "V-A19: axe finds no serious or critical issue with Voice Mode on",
+   "ok": true
+  },
+  {
+   "name": "V-A09: after voice ends, text continues the same conversation",
+   "ok": true
+  },
+  {
+   "name": "MM01: a photo larger than a request allows is scaled down in the browser (body under 4.5 MB) and added",
+   "ok": true
+  },
+  {
+   "name": "phone: Voice Mode controls are on screen",
+   "ok": true
+  },
+  {
+   "name": "V-A19: reduced motion hides the level animation (the state text stays)",
+   "ok": true
+  },
+  {
+   "name": "phone: nothing scrolls sideways with voice on",
+   "ok": true
+  },
+  {
+   "name": "V-A11: a Cantonese request is delegated and answered in the same conversation",
+   "ok": true
+  },
+  {
+   "name": "tablet: Voice Mode runs in the sheet; nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "“New conversation” during a call: the next spoken request lands there and the panel stays on it",
+   "ok": true
+  },
+  {
+   "name": "leaving the app (as signing out does) ends the call and releases the microphone",
+   "ok": true
+  }
+ ]
+}
