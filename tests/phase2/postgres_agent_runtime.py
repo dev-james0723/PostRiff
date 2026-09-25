@@ -993,6 +993,27 @@ def _():
     return {"actual": result["result"]["answerText"]}
 
 
+@scenario("S-MOD5", "Text starts a task; voice continues it (V-A10)", "(typed) plan + propose → (voice) yes",
+          "the plan and its waiting step come from a text turn; a new voice session gets the conversation; a spoken yes closes the step, verified")
+def _():
+    conversation = fresh_conversation("text→voice")
+    draft = fresh_draft(conversation)
+    SCRIPTS.set(rafii_manager=[[function_call("task_plan", {"title": "Tuesday post", "steps": [{"label": "Schedule Tuesday 09:30"}]}, call_id="m0")],
+                               [function_call("schedule_propose", {"draftId": draft, "when": "Tuesday 09:30", "assetId": STATE["asset"], "alt": "Warm overhead piano keyboard",
+                                                                   "stepId": "s1"}, call_id="m1")],
+                               [reply("Prepared for Tuesday at 09:30. Say yes to apply it.")]])
+    typed = turn("Plan and schedule it Tuesday 09:30", conversationId=conversation, modality="text")
+    SCRIPTS.complete()
+    assert typed["result"]["pendingApprovals"], typed["result"]["errors"]
+    started = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n", "conversationId": conversation})
+    history = LIVE.requests[-1]["body"]["session"]["input"][0]["content"][0]["text"]
+    spoken = turn("yes", conversationId=conversation, modality="voice", voiceSessionId=started["voiceSessionId"])
+    task = one("SELECT artifact->'task'->'steps' FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%'", conversation)[0]
+    voice.end(wid, OWNER, started["voiceSessionId"], {"usageSeconds": 12, "reason": "user_ended"})
+    assert "Tuesday" in history and task[0]["state"] == "done" and task[0]["verified"] is True, (history[-200:], task)
+    return {"actual": spoken["result"]["answerText"][:200], "voiceHistoryHasTask": True}
+
+
 @scenario("S-MOD4", "The panel's Apply (agent decide) applies the same proposal, re-reads it and closes the task step", "(click Apply)",
           "decide → site apply path → verified checks; the waiting step becomes done; a second Apply is refused as closed")
 def _():

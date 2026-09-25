@@ -1,0 +1,30 @@
+{
+ "at": "2026-09-25T01:59:27Z",
+ "checks": [
+  {
+   "check": "reasoning",
+   "result": "BLOCKED",
+   "reason": "No model route is configured (OPENAI_API_KEY or AI_GATEWAY_API_KEY)."
+  },
+  {
+   "check": "vision",
+   "result": "BLOCKED",
+   "reason": "No model route is configured (OPENAI_API_KEY or AI_GATEWAY_API_KEY)."
+  },
+  {
+   "check": "images",
+   "result": "BLOCKED",
+   "reason": "No model route is configured (OPENAI_API_KEY or AI_GATEWAY_API_KEY)."
+  },
+  {
+   "check": "live-session",
+   "result": "BLOCKED",
+   "reason": "OPENAI_API_KEY is not configured on this deployment, so Voice Mode can't start a GPT-Live session."
+  }
+ ],
+ "provider": null,
+ "credentials": {
+  "openai": false,
+  "gateway": false
+ }
+}

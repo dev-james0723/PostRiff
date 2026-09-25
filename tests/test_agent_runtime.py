@@ -292,6 +292,13 @@ class AnswerPolicyTest(unittest.TestCase):
         ledger.changed.append({"type": "draft", "id": "d9", "change": "created", "verified": True})
         self.assertIsNone(answer_policy.check("I created an Instagram draft for you.", ledger))
 
+    def test_prepared_claims_need_a_proposal(self):
+        ledger = rt_context.EffectLedger()
+        self.assertEqual(answer_policy.check("I've prepared the post for Saturday at 10:00. Shall I apply it?", ledger), "claims_missing_proposal")
+        self.assertEqual(answer_policy.check("我已經幫你準備好個 post", ledger), "claims_missing_proposal")
+        ledger.proposals.append({"id": "p1", "summary": ["prepare the post"]})
+        self.assertIsNone(answer_policy.check("I've prepared the post for Saturday at 10:00. Shall I apply it?", ledger))
+
     def test_unknown_ids_and_secrets(self):
         ledger = rt_context.EffectLedger()
         self.assertEqual(answer_policy.check("See draft 3f2b1c4d-0000-4000-8000-000000000000.", ledger), "unknown_id")

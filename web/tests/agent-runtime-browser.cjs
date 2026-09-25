@@ -222,14 +222,6 @@ async function axe(page) {
     const before = await call('GET', `/api/workspaces/${seeded.workspaceId}`);
     check('nothing is prepared before the person decides', before.state.phase2.reviews.length === 0);
 
-    // Spoken “yes” binds to exactly that proposal; the server re-checks and applies; the result is re-read.
-    const yes = await say(page, 'yes');
-    const after = await call('GET', `/api/workspaces/${seeded.workspaceId}`);
-    const review = after.state.phase2.reviews.find((r) => r.manifest?.timing?.local?.endsWith('T18:00'));
-    check('V-A07: spoken “yes” applied exactly the presented proposal; a review now waits for approval at 18:00 with the image; nothing published',
-      Boolean(review) && review.status === 'needs_review' && (review.manifest.media ?? []).length === 1 && after.state.phase2.jobs.length === 0 && /checked/i.test(yes ? await yes.innerText() : ''),
-      { reviews: after.state.phase2.reviews.map((r) => [r.status, r.manifest?.timing?.local]) });
-
     // Navigate with the call on: the session survives, and Live is told where the person is.
     await page.getByRole('link', { name: 'Calendar' }).first().click();
     await page.waitForURL(/\/app\/calendar/, { timeout: 120000 });
@@ -237,9 +229,17 @@ async function axe(page) {
     const stillLive = (await voiceState(page)) === 'live';
     const told = (await sent(page)).some((e) => e.type === 'session.thinking.append' && /Calendar/.test(e.content));
     check('V-A02: moving to Calendar keeps Voice Mode live, and Live hears about the page change', stillLive && told);
+    await openPanel(page);
+
+    // Spoken “yes” binds to exactly that proposal; the server re-checks and applies; the result is re-read.
+    const yes = await say(page, 'yes');
+    const after = await call('GET', `/api/workspaces/${seeded.workspaceId}`);
+    const review = after.state.phase2.reviews.find((r) => r.manifest?.timing?.local?.endsWith('T18:00'));
+    check('V-A18/V-A07: after moving pages, the spoken “yes” applied exactly the presented proposal; a review now waits for approval at 18:00 with the image; nothing published',
+      Boolean(review) && review.status === 'needs_review' && (review.manifest.media ?? []).length === 1 && after.state.phase2.jobs.length === 0 && /checked/i.test(yes ? await yes.innerText() : ''),
+      { reviews: after.state.phase2.reviews.map((r) => [r.status, r.manifest?.timing?.local]) });
 
     // Type while the call is on: the typed turn is answered and Live gets it as context.
-    await openPanel(page);
     const typedBefore = await answers(page).count();
     await composer(page).fill('What is still open?');
     await composer(page).press('Enter');
