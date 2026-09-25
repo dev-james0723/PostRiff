@@ -38,6 +38,9 @@ DEFAULT_PRICES = {
     "google/gemini-3.1-pro-preview": (2.0, 12.0),
     "google/gemini-2.5-flash": (0.3, 2.5),
 }
+# Public catalogue 2026-09-20: Sonnet 5 does not accept temperature. Structured side calls send sampling only to
+# models that take it (learning_model.GatewayCall); drafting never sends it (ServerModelRuntime._call).
+NO_TEMPERATURE = frozenset({"anthropic/claude-sonnet-5"})
 MAX_CONTEXT_BYTES = 60_000
 MAX_SKILLS_BYTES = 60_000       # composed skill text (IdeasService binds it); method only, never identity or policy
 MAX_MEMORY_BYTES = 16_000       # memory files the workspace allowed a cloud model to read (memory.projection)

@@ -42,6 +42,10 @@ import { STATUS } from '@/lib/status-labels';
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
+import { SiteAgentAnswer } from '@/features/site-agent/answer';
+import { RafiiAvatar } from '@/features/site-agent/rafii-avatar';
+import { isSiteAgentBody } from '@/lib/site-agent/panel-logic';
+import type { SiteAgentBody } from '@/lib/site-agent/types';
 import { ActivityStrip } from './activity-strip';
 import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
 import { useChannelLanguages } from './use-channel-languages';
@@ -129,7 +133,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const composer = useRef<HTMLTextAreaElement>(null);
 
   const messages = useMemo(() => thread.data?.messages ?? [], [thread.data]);
-  const lastAssistant = useMemo(() => messages.toReversed().find((m) => m.role === 'assistant' && m.runId) ?? null, [messages]);
+  // Rafii panel answers (`body.siteAgent`) are runs too, but not writing runs: the drafts inspector follows the last writing run.
+  const lastAssistant = useMemo(() => messages.toReversed().find((m) => m.role === 'assistant' && m.runId && !isSiteAgentBody(m.body)) ?? null, [messages]);
+  const lastSiteAnswer = useMemo(() => messages.findLast((m) => m.role === 'assistant' && isSiteAgentBody(m.body))?.messageId ?? null, [messages]);
   const lastRunId = lastAssistant?.runId ?? null;
   const seed = (lastRunId ? client.getQueryData<Run>(['agent-run', workspaceId, lastRunId]) : undefined) ?? null;
   const run = useRun(lastRunId, seed);
@@ -339,6 +345,31 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                         {/* The soft bubble's surface is its first child span; recolor it to today's secondary look. */}
                         <MessageBubbleContent className='text-foreground max-w-[80%] px-4 leading-relaxed whitespace-pre-wrap [&>span]:rafii-glass'>{body.text}</MessageBubbleContent>
                       </MessageBubble>
+                      {(body as { siteAgent?: SiteAgentBody }).siteAgent?.page?.title && (
+                        <span className='text-muted-foreground self-end text-[11px]'>Asked from {(body as { siteAgent?: SiteAgentBody }).siteAgent?.page?.title}</span>
+                      )}
+                    </Message>
+                  </li>
+                );
+              }
+              const siteAnswer = (body as { siteAgent?: SiteAgentBody }).siteAgent;
+              if (siteAnswer) {
+                return (
+                  <li key={message.messageId}>
+                    <Message from='assistant' animateIn={animateIn} className='gap-3'>
+                      <MessageAvatar className='mt-0.5 rounded-full'>
+                        <RafiiAvatar size={28} />
+                      </MessageAvatar>
+                      <MessageContent className='items-stretch gap-3'>
+                        {siteAnswer.status === 'running' ? (
+                          <span role='status' className='text-muted-foreground text-xs'>
+                            <ThinkingShimmer>Rafii is answering in the panel</ThinkingShimmer>
+                          </span>
+                        ) : (
+                          <SiteAgentAnswer body={siteAnswer} actions={{ messageId: message.messageId, conversationId, latest: message.messageId === lastSiteAnswer }} />
+                        )}
+                        <span className='text-muted-foreground text-[11px]'>{relativeTime(message.at)}</span>
+                      </MessageContent>
                     </Message>
                   </li>
                 );

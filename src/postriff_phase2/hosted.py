@@ -365,6 +365,9 @@ class HostedWorkspaceService:
         from .planning_store import sync as sync_planning
         self.repository.effects.append(sync_planning)
         self.ideas.learning = self.learning
+        from .site_agent.service import SiteAgentService
+        # The site-wide Rafii panel: the same conversations, runs, events and approval paths as Home (site agent spec §4.2).
+        self.site_agent = SiteAgentService(self)
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):

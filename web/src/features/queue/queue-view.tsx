@@ -49,6 +49,7 @@ import { ScheduleDialog } from './schedule-dialog';
 import { DraftsPanel, useDraftCount } from '@/features/pipeline/drafts-panel';
 import { StatusChip } from './status-chip';
 import { useElementWidth, useWide } from './use-wide';
+import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 /** How often the snapshot refreshes while a job is with the provider or about to be picked up. */
 const LIVE_REFRESH_MS = 15_000;
@@ -480,6 +481,7 @@ function Queue() {
     },
     { history: 'replace', scroll: false }
   );
+  useSiteAgentPageContext({ selectedEntity: params.job ? { type: 'job', id: params.job } : null, visibleState: { view: params.view, filter: params.filter } });
   // A new key per opening, so "Prepare again" preselects its draft in a fresh dialog.
   const [scheduling, setScheduling] = useState<{ open: boolean; variantId: string | null; assetId?: string; key: number }>({ open: false, variantId: null, key: 0 });
   useEffect(() => {

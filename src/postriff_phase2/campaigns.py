@@ -51,6 +51,10 @@ MIN_COMPARABLE = 3
 MAX_MONTH_DAYS = 4
 MAX_COUNTDOWN_STEPS = 8
 MAX_COUNTDOWN_DAYS = 90
+# A campaign's items: what its automation runs produced, and drafts or posts a person linked to it (by id).
+LINK_KEYS = {"draft": "variantId", "post": "jobId", "asset": "assetId"}
+MAX_CAMPAIGN_ITEMS = 200
+MAX_ITEM_LOG = 100
 LIBRARY_ID = re.compile(r"[a-z0-9][a-z0-9_.:-]{0,79}")
 
 
@@ -766,6 +770,39 @@ def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> d
     return {"occurrenceId": occurrence["id"], "itemKey": item["key"], "state": item["state"], "taskId": task["id"]}
 
 
+def _link_targets(state: dict, payload: dict, known_only: bool = True) -> list[tuple[str, str]]:
+    """The drafts (`draftIds`), posts (`jobIds`) and images (`assetIds`) a link names. Linking checks each against
+    this workspace (a deleted image is refused); unlinking also accepts an id the campaign still holds after it is gone."""
+    variants = {v.get("id") for v in state.get("variants", []) if isinstance(v, dict)}
+    jobs = {j.get("id") for j in (state.get("phase2") or {}).get("jobs", []) if isinstance(j, dict)}
+    assets = {a.get("id") for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted")}
+    targets = []
+    for kind, key, known in (("draft", "draftIds", variants), ("post", "jobIds", jobs), ("asset", "assetIds", assets)):
+        ids = payload.get(key) if payload.get(key) is not None else []
+        if not isinstance(ids, list) or len(ids) > 20 or not all(isinstance(item, str) and item for item in ids):
+            raise AlphaError("Choose up to 20 drafts, posts or images.")
+        for target in dict.fromkeys(ids):
+            if known_only and target not in known:
+                raise AlphaError(f"That {kind} is not in this workspace.", 404)
+            targets.append((kind, target))
+    if not targets:
+        raise AlphaError("Choose a draft, a post or an image.")
+    return targets
+
+
+def linked_campaigns(state: dict, kind: str, target: str) -> list[dict]:
+    """The campaigns a draft or post was linked to, with who linked it and when."""
+    key = LINK_KEYS[kind]
+    return [{"campaign": campaign, "item": item} for campaign in _root(state)["campaigns"] if campaign.get("status") != "cancelled"
+            for item in campaign.get("items") or [] if item.get("kind") == kind and item.get(key) == target]
+
+
+def _log_items(campaign: dict, op: str, kind: str, target: str, actor: str, now: float) -> None:
+    log = campaign.setdefault("itemLog", [])
+    log.append({"op": op, "kind": kind, "id": target, "by": actor, "at": now})
+    del log[:-MAX_ITEM_LOG]
+
+
 def apply_action(state: dict, action: str, payload: dict, actor: str, now: float) -> dict | None:
     if not action.startswith("raffi_campaign_") and not action.startswith("raffi_recurrence_") and action != "raffi_run_decide":
         return None
@@ -786,6 +823,36 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
         }
         root["campaigns"].append(campaign)
         return {"campaignId": campaign["id"], "status": campaign["status"], "missingFacts": missing}
+    if action == "raffi_campaign_link":
+        # Organisation only: the campaign lists the draft or post. Nothing is drafted, scheduled or published, and
+        # the brief itself (its version, goal, audience) is unchanged, so no automation is paused for it.
+        campaign = _find(root["campaigns"], payload.get("campaignId"), "Campaign")
+        if campaign.get("status") == "cancelled":
+            raise AlphaError("This campaign is cancelled.", 409)
+        added, already = [], 0
+        for kind, target in _link_targets(state, payload):
+            key = LINK_KEYS[kind]
+            if any(item.get("kind") == kind and item.get(key) == target for item in campaign["items"]):
+                already += 1
+                continue
+            if len(campaign["items"]) >= MAX_CAMPAIGN_ITEMS:
+                raise AlphaError("This campaign already holds as many items as it can.", 409)
+            item = {"id": uid(), "kind": kind, key: target, "addedBy": actor, "addedAt": now}
+            campaign["items"].append(item)
+            _log_items(campaign, "link", kind, target, actor, now)
+            added.append(item["id"])
+        return {"campaignId": campaign["id"], "added": added, "alreadyLinked": already}
+    if action == "raffi_campaign_unlink":
+        campaign = _find(root["campaigns"], payload.get("campaignId"), "Campaign")
+        removed = 0
+        for kind, target in _link_targets(state, payload, known_only=False):
+            key = LINK_KEYS[kind]
+            keep = [item for item in campaign["items"] if not (item.get("kind") == kind and item.get(key) == target)]
+            if len(keep) != len(campaign["items"]):
+                removed += len(campaign["items"]) - len(keep)
+                campaign["items"] = keep
+                _log_items(campaign, "unlink", kind, target, actor, now)
+        return {"campaignId": campaign["id"], "removed": removed}
     if action == "raffi_campaign_update":
         campaign = _find(root["campaigns"], payload.get("campaignId"), "Campaign")
         if campaign.get("status") == "cancelled": raise AlphaError("This campaign is cancelled.", 409)

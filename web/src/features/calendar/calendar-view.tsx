@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { CalendarFilters, type ChannelOption } from './calendar-filters';
 import { jobKind, KIND_META, KINDS, reviewExpired, reviewKind, type Kind } from './calendar-kinds';
 import { useLiveSnapshotRefresh, useMinWidth, useNowSeconds } from './use-calendar-live';
+import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 interface Post {
   kind: Kind;
@@ -246,6 +247,7 @@ export function CalendarView() {
 
   const phase2 = snapshot.data?.state.phase2;
   const live = useLiveSnapshotRefresh(phase2?.jobs, nowSeconds);
+  useSiteAgentPageContext({ visibleState: { view: params.view, date: params.date ?? '' } });
 
   const focusedDate = useMemo(
     () => (timeZone ? (parseDay(params.date) ?? today(timeZone)) : null),

@@ -46,6 +46,7 @@ class FakeCliRuntime(AgentRuntime):
         self.release = threading.Event()
         self.threads = []
         self.behaviour = "complete"
+        self.cite = []  # the source ids the fake says it used
 
     def list_supported_models(self):
         return [{"id": "claude-code:default", "label": "Claude Code · default", "qualified": True, "costClass": "subscription", "route": "claude-code", "detail": "fake"}]
@@ -70,7 +71,7 @@ class FakeCliRuntime(AgentRuntime):
             self.release.wait(10)
             if self.behaviour == "complete":
                 sink.emit(safe_event("message.delta", text="Hello "))
-                artifact = {"variants": [{"platform": d["platform"], "language": d["language"], "text": f"Draft for {d['platform']} from {request['idea']}", "sourceIds": [], "unknowns": [], "warnings": ["fake"], "candidateOnly": False} for d in request["destinations"]]}
+                artifact = {"variants": [{"platform": d["platform"], "language": d["language"], "text": f"Draft for {d['platform']} from {request['idea']}", "sourceIds": list(self.cite), "unknowns": [], "warnings": ["fake"], "candidateOnly": False} for d in request["destinations"]]}
                 sink.complete(artifact, {"provenance": "reported_by_cli", "billing": "subscription", "modelRequests": 1, "costUsd": 0, "cliCostUsd": 0.02})
             else:
                 sink.fail("Claude Code is not signed in on this machine. Run `claude auth login`.")
@@ -188,4 +189,33 @@ except AlphaError as error:
 files = ideas.memory_files(wid, "one")["files"]
 assert [f["name"] for f in files] == ["AGENT.md", "IDENTITY.md", "VOICE.md", "BOUNDARIES.md", "BRAND.md"]
 assert "No active voice profile yet" in next(f for f in files if f["name"] == "VOICE.md")["body"]
-print("postgres_cli_route: 10/10 checks passed")
+# 11. A writer cites the sources it used, usually fewer than it was given. The candidate still saves; the check still
+# covers every source it was given, so narrowing the approved facts of one it did not cite stops the save.
+for notes in ("Focus notes.\nPractise one bar at a time.\nRest between repetitions.", "Warm-up notes.\nStart with slow scales.\nKeep the wrists loose."):
+    ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": notes, "ownContent": True, "confirmUse": True, "model": "claude-code:default", "timeZone": "Asia/Hong_Kong"})
+    fake.threads[-1].join(10)
+sources = [s for s in service.get(wid, "one")["state"]["sources"] if s.get("active") and any(f.get("approved") for f in s.get("facts", []))]
+given = [s["id"] for s in sources]
+assert len(given) == 2, given
+fake.cite = given[:1]
+cited = ideas.turn(wid, "one", cid, {"text": "Write about focus for LinkedIn.", "model": "claude-code:default", "timeZone": "Asia/Hong_Kong"})
+fake.threads[-1].join(10)
+cited_done = ideas.events(wid, "one", cited["runId"])
+assert cited_done["status"] == "completed" and sorted(b["id"] for b in cited_done["artifact"]["sourceBindings"]) == sorted(given), cited_done["artifact"]["sourceBindings"]
+assert cited_done["artifact"]["variants"][0]["sourceIds"] == given[:1]
+saved = ideas.apply(wid, "one", service.get(wid, "one")["revision"], cited["runId"], cited_done["artifactHash"])
+assert saved["status"] == "applied", saved
+kept = next(v for v in service.get(wid, "one")["state"]["variants"] if (v.get("provenance") or {}).get("runId") == cited["runId"] or (v.get("proposedUpdate") or {}).get("runId") == cited["runId"])
+assert (kept.get("proposedUpdate") if (kept.get("proposedUpdate") or {}).get("runId") == cited["runId"] else kept)["sourceIds"] == given[:1]
+stale = ideas.turn(wid, "one", cid, {"text": "Write about focus again for LinkedIn.", "model": "claude-code:default", "timeZone": "Asia/Hong_Kong"})
+fake.threads[-1].join(10)
+stale_done = ideas.events(wid, "one", stale["runId"])
+uncited = next(s for s in sources if s["id"] == given[1])
+service.mutate(wid, "one", service.get(wid, "one")["revision"], "approve_source", {"sourceId": uncited["id"], "factIds": [uncited["facts"][0]["id"]]})
+try:
+    ideas.apply(wid, "one", service.get(wid, "one")["revision"], stale["runId"], stale_done["artifactHash"])
+    raise AssertionError("saved a candidate after the facts of a source it was given changed")
+except AlphaError as error:
+    assert error.status == 409 and "Sources or their policies changed" in str(error), error
+fake.cite = []
+print("postgres_cli_route: 11/11 checks passed")
