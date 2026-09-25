@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { SettingsSection } from '@/features/account/settings-section';
 import { FIELD_CLASS, SelectField } from '@/features/workspace/rafii-parts';
 import { errorMessage, isFeatureDisabled } from '@/lib/coworker/api';
-import { useCoworkerApi, useNotificationPreferences, useSetPreference } from '@/lib/coworker/hooks';
+import { useCoworkerApi, useCoworkerFlag, useNotificationPreferences, useSetPreference } from '@/lib/coworker/hooks';
 import type { NotificationPreferences, PreferenceFields, PreferencePatch } from '@/lib/coworker/types';
 import { CATEGORY_LABELS } from './labels';
 import { PushOptIn } from './push-opt-in';
@@ -65,9 +65,12 @@ function defaultMode(prefs: NotificationPreferences, category: string, channel: 
  * Hidden when the deployment has the notification centre off.
  */
 export function NotificationSettings() {
+  const centre = useCoworkerFlag('RAFII_NOTIFICATIONS_V2_ENABLED');
   const prefs = useNotificationPreferences();
   const set = useSetPreference();
   const { w } = useCoworkerApi();
+  // With the centre off (or its status unknown) there is nothing to set, and the preferences query never runs.
+  if (centre !== true) return null;
   if (prefs.isPending) return <StateMessage kind='loading' title='Loading notification settings…' />;
   if (prefs.isError) {
     if (isFeatureDisabled(prefs.error)) return null;

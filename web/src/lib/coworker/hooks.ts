@@ -55,16 +55,28 @@ export function useCoworkerFlag(flag: CoworkerFlag): boolean | null {
   return status.data.flags?.[flag] === true;
 }
 
+/**
+ * Whether any of these features is on, per the status route (which answers even with every flag off). False while
+ * the status loads. Feature queries wait for it, so a workspace with the features off makes no request that would
+ * only return 404 (every page mounts the bell, and Overview mounts the attention panel).
+ */
+function useAnyFlagOn(...flags: CoworkerFlag[]): boolean {
+  const status = useCoworkerStatus();
+  return Boolean(status.data && flags.some((flag) => status.data.flags?.[flag] === true));
+}
+
 export function useCoworkerAttention() {
   const { api, w, enabled } = useCoworkerApi();
-  return useQuery({ queryKey: coworkerKeys.attention(w), queryFn: () => api.attention(w), enabled, refetchInterval: POLL_MS, refetchIntervalInBackground: false, ...base });
+  const on = useAnyFlagOn('RAFII_NOTIFICATIONS_V2_ENABLED', 'RAFII_WEEKLY_OPERATOR_ENABLED');
+  return useQuery({ queryKey: coworkerKeys.attention(w), queryFn: () => api.attention(w), enabled: enabled && on, refetchInterval: POLL_MS, refetchIntervalInBackground: false, ...base });
 }
 
 /* ---------- notifications ---------- */
 
 export function useNotificationCenter() {
   const { api, w, enabled } = useCoworkerApi();
-  return useQuery({ queryKey: coworkerKeys.notifications(w), queryFn: () => api.notifications(w), enabled, refetchInterval: POLL_MS, refetchIntervalInBackground: false, ...base });
+  const on = useAnyFlagOn('RAFII_NOTIFICATIONS_V2_ENABLED');
+  return useQuery({ queryKey: coworkerKeys.notifications(w), queryFn: () => api.notifications(w), enabled: enabled && on, refetchInterval: POLL_MS, refetchIntervalInBackground: false, ...base });
 }
 
 export function useMarkNotification() {
@@ -78,7 +90,8 @@ export function useMarkNotification() {
 
 export function useNotificationPreferences() {
   const { api, w, enabled } = useCoworkerApi();
-  return useQuery({ queryKey: coworkerKeys.preferences(w), queryFn: () => api.preferences(w), enabled, ...base });
+  const on = useAnyFlagOn('RAFII_NOTIFICATIONS_V2_ENABLED');
+  return useQuery({ queryKey: coworkerKeys.preferences(w), queryFn: () => api.preferences(w), enabled: enabled && on, ...base });
 }
 
 export function useSetPreference() {
@@ -92,7 +105,9 @@ export function useSetPreference() {
 
 export function usePushDevices(enabledWhen = true) {
   const { api, w, enabled } = useCoworkerApi();
-  return useQuery({ queryKey: coworkerKeys.pushDevices(w), queryFn: () => api.pushDevices(w), enabled: enabled && enabledWhen, ...base });
+  const centre = useAnyFlagOn('RAFII_NOTIFICATIONS_V2_ENABLED');
+  const push = useAnyFlagOn('RAFII_WEB_PUSH_ENABLED');
+  return useQuery({ queryKey: coworkerKeys.pushDevices(w), queryFn: () => api.pushDevices(w), enabled: enabled && enabledWhen && centre && push, ...base });
 }
 
 /* ---------- weekly ---------- */
