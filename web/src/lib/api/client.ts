@@ -40,6 +40,11 @@ import type {
   SecurityEvent,
   SessionInfo,
   Snapshot,
+  ActiveTimeBeat,
+  TimeSavingsCalibrationInput,
+  TimeSavingsRange,
+  TimeSavingsSummary,
+  TimeSavingsTaskKind,
   Usage,
   WorkspaceListItem
 } from './types';
@@ -262,6 +267,16 @@ export function createApi(getToken: TokenSource) {
     siteAgentInsights: (w: string) => get<SiteAgentInsights>(`${ws(w)}/site-agent/insights`),
     helpCatalogue: (w: string) => get<{ snapshot: string; productVersion: string; documents: HelpDocumentSummary[] }>(`${ws(w)}/site-agent/help`),
     helpDocument: (w: string, documentId: string) => get<HelpDocument>(`${ws(w)}/site-agent/help/${encodeURIComponent(documentId)}`),
+
+    /* time back: the person's own estimate, kept apart from platform analytics */
+    timeSavings: (w: string, range: TimeSavingsRange = '30d') => get<TimeSavingsSummary>(`${ws(w)}/time-savings?range=${encodeURIComponent(range)}`),
+    /** `keepalive` lets the last beat leave while the page is being hidden or closed. */
+    recordActiveTime: async (w: string, beat: ActiveTimeBeat, options: { keepalive?: boolean } = {}) =>
+      parse<{ accepted: boolean; activeSeconds: number; sequence: number }>(
+        await fetch(`${ws(w)}/time-savings/activity`, { method: 'POST', headers: await headers(), body: JSON.stringify(beat), keepalive: options.keepalive === true })
+      ),
+    calibrateTimeSavings: (w: string, input: TimeSavingsCalibrationInput) =>
+      send<{ taskKind: TimeSavingsTaskKind; calibration: TimeSavingsSummary['calibration'] }>('POST', `${ws(w)}/time-savings/calibrations`, input),
 
     /* analytics & audience */
     analytics: (w: string) => get<Analytics>(`${ws(w)}/analytics/summary`),

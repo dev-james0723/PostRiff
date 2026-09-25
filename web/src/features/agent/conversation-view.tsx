@@ -54,6 +54,8 @@ import { localTimeToDate } from './plan';
 import { ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
 import { useRun } from './use-run';
 import { VariantCard, destinationLabel } from './variant-card';
+import { workflowKey } from '@/lib/time-back/active-time';
+import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 import { ImageGenerationCard } from './image-generation-card';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
@@ -586,5 +588,7 @@ function exclusionText(reason: string) {
 }
 export function ConversationView({ conversationId }: { conversationId: string }) {
   const { workspaceId } = useWorkspaceApi();
+  // Time back: active time here is credited to the first draft this conversation's writing produces, once approved.
+  useActiveWorkTimer({ workflowKey: workflowKey('conversation', conversationId), taskKind: 'draft' });
   return <ConversationWorkspace key={`${workspaceId}:${conversationId}`} conversationId={conversationId} />;
 }

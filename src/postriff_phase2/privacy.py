@@ -15,6 +15,7 @@ RETENTION_CLASSES = {
     "approvals_receipts": {"retention": "retained as records after publication", "note": "Limited deletion, trial and audit records remain after account deletion; workspace publication records are removed."},
     "analytics_observations": {"retention": "until workspace deletion; release policy pending review", "note": "Native metric observations; never sold or aggregated across tenants with content."},
     "audience_comments": {"retention": "until provider deletion or customer deletion", "note": "Tombstones preserved when a provider requires deletion."},
+    "time_back": {"retention": "until account or workspace deletion", "note": "Estimated minutes saved per completed task, your answers about how long tasks usually take, and seconds of active use in Rafii workflows. No text, keystrokes, pointer positions, page structure or browsing outside Rafii."},
     "logs_traces": {"retention": "30 days candidate", "note": "Sanitized: no prompts, post bodies, tokens or files by default."},
     "backups": {"retention": "30 days rotation candidate", "note": "Database backups; object storage is backed up separately (Supabase DB backups do not include Storage)."},
 }

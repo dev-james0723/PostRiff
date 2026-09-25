@@ -147,6 +147,7 @@ const RETENTION_LABEL: Record<string, string> = {
   approvals_receipts: 'Approval receipts',
   analytics_observations: 'Post metrics',
   audience_comments: 'Audience comments',
+  time_back: 'Time back estimates',
   logs_traces: 'Logs and traces',
   backups: 'Backups'
 };

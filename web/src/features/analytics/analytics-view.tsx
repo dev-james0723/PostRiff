@@ -6,7 +6,8 @@ import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatusChip } from '@/features/workspace/rafii-parts';
+import { SectionHeading, StatusChip } from '@/features/workspace/rafii-parts';
+import { TimeBackSection } from '@/features/time-back/time-back-section';
 import { useAnalytics, useChannels, useSnapshot } from '@/lib/api/hooks';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -34,6 +35,7 @@ import { RulesCollapsible } from './rules-collapsible';
 const infoContent = {
   title: 'Analytics',
   sections: [
+    { title: 'Time back', description: 'Estimated time Rafii saved you on completed work. It is never mixed with the platforms’ numbers below.' },
     {
       title: 'Each platform’s own numbers',
       description: 'A “view” on Threads isn’t a “view” on Instagram. Metrics keep their native names and are never added across platforms.'
@@ -165,6 +167,8 @@ export function AnalyticsView() {
   return (
     <PageContainer pageTitle='Analytics' infoContent={infoContent} pageHeaderAction={headerAction}>
       <div className='flex min-w-0 flex-col gap-6'>
+        <TimeBackSection />
+        <SectionHeading id='post-performance-heading' title='Post performance' description='Each platform’s own numbers for your published posts.' className='pt-2' />
         {channels.error ? (
           <RetryState title='accounts' error={channels.error} onRetry={() => channels.refetch()} />
         ) : coverage.connections.length > 0 || channels.isLoading ? (

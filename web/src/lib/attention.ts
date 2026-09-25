@@ -43,6 +43,9 @@ export interface Attention {
   unavailable: AttentionSource[];
 }
 
+/** Writing batches at or below this many left are worth a reminder. */
+const WRITING_LOW = 2;
+
 /** Snapshot channel states (`store.py: channel_state`) that ask for a person, used only when /channels is unreadable. */
 const SNAPSHOT_RECONNECT = 'Reconnect';
 const SNAPSHOT_FINISH = 'Finish setup';
@@ -160,6 +163,22 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
       description: 'Choose a plan to keep publishing.',
       href: '/app/account/billing',
       action: 'See plans'
+    });
+  }
+
+  // The writing allowance is no longer an Overview headline number (Time back took that place); running low or out
+  // is actionable, so it is a reminder here. The full meters stay under Billing.
+  const writing = usageData?.entitlement;
+  if (writing && typeof writing.writingBatchesRemaining === 'number' && writing.writingBatchesRemaining <= WRITING_LOW) {
+    const left = Math.max(0, writing.writingBatchesRemaining);
+    const resets = writing.resetsAt ? ` It resets ${relativeTime(writing.resetsAt, now)}.` : '';
+    items.push({
+      id: 'writing-allowance',
+      tone: left === 0 ? 'warning' : 'info',
+      title: left === 0 ? 'Writing allowance used up' : `${left} writing ${left === 1 ? 'batch' : 'batches'} left`,
+      description: (left === 0 ? 'New drafts pause until more are available; nothing extra is charged.' : 'Drafting pauses when they run out; nothing extra is charged.') + resets,
+      href: '/app/account/billing',
+      action: 'See plan'
     });
   }
 
