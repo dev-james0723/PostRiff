@@ -1,7 +1,7 @@
 {
  "browser": "chromium",
  "base": "http://localhost:3290",
- "at": "2026-09-25T02:22:25.523Z",
+ "at": "2026-09-25T04:25:41.000Z",
  "results": [
   {
    "name": "seed: workspace, LinkedIn account, a campaign; the agent runtime reports voice available (harness)",
@@ -68,6 +68,14 @@
    "ok": true
   },
   {
+   "name": "long call: past 60 transcript lines, a spoken request still carries exactly its own words",
+   "ok": true
+  },
+  {
+   "name": "a brief drop that recovers returns to live by itself; End voice stays available while reconnecting",
+   "ok": true
+  },
+  {
    "name": "V-A15: a dropped connection shows a truthful reconnect state; reconnecting resumes voice",
    "ok": true
   },
@@ -77,6 +85,10 @@
   },
   {
    "name": "V-A09: after voice ends, text continues the same conversation",
+   "ok": true
+  },
+  {
+   "name": "MM01: a photo larger than a request allows is scaled down in the browser (body under 4.5 MB) and added",
    "ok": true
   },
   {
@@ -101,6 +113,14 @@
   },
   {
    "name": "tablet: Voice Mode runs in the sheet; nothing scrolls sideways",
+   "ok": true
+  },
+  {
+   "name": "“New conversation” during a call: the next spoken request lands there and the panel stays on it",
+   "ok": true
+  },
+  {
+   "name": "leaving the app (as signing out does) ends the call and releases the microphone",
    "ok": true
   }
  ]

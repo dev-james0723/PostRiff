@@ -1,5 +1,5 @@
 {
- "at": "2026-09-25T01:59:27Z",
+ "at": "2026-09-25T04:21:24Z",
  "checks": [
   {
    "check": "reasoning",
@@ -22,6 +22,16 @@
    "reason": "OPENAI_API_KEY is not configured on this deployment, so Voice Mode can't start a GPT-Live session."
   }
  ],
+ "caps": {
+  "reasoningBudgetUsd": 0.5,
+  "reasoningMaxTurns": 6,
+  "reasoningMaxOutputTokens": 4000,
+  "visionCalls": 1,
+  "imageCalls": 2,
+  "imageSize": "1024x1024",
+  "liveSessions": 1,
+  "liveSessionMaxSeconds": 35
+ },
  "provider": null,
  "credentials": {
   "openai": false,
