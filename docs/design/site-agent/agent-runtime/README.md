@@ -137,6 +137,15 @@ in `config.py` (override `RAFII_AGENT_MODEL_PRICES`); a model without a price is
 `RAFII_AGENT_IMAGE_PRICES` (USD per image, `image_fast` / `image_quality`). `vercel.json` allows the
 microphone for this origin only. Dependency: `openai-agents==0.22.3`, `openai==3.19.2`.
 
+Follow-up suggestions (`followups.py`): after each answer the panel shows two or three chips the person may tap to send
+as their own next message. The Manager's own `follow_ups` are used when it offers at least two; otherwise the fast model
+writes them from the person's message, the answer and the open work (thinking off, at most 240 output tokens). The call
+is metered on the same run: after a Manager answer it runs only if its ceiling fits the room left in the turn's
+reservation; after a deterministic answer (an applied or dismissed proposal) it reserves its own small ceiling on the
+run first. A refused budget, a missing route or price, a stopped run, too little time or any provider failure means no
+chips, never an error. A suggestion that reads as a decision ("yes", "cancel", "the second one") is dropped, so a tap
+never approves, rejects, chooses or stops anything. Scripted runs make no provider call.
+
 ## Verification
 
 - `PYTHONPATH=src:tests python -m unittest tests.test_agent_runtime` — deterministic (Agents SDK `ScriptedModel`).
