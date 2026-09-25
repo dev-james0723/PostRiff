@@ -179,7 +179,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     return { platform, account: account?.account, state: account?.displayState };
   });
   const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
-  const runModelLabel = run ? shortLabel(runOption, run.model) : choice.label;
+  const runModelLabel = run ? shortLabel(runOption, run.model) : models.data ? choice.label : models.isError ? 'Model list unavailable' : 'Loading models…';
   const timeZone = useTimeZone();
   /** The follow-up body the server receives (and a credit estimate describes), minus key and image. */
   const turnPayload = (body: string) => ({ text: body, destinations: languages.destinations, model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone });

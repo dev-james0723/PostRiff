@@ -241,7 +241,12 @@ function HomeWorkspace() {
     const tags = Array.from(new Set(languages.selection.flatMap((item) => languages.languagesOf(item))));
     return tags.length === 0 ? 'Choose' : tags.length === 1 ? languageLabel(tags[0]) : `Per destination · ${tags.length} languages`;
   }, [languages]);
-  const modelSummary = `${choice.label}${choice.reasoningMapping.applied ? ` · ${REASONING_LABELS[choice.reasoningMapping.preference]}` : ''}`;
+  // Before the model list arrives no model is chosen yet (the server would use its default writer); say so instead of a blank.
+  const modelSummary = !models.data
+    ? models.isError
+      ? 'Model list unavailable'
+      : 'Loading models…'
+    : `${choice.label}${choice.reasoningMapping.applied ? ` · ${REASONING_LABELS[choice.reasoningMapping.preference]}` : ''}`;
   const destinationCount = languages.destinations.length;
   const accountsSelected = targets.filter((t) => t.channelId).length;
   const channelsLabel = destinations.selected.length > 0 ? destinations.summary : accounts.length === 0 ? 'Platforms only' : 'Channels';
