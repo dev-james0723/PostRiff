@@ -104,7 +104,7 @@ const draftsReady=page=>page.waitForFunction(()=>/ready · yours to edit/.test(d
    await card.waitFor();await page.reload();await hydrated(page,card.getByRole('button',{name:'Edit'}));
    // An event brief saves without its date and venue, but cannot be activated until they are added.
    assert.equal(await card.getByRole('button',{name:'Activate'}).isDisabled(),true);
-   await card.getByText(/Add the event date and venue before it can be activated\./).waitFor();
+   await card.getByText(/Add the event date and venue to activate\./).waitFor();
    await card.getByRole('button',{name:'Edit'}).click();
    const edit=page.getByRole('dialog',{name:/automation/i}).first();
    assert.equal(await edit.getByLabel('What should each draft be about?').inputValue(),title);
