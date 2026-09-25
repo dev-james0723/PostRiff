@@ -65,8 +65,8 @@ test('both chat entry points intercept learning before drafting or publishing', 
     assert.ok(/VoiceLearningPanel/.test(source), `${relative}: render the shared review panel`);
     const intercept = source.indexOf('voiceLearningIntent(body)');
     // Home drafts through its generation hook (features/agent/home/use-home-generation.ts calls api.quickStart).
-    const generation = Math.max(source.indexOf('await api.quickStart('), source.indexOf('await api.turn('), source.indexOf('await generation.start('));
+    const generation = Math.max(source.indexOf('await api.quickStart('), source.indexOf('await api.turn('), source.indexOf('await submitConversationTurn('), source.indexOf('await generation.start('));
     assert.ok(generation > -1, `${relative}: a drafting call exists`);
-    assert.ok(intercept < generation);
+    assert.ok(intercept < generation, `${relative}: voice analysis must be intercepted before generation`);
   }
 });

@@ -13,6 +13,7 @@ import { runLabel, scheduleSummary, statusText } from '@/features/automations/sc
 import { automationsOf, finished, unseen } from '@/features/automations/use-automations';
 import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
+import { relativeTime } from '@/lib/time';
 import type { SnapshotState } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
@@ -30,6 +31,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
   const [busy, setBusy] = useState(false);
   const automations = automationsOf(state).filter((item) => item.task.status !== 'cancelled');
   const active = automations.filter((item) => item.task.status === 'active');
+  const checkedAt = state.raffi?.suggestionsCheckedAt;
   const suggestions = state.raffi?.suggestions ?? [];
 
   async function act(action: string, payload: Record<string, unknown>) {
@@ -54,6 +56,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
     if (!ref?.targetId || ref.workspaceId !== workspaceId) return;
     if (ref.targetType === 'job') router.push(`/app/queue?job=${encodeURIComponent(ref.targetId)}`);
     else if (ref.targetType === 'asset') router.push(`/app/queue?asset=${encodeURIComponent(ref.targetId)}`);
+    else if (ref.targetType === 'channel') router.push('/app?new=1');
     else if (ref.targetType === 'campaign') router.push(`/app/automations?campaign=${encodeURIComponent(ref.targetId)}`);
   }
 
@@ -114,16 +117,18 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
             <h2 className='text-foreground text-lg font-normal tracking-[-0.01em]'>
               Rafii <em className='rafii-serif'>suggestions</em>
             </h2>
-            <p className='text-muted-foreground text-xs leading-relaxed'>Each suggestion names the workspace evidence behind it.</p>
+            <p className='text-muted-foreground text-xs leading-relaxed'>Each suggestion names the workspace evidence behind it. They update when you press Refresh, not in the background. {checkedAt ? `Last checked ${relativeTime(checkedAt)}.` : 'Not checked yet.'}</p>
           </div>
           {canEdit && <Button variant='glass' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_refresh', {})}>Refresh</Button>}
         </div>
         <div className='space-y-2'>
-          {suggestions.filter((item) => item.status === 'open').length === 0 && <StateMessage kind='empty' layout='inline' title='No suggestions right now.' description='No current evidence in this workspace supports one.' />}
+          {suggestions.filter((item) => item.status === 'open').length === 0 && (checkedAt
+            ? <StateMessage kind='empty' layout='inline' title='No suggestions right now.' description='No current evidence in this workspace supports one.' />
+            : <StateMessage kind='empty' layout='inline' title='Not checked yet.' description='Refresh looks at your campaigns, drafts, images and held posts.' />)}
           {suggestions.filter((item) => item.status === 'open' || item.status === 'accepted').slice(-4).toReversed().map((item) => <Surface key={item.id} material='quiet' radius='control' padding='sm'>
             <p className='text-sm'>{item.reason}</p>
             <p className='text-muted-foreground mt-1 text-xs'>{item.evidence.map((entry) => `${entry.type} ${entry.id.slice(0, 8)} · rev ${entry.revision}`).join(' · ')}</p>
-            {canEdit && <div className='mt-2 flex gap-2'><Button variant='action' size='sm' className='min-h-11' disabled={busy} onClick={() => void openSuggestion(item.id)}>Open for review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button></div>}
+            {canEdit && <div className='mt-2 flex gap-2'><Button variant='action' size='sm' className='min-h-11' disabled={busy} onClick={() => void openSuggestion(item.id)}>Open for review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button>{item.status === 'open' && <Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_snooze', { suggestionId: item.id, until: Date.now() / 1000 + 86400 })}>Snooze 1 day</Button>}</div>}
           </Surface>)}
         </div>
       </Surface>

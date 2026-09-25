@@ -201,6 +201,41 @@ class ModelReadingTest(unittest.TestCase):
         self.assertEqual(schedule["monthDays"], ["last"])
         self.assertIsNone(automation_chat._understood_schedule({}, {"localTime": "09:00"}, HK))
 
+    def test_countdown_reading_becomes_a_countdown_automation(self):
+        # Live gateway runs (2026-09-24) read "two weeks before, one week before and on the day" as monthly days
+        # 4, 11 and 18, which would repeat every month after the event; a countdown has its own shape.
+        countdown = {"kind": "countdown", "eventDate": "2026-10-18", "daysBefore": [0, 14, 7, 7], "localTime": None}
+        answer = {"action": "automation", "automation": {"schedule": countdown, "monthDays": [4, 11, 18], "topic": "my recital"}}
+        understood = request_model.reading(answer, self.state)["automation"]
+        self.assertEqual(understood["schedule"], {"kind": "countdown", "eventDate": "2026-10-18", "daysBefore": [14, 7, 0], "localTime": None})
+        self.assertEqual(understood["countdown"], {"eventDate": "2026-10-18", "daysBefore": [14, 7, 0]})
+        self.assertNotIn("monthDays", understood)
+        for bad in ({"eventDate": "18 October", "daysBefore": [7]}, {"eventDate": "2026-10-18", "daysBefore": [120]}, {"eventDate": "2026-10-18", "daysBefore": []}):
+            with self.subTest(bad=bad):
+                reading = request_model.reading({"action": "automation", "automation": {"schedule": {"kind": "countdown", **bad}, "weekdays": ["Monday"]}}, self.state)["automation"]
+                self.assertNotIn("countdown", reading)
+                self.assertEqual(reading["weekdays"], ["Monday"])
+        automation = request_model.schema(self.state)["properties"]["automation"]["anyOf"][0]
+        kinds = [option["properties"]["kind"]["enum"][0] for option in automation["properties"]["schedule"]["anyOf"] if option.get("type") == "object"]
+        self.assertEqual(kinds, ["once", "weekly", "monthly", "countdown"])
+        self.assertTrue(request_model.CUE.search("Count down to my recital on 18 October"))
+        self.assertTrue(request_model.CUE.search("幫我倒數音樂會"))
+        view = automation_chat.create(self.state, "owner-1", self.now, "Count down to my recital on 18 October on LinkedIn", HK,
+                                      destinations=[{"platform": "LinkedIn", "language": "en", "channelId": "acct-linkedin"}], route="deterministic-preview",
+                                      voice_route="local-cli", reasoning="quick", paid=False, voice=False, source_ids=[], owner=True, understood=understood)
+        task = self.state["raffi"]["campaignPlanning"]["recurringTasks"][-1]
+        self.assertEqual(task["schedule"], {"kind": "countdown", "eventDate": "2026-10-18", "daysBefore": [14, 7, 0], "localTime": "09:00", "timeZone": HK})
+        campaign = next(item for item in self.state["raffi"]["campaignPlanning"]["campaigns"] if item["id"] == task["campaignId"])
+        self.assertEqual(campaign["facts"]["date"], "2026-10-18")
+        # A recital still needs its venue, so the countdown waits for the owner instead of turning on.
+        self.assertNotEqual(task["status"], "active")
+        self.assertIn("facts", [need["code"] for need in view["needs"]])
+        self.assertEqual(view["scheduleText"], "Countdown to 2026-10-18: 14 days before, 7 days before and on the day at 09:00 (Asia/Hong_Kong)")
+        # A countdown whose dates have all passed is not used.
+        past = {"countdown": {"eventDate": "2026-09-01", "daysBefore": [7, 0]}}
+        self.assertIsNone(automation_chat._understood_schedule(past, {"localTime": "09:00"}, HK, self.now))
+        self.assertIsNotNone(automation_chat._understood_schedule(past, {"localTime": "09:00"}, HK))
+
 
 class VoiceModeTest(unittest.TestCase):
     def test_voice_is_part_of_what_is_drafted(self):

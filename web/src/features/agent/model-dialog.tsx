@@ -126,6 +126,8 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
   const [query, setQuery] = useState('');
   const [listKey, setListKey] = useState(0);
 
+  /* Most people draft with the writers under PostRiff; the CLI switch appears only where the API host reports one. */
+  const hasCli = groups.some((group) => group.mode === 'cli') || (catalog?.agents?.length ?? 0) > 0;
   const rail = groups.filter((group) => group.mode === mode);
   const activeGroup = rail.find((group) => group.id === provider) ?? rail[0];
   const stagedOption = models.find((model) => model.id === staged);
@@ -235,11 +237,11 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
         {!catalog ? (
           <StateMessage kind='loading' title='Loading the model catalog' />
         ) : models.length === 0 ? (
-          <StateMessage kind='empty' title='No models are configured' description='Add a provider or sign in to a CLI on the machine that serves the API, then rescan.' />
+          <StateMessage kind='empty' title='No writers are available' description='No writer is set up for this workspace yet. Try again later; whoever runs this PostRiff can add one.' />
         ) : (
           <>
             <div className='mb-3 flex flex-wrap items-center justify-between gap-3'>
-              <SegmentedControl<Mode> label='Connection mode' size='sm' widths='content' value={mode} onChange={switchMode} options={[{ value: 'api', label: 'API models' }, { value: 'cli', label: 'CLI' }]} />
+              {hasCli && <SegmentedControl<Mode> label='Connection mode' size='sm' widths='content' value={mode} onChange={switchMode} options={[{ value: 'api', label: 'API models' }, { value: 'cli', label: 'CLI' }]} />}
               <span className='text-muted-foreground text-xs'>{mode === 'cli' ? 'Runs on the machine that serves the API' : 'Runs through the workspace'}</span>
             </div>
 

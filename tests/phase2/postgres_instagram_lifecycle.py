@@ -75,7 +75,9 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(job['container'],'555'); self.assertEqual(job['providerReference'],'999')
         self.assertEqual(job['verification']['method'],'provider_lookup')
         from pathlib import Path
-        Path('docs/postriff-research-20260918/evidence/receipt-snapshot.json').write_text(json.dumps(job))
+        receipt = Path('docs/postriff-research-20260918/evidence/receipt-snapshot.json')
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text(json.dumps(job))
         self.assertEqual(self.provider.count('/media'),1); self.assertEqual(self.provider.count('/media_publish'),1)
     def test_unknown_publish_response_does_not_resubmit(self):
         self.ready(); self.provider.publish_timeout=True

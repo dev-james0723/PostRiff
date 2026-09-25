@@ -40,6 +40,20 @@ def _created_epoch(value):
     return 0.0
 
 
+# Why a source was left out of a run, in words a person can act on (reason codes stay in the data).
+EXCLUSION_REASONS = {
+    "retracted": "it was retracted",
+    "policy_review_required": "its use needs review first",
+    "prohibited": "its use policy does not allow this",
+    "egress_consent_required": "cloud sharing is off for it (allow it on the Memory page)",
+    "internal_reference_excluded_from_public_draft": "internal references stay out of public drafts",
+}
+
+
+def exclusion_message(reason):
+    return f"A source was left out: {EXCLUSION_REASONS.get(reason, str(reason).replace('_', ' '))}."
+
+
 def stamp(state):
     """Assign creation-time defaults to new sources; legacy rows stay unreviewed (None)."""
     for source in state.get("sources", []):

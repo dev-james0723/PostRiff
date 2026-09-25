@@ -137,26 +137,34 @@ function ProviderTile({
         <ProviderReadiness provider={provider} />
       </div>
       <p className='text-muted-foreground text-[13px] leading-relaxed'>
-        {provider.configured === false
-          ? 'This provider is not ready for OAuth. Correct the presence-only configuration issues below; credentials never belong in the browser.'
-          : provider.executionPaused
-            ? 'This connector is temporarily paused. Existing drafts and receipts remain available.'
+        {provider.executionPaused
+          ? 'This connector is temporarily paused. Existing drafts and receipts remain available.'
+          : provider.configured === false || provider.connectReady === false
+            ? 'Not set up on this PostRiff yet, so it cannot be connected.'
             : provider.productionReviewed
-              ? 'Direct candidate: confirm this account’s permissions and supported format before scheduling. App configuration is not proof of a verified publication.'
+              ? 'Direct candidate: confirm this account’s permissions and supported format before scheduling.'
               : 'Platform review has not been confirmed. Eligible developer/test accounts may connect; public-user access, history and publishing remain separately checked.'}
       </p>
       <p className='text-muted-foreground text-[13px] leading-relaxed'>{provider.accountRequirement}</p>
-      {/* Setup issues stay visible on the tile: they are what blocks Connect. */}
-      {provider.setupIssues?.map((issue) => (
-        <p key={issue} role='status' className='text-destructive flex min-w-0 items-start gap-1.5 text-[13px] [overflow-wrap:anywhere]'>
-          <Icons.warning className='mt-0.5 size-3.5 shrink-0' aria-hidden />
-          {issue}
-        </p>
-      ))}
-      {provider.callbackUri && provider.connectReady === false && (
-        <p className='text-muted-foreground text-xs break-all'>
-          Callback: <code className='rafii-field rounded-md px-1.5 py-0.5 font-mono'>{provider.callbackUri}</code>
-        </p>
+      {/* Why Connect is blocked stays in the line above; the server settings that fix it are for whoever runs PostRiff. */}
+      {(Boolean(provider.setupIssues?.length) || (provider.callbackUri && provider.connectReady === false)) && (
+        <details className='text-[13px]'>
+          <summary className='rafii-focus text-muted-foreground cursor-pointer rounded-md'>Setup details for whoever runs this PostRiff</summary>
+          <div className='mt-2 flex flex-col gap-1.5'>
+            {provider.setupIssues?.map((issue) => (
+              <p key={issue} className='text-destructive flex min-w-0 items-start gap-1.5 [overflow-wrap:anywhere]'>
+                <Icons.warning className='mt-0.5 size-3.5 shrink-0' aria-hidden />
+                {issue}
+              </p>
+            ))}
+            {provider.callbackUri && provider.connectReady === false && (
+              <p className='text-muted-foreground text-xs break-all'>
+                Callback: <code className='rafii-field rounded-md px-1.5 py-0.5 font-mono'>{provider.callbackUri}</code>
+              </p>
+            )}
+            <p className='text-muted-foreground text-xs'>Credentials go in the server configuration, never in the browser.</p>
+          </div>
+        </details>
       )}
       <p className='text-muted-foreground text-[13px] leading-relaxed'>{publishingSupport(provider.platform)}</p>
       {offered.length > 0 && (
@@ -197,7 +205,7 @@ function CompanionDirectory() {
 }
 
 const COMPANION_SENTENCE =
-  'These platforms have no third-party publishing API a small studio can use honestly. The companion will sign in on your own machine and publish through your own session — never from our servers. It is not available yet; this page will say so until it is.';
+  'No official publishing API. A desktop companion will publish from your own computer and session, never from our servers. Not available yet.';
 
 function ChannelsPage() {
   const channelsQuery = useChannels();
@@ -383,7 +391,7 @@ function ChannelsPage() {
                     <StateMessage
                       kind='empty'
                       title='No accounts connected'
-                      description='You can draft and export without connecting anything. Connect an account when you want previews, scheduling, analytics or comments for it — each capability is verified on its own.'
+                      description='You can draft and export without connecting anything. Connect an account when you want previews, scheduling, analytics or comments for it.'
                       media={
                         <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
                           <Icons.broadcast className='size-5' />

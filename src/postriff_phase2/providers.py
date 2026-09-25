@@ -145,7 +145,7 @@ class ThreadsProvider(OAuthProvider):
     REFRESH = "https://graph.threads.net/refresh_access_token"
     ME = f"https://graph.threads.net/{GRAPH_VERSION}/me"
     SCOPES = {"identity": ["threads_basic"], "publish": ["threads_basic", "threads_content_publish"], "schedule": ["threads_basic", "threads_content_publish"], "analytics": ["threads_basic", "threads_manage_insights"], "comments_read": ["threads_basic", "threads_read_replies"], "reply": ["threads_basic", "threads_manage_replies"]}
-    EXPLAIN = {"publish": "PostRiff will create Threads posts on this profile only when you approve each exact post.", "analytics": "PostRiff will read views, likes, replies, reposts and quotes for posts it created.", "comments_read": "PostRiff will read replies to your posts.", "reply": "PostRiff will post replies only after you approve the exact text."}
+    EXPLAIN = {"publish": "PostRiff will create Threads posts on this profile only when you approve each exact post.", "analytics": "Allows PostRiff to read views, likes, replies, reposts and quotes for posts it created.", "comments_read": "PostRiff will read replies to your posts.", "reply": "PostRiff will post replies only after you approve the exact text."}
 
     def authorize_url(self, redirect, state, challenge, scopes):
         return self.AUTH + "?" + urlencode({"client_id": self.client_id, "redirect_uri": redirect, "scope": ",".join(scopes), "response_type": "code", "state": state})
@@ -184,7 +184,7 @@ class InstagramProvider(OAuthProvider):
     REFRESH = "https://graph.instagram.com/refresh_access_token"
     ME = f"https://graph.instagram.com/{GRAPH_VERSION}/me"
     SCOPES = {"identity": ["instagram_business_basic"], "publish": ["instagram_business_basic", "instagram_business_content_publish"], "schedule": ["instagram_business_basic", "instagram_business_content_publish"], "analytics": ["instagram_business_basic", "instagram_business_manage_insights"], "comments_read": ["instagram_business_basic", "instagram_business_manage_comments"], "reply": ["instagram_business_basic", "instagram_business_manage_comments"]}
-    EXPLAIN = {"publish": "PostRiff will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "PostRiff will read reach, views, likes, comments, saves and shares for posts it created.", "comments_read": "PostRiff will read comments on your posts.", "reply": "PostRiff will reply only after you approve the exact text."}
+    EXPLAIN = {"publish": "PostRiff will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "Allows PostRiff to read reach, views, likes, comments, saves and shares for posts it created.", "comments_read": "PostRiff will read comments on your posts.", "reply": "PostRiff will reply only after you approve the exact text."}
 
     def capability_scopes(self, capability):
         if capability == "posts_read":

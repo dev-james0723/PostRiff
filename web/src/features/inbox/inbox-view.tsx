@@ -353,7 +353,7 @@ function InboxEmpty({
           if (commentsLevel !== 'Direct') {
             sentence = `Comments are ${commentsLevel} for ${channel.account}, so PostRiff does not read its comments. ${evidenceSentence(comments, provider?.capabilities.comments_read, channel.platform)}`;
           } else if (commentsReadFor(channel.platform, providers)) {
-            sentence = `Comments show up here after PostRiff publishes and verifies a post on ${channel.account}.`;
+            sentence = `Comments are read once, when PostRiff verifies a post it published on ${channel.account}; later comments are not collected yet.`;
           } else {
             // A Direct level is not enough: the server reads comments for only some providers.
             sentence = `Comments are Direct for ${channel.account}, but PostRiff reads only ${commentReadNames(providers)} comments in this release, so none from ${channel.platform} appear here.`;

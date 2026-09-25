@@ -51,7 +51,7 @@ const infoContent = {
     {
       title: 'When PostRiff reads',
       description:
-        'A reading happens when PostRiff’s worker asks the provider for a post’s insights after the provider verifies the publication. There is no fixed schedule yet, so no “next read” time is shown; each row carries the time of its own reading.'
+        'Readings are not collected automatically yet. A row shows numbers only after a reading has been taken, with the time of that reading; nothing here is synced in the background.'
     },
     {
       title: 'Why some accounts have no numbers',

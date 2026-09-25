@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'motion/react';
@@ -24,7 +24,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
-import { approvePlan, variantForRow, type ApproveStep, type PlanRow } from './plan';
+import { approvePlan, defaultPlanAccount, variantForRow, type ApproveStep, type PlanRow } from './plan';
 import { Destination } from './variant-card';
 
 interface RowState {
@@ -144,10 +144,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
   useEffect(() => {
     setRows(
       plan.destinations.map((d) => {
-        const candidates = channels.filter((c) => c.platform === d.platform);
-        // The row names its account when the draft was written for one; otherwise the ready account on that platform.
-        const named = d.channelId ? candidates.find((c) => c.id === d.channelId) : undefined;
-        const ready = named ?? candidates.find((c) => c.displayState === READY) ?? candidates[0];
+        const ready = defaultPlanAccount(channels, d, READY);
         return { include: Boolean(ready && d.localTime), localTime: d.localTime ?? '', channelId: ready?.id ?? '', assetId: '', alt: '' };
       })
     );
@@ -184,8 +181,12 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
   const ready = count > 0 && voiceActive && checks.rights && (!needsUnknowns || checks.unknowns) && (!needsWarnings || checks.warnings);
   // While the finished checklist is held, nothing can start a second approval or save.
   const holding = approval?.outcome === 'succeeded';
+  const inFlight = useRef(false);
 
   async function approve() {
+    // Same-tick double clicks: state-based disabling has not re-rendered yet.
+    if (inFlight.current) return;
+    inFlight.current = true;
     const selected: PlanRow[] = plan.destinations
       .map((d, index) => ({ d, row: rows[index], ok: included[index] }))
       .filter((item) => item.ok)
@@ -222,12 +223,14 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
       toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'The plan could not be approved.');
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } finally {
+      inFlight.current = false;
       setProgress(null);
     }
   }
 
   async function saveDrafts() {
-    if (!run.artifactHash || run.status === 'applied') return;
+    if (!run.artifactHash || run.status === 'applied' || inFlight.current) return;
+    inFlight.current = true;
     clearFailed();
     setSaving(true);
     setProgress('Adding the candidates to your drafts…');
@@ -238,6 +241,7 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'The drafts could not be saved.');
     } finally {
+      inFlight.current = false;
       setProgress(null);
       setSaving(false);
     }

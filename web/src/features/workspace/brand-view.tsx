@@ -116,7 +116,7 @@ export function BrandView() {
   return (
     <PageContainer
       pageTitle='Brand & voice'
-      pageDescription='Who speaks in this workspace and how they sound. Drafts are written from it; nothing here is inferred by a model.'
+      pageDescription='Your brand and writing style. AI suggestions need your approval.'
       infoContent={infoContent}
       access={canEdit}
       accessFallback={

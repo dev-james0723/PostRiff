@@ -429,14 +429,16 @@ function FirstRun({ canSchedule, hasDrafts, hasReadyAccount, onSchedule }: { can
           </li>
         ))}
       </ol>
+      {/* One next step: scheduling needs a draft, so without one the block points at Ideas instead. */}
       <div className='flex flex-wrap justify-center gap-2'>
-        {canSchedule && (
-          <Button variant='action' size='control' onClick={onSchedule}>
-            Schedule a draft
-          </Button>
-        )}
-        {!hasDrafts && (
-          <Link href='/app/ideas' className={buttonVariants({ variant: canSchedule ? 'glass' : 'action', size: 'control' })}>
+        {hasDrafts ? (
+          canSchedule && (
+            <Button variant='action' size='control' onClick={onSchedule}>
+              Schedule a draft
+            </Button>
+          )
+        ) : (
+          <Link href='/app/ideas' className={buttonVariants({ variant: 'action', size: 'control' })}>
             Draft something in Ideas
           </Link>
         )}

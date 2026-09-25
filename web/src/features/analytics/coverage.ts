@@ -219,7 +219,7 @@ export function capabilitySummary(connection: ConnectionCoverage) {
   }
   if (connection.evidence) return connection.evidence;
   if (connection.direct)
-    return 'Direct: PostRiff reads the provider’s official insights for posts it published.';
+    return 'Direct: this account allows reading the provider’s official insights for posts PostRiff published. Automatic reading is not switched on yet.';
   return 'Analytics has not been granted for this account. It is a separate permission from publishing.';
 }
 

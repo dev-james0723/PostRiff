@@ -14,16 +14,21 @@
  * rule). A caption edited here is the person's reviewed text, so it is recorded on that draft as an
  * author edit; an unedited refresh stays a proposal and is reported, never accepted silently.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api/client';
-import { keys } from '@/lib/api/hooks';
+import { keys, useSnapshot } from '@/lib/api/hooks';
+import { createSubmissionGate } from '../submission-gate';
+import { submitQuickStart } from '../credit-turn';
+import { checkEditBase } from './draft-edit-guard';
+import { buildItems, type DestinationStatus } from './generation-items';
 import type { Destination, Run, RunVariant, Snapshot, SnapshotVariant } from '@/lib/api/types';
 import { locales } from '@/lib/locales';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useRun } from '../use-run';
 
 export interface GenerationRequest {
+  maxMilliCredits?: number | null;
   text: string;
   ownContent: boolean;
   destinations: Destination[];
@@ -37,7 +42,7 @@ export interface GenerationRequest {
   sourceIds?: string[];
 }
 
-export type DestinationStatus = 'pending' | 'writing' | 'ready' | 'failed' | 'cancelled';
+export type { DestinationStatus } from './generation-items';
 
 export interface GeneratedItem {
   /** `${platform}|${channelId ?? ''}|${language}`: stable across polls. */
@@ -51,6 +56,23 @@ export interface GeneratedItem {
   variant: RunVariant | null;
 }
 
+/** The quick-start body the server receives (and a credit estimate describes), minus the request key. */
+export function quickStartPayload(request: Omit<GenerationRequest, 'maxMilliCredits'>) {
+  return {
+    text: request.text,
+    ownContent: request.ownContent,
+    confirmUse: true,
+    destinations: request.destinations,
+    model: request.model,
+    reasoning: request.reasoning,
+    voiceMode: request.voiceMode,
+    voiceSourceIds: request.voiceMode === 'personalized' ? request.voiceSourceIds : [],
+    imageGeneration: request.imageGeneration,
+    timeZone: request.timeZone,
+    sourceIds: request.sourceIds ?? []
+  };
+}
+
 export const destinationKey = (d: { platform: string; channelId?: string; language: string }) => `${d.platform}|${d.channelId ?? ''}|${locales.canonical(d.language) ?? d.language}`;
 
 const ACTIVE = new Set(['running', 'queued']);
@@ -59,9 +81,14 @@ function sameSlot(variant: Pick<SnapshotVariant, 'platform' | 'language' | 'chan
   return variant.platform === item.destination.platform && locales.same(variant.language, item.destination.language) && (variant.channelId ?? null) === (item.destination.channelId ?? null);
 }
 
-export function useHomeGeneration() {
+export function useHomeGeneration(restoreRunId: string | null = null) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
+  const stored = useSnapshot();
+  const [gate] = useState(createSubmissionGate);
+  useEffect(() => { gate.activate(); return () => gate.dispose(); }, [gate]);
+  const editBases = useRef<Record<string, string>>({});
+  const saveLock = useRef(false);
   const [seed, setSeed] = useState<(Run & { conversationId: string }) | null>(null);
   const [requested, setRequested] = useState<Destination[]>([]);
   const [busy, setBusy] = useState(false);
@@ -70,30 +97,22 @@ export function useHomeGeneration() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<{ variants: number; edited: number; pendingReview: number } | null>(null);
   const ticket = useRef(0);
-  const run = useRun(seed?.runId ?? null, seed);
+  const run = useRun(seed?.runId ?? restoreRunId, seed);
 
   const start = useCallback(
     async (request: GenerationRequest, expectedRevision: number) => {
+      if (!gate.enter()) return null;
       const mine = ++ticket.current;
+      editBases.current = {};
       setBusy(true);
       setError(null);
       setEdits({});
       setSaved(null);
       setRequested(request.destinations);
       try {
-        const result = await api.quickStart(workspaceId, expectedRevision, {
-          text: request.text,
-          ownContent: request.ownContent,
-          confirmUse: true,
-          destinations: request.destinations,
-          model: request.model,
-          reasoning: request.reasoning,
-          voiceMode: request.voiceMode,
-          voiceSourceIds: request.voiceMode === 'personalized' ? request.voiceSourceIds : [],
-          imageGeneration: request.imageGeneration,
-          timeZone: request.timeZone,
-          sourceIds: request.sourceIds ?? []
-        });
+        const payload = { ...quickStartPayload(request), idempotencyKey: crypto.randomUUID() };
+        const result = await submitQuickStart({ api, workspaceId, expectedRevision, request: payload, maxMilliCredits: request.maxMilliCredits ?? null, isCurrent: gate.alive });
+        if (!result || !gate.alive()) return null;
         if (mine !== ticket.current) return null; // a newer request superseded this one
         // A request for recurring drafts opens no run: Home shows Rafii's reply and the automation instead.
         if (result.status !== 'automation') {
@@ -109,13 +128,14 @@ export function useHomeGeneration() {
         ]);
         return result;
       } catch (err) {
-        if (mine === ticket.current) setError(err instanceof ApiError ? err.message : 'The drafts could not be started.');
+        if (gate.alive() && mine === ticket.current) setError(err instanceof Error ? err.message : 'The drafts could not be started.');
         return null;
       } finally {
-        if (mine === ticket.current) setBusy(false);
+        gate.leave();
+        if (gate.alive() && mine === ticket.current) setBusy(false);
       }
     },
-    [api, client, workspaceId]
+    [api, client, workspaceId, gate]
   );
 
   const cancel = useCallback(async () => {
@@ -139,26 +159,21 @@ export function useHomeGeneration() {
 
   const failure = useMemo(() => run?.events.findLast((e) => e.type === 'run.failed' || e.type === 'run.cancelled')?.message ?? null, [run?.events]);
 
-  /** One row per requested destination, in request order, with the run's progress folded in. */
-  const items = useMemo<GeneratedItem[]>(() => {
-    const variants = run?.artifact?.variants ?? [];
-    const completed = new Set((run?.events ?? []).filter((e) => e.type === 'message.completed' && typeof e.destination === 'number').map((e) => e.destination as number));
-    const failed = run?.status === 'failed';
-    const cancelled = run?.status === 'cancelled';
-    const running = run ? ACTIVE.has(run.status) : false;
-    return requested.map((destination, index) => {
-      const variant = variants.find((v) => destinationKey(v) === destinationKey(destination)) ?? null;
-      const key = destinationKey(destination);
-      const status: DestinationStatus = variant ? 'ready' : failed ? 'failed' : cancelled ? 'cancelled' : completed.has(index) ? 'ready' : running && index === completed.size ? 'writing' : 'pending';
-      return { key, destination: { ...destination, account: variant?.account }, status, text: variant?.text ?? '', edited: edits[key] !== undefined && edits[key] !== variant?.text ? edits[key] : null, variant };
-    });
-  }, [requested, run, edits]);
+  /** Chosen destinations first, then any other destination the run wrote; saved text wins after a reload. */
+  const items = useMemo<GeneratedItem[]>(
+    () => buildItems<RunVariant>({ requested, run, savedVariants: stored.data?.state.variants ?? [], edits, keyOf: destinationKey }),
+    [requested, run, edits, stored.data]
+  );
 
-  const setEdit = useCallback((key: string, text: string) => setEdits((current) => ({ ...current, [key]: text })), []);
+  const setEdit = useCallback((key: string, text: string) => {
+    if (editBases.current[key] === undefined) editBases.current[key] = items.find((item) => item.key === key)?.text ?? '';
+    setEdits((current) => ({ ...current, [key]: text }));
+  }, [items]);
 
   /** Persist the run through the existing pipeline: apply, then record local caption edits on the new variants. */
   const save = useCallback(async () => {
-    if (!run || run.status !== 'completed' || !run.artifactHash) return;
+    if (!run || run.status !== 'completed' || !run.artifactHash || saveLock.current) return;
+    saveLock.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -174,10 +189,14 @@ export function useHomeGeneration() {
         const refreshed = created ? undefined : variants.find((v) => v.proposedUpdate?.runId === run.runId && sameSlot(v, item));
         const target = created ?? refreshed;
         const text = item.edited?.trim() ? item.edited : null;
-        if (!target || text === null || (created && target.text === text)) {
+        if (text === null) {
           if (refreshed) pendingReview += 1;
           continue;
         }
+        if (!target) throw new Error('The destination draft is unavailable. Your edit is kept here.');
+        const serverText = created ? target.text : (target.proposedUpdate?.text ?? target.text);
+        checkEditBase(editBases.current[item.key] ?? item.text, serverText, text);
+        if (created && target.text === text) continue;
         snapshot = await api.act(workspaceId, snapshot.revision, 'variant_edit', { variantId: target.id, variantRevision: target.revision, text });
         edited += 1;
       }
@@ -186,8 +205,9 @@ export function useHomeGeneration() {
       setSeed((value) => (value ? { ...value, status: 'applied' } : value));
       await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The drafts could not be saved.');
+      setError(err instanceof Error ? err.message : 'The drafts could not be saved.');
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   }, [api, client, items, run, workspaceId]);
@@ -199,7 +219,7 @@ export function useHomeGeneration() {
     completed: run?.status === 'completed' || run?.status === 'applied',
     applied: run?.status === 'applied' || saved !== null,
     run,
-    conversationId: seed?.conversationId ?? null,
+    conversationId: run?.conversationId ?? seed?.conversationId ?? null,
     items,
     failure,
     error,

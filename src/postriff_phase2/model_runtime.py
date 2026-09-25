@@ -18,17 +18,25 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 from postriff_alpha.domain import AlphaError, clean
 from .agent_runtime import AgentRuntime, DEFAULT_REQUEST_DESTINATIONS, PLATFORMS, REASONING, check_destinations, identity_fields, safe_event
 from .contracts import LIMITS, digest
+from .source_policy import exclusion_message
 from . import locale_lint, locales
 from .text_measure import over_by
 from .voice_sources import bounded_style_directives
 
 DEFAULT_ENDPOINT = "https://ai-gateway.vercel.sh/v1/chat/completions"
 DEFAULT_MODEL = "anthropic/claude-sonnet-5"
-# Conservative USD per 1M tokens (input, output) for the estimate; the provider-reported usage settles the ledger.
+# USD per 1M tokens (input, output) for the estimate; the provider-reported usage settles the ledger. Checked
+# against the AI Gateway's public price list (/v1/models) on 2026-09-24; a cost computed from this table records
+# the version it used. A price here does not offer a model: POSTRIFF_MODEL_IDS decides what can be chosen.
+DEFAULT_PRICES_VERSION = "gateway-list-2026-09-24"
 DEFAULT_PRICES = {
     "anthropic/claude-sonnet-5": (2.0, 10.0),
+    "anthropic/claude-opus-5.5": (4.0, 20.0),
     "anthropic/claude-haiku-4.5": (1.0, 5.0),
+    "openai/gpt-6-sol": (2.0, 10.0),
     "openai/gpt-4.1-mini": (0.4, 1.6),
+    "google/gemini-3.1-pro-preview": (2.0, 12.0),
+    "google/gemini-2.5-flash": (0.3, 2.5),
 }
 # Public catalogue 2026-09-20: Sonnet 5 does not accept temperature. Structured side calls send sampling only to
 # models that take it (learning_model.GatewayCall); drafting never sends it (ServerModelRuntime._call).
@@ -39,6 +47,7 @@ MAX_MEMORY_BYTES = 16_000       # memory files the workspace allowed a cloud mod
 MAX_OUTPUT_TOKENS = 2_400
 TIMEOUT_SECONDS = 45
 ATTEMPTS = 2
+RATE_LIMIT_BACKOFF_SECONDS = 1.5
 RESPONSE_CAP = 1_048_576
 
 
@@ -87,6 +96,31 @@ Rules you must follow:
 9. "Learned from how you edit" in VOICE.md lists preferences about form only (length, openings, hashtags, how a post closes). They never add content; the idea, the approved facts and this request win over them."""
 
 
+def provider_map(values):
+    """`POSTRIFF_MODEL_PROVIDERS`: {model: [gateway provider slugs]} each model may be routed to. A model not
+    listed runs only on its maker's own provider. Shared by drafting, images and learning extraction."""
+    raw = values.get("POSTRIFF_MODEL_PROVIDERS")
+    if not raw:
+        return {}
+    try:
+        return {str(k): [str(p) for p in v] for k, v in json.loads(raw).items() if isinstance(v, list) and v}
+    except (ValueError, TypeError, AttributeError) as error:
+        raise ValueError("POSTRIFF_MODEL_PROVIDERS must be a JSON object of model → [provider slugs].") from error
+
+
+def gateway_routing(data):
+    """Gateway routing metadata (who served the call, what it cost in USD), when the response carries it."""
+    meta = (data.get("providerMetadata") or data.get("provider_metadata") or {}) if isinstance(data, dict) else {}
+    gateway = meta.get("gateway") if isinstance(meta, dict) and isinstance(meta.get("gateway"), dict) else {}
+    routing = gateway.get("routing") if isinstance(gateway.get("routing"), dict) else {}
+    provider = routing.get("finalProvider") if isinstance(routing.get("finalProvider"), str) and routing.get("finalProvider") else None
+    try:
+        cost = float(gateway["cost"]) if gateway.get("cost") is not None else None
+    except (TypeError, ValueError):
+        cost = None
+    return provider, cost if cost is not None and 0 <= cost < float("inf") else None
+
+
 class ServerModelRuntime(AgentRuntime):
     """Paid, synchronous, cloud-egress route. One HTTPS call per turn (retried at most once)."""
     provider = "vercel-ai-gateway"
@@ -94,12 +128,16 @@ class ServerModelRuntime(AgentRuntime):
     provider_class = "cloud"
     asynchronous = False
 
-    def __init__(self, api_key, model=DEFAULT_MODEL, endpoint=DEFAULT_ENDPOINT, transport=None, prices=None, clock=time.time, models=None):
+    def __init__(self, api_key, model=DEFAULT_MODEL, endpoint=DEFAULT_ENDPOINT, transport=None, prices=None, clock=time.time, models=None, allowed_providers=None):
         if not api_key or not isinstance(api_key, str):
             raise AlphaError("A model gateway key is required.", 503)
         self.api_key, self.model, self.endpoint = api_key, model, endpoint
         self.transport = transport or model_transport
+        self.sleep = time.sleep
+        # Execution providers each model may run on (AI Gateway slugs); default: only the model's maker.
+        self.allowed_providers = {m: [str(p) for p in slugs] for m, slugs in (allowed_providers or {}).items()}
         self.prices = {**DEFAULT_PRICES, **(prices or {})}
+        self.configured_prices = set(prices or {})
         self.clock = clock
         self.models = list(models or [model])
         if self.model not in self.models:
@@ -143,9 +181,23 @@ class ServerModelRuntime(AgentRuntime):
         model = model or self.model
         prompt_tokens = len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode()) + 256
         calls = ATTEMPTS + (1 if request.get('reasoning') == 'deep' else 0)
-        # Critique includes the first response; bound it by the transport cap.
-        critique = RESPONSE_CAP if request.get('reasoning') == 'deep' else 0
+        # The revise pass re-reads the first draft, which `max_tokens` bounds on every call; twice that
+        # allows for re-serialising it. (Counting the 1 MB transport cap as tokens made deep unaffordable.)
+        critique = 2 * MAX_OUTPUT_TOKENS if request.get('reasoning') == 'deep' else 0
         return self._cost(model, prompt_tokens * calls + critique, MAX_OUTPUT_TOKENS * calls)
+
+    ESTIMATE_BASIS = ("one attempt (two with the deep revise pass), about 3 bytes of request per input token and "
+                      "400 output tokens per destination; a formula, not measured on real samples")
+
+    def typical_quote(self, request, model=None):
+        """A usual cost for display, clearly below the reservation ceiling; see ESTIMATE_BASIS."""
+        import math
+        model = model or self.model
+        calls = 2 if request.get('reasoning') == 'deep' else 1
+        prompt_tokens = math.ceil(len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode()) / 3)
+        destinations = len(request.get('destinations') or DEFAULT_REQUEST_DESTINATIONS)
+        completion_tokens = min(MAX_OUTPUT_TOKENS, 400 * destinations)
+        return self._cost(model, prompt_tokens * calls, completion_tokens * calls)
 
     def _cost(self, model, prompt_tokens, completion_tokens):
         inp, out = self._price(model)
@@ -200,27 +252,65 @@ class ServerModelRuntime(AgentRuntime):
             messages.append({"role": "user", "content": "Revise every variant: tighten the opening, keep only fact-backed claims, respect the character limits, keep the language. Answer with the same JSON shape only."})
         return messages
 
-    def _call(self, messages, model):
+    def price_basis(self, model):
+        """Which price table a token-derived cost came from, so a later price change can be audited."""
+        input_price, output_price = self.prices[model]
+        return {"version": "configured" if model in self.configured_prices else DEFAULT_PRICES_VERSION, "inputUsdPerMTok": input_price, "outputUsdPerMTok": output_price}
+
+    def allowed_for(self, model):
+        """AI Gateway provider slugs this model may execute on; the model maker when not configured."""
+        return list(self.allowed_providers.get(model) or ([model.split("/", 1)[0]] if "/" in model else []))
+
+    def _call(self, messages, model, progress=None):
         # Public catalogue 2026-09-20: Sonnet 5 does not accept temperature.
         # Leave sampling at each provider's default rather than sending an unsupported field.
         body = {"model": model, "messages": messages, "max_tokens": MAX_OUTPUT_TOKENS, "response_format": {"type": "json_object"}}
-        response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
+        allowed = self.allowed_for(model)
+        if allowed:
+            # `only` limits routing and fallbacks to these providers; no model fallback (`models`) is sent.
+            body["providerOptions"] = {"gateway": {"only": allowed}}
+        if progress is not None:
+            progress["dispatched"] = True
+        try:
+            response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
+        except AlphaError as error:
+            raise _Unknown(str(error), error.status) from error
         status, data = response.get("status"), response.get("body") or {}
         if status == 429:
-            raise _Retry("The model provider is rate limiting; retrying once.")
+            raise _RateLimited("The model provider is rate limiting; retrying once.")
         if status is None or status >= 500:
-            raise AlphaError("The model request outcome is unknown. Check usage before starting another run.", 502)
+            raise _Unknown("The model request outcome is unknown. Check usage before starting another run.", 502)
         if status != 200 or not isinstance(data, dict):
-            raise AlphaError("The model provider rejected the request.", 502)
+            raise _Rejected("The model provider rejected the request.", 502)
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
             raise _Retry("The model provider returned an unexpected shape.") from error
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        usage = dict(data.get("usage")) if isinstance(data.get("usage"), dict) else {}
+        final_provider, gateway_cost = gateway_routing(data)
+        if final_provider:
+            usage["executionProvider"] = final_provider
+        if gateway_cost is not None:
+            usage["gatewayCost"] = gateway_cost
+        finish = data["choices"][0].get("finish_reason") if isinstance(data["choices"][0], dict) else None
+        if isinstance(finish, str):
+            usage["finishReason"] = finish
         return content, usage
 
     # --- run -----------------------------------------------------------------------------
     def start_turn(self, request, emit):
+        progress = {"dispatched": False}
+        try:
+            return self._start_turn(request, emit, progress)
+        except ProviderFailure:
+            raise
+        except AlphaError as error:
+            # Free only when no provider request had been sent; otherwise the outcome is unknown.
+            if progress["dispatched"]:
+                raise ProviderFailure(str(error), error.status, dispatched=True, cost_usd=None, code=error.code) from error
+            raise ProviderFailure(str(error), error.status, dispatched=False, cost_usd=0.0, code=error.code) from error
+
+    def _start_turn(self, request, emit, progress):
         context = request["context"]
         if context.get("providerClass") != "cloud":
             raise AlphaError("Cloud drafting needs sources projected for cloud egress. Grant per-source cloud consent, then draft again.", 403)
@@ -239,7 +329,7 @@ class ServerModelRuntime(AgentRuntime):
         for source in context["sources"]:
             emit(safe_event("source.added", sourceId=source["id"], policy=source["policy"], candidateOnly=source["candidateOnly"], facts=len(source["facts"])))
         for item in context["excluded"]:
-            emit(safe_event("warning.created", sourceId=item["id"], message=f"Source excluded: {item['reason']}."))
+            emit(safe_event("warning.created", sourceId=item["id"], reason=item["reason"], message=exclusion_message(item["reason"])))
         if not context["sources"] and not request.get("idea"):
             raise AlphaError("Nothing to draft from: no source has cloud consent and no idea text was given.", 400)
         emit(safe_event("progress.updated", stage="drafting", percent=15))
@@ -249,30 +339,57 @@ class ServerModelRuntime(AgentRuntime):
         accumulated_cost = 0.0
         def cost_of(usage):
             import math
+            if type(usage.get('gatewayCost')) is float:
+                return usage['gatewayCost']
             value = usage.get('cost')
             if type(value) in (int, float) and math.isfinite(value) and value >= 0:
                 return float(value)
             if all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('prompt_tokens', 'completion_tokens')):
                 return self._cost(model, usage['prompt_tokens'], usage['completion_tokens'])
             return None
-        variants, last_error = None, None
+        variants, last_error, served_by = None, None, None
+
+        def stop_if_cancelled():
+            # The run sink reports False once the run is no longer running (cancelled or failed elsewhere).
+            if requests_made and emit(safe_event("progress.updated", stage="drafting", percent=20 + requests_made)) is False:
+                raise ProviderFailure("Cancelled; no further model request was sent.", 409, dispatched=True, cost_usd=round(accumulated_cost, 6) if usage_complete else None)
+
         for attempt in range(ATTEMPTS):
+            stop_if_cancelled()
             try:
-                content, usage = self._call(self._messages(request, reasoning), model)
+                content, usage = self._call(self._messages(request, reasoning), model, progress)
+            except _RateLimited as error:
+                requests_made += 1  # refused before any work: known to cost nothing
+                last_error = str(error)
+                emit(safe_event("warning.created", message=last_error))
+                self.sleep(RATE_LIMIT_BACKOFF_SECONDS)
+                continue
             except _Retry as error:
                 requests_made += 1
                 usage_complete = False
                 last_error = str(error)
                 emit(safe_event("warning.created", message=last_error))
                 continue
+            except _Rejected as error:
+                raise ProviderFailure(str(error), 502, dispatched=True, cost_usd=round(accumulated_cost, 6) if usage_complete else None) from error
+            except _Unknown as error:
+                raise ProviderFailure(str(error), error.status, dispatched=True, cost_usd=None) from error
             requests_made += 1
             call_cost = cost_of(usage)
             usage_complete = usage_complete and call_cost is not None
             accumulated_cost += call_cost or 0
             prompt_tokens += int(usage.get("prompt_tokens") or 0)
             completion_tokens += int(usage.get("completion_tokens") or 0)
-            if isinstance(usage.get("cost"), (int, float)):
-                reported_cost = (reported_cost or 0) + float(usage["cost"])
+            if type(usage.get("gatewayCost")) is float or isinstance(usage.get("cost"), (int, float)):
+                reported_cost = (reported_cost or 0) + (usage["gatewayCost"] if type(usage.get("gatewayCost")) is float else float(usage["cost"]))
+            served_by = usage.get("executionProvider") or served_by
+            allowed = self.allowed_for(model)
+            if usage.get("executionProvider") and allowed and usage["executionProvider"] not in allowed:
+                raise ProviderFailure("The gateway reported a provider outside the approved set; this draft was not used.", 502, dispatched=True, cost_usd=round(accumulated_cost, 6) if usage_complete else None)
+            if usage.get("finishReason") == "length":
+                last_error = "The model reached its output limit before finishing."
+                emit(safe_event("warning.created", message=last_error))
+                continue
             try:
                 variants = self._parse(content, destinations, context)
                 break
@@ -280,12 +397,13 @@ class ServerModelRuntime(AgentRuntime):
                 last_error = str(error)
                 emit(safe_event("warning.created", message=last_error))
         if variants is None:
-            raise AlphaError(last_error or "The model did not return usable drafts.", 502)
+            raise ProviderFailure(last_error or "The model did not return usable drafts.", 502, dispatched=requests_made > 0, cost_usd=round(accumulated_cost, 6) if usage_complete else None)
         emit(safe_event("progress.updated", stage="drafting", percent=70))
 
         if reasoning == "deep":
+            stop_if_cancelled()
             try:
-                revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model)
+                revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress)
                 requests_made += 1
                 call_cost = cost_of(revised_usage)
                 usage_complete = usage_complete and call_cost is not None
@@ -295,6 +413,8 @@ class ServerModelRuntime(AgentRuntime):
                 if isinstance(revised_usage.get("cost"), (int, float)):
                     reported_cost = (reported_cost or 0) + float(revised_usage["cost"])
                 variants = self._parse(revised_content, destinations, context)
+            except (_RateLimited, _Rejected):
+                emit(safe_event("warning.created", message="The revise pass did not complete; the first draft is kept."))
             except (_Retry, AlphaError):
                 usage_complete = False
                 emit(safe_event("warning.created", message="The revise pass did not complete; the first draft is kept."))
@@ -307,7 +427,10 @@ class ServerModelRuntime(AgentRuntime):
         emit(safe_event("artifact.created", artifactHash=digest(artifact), variants=len(variants)))
         cost = round(accumulated_cost, 6) if usage_complete else None
         usage_out = {"provenance": "unknown" if not usage_complete else "provider_reported" if reported_cost is not None else "estimated_from_tokens", "modelRequests": requests_made,
-                     "promptTokens": prompt_tokens, "completionTokens": completion_tokens, "costUsd": cost, "model": model, "provider": self.provider}
+                     "promptTokens": prompt_tokens, "completionTokens": completion_tokens, "costUsd": cost, "model": model, "provider": self.provider,
+                     "executionProvider": served_by, "allowedProviders": self.allowed_for(model)}
+        if usage_out["provenance"] == "estimated_from_tokens":
+            usage_out["priceBasis"] = self.price_basis(model)
         emit(safe_event("run.completed", usage=usage_out))
         return {"artifact": artifact, "usage": usage_out}
 
@@ -386,3 +509,27 @@ def resolve_source_ids(cited, context):
 
 class _Retry(Exception):
     """Internal: the attempt failed in a way worth one retry."""
+
+
+class _RateLimited(_Retry):
+    """Internal: 429, the provider refused before doing any work, so the attempt is not billed."""
+
+
+class _Rejected(AlphaError):
+    """Internal: a 4xx refusal; the provider did not process this request."""
+
+
+class _Unknown(AlphaError):
+    """Internal: 5xx, no status or no answer; whether this request was billed is unknown."""
+
+
+class ProviderFailure(AlphaError):
+    """A failed cloud draft that records whether a provider request went out and its known cost.
+
+    `cost_usd` is the known total for the run, or None when it is unknown (never reported as 0).
+    """
+
+    def __init__(self, message, status=502, *, dispatched, cost_usd=None, code=None):
+        super().__init__(message, status, code=code)
+        self.dispatched = dispatched
+        self.cost_usd = cost_usd

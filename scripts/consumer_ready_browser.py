@@ -12,20 +12,19 @@ OUT=ROOT/'docs/consumer-ready/evidence'
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
-    # Refuse occupied ports; never attach to or terminate another developer's servers. The probe binds like the servers
-    # do (SO_REUSEADDR), so a live listener still refuses it while the previous run's closed connections (TIME_WAIT)
-    # do not; it waits briefly for a previous run that is still shutting down.
+    # Refuse occupied ports; never attach to or terminate another developer's servers. SO_REUSEADDR, as the
+    # servers themselves use, lets a port whose last server just stopped (connections in TIME_WAIT) count as
+    # free, while a port that something is listening on still refuses; a port being released gets 30 s.
     for port in (4438,4439,55479):
-        deadline=time.monotonic()+15
+        deadline=time.monotonic()+30
         while True:
             with socket.socket() as probe:
                 probe.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-                try:
-                    probe.bind(('127.0.0.1',port));break
+                try:probe.bind(('127.0.0.1',port));break
                 except OSError:
                     if time.monotonic()>deadline:
                         print(json.dumps({'status':'VALIDATION_UNAVAILABLE','reason':f'loopback port {port} occupied'}));return 3
-            time.sleep(.5)
+            time.sleep(1)
     env={k:v for k,v in os.environ.items() if k in ('PATH','HOME','TMPDIR','LANG','TERM','POSTRIFF_PG_BIN','PLAYWRIGHT_MODULE','BROWSER_EXECUTABLE')}
     env.update(LC_ALL='C',POSTRIFF_LOCAL_CLI='0',POSTRIFF_RESEARCH='0',POSTRIFF_DEV_WEB_ORIGIN='http://127.0.0.1:4439')
     env.setdefault('PLAYWRIGHT_MODULE',str(ROOT/'.codex/consumer-ready/web/node_modules/playwright'))

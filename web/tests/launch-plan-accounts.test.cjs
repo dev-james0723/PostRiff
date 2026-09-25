@@ -18,3 +18,13 @@ test('review refuses a different account even for the same platform',()=>{
 test('one legacy platform draft can still be assigned explicitly',()=>{
  assert.equal(variantForRow({variants:[variant('legacy',undefined)]},{runId:'run-current'},{platform:'Instagram',language:'en-US',channelId:'account-a'})?.id,'legacy');
 });
+
+test('schedule defaults keep the selected account',()=>{
+ const choose=loaded.exports.defaultPlanAccount;
+ assert.equal(typeof choose,'function');
+ const channels=[{id:'one',platform:'Instagram',displayState:'Ready'},{id:'two',platform:'Instagram',displayState:'Ready'}];
+ assert.equal(choose(channels,{platform:'Instagram',channelId:'two'},'Ready')?.id,'two');
+ assert.equal(choose(channels,{platform:'Instagram',channelId:'missing'},'Ready'),undefined);
+ assert.equal(choose(channels,{platform:'LinkedIn',channelId:'two'},'Ready'),undefined);
+ assert.equal(choose(channels,{platform:'Instagram'},'Ready')?.id,'one');
+});

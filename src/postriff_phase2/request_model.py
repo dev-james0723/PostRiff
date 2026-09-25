@@ -67,8 +67,9 @@ _MONTH = r"(?:january|february|march|april|may|june|july|august|september|octobe
 # Words that can introduce a recurring request in English or Chinese (kept for older callers).
 CUE = re.compile(
     r"\b(?:every|each|weekly|daily|monthly|fortnightly|bi-?weekly|twice|thrice|once\s+a|times\s+a|per\s+(?:week|month|day)"
-    r"|a\s+(?:week|month)\b|regularly|routinely|recurring|automat\w*|keep\s+(?:posting|my|sharing)|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays)"
-    r"|逢|每|定期|自動|自动",
+    r"|a\s+(?:week|month)\b|regularly|routinely|recurring|automat\w*|keep\s+(?:posting|my|sharing)|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays"
+    r"|count\s*down)"
+    r"|逢|每|定期|自動|自动|倒數|倒数",
     re.I)
 # A clock time: 2 PM · 4:30 pm · 16:30 · at 6 · 3點 · 3點半 · noon.
 _CLOCK = re.compile(
@@ -181,7 +182,7 @@ action:
 - "draft": anything else: something written now with no later time, including one post about a recurring thing ("write my weekly recap") or a message that only describes a habit ("I practise every day, write about it").
 
 automation. Fill only what the message says; leave the rest null, empty or false.
-- schedule: once {"kind":"once","date":"YYYY-MM-DD","localTime":"HH:MM"} (work out "today", "tomorrow", "Friday" from now); weekly {"kind":"weekly","slots":[{"weekday":"Wednesday","localTime":"16:30"}]} (one slot per weekday, the same time on each unless different times are named); monthly {"kind":"monthly","monthDays":[1,15] or ["last"],"localTime":"HH:MM"}. Times are 24-hour. localTime is null when no time is named: never make one up. A named part of the day is a time: morning 09:00, noon 12:00, afternoon 14:00, evening 18:00, night 20:00; say so in assumptions. For "twice a week" pick two well-spaced weekdays and say so.
+- schedule: once {"kind":"once","date":"YYYY-MM-DD","localTime":"HH:MM"} (work out "today", "tomorrow", "Friday" from now); weekly {"kind":"weekly","slots":[{"weekday":"Wednesday","localTime":"16:30"}]} (one slot per weekday, the same time on each unless different times are named); monthly {"kind":"monthly","monthDays":[1,15] or ["last"],"localTime":"HH:MM"}; countdown to one dated event ("two weeks before, one week before and on the day", "倒數") {"kind":"countdown","eventDate":"YYYY-MM-DD","daysBefore":[14,7,0],"localTime":"HH:MM"} (0 is the day itself; never weekly or monthly days, which would repeat after the event; only when the message names the date). Times are 24-hour. localTime is null when no time is named: never make one up. A named part of the day is a time: morning 09:00, noon 12:00, afternoon 14:00, evening 18:00, night 20:00; say so in assumptions. For "twice a week" pick two well-spaced weekdays and say so.
 - timeRole: what the schedule's time is. "publish" when the post goes out then ("post at 2 PM", "publish every Friday at 5"). "generate" when that is when Raffi researches and writes and publishing comes later or not at all ("every Wednesday find an article ... publish it Saturday", "every Tuesday draft ...").
 - stages: separate times for separate steps; each null unless the message names that step's own time. generate = research and writing, review = drafts ready for the person, publish = the post goes out. A stage is {"at":"anchor"} (the schedule's time), {"at":"generate"} (review only), {"asap":true} (generate, one time only), {"minutesOffset":-60}, {"dayOffset":-1,"localTime":"09:00"} or {"weekday":"Saturday","localTime":"18:00"} (the first such time after the writing).
   "Every Wednesday find a notable BBC News article, write a reflection and publish it Saturday at 6 PM" → weekly slot Wednesday (localTime null), timeRole "generate", publish {"weekday":"Saturday","localTime":"18:00"}.
@@ -327,6 +328,9 @@ def schema(state: dict, tier: str = "light") -> dict:
                                                             "items": _obj(["weekday", "localTime"], weekday=_WEEKDAY_S, localTime=_TIME_OR_NULL)}),
         _obj(["kind", "monthDays", "localTime"], kind=_one("monthly"), localTime=_TIME_OR_NULL,
              monthDays={"type": "array", "minItems": 1, "maxItems": campaigns.MAX_MONTH_DAYS, "items": month_day}),
+        _obj(["kind", "eventDate", "daysBefore", "localTime"], kind=_one("countdown"), eventDate=_DATE_S, localTime=_TIME_OR_NULL,
+             daysBefore={"type": "array", "minItems": 1, "maxItems": campaigns.MAX_COUNTDOWN_STEPS,
+                         "items": {"type": "integer", "minimum": 0, "maximum": campaigns.MAX_COUNTDOWN_DAYS}}),
         _NULL]}
     hosts = {"type": "array", "maxItems": workflow.MAX_DOMAINS, "items": _string(253)}
     research = _nullable(_obj(
@@ -526,6 +530,13 @@ def _schedule(value) -> dict | None:
     if kind == "monthly":
         days = _month_days(value.get("monthDays"))
         return {"kind": "monthly", "monthDays": days, "localTime": _clock(value.get("localTime"))} if days else None
+    if kind == "countdown":
+        # Live gateway runs (2026-09-24) turned countdowns into monthly days 4, 11, 18: a countdown keeps its own shape.
+        try:
+            event, days_before = campaigns.countdown_of(value)
+        except AlphaError:
+            return None
+        return {"kind": "countdown", "eventDate": event.isoformat(), "daysBefore": days_before, "localTime": _clock(value.get("localTime"))}
     return None
 
 
@@ -647,6 +658,10 @@ def _automation(raw, state: dict, text) -> dict:
             out["localTime"] = schedule["slots"][0]["localTime"]
     elif schedule and schedule["kind"] == "monthly":
         out["monthDays"] = list(schedule["monthDays"])
+        if schedule["localTime"]:
+            out["localTime"] = schedule["localTime"]
+    elif schedule and schedule["kind"] == "countdown":
+        out["countdown"] = {"eventDate": schedule["eventDate"], "daysBefore": list(schedule["daysBefore"])}
         if schedule["localTime"]:
             out["localTime"] = schedule["localTime"]
     return out

@@ -46,6 +46,14 @@ import { useModelChoice } from './use-model';
 import { eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
+import { useAuth } from '@/lib/auth/session';
+import { CreditLimitField } from './credit-limit-field';
+import { parseCreditLimit } from './credit-limit';
+import { creditRequestFor } from './credit-turn';
+import { useCreditEstimate } from './use-credit-estimate';
+import { quickStartPayload } from './home/use-home-generation';
+import { createSubmissionGate } from './submission-gate';
+import { briefStorageKey, decodeBrief, encodeBrief } from './brief-recovery';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
 import type { ChatAutomation } from '@/lib/api/types';
 
@@ -95,7 +103,7 @@ const infoContent = {
 
 const isDraftable = (platform: string): platform is DraftPlatform => (DRAFT_PLATFORMS as readonly string[]).includes(platform);
 
-export function HomeView() {
+function HomeWorkspace() {
   const params = useSearchParams();
   const router = useRouter();
   const client = useQueryClient();
@@ -112,6 +120,11 @@ export function HomeView() {
   const me = useMe();
   const timeZone = useTimeZone();
   const composer = useRef<HTMLTextAreaElement>(null);
+  const { user } = useAuth();
+  const [submission] = useState(createSubmissionGate);
+  useEffect(() => { submission.activate(); return () => submission.dispose(); }, [submission]);
+  const [preparing, setPreparing] = useState(false);
+  const [creditLimit, setCreditLimit] = useState('');
   const ids = { language: useId(), model: useId(), voice: useId() };
 
   const state = snapshot.data?.state;
@@ -127,7 +140,25 @@ export function HomeView() {
 
   /* ---- composer state: original input, applied settings, staged dialog choices ---- */
   const [text, setText] = useState('');
-  const [own, setOwn] = useState(true);
+  const [savedBrief, setSavedBrief] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const recovered = decodeBrief(sessionStorage.getItem(briefStorageKey(user.id, workspaceId)), user.id, workspaceId);
+      if (recovered !== null) { setText(current => current || recovered); setSavedBrief(recovered); }
+    } catch { /* Unavailable storage cannot discard current input. */ }
+  }, [user?.id, workspaceId]);
+  function saveBrief() {
+    if (!user?.id || !canEdit) return;
+    try { sessionStorage.setItem(briefStorageKey(user.id, workspaceId), encodeBrief(user.id, workspaceId, text)); setSavedBrief(text); }
+    catch { toast.error('The brief could not be saved in this browser. Copy your text before leaving.'); }
+  }
+  function clearBrief() {
+    if (!user?.id) return;
+    try { sessionStorage.removeItem(briefStorageKey(user.id, workspaceId)); setSavedBrief(null); }
+    catch { toast.error('The saved brief could not be cleared.'); }
+  }
+  const [own, setOwn] = useState(false);
   const [use, setUse] = useState(true);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>('neutral');
   const [imageRequested, setImageRequested] = useState(false);
@@ -170,10 +201,19 @@ export function HomeView() {
   }, [targetsKey]);
 
   const choice = useModelChoice(models.data);
+  const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
+  const maximum = parseCreditLimit(creditLimit);
+  const estimateRequest = useMemo(
+    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds, timeZone, sourceIds: included })),
+    [text, own, languages.destinations, choice.model, choice.reasoning, voiceMode, voiceSourceIds, timeZone, included]
+  );
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest });
+  const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
+  const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || imageRequested || (ceiling !== null && maximum < ceiling));
   const voiceAvailable = voiceSourceIds.length > 0;
   const imageCapability = models.data?.imageGeneration;
-  const generation = useHomeGeneration();
+  const generation = useHomeGeneration(params.get('run'));
   const chosenContent = contentChoice(library);
 
   useEffect(() => {
@@ -194,7 +234,7 @@ export function HomeView() {
   );
   const languageSummary = useMemo(() => {
     const tags = Array.from(new Set(languages.selection.flatMap((item) => languages.languagesOf(item))));
-    return tags.length === 0 ? 'Choose' : tags.length === 1 ? languageLabel(tags[0]) : `${tags.length} languages`;
+    return tags.length === 0 ? 'Choose' : tags.length === 1 ? languageLabel(tags[0]) : `Per destination · ${tags.length} languages`;
   }, [languages]);
   const modelSummary = `${choice.label}${choice.reasoningMapping.applied ? ` · ${REASONING_LABELS[choice.reasoningMapping.preference]} reasoning` : ''}`;
   const destinationCount = languages.destinations.length;
@@ -234,7 +274,7 @@ export function HomeView() {
     composer.current?.focus();
   }
 
-  const canGenerate = canEdit && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running;
+  const canGenerate = canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running;
 
   async function start() {
     const body = text.trim();
@@ -245,33 +285,32 @@ export function HomeView() {
       setText('');
       return; // No draft, model call, retention, analysis grant or publishing action.
     }
-    let current = revision;
-    try {
-      if (template) current = await selectContentType(template, revision);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The content type could not be selected.');
-      return;
-    }
+    if (!submission.enter()) return;
+    setPreparing(true);
     setAutomationReply(null);
-    const result = await generation.start(
-      {
-        text: body,
-        ownContent: own,
-        destinations: languages.destinations,
-        model: choice.model,
-        reasoning: choice.reasoning,
-        voiceMode,
-        voiceSourceIds,
+    try {
+      const latest = await api.snapshot(workspaceId);
+      if (!submission.alive()) return;
+      const current = template ? await selectContentType(template, latest.revision) : latest.revision;
+      if (!submission.alive()) return;
+      const result = await generation.start({ text: body, ownContent: own, destinations: languages.destinations,
+        model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds,
         imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
-        timeZone,
-        sourceIds: included
-      },
-      current
-    );
-    if (result?.status === 'automation') {
-      // Rafii read a request for recurring drafts: it set up an automation instead of drafting once.
-      setAutomationReply({ workspaceId, id: result.conversationId, automation: result.automation ?? null, reply: result.reply ?? '' });
-      setText('');
+        timeZone, sourceIds: included, maxMilliCredits: creditMode ? maximum : null }, current);
+      if (!submission.alive() || !result) return;
+      if (result.status === 'automation') {
+        // Rafii read a request for recurring drafts: it set up an automation instead of drafting once.
+        setAutomationReply({ workspaceId, id: result.conversationId, automation: result.automation ?? null, reply: result.reply ?? '' });
+        setText('');
+        return;
+      }
+      setCreditLimit('');
+      router.replace(`/app?run=${encodeURIComponent(result.runId)}`, { scroll: false });
+    } catch (error) {
+      if (submission.alive()) toast.error(error instanceof Error ? error.message : 'Draft preparation failed.');
+    } finally {
+      submission.leave();
+      if (submission.alive()) setPreparing(false);
     }
   }
 
@@ -312,8 +351,9 @@ export function HomeView() {
 
   const draftAgain = useCallback(() => {
     generation.reset();
+    router.replace("/app", { scroll: false });
     composer.current?.focus();
-  }, [generation]);
+  }, [generation, router]);
 
   const helpText = !canEdit
     ? 'You need the edit permission to draft in this workspace.'
@@ -355,17 +395,22 @@ export function HomeView() {
                 </>
               )}
             </h1>
-            <p className='text-muted-foreground max-w-[450px] text-[15px] leading-relaxed'>Give it a thought. Rafii drafts one version per destination, in your voice, for your review.</p>
+            <p className='text-muted-foreground max-w-[450px] text-[15px] leading-relaxed'>Give it a thought. Rafii drafts one version per destination for your review.</p>
           </div>
 
+          {canEdit && <div className='flex flex-wrap items-center gap-2 text-xs'>
+            <Button variant='quiet' size='sm' onClick={saveBrief} disabled={preparing || generation.busy || !text.trim() || savedBrief === text}>Save brief</Button>
+            {savedBrief !== null && <Button variant='quiet' size='sm' onClick={clearBrief}>Clear saved brief</Button>}
+            <span role='status' className='text-muted-foreground'>{savedBrief === null ? '' : savedBrief === text ? 'Saved for this browser session' : 'Unsaved changes'}</span>
+          </div>}
           {canEdit ? (
             <IdeaComposer
               ref={composer}
               value={text}
               onChange={setText}
               placeholder={template ? `${template.title}: replace the brackets and send.` : PLACEHOLDER}
-              disabled={!models.data || !snapshot.data}
-              busy={generation.busy || generation.running}
+              disabled={!models.data || !snapshot.data || preparing || generation.busy || generation.running}
+              busy={preparing || generation.busy || generation.running}
               onExpand={() => setDialog('expand')}
               contextCount={included.length}
               onOpenContext={() => setDialog('context')}
@@ -374,7 +419,7 @@ export function HomeView() {
                 <button
                   type='button'
                   aria-pressed={imageRequested}
-                  disabled={!imageCapability?.available}
+                  disabled={creditMode || !imageCapability?.available || preparing || generation.busy || generation.running}
                   onClick={() => setImageRequested((v) => !v)}
                   title={imageCapability?.detail ?? 'Checking the managed image route…'}
                   className={cn('rafii-focus inline-flex min-h-11 items-center gap-1.5 rounded-md text-xs font-medium', imageRequested ? 'text-foreground' : 'text-muted-foreground hover:text-foreground', !imageCapability?.available && 'opacity-50')}
@@ -421,14 +466,15 @@ export function HomeView() {
                   voice={{ value: voiceMode === 'personalized' ? 'Writing like you' : 'Neutral', onClick: () => setDialog('voice'), expanded: dialog === 'voice', controls: ids.voice }}
                 />
               }
+              notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} /></div> : undefined}
               generate={{ label: generation.run ? 'Generate again' : 'Generate drafts', count: destinationCount, disabled: !canGenerate, onClick: () => void start(), help: helpText }}
               consent={
                 <div className='mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pt-3'>
                   <Checkbox checked={use} onCheckedChange={setUse} label='Use this text to draft with' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
-                  <Checkbox checked={own} onCheckedChange={setOwn} label='My own writing (may be quoted publicly)' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
+                  <Checkbox checked={own} onCheckedChange={setOwn} label='Allow public quotes from my own writing' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
                   <span className='text-muted-foreground ml-auto inline-flex items-center gap-1.5 text-xs'>
                     <Icons.shieldCheck className='size-3.5' />
-                    Your approval. Always. Nothing publishes here.
+                    You approve before publishing.
                   </span>
                 </div>
               }
@@ -485,7 +531,7 @@ export function HomeView() {
               <Icons.paperclip className='size-3.5' />
               Sources · <span className='text-foreground font-medium'>{snapshot.isLoading ? '…' : `${sources.length} usable`}</span>
             </Link>
-            {canEdit && <StartVoiceInterview key={workspaceId} />}
+            {canEdit && !voiceActive && <StartVoiceInterview key={workspaceId} />}
           </div>
 
           {canEdit && <QuickStartsDisclosure selected={template} onPick={pickTemplate} disabled={generation.busy || generation.running} />}
@@ -626,4 +672,10 @@ function PlatformOnlyDialog({ open, onOpenChange, value, onApply }: { open: bool
       </RafiiDialogContent>
     </RafiiDialog>
   );
+}
+
+export function HomeView() {
+  const { workspaceId } = useWorkspaceApi();
+  const { user } = useAuth();
+  return <HomeWorkspace key={`${user?.id ?? 'loading'}:${workspaceId}`} />;
 }

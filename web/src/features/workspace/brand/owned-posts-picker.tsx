@@ -125,7 +125,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
     <Band as='section' data-tour='owned-posts-picker' aria-label='Import my social posts'>
       <h3 className='text-foreground text-sm font-medium'>{autoPropose ? 'Review Rafii’s proposed sample set' : 'Choose from my social posts'}</h3>
       {autoPropose && <p className='text-muted-foreground text-xs'>Your request authorizes read-only retrieval. Up to 10 dated posts from the loaded results are proposed, not retained or analyzed. Change this selection, confirm authorship, then separately allow an analysis route.</p>}
-      <p className='text-muted-foreground text-xs'>Read your connected account, choose your own writing, then decide how it may be analysed. This never publishes or starts AI analysis.</p>
+      <p className='text-muted-foreground text-xs'>Read your connected account, choose your own writing, then decide how it may be analysed. Loading posts never starts AI analysis.</p>
       {channels.isError && (
         <StateMessage
           kind='error'

@@ -39,8 +39,8 @@ export interface WritingNowProps {
 }
 
 /**
- * The page's one glass work surface (DNA §21.14): the applied choice, shown separately from the
- * saved preference when the two differ, and what it costs.
+ * The page's one glass work surface (DNA §21.14): the chosen writer and what it costs. A saved writer
+ * that is unavailable stays chosen until the person picks another; nothing is substituted for them.
  */
 export function WritingNow({ loading, error, onRetry, options, agents, model, option, saved, picked }: WritingNowProps) {
   const body = () => {
@@ -67,14 +67,15 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
         />
       );
     }
+    if (!option && saved && options.length > 0) {
+      return <StateMessage kind='stale' layout='inline' title={`Your saved writer (${shortLabel(undefined, saved)}) is not offered here`} description='Choose another writer below. Drafting waits until you do; nothing is switched for you.' />;
+    }
     if (!option) {
       return <StateMessage kind='empty' layout='inline' title='No writer listed' description='This deployment returned no writers. Drafting cannot start until one is listed.' />;
     }
 
     const kind = routeKind(option, agents);
     const cost = costCopy(option.costClass);
-    const savedOption = saved ? options.find((m) => m.id === saved) : undefined;
-    const fellBack = Boolean(saved) && saved !== model;
 
     return (
       <div className='flex flex-col gap-2'>
@@ -92,15 +93,7 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
             </>
           )}
         </p>
-        {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} />}
-        {fellBack && saved && (
-          <StateMessage
-            kind='stale'
-            layout='inline'
-            title={`Your saved choice (${shortLabel(savedOption, saved)}) is unavailable here; using ${shortLabel(option, model)} instead.`}
-            description={savedOption ? `The server says: ${savedOption.detail}` : 'This deployment does not list it.'}
-          />
-        )}
+        {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} description='Choose another writer below. Drafting waits until you do; nothing is switched for you.' />}
         <p className='text-muted-foreground text-xs leading-relaxed'>Used by Home and every conversation. Saved in this browser only, so another browser or device can have a different writer.</p>
       </div>
     );

@@ -20,7 +20,7 @@ import { useNowSeconds } from './models/use-saved-choice';
 import { WritingNow } from './models/writing-now';
 
 const PAGE_TITLE = 'Models & providers';
-const PAGE_DESCRIPTION = 'Pick what writes your drafts, see where each writer runs, who pays for it and what it may read.';
+const PAGE_DESCRIPTION = 'Choose your AI writer.';
 
 const infoContent = {
   title: 'Where drafts are written',
@@ -32,7 +32,7 @@ const infoContent = {
     },
     {
       title: 'Your pick',
-      description: 'The writer you pick here is used by Home and every conversation in this browser. If it stops being available, PostRiff uses the first available writer and this page says so.'
+      description: 'The writer you pick here is used by Home and every conversation in this browser. If it becomes unavailable, choose another writer explicitly. No model is silently substituted.'
     },
     {
       title: 'Checking again',
@@ -129,6 +129,16 @@ function ModelsBody() {
             picked={picked}
           />
 
+          <PostriffRoutes
+            loading={loading}
+            listed={Boolean(models.data)}
+            options={options}
+            agents={agents}
+            current={choice.model}
+            onChoose={onChoose}
+            consent={{ loading: memory.isLoading, egress: memory.data?.egress }}
+          />
+
           <section data-tour='models-cli' className='flex flex-col gap-3' aria-labelledby='models-cli-heading'>
             <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1'>
               <h2 id='models-cli-heading' className='text-foreground text-lg font-medium tracking-tight'>
@@ -160,15 +170,6 @@ function ModelsBody() {
             )}
           </section>
 
-          <PostriffRoutes
-            loading={loading}
-            listed={Boolean(models.data)}
-            options={options}
-            agents={agents}
-            current={choice.model}
-            onChoose={onChoose}
-            consent={{ loading: memory.isLoading, egress: memory.data?.egress }}
-          />
         </div>
 
         <div className='flex min-w-0 flex-col gap-8'>

@@ -65,4 +65,5 @@ See the tables in `route-ledger.md` (routes) and `wiring-matrix.md` (controls). 
 
 - Phases 1–6 done (2026-09-24): checks, evidence, conformance, rollback and status fields in `REPORT.md`; branch `rafii-v9-integration` (10 commits on 468811b, not pushed); file list by group in `v9-files.json`.
 - Harness left running for review: `postriff-api-offline` (research off) + `postriff-web`, seeded workspace in `evidence/seed.json`. Switch back with `preview_stop` + `preview_start postriff-api` (resets the disposable database).
+- 2026-09-24 18:54 UTC, production release: PR #1 was merged as `df9bea0` and deployed as `dpl_42MDoufsQgKD7rB8K4csc5RDsKyy` (alias postriff-phase2-private.vercel.app). Migration 018 was applied and verified first. Production smoke passed, and publishing stays disabled (no provider review flags). Details are in `orchestration.md` §11 and `migrations-review.md` (Production result).
 - Next (needs the owner): physical-device pass (iPhone Safari, Android Chrome); live model/OAuth/publishing verification with authorized credentials; review and merge the branch; decide whether the snapshot and launch-audit commits belong in the merge.
