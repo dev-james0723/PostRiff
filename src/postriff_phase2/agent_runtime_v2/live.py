@@ -35,6 +35,7 @@ LIVE_ENDPOINT = "https://api.openai.com/v1/live/sessions"
 DATA_CHANNEL = "oai-events"
 MAX_SDP_BYTES = 64_000
 MAX_TRANSCRIPT_TURNS = 400
+MAX_ACTIVE_SESSIONS = 2
 MAX_HISTORY_CHARS = 12_000
 VOICES = ("marin", "cedar", "sage", "verse", "coral", "alloy")
 ALLOWED_CLIENT_EVENTS = ["session.commentary.append", "session.thinking.append", "session.instructions.append", "session.input_audio.mute",
@@ -138,6 +139,10 @@ class VoiceSessions:
             else:
                 cur.execute("INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,%s) RETURNING id::text", (workspace_id, principal, "Voice conversation with Rafii"))
                 conversation_id = cur.fetchone()[0]
+            cur.execute("SELECT count(*) FROM public.pr_agent_runs WHERE workspace_id=%s AND actor=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
+                        "AND created_at>now()-make_interval(mins=>%s)", (workspace_id, principal, self._cap_minutes()))
+            if cur.fetchone()[0] >= MAX_ACTIVE_SESSIONS:
+                raise AlphaError("Voice Mode is already on in another tab. End it there first.", 429, code="voice_busy")
             history = self._history(cur, workspace_id, conversation_id)
             estimate = self.cfg.live_usd_micro_per_minute * self._cap_minutes()
             key = "voice:" + uid()
@@ -206,9 +211,9 @@ class VoiceSessions:
             words = clean(turn.get("text", ""), 1000)
             if words:
                 clean_turns.append({"role": turn["role"], "text": words, "at": self._now(), **({"startMs": int(turn["startMs"])} if isinstance(turn.get("startMs"), int) else {})})
-        with self.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
+        with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self.service.ideas._member(row), "read")
-            artifact = self._artifact(cur, workspace_id, voice_session_id, owner_check=True)
+            artifact = self._artifact(cur, workspace_id, voice_session_id, owner_check=True, principal=principal)
             log = artifact["voice"].setdefault("transcript", [])
             log.extend(clean_turns)
             del log[:-MAX_TRANSCRIPT_TURNS]
@@ -220,9 +225,9 @@ class VoiceSessions:
         reported = payload.get("usageSeconds")
         seconds = float(reported) if isinstance(reported, (int, float)) and not isinstance(reported, bool) and 0 <= reported < 86400 else None
         reason = payload.get("reason") if payload.get("reason") in ("close_requested", "expired", "content", "remote_hangup", "connection_lost", "user_ended", "page_closed", "error") else "user_ended"
-        with self.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
+        with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self.service.ideas._member(row), "read")
-            artifact = self._artifact(cur, workspace_id, voice_session_id, owner_check=True)
+            artifact = self._artifact(cur, workspace_id, voice_session_id, owner_check=True, principal=principal)
             reservation = artifact["voice"].get("reservationId")
         return self._close(workspace_id, token, voice_session_id, {"reservationId": reservation} if reservation else None, state="ended", reason=reason, seconds=seconds)
 
@@ -245,10 +250,13 @@ class VoiceSessions:
             self.service.ideas._insert_event(cur, workspace_id, voice_session_id, safe_event(kind, **({"usage": {"provenance": "voice", "seconds": billed}} if kind == "run.completed" else {"message": f"Voice session ended: {reason}."})))
         return {"voiceSessionId": voice_session_id, "state": state, "reason": reason, "usageSeconds": billed}
 
-    def _artifact(self, cur, workspace_id, voice_session_id, *, owner_check=False) -> dict:
+    def _artifact(self, cur, workspace_id, voice_session_id, *, owner_check=False, principal=None) -> dict:
         cur.execute("SELECT artifact,idempotency_key,actor::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (voice_session_id, workspace_id))
         row = cur.fetchone()
         if not row or not str(row[1]).startswith("voice:"):
+            raise AlphaError("Voice session unavailable.", 404)
+        if owner_check and row[2] != principal:
+            # Only the person who started a voice session writes its transcript or ends it (same answer as a missing one).
             raise AlphaError("Voice session unavailable.", 404)
         artifact = row[0] or {}
         artifact.setdefault("voice", {})

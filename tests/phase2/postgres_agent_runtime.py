@@ -1038,6 +1038,66 @@ def _():
     return {"actual": decided["speakableSummary"], "checks": [c["what"] for c in decided["checks"]], "secondApply": str(again), "state": bool(state)}
 
 
+@scenario("R12", "Voice sessions belong to the person who started them; at most two live sessions per member", "(other member) end my session; a third session",
+          "another member can't write the transcript of, or end, my session (404); a third concurrent session is refused (429) with nothing reserved")
+def _():
+    with connection() as db:
+        db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'editor','active') ON CONFLICT DO NOTHING", (wid, TWO))
+    mine = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
+    denied(lambda: voice.transcript(wid, OTHER, mine["voiceSessionId"], {"turns": [{"role": "user", "text": "not yours"}]}), 404)
+    denied(lambda: voice.end(wid, OTHER, mine["voiceSessionId"], {"reason": "user_ended"}), 404)
+    second = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
+    before = one("SELECT count(*) FROM public.pr_usage_ledger WHERE workspace_id=%s AND dimension='tool'", wid)[0]
+    error = denied(lambda: voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"}), 429)
+    assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE workspace_id=%s AND dimension='tool'", wid)[0] == before
+    for session in (mine, second):
+        voice.end(wid, OWNER, session["voiceSessionId"], {"usageSeconds": 3, "reason": "user_ended"})
+    with connection() as db:
+        db.execute("DELETE FROM public.pr_memberships WHERE workspace_id=%s AND user_id=%s", (wid, TWO))
+    return {"actual": str(error)}
+
+
+@scenario("HTTP01", "The agent routes over HTTP: session, request guard, JSON, status, a turn, a decision, voice start — and no API-token access",
+          "GET status · POST turns · POST approvals/decide · POST voice/sessions (through HostedApplication)",
+          "201/200 with the guard; 403 without it; API tokens refused; the voice response carries no credential")
+def _():
+    from postriff_phase2.hosted_app import HostedApplication
+    from postriff_phase2.agent_runtime_v2 import http as agent_http
+    service._agent_runtime_v2 = runtime  # the same runtime the scenarios use (scripted reasoning, fake providers)
+    app = HostedApplication(service=service, worker=None, public_auth={}, cron_secret="x" * 32)
+
+    def http(method, path, body=None, token=OWNER, guard=True):
+        raw = json.dumps(body).encode() if body is not None else b""
+        environ = {"REQUEST_METHOD": method, "PATH_INFO": path, "QUERY_STRING": "", "CONTENT_TYPE": "application/json", "CONTENT_LENGTH": str(len(raw)),
+                   "wsgi.input": io.BytesIO(raw), "HTTP_AUTHORIZATION": "Bearer " + token, "HTTP_HOST": "localhost", "HTTP_X_FORWARDED_PROTO": "http"}
+        if guard:
+            environ["HTTP_X_POSTRIFF_REQUEST"] = "founder-alpha"
+        status = []
+        chunks = app(environ, lambda s, h, e=None: status.append(int(s.split()[0])))
+        return status[0], json.loads(b"".join(chunks) or b"{}")
+
+    code, status = http("GET", f"/api/workspaces/{wid}/agent/status")
+    assert code == 200 and status["voice"]["available"] is True and "credential" not in json.dumps(status).lower(), status
+    SCRIPTS.set(rafii_manager=[[reply("Nothing is waiting on you right now.")]])
+    code, body = http("POST", f"/api/workspaces/{wid}/agent/turns", {"message": "Anything waiting on me?", "idempotencyKey": uuid.uuid4().hex, "timeZone": HK, "modality": "text"})
+    assert code == 201 and body["result"]["answerText"], (code, body)
+    code, refused = http("POST", f"/api/workspaces/{wid}/agent/turns", {"message": "hi", "idempotencyKey": uuid.uuid4().hex}, guard=False)
+    assert code == 403, (code, refused)
+    code, started = http("POST", f"/api/workspaces/{wid}/agent/voice/sessions", {"sdp": "v=0\r\no=- offer\r\n", "conversationId": body["conversationId"]})
+    assert code == 201 and FAKE_PROJECT_KEY not in json.dumps(started) and started["sdp"].startswith("v=0"), (code, started)
+    code, ended = http("POST", f"/api/workspaces/{wid}/agent/voice/sessions/{started['voiceSessionId']}/end", {"usageSeconds": 5, "reason": "user_ended"})
+    assert code == 200 and ended["state"] == "ended"
+    code, missing = http("POST", f"/api/workspaces/{wid}/agent/approvals/decide", {"conversationId": body["conversationId"], "messageId": body["messageId"], "proposalId": "none",
+                                                                                 "digest": "x", "decision": "apply"})
+    assert code == 404, (code, missing)
+    code, other_ws = http("GET", f"/api/workspaces/{other}/agent/runs/{body['runId']}", token=OTHER)
+    assert code == 404, (code, other_ws)
+    from postriff_phase2.agent_runtime_v2.api_guard import require_session_token
+    denied(lambda: require_session_token("prt_" + "x" * 40))
+    _ = agent_http
+    return {"actual": {"status": code, "turn": body["runId"], "voice": started["voiceSessionId"]}}
+
+
 # --- write evidence ------------------------------------------------------------------------------------------------------------
 out_dir = ROOT / "docs/design/site-agent/agent-runtime/evidence"
 out_dir.mkdir(parents=True, exist_ok=True)

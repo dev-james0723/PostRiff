@@ -494,6 +494,10 @@ class HostedApplication:
                 return self._ideas(environ, start_response, service, token, method, parts)
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "site-agent":
                 return self._site_agent(environ, start_response, service, token, method, parts)
+            if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "agent":
+                # The Rafii Agent Runtime (text, voice, images); its routes live in agent_runtime_v2/http.py.
+                from .agent_runtime_v2.http import handle as agent_runtime_handle
+                return agent_runtime_handle(self, environ, start_response, service, token, method, parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":
                 body = self._body(environ)
                 if parts[4] == "checkout":

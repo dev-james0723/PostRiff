@@ -15,16 +15,22 @@ import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { siteConfig } from '@/config/site';
 import { useModelChoice } from '@/features/agent/use-model';
+import { AgentExtras } from '@/features/rafii-voice/agent-extras';
+import { AttachImage } from '@/features/rafii-voice/attach-image';
+import { VoiceMode } from '@/features/rafii-voice/voice-mode';
 import { ApiError } from '@/lib/api/client';
 import { keys, useMe, useMessages, useModels } from '@/lib/api/hooks';
 import type { Message } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import type { AgentResult, AgentTurnResponse } from '@/lib/agent-runtime/types';
+import { useAgent } from '@/lib/agent-runtime/use-agent';
+import { voiceSession } from '@/lib/agent-runtime/voice-session';
 import { useTimeZone } from '@/lib/preferences';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
 import { activityRows, isSiteAgentBody, suggestionsFor } from '@/lib/site-agent/panel-logic';
 import { matchRoute, safeHref, type RouteManifest } from '@/lib/site-agent/routes';
-import type { SiteAgentMessageBody } from '@/lib/site-agent/types';
+import type { SiteAgentMessageBody, SiteAgentPageContext, SiteAgentTurnResult } from '@/lib/site-agent/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { SiteAgentAnswer } from './answer';
@@ -51,6 +57,10 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const me = useMe();
   const timeZone = useTimeZone();
   const { reduced } = useMotionPreference();
+  // The Rafii Agent Runtime answers text turns when this deployment enables it; the site agent stays the fallback.
+  const agent = useAgent();
+  const agentOn = Boolean(agent.status?.manager.available);
+  const [images, setImages] = useState<{ assetId: string; index: number | null }[]>([]);
 
   useEffect(() => {
     if (workspaceId) panelStore.load(workspaceId);
@@ -104,14 +114,33 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
       const current = panelStore.get();
       try {
         const context = current.page;
-        const result = await api.siteAgentTurn(w, {
-          message,
-          idempotencyKey: newKey(),
-          ...(current.conversations[w] ? { conversationId: current.conversations[w] } : {}),
-          model: choice.model,
-          timeZone,
-          pageContext: { route: pathname, selectedEntity: context?.selectedEntity ?? null, visibleState: context?.visibleState ?? {}, uiCapabilities: ['navigate', 'show_help'] }
-        });
+        const pageContext = { route: pathname, selectedEntity: context?.selectedEntity ?? null, visibleState: context?.visibleState ?? {}, uiCapabilities: ['navigate', 'show_help'] };
+        let result: SiteAgentTurnResult;
+        if (agentOn) {
+          // The Agent Runtime answers (same conversation; it falls back to the site agent by itself when it must).
+          const response = await agent.api.turn(w, {
+            message,
+            idempotencyKey: newKey(),
+            conversationId: current.conversations[w] ?? null,
+            modality: 'text',
+            pageContext,
+            attachments: images.map((image) => ({ assetId: image.assetId })),
+            timeZone,
+            model: choice.model
+          });
+          setImages([]);
+          voiceSession.typedExchange(message, response.result);
+          result = response.siteAgent ?? { conversationId: response.conversationId, runId: response.runId, status: response.status, messageId: response.messageId };
+        } else {
+          result = await api.siteAgentTurn(w, {
+            message,
+            idempotencyKey: newKey(),
+            ...(current.conversations[w] ? { conversationId: current.conversations[w] } : {}),
+            model: choice.model,
+            timeZone,
+            pageContext
+          });
+        }
         if (workspaceRef.current !== w) return;
         panelStore.setConversation(w, result.conversationId);
         if (result.runId && !result.delegated) panelStore.setLive(result.runId, { events: result.events ?? [], composing: Boolean(result.needsCompose) });
@@ -142,8 +171,22 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         panelStore.setBusy(w, false);
       }
     },
-    [api, choice.model, client, onNavigate, pathname, router, timeZone, workspaceId]
+    [agent.api, agentOn, api, choice.model, client, images, onNavigate, pathname, router, timeZone, workspaceId]
   );
+
+  // Voice Mode reads the page when a spoken request is delegated (the call outlives this component's render).
+  const voicePageContext = useCallback((): SiteAgentPageContext => {
+    const registered = panelStore.get().page;
+    return { route: window.location.pathname, selectedEntity: registered?.selectedEntity ?? null, visibleState: registered?.visibleState ?? {}, uiCapabilities: ['navigate', 'show_help'] };
+  }, []);
+  const onVoiceConversation = useCallback((id: string) => {
+    if (workspaceId) panelStore.setConversation(workspaceId, id);
+  }, [workspaceId]);
+  const onVoiceAnswer = useCallback((response: AgentTurnResponse) => {
+    if (!workspaceId || !response.conversationId) return;
+    void client.invalidateQueries({ queryKey: keys.messages(workspaceId, response.conversationId) });
+    void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+  }, [client, workspaceId]);
 
   const composingRun = messages.find((m) => m.role === 'assistant' && m.runId && live[m.runId]?.composing)?.runId ?? null;
 
@@ -201,6 +244,9 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         </Button>
       </div>
 
+      {agent.status?.flags?.RAFII_VOICE_ENABLED && (
+        <VoiceMode conversationId={conversationId} pageContext={voicePageContext} onConversation={onVoiceConversation} onAnswer={onVoiceAnswer} timeZone={timeZone} model={choice.model} />
+      )}
       <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3' role='log' aria-live='polite' aria-relevant='additions' aria-label={`Conversation with ${siteConfig.name}`}>
         {empty && !optimistic ? (
           <div className='flex flex-col items-start gap-3 pt-4'>
@@ -246,6 +292,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
 
       <form onSubmit={onSubmit} className='shrink-0 px-3 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
         <div className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
+          {agentOn && <AttachImage conversationId={conversationId} onAttached={(image) => setImages((prev) => [...prev, image].slice(-4))} disabled={busy} />}
           <textarea
             ref={input}
             value={text}
@@ -285,10 +332,15 @@ function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavi
   onStop?: () => void;
 }) {
   const body = message.body as SiteAgentMessageBody;
+  const agentBody = (body as { agent?: AgentResult & { modality?: string } }).agent;
   if (message.role === 'user') {
+    const spoken = agentBody?.modality === 'voice';
     return (
       <li className='flex justify-end'>
-        <p className='rafii-glass max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap'>{body.text}</p>
+        <p className='rafii-glass max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap'>
+          {spoken && <span className='text-muted-foreground mr-1 text-[11px]'>Said:</span>}
+          {body.text}
+        </p>
       </li>
     );
   }
@@ -321,6 +373,7 @@ function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavi
         <RafiiAvatar size={24} className='mt-0.5' />
         <article className='min-w-0 flex-1' aria-label={`${siteConfig.name}'s answer`}>
           <SiteAgentAnswer body={body.siteAgent} actions={{ onAsk, onNavigate, messageId: message.messageId, conversationId, latest }} />
+          {agentBody && agentBody.traceId && <AgentExtras result={agentBody} conversationId={conversationId} />}
         </article>
       </li>
     );
