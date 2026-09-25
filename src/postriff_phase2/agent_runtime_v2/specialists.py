@@ -49,7 +49,8 @@ scheduled or published. Keep to facts the person or the workspace supplied.""",
     },
     "campaign": {
         "title": "Campaign", "workload": "fast_language",
-        "tools": ["campaign_list", "campaign_get", "campaign_items", "campaign_link", "campaign_unlink", "calendar_range", "content_search", "relationships", "attention_summary"],
+        "tools": ["campaign_list", "campaign_get", "campaign_items", "campaign_membership", "campaign_link", "campaign_unlink", "calendar_range", "content_search", "relationships",
+                  "attention_summary"],
         "purpose": "Campaign planning and gaps, which drafts and posts belong to a campaign, and adding or removing them.",
         "instructions": """Campaign. You work with campaign briefs and their real relationships. Membership of a draft or post in a campaign is a stored
 link (campaign_link / campaign_unlink / campaign_items) — never a tag, a note or memory. Gaps are derived observations (platforms not covered,

@@ -508,6 +508,28 @@ class ManagerOrchestrationTest(unittest.TestCase):
         self.assertEqual(ctx.ledger.changed, [])
 
 
+class HarnessGuardTest(unittest.TestCase):
+    def test_qa_harness_never_runs_on_a_deployment(self):
+        import os
+        from postriff_phase2.agent_runtime_v2 import harness
+        saved = {k: os.environ.get(k) for k in ("RAFII_AGENT_HARNESS", "VERCEL")}
+        try:
+            os.environ.pop("RAFII_AGENT_HARNESS", None)
+            os.environ.pop("VERCEL", None)
+            self.assertFalse(harness.enabled())
+            os.environ["RAFII_AGENT_HARNESS"] = "1"
+            self.assertTrue(harness.enabled())
+            os.environ["VERCEL"] = "1"
+            with self.assertRaises(RuntimeError):
+                harness.enabled()
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+
 # --- GPT-Live front end (§7, ADR-L1/L2) -------------------------------------------------------------------------------------------
 class LivePromptTest(unittest.TestCase):
     def test_prompt_follows_the_live_template_and_is_short(self):

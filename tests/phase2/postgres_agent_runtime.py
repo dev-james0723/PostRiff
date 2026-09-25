@@ -811,6 +811,117 @@ def _():
     return {"actual": "transcript stored as text; unknown usage held as estimated_unknown"}
 
 
+# ===========================================================================================================================
+# Closed capability gaps through the Manager (V04, D04, H05, X04 evidence) and proactive evidence (§22)
+# ===========================================================================================================================
+
+
+@scenario("GAP-V04", "“Does this sound like me?” — Brand Intelligence uses the deterministic voice check with evidence; no “exactly your voice”",
+          "Does this draft sound like me?", "voice.check runs on the draft; findings with their basis and evidence are shown; the answer makes no exact-match claim")
+def _():
+    def approved_voice(s, actor):
+        speaker = s.setdefault("speaker", {})
+        revisions = speaker.setdefault("revisions", [])
+        revision = max([r.get("revision", 0) for r in revisions] + [0]) + 1
+        revisions.append({"revision": revision, "approvedAt": clock[0] - 86400, "reason": "Approved from two writing samples",
+                          "profile": {"tone": "warm", "observations": ["Opens with a short question to the reader.", "Keeps paragraphs to two sentences."]}})
+        speaker["activeRevision"] = revision
+        return s
+    command(approved_voice)
+    SCRIPTS.set(rafii_manager=[[function_call("ask_brand_intelligence", {"input": f"Does draft {STATE['draft']} sound like the person? Evidence per finding."}, call_id="m1")],
+                               [reply("Some traits match your profile and some differ; each finding shows what it is based on. This isn't a claim that it is exactly your voice.")]],
+                brand_intelligence=[[function_call("voice_check", {"draftId": STATE["draft"]}, call_id="b1")], [assistant_message("Findings attached.")]])
+    result = turn("Does this draft sound like me?", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    body = result["result"]
+    tool = next(a for a in body["toolActivity"] if a["tool"] == "voice_check")
+    assert tool["status"] in ("verified", "unverified") and tool["specialist"] == "brand_intelligence", tool
+    assert "exactly your voice" not in body["answerText"].replace("isn't a claim that it is exactly your voice", "")
+    evidence = [b for b in message_body(result["messageId"])["siteAgent"]["blocks"] if b["type"] in ("result_list", "diagnostic_card")]
+    checked = next((b for b in evidence if b.get("title") == "Checked against your stored voice"), None)
+    assert checked and checked["items"], evidence
+    assert all(item.get("meta") and item.get("excerpt") for item in checked["items"]), "each finding shows its basis and evidence"
+    return {"actual": body["answerText"], "evidenceBlocks": [b.get("title") for b in evidence], "findings": [(i["title"], i["meta"]) for i in checked["items"]]}
+
+
+@scenario("GAP-D04", "Shorten a draft through the writing pipeline: a proposed update on that exact draft; its text unchanged until accepted",
+          "Shorten this draft", "a writing run with the draft as material; proposedUpdate.runId on the same draft; current text unchanged; verified")
+def _():
+    before = next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == STATE["draft"])
+    SCRIPTS.set(rafii_manager=[[function_call("ask_content", {"input": f"Shorten draft {STATE['draft']}."}, call_id="m1")],
+                               [reply("I wrote a shorter version as a proposed update on the draft; the current text stays until you accept it.")]],
+                content=[[function_call("draft_rewrite", {"draftId": STATE["draft"], "instruction": "Shorten it to two sentences."}, call_id="c1")], [assistant_message("Proposed.")]])
+    result = turn("Shorten this draft", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    after = next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == STATE["draft"])
+    rewrite = next(a for a in result["result"]["toolActivity"] if a["tool"] == "draft_rewrite")
+    if rewrite["status"] != "verified":
+        return {"status": "FAIL", "actual": result["result"]["answerText"], "tool": rewrite}
+    assert after["text"] == before["text"] and (after.get("proposedUpdate") or {}).get("runId"), after.get("proposedUpdate")
+    assert result["result"]["changedEntities"][0]["verified"] is True
+    return {"actual": result["result"]["answerText"], "proposedRun": after["proposedUpdate"]["runId"]}
+
+
+@scenario("GAP-H05", "Who linked the draft to the campaign? — attribution only from stored evidence; an unknown person is not guessed",
+          "Who added this draft to the campaign? / What did Alex do this week?", "record.attribution names the member from audit/records; “Alex” gets no invented activity")
+def _():
+    SCRIPTS.set(rafii_manager=[[function_call("ask_workspace_history", {"input": f"Who acted on draft {STATE['draft']}? And what did Alex do?"}, call_id="m1")],
+                               [reply("The records show who acted on this draft; nothing in the records names anyone called Alex.")]],
+                workspace_history=[[function_call("record_attribution", {"type": "draft", "id": STATE["draft"]}, call_id="h1"),
+                                    function_call("member_activity", {"member": "Alex"}, call_id="h2")], [assistant_message("Attribution from records only.")]])
+    result = turn("Who added this draft to the campaign, and what did Alex do this week?", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    tools = {a["tool"]: a for a in result["result"]["toolActivity"]}
+    assert tools["record_attribution"]["status"] in ("verified", "unverified") and tools["member_activity"]["status"] in ("verified", "unverified"), tools
+    blocks = message_body(result["messageId"])["siteAgent"]["blocks"]
+    text = json.dumps(blocks, ensure_ascii=False)
+    assert "Alex" not in text or "No member" in text or "not" in text.lower()
+    return {"actual": result["result"]["answerText"], "evidence": [b.get("title") for b in blocks if b["type"] in ("result_list", "diagnostic_card")]}
+
+
+@scenario("A01-agent", "“What should I pay attention to?” — stored facts and derived observations with their rules, shown under the answer (§22)",
+          "What should I pay attention to this week?", "attention.summary read; evidence blocks (stored state; derived observations with rules); no action taken")
+def _():
+    SCRIPTS.set(rafii_manager=[[function_call("attention_summary", {}, call_id="m1")],
+                               [reply("A post waits for approval on Thursday; the other items are observations from your data, each with the rule that produced it.")]])
+    before = service.get(wid, OWNER)["revision"]
+    result = turn("What should I pay attention to this week?", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    blocks = message_body(result["messageId"])["siteAgent"]["blocks"]
+    titles = [b.get("title") for b in blocks if b["type"] == "result_list"]
+    assert any("stored state" in (t or "") for t in titles), titles
+    assert service.get(wid, OWNER)["revision"] == before
+    return {"actual": result["result"]["answerText"], "evidence": titles}
+
+
+@scenario("MM15", "Image publishing checks stay enforced: an image without alt text can't be attached to a scheduled post", "schedule with the reference image",
+          "the proposal tool refuses without alt text; no proposal; nothing changed")
+def _():
+    reference = next(a for a in service.get(wid, OWNER)["state"]["phase2"]["assets"] if a["id"] == STATE["reference"])
+    assert not reference.get("alt"), "the uploaded reference has no alt text"
+    SCRIPTS.set(rafii_manager=[[function_call("schedule_propose", {"draftId": STATE["draft"], "when": "Friday 09:00", "assetId": STATE["reference"]}, call_id="m1")],
+                               [reply("I couldn't prepare that yet; the image needs a short description first.")]])
+    before = service.get(wid, OWNER)["revision"]
+    result = turn("Schedule it Friday at 9 with the reference image", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    tool = next(a for a in result["result"]["toolActivity"] if a["tool"] == "schedule_propose")
+    assert tool["code"] == "needs_alt" and not result["result"]["pendingApprovals"], tool
+    assert service.get(wid, OWNER)["revision"] == before
+    return {"actual": result["result"]["answerText"], "code": tool["code"]}
+
+
+@scenario("MEM01", "Layered memory with provenance: explicit vs inferred, confidence, and cloud consent respected (§14)", "What do you remember about my style?",
+          "memory_context returns layers; without cloud consent the content is withheld and said so")
+def _():
+    SCRIPTS.set(rafii_manager=[[function_call("memory_context", {"layers": ["brand", "voice", "preferences", "campaigns", "task"]}, call_id="m1")],
+                               [reply("Your Brand Brain content isn't shared with the agent model until an owner allows cloud memory; here is what exists.")]])
+    result = turn("What do you remember about my style?", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    run = one("SELECT artifact->'trace'->'tools' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
+    assert run[0]["tool"] == "memory_context" and run[0]["status"] == "verified", run
+    return {"actual": result["result"]["answerText"]}
+
+
 # --- write evidence ------------------------------------------------------------------------------------------------------------
 out_dir = ROOT / "docs/design/site-agent/agent-runtime/evidence"
 out_dir.mkdir(parents=True, exist_ok=True)

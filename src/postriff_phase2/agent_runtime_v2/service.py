@@ -568,6 +568,7 @@ class AgentRuntimeService:
         if ctx.task is not None and ctx.task.steps:
             from ..site_agent.compose_reads import result_list
             blocks.append(result_list("Steps", [{"kind": s.state, "title": s.label, "excerpt": s.reason, "meta": s.state.replace("_", " "), "href": None} for s in ctx.task.steps]))
+        blocks.extend(evidence_blocks(ledger, ctx.request_text, result.get("language")))
         blocks.extend(ledger.navigation[:2])
         if ledger.citations:
             blocks.append(site_contracts.citations(ledger.citations[:4]))
@@ -820,3 +821,33 @@ def attach_upload(runtime: "AgentRuntimeService", workspace_id, token, payload) 
         images = creative.conversation_images(cur, state, workspace_id, payload["conversationId"])
     index = next((i["index"] for i in images if i["assetId"] == asset_id), None)
     return {"assetId": attached[0]["assetId"], "index": index, "images": images, "href": f"/api/workspaces/{workspace_id}/media/{asset_id}"}
+
+
+# The site agent's own evidence views for what the Manager read: stored facts and derived observations (with their rules),
+# voice-check findings with their basis, audit-backed attribution — so a recommendation is inspectable (spec §22, §24).
+EVIDENCE_INTENTS = {"attention.summary": "attention", "reviews.list": "reviews", "publishing.summary": "publishing", "calendar.range": "calendar",
+                    "campaign.get": "campaign", "voice.check": "voice_check", "member.activity": "member_activity", "record.attribution": "attribution",
+                    "campaign.membership": "campaign_membership"}
+MAX_EVIDENCE_BLOCKS = 6
+
+
+def evidence_blocks(ledger, text: str, language: str | None) -> list[dict]:
+    from ..site_agent import compose_reads
+    out = []
+    for tool_id, intent in EVIDENCE_INTENTS.items():
+        result = ledger.site_results.get(tool_id)
+        if not result:
+            continue
+        try:
+            composed = compose_reads.compose(intent, {"intent": intent, "language": language or "en", "entities": {"platforms": [], "days": []}}, {tool_id: result}, text or "")
+        except Exception:  # noqa: BLE001 — evidence is additive; a composer that needs more context is skipped
+            composed = None
+        kept = [b for b in (composed or {}).get("blocks") or [] if b.get("type") in ("result_list", "diagnostic_card")]
+        if not kept and (composed or {}).get("lines") and len(out) < MAX_EVIDENCE_BLOCKS:
+            # Nothing to list, but the grounded reading still says something true ("no profile to compare with").
+            from ..site_agent import contracts as site_contracts
+            out.append(site_contracts.text(" ".join(composed["lines"])[:600]))
+        for block in kept:
+            if len(out) < MAX_EVIDENCE_BLOCKS:
+                out.append(block)
+    return out

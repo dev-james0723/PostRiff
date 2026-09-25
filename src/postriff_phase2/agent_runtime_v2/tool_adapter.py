@@ -189,7 +189,7 @@ _SITE_NAMES = {
     "campaign.get": "campaign_get", "reviews.list": "reviews_list", "publishing.summary": "publishing_summary", "attention.summary": "attention_summary",
     "entity.status": "entity_status",
     # Registered by the site agent's gap work (voice fit, member activity); adapted when present.
-    "voice.check": "voice_check", "member.activity": "member_activity", "record.attribution": "record_attribution",
+    "voice.check": "voice_check", "member.activity": "member_activity", "record.attribution": "record_attribution", "campaign.membership": "campaign_membership",
 }
 _ID_TYPES = {"draftId": "draft", "variantId": "draft", "campaignId": "campaign", "jobId": "job", "reviewId": "review", "automationId": "automation",
              "taskId": "automation", "assetId": "asset", "connectionId": "connection", "documentId": "help_document"}
@@ -244,6 +244,8 @@ def _site_executor(tool_id: str):
             raise AlphaError(result["warnings"][0] if result.get("warnings") else "That tool is not available.", 403 if record.get("code") == "tool_forbidden" else 400,
                              code=record.get("code") or "tool_input")
         data = result.get("data")
+        if result.get("ok"):
+            ctx.ledger.site_results[tool_id] = result
         harvest(ctx, data)
         if tool_id == "ui.navigate" and result.get("ok") and isinstance(data, dict) and data.get("canOpen"):
             from ..site_agent import contracts as site_contracts

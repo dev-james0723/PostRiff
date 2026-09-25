@@ -24,8 +24,19 @@ def runtime_for(service):
     """One runtime per hosted service, created on first use (the SDK is imported only when the agent is used)."""
     runtime = getattr(service, "_agent_runtime_v2", None)
     if runtime is None:
+        from . import harness
         from .service import AgentRuntimeService
-        runtime = AgentRuntimeService(service)
+        if harness.enabled():
+            # LOCAL QA only (refused on Vercel): deterministic reasoning and provider stand-ins; everything else is real.
+            from . import config, creative
+            import os
+            placeholder = "-".join(("harness", "placeholder"))  # routes resolve to the stand-in transports below; nothing reaches OpenAI
+            cfg = config.RuntimeConfig.from_environment({**os.environ, "OPENAI_API_KEY": placeholder, "RAFII_AGENT_V2_ENABLED": "1", "RAFII_VOICE_ENABLED": "1",
+                                                         "RAFII_IMAGE_AGENT_ENABLED": "1", "RAFII_SPECIALISTS_ENABLED": "1"})
+            runtime = AgentRuntimeService(service, cfg, model_factory=harness.model_factory(), image_studio=creative.ImageStudio(cfg, transport=harness.provider_transport),
+                                          vision=creative.VisionAnalyzer(cfg, transport=harness.provider_transport), live_transport=harness.live_transport)
+        else:
+            runtime = AgentRuntimeService(service)
         service._agent_runtime_v2 = runtime
     return runtime
 
