@@ -504,7 +504,7 @@ export const voiceSession = {
   /** An image added during the call belongs to the next request; GPT-Live can't see it, the backend can. */
   imageAttached(assetId: string, index: number | null) {
     set({ pendingImages: [...snapshot.pendingImages, { assetId, index }].slice(-4) });
-    if (snapshot.state === 'live') think(`The user attached image ${index ?? ''} to the conversation. You cannot see images; delegate to the backend to look at it.`);
+    if (snapshot.state === 'live') think(`The user attached image ${index ?? ''} to the conversation. You cannot see images; delegate the request so Rafii can look at it.`);
   },
 
   setConversation(conversationId: string | null) {
