@@ -15,6 +15,7 @@ import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { siteConfig } from '@/config/site';
 import { useWide } from '@/features/queue/use-wide';
+import { VoiceIndicator } from '@/features/rafii-voice/voice-indicator';
 import { SiteAgentChat } from './chat';
 import { panelStore, usePanel } from './store';
 
@@ -102,7 +103,8 @@ export function SiteAgentHotkeys() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  return null;
+  // Voice Mode stays on across pages; while the panel is closed its state stays visible here.
+  return <VoiceIndicator />;
 }
 
 /** The docked column; renders nothing below 1024px, while closed, or while the conversation is shown above a dialog. */
