@@ -262,8 +262,10 @@ def _register_workflow_tools(tool_adapter, contracts, untrusted):
                             "goal": {"type": "string"}, "audience": {"type": "string"}, "channelIds": {"type": "array", "items": {"type": "string"}, "maxItems": 6, "required": True}}, "Built a campaign from the source")
     def source_campaign_create(ctx, args):
         try:
+            # The writer the person chose for this turn (never swapped); with none, the server's default writer.
+            chosen = {"model": ctx.writer_model} if isinstance(getattr(ctx, "writer_model", None), str) and ctx.writer_model else {}
             result = _service(ctx).coworker.source_campaign(ctx.workspace_id, ctx.token, {**{k: args.get(k) for k in ("format", "text", "url", "title", "goal", "audience")},
-                                                                                            "destinations": [{"channelId": c} for c in args["channelIds"] if isinstance(c, str)][:6]})
+                                                                                            "destinations": [{"channelId": c} for c in args["channelIds"] if isinstance(c, str)][:6], **chosen})
         except AlphaError as error:
             return _app_error(error)
         record, existing = result["sourceCampaign"], bool(result.get("existing"))

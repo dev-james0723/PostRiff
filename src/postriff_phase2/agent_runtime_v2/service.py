@@ -679,7 +679,7 @@ class AgentRuntimeService:
             if state_json is not None:
                 if ctx.task is None:
                     ctx.task = task_state.create(cur, self.service.ideas, ctx.workspace_id, ctx.conversation_id, ctx.principal, "Waiting for your approval", ctx.trace_id)
-                self._store_pending_run(cur, ctx.workspace_id, ctx.task.task_id, state_json, interruptions)
+                self._store_pending_run(cur, ctx.workspace_id, ctx.task.task_id, state_json, interruptions, writer_model=ctx.writer_model)
                 for item in interruptions:
                     try:
                         args = json.loads(getattr(item, "arguments", "") or "{}")
@@ -808,7 +808,7 @@ class AgentRuntimeService:
                           usage={"provenance": "deterministic", "billing": "reservation booked: the turn never finished"})
 
     # --- SDK human-in-the-loop resume (ADR-H1) ---------------------------------------------------------------------------
-    def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions):
+    def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions, writer_model=None):
         cur.execute("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (task_id, workspace_id))
         row = cur.fetchone()
         artifact = row[0] or {} if row else {}
@@ -820,7 +820,8 @@ class AgentRuntimeService:
                 args = {}
             if args.get("proposalId"):
                 proposal_ids.append(args["proposalId"])
-        artifact["pendingRun"] = {"state": state_json, "proposalIds": proposal_ids, "storedAt": self.clock()}
+        # The writer the person chose travels with the paused run, so drafting after an approval uses it too.
+        artifact["pendingRun"] = {"state": state_json, "proposalIds": proposal_ids, "storedAt": self.clock(), "writerModel": writer_model}
         cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
 
     def _claim_pending_run(self, workspace_id, token, conversation_id, proposal_id):
@@ -867,7 +868,8 @@ class AgentRuntimeService:
             plan = task_state.load(cur, workspace_id, task_id)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, zone=zone, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
-                              vision=self.vision, request_text="(approved)")
+                              vision=self.vision, request_text="(approved)",
+                              writer_model=pending.get("writerModel") if isinstance(pending.get("writerModel"), str) and pending.get("writerModel") else None)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         ctx.ledger.changed.extend(dict(change) for change in approved)  # the approval the application applied and verified
