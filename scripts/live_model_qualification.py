@@ -350,15 +350,16 @@ def failures(guard, model, restricted):
     guard.mutate = None
 
     guard.scenario = 'truncated_output'
-    saved = model_runtime.MAX_OUTPUT_TOKENS
-    model_runtime.MAX_OUTPUT_TOKENS = 24
+    # Both caps: output_cap() reads them at call time, so thinking models are forced to the limit too.
+    saved = (model_runtime.MAX_OUTPUT_TOKENS, model_runtime.THINKING_OUTPUT_TOKENS)
+    model_runtime.MAX_OUTPUT_TOKENS = model_runtime.THINKING_OUTPUT_TOKENS = 24
     try:
         draft(rt, model, context(RECITAL), one, 'Invite people to my autumn recital.')
         out['output limit reached twice → clean failure with known cost'] = 'unexpected success'
     except ProviderFailure as error:
         out['output limit reached twice → clean failure with known cost'] = error.dispatched and error.cost_usd is not None and 'output limit' in str(error)
     finally:
-        model_runtime.MAX_OUTPUT_TOKENS = saved
+        model_runtime.MAX_OUTPUT_TOKENS, model_runtime.THINKING_OUTPUT_TOKENS = saved
 
     for label, bad in (('gateway refuses a restricted model (free tier)', restricted), ('gateway refuses an unknown model id', 'anthropic/not-a-model')):
         guard.scenario = label

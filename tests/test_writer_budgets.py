@@ -68,40 +68,125 @@ class SkillByteBudgetTest(unittest.TestCase):
 
 
 class ThinkingModelTest(unittest.TestCase):
-    """A thinking model's reasoning tokens share max_tokens; a 2,400 cap ended long drafts mid-JSON in production."""
+    """A thinking model's reasoning tokens share max_tokens; a 2,400 cap ended long drafts mid-JSON in production.
+    Which models think, the reasoning level and the optional parameters come from the gateway catalogue."""
 
-    def body_for(self, model):
+    ASTRA = {"openai/gpt-6-astra": (2.0, 10.0)}   # a model that must reason; priced here for the test
+
+    def call(self, model, **kwargs):
         calls = []
 
         def transport(method, url, headers=None, body=None, timeout=None):
-            calls.append(body)
+            calls.append({"body": body, "timeout": timeout})
             return {"status": 200, "body": {"choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}], "usage": {}}}
-        runtime = ServerModelRuntime("key", model=model, models=[model], transport=transport)
-        runtime._call([{"role": "user", "content": "x"}], model)
+        runtime = ServerModelRuntime("key", model=model, models=[model], transport=transport, prices=self.ASTRA)
+        runtime._call([{"role": "user", "content": "x"}], model, **kwargs)
         return calls[0]
 
-    def test_openai_reasoning_models_get_low_effort_and_headroom(self):
-        body = self.body_for("openai/gpt-6-sol")
-        self.assertEqual(body["reasoning_effort"], "low")
-        self.assertEqual(body["max_tokens"], model_runtime.THINKING_OUTPUT_TOKENS)
-        self.assertGreater(model_runtime.THINKING_OUTPUT_TOKENS, model_runtime.MAX_OUTPUT_TOKENS)
+    def test_catalogue_driven_reasoning_per_family(self):
+        sent = {m: self.call(m)["body"] for m in ("openai/gpt-6-sol", "openai/gpt-6-astra", "anthropic/claude-opus-5.5", "deepseek/deepseek-v4-pro",
+                                                   "anthropic/claude-haiku-4.5", "alibaba/qwen3.6-plus", "openai/gpt-4.1-mini")}
+        # Thinking off wherever the model can switch it off: no reasoning tokens, no headroom needed.
+        for model in ("openai/gpt-6-sol", "deepseek/deepseek-v4-pro", "alibaba/qwen3.6-plus"):
+            self.assertEqual(sent[model]["reasoning"], {"effort": "none"}, model)
+            self.assertEqual(sent[model]["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS, model)
+        self.assertNotIn("reasoning_effort", sent["openai/gpt-6-sol"])
+        # A model that must reason gets its lowest level and headroom.
+        for model in ("openai/gpt-6-astra", "anthropic/claude-opus-5.5"):
+            self.assertEqual(sent[model]["reasoning"], {"effort": "low"}, model)
+            self.assertEqual(sent[model]["max_tokens"], model_runtime.THINKING_OUTPUT_TOKENS, model)
+        self.assertNotIn("response_format", sent["anthropic/claude-opus-5.5"], "only parameters the catalogue lists")
+        self.assertNotIn("response_format", sent["alibaba/qwen3.6-plus"])
+        # A toggle with no effort levels (thinking off unless asked): nothing sent, no headroom.
+        self.assertNotIn("reasoning", sent["anthropic/claude-haiku-4.5"])
+        self.assertEqual(sent["anthropic/claude-haiku-4.5"]["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS)
+        self.assertNotIn("reasoning", sent["openai/gpt-4.1-mini"])
+        self.assertEqual(sent["openai/gpt-4.1-mini"]["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS)
+        self.assertEqual(sent["openai/gpt-4.1-mini"]["response_format"], {"type": "json_object"})
 
-    def test_other_models_are_sent_as_before(self):
-        body = self.body_for("anthropic/claude-sonnet-5")
-        self.assertNotIn("reasoning_effort", body)
-        self.assertEqual(body["max_tokens"], model_runtime.MAX_OUTPUT_TOKENS)
-        # Gemini thinks by default: headroom, but no OpenAI-only field.
-        self.assertTrue(model_runtime.thinking("google/gemini-3.1-pro-preview"))
-        self.assertNotIn("reasoning_effort", self.body_for("google/gemini-3.1-pro-preview"))
+    def test_thinking_models_get_a_longer_timeout(self):
+        self.assertEqual(self.call("openai/gpt-6-astra")["timeout"], model_runtime.THINKING_TIMEOUT_SECONDS)
+        self.assertIsNone(self.call("openai/gpt-6-sol")["timeout"], "thinking off: the transport default")
+
+    def big_deep_request(self):
+        # Near every limit at once: a full skills slot, 16 kB of memory and a user payload just under MAX_CONTEXT_BYTES.
+        facts = [{"id": f"f{i}", "sourceId": "s1", "text": "Fact " + "x" * 440, "locator": ""} for i in range(95)]
+        sources = [{"id": "s1", "policy": "public_quote", "candidateOnly": False, "hash": "h", "facts": facts}]
+        return {"context": context(sources=sources), "idea": self.composed_idea(), "tone": "warm", "destinations": DESTS, "reasoning": "deep",
+                "memory": [{"name": "VOICE.md", "body": "v" * 16_000}], "skills": {"text": "s" * 59_000}}
+
+    @staticmethod
+    def composed_idea():
+        return "Rewrite this for LinkedIn." + f"\n\n{MATERIAL_LABEL}\n<<<\n" + "m" * 6_000 + "\n>>>"
+
+    def test_headroom_is_trimmed_to_fit_the_per_request_budget(self):
+        import os
+        from unittest import mock
+        runtime = ServerModelRuntime("key", model="openai/gpt-6-astra", models=["openai/gpt-6-astra"], prices=self.ASTRA)
+        request = self.big_deep_request()
+        self.assertLess(len(json.dumps(runtime._user_payload(request), ensure_ascii=False).encode()), model_runtime.MAX_CONTEXT_BYTES)
+        with mock.patch.dict(os.environ, {"POSTRIFF_BUDGET_POLICY": ""}):
+            self.assertGreater(runtime.price_quote(request), 1.0, "with the full headroom this turn would be refused under $1")
+        with mock.patch.dict(os.environ, {"POSTRIFF_BUDGET_POLICY": "launch-2026-09-24"}):
+            cap = runtime.output_tokens(request)
+            quote = runtime.price_quote(request)
+        self.assertLessEqual(quote, 1.0, "a deep turn near the context limit stays inside the $1 policy")
+        self.assertGreaterEqual(cap, model_runtime.MAX_OUTPUT_TOKENS)
+        self.assertLess(cap, model_runtime.THINKING_OUTPUT_TOKENS)
+        with mock.patch.dict(os.environ, {"POSTRIFF_BUDGET_POLICY": ""}):
+            self.assertEqual(runtime.output_tokens(request), model_runtime.THINKING_OUTPUT_TOKENS, "no policy: full headroom")
+        small = {"context": context(), "idea": "Announce the recital", "destinations": DESTS, "reasoning": "quick"}
+        with mock.patch.dict(os.environ, {"POSTRIFF_BUDGET_POLICY": "launch-2026-09-24"}):
+            self.assertEqual(runtime.output_tokens(small), model_runtime.THINKING_OUTPUT_TOKENS, "a normal turn keeps the full headroom")
 
     def test_the_reservation_ceiling_follows_the_larger_cap(self):
         request = {"context": context(), "idea": "Announce the recital", "destinations": DESTS, "reasoning": "quick"}
-        thinking = ServerModelRuntime("key", model="openai/gpt-6-sol", models=["openai/gpt-6-sol"])
-        plain = ServerModelRuntime("key", model="anthropic/claude-sonnet-5", models=["anthropic/claude-sonnet-5"])
-        # Same $2/$10 price list: the difference is the output allowance only.
+        thinking = ServerModelRuntime("key", model="openai/gpt-6-astra", models=["openai/gpt-6-astra"], prices=self.ASTRA)
+        plain = ServerModelRuntime("key", model="openai/gpt-6-sol", models=["openai/gpt-6-sol"])   # same price list, thinking off
         self.assertGreater(thinking.price_quote(request), plain.price_quote(request))
         self.assertGreater(thinking.typical_quote(request), plain.typical_quote(request))
         self.assertLess(thinking.price_quote(request), 1.0, "stays under the $1 per-request policy")
+
+
+class StructuredCallTest(unittest.TestCase):
+    def body(self, model):
+        from postriff_phase2.learning_model import GatewayCall
+        calls = []
+
+        def transport(method, url, headers=None, body=None):
+            calls.append(body)
+            return {"status": 200, "body": {"choices": [{"message": {"content": "{}"}}], "usage": {}}}
+        GatewayCall("key", model=model, transport=transport)("system", "user", {"type": "object"})
+        return calls[0]
+
+    def test_side_calls_keep_thinking_off_where_they_can(self):
+        sonnet, opus, haiku = (self.body(m) for m in ("anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5", "anthropic/claude-haiku-4.5"))
+        self.assertEqual((sonnet["reasoning"], sonnet["max_tokens"]), ({"effort": "none"}, 1200))
+        self.assertNotIn("temperature", sonnet, "the catalogue does not list temperature for Sonnet 5")
+        self.assertEqual((opus["reasoning"], opus["max_tokens"]), ({"effort": "low"}, 4000))
+        self.assertNotIn("response_format", opus)
+        self.assertNotIn("reasoning", haiku)
+        self.assertEqual((haiku["max_tokens"], haiku["temperature"]), (1200, 0.2))
+
+
+class CatalogueTest(unittest.TestCase):
+    def test_parse_and_refresh_keep_what_works(self):
+        from postriff_phase2 import gateway_catalog
+        data = {"data": [{"id": "vendor/new", "type": "language", "reasoning_options": [{"type": "effort", "values": ["low", "high"]}], "supported_parameters": ["reasoning", "max_tokens"], "max_tokens": 1000},
+                         {"id": "vendor/image", "type": "image"}]}
+        self.assertEqual(gateway_catalog.parse(data), {"vendor/new": {"reasoning": [{"type": "effort", "values": ["low", "high"]}], "params": ["max_tokens", "reasoning"], "maxTokens": 1000}})
+        before = gateway_catalog._models()
+        gateway_catalog._refresh(transport=lambda url: {"data": []})
+        self.assertIs(gateway_catalog._models(), before, "an empty answer never replaces the catalogue")
+
+    def test_only_a_deployed_app_fetches(self):
+        import os
+        from unittest import mock
+        from postriff_phase2 import gateway_catalog
+        with mock.patch.dict(os.environ, {"VERCEL": ""}):
+            self.assertFalse(gateway_catalog._refresh_allowed())
+        with mock.patch.dict(os.environ, {"VERCEL": "1", "POSTRIFF_GATEWAY_CATALOG_REFRESH": "0"}):
+            self.assertFalse(gateway_catalog._refresh_allowed())
 
 if __name__ == "__main__":
     unittest.main()

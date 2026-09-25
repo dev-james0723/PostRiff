@@ -1018,7 +1018,8 @@ class IdeasService:
             estimate = __import__('math').ceil(runtime.price_quote(request, model_id) * 1_000_000) if paid and hasattr(runtime, 'price_quote') else 500_000 if paid else 0
             recurring = getattr(self, 'recurring_binding', None)
             if recurring and estimate > recurring['maxCostUsdMicro']:
-                raise AlphaError('This writer exceeds the confirmed per-occurrence cost limit.', 402)
+                raise AlphaError(f"This run could cost up to US${estimate / 1_000_000:.2f}, over this automation's US${recurring['maxCostUsdMicro'] / 1_000_000:.2f} limit per run. "
+                                 f"Raise the limit to at least US${estimate / 1_000_000:.2f} to let it write.", 402, code="automation_cost_limit")
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id, credit_authority=credit_authority)
             outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
             if material_ref and material_ref.get("type") == "draft" and isinstance(material_ref.get("id"), str):

@@ -46,13 +46,13 @@ MAX_SKILLS_BYTES = 60_000       # composed skill text (IdeasService binds it); m
 MAX_MEMORY_BYTES = 16_000       # memory files the workspace allowed a cloud model to read (memory.projection)
 MAX_OUTPUT_TOKENS = 2_400
 # Models that think before answering count their reasoning tokens inside max_tokens, so a 2,400 cap could end a draft
-# mid-JSON (finish_reason "length", then "The writer did not finish"). They get output headroom; OpenAI's reasoning
-# models are also asked for low reasoning effort (the gateway takes reasoning_effort, as agent_runtime_v2 already sends).
-# Headroom changes only the cap and the reservation ceiling, never which model runs.
-THINKING_MODEL_PREFIXES = ("openai/gpt-6", "openai/gpt-5", "openai/o", "google/gemini-2.5", "google/gemini-3", "deepseek/", "qwen/qwen3")
-EFFORT_MODEL_PREFIXES = ("openai/gpt-6", "openai/gpt-5", "openai/o")
+# mid-JSON (finish_reason "length", then "The writer did not finish"). Which models think, the reasoning level sent and
+# the optional parameters come from the gateway catalogue (gateway_catalog), not from model names. Thinking models get
+# output headroom, trimmed per request so the reservation stays inside the budget policy's per-request limit, and a
+# longer timeout. Headroom changes only the cap and the reservation ceiling, never which model runs.
 THINKING_OUTPUT_TOKENS = 8_000
 TYPICAL_REASONING_TOKENS = 800   # per call, for the displayed typical cost of a low-effort thinking model
+THINKING_TIMEOUT_SECONDS = 90    # 3 calls on a deep turn stay inside the 300 s function limit
 # The idea field carries the typed instruction (ideas.IDEA_LIMIT, 3,000) plus any handed-in material (ideas.MAX_TEXT,
 # 6,000) under generation.MATERIAL_LABEL. A 3,000 cap here refused every draft_create brief over ~1,500 characters,
 # every rewrite of a long draft and every weekly/campaign brief with a 400 on the cloud writer.
@@ -64,13 +64,25 @@ RESPONSE_CAP = 1_048_576
 
 
 def thinking(model):
-    """True for models whose reasoning tokens share the output cap (see THINKING_MODEL_PREFIXES)."""
-    return isinstance(model, str) and model.startswith(THINKING_MODEL_PREFIXES)
+    """True for models whose reasoning tokens share the output cap (the gateway catalogue's reasoning_options)."""
+    from . import gateway_catalog
+    return gateway_catalog.thinking(model)
 
 
-def output_cap(model):
-    """max_tokens for one call: the visible draft's cap, plus reasoning headroom for thinking models."""
-    return THINKING_OUTPUT_TOKENS if thinking(model) else MAX_OUTPUT_TOKENS
+def output_cap(model, limit=None):
+    """max_tokens for one call: the visible draft's cap, plus reasoning headroom for thinking models. `limit` trims
+    the headroom (never below the visible cap) when the full headroom would not fit the per-request budget."""
+    cap = THINKING_OUTPUT_TOKENS if thinking(model) else MAX_OUTPUT_TOKENS
+    return cap if limit is None else max(MAX_OUTPUT_TOKENS, min(cap, int(limit)))
+
+
+def _takes_timeout(transport):
+    import inspect
+    try:
+        params = inspect.signature(transport).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "timeout" or p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -206,7 +218,31 @@ class ServerModelRuntime(AgentRuntime):
         # The revise pass re-reads the first draft, which `max_tokens` bounds on every call; twice that
         # allows for re-serialising it. (Counting the 1 MB transport cap as tokens made deep unaffordable.)
         critique = 2 * MAX_OUTPUT_TOKENS if request.get('reasoning') == 'deep' else 0
-        return self._cost(model, prompt_tokens * calls + critique, output_cap(model) * calls)
+        return self._cost(model, prompt_tokens * calls + critique, self.output_tokens(request, model) * calls)
+
+    def output_tokens(self, request, model=None):
+        """This request's max_tokens per call. A thinking model gets the full headroom unless that would put the
+        reservation over the active budget policy's per-request limit; then only what fits (never below the visible
+        draft cap, so nothing that ran before is refused because of the headroom)."""
+        import math
+        model = model or self.model
+        cap = output_cap(model)
+        if cap <= MAX_OUTPUT_TOKENS:
+            return cap
+        from .billing import USD, active_budget_policy
+        try:
+            policy = active_budget_policy()
+        except Exception:  # noqa: BLE001 - an unknown policy refuses paid work elsewhere; keep the full headroom here
+            policy = None
+        if not policy:
+            return cap
+        inp, out = self._price(model)
+        prompt_tokens = len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode()) + 256
+        calls = ATTEMPTS + (1 if request.get('reasoning') == 'deep' else 0)
+        critique = 2 * MAX_OUTPUT_TOKENS if request.get('reasoning') == 'deep' else 0
+        room_usd = policy["requestMax"] / USD - (prompt_tokens * calls + critique) * inp / 1_000_000
+        fits = math.floor(room_usd * 1_000_000 / (out * calls)) if out > 0 else cap
+        return output_cap(model, limit=fits)
 
     ESTIMATE_BASIS = ("one attempt (two with the deep revise pass), about 3 bytes of request per input token, "
                       "400 output tokens per destination and, for models that think first, 800 reasoning tokens a call; "
@@ -284,12 +320,16 @@ class ServerModelRuntime(AgentRuntime):
         """AI Gateway provider slugs this model may execute on; the model maker when not configured."""
         return list(self.allowed_providers.get(model) or ([model.split("/", 1)[0]] if "/" in model else []))
 
-    def _call(self, messages, model, progress=None):
+    def _call(self, messages, model, progress=None, max_tokens=None):
         # Public catalogue 2026-09-20: Sonnet 5 does not accept temperature.
         # Leave sampling at each provider's default rather than sending an unsupported field.
-        body = {"model": model, "messages": messages, "max_tokens": output_cap(model), "response_format": {"type": "json_object"}}
-        if model.startswith(EFFORT_MODEL_PREFIXES):
-            body["reasoning_effort"] = "low"
+        from . import gateway_catalog
+        body = {"model": model, "messages": messages, "max_tokens": max_tokens or output_cap(model)}
+        if gateway_catalog.supports(model, "response_format"):
+            body["response_format"] = {"type": "json_object"}   # models without it follow the system prompt's JSON contract
+        reasoning = gateway_catalog.drafting_reasoning(model)
+        if reasoning:
+            body["reasoning"] = reasoning   # the gateway's unified reasoning object; only a level the model lists
         allowed = self.allowed_for(model)
         if allowed:
             # `only` limits routing and fallbacks to these providers; no model fallback (`models`) is sent.
@@ -297,7 +337,9 @@ class ServerModelRuntime(AgentRuntime):
         if progress is not None:
             progress["dispatched"] = True
         try:
-            response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
+            # A thinking model may take longer than the default 45 s; a transport without a timeout parameter keeps its own.
+            extra = {"timeout": THINKING_TIMEOUT_SECONDS} if thinking(model) and _takes_timeout(self.transport) else {}
+            response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body, **extra)
         except AlphaError as error:
             raise _Unknown(str(error), error.status) from error
         status, data = response.get("status"), response.get("body") or {}
@@ -351,6 +393,7 @@ class ServerModelRuntime(AgentRuntime):
             raise AlphaError("Reduce the selected sources: the drafting context is over the 60 kB limit.", 413)
 
         emit(safe_event("run.started", model=model, reasoning=reasoning, contextDigest=digest(context), estimatedCostUsd=self.price_quote(request, model)))
+        cap = self.output_tokens(request, model)   # the same max_tokens the reservation ceiling above assumed
         for source in context["sources"]:
             emit(safe_event("source.added", sourceId=source["id"], policy=source["policy"], candidateOnly=source["candidateOnly"], facts=len(source["facts"])))
         for item in context["excluded"]:
@@ -382,7 +425,7 @@ class ServerModelRuntime(AgentRuntime):
         for attempt in range(ATTEMPTS):
             stop_if_cancelled()
             try:
-                content, usage = self._call(self._messages(request, reasoning), model, progress)
+                content, usage = self._call(self._messages(request, reasoning), model, progress, max_tokens=cap)
             except _RateLimited as error:
                 requests_made += 1  # refused before any work: known to cost nothing
                 last_error = str(error)
@@ -428,7 +471,7 @@ class ServerModelRuntime(AgentRuntime):
         if reasoning == "deep":
             stop_if_cancelled()
             try:
-                revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress)
+                revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress, max_tokens=cap)
                 requests_made += 1
                 call_cost = cost_of(revised_usage)
                 usage_complete = usage_complete and call_cost is not None

@@ -173,11 +173,20 @@ class GatewayCall:
 
     def __call__(self, system, user, schema):
         cost_usd_micro = None
+        from . import gateway_catalog
         from .model_runtime import NO_TEMPERATURE
-        body = {"model": self.model, "max_tokens": 1200, "response_format": {"type": "json_object"},
+        # Thinking off where the model allows it (as these short structured calls always ran); a model that must
+        # reason gets its lowest level and headroom, since its reasoning shares max_tokens.
+        reasoning = gateway_catalog.drafting_reasoning(self.model)
+        reasons = bool(reasoning) and reasoning.get("effort") != "none"
+        body = {"model": self.model, "max_tokens": 4000 if reasons else 1200,
                 "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}],
                 "providerOptions": {"gateway": {"only": list(self.allowed_providers)}}}
-        if self.model not in NO_TEMPERATURE:
+        if gateway_catalog.supports(self.model, "response_format"):
+            body["response_format"] = {"type": "json_object"}
+        if reasoning:
+            body["reasoning"] = reasoning
+        if self.model not in NO_TEMPERATURE and gateway_catalog.supports(self.model, "temperature") and not reasons:
             body["temperature"] = 0.2
         response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
         data = response.get("body") or {}
