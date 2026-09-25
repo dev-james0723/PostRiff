@@ -45,7 +45,7 @@ chosen metrics are our editorial inferences, not platform-authored instructions.
 - YouTube: test distinct honest title/thumbnail concepts with an unchanged payoff;
   inspect where the opening loses viewers before adding more cuts.
 - TikTok: compare two clear spoken/visual openings, or a tighter explanation against
-  a slower demonstration; preserve musical context and do not loop merely for views.
+  a slower demonstration; preserve the content's own pacing and do not loop merely for views.
 - Facebook: try a short observation versus a connected human story. The upstream
   under-80-character suggestion can seed a variant, never dictate every post.
 - Timing, length, hashtags, link placement and native-media treatment can become

@@ -15,7 +15,7 @@ const modules=process.env.VERCEL_BUILDER_MODULES || path.join(root,'.codex/consu
   if(entry.isDirectory())walk(path.join(dir,entry.name),name+'/');else uploaded.push(name);
  }}
  walk(root);
- const forbidden=/(^|\/)(\.env[^/]*|broker\.key|vendor|\.codex|\.token-pilot|\.claude|\.agents|\.git|tests|node_modules|\.next[^/]*|.*-broker-.*)(\/|$)/;
+ const forbidden=/(^|\/)(\.env[^/]*|broker\.key|vendor|\.codex|\.token-pilot|\.claude|\.agents|\.git|tests|node_modules|\.next[^/]*|.*-broker-.*|james-au-[^/]*)(\/|$)/;
  assert.deepEqual(uploaded.filter(n=>forbidden.test(n)||n.startsWith('docs/')),[]);
  for(const name of ['api/index.py','src/postriff_phase2/locale_catalogue.json','skills/postriff-voice/SKILL.md']) {
   if(name.includes('postriff-voice'))assert(uploaded.some(n=>n.startsWith('skills/postriff-')&&n.endsWith('/SKILL.md')));

@@ -1,0 +1,181 @@
+{
+  "schema": "rafii.coworker-verification.v1",
+  "generatedAt": "2026-09-25T06:00:33.838977+00:00",
+  "environment": {
+    "python": "3.12.13",
+    "platform": "macOS-15.1-arm64-arm-64bit",
+    "research": "0",
+    "registryRelease": "reg_50523c1e7bc9a8875ef628b1"
+  },
+  "live": {
+    "verified": [],
+    "note": "No live provider, email, push, model, image, payment, publishing, migration or deployment was exercised. Every result here is local or synthetic."
+  },
+  "catalog": {
+    "events": 24,
+    "emailPreviews": 96
+  },
+  "gates": [
+    {
+      "gate": "capability_registry",
+      "command": "python scripts/rafii_skill_registry.py --check",
+      "status": "PASS",
+      "ok": true,
+      "release": "reg_50523c1e7bc9a8875ef628b1",
+      "totals": {
+        "registered": 90,
+        "default": 82,
+        "private": 5,
+        "byKind": {
+          "knowledge": 46,
+          "workflow": 5,
+          "tool": 21,
+          "policy": 10,
+          "evaluator": 8
+        },
+        "deprecated": 1,
+        "dormant": 2
+      },
+      "orphanCount": 0,
+      "orphans": [],
+      "documentedExceptions": [
+        {
+          "id": "rafii-listening-opportunity",
+          "state": "dormant",
+          "reason": "No production path applies this method yet: listening scores and records opportunities deterministically, and 'Act on it' records a decision without drafting. Kept for when an opportunity drafts through the writer; not bound, not advertised."
+        },
+        {
+          "id": "postriff-conversation-director",
+          "state": "deprecated",
+          "reason": "Duplicates runtime intake (intent.py, onboarding_chat, the Rafii Manager's instructions). Its one-blocking-question rule is implemented by coworker.weekly_operator needs_input questions. Not bound, not advertised."
+        },
+        {
+          "id": "postriff-hyperframes-motion",
+          "state": "dormant",
+          "reason": "No hosted motion renderer exists (HyperFrames rendering is local-only). Kept for the local studio; not bound, not advertised, not counted as a hosted capability."
+        }
+      ],
+      "jamesLeakage": {
+        "findings": 0,
+        "items": []
+      },
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "gate": "coworker_unit_tests",
+      "status": "PASS",
+      "counts": {
+        "ran": 130,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "command": "/private/tmp/claude-501/-Users-ouxianxing/368c5a0f-34ad-4513-9a72-1e86abce3c9b/scratchpad/venv312/bin/python -m unittest tests.test_rafii_skill_registry tests.test_rafii_humanizer tests.test_rafii_notifications tests.test_rafii_workflows tests.test_rafii_runtime_convergence tests.test_rafii_review_fixes",
+      "exitCode": 0,
+      "at": "2026-09-25T05:57:40.668371+00:00"
+    },
+    {
+      "gate": "python_unit_full",
+      "status": "PASS",
+      "counts": {
+        "ran": 979,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "command": "/private/tmp/claude-501/-Users-ouxianxing/368c5a0f-34ad-4513-9a72-1e86abce3c9b/scratchpad/venv312/bin/python -m unittest discover -s tests -p test_*.py",
+      "at": "2026-09-25T05:57:50.245202+00:00"
+    },
+    {
+      "gate": "postgres_coworker_scenarios",
+      "status": "PASS",
+      "summary": {
+        "PASS": 35,
+        "FAIL": 0
+      },
+      "evidence": "docs/design/site-agent/adaptive-social-coworker/evidence/pg-coworker.json",
+      "command": "RAFII_COWORKER_EVIDENCE=docs/design/site-agent/adaptive-social-coworker/evidence/pg-coworker.json python scripts/postriff_pg_suite.py postgres_coworker",
+      "generatedAt": "2026-09-25T05:52:13.499064+00:00",
+      "execution": "local disposable PostgreSQL; synthetic email and push providers; deterministic preview writer; no live provider",
+      "mode": "evidence file (not re-run by this script)"
+    },
+    {
+      "gate": "email_render_accessibility",
+      "status": "PASS",
+      "summary": {
+        "checked": 768,
+        "passed": 768,
+        "failed": 0,
+        "browsers": [
+          "chromium",
+          "webkit"
+        ],
+        "errors": []
+      },
+      "evidence": "docs/design/site-agent/adaptive-social-coworker/evidence/email-render.json",
+      "command": "node scripts/rafii_email_render_check.cjs",
+      "generatedAt": null,
+      "execution": "local static HTML in headless browsers; nothing sent",
+      "mode": "evidence file (not re-run by this script)"
+    },
+    {
+      "gate": "web_browser_coworker",
+      "status": "PASS",
+      "summary": {
+        "chromium": {
+          "ran": 47,
+          "ok": 47
+        },
+        "webkit": {
+          "ran": 47,
+          "ok": 47
+        }
+      },
+      "evidence": "docs/design/site-agent/adaptive-social-coworker/web/evidence",
+      "command": "node web/tests/coworker-browser.cjs --browser=chromium|webkit (local next dev + local API harness; synthetic data)",
+      "generatedAt": {
+        "chromium": "2026-09-25T05:56:44.566Z",
+        "webkit": "2026-09-25T05:57:21.879Z"
+      },
+      "execution": "local only (not live)",
+      "mode": "evidence file (not re-run by this script)"
+    },
+    {
+      "gate": "secret_scan",
+      "status": "PASS",
+      "files": 1389,
+      "unexpected": 0,
+      "command": "/private/tmp/claude-501/-Users-ouxianxing/368c5a0f-34ad-4513-9a72-1e86abce3c9b/scratchpad/venv312/bin/python scripts/consumer_ready_secrets.py",
+      "exitCode": 0
+    },
+    {
+      "gate": "web_contract_tests",
+      "status": "PASS",
+      "pass": 100,
+      "fail": 0,
+      "command": "/opt/homebrew/opt/node@24/bin/node --test web/tests/auth-navigation.test.cjs web/tests/coworker-api.test.cjs web/tests/coworker-deeplink.test.mjs web/tests/coworker-present.test.mjs web/tests/coworker…",
+      "exitCode": 0
+    },
+    {
+      "gate": "web_typecheck",
+      "status": "PASS",
+      "command": "npm --prefix web run typecheck",
+      "exitCode": 0,
+      "tail": "\n> postriff-web@0.1.0 typecheck\n> tsc --noEmit\n\n"
+    },
+    {
+      "gate": "web_lint",
+      "status": "PASS",
+      "command": "npm --prefix web run lint",
+      "exitCode": 0,
+      "tail": "\n> postriff-web@0.1.0 lint\n> oxlint src\n\nFound 0 warnings and 0 errors.\nFinished in 1.4s on 731 files with 213 rules using 12 threads.\n"
+    }
+  ],
+  "summary": {
+    "PASS": 10,
+    "FAIL": 0,
+    "STALE": 0,
+    "NOT_RUN": 0
+  }
+}

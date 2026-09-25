@@ -1,6 +1,8 @@
 ---
 name: postriff-publish-and-verify
 description: Use when executing an exactly approved campaign job, inspecting scheduled or published results, or reconciling a submission whose remote outcome is uncertain.
+metadata:
+  version: 1.0.0
 ---
 
 # Publish and verify

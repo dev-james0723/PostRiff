@@ -1,0 +1,9 @@
+Weekly plan couldn't finish
+
+The run stopped before it could prepare drafts. Nothing was published. Recorded reason: LinkedIn rejected the post: the text is longer than allowed.
+
+See what happened: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

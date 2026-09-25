@@ -1,0 +1,12 @@
+Last week at a glance
+
+Here is what your posts did last week. Patterns are shown as hypotheses with their sample size; a single post never becomes a rule.
+Verified posts: 12
+Median views: 1,240
+Hypotheses: 2
+
+Open the summary: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

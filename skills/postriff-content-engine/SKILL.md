@@ -1,6 +1,8 @@
 ---
 name: postriff-content-engine
 description: Use when creating, researching, localizing, reviewing, or scheduling social content for a PostRiff workspace, in any language and for any channel the workspace has connected.
+metadata:
+  version: 1.1.0
 ---
 
 # PostRiff content engine
@@ -344,8 +346,8 @@ If any answer is unclear, pause and create a draft rather than guessing.
 7. Multiple posts per day are allowed, but repetition and filler are not.
 8. When the system lacks enough information, ask for it or save a draft.
 9. Optimize for a compounding body of work, not one viral spike.
-10. The reader should meet a real person who is building, listening, and still
-    figuring things out.
+10. The reader should meet a real person or brand with a specific point of view,
+    not a content machine.
 
 
 ## Working with the craft layer

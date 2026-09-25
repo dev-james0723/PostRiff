@@ -1,0 +1,9 @@
+請重新連接 LinkedIn
+
+Rafii 已無法發佈到你的 LinkedIn 帳戶。相關帖文會保留，但會暫停，直至你重新連接。
+
+重新連接帳戶: https://app.rafii.example/app/queue
+
+你收到這封電郵，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電郵: https://app.rafii.example/api/notifications/unsubscribe?token=preview

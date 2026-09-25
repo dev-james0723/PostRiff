@@ -1,0 +1,9 @@
+有一篇帖子需要你批准
+
+一篇 LinkedIn 帖子正在等待你批准。只有在发布时间前批准，才会发布。
+
+审阅并批准: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

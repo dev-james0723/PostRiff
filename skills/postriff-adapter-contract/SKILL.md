@@ -1,6 +1,8 @@
 ---
 name: postriff-adapter-contract
 description: The shared contract every PostRiff channel adapter inherits — asset rules, setup, browser fallback, approval and safety, draft payload mapping, and verification. Bound once per turn alongside whichever channel adapters the turn uses.
+metadata:
+  version: 1.0.0
 ---
 
 # Channel adapter contract

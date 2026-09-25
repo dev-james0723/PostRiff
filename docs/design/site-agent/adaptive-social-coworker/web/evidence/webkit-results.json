@@ -1,0 +1,242 @@
+{
+  "base": "http://127.0.0.1:3390",
+  "principal": "86ae96e0-aab5-4405-aeba-83e668334731",
+  "at": "2026-09-25T05:57:21.879Z",
+  "results": [
+    {
+      "browser": "webkit",
+      "name": "seed: workspace, LinkedIn account and an approved source; coworker flags on",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: the sidebar offers Weekly",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: with no plan, the next step is \"Set up your week\"",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: the plan saved from the form is read back from the API",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: saving the plan drafts nothing",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: preparing plans the week and drafts what it can",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: a question comes first as the single next step",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: the header says what is ready and what is blocked",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: posts are grouped by day",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: a ready post shows its draft and status in words",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: the answer is stored and the post leaves \"needs input\"",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: answering reopens the week for drafting",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: after the answer the next step is drafting the waiting post",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: the answered post is drafted and the week is back in review",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: an accepted post says it is in Queue → Drafts, not scheduled",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: the Queue link opens the drafts view on that draft",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: the API reads the post back as accepted (not scheduled or published)",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "weekly: \"Scheduled\" / \"Published\" appear only for posts the API says so",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "axe: no serious or critical issue on /app/weekly",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "bell: the harness emitted \"week ready\"",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "bell: the count includes unread server notifications",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "bell: opening a notification follows its in-app link and marks it read",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "overview: \"What needs my attention\" lists Rafii’s items with a link",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "personalization: a note shows as \"You said this\" with its scope",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "personalization: turning a note off is read back from the API",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "personalization: turning it back on is read back from the API",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "personalization: Export JSON downloads the overlays export",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "personalization: reset asks for confirmation first",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "personalization: cancelling the reset keeps the note",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "axe: no serious or critical issue on /app/workspace/personalization",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "notifications: without a VAPID key the page says push is not turned on (no broken button)",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "notifications: per-category choices are labelled",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "notifications: a category change is stored for this workspace",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "axe: no serious or critical issue on /app/account/notifications",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "notifications: the push opt-in button exists when push is available",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "notifications: nothing prompts for permission on load",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "notifications: no service worker is registered until the person opts in",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "axe: no serious or critical issue on /app/account/notifications (push available)",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "no uncaught page errors on the desktop journey",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: /app/weekly does not scroll sideways",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: /app/weekly inputs are at least 16px",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: /app/workspace/personalization does not scroll sideways",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: /app/workspace/personalization inputs are at least 16px",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: /app/account/notifications does not scroll sideways",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: /app/account/notifications inputs are at least 16px",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: the bottom bar offers Weekly",
+      "ok": true
+    },
+    {
+      "browser": "webkit",
+      "name": "phone: with reduced motion no looping animation runs on the settled Weekly page",
+      "ok": true
+    }
+  ]
+}

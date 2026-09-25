@@ -1,0 +1,958 @@
+{
+  "version": "2026-09-24.1",
+  "fallback": "en",
+  "locales": {
+    "en": {
+      "common": {
+        "brand": "Rafii",
+        "reason": "You received this because you use Rafii for {workspace}.",
+        "reasonPerson": "You received this because it concerns your Rafii account.",
+        "settings": "Notification settings",
+        "unsubscribe": "Unsubscribe from these emails",
+        "privacy": "Privacy",
+        "linkFallback": "If the button doesn't work, open this link:",
+        "nothingPublished": "Nothing is published without your approval.",
+        "status": {
+          "action": "Needs you",
+          "critical": "Needs attention",
+          "warning": "Blocked",
+          "info": "Update",
+          "security": "Security",
+          "success": "Done"
+        }
+      },
+      "templates": {
+        "weekly_ready": {
+          "subject": "Next week is ready for your review",
+          "preheader": "{count} posts are drafted and checked. Review what matters.",
+          "context": "Weekly plan",
+          "headline": "Next week is ready for you",
+          "lead": "Rafii prepared {count} posts for the week of {weekOf}. Each one is drafted for its platform and checked against your voice, and against your sources where it has them. Nothing is scheduled until you approve it.",
+          "cta": "Review the week",
+          "status": "action"
+        },
+        "drafts_ready": {
+          "subject": "Drafts ready for review",
+          "preheader": "{count} drafts are waiting for you.",
+          "context": "Automation",
+          "headline": "Your drafts are ready",
+          "lead": "{recipe} prepared {count} drafts for your review. Nothing was scheduled or published.",
+          "cta": "Review drafts",
+          "status": "action"
+        },
+        "approval_required": {
+          "subject": "A post is waiting for your approval",
+          "preheader": "Approve it before its publish time, or it won't go out.",
+          "context": "Approval",
+          "headline": "A post needs your approval",
+          "lead": "A post for {platform} is waiting for your approval. It is only published if you approve it before its publish time.",
+          "cta": "Review and approve",
+          "status": "action"
+        },
+        "campaign_blocked": {
+          "subject": "Something is blocked and needs you",
+          "preheader": "Rafii paused until you decide.",
+          "context": "Blocked",
+          "headline": "Rafii can't continue without you",
+          "lead": "{title}. {reason}",
+          "cta": "See what's needed",
+          "status": "warning"
+        },
+        "needs_input": {
+          "subject": "Rafii has a question before it continues",
+          "preheader": "One answer unblocks the next step.",
+          "context": "Research",
+          "headline": "One question before Rafii continues",
+          "lead": "{reason}",
+          "cta": "Answer",
+          "status": "action"
+        },
+        "asset_review": {
+          "subject": "An image is ready for your review",
+          "preheader": "Check it before it is used.",
+          "context": "Creative",
+          "headline": "An image needs your review",
+          "lead": "A new image was prepared for {platform}. The original was kept; nothing is used until you choose it.",
+          "cta": "Review the image",
+          "status": "action"
+        },
+        "publish_scheduled": {
+          "subject": "A post is scheduled",
+          "preheader": "It will publish at its approved time.",
+          "context": "Publishing",
+          "headline": "A post is scheduled",
+          "lead": "A post for {platform} is scheduled. Scheduled is not published yet; Rafii confirms each post after it goes out.",
+          "cta": "Open Queue",
+          "status": "info"
+        },
+        "publish_verified": {
+          "subject": "A post was published and confirmed",
+          "preheader": "The platform confirmed the post.",
+          "context": "Publishing",
+          "headline": "Published and confirmed",
+          "lead": "Your post on {platform} was published and the platform confirmed it.",
+          "cta": "See the post",
+          "status": "success"
+        },
+        "publish_failed": {
+          "subject": "A post couldn't be published",
+          "preheader": "It did not go out. Your approved draft is kept.",
+          "context": "Publishing",
+          "headline": "A post didn't go out",
+          "lead": "Your post for {platform} couldn't be published. The approved draft is kept. Recorded reason: {reason}",
+          "cta": "See what happened",
+          "status": "critical"
+        },
+        "publish_uncertain": {
+          "subject": "We couldn't confirm a post",
+          "preheader": "Check before trying again, so it isn't posted twice.",
+          "context": "Publishing",
+          "headline": "We couldn't confirm this post",
+          "lead": "Rafii sent a post to {platform} but couldn't confirm whether it was published. Please check the platform before trying again, so it isn't posted twice.",
+          "cta": "Check the post",
+          "status": "critical"
+        },
+        "channel_reconnect": {
+          "subject": "Reconnect an account to keep publishing",
+          "preheader": "Posts for this account are paused until you reconnect.",
+          "context": "Accounts",
+          "headline": "Reconnect {platform}",
+          "lead": "Rafii can no longer publish to your {platform} account. Posts for it are kept but paused until you reconnect.",
+          "cta": "Reconnect the account",
+          "status": "critical"
+        },
+        "automation_completed": {
+          "subject": "An automation finished",
+          "preheader": "See what it prepared.",
+          "context": "Automation",
+          "headline": "{recipe} finished",
+          "lead": "{reason}",
+          "cta": "Open the automation",
+          "status": "info"
+        },
+        "automation_failed": {
+          "subject": "An automation couldn't finish",
+          "preheader": "Nothing was published. See what happened.",
+          "context": "Automation",
+          "headline": "{recipe} couldn't finish",
+          "lead": "The run stopped before it could prepare drafts. Nothing was published. Recorded reason: {reason}",
+          "cta": "See what happened",
+          "status": "warning"
+        },
+        "engagement": {
+          "subject": "People are waiting for a reply",
+          "preheader": "Questions and messages that need an answer.",
+          "context": "Inbox",
+          "headline": "Comments that need a reply",
+          "lead": "There are comments on {platform} that ask a question or need an answer. Rafii can suggest replies; nothing is sent without you.",
+          "cta": "Open Inbox",
+          "status": "action"
+        },
+        "opportunity": {
+          "subject": "An idea worth considering",
+          "preheader": "From the sources you follow.",
+          "context": "Opportunity",
+          "headline": "An opportunity for your content",
+          "lead": "{title}. Why it may matter: {why}",
+          "cta": "See the evidence",
+          "status": "info"
+        },
+        "weekly_performance": {
+          "subject": "Your weekly performance summary",
+          "preheader": "What happened last week, with the evidence.",
+          "context": "Weekly summary",
+          "headline": "Last week at a glance",
+          "lead": "Here is what your posts did last week. Patterns are shown as hypotheses with their sample size; a single post never becomes a rule.",
+          "cta": "Open the summary",
+          "status": "info"
+        },
+        "analytics_anomaly": {
+          "subject": "Something changed in your results",
+          "preheader": "An unusual change worth a look.",
+          "context": "Analytics",
+          "headline": "An unusual change",
+          "lead": "{reason}",
+          "cta": "Look closer",
+          "status": "warning"
+        },
+        "preference_proposed": {
+          "subject": "Rafii noticed a possible preference",
+          "preheader": "Accept, edit or dismiss it.",
+          "context": "Learning",
+          "headline": "Should Rafii remember this?",
+          "lead": "Rafii noticed a pattern in how you edit. It only becomes a preference if you accept it.",
+          "cta": "Review the suggestion",
+          "status": "info"
+        },
+        "budget_threshold": {
+          "subject": "Your AI budget is nearly used",
+          "preheader": "Work pauses at your limit.",
+          "context": "Budget",
+          "headline": "Your budget is nearly used",
+          "lead": "This workspace has used most of its AI budget for this period. At the limit, paid work pauses; nothing is charged beyond it.",
+          "cta": "Review usage",
+          "status": "warning"
+        },
+        "payment_failed": {
+          "subject": "Action needed: your payment didn't go through",
+          "preheader": "Update your payment method to keep your plan active.",
+          "context": "Billing",
+          "headline": "Your payment didn't go through",
+          "lead": "We couldn't collect your latest payment. Please update your payment method to keep your plan active.",
+          "cta": "Update payment",
+          "status": "critical"
+        },
+        "trial_ending": {
+          "subject": "Your Rafii trial ends soon",
+          "preheader": "Nothing is charged automatically.",
+          "context": "Billing",
+          "headline": "Your trial ends {endsAt}",
+          "lead": "Choose a plan to keep preparing and publishing without interruption. Nothing is charged automatically; the trial never converts on its own.",
+          "cta": "See plans",
+          "status": "action"
+        },
+        "subscription_active": {
+          "subject": "Your plan is active",
+          "preheader": "Thanks for choosing Rafii.",
+          "context": "Billing",
+          "headline": "Your plan is active",
+          "lead": "Thanks. Your {planName} plan is active. You can review invoices, change the plan or cancel any time.",
+          "cta": "Manage billing",
+          "status": "success"
+        },
+        "security_alert": {
+          "subject": "Security notice for your Rafii account",
+          "preheader": "Review this activity on your account.",
+          "context": "Security",
+          "headline": "{title}",
+          "lead": "If this was you, there is nothing to do. If it wasn't, open your security settings, sign out other sessions and turn on two-step sign-in.",
+          "cta": "Review security",
+          "status": "security"
+        },
+        "digest": {
+          "subject": "Your Rafii summary",
+          "preheader": "{count} updates since your last summary.",
+          "context": "Summary",
+          "headline": "Your summary",
+          "lead": "Here is what happened since your last summary. Anything urgent was sent to you straight away.",
+          "cta": "Open Rafii",
+          "status": "info"
+        }
+      }
+    },
+    "zh-Hant-HK": {
+      "common": {
+        "brand": "Rafii",
+        "reason": "你收到這封電郵，是因為你在 {workspace} 使用 Rafii。",
+        "reasonPerson": "你收到這封電郵，是因為它與你的 Rafii 帳戶有關。",
+        "settings": "通知設定",
+        "unsubscribe": "取消訂閱這類電郵",
+        "privacy": "私隱政策",
+        "linkFallback": "如果按鈕無法使用，請開啟這條連結：",
+        "nothingPublished": "未經你批准，任何內容都不會發佈。",
+        "status": {
+          "action": "需要你處理",
+          "critical": "需要留意",
+          "warning": "已暫停",
+          "info": "最新消息",
+          "security": "帳戶安全",
+          "success": "已完成"
+        }
+      },
+      "templates": {
+        "weekly_ready": {
+          "subject": "下星期的內容已準備好，請你審閱",
+          "preheader": "{count} 篇帖文已擬好並檢查過，請審閱重要部分。",
+          "context": "每週計劃",
+          "headline": "下星期的內容已準備好",
+          "lead": "Rafii 已為 {weekOf} 那一星期準備了 {count} 篇帖文，每篇都按平台撰寫，並對照你的語氣檢查過；有資料來源的帖文，亦已對照來源檢查。未經你批准，一概不會排程。",
+          "cta": "審閱這星期",
+          "status": "action"
+        },
+        "drafts_ready": {
+          "subject": "草稿已準備好，請你審閱",
+          "preheader": "有 {count} 份草稿等你處理。",
+          "context": "自動化",
+          "headline": "你的草稿已準備好",
+          "lead": "{recipe} 已準備 {count} 份草稿供你審閱，沒有排程，也沒有發佈。",
+          "cta": "審閱草稿",
+          "status": "action"
+        },
+        "approval_required": {
+          "subject": "有一篇帖文等你批准",
+          "preheader": "請在發佈時間前批准，否則不會發出。",
+          "context": "批准",
+          "headline": "有一篇帖文需要你批准",
+          "lead": "一篇 {platform} 帖文正等你批准。只有在發佈時間前批准，才會發佈。",
+          "cta": "審閱並批准",
+          "status": "action"
+        },
+        "campaign_blocked": {
+          "subject": "有工作暫停了，需要你處理",
+          "preheader": "Rafii 會等你決定後才繼續。",
+          "context": "已暫停",
+          "headline": "Rafii 需要你才能繼續",
+          "lead": "{title}。{reason}",
+          "cta": "查看需要甚麼",
+          "status": "warning"
+        },
+        "needs_input": {
+          "subject": "Rafii 繼續之前有一個問題",
+          "preheader": "回答一條問題，就可以進行下一步。",
+          "context": "資料搜集",
+          "headline": "繼續之前有一個問題",
+          "lead": "{reason}",
+          "cta": "回答",
+          "status": "action"
+        },
+        "asset_review": {
+          "subject": "有一張圖片等你審閱",
+          "preheader": "使用前請先檢查。",
+          "context": "創作",
+          "headline": "有一張圖片需要你審閱",
+          "lead": "已為 {platform} 準備了一張新圖片。原圖會保留；未經你選擇，不會使用。",
+          "cta": "審閱圖片",
+          "status": "action"
+        },
+        "publish_scheduled": {
+          "subject": "有一篇帖文已排程",
+          "preheader": "會在已批准的時間發佈。",
+          "context": "發佈",
+          "headline": "帖文已排程",
+          "lead": "一篇 {platform} 帖文已排程。已排程不等於已發佈；每篇帖文發出後，Rafii 都會再確認。",
+          "cta": "開啟發佈列",
+          "status": "info"
+        },
+        "publish_verified": {
+          "subject": "帖文已發佈並確認",
+          "preheader": "平台已確認這篇帖文。",
+          "context": "發佈",
+          "headline": "已發佈並確認",
+          "lead": "你在 {platform} 的帖文已發佈，平台亦已確認。",
+          "cta": "查看帖文",
+          "status": "success"
+        },
+        "publish_failed": {
+          "subject": "有一篇帖文未能發佈",
+          "preheader": "帖文沒有發出，已批准的草稿會保留。",
+          "context": "發佈",
+          "headline": "有一篇帖文沒有發出",
+          "lead": "你的 {platform} 帖文未能發佈，已批准的草稿會保留。記錄的原因：{reason}",
+          "cta": "查看發生了甚麼",
+          "status": "critical"
+        },
+        "publish_uncertain": {
+          "subject": "我們未能確認一篇帖文",
+          "preheader": "再試之前請先檢查，以免重複發佈。",
+          "context": "發佈",
+          "headline": "未能確認這篇帖文",
+          "lead": "Rafii 已把帖文送往 {platform}，但未能確認是否已發佈。再試之前請先在平台上檢查，以免重複發佈。",
+          "cta": "檢查帖文",
+          "status": "critical"
+        },
+        "channel_reconnect": {
+          "subject": "請重新連接帳戶，才能繼續發佈",
+          "preheader": "重新連接之前，這個帳戶的帖文會暫停。",
+          "context": "帳戶",
+          "headline": "請重新連接 {platform}",
+          "lead": "Rafii 已無法發佈到你的 {platform} 帳戶。相關帖文會保留，但會暫停，直至你重新連接。",
+          "cta": "重新連接帳戶",
+          "status": "critical"
+        },
+        "automation_completed": {
+          "subject": "自動化已完成",
+          "preheader": "看看它準備了甚麼。",
+          "context": "自動化",
+          "headline": "{recipe} 已完成",
+          "lead": "{reason}",
+          "cta": "開啟自動化",
+          "status": "info"
+        },
+        "automation_failed": {
+          "subject": "自動化未能完成",
+          "preheader": "沒有任何內容發佈。看看發生了甚麼。",
+          "context": "自動化",
+          "headline": "{recipe} 未能完成",
+          "lead": "這次執行在準備草稿前停止了，沒有任何內容發佈。記錄的原因：{reason}",
+          "cta": "查看發生了甚麼",
+          "status": "warning"
+        },
+        "engagement": {
+          "subject": "有人在等你回覆",
+          "preheader": "有需要回答的問題和留言。",
+          "context": "收件匣",
+          "headline": "需要回覆的留言",
+          "lead": "{platform} 上有留言提出問題或需要回答。Rafii 可以建議回覆；未經你同意，不會發出任何內容。",
+          "cta": "開啟收件匣",
+          "status": "action"
+        },
+        "opportunity": {
+          "subject": "有一個值得考慮的點子",
+          "preheader": "來自你關注的資料來源。",
+          "context": "機會",
+          "headline": "一個可用於內容的機會",
+          "lead": "{title}。為何可能重要：{why}",
+          "cta": "查看證據",
+          "status": "info"
+        },
+        "weekly_performance": {
+          "subject": "你的每週成效摘要",
+          "preheader": "上星期的情況，連同證據。",
+          "context": "每週摘要",
+          "headline": "上星期概覽",
+          "lead": "以下是你上星期帖文的表現。規律只會以假設形式列出並附上樣本數；單一帖文不會變成規則。",
+          "cta": "開啟摘要",
+          "status": "info"
+        },
+        "analytics_anomaly": {
+          "subject": "你的成效有變化",
+          "preheader": "一個值得留意的異常變化。",
+          "context": "數據分析",
+          "headline": "一個異常變化",
+          "lead": "{reason}",
+          "cta": "看清楚",
+          "status": "warning"
+        },
+        "preference_proposed": {
+          "subject": "Rafii 留意到一個可能的偏好",
+          "preheader": "接受、修改或忽略。",
+          "context": "學習",
+          "headline": "Rafii 應否記住這一點？",
+          "lead": "Rafii 留意到你修改內容時的一個規律。只有你接受後，才會成為偏好。",
+          "cta": "審閱建議",
+          "status": "info"
+        },
+        "budget_threshold": {
+          "subject": "你的 AI 預算快將用完",
+          "preheader": "到達上限時工作會暫停。",
+          "context": "預算",
+          "headline": "預算快將用完",
+          "lead": "這個工作區本期的 AI 預算已用去大部分。到達上限時，付費工作會暫停，不會超額收費。",
+          "cta": "查看用量",
+          "status": "warning"
+        },
+        "payment_failed": {
+          "subject": "需要你處理：付款未能完成",
+          "preheader": "請更新付款方式，以保持計劃生效。",
+          "context": "帳單",
+          "headline": "你的付款未能完成",
+          "lead": "我們未能收取你最近一期的款項。請更新付款方式，以保持計劃生效。",
+          "cta": "更新付款方式",
+          "status": "critical"
+        },
+        "trial_ending": {
+          "subject": "你的 Rafii 試用期即將結束",
+          "preheader": "不會自動收費。",
+          "context": "帳單",
+          "headline": "試用期將於 {endsAt} 結束",
+          "lead": "選擇計劃，就可以繼續準備和發佈內容。不會自動收費，試用期亦不會自行轉為付費。",
+          "cta": "查看計劃",
+          "status": "action"
+        },
+        "subscription_active": {
+          "subject": "你的計劃已生效",
+          "preheader": "多謝你選擇 Rafii。",
+          "context": "帳單",
+          "headline": "你的計劃已生效",
+          "lead": "多謝。你的 {planName} 計劃已生效，你可以隨時查看發票、更改計劃或取消。",
+          "cta": "管理帳單",
+          "status": "success"
+        },
+        "security_alert": {
+          "subject": "你的 Rafii 帳戶安全通知",
+          "preheader": "請檢查帳戶上的這項活動。",
+          "context": "帳戶安全",
+          "headline": "{title}",
+          "lead": "如果這是你本人，無需處理。如果不是，請開啟安全設定，登出其他工作階段，並啟用兩步驗證。",
+          "cta": "檢查安全設定",
+          "status": "security"
+        },
+        "digest": {
+          "subject": "你的 Rafii 摘要",
+          "preheader": "自上次摘要以來有 {count} 項更新。",
+          "context": "摘要",
+          "headline": "你的摘要",
+          "lead": "以下是自上次摘要以來的情況。任何緊急事項都已即時通知你。",
+          "cta": "開啟 Rafii",
+          "status": "info"
+        }
+      }
+    },
+    "zh-Hant": {
+      "common": {
+        "brand": "Rafii",
+        "reason": "你收到這封電子郵件，是因為你在 {workspace} 使用 Rafii。",
+        "reasonPerson": "你收到這封電子郵件，是因為它與你的 Rafii 帳號有關。",
+        "settings": "通知設定",
+        "unsubscribe": "取消訂閱這類電子郵件",
+        "privacy": "隱私權政策",
+        "linkFallback": "如果按鈕無法使用，請開啟這個連結：",
+        "nothingPublished": "未經你核准，任何內容都不會發布。",
+        "status": {
+          "action": "需要你處理",
+          "critical": "需要注意",
+          "warning": "已暫停",
+          "info": "最新消息",
+          "security": "帳號安全",
+          "success": "已完成"
+        }
+      },
+      "templates": {
+        "weekly_ready": {
+          "subject": "下週的內容已準備好，請你審閱",
+          "preheader": "{count} 則貼文已擬好並檢查過，請審閱重點。",
+          "context": "每週計畫",
+          "headline": "下週的內容已準備好",
+          "lead": "Rafii 已為 {weekOf} 那一週準備了 {count} 則貼文，每則都依平台撰寫，並對照你的語氣檢查過；有資料來源的貼文，也已對照來源檢查。未經你核准，一律不會排程。",
+          "cta": "審閱這一週",
+          "status": "action"
+        },
+        "approval_required": {
+          "subject": "有一則貼文等待你核准",
+          "preheader": "請在發布時間前核准，否則不會發出。",
+          "context": "核准",
+          "headline": "有一則貼文需要你核准",
+          "lead": "一則 {platform} 貼文正在等待你核准。只有在發布時間前核准，才會發布。",
+          "cta": "審閱並核准",
+          "status": "action"
+        },
+        "publish_failed": {
+          "subject": "有一則貼文無法發布",
+          "preheader": "貼文沒有發出，已核准的草稿會保留。",
+          "context": "發布",
+          "headline": "有一則貼文沒有發出",
+          "lead": "你的 {platform} 貼文無法發布，已核准的草稿會保留。記錄的原因：{reason}",
+          "cta": "查看發生了什麼事",
+          "status": "critical"
+        },
+        "publish_uncertain": {
+          "subject": "我們無法確認一則貼文",
+          "preheader": "重試之前請先檢查，以免重複發布。",
+          "context": "發布",
+          "headline": "無法確認這則貼文",
+          "lead": "Rafii 已將貼文送往 {platform}，但無法確認是否已發布。重試之前請先到平台上檢查，以免重複發布。",
+          "cta": "檢查貼文",
+          "status": "critical"
+        },
+        "channel_reconnect": {
+          "subject": "請重新連結帳號，才能繼續發布",
+          "preheader": "重新連結之前，這個帳號的貼文會暫停。",
+          "context": "帳號",
+          "headline": "請重新連結 {platform}",
+          "lead": "Rafii 已無法發布到你的 {platform} 帳號。相關貼文會保留，但會暫停，直到你重新連結。",
+          "cta": "重新連結帳號",
+          "status": "critical"
+        },
+        "automation_failed": {
+          "subject": "自動化無法完成",
+          "preheader": "沒有任何內容發布。看看發生了什麼事。",
+          "context": "自動化",
+          "headline": "{recipe} 無法完成",
+          "lead": "這次執行在準備草稿前停止了，沒有任何內容發布。記錄的原因：{reason}",
+          "cta": "查看發生了什麼事",
+          "status": "warning"
+        },
+        "weekly_performance": {
+          "subject": "你的每週成效摘要",
+          "preheader": "上週的情況，附上證據。",
+          "context": "每週摘要",
+          "headline": "上週概覽",
+          "lead": "以下是你上週貼文的表現。規律只會以假設形式呈現並附上樣本數；單一貼文不會變成規則。",
+          "cta": "開啟摘要",
+          "status": "info"
+        },
+        "opportunity": {
+          "subject": "有一個值得考慮的點子",
+          "preheader": "來自你關注的資料來源。",
+          "context": "機會",
+          "headline": "一個可用於內容的機會",
+          "lead": "{title}。為什麼可能重要：{why}",
+          "cta": "查看證據",
+          "status": "info"
+        },
+        "security_alert": {
+          "subject": "你的 Rafii 帳號安全通知",
+          "preheader": "請檢查帳號上的這項活動。",
+          "context": "帳號安全",
+          "headline": "{title}",
+          "lead": "如果這是你本人，無需處理。如果不是，請開啟安全設定，登出其他工作階段，並啟用兩步驟驗證。",
+          "cta": "檢查安全設定",
+          "status": "security"
+        },
+        "trial_ending": {
+          "subject": "你的 Rafii 試用期即將結束",
+          "preheader": "不會自動收費。",
+          "context": "帳單",
+          "headline": "試用期將於 {endsAt} 結束",
+          "lead": "選擇方案，就能繼續準備與發布內容。不會自動收費，試用期也不會自行轉為付費。",
+          "cta": "查看方案",
+          "status": "action"
+        },
+        "payment_failed": {
+          "subject": "需要你處理：付款未完成",
+          "preheader": "請更新付款方式，以維持方案有效。",
+          "context": "帳單",
+          "headline": "你的付款未完成",
+          "lead": "我們無法收取你最近一期的款項。請更新付款方式，以維持方案有效。",
+          "cta": "更新付款方式",
+          "status": "critical"
+        },
+        "subscription_active": {
+          "subject": "你的方案已生效",
+          "preheader": "感謝你選擇 Rafii。",
+          "context": "帳單",
+          "headline": "你的方案已生效",
+          "lead": "感謝你。你的 {planName} 方案已生效，你可以隨時查看發票、變更方案或取消。",
+          "cta": "管理帳單",
+          "status": "success"
+        },
+        "digest": {
+          "subject": "你的 Rafii 摘要",
+          "preheader": "自上次摘要以來有 {count} 項更新。",
+          "context": "摘要",
+          "headline": "你的摘要",
+          "lead": "以下是自上次摘要以來的情況。任何緊急事項都已即時通知你。",
+          "cta": "開啟 Rafii",
+          "status": "info"
+        },
+        "drafts_ready": {
+          "subject": "草稿已準備好，請你審閱",
+          "preheader": "有 {count} 份草稿等待你處理。",
+          "context": "自動化",
+          "headline": "你的草稿已準備好",
+          "lead": "{recipe} 已準備 {count} 份草稿供你審閱，沒有排程，也沒有發布。",
+          "cta": "審閱草稿",
+          "status": "action"
+        },
+        "campaign_blocked": {
+          "subject": "有工作暫停了，需要你處理",
+          "preheader": "Rafii 會等你決定後才繼續。",
+          "context": "已暫停",
+          "headline": "Rafii 需要你才能繼續",
+          "lead": "{title}。{reason}",
+          "cta": "查看需要什麼",
+          "status": "warning"
+        },
+        "needs_input": {
+          "subject": "Rafii 繼續之前有一個問題",
+          "preheader": "回答一個問題，就能進行下一步。",
+          "context": "資料蒐集",
+          "headline": "繼續之前有一個問題",
+          "lead": "{reason}",
+          "cta": "回答",
+          "status": "action"
+        },
+        "asset_review": {
+          "subject": "有一張圖片等待你審閱",
+          "preheader": "使用前請先檢查。",
+          "context": "創作",
+          "headline": "有一張圖片需要你審閱",
+          "lead": "已為 {platform} 準備了一張新圖片。原圖會保留；未經你選擇，不會使用。",
+          "cta": "審閱圖片",
+          "status": "action"
+        },
+        "publish_scheduled": {
+          "subject": "有一則貼文已排程",
+          "preheader": "會在已核准的時間發布。",
+          "context": "發布",
+          "headline": "貼文已排程",
+          "lead": "一則 {platform} 貼文已排程。已排程不等於已發布；每則貼文發出後，Rafii 都會再確認。",
+          "cta": "開啟發布佇列",
+          "status": "info"
+        },
+        "publish_verified": {
+          "subject": "貼文已發布並確認",
+          "preheader": "平台已確認這則貼文。",
+          "context": "發布",
+          "headline": "已發布並確認",
+          "lead": "你在 {platform} 的貼文已發布，平台也已確認。",
+          "cta": "查看貼文",
+          "status": "success"
+        },
+        "automation_completed": {
+          "subject": "自動化已完成",
+          "preheader": "看看它準備了什麼。",
+          "context": "自動化",
+          "headline": "{recipe} 已完成",
+          "lead": "{reason}",
+          "cta": "開啟自動化",
+          "status": "info"
+        },
+        "engagement": {
+          "subject": "有人在等你回覆",
+          "preheader": "有需要回答的問題和留言。",
+          "context": "收件匣",
+          "headline": "需要回覆的留言",
+          "lead": "{platform} 上有留言提出問題或需要回答。Rafii 可以建議回覆；未經你同意，不會發出任何內容。",
+          "cta": "開啟收件匣",
+          "status": "action"
+        },
+        "analytics_anomaly": {
+          "subject": "你的成效有變化",
+          "preheader": "一個值得注意的異常變化。",
+          "context": "數據分析",
+          "headline": "一個異常變化",
+          "lead": "{reason}",
+          "cta": "仔細看看",
+          "status": "warning"
+        },
+        "preference_proposed": {
+          "subject": "Rafii 注意到一個可能的偏好",
+          "preheader": "接受、編輯或略過。",
+          "context": "學習",
+          "headline": "Rafii 應該記住這一點嗎？",
+          "lead": "Rafii 注意到你修改內容時的一個規律。只有在你接受後，才會成為偏好。",
+          "cta": "審閱建議",
+          "status": "info"
+        },
+        "budget_threshold": {
+          "subject": "你的 AI 預算即將用完",
+          "preheader": "達到上限時工作會暫停。",
+          "context": "預算",
+          "headline": "預算即將用完",
+          "lead": "這個工作區本期的 AI 預算已用掉大部分。達到上限時，付費工作會暫停，不會超額收費。",
+          "cta": "查看用量",
+          "status": "warning"
+        }
+      }
+    },
+    "zh-Hans": {
+      "common": {
+        "brand": "Rafii",
+        "reason": "你收到这封邮件，是因为你在 {workspace} 使用 Rafii。",
+        "reasonPerson": "你收到这封邮件，是因为它与你的 Rafii 账户有关。",
+        "settings": "通知设置",
+        "unsubscribe": "退订此类邮件",
+        "privacy": "隐私政策",
+        "linkFallback": "如果按钮无法使用，请打开这个链接：",
+        "nothingPublished": "未经你批准，任何内容都不会发布。",
+        "status": {
+          "action": "需要你处理",
+          "critical": "需要关注",
+          "warning": "已暂停",
+          "info": "最新动态",
+          "security": "账户安全",
+          "success": "已完成"
+        }
+      },
+      "templates": {
+        "weekly_ready": {
+          "subject": "下周的内容已准备好，请你审阅",
+          "preheader": "{count} 篇帖子已拟好并检查过，请审阅重点。",
+          "context": "每周计划",
+          "headline": "下周的内容已准备好",
+          "lead": "Rafii 已为 {weekOf} 那一周准备了 {count} 篇帖子，每篇都按平台撰写，并对照你的语气检查过；有资料来源的帖子，也已对照来源检查。未经你批准，一律不会排期。",
+          "cta": "审阅这一周",
+          "status": "action"
+        },
+        "approval_required": {
+          "subject": "有一篇帖子等待你批准",
+          "preheader": "请在发布时间前批准，否则不会发出。",
+          "context": "批准",
+          "headline": "有一篇帖子需要你批准",
+          "lead": "一篇 {platform} 帖子正在等待你批准。只有在发布时间前批准，才会发布。",
+          "cta": "审阅并批准",
+          "status": "action"
+        },
+        "publish_failed": {
+          "subject": "有一篇帖子未能发布",
+          "preheader": "帖子没有发出，已批准的草稿会保留。",
+          "context": "发布",
+          "headline": "有一篇帖子没有发出",
+          "lead": "你的 {platform} 帖子未能发布，已批准的草稿会保留。记录的原因：{reason}",
+          "cta": "查看发生了什么",
+          "status": "critical"
+        },
+        "publish_uncertain": {
+          "subject": "我们无法确认一篇帖子",
+          "preheader": "重试之前请先检查，以免重复发布。",
+          "context": "发布",
+          "headline": "无法确认这篇帖子",
+          "lead": "Rafii 已把帖子发送到 {platform}，但无法确认是否已发布。重试之前请先在平台上检查，以免重复发布。",
+          "cta": "检查帖子",
+          "status": "critical"
+        },
+        "channel_reconnect": {
+          "subject": "请重新连接账号，才能继续发布",
+          "preheader": "重新连接之前，这个账号的帖子会暂停。",
+          "context": "账号",
+          "headline": "请重新连接 {platform}",
+          "lead": "Rafii 已无法发布到你的 {platform} 账号。相关帖子会保留，但会暂停，直到你重新连接。",
+          "cta": "重新连接账号",
+          "status": "critical"
+        },
+        "automation_failed": {
+          "subject": "自动化未能完成",
+          "preheader": "没有任何内容发布。看看发生了什么。",
+          "context": "自动化",
+          "headline": "{recipe} 未能完成",
+          "lead": "这次运行在准备草稿前停止了，没有任何内容发布。记录的原因：{reason}",
+          "cta": "查看发生了什么",
+          "status": "warning"
+        },
+        "weekly_performance": {
+          "subject": "你的每周效果摘要",
+          "preheader": "上周的情况，附上证据。",
+          "context": "每周摘要",
+          "headline": "上周概览",
+          "lead": "以下是你上周帖子的表现。规律只会以假设形式呈现并附上样本数；单篇帖子不会变成规则。",
+          "cta": "打开摘要",
+          "status": "info"
+        },
+        "opportunity": {
+          "subject": "有一个值得考虑的点子",
+          "preheader": "来自你关注的资料来源。",
+          "context": "机会",
+          "headline": "一个可用于内容的机会",
+          "lead": "{title}。为什么可能重要：{why}",
+          "cta": "查看证据",
+          "status": "info"
+        },
+        "security_alert": {
+          "subject": "你的 Rafii 账户安全通知",
+          "preheader": "请检查账户上的这项活动。",
+          "context": "账户安全",
+          "headline": "{title}",
+          "lead": "如果这是你本人，无需处理。如果不是，请打开安全设置，退出其他会话，并开启两步验证。",
+          "cta": "检查安全设置",
+          "status": "security"
+        },
+        "trial_ending": {
+          "subject": "你的 Rafii 试用期即将结束",
+          "preheader": "不会自动扣费。",
+          "context": "账单",
+          "headline": "试用期将于 {endsAt} 结束",
+          "lead": "选择方案，就能继续准备和发布内容。不会自动扣费，试用期也不会自行转为付费。",
+          "cta": "查看方案",
+          "status": "action"
+        },
+        "payment_failed": {
+          "subject": "需要你处理：付款未完成",
+          "preheader": "请更新付款方式，以保持方案有效。",
+          "context": "账单",
+          "headline": "你的付款未完成",
+          "lead": "我们未能收取你最近一期的款项。请更新付款方式，以保持方案有效。",
+          "cta": "更新付款方式",
+          "status": "critical"
+        },
+        "subscription_active": {
+          "subject": "你的方案已生效",
+          "preheader": "感谢你选择 Rafii。",
+          "context": "账单",
+          "headline": "你的方案已生效",
+          "lead": "谢谢。你的 {planName} 方案已生效，你可以随时查看发票、更改方案或取消。",
+          "cta": "管理账单",
+          "status": "success"
+        },
+        "digest": {
+          "subject": "你的 Rafii 摘要",
+          "preheader": "自上次摘要以来有 {count} 项更新。",
+          "context": "摘要",
+          "headline": "你的摘要",
+          "lead": "以下是自上次摘要以来的情况。任何紧急事项都已即时通知你。",
+          "cta": "打开 Rafii",
+          "status": "info"
+        },
+        "drafts_ready": {
+          "subject": "草稿已准备好，请你审阅",
+          "preheader": "有 {count} 份草稿等待你处理。",
+          "context": "自动化",
+          "headline": "你的草稿已准备好",
+          "lead": "{recipe} 已准备 {count} 份草稿供你审阅，没有排期，也没有发布。",
+          "cta": "审阅草稿",
+          "status": "action"
+        },
+        "campaign_blocked": {
+          "subject": "有工作暂停了，需要你处理",
+          "preheader": "Rafii 会等你决定后再继续。",
+          "context": "已暂停",
+          "headline": "Rafii 需要你才能继续",
+          "lead": "{title}。{reason}",
+          "cta": "查看需要什么",
+          "status": "warning"
+        },
+        "needs_input": {
+          "subject": "Rafii 继续之前有一个问题",
+          "preheader": "回答一个问题，就能进行下一步。",
+          "context": "资料搜集",
+          "headline": "继续之前有一个问题",
+          "lead": "{reason}",
+          "cta": "回答",
+          "status": "action"
+        },
+        "asset_review": {
+          "subject": "有一张图片等待你审阅",
+          "preheader": "使用前请先检查。",
+          "context": "创作",
+          "headline": "有一张图片需要你审阅",
+          "lead": "已为 {platform} 准备了一张新图片。原图会保留；未经你选择，不会使用。",
+          "cta": "审阅图片",
+          "status": "action"
+        },
+        "publish_scheduled": {
+          "subject": "有一篇帖子已排期",
+          "preheader": "会在已批准的时间发布。",
+          "context": "发布",
+          "headline": "帖子已排期",
+          "lead": "一篇 {platform} 帖子已排期。已排期不等于已发布；每篇帖子发出后，Rafii 都会再确认。",
+          "cta": "打开发布队列",
+          "status": "info"
+        },
+        "publish_verified": {
+          "subject": "帖子已发布并确认",
+          "preheader": "平台已确认这篇帖子。",
+          "context": "发布",
+          "headline": "已发布并确认",
+          "lead": "你在 {platform} 的帖子已发布，平台也已确认。",
+          "cta": "查看帖子",
+          "status": "success"
+        },
+        "automation_completed": {
+          "subject": "自动化已完成",
+          "preheader": "看看它准备了什么。",
+          "context": "自动化",
+          "headline": "{recipe} 已完成",
+          "lead": "{reason}",
+          "cta": "打开自动化",
+          "status": "info"
+        },
+        "engagement": {
+          "subject": "有人在等你回复",
+          "preheader": "有需要回答的问题和评论。",
+          "context": "收件箱",
+          "headline": "需要回复的评论",
+          "lead": "{platform} 上有评论提出问题或需要回答。Rafii 可以建议回复；未经你同意，不会发出任何内容。",
+          "cta": "打开收件箱",
+          "status": "action"
+        },
+        "analytics_anomaly": {
+          "subject": "你的效果有变化",
+          "preheader": "一个值得关注的异常变化。",
+          "context": "数据分析",
+          "headline": "一个异常变化",
+          "lead": "{reason}",
+          "cta": "仔细看看",
+          "status": "warning"
+        },
+        "preference_proposed": {
+          "subject": "Rafii 注意到一个可能的偏好",
+          "preheader": "接受、编辑或忽略。",
+          "context": "学习",
+          "headline": "Rafii 应该记住这一点吗？",
+          "lead": "Rafii 注意到你修改内容时的一个规律。只有在你接受后，才会成为偏好。",
+          "cta": "审阅建议",
+          "status": "info"
+        },
+        "budget_threshold": {
+          "subject": "你的 AI 预算即将用完",
+          "preheader": "达到上限时工作会暂停。",
+          "context": "预算",
+          "headline": "预算即将用完",
+          "lead": "这个工作区本期的 AI 预算已用掉大部分。达到上限时，付费工作会暂停，不会超额收费。",
+          "cta": "查看用量",
+          "status": "warning"
+        }
+      }
+    }
+  }
+}

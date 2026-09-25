@@ -1,0 +1,9 @@
+無法確認這則貼文
+
+Rafii 已將貼文送往 LinkedIn，但無法確認是否已發布。重試之前請先到平台上檢查，以免重複發布。
+
+檢查貼文: https://app.rafii.example/app/queue
+
+你收到這封電子郵件，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電子郵件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

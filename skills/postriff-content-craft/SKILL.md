@@ -3,7 +3,7 @@ name: postriff-content-craft
 description: Use when drafting, adapting or reviewing natural, human-sounding social posts, carousel copy, video packaging or spoken hooks for LinkedIn, X, Instagram, YouTube, Threads, TikTok and Facebook.
 license: MIT
 metadata:
-  version: 1.1.1
+  version: 1.2.0
   status: reviewed-postriff-adaptation
 ---
 

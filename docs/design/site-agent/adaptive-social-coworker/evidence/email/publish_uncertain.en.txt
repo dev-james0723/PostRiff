@@ -1,0 +1,9 @@
+We couldn't confirm this post
+
+Rafii sent a post to LinkedIn but couldn't confirm whether it was published. Please check the platform before trying again, so it isn't posted twice.
+
+Check the post: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

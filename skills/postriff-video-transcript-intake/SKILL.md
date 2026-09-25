@@ -3,6 +3,7 @@ name: postriff-video-transcript-intake
 description: Inspect a permitted public video source and prepare provenance-rich caption or transcript artifacts for analysis. Use for caption discovery, transcript acquisition planning, and ASR fallback decisions; do not use for protected-media bypass, translation, content approval, or publishing.
 license: MIT
 metadata:
+  version: 1.0.0
   status: project-local-phase0-fixture-only
   project-contract: postriff-social-media-suite-design-revision-14
 ---

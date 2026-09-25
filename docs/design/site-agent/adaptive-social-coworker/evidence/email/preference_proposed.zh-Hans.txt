@@ -1,0 +1,9 @@
+Rafii 应该记住这一点吗？
+
+Rafii 注意到你修改内容时的一个规律。只有在你接受后，才会成为偏好。
+
+审阅建议: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

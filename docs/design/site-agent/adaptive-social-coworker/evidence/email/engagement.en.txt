@@ -1,0 +1,9 @@
+Comments that need a reply
+
+There are comments on LinkedIn that ask a question or need an answer. Rafii can suggest replies; nothing is sent without you.
+
+Open Inbox: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

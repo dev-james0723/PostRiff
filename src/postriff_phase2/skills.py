@@ -95,6 +95,9 @@ MAX_FILE_CHARS = 20_000
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 _VERSION = re.compile(r"^\s*version:\s*([\w.+-]+)\s*$", re.M)
 _SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,80}$")
+# Only product skills are loadable by the hosted binder. Customer- or person-specific packages (for example the
+# local Studio's own skills) are classified private in `skills/rafii-registry.json` and never reach a hosted run.
+PRODUCT_PREFIXES = ("postriff-", "rafii-")
 
 
 def budget_for(cost_class):
@@ -142,7 +145,7 @@ class SkillLibrary:
 
     def load(self, skill_id, references=()):
         """One skill: SKILL.md plus the named reference files. None when the package is absent."""
-        if not self.available() or not _SAFE_ID.match(skill_id):
+        if not self.available() or not _SAFE_ID.match(skill_id) or not skill_id.startswith(PRODUCT_PREFIXES):
             return None
         main = self._read(skill_id, "SKILL.md")
         if main is None:
@@ -210,6 +213,11 @@ class SkillLibrary:
         if any((self.root / skill_id / "SKILL.md").is_file() for skill_id in adapters):
             wanted.append((ADAPTER_CONTRACT, ()))
         wanted.extend((skill_id, ()) for skill_id in adapters)
+        # Registry v2 (RAFII_SKILL_REGISTRY_V2_ENABLED): the Humanizer pack for each destination language and the
+        # active coworker workflow's own skill ride after the core. They are the first to go on a tight budget.
+        from .skill_compiler import writer_extras
+        extras = [(skill_id, refs) for skill_id, refs in writer_extras(destinations, format_id, intent, content_type) if all(skill_id != w[0] for w in wanted)]
+        wanted.extend(extras)
         warnings = [f"No channel adapter is mapped for {platform}; the run wrote for it without one." for platform in unmapped]
         selected = []  # [skill_id, [references], loaded]
         for skill_id, references in wanted:
@@ -241,7 +249,11 @@ class SkillLibrary:
                     return True
             return False
 
-        for skill_id, reference in DROP_ORDER:
+        # Tight budget: Humanizer packs go first (the deterministic Humanizer stage still checks every draft), then
+        # the optional references, then the active workflow's own skill (small, and specific to this run).
+        workflow_extras = [(skill_id, None) for skill_id, _ in extras if skill_id.startswith("rafii-") and "humanizer" not in skill_id]
+        knowledge_extras = [(skill_id, None) for skill_id, _ in reversed(extras) if (skill_id, None) not in workflow_extras]
+        for skill_id, reference in tuple(knowledge_extras) + DROP_ORDER + tuple(workflow_extras):
             if len(composed()) <= budget:
                 break
             drop(skill_id, reference)

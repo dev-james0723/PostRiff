@@ -1,0 +1,9 @@
+无法确认这篇帖子
+
+Rafii 已把帖子发送到 LinkedIn，但无法确认是否已发布。重试之前请先在平台上检查，以免重复发布。
+
+检查帖子: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

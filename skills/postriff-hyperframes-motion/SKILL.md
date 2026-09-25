@@ -3,6 +3,7 @@ name: postriff-hyperframes-motion
 description: Plan and validate target-native HyperFrames motion explainers from an approved article, transcript translation, or CanonicalBrief. Use for local motion briefs and 16:9, 1:1, or 9:16 composition plans; do not use for source verification, unreviewed rendering, upload, scheduling, or publishing.
 license: MIT
 metadata:
+  version: 1.0.0
   status: project-local-phase0-plan-only
   project-contract: postriff-social-media-suite-design-revision-14
 ---

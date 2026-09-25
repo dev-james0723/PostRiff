@@ -1,16 +1,17 @@
 # Human voice pass
 
-Use this pass on every the creator draft after the meaning, evidence and platform
-shape are in place. It adapts the useful parts of the local `humanizer` skill to
-the creator's established voice. The creator's supplied wording, approved examples and the
+Use this pass on every draft after the meaning, evidence and platform shape are
+in place. It adapts the useful parts of the `humanizer` method to the voice this
+workspace has approved. The creator's supplied wording, approved examples and the
 Content Engine remain the authority.
 
 ## Anchor the voice
 
-Write as the creator speaking to one thoughtful person: reflective, specific, calm,
-curious, candid, practical and lightly conversational. Prefer wording and rhythm
-already present in the creator's supplied material. Preserve natural Cantonese-English
-mixing, uncertainty, humour, asides and unusual phrasing when they are theirs.
+Anchor to this creator's approved voice (`VOICE.md`) and supplied material, not
+to a house style: there is no default personality to impose. Prefer wording and
+rhythm already present in the creator's own writing. Preserve their register,
+any natural code-switching between languages or dialects, uncertainty, humour,
+asides and unusual phrasing when they are theirs. A formal voice may stay formal.
 
 Do not add opinions, memories, feelings, slang, jokes, typos or verbal tics to
 make copy seem human. If a personal reaction matters and the creator has not supplied

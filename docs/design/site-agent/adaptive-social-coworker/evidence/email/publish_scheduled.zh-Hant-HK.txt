@@ -1,0 +1,9 @@
+帖文已排程
+
+一篇 LinkedIn 帖文已排程。已排程不等於已發佈；每篇帖文發出後，Rafii 都會再確認。
+
+開啟發佈列: https://app.rafii.example/app/queue
+
+你收到這封電郵，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電郵: https://app.rafii.example/api/notifications/unsubscribe?token=preview

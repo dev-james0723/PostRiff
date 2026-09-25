@@ -58,7 +58,7 @@ Use this sequence:
 1. Find a topic that passes the idea filter.
 2. Separate verified facts from interpretation.
 3. State the story in one or two sentences.
-4. Identify the connection to music, building, creativity, or living well.
+4. Identify the connection to the creator's field, work or audience.
 5. Write the creator's actual point of view, including uncertainty when it exists.
 6. End with a practical implication or an honest question only if useful.
 7. Create platform-specific versions rather than copying one caption everywhere.
@@ -70,7 +70,7 @@ Good angles usually focus on a tension, for example:
 - automation versus learning;
 - visibility versus privacy;
 - ambition versus psychological cost;
-- performance versus genuine musical understanding.
+- performance versus genuine understanding.
 
 Do not turn every article into “three lessons.” A short, sharp point is often
 stronger.

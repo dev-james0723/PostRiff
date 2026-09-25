@@ -1,0 +1,9 @@
+預算快將用完
+
+這個工作區本期的 AI 預算已用去大部分。到達上限時，付費工作會暫停，不會超額收費。
+
+查看用量: https://app.rafii.example/app/queue
+
+你收到這封電郵，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電郵: https://app.rafii.example/api/notifications/unsubscribe?token=preview

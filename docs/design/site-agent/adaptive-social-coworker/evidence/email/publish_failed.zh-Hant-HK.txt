@@ -1,0 +1,9 @@
+有一篇帖文沒有發出
+
+你的 LinkedIn 帖文未能發佈，已批准的草稿會保留。記錄的原因：LinkedIn rejected the post: the text is longer than allowed.
+
+查看發生了甚麼: https://app.rafii.example/app/queue
+
+你收到這封電郵，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電郵: https://app.rafii.example/api/notifications/unsubscribe?token=preview

@@ -17,6 +17,8 @@ import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
+import { NotificationSettings } from '@/features/coworker/notifications/notification-settings';
+import { useCoworkerFlag } from '@/lib/coworker/hooks';
 import { SettingsSection } from './settings-section';
 
 const EMAILS = [
@@ -74,8 +76,14 @@ export function NotificationsView() {
   const auth = useAuth();
   const access = useWorkspaceAccess();
   const owner = checkAccess(access, { permission: 'owner' });
+  // With Rafii's notification centre on, the person chooses what reaches them; otherwise only transactional email exists.
+  const centre = useCoworkerFlag('RAFII_NOTIFICATIONS_V2_ENABLED') === true;
   return (
-    <PageContainer pageTitle='Notifications' pageDescription='No marketing emails. No tracking pixels.' width='reading'>
+    <PageContainer
+      pageTitle='Notifications'
+      pageDescription={centre ? 'Choose what reaches you, where and when. No marketing, no tracking pixels; security and billing emails always reach you.' : 'No marketing emails. No tracking pixels.'}
+      width='reading'
+    >
       <div className='flex flex-col gap-8'>
         <SecurityAlerts />
 
@@ -110,6 +118,8 @@ export function NotificationsView() {
             <Icons.dashboard className='size-4' aria-hidden /> Open Overview
           </Link>
         </p>
+
+        <NotificationSettings />
       </div>
     </PageContainer>
   );

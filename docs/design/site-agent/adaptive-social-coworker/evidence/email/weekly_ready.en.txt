@@ -1,0 +1,9 @@
+Next week is ready for you
+
+Rafii prepared 5 posts for the week of 2026-09-28. Each one is drafted for its platform and checked against your voice, and against your sources where it has them. Nothing is scheduled until you approve it.
+
+Review the week: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

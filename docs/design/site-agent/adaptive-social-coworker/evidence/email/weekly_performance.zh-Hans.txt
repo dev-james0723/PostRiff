@@ -1,0 +1,12 @@
+上周概览
+
+以下是你上周帖子的表现。规律只会以假设形式呈现并附上样本数；单篇帖子不会变成规则。
+Verified posts: 12
+Median views: 1,240
+Hypotheses: 2
+
+打开摘要: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

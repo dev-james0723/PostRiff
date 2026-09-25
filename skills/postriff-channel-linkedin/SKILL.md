@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-linkedin
 description: Prepare and validate linkedin native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.1.0
 ---
 
 # linkedin adapter
@@ -9,7 +11,7 @@ This adapter adds what is specific to linkedin. The shared adapter contract (`po
 
 ## 1. Channel purpose
 
-Concrete builder lessons and professional relevance, without corporate filler.
+Concrete work lessons and professional relevance, without corporate filler.
 
 ## 2. Audience and expected language
 
