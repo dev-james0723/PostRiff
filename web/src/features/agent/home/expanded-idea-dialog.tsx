@@ -16,7 +16,7 @@ export function ExpandedIdeaDialog({ open, onOpenChange, value, onChange, placeh
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>
       <RafiiDialogContent size='xl' aria-describedby={undefined} initialFocus={field}>
-        <RafiiDialogHeader eyebrow='Expanded draft' title='A bigger space to' accent='think.' intro='Stretch out. Everything you type here is already in the composer.' />
+        <RafiiDialogHeader eyebrow='Expanded draft' title='A bigger space to' accent='think.' />
         <RafiiDialogBody className='flex flex-col'>
           <label htmlFor='rafii-idea-expanded' className='sr-only'>
             Expanded writing space
@@ -38,7 +38,7 @@ export function ExpandedIdeaDialog({ open, onOpenChange, value, onChange, placeh
             {value.length.toLocaleString()} / {IDEA_MAX.toLocaleString()}
           </span>
           <Button variant='action' size='control' onClick={() => onOpenChange(false)}>
-            Use this draft
+            Done
             <Icons.check />
           </Button>
         </RafiiDialogFooter>

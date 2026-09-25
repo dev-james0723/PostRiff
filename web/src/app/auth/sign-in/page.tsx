@@ -4,7 +4,7 @@ import { AuthForm } from '@/components/auth/auth-form';
 
 export const metadata: Metadata = {
   title: 'Sign in',
-  description: 'Sign in to your PostRiff workspace.',
+  description: 'Sign in to your Rafii workspace.',
   robots: { index: false }
 };
 

@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/api/client';
 import { useAct, useInvalidate, useMembers, useMemory, useSnapshot } from '@/lib/api/hooks';
 import type { MemoryEgress, ResearchEgress } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { memoryFileLabel } from './memory-files';
 import { formatDate } from '@/lib/time';
 import { Unavailable } from './memory-states';
 
@@ -80,7 +81,7 @@ function ConfirmChoice({ open, pending, title, description, confirmLabel, cancel
           <AlertDialogCancel variant='glass' size='control' disabled={pending}>
             {cancelLabel}
           </AlertDialogCancel>
-          <LoadingButton variant='action' size='control' loading={pending} loadingLabel='Saving the change…' onClick={onConfirm}>
+          <LoadingButton variant='action' size='control' loading={pending} loadingLabel='Saving…' onClick={onConfirm}>
             {confirmLabel}
           </LoadingButton>
         </AlertDialogFooter>
@@ -114,14 +115,14 @@ function CloudRow({ egress, isOwner }: { egress: MemoryEgress | undefined; isOwn
   const choice = useConfirmedChoice();
 
   if (!egress) {
-    return <AccessRow title='Cloud model access' status='warning' badge='Unavailable' description='Whether PostRiff’s cloud model may read these files could not be read, so nothing is shown as on or off.' />;
+    return <AccessRow title='Cloud model access' status='warning' badge='Unavailable' description='Couldn’t load this setting.' />;
   }
 
   const shared = egress.sharedFiles ?? [];
   const privacy = (egress.shareablePrivacy ?? []).map((value) => value.replace(/_/g, ' '));
   const withheld = egress.withheldBoundaries;
-  const files = shared.length > 0 ? listNames(shared, egress.cloud ? 'and' : 'or') : 'the files given to writing routes';
-  const allFiles = shared.length > 0 ? listNames(shared, 'and') : 'the files given to writing routes';
+  const files = shared.length > 0 ? listNames(shared.map((name) => memoryFileLabel(name).toLowerCase()), egress.cloud ? 'and' : 'or') : 'your memory';
+  const allFiles = shared.length > 0 ? listNames(shared.map((name) => memoryFileLabel(name).toLowerCase()), 'and') : 'your memory';
   const boundaryRule =
     (privacy.length > 0 && shared.includes('BOUNDARIES.md') ? ` Only boundaries marked ${listNames(privacy, 'or')} are included.` : '') +
     (withheld > 0 ? ` ${withheld} private or local-only boundar${withheld === 1 ? 'y stays' : 'ies stay'} out.` : '');
@@ -131,10 +132,10 @@ function CloudRow({ egress, isOwner }: { egress: MemoryEgress | undefined; isOwn
     act.mutate(
       { revision: snapshot.data?.revision ?? 0, action: 'memory_egress', payload: { cloud, confirmed: true } },
       {
+        // The row's switch and badge show the result; no toast.
         onSuccess: () => {
           choice.close();
           invalidate('memory');
-          toast.success(cloud ? 'The cloud model can now read the files given to writing routes, without private boundaries.' : 'The cloud model no longer reads your memory files.');
         },
         onError: (err) => {
           choice.close();
@@ -146,9 +147,8 @@ function CloudRow({ egress, isOwner }: { egress: MemoryEgress | undefined; isOwn
 
   const description =
     (egress.cloud
-      ? `PostRiff’s cloud model reads ${files} when it drafts${privacy.length > 0 && shared.includes('BOUNDARIES.md') ? `, with only the boundaries marked ${listNames(privacy, 'or')}` : ''}.`
-      : `Drafts written by PostRiff’s cloud model don’t see ${files} until an owner allows it. Writing routes on your own machine always read them.`) +
-    (withheld > 0 ? ` ${withheld} boundar${withheld === 1 ? 'y is' : 'ies are'} private or local-only and never reach the cloud model, either way.` : '');
+      ? `The cloud model reads ${files} when it drafts${privacy.length > 0 && shared.includes('BOUNDARIES.md') ? `, with only boundaries marked ${listNames(privacy, 'or')}` : ''}.`
+      : `The cloud model doesn’t read ${files}.`) + (withheld > 0 ? ` ${withheld} private boundar${withheld === 1 ? 'y never reaches' : 'ies never reach'} it.` : '');
 
   return (
     <>
@@ -157,7 +157,7 @@ function CloudRow({ egress, isOwner }: { egress: MemoryEgress | undefined; isOwn
         status={egress.cloud ? 'success' : 'neutral'}
         badge={egress.cloud ? 'Shared' : 'Not shared'}
         description={description}
-        note={isOwner ? (decidedLine ?? 'Nothing is shared until an owner turns this on.') : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
+        note={isOwner ? decidedLine : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
         control={<Switch checked={egress.cloud} disabled={!isOwner || act.isPending || !snapshot.data} onCheckedChange={choice.ask} ariaLabel='Let the cloud model read your memory files' label='Allow' />}
       />
       {isOwner && (
@@ -167,8 +167,8 @@ function CloudRow({ egress, isOwner }: { egress: MemoryEgress | undefined; isOwn
           title={choice.requested ? 'Let the cloud model read your memory files?' : 'Stop sharing memory files with the cloud model?'}
           description={
             choice.requested
-              ? `PostRiff’s cloud model will receive ${allFiles} each time it drafts for this workspace.${boundaryRule} Routes on your own machine read them either way.`
-              : `Drafts written by PostRiff’s cloud model will no longer receive ${allFiles}. Routes on your own machine still read them.`
+              ? `The cloud model will receive ${allFiles} each time it drafts for this workspace.${boundaryRule}`
+              : `The cloud model will stop receiving ${allFiles}. Local writers still read them.`
           }
           confirmLabel={choice.requested ? 'Allow cloud access' : 'Stop sharing'}
           cancelLabel={choice.requested ? 'Keep it off' : 'Keep sharing'}
@@ -189,13 +189,13 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
   const choice = useConfirmedChoice();
 
   if (!research) {
-    return <AccessRow title='Web research' status='warning' badge='Unavailable' description='Whether drafts may look facts up on the web could not be read, so nothing is shown as on or off.' />;
+    return <AccessRow title='Web research' status='warning' badge='Unavailable' description='Couldn’t load this setting.' />;
   }
 
-  const onText = 'When a draft needs facts you haven’t supplied, PostRiff looks them up.';
+  const onText = 'Drafts can look up missing facts on the web.';
   const offText = 'Drafts use only what you supply.';
   const processors = research.processors ?? [];
-  const disclosure = processors.length > 0 ? `What is sent, and to whom: ${processors.join('; ')}. They never receive your sources, memory files or drafts.` : '';
+  const disclosure = processors.length > 0 ? `Lookups go to: ${processors.join('; ')}. They never receive your sources, memory files or drafts.` : '';
 
   // No switch applies on the person's own machine (always on) or when research is off for everyone here.
   if (!research.hosted || research.enabled === false) {
@@ -206,7 +206,7 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
         status={on ? 'success' : 'neutral'}
         badge={on ? 'On' : 'Off'}
         description={on ? `${onText} ${disclosure}` : offText}
-        note={on ? 'Always on when drafting on your own machine.' : research.hosted ? 'Web research is switched off for this service right now.' : 'Turned off on this machine (POSTRIFF_RESEARCH=0).'}
+        note={on ? 'Always on when drafting on your own machine.' : research.hosted ? 'Web research isn’t available right now.' : 'Turned off on this machine.'}
       />
     );
   }
@@ -216,10 +216,10 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
     act.mutate(
       { revision: snapshot.data?.revision ?? 0, action: 'research_egress', payload: { web, confirmed: true } },
       {
+        // The row's switch and badge show the result; no toast.
         onSuccess: () => {
           choice.close();
           invalidate('memory');
-          toast.success(web ? 'Web research is on. PostRiff looks facts up when a draft needs them.' : 'Web research is off. Drafts use only what you supply.');
         },
         onError: (err) => {
           choice.close();
@@ -235,16 +235,16 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
         title='Web research'
         status={research.web ? 'success' : 'neutral'}
         badge={research.web ? 'On' : 'Off'}
-        description={`${research.web ? onText : `${offText} Turn this on and PostRiff looks up the facts a draft needs.`} ${disclosure}`}
-        note={isOwner ? (decidedLine ?? 'Nothing is sent until an owner turns this on.') : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
-        control={<Switch checked={research.web} disabled={!isOwner || act.isPending || !snapshot.data} onCheckedChange={choice.ask} ariaLabel='Let PostRiff look facts up on the web' label='Allow' />}
+        description={`${research.web ? onText : offText} ${disclosure}`}
+        note={isOwner ? decidedLine : ['Only an owner can change this.', decidedLine].filter(Boolean).join(' ')}
+        control={<Switch checked={research.web} disabled={!isOwner || act.isPending || !snapshot.data} onCheckedChange={choice.ask} ariaLabel='Let Rafii look facts up on the web' label='Allow' />}
       />
       {isOwner && (
         <ConfirmChoice
           open={choice.open}
           pending={act.isPending}
           title={choice.requested ? 'Turn on web research?' : 'Turn off web research?'}
-          description={choice.requested ? `${onText} ${disclosure || 'Which services receive the lookups could not be read.'}` : `${offText} A draft that needed facts says that research was off, and an owner can turn it back on here.`}
+          description={choice.requested ? `${onText} ${disclosure || 'Couldn’t check which services receive the lookups.'}` : offText}
           confirmLabel={choice.requested ? 'Turn on' : 'Turn off'}
           cancelLabel={choice.requested ? 'Keep it off' : 'Keep it on'}
           onConfirm={() => decide(choice.requested)}
@@ -269,7 +269,7 @@ export function AccessCard({ className }: { className?: string }) {
       data-tour='memory-access'
       titleId='memory-access-title'
       title='Who reads these files'
-      description='Writing routes on your own machine always read the files given to them. An owner decides whether anything else does.'
+      description='Local writers always read these files. An owner decides who else can.'
       className={className}
       bodyClassName='gap-2'
     >
@@ -284,7 +284,7 @@ export function AccessCard({ className }: { className?: string }) {
           <Skeleton className='h-20 w-full rounded-[var(--rafii-radius-control)]' />
         </div>
       ) : (
-        <Unavailable message='Access settings are unavailable right now.' query={memory} />
+        <Unavailable message='Couldn’t load access settings.' query={memory} />
       )}
     </Panel>
   );

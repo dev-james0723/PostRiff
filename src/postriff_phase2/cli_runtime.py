@@ -274,7 +274,7 @@ class ClaudeCliRuntime(AgentRuntime):
     def list_supported_models(self):
         probe = self.detect()
         ready = probe["installed"] and probe["authStatus"] == "ok"
-        detail = "Runs the Claude Code CLI signed in on this machine. Your subscription pays; PostRiff spends $0 and records the run." if ready else (probe["guidance"] or "Claude Code is not available on this machine.")
+        detail = "Runs the Claude Code CLI signed in on this machine. Your subscription pays; Rafii spends $0 and records the run." if ready else (probe["guidance"] or "Claude Code is not available on this machine.")
         labels = {"default": "Claude Code · your default model", "fable": "Claude Code · Fable", "opus": "Claude Code · Opus", "sonnet": "Claude Code · Sonnet", "haiku": "Claude Code · Haiku"}
         return [{"id": f"{MODEL_PREFIX}{alias}", "label": labels[alias], "qualified": ready, "costClass": "subscription", "route": ROUTE, "detail": detail} for alias in MODEL_ALIASES]
 

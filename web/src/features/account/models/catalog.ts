@@ -11,10 +11,10 @@ import { ROUTE_LABELS } from '@/features/agent/use-model';
 export type RouteKind = 'cli' | 'managed' | 'preview' | 'other';
 
 export const KIND_LABEL: Record<RouteKind, string> = {
-  cli: 'Local CLI',
-  managed: 'PostRiff managed',
-  preview: 'Preview · no model',
-  other: 'Other route'
+  cli: 'CLI',
+  managed: 'Managed',
+  preview: 'Free preview',
+  other: 'Other'
 };
 
 /** Which kind of writer an option is. Managed options carry no `route` today, so cost class decides for them. */
@@ -101,22 +101,16 @@ export interface CostCopy {
 export function costCopy(costClass: string | undefined): CostCopy {
   switch (costClass) {
     case 'none':
-      return { badge: 'Free', line: 'No model request and no charge.' };
+      return { badge: 'Free', line: 'Free. No AI model is used.' };
     case 'subscription':
-      return {
-        badge: 'Your CLI subscription',
-        line: 'The subscription signed in to the CLI pays. PostRiff records the run with a cost of $0.'
-      };
+      return { badge: 'Your CLI subscription', line: 'Paid by the CLI’s own subscription. $0 here.' };
     case 'paid':
-      return {
-        badge: 'Writing batches',
-        line: 'Metered to this workspace. A finished run uses one writing batch from your plan; a failed run gives the batch back.'
-      };
+      return { badge: 'Writing batches', line: 'Uses one writing batch from your plan per finished run. Failed runs don’t count.' };
     case undefined:
     case '':
-      return { badge: 'Not reported', line: 'The API did not say how this route is paid for.' };
+      return { badge: 'Not reported', line: 'Cost not reported.' };
     default:
-      return { badge: costClass, line: `The API reports the cost class “${costClass}”, which this page does not describe yet.` };
+      return { badge: costClass, line: `Cost: ${costClass}.` };
   }
 }
 
@@ -131,6 +125,6 @@ export function distinctCostClasses(options: ModelOption[]) {
 
 /** Plain words for the `host` an agent reports. */
 export function hostLabel(host: string | undefined) {
-  if (host === 'api-process') return 'The machine that serves the PostRiff API';
+  if (host === 'api-process') return 'The app’s server';
   return host ? host : 'Not reported';
 }

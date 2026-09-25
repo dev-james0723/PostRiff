@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
-import { StateMessage, Surface } from '@/components/rafii';
+import { InfoTip, StateMessage, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { StatusChip } from '@/features/queue/status-chip';
 import { runLabel, scheduleSummary, statusText } from '@/features/automations/schedule';
@@ -31,6 +31,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
   const automations = automationsOf(state).filter((item) => item.task.status !== 'cancelled');
   const active = automations.filter((item) => item.task.status === 'active');
   const suggestions = state.raffi?.suggestions ?? [];
+  const open = suggestions.filter((item) => item.status === 'open').length;
 
   async function act(action: string, payload: Record<string, unknown>) {
     setBusy(true);
@@ -41,7 +42,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
       if (activeWorkspace.current !== workspaceId) return null;
       return next;
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'Rafii could not save this change.');
+      toast.error(error instanceof ApiError ? error.message : 'Couldn’t save this change.');
       return null;
     } finally {
       setBusy(false);
@@ -60,17 +61,12 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
   return (
     <section className='grid gap-4 md:grid-cols-2' aria-label='Automations and Rafii suggestions'>
       <Surface material='glass' padding='md' className='flex flex-col gap-4'>
-        <div className='flex items-start justify-between gap-3'>
-          <div className='flex flex-col gap-1'>
-            <span className='rafii-eyebrow'>On repeat</span>
-            <h2 className='text-foreground text-lg font-normal tracking-[-0.01em]'>
-              Drafts that <em className='rafii-serif'>prepare themselves</em>
-            </h2>
-            <p className='text-muted-foreground text-xs leading-relaxed'>Automations draft on a schedule for the accounts you choose. Every draft still needs your review and approval.</p>
-          </div>
+        <div className='flex items-center gap-1'>
+          <h2 className='text-foreground text-lg font-normal tracking-[-0.01em]'>Automations</h2>
+          <InfoTip label='About automations' description='Drafts on a schedule. You still approve every draft.' className='size-9' />
         </div>
         {automations.length === 0 ? (
-          <StateMessage kind='empty' layout='inline' title='No automations yet.' description='A weekly tip, a monthly recap, a countdown to your next event: set it once and review what Rafii prepares.' />
+          <StateMessage kind='empty' layout='inline' title='No automations yet' />
         ) : (
           <ul className='flex flex-col gap-2'>
             {automations.slice(0, 3).map((item) => {
@@ -108,24 +104,18 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
       </Surface>
 
       <Surface material='glass' padding='md'>
-        <div className='mb-4 flex items-start justify-between gap-3'>
-          <div className='flex flex-col gap-1'>
-            <span className='rafii-eyebrow'>Evidence first</span>
-            <h2 className='text-foreground text-lg font-normal tracking-[-0.01em]'>
-              Rafii <em className='rafii-serif'>suggestions</em>
-            </h2>
-            <p className='text-muted-foreground text-xs leading-relaxed'>Each suggestion names the workspace evidence behind it.</p>
-          </div>
+        <div className='mb-3 flex items-center justify-between gap-3'>
+          <h2 className='text-foreground text-lg font-normal tracking-[-0.01em]'>{open > 0 ? `${open} idea${open === 1 ? '' : 's'} for you` : 'Suggestions'}</h2>
           {canEdit && <Button variant='glass' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_refresh', {})}>Refresh</Button>}
         </div>
-        <div className='space-y-2'>
-          {suggestions.filter((item) => item.status === 'open').length === 0 && <StateMessage kind='empty' layout='inline' title='No suggestions right now.' description='No current evidence in this workspace supports one.' />}
-          {suggestions.filter((item) => item.status === 'open' || item.status === 'accepted').slice(-4).toReversed().map((item) => <Surface key={item.id} material='quiet' radius='control' padding='sm'>
-            <p className='text-sm'>{item.reason}</p>
-            <p className='text-muted-foreground mt-1 text-xs'>{item.evidence.map((entry) => `${entry.type} ${entry.id.slice(0, 8)} · rev ${entry.revision}`).join(' · ')}</p>
-            {canEdit && <div className='mt-2 flex gap-2'><Button variant='action' size='sm' className='min-h-11' disabled={busy} onClick={() => void openSuggestion(item.id)}>Open for review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button></div>}
-          </Surface>)}
-        </div>
+        <ul className='flex flex-col gap-2'>
+          {open === 0 && <li><StateMessage kind='empty' layout='inline' title='No suggestions right now' /></li>}
+          {/* The evidence behind each suggestion stays one hover away, not a line of ids under every item. */}
+          {suggestions.filter((item) => item.status === 'open' || item.status === 'accepted').slice(-4).toReversed().map((item) => <li key={item.id} className='rafii-quiet flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--rafii-radius-control)] px-3 py-2'>
+            <p className='min-w-0 flex-[1_1_12rem] text-sm' title={item.evidence.length ? `Based on ${item.evidence.map((entry) => `${entry.type} ${entry.id.slice(0, 8)}`).join(', ')}` : undefined}>{item.reason}</p>
+            {canEdit && <div className='flex gap-1'><Button variant='action' size='sm' className='min-h-11' disabled={busy} aria-label={`Review: ${item.reason}`} onClick={() => void openSuggestion(item.id)}>Review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} aria-label={`Dismiss: ${item.reason}`} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button></div>}
+          </li>)}
+        </ul>
       </Surface>
     </section>
   );

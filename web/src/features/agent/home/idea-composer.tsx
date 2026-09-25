@@ -63,12 +63,9 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
   }
   return (
     <section aria-label='Create a social draft' data-tour='composer' className={cn('rafii-composer flex flex-col rounded-[var(--rafii-radius-composer)] px-5 pt-5 pb-4 md:px-[26px] md:pt-[27px] md:pb-[18px]', className)}>
-      <div className='text-muted-foreground flex min-h-9 items-center justify-between gap-3'>
-        <span className='rafii-eyebrow inline-flex items-center gap-2'>
-          <span aria-hidden className='bg-foreground size-1.5 rounded-full' />A new draft
-        </span>
-        <button type='button' onClick={onExpand} disabled={disabled} className='rafii-focus hover:text-foreground inline-flex min-h-10 items-center gap-1.5 rounded-md text-xs font-medium'>
-          Expand writing space
+      <div className='text-muted-foreground flex min-h-9 items-center justify-end gap-3'>
+        <button type='button' onClick={onExpand} disabled={disabled} aria-label='Expand writing space' className='rafii-focus hover:text-foreground inline-flex min-h-10 items-center gap-1.5 rounded-md text-xs font-medium'>
+          Expand
           <Icons.arrowUpRight className='size-3.5' />
         </button>
       </div>
@@ -83,7 +80,7 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
         aria-describedby={helpId}
         placeholder={placeholder}
         spellCheck
-        className='rafii-serif placeholder:text-muted-foreground/80 mt-5 min-h-[170px] w-full resize-none bg-transparent text-[25px] leading-[1.45] tracking-[-0.02em] outline-none disabled:opacity-60 md:mt-7 md:min-h-[190px] md:text-[26px]'
+        className='rafii-serif placeholder:text-muted-foreground/80 mt-3 min-h-[170px] w-full resize-none bg-transparent text-[25px] leading-[1.45] tracking-[-0.02em] outline-none disabled:opacity-60 md:mt-4 md:min-h-[190px] md:text-[26px]'
       />
       <div className='mt-1 mb-4 flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1'>
         <button type='button' onClick={onOpenContext} disabled={disabled} aria-haspopup='dialog' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-3 rounded-md text-sm'>
@@ -103,7 +100,8 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
               <Icons.arrowUpRight className='size-3.5' />
             </button>
           )}
-          {value.length > 0 && (
+          {/* The limit only matters near it. */}
+          {value.length > IDEA_MAX * 0.8 && (
             <span className='text-muted-foreground text-xs tabular-nums' aria-live='polite'>
               {value.length.toLocaleString()} / {IDEA_MAX.toLocaleString()}
             </span>

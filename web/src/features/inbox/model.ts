@@ -1,6 +1,7 @@
 import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import type { Audience, Capability, ChannelView, ProviderView, Thread } from '@/lib/api/types';
 import { LEVEL_MEANING } from '@/lib/channels/capabilities';
+import { STATUS } from '@/lib/status-labels';
 
 /**
  * Pure helpers for the Inbox. The audience API (`GET /audience/threads`) returns threads, the
@@ -92,7 +93,7 @@ export const THREAD_PAGE_LIMIT = 200;
 
 export function providerName(provider: string, channel?: Pick<ChannelView, 'platform'> | null) {
   if (channel?.platform) return channel.platform;
-  return provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'the provider';
+  return provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'the platform';
 }
 
 export function authorLabel(author: string) {
@@ -103,13 +104,13 @@ export function authorLabel(author: string) {
 export function replyStatusView(status: string): { label: string; badge: AnimatedBadgeStatus } {
   switch (status) {
     case 'draft':
-      return { label: 'Draft', badge: 'neutral' };
+      return { label: STATUS.draft, badge: 'neutral' };
     case 'approved':
-      return { label: 'Approved · reconfirm when sending is enabled', badge: 'info' };
+      return { label: `${STATUS.approved} · not sent`, badge: 'info' };
     case 'submitting':
       return { label: 'Sending', badge: 'loading' };
     case 'submitted':
-      return { label: 'Sent · waiting for the provider to confirm', badge: 'info' };
+      return { label: 'Sent · awaiting confirmation', badge: 'info' };
     case 'verified':
       return { label: 'Posted', badge: 'success' };
     case 'uncertain':
@@ -153,8 +154,8 @@ export function evidenceSentence(capability: Capability | undefined, providerOff
   if (evidence) return evidence;
   const level = capability?.level ?? 'Unsupported';
   if (level !== 'Unsupported') return LEVEL_MEANING[level] ?? level;
-  if (providerOffers === false) return `${platform} does not offer this to PostRiff.`;
-  return 'Not verified for this account, so PostRiff treats it as unavailable.';
+  if (providerOffers === false) return `${platform} doesn’t offer this yet.`;
+  return 'Not verified for this account.';
 }
 
 export function providerFor(platform: string, providers: ProviderView[] | undefined) {

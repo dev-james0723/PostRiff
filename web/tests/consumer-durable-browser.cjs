@@ -134,7 +134,7 @@ async function home(page) {
    writeFileSync(resolve(out,'browser-accessibility.json'),JSON.stringify({execution:'local Chromium axe-core; reduced motion; keyboard tab; no human conformance claim',audits},null,2));
    await page.screenshot({path:resolve(out,`durable-automation-${width}.png`),fullPage:true});
    await reviewed().getByRole('button',{name:'Cancel automation'}).click();
-   const confirm=page.getByRole('dialog').filter({hasText:'No further drafts will be prepared'});await confirm.waitFor();
+   const confirm=page.getByRole('dialog').filter({hasText:'No more drafts will be prepared'});await confirm.waitFor();
    await confirm.getByRole('button',{name:'Cancel automation'}).click();
    await confirm.waitFor({state:'hidden'});
    await page.reload();await page.getByRole('heading',{name:'Automations',level:1}).waitFor();
@@ -157,8 +157,8 @@ async function home(page) {
    await row.getByRole('button',{name:'Allow this writer to use style'}).click();
    await row.getByText(/Allowed for.*generation/).waitFor();
    await page.reload();await page.getByText(sample,{exact:true}).waitFor();
-   await page.getByRole('button',{name:'Describe local writing statistics',exact:true}).click();
-   await page.getByText('A provisional voice profile is ready for review. It is not active yet.',{exact:true}).waitFor();
+   await page.getByRole('button',{name:'Analyse locally',exact:true}).click();
+   await page.getByText('Voice proposal ready for review.',{exact:true}).waitFor();
    await row.getByRole('button',{name:'Revoke & remove text',exact:true}).click();
    await row.getByRole('button',{name:'Confirm revoke',exact:true}).click();
    await page.waitForFunction(text => ![...document.querySelectorAll('p,blockquote')].some(el => el.textContent === text),sample);

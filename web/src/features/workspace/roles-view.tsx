@@ -26,18 +26,17 @@ const infoContent = {
   title: 'Roles and grants',
   sections: [
     {
-      title: 'Five roles and four grants',
-      description: 'Owner, admin, editor, approver and viewer. A grant adds one right (approve, reply, moderate, manage connections) to a member without changing their role.',
+      title: 'Five roles, four grants',
+      description: 'A grant adds one right (approve, reply, moderate, manage connections) without changing someone’s role. It never applies to a viewer.',
       links: [{ title: 'Members', url: '/app/workspace/members' }]
     },
     {
-      title: 'Grants never lift a viewer',
-      description: 'A viewer stays read-only whatever grants they carry. Only the owner or an admin can change access, nobody can change their own, and a grant can only be handed out by someone who holds it.'
+      title: 'Who can change access',
+      description: 'Only the owner or an admin. Nobody can change their own access, and you can only hand out grants you hold.'
     },
     {
-      title: 'Some changes need a recent sign-in',
-      description:
-        'Changing someone’s role or grants, removing a member and inviting only work shortly after a fresh sign-in. If yours is too old, nothing is saved: sign out, sign in again and retry. Every change is recorded in the audit log.',
+      title: 'Recent sign-in needed',
+      description: 'Sensitive changes need a recent sign-in. Every change is recorded in the audit log.',
       links: [{ title: 'Audit log', url: '/app/workspace/audit' }]
     }
   ]
@@ -68,7 +67,7 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
   const roles = ASSIGNABLE_ROLES.filter((r) => canAssignRole(membership, r));
 
   return (
-    <Panel material='glass' data-tour='roles-you' title='Your access' titleId='roles-you-heading' eyebrow='Where you stand' bodyClassName='gap-5'>
+    <Panel material='glass' data-tour='roles-you' title='Your access' titleId='roles-you-heading' bodyClassName='gap-5'>
       <div className='grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,14rem)]'>
         <div className='flex flex-col gap-1.5'>
           <FieldLabel>Your role</FieldLabel>
@@ -96,7 +95,7 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
         <div className='flex flex-col gap-1.5'>
           <FieldLabel>Your extra grants</FieldLabel>
           {owner ? (
-            <p className='text-muted-foreground text-sm'>Not needed: an owner holds every right.</p>
+            <p className='text-muted-foreground text-sm'>Not needed as owner</p>
           ) : held.length === 0 ? (
             <p className='text-muted-foreground text-sm'>None</p>
           ) : (
@@ -110,7 +109,7 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
                   </li>
                 ))}
               </ul>
-              {role === 'viewer' && <p className='text-muted-foreground text-xs'>Recorded, but inactive: grants never apply to a viewer.</p>}
+              {role === 'viewer' && <p className='text-muted-foreground text-xs'>Inactive: grants never apply to a viewer.</p>}
             </>
           )}
         </div>
@@ -120,7 +119,7 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
         <div className='flex flex-col gap-1.5'>
           <FieldLabel>{owner ? 'As the owner' : 'To do more'}</FieldLabel>
           {owner ? (
-            <p className='text-foreground text-sm'>You own this workspace: every permission, billing and deletion.</p>
+            <p className='text-foreground text-sm'>Every permission, billing and deletion.</p>
           ) : (
             <ul className='flex flex-col gap-1 text-sm'>
               {more.map((line) => (
@@ -155,7 +154,7 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
                 );
               })}
             </div>
-            <p className='text-muted-foreground text-xs'>You can only hand out grants you hold yourself. Nobody can change their own access, and the owner’s access is not changed from here.</p>
+            <p className='text-muted-foreground text-xs'>Only grants you hold. Nobody can change their own access.</p>
           </div>
         )}
       </div>
@@ -165,8 +164,8 @@ function YourAccess({ membership, fresh, canManage }: { membership: Membership; 
           kind='stale'
           layout='inline'
           className='rafii-quiet rounded-[var(--rafii-radius-control)] px-4 py-3'
-          title='Your access changed since this page loaded.'
-          description='Menus still follow the earlier access.'
+          title='Your access changed.'
+          description='Reload to update the menus.'
           action={
             <Button size='default' variant='glass' onClick={() => void workspace.refresh()}>
               Reload access
@@ -185,7 +184,7 @@ function SensitiveChanges() {
       <SectionHeading
         id='roles-stepup-heading'
         title='Sensitive changes'
-        description='These only work shortly after a fresh sign-in, on top of the right permission. If yours is too old, nothing is saved: sign out, sign in again and retry. Revoking an invitation does not need it.'
+        description='These need a recent sign-in. If yours is too old, sign in again and retry.'
       />
       <ul className='flex flex-wrap gap-1.5'>
         {STEP_UP_ACTIONS.map((action) => (
@@ -219,7 +218,6 @@ export function RolesView() {
   return (
     <PageContainer
       pageTitle='Roles'
-      pageDescription='What each role can do in this workspace, who holds it, and where you stand.'
       infoContent={infoContent}
       access={access.hasWorkspace}
       accessFallback={<StateMessage kind='permission' className='w-full max-w-md' title='Join or create a workspace first.' />}

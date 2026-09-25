@@ -44,7 +44,7 @@ export function ShortcutsDialog() {
       <DialogContent className={cn(rafiiDialog, 'max-h-[85dvh] gap-5 overflow-y-auto sm:max-w-xl')}>
         <DialogHeader className='gap-1.5 pr-8'>
           <DialogTitle className='text-foreground text-xl font-medium tracking-tight'>Keyboard shortcuts</DialogTitle>
-          <DialogDescription className='leading-relaxed'>Navigation shortcuts follow your current workspace permissions. Type letter sequences outside text fields.</DialogDescription>
+          <DialogDescription className='leading-relaxed'>Type letter pairs outside text fields.</DialogDescription>
         </DialogHeader>
         <dl className='grid gap-1.5 sm:grid-cols-2'>
           {entries.map((item) => (

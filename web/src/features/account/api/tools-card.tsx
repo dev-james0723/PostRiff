@@ -1,7 +1,7 @@
 'use client';
 
 import { AnimatedBadge } from '@/components/motion/animated-badge';
-import { StateMessage } from '@/components/rafii';
+import { InfoTip, StateMessage } from '@/components/rafii';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatBytes } from '@/lib/time';
@@ -24,42 +24,40 @@ function ToolsSkeleton() {
 /** Isolation and invoke are two flags in the API; they stay two rows here so one is never read as the other. */
 function RunnerFlags({ isolation }: { isolation: ToolIsolation }) {
   return (
-    <div className='rafii-glass flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-3 text-sm'>
-      <div className='flex flex-col gap-1'>
-        <div className='flex flex-wrap items-center justify-between gap-2'>
-          <span className='text-foreground font-medium'>Runner isolation</span>
-          <AnimatedBadge size='sm' status={isolation.isolated ? 'success' : 'warning'} contentKey={isolation.isolated ? 'isolated' : 'not-isolated'}>
-            {isolation.isolated ? 'Isolated' : 'Not isolated'}
-          </AnimatedBadge>
-        </div>
-        <p className='text-muted-foreground text-xs leading-relaxed'>
-          {isolation.detail} <span className='font-mono'>runner: {isolation.runner}</span>
-        </p>
+    <div className='rafii-glass flex flex-col gap-1 rounded-[var(--rafii-radius-control)] px-3 py-1 text-sm'>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <span className='text-foreground flex items-center gap-0.5 font-medium'>
+          Runner isolation
+          <InfoTip label='About runner isolation' className='size-9' description={`${isolation.detail} Runner: ${isolation.runner}.`} />
+        </span>
+        <AnimatedBadge size='sm' status={isolation.isolated ? 'success' : 'warning'} contentKey={isolation.isolated ? 'isolated' : 'not-isolated'}>
+          {isolation.isolated ? 'Isolated' : 'Not isolated'}
+        </AnimatedBadge>
       </div>
-      <div className='flex flex-col gap-1'>
-        <div className='flex flex-wrap items-center justify-between gap-2'>
-          <span className='text-foreground font-medium'>Public invoke</span>
-          <AnimatedBadge
-            size='sm'
-            status={isolation.publicInvokeEnabled ? 'info' : 'neutral'}
-            contentKey={isolation.publicInvokeEnabled ? 'invoke-enabled' : 'invoke-blocked'}
-          >
-            {isolation.publicInvokeEnabled ? 'Enabled' : 'Blocked'}
-          </AnimatedBadge>
-        </div>
-        <p className='text-muted-foreground text-xs leading-relaxed'>
-          {isolation.publicInvokeEnabled
-            ? 'Tools can be run through the API on this deployment.'
-            : 'Invoke is blocked on this deployment: tools are listed but cannot be run through the API.'}
-        </p>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <span className='text-foreground flex items-center gap-0.5 font-medium'>
+          Public invoke
+          <InfoTip
+            label='About public invoke'
+            className='size-9'
+            description={isolation.publicInvokeEnabled ? 'Tools can run through the API.' : 'Tools are listed but can’t run through the API.'}
+          />
+        </span>
+        <AnimatedBadge
+          size='sm'
+          status={isolation.publicInvokeEnabled ? 'info' : 'neutral'}
+          contentKey={isolation.publicInvokeEnabled ? 'invoke-enabled' : 'invoke-blocked'}
+        >
+          {isolation.publicInvokeEnabled ? 'Enabled' : 'Blocked'}
+        </AnimatedBadge>
       </div>
     </div>
   );
 }
 
 /**
- * The versioned tools this deployment lists (`GET /api/tools`) and the runner's two flags. The list
- * is a registry, not a promise that anything runs.
+ * The versioned tools the API lists (`GET /api/tools`) and the runner's two flags. The list is a
+ * registry, not a promise that anything runs.
  */
 export function ToolsCard({ tools }: { tools: ToolRegistryState }) {
   const { available, query } = tools;
@@ -71,8 +69,7 @@ export function ToolsCard({ tools }: { tools: ToolRegistryState }) {
       <StateMessage
         kind='unsupported'
         layout='inline'
-        title='Unavailable'
-        description='This page cannot read the tool registry yet, so the tools and the runner’s status are not shown.'
+        title='Tools aren’t available yet'
       />
     );
   } else if (query.isPending) {
@@ -80,7 +77,7 @@ export function ToolsCard({ tools }: { tools: ToolRegistryState }) {
   } else if (query.isError && !registry) {
     content = (
       <LoadError
-        title='The tool registry could not be loaded.'
+        title='Couldn’t load tools'
         error={query.error}
         retrying={query.isFetching}
         onRetry={() => void query.refetch()}
@@ -91,7 +88,7 @@ export function ToolsCard({ tools }: { tools: ToolRegistryState }) {
       <div className='flex flex-col gap-4'>
         <RunnerFlags isolation={registry.isolation} />
         {registry.tools.length === 0 ? (
-          <StateMessage kind='empty' layout='inline' title='No tools are registered for this deployment.' />
+          <StateMessage kind='empty' layout='inline' title='No tools yet' />
         ) : (
           <ul className='flex flex-col gap-4' aria-label='Registered tools'>
             {registry.tools.map((tool) => (
@@ -106,7 +103,7 @@ export function ToolsCard({ tools }: { tools: ToolRegistryState }) {
                 </div>
                 <p className='text-foreground text-sm leading-relaxed'>{tool.purpose}</p>
                 {tool.bounds && (
-                  <p className='text-muted-foreground text-xs'>
+                  <p className='text-muted-foreground hidden text-xs md:block'>
                     Up to {tool.bounds.maxSeconds}s · {formatBytes(tool.bounds.maxInputBytes)} in · network: {tool.bounds.network}
                   </p>
                 )}
@@ -121,8 +118,7 @@ export function ToolsCard({ tools }: { tools: ToolRegistryState }) {
   return (
     <SettingsSection
       id='api-tools'
-      title='Tool registry'
-      description='Versioned tools this deployment lists for agents. Being listed does not mean a tool can run.'
+      title='Tools'
       className='h-full'
       bodyClassName='flex-1'
       data-tour='api-tools'

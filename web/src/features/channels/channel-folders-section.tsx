@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { IconArrowDown, IconArrowUp, IconCopy, IconFolderPlus, IconPencil, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
-import { ActiveFilters, RafiiDialog, RafiiDialogContent, RafiiDialogHeader, StateMessage } from '@/components/rafii';
+import { ActiveFilters, InfoTip, RafiiDialog, RafiiDialogContent, RafiiDialogHeader, StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import type { ChannelFolder } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -57,7 +57,7 @@ type FolderCommand = 'pin' | 'duplicate' | 'up' | 'down' | 'delete';
 
 const everyPlatform = () => true;
 const asSymbol = (symbol: string | undefined): FolderSymbol => ((FOLDER_SYMBOLS as readonly string[]).includes(symbol ?? '') ? (symbol as FolderSymbol) : 'folder');
-const LIMIT_MESSAGE = `This workspace already has ${FOLDER_MAX} folders. Delete one before adding another.`;
+const LIMIT_MESSAGE = `You have ${FOLDER_MAX} folders, the limit. Delete one first.`;
 
 /** The members and management actions of one folder, unfolded beneath its card. */
 function FolderPanel({
@@ -255,7 +255,7 @@ export function ChannelFoldersSection({ accounts, view, onViewChange }: ChannelF
     try {
       if (command === 'pin') {
         await folderApi.pin(folder, !folder.pinned);
-        setFeedback(folder.pinned ? 'Folder unpinned.' : 'Folder pinned to the shelf.');
+        setFeedback(folder.pinned ? 'Folder unpinned.' : 'Folder pinned.');
       } else if (command === 'duplicate') {
         if (folders.length >= FOLDER_MAX) {
           setFeedback(LIMIT_MESSAGE);
@@ -263,14 +263,14 @@ export function ChannelFoldersSection({ accounts, view, onViewChange }: ChannelF
           const { folder: copy } = await folderApi.duplicate(folder);
           setAll(true);
           setInspecting(copy.id);
-          setFeedback('Folder duplicated. Accounts and draft destinations are unchanged.');
+          setFeedback('Folder duplicated.');
         }
       } else {
         await folderApi.move(folder.id, command === 'up' ? -1 : 1);
         setFeedback('Folder order updated.');
       }
     } catch (error) {
-      setFeedback(folderErrorMessage(error, 'The folder could not be changed. Nothing was lost.'));
+      setFeedback(folderErrorMessage(error, "Couldn't change the folder."));
     }
   }
   async function confirmDelete() {
@@ -280,10 +280,10 @@ export function ChannelFoldersSection({ accounts, view, onViewChange }: ChannelF
       await folderApi.remove(folder.id);
       setConfirmingDelete(false);
       setInspecting(null);
-      setFeedback('Folder deleted. Accounts and draft destinations are unchanged.');
+      setFeedback('Folder deleted.');
       newFolderRef.current?.focus({ preventScroll: true });
     } catch (error) {
-      setFeedback(folderErrorMessage(error, 'The folder could not be deleted. Nothing was changed.'));
+      setFeedback(folderErrorMessage(error, "Couldn't delete the folder."));
     }
   }
 
@@ -328,7 +328,7 @@ export function ChannelFoldersSection({ accounts, view, onViewChange }: ChannelF
       if (!visibleFolders(list, '', all, accounts).some((f) => f.id === saved.id)) setAll(true);
       pendingChevron.current = saved.id;
       returnFocus.current = null;
-      setFeedback('Folder saved. Accounts and draft destinations are unchanged.');
+      setFeedback('Folder saved.');
     } catch (error) {
       setEditor((current) => (current ? { ...current, error: folderErrorMessage(error) } : current));
     }
@@ -389,13 +389,12 @@ export function ChannelFoldersSection({ accounts, view, onViewChange }: ChannelF
     <section ref={root} aria-labelledby='folders-heading' className='flex flex-col gap-4'>
       <div className='flex flex-col gap-3 md:flex-row md:items-end md:justify-between'>
         <div className='flex min-w-0 flex-col gap-1'>
-          <h2 id='folders-heading' className='text-foreground text-lg font-medium tracking-tight'>
-            Saved folders
-          </h2>
-          <p className='text-muted-foreground max-w-[70ch] text-sm leading-relaxed'>
-            Named groups of your accounts. Pick one to show only its accounts below; drafts choose their destinations in Channel Bloom. A folder is a
-            shortcut, not a platform: it never means its accounts are connected or publishable.
-          </p>
+          <div className='flex items-center gap-1'>
+            <h2 id='folders-heading' className='text-foreground text-lg font-medium tracking-tight'>
+              Folders
+            </h2>
+            <InfoTip label='About folders' description='Groups of your accounts. Pick one to show only its accounts. A folder doesn’t change what an account can do.' className='-my-3' />
+          </div>
         </div>
         <div className='flex shrink-0 flex-wrap items-center gap-2'>
           {(hidden > 0 || all) && folders.length > FOLDER_SHELF && (
@@ -416,8 +415,6 @@ export function ChannelFoldersSection({ accounts, view, onViewChange }: ChannelF
           kind='empty'
           layout='inline'
           title='No folders yet'
-          description='Save the accounts you post to together as a folder and pick them in one tap next time.'
-          action={canEdit ? newFolderButton(false) : undefined}
           className='rafii-quiet rounded-[var(--rafii-radius-card)] px-4 py-3'
         />
       ) : (

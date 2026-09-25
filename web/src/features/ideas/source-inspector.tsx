@@ -27,6 +27,8 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { formatBytes, formatDate, formatDateTime } from '@/lib/time';
 import { retractionImpact, retractionLines } from '@/lib/sources';
 import { cn } from '@/lib/utils';
+import { InfoTip } from '@/components/rafii';
+import { STATUS } from '@/lib/status-labels';
 import { useDraftHandoff } from './use-draft';
 import { factsDigest, isWeb, kindIcon, kindLabel, LINK_PATTERN, plural, POLICIES, toEpoch, useActError, variantsUsing, type IdeaSource, type UseState } from './use-sources';
 
@@ -102,10 +104,8 @@ export function SourceInspector({ source, useApproved }: SourceInspectorProps) {
         </>
       ) : (
         <Section title='Withdrawn'>
-          <p className='text-sm leading-relaxed'>Withdrawn {formatDateTime(toEpoch(source.withdrawnAt))}. Its text and facts were removed from this workspace.</p>
-          <p className='text-muted-foreground text-sm leading-relaxed'>
-            {blocked > 0 ? `${plural(blocked, 'draft')} that used it ${blocked === 1 ? 'is' : 'are'} blocked until regenerated.` : 'No draft is blocked by it.'}
-          </p>
+          <p className='text-sm leading-relaxed'>Withdrawn {formatDateTime(toEpoch(source.withdrawnAt))}. Its text and facts were removed.</p>
+          {blocked > 0 && <p className='text-muted-foreground text-sm leading-relaxed'>{plural(blocked, 'draft')} blocked until drafted again.</p>}
           <UsedIn source={source} />
         </Section>
       )}
@@ -146,10 +146,13 @@ function Provenance({ source }: { source: IdeaSource }) {
             </a>
           ) : null}
           {origin.query && <span className='text-muted-foreground'>Found by web research for “{origin.query}”</span>}
-          <span className='text-muted-foreground text-xs'>
-            {origin.fetchedAt ? `Read ${formatDateTime(toEpoch(origin.fetchedAt))}` : 'Read time not recorded'}
-            {origin.published ? ` · published ${formatDate(toEpoch(origin.published))}` : ''}
-          </span>
+          {(origin.fetchedAt || origin.published) && (
+            <span className='text-muted-foreground text-xs'>
+              {origin.fetchedAt ? `Read ${formatDateTime(toEpoch(origin.fetchedAt))}` : ''}
+              {origin.fetchedAt && origin.published ? ' · ' : ''}
+              {origin.published ? `published ${formatDate(toEpoch(origin.published))}` : ''}
+            </span>
+          )}
         </div>
       ) : source.kind === 'link' && LINK_PATTERN.test(source.text) ? (
         <div className='flex flex-col gap-1 text-sm'>
@@ -222,7 +225,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
         onSuccess: () => setFactsState('success'),
         onError: (err) => {
           setFactsState('idle');
-          onError(err, 'The approved facts could not be saved.');
+          onError(err, 'Couldn’t save the approved facts');
         }
       }
     );
@@ -232,8 +235,8 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
     policyAct.mutate(
       { revision: revision(), action: 'source_policy', payload: { sourceId: source.id, policy: next, egressConsent: nextCloud ? ['local', 'cloud'] : ['local'], confirmed: true } },
       {
-        onSuccess: () => toast.success(nextCloud !== cloud ? (nextCloud ? 'The cloud model may now read this source.' : 'The cloud model can no longer read this source.') : 'How this source may be used is saved.'),
-        onError: (err) => onError(err, 'How this source may be used could not be saved.')
+        // The switch and the select show the saved choice, so success needs no toast.
+        onError: (err) => onError(err, 'Couldn’t save how this source may be used')
       }
     );
   }
@@ -241,19 +244,17 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
   async function approveUse() {
     const digest = await factsDigest(source.facts);
     if (!digest) {
-      toast.error('This browser cannot compute the facts fingerprint the approval needs.');
+      toast.error('This browser can’t approve public use.');
       return;
     }
     approveAct.mutate(
       { revision: revision(), action: 'source_use_approve', payload: { sourceId: source.id, factsDigest: digest, confirmed: true } },
       {
-        onSuccess: () => {
-          setConfirmUse(false);
-          toast.success(`Public use approved for ${plural(approvedFacts.length, 'fact')}.`);
-        },
+        // The Public use badge turns to Approved, so success needs no toast.
+        onSuccess: () => setConfirmUse(false),
         onError: (err) => {
           setConfirmUse(false);
-          onError(err, 'Public use could not be approved.');
+          onError(err, 'Couldn’t approve public use');
         }
       }
     );
@@ -263,29 +264,28 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
     retractAct.mutate(
       { revision: revision(), action: 'retract_source', payload: { sourceId: source.id } },
       {
-        onSuccess: () => toast.success(`Source withdrawn. ${retractionCopy}`),
+        onSuccess: () => toast.success('Source withdrawn', { description: retractionCopy }),
         onError: (err) => {
           // Reset the hold so a failed withdrawal can be tried again.
           setHoldEpoch((n) => n + 1);
-          onError(err, 'The source could not be withdrawn.');
+          onError(err, 'Couldn’t withdraw this source');
         }
       }
     );
   }
 
+  // Only what the controls above do not already say (the chosen use is on its select).
   const reminders: string[] = [];
-  if (!policy) reminders.push('No use is chosen yet, so drafts leave this source out until you choose one.');
-  else if (policy === 'prohibited') reminders.push('Set to Do not use, so drafts leave it out.');
-  else if (policy === 'internal_reference') reminders.push('Internal only, so public drafts leave it out.');
-  if (hasFacts && approvedFacts.length === 0 && policy !== 'prohibited') reminders.push('No facts are approved, so a draft cannot use its wording.');
-  if (policy === 'rewrite_approval' && approvedFacts.length > 0 && useApproved === false) reminders.push('Drafts from it stay candidates until public use is approved.');
+  if (!policy) reminders.push('Drafts leave it out until you choose how it may be used.');
+  if (hasFacts && approvedFacts.length === 0 && policy !== 'prohibited') reminders.push('No approved facts, so drafts can’t use its wording.');
+  if (policy === 'rewrite_approval' && approvedFacts.length > 0 && useApproved === false) reminders.push('Drafts from it can’t be scheduled until public use is approved.');
 
   return (
     <>
       {hasFacts && (
         <Section title='Facts' data-tour='ideas-facts'>
           {source.facts.length === 0 ? (
-            <p className='text-muted-foreground text-sm leading-relaxed'>No paragraphs were split into facts from this text, so drafts cannot use its wording.</p>
+            <p className='text-muted-foreground text-sm leading-relaxed'>No facts found in this text.</p>
           ) : (
             <>
               <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -350,7 +350,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
       )}
       {!hasFacts && (
         <p className='text-muted-foreground text-sm leading-relaxed'>
-          {source.kind === 'idea' ? 'An idea carries no facts to approve; a draft from it uses the idea itself as the brief.' : 'A link carries no facts to approve until its page is read; a draft from it names the link as the brief.'}
+          {source.kind === 'idea' ? 'No facts to approve; drafts use the idea as the brief.' : 'No facts until the page is read; drafts use the link as the brief.'}
         </p>
       )}
 
@@ -385,12 +385,17 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
             ariaLabel='Allow the cloud model to read this source'
             label='Allow the cloud model'
           />
-          {models.isSuccess && !cloudAvailable && <span className='text-muted-foreground text-xs'>· no cloud model on this deployment</span>}
+          {models.isSuccess && !cloudAvailable && <span className='text-muted-foreground text-xs'>· not available yet</span>}
+          {/* Privacy detail one tap away; the line below keeps the essential fact visible. */}
+          <InfoTip
+            label='What the cloud switch covers'
+            description={`${cloud ? 'Cloud models may read its approved facts.' : 'Cloud models don’t read its approved facts.'} Other writing routes, like an agent on your own machine, can.${
+              !hasFacts ? ` Drafting from this ${source.kind === 'idea' ? 'idea' : 'link'} sends it to the model you pick, whatever this switch says.` : ''
+            }`}
+            className='-my-2'
+          />
         </div>
-        <p className='text-muted-foreground text-xs leading-relaxed'>
-          {cloud ? 'A paid cloud model may read its approved facts.' : 'A paid cloud model does not read its approved facts; other writing routes can.'}
-          {!hasFacts && ` Drafting from this ${source.kind === 'idea' ? 'idea' : 'link'} sends the ${source.kind === 'idea' ? 'idea' : 'link'} itself to the model you pick, whatever this switch says.`}
-        </p>
+        <p className='text-muted-foreground text-xs leading-relaxed'>{cloud ? 'Cloud models may read its approved facts.' : 'Cloud models don’t read its approved facts.'}</p>
       </Section>
 
       {policy === 'rewrite_approval' && (
@@ -399,24 +404,22 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
           {!hashing ? (
             <p className='text-muted-foreground text-sm'>Public-use status is unavailable in this browser.</p>
           ) : useApproved === true ? (
-            <AnimatedBadge size='sm' status='success' className={cn(SETTLED_BADGE, 'w-fit')} contentKey='use-approved'>
-              Approved for the current facts
+            <AnimatedBadge size='sm' status='success' className={cn(SETTLED_BADGE, 'w-fit')} contentKey='use-approved' title='Approved for the current facts'>
+              {STATUS.approved}
             </AnimatedBadge>
           ) : useApproved === false ? (
-            <AnimatedBadge size='sm' status='warning' pulse={drafts.length > 0} className={cn(ATTENTION_BADGE, 'w-fit')} contentKey='use-needed'>
-              Needed before a draft from it can be scheduled
+            <AnimatedBadge size='sm' status='warning' pulse={drafts.length > 0} className={cn(ATTENTION_BADGE, 'w-fit')} contentKey='use-needed' title='Needed before a draft from it can be scheduled'>
+              {STATUS.needsReview}
             </AnimatedBadge>
           ) : null}
-          {useApproved === false && (source.useApprovals ?? []).length > 0 && (
-            <p className='text-muted-foreground text-xs leading-relaxed'>The approved facts changed since public use was last approved, so it needs approving again.</p>
-          )}
+          {useApproved === false && (source.useApprovals ?? []).length > 0 && <p className='text-muted-foreground text-xs leading-relaxed'>Facts changed since the last approval.</p>}
           {canEdit && useApproved === false && (
             <>
               <Button variant='glass' size='control' className='w-fit' disabled={approvedFacts.length === 0 || approveAct.isPending} onClick={() => setConfirmUse(true)}>
                 {`Approve public use of ${plural(approvedFacts.length, 'fact')}`}
               </Button>
               {approvedFacts.length === 0 && <p className='text-muted-foreground text-xs'>Approve at least one fact first.</p>}
-              {dirty && approvedFacts.length > 0 && <p className='text-muted-foreground text-xs'>Approval covers the saved facts, not the unsaved ticks above.</p>}
+              {dirty && approvedFacts.length > 0 && <p className='text-muted-foreground text-xs'>Covers saved facts only.</p>}
             </>
           )}
           <AlertDialog open={confirmUse} onOpenChange={(open) => !approveAct.isPending && setConfirmUse(open)}>
@@ -424,7 +427,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
               <AlertDialogHeader>
                 <AlertDialogTitle>Approve public use of these facts?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Drafts may publish rewritten versions of exactly these {plural(approvedFacts.length, 'fact')} from “{source.title}”. Changing the facts later needs a new approval.
+                  Drafts may publish rewritten versions of these {plural(approvedFacts.length, 'fact')} from “{source.title}”. Changing the facts needs a new approval.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <ol className='rafii-quiet flex max-h-64 list-decimal flex-col gap-1.5 overflow-y-auto rounded-[var(--rafii-radius-control)] py-2.5 pr-3 pl-8 text-sm leading-relaxed'>
@@ -456,8 +459,8 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
             <StatefulButton data-tour='ideas-draft' className={cn(ACTION, 'w-full')} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={retractAct.isPending} onClick={() => void draft.fromSource(source)}>
               Draft from this source
             </StatefulButton>
-            <p className='text-muted-foreground text-xs leading-relaxed'>
-              Opens a conversation · {draft.modelLabel} · for {draft.destinationLabel}
+            <p className='text-muted-foreground hidden text-xs leading-relaxed sm:block'>
+              {draft.modelLabel} · {draft.destinationLabel}
             </p>
             {reminders.length > 0 && <Notes items={reminders} />}
           </div>
@@ -492,7 +495,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
 function UsedIn({ source }: { source: IdeaSource }) {
   const snapshot = useSnapshot();
   const drafts = variantsUsing(snapshot.data?.state, source.id);
-  if (drafts.length === 0) return <p className='text-muted-foreground text-sm'>Not used in any draft yet.</p>;
+  if (drafts.length === 0) return <p className='text-muted-foreground text-sm'>Not used yet</p>;
   return (
     <ul className='flex flex-col gap-1.5'>
       {drafts.map((variant) => (
@@ -507,7 +510,7 @@ function UsedIn({ source }: { source: IdeaSource }) {
           ) : variant.needsReview ? (
             <span className='text-muted-foreground inline-flex items-center gap-1 text-xs'>
               <Icons.eye aria-hidden className='size-3.5' />
-              Needs review
+              {STATUS.needsReview}
             </span>
           ) : null}
         </li>

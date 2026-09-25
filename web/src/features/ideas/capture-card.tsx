@@ -149,7 +149,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
     if (!item || !snap || saveState === 'loading') return;
     const duplicate = existing(snap, item);
     if (duplicate) {
-      toast.info('That source is already here. It is open for review.');
+      toast.info('Already saved; opened it.');
       onSelect(duplicate.id);
       return;
     }
@@ -160,7 +160,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
       after = await act.mutateAsync({ revision: snap.revision, action: 'source', payload: item });
     } catch (err) {
       setSaveState('idle');
-      onError(err, 'The source could not be saved.');
+      onError(err, 'Couldn’t save this source');
       if (err instanceof ApiError && /already here/i.test(err.message)) void openExisting(item);
       return;
     }
@@ -177,7 +177,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
           after = await act.mutateAsync({ revision: after.revision, action: 'source_policy', payload: { sourceId: created.id, policy: 'rewrite_approval', egressConsent: ['local'], confirmed: true } });
         }
       } catch (err) {
-        onError(err, 'Saved, but how it may be used could not be set. Set it in the inspector.');
+        onError(err, 'Saved, but couldn’t set how it may be used.');
       }
       onSelect(created.id);
     }
@@ -203,11 +203,11 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
       setFile(null);
     };
     if (!/\.(txt|md)$/i.test(picked.name)) {
-      toast.error('Only .txt and .md files can be added. Export other documents as plain text first.');
+      toast.error('Only .txt and .md files');
       return reset();
     }
     if (picked.size > MAX_FILE_BYTES) {
-      toast.error(`${picked.name} is ${formatBytes(picked.size)}. Files can be at most 20 KB of UTF-8 text.`);
+      toast.error(`${picked.name} is over 20 KB`, { description: formatBytes(picked.size) });
       return reset();
     }
     try {
@@ -218,7 +218,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
       }
       setFile({ name: picked.name, text, bytes: picked.size });
     } catch {
-      toast.error(`${picked.name} is not UTF-8 text.`);
+      toast.error(`${picked.name} isn’t plain text`);
       reset();
     }
   }
@@ -236,12 +236,9 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
     // The page's work surface (DNA §5.2, §21.10): one glass panel, its WHAT control, the entry field and one commitment.
     <Surface as='section' material='glass' radius='card' padding='lg' data-tour='ideas-capture' aria-labelledby='ideas-capture-title' className='flex flex-col gap-4'>
       <div className='flex flex-col gap-3'>
-        <div className='flex flex-col gap-1'>
-          <h2 id='ideas-capture-title' className='text-foreground text-base font-medium'>
-            Capture
-          </h2>
-          <p className='text-muted-foreground text-sm leading-relaxed'>Saving keeps it here. Nothing is drafted, sent to a model or published until you ask.</p>
-        </div>
+        <h2 id='ideas-capture-title' className='text-foreground text-base font-medium'>
+          Capture
+        </h2>
         <div className='relative scrollbar-hide -mx-1 overflow-x-auto px-1 py-0.5'>
           <SegmentedControl
             label='What to capture'
@@ -273,7 +270,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
             rows={3}
             maxLength={IDEA_LIMIT}
             aria-label='Your idea'
-            placeholder='e.g. The thing I keep noticing about first-time customers…'
+            placeholder='The thing I keep noticing about first-time customers…'
             className={cn(FIELD_AREA, 'max-h-48')}
           />
         )}
@@ -287,10 +284,10 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
               rows={6}
               maxLength={TEXT_LIMIT}
               aria-label='Text to keep'
-              placeholder='Paste notes, an article excerpt or a transcript. Each paragraph becomes a fact you can approve.'
+              placeholder='Paste notes, an excerpt or a transcript'
               className={cn(FIELD_AREA, 'max-h-72')}
             />
-            <Input value={pastedTitle} onChange={(event) => setPastedTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional) · Pasted source' className={FIELD_INPUT} />
+            <Input value={pastedTitle} onChange={(event) => setPastedTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional)' className={FIELD_INPUT} />
           </>
         )}
         {kind === 'link' && (
@@ -310,16 +307,16 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
                 className={FIELD_INPUT}
               />
               <p className={linkInvalid ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>
-                {linkInvalid ? 'Use a full http or https address.' : 'Saved as an unverified reference: the page itself is not read when you save.'}
+                {linkInvalid ? 'Use a full http or https address.' : 'Saved as a reference; the page isn’t read.'}
               </p>
             </div>
-            <Input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional) · the site name' className={FIELD_INPUT} />
+            <Input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} onKeyDown={onKeyDown} maxLength={200} aria-label='Title' placeholder='Title (optional)' className={FIELD_INPUT} />
           </>
         )}
         {kind === 'file' && (
           <div className='flex flex-col gap-2'>
             <Label htmlFor='ideas-file' className='text-muted-foreground text-xs font-normal'>
-              A UTF-8 .txt or .md file, up to 20 KB. Each paragraph becomes a fact you can approve.
+              .txt or .md, up to 20 KB
             </Label>
             <input
               id='ideas-file'
@@ -355,8 +352,9 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
         )}
 
         <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
-          <p className='text-muted-foreground min-w-0 text-xs leading-relaxed sm:max-w-sm'>
-            Draft now opens a conversation · {draft.modelLabel} · for {draft.destinationLabel} · {batches === 'Unavailable' ? 'writing allowance unavailable' : `${batches} writing batches left`}
+          {/* Which model writes and for where; secondary, so it stays off phones. The allowance is in the page's info. */}
+          <p className='text-muted-foreground hidden min-w-0 text-xs leading-relaxed sm:block sm:max-w-sm' title={batches === 'Unavailable' ? undefined : `${batches} writing batches left`}>
+            {draft.modelLabel} · {draft.destinationLabel}
           </p>
           <div className='flex flex-wrap items-center gap-2 sm:shrink-0'>
             <StatefulButton variant='ghost' className={GLASS} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={!ready || !body || saveState === 'loading'} onClick={() => void draftNow()}>

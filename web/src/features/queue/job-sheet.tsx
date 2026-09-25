@@ -76,9 +76,9 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(value);
-          toast.success(`${label} copied.`);
+          toast.success('Copied');
         } catch {
-          toast.error('Could not copy.');
+          toast.error('Couldn’t copy');
         }
       }}
     >
@@ -96,27 +96,26 @@ function Approved({ job, jobs }: { job: QueueJob; jobs: QueueJob[] }) {
   const together = job.scheduleId ? jobs.filter((other) => other.id !== job.id && other.scheduleId === job.scheduleId).length : 0;
   return (
     <section className='flex flex-col gap-3'>
-      <Heading>What was approved</Heading>
+      <Heading>Approved post</Heading>
       <div className='flex flex-col gap-4'>
         <ManifestPreview manifest={manifest} scale={0.6} />
         <dl className='flex flex-col'>
           <Row label='Time'>
-            {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone})
-            <span className='text-muted-foreground block text-xs'>{formatDateTime(epochOf(manifest.timing.utc))} in your time</span>
+            <span title={`${manifest.timing.local.replace('T', ' ')} (${manifest.timing.timeZone})`}>{formatDateTime(epochOf(manifest.timing.utc))}</span>
           </Row>
           <Row label='Language'>{manifest.payload.language}</Row>
           <Row label='Media'>{manifest.media.length === 0 ? 'Text only' : `${manifest.media.length} attached`}</Row>
-          {job.approvalDigest && (
-            <Row label='Approval digest' mono>
-              <span className='flex items-start gap-1'>
-                <span className='min-w-0 break-all'>{job.approvalDigest}</span>
-                <CopyButton value={job.approvalDigest} label='Approval digest' />
-              </span>
+          {together > 0 && (
+            <Row label='Approved with'>
+              {together} other post{together === 1 ? '' : 's'}
             </Row>
           )}
-          {together > 0 && (
-            <Row label='Schedule'>
-              Approved together with {together} other post{together === 1 ? '' : 's'}; each keeps its own state.
+          {job.approvalDigest && (
+            <Row label='Approval ID' mono>
+              <span className='flex items-start gap-1'>
+                <span className='min-w-0 break-all'>{job.approvalDigest}</span>
+                <CopyButton value={job.approvalDigest} label='Approval ID' />
+              </span>
             </Row>
           )}
         </dl>
@@ -167,7 +166,7 @@ function Attempts({ job }: { job: QueueJob }) {
         Attempts · {job.attempts.length} of {MAX_ATTEMPTS}
       </Heading>
       {job.attempts.length === 0 ? (
-        <p className='text-muted-foreground text-sm'>The worker has not started this job.</p>
+        <p className='text-muted-foreground text-sm'>Not started yet.</p>
       ) : (
         <ul className='flex flex-col gap-1 text-sm'>
           {job.attempts.map((attempt, index) => {
@@ -188,38 +187,26 @@ function Attempts({ job }: { job: QueueJob }) {
   );
 }
 
-function Provider({ job, nowSeconds }: { job: QueueJob; nowSeconds: number }) {
+/** What the platform answered. The receipt below carries the post ID and verification, so they are not repeated here. */
+function Platform({ job, nowSeconds }: { job: QueueJob; nowSeconds: number }) {
   const settled = DONE.has(job.state) || ENDED.has(job.state) || HELD.has(job.state);
   const note = workerNote(job);
   return (
     <section className='flex flex-col gap-2'>
-      <Heading>Provider</Heading>
+      <Heading>Platform</Heading>
       <dl className='flex flex-col'>
-        <Row label='Reference' mono>
-          {job.providerReference ? (
-            <span className='flex items-start gap-1'>
-              <span className='min-w-0 break-all'>{job.providerReference}</span>
-              <CopyButton value={job.providerReference} label='Provider reference' />
-            </span>
-          ) : (
-            <span className='text-muted-foreground font-sans text-sm'>None yet</span>
-          )}
-        </Row>
-        <Row label='Provider said'>{job.providerConfirmed || <span className='text-muted-foreground'>Nothing yet</span>}</Row>
-        <Row label='Verification'>
-          {job.verification ? `${job.verification.method.replace(/_/g, ' ')} · ${formatDateTime(job.verification.at)}` : <span className='text-muted-foreground'>Not verified</span>}
-        </Row>
-        {typeof job.checks === 'number' && job.checks > 0 && <Row label='Checks'>{job.checks} reconciliation check{job.checks === 1 ? '' : 's'}</Row>}
+        <Row label='Response'>{job.providerConfirmed || <span className='text-muted-foreground'>None yet</span>}</Row>
+        {typeof job.checks === 'number' && job.checks > 0 && <Row label='Checks'>{job.checks}</Row>}
         {!settled && typeof job.nextAt === 'number' && job.nextAt > 0 && (
-          <Row label='Next look'>
-            {formatDateTime(job.nextAt)} · {relativeTime(job.nextAt, nowSeconds)}
+          <Row label='Next check'>
+            <span title={formatDateTime(job.nextAt)}>{relativeTime(job.nextAt, nowSeconds)}</span>
           </Row>
         )}
       </dl>
-      <PublicationReceipt job={job} />
+      <PublicationReceipt job={job} referenceAction={job.providerReference ? <CopyButton value={job.providerReference} label='Post ID' /> : undefined} />
       {note && (
         <Surface as='p' material='quiet' radius='control' padding='sm' className='text-sm'>
-          <span className='text-muted-foreground block text-xs'>Last worker note</span>
+          <span className='text-muted-foreground block text-xs'>Latest note</span>
           {note}
         </Surface>
       )}
@@ -241,7 +228,8 @@ function ApprovedBy({ job }: { job: QueueJob }) {
 }
 
 function FooterActions({ job, canApprove, canSchedule, cancelPending, holdEpoch, onCancel, onPrepareAgain, draftAvailable }: JobSheetProps & { job: QueueJob }) {
-  const prepare = canSchedule && (HELD.has(job.state) || job.state === 'failed');
+  const failed = job.state === 'failed';
+  const prepare = canSchedule && (HELD.has(job.state) || failed);
   const cancel = canApprove && canCancel(job);
   if (!prepare && !cancel) return null;
   const available = draftAvailable(job.manifest.variantId);
@@ -249,15 +237,15 @@ function FooterActions({ job, canApprove, canSchedule, cancelPending, holdEpoch,
     <div className='flex flex-wrap items-center gap-2 [&_button]:min-h-11'>
       {prepare && (
         <Button
-          variant='glass'
+          variant={failed ? 'action' : 'glass'}
           size='control'
           className='h-11 px-3.5 text-[13px]'
           disabled={!available}
-          title={available ? 'Prepare a new review of the same draft' : 'This draft is no longer available'}
+          title={available ? undefined : 'This draft is gone'}
           onClick={() => onPrepareAgain(job.manifest.variantId)}
         >
           <Icons.refresh />
-          Prepare again
+          {failed ? 'Try again' : 'Prepare again'}
         </Button>
       )}
       {cancel && (
@@ -288,7 +276,7 @@ export function JobSheet(props: JobSheetProps) {
       {job.manifest.platform} · {job.manifest.account}
     </span>
   ) : (
-    'Job not found'
+    'Post not found'
   );
   const description = job ? (
     <span className='flex flex-wrap items-center gap-2'>
@@ -296,14 +284,15 @@ export function JobSheet(props: JobSheetProps) {
       {isSynthetic(job) && <FixtureBadge />}
     </span>
   ) : (
-    'This job is not in the workspace. It may belong to another workspace, or the link is out of date.'
+    'This link is out of date.'
   );
   const body = job ? (
     <div className='flex flex-col gap-7'>
+      {job.state === 'failed' && <p className='text-destructive text-sm font-medium'>Couldn’t publish this post</p>}
       <Approved job={job} jobs={jobs} />
       <Timeline job={job} />
       <Attempts job={job} />
-      <Provider job={job} nowSeconds={nowSeconds} />
+      <Platform job={job} nowSeconds={nowSeconds} />
     </div>
   ) : null;
   const footer = job ? (

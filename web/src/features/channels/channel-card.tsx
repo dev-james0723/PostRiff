@@ -55,7 +55,7 @@ export interface ChannelActivity {
 
 export interface ChannelCardProps {
   channel: ChannelView;
-  /** The mounted provider for this platform; undefined when the deployment no longer offers it. */
+  /** The mounted provider for this platform; undefined when this platform can no longer be connected. */
   provider?: ProviderView;
   canManage: boolean;
   activity?: ChannelActivity | null;
@@ -126,12 +126,12 @@ function DisconnectButton({
           <AlertDialogHeader>
             <AlertDialogTitle className='text-xl font-medium tracking-tight'>Disconnect {platform}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {account}: stored tokens are wiped and revoked remotely where supported. Officially imported writing samples for this connection are revoked and their retained text is removed; dependent Writing DNA is invalidated. Manual samples remain. Approved jobs for this account will be held until you reconnect.
+              Rafii loses access to {account}. Writing samples imported from it are deleted, and Writing DNA built from them must be rebuilt. Manual samples stay. Approved posts are held until you reconnect.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className={DIALOG_FOOTER_PLAIN}>
             <AlertDialogCancel variant='glass' size='control'>
-              Keep
+              Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               variant='action'
@@ -152,11 +152,11 @@ function DisconnectButton({
 
 function ScopesList({ scopes }: { scopes: string[] }) {
   const [open, setOpen] = useState(false);
-  if (scopes.length === 0) return <span>no scopes</span>;
+  if (scopes.length === 0) return <span>No permissions</span>;
   return (
     <Collapsible open={open} onOpenChange={setOpen} className='inline'>
       <CollapsibleTrigger className='rafii-focus inline-flex min-h-6 items-center gap-0.5 rounded-sm underline-offset-2 hover:underline'>
-        {scopes.length} {scopes.length === 1 ? 'scope' : 'scopes'}
+        {scopes.length} {scopes.length === 1 ? 'permission' : 'permissions'}
         <Icons.chevronDown className={cn('size-3 transition-transform', open && 'rotate-180')} />
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -207,12 +207,14 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
     setVerifying(true);
     try {
       const result = await api.verifyChannel(workspaceId, channel.id);
-      toast.success(`Verification: ${result.state.replace(/_/g, ' ')}${result.detail ? ` — ${result.detail}` : ''}`);
       await refresh();
       // The request can succeed while the check fails (an expired token): only a verified state earns "Verified".
-      flashVerifyOutcome(VERIFIED_STATES.has(result.state) ? { state: 'success', label: 'Verified' } : { state: 'error', label: 'Not verified' });
+      // Success shows on the button and the badge; a failed check keeps its detail in the toast.
+      const verified = VERIFIED_STATES.has(result.state);
+      if (!verified) toast.error(`${channel.platform} not verified`, { description: result.detail || result.state.replace(/_/g, ' ') });
+      flashVerifyOutcome(verified ? { state: 'success', label: 'Verified' } : { state: 'error', label: 'Not verified' });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Verification failed.');
+      toast.error(`Couldn't verify ${channel.platform}`, { description: err instanceof ApiError ? err.message : undefined });
       flashVerifyOutcome({ state: 'error', label: 'Try again' });
     } finally {
       setBusy(false);
@@ -226,10 +228,10 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
     setBusy(true);
     try {
       await api.disconnectChannel(workspaceId, channel.id);
-      toast.success('Disconnected. Stored tokens were wiped.');
+      // No toast: the card's badge turns to Disconnected.
       await refresh();
     } catch (err) {
-      reportChangeError(err, 'Could not disconnect.');
+      reportChangeError(err, "Couldn't disconnect.");
     } finally {
       setBusy(false);
     }
@@ -272,8 +274,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         <StateMessage
           kind={attentionKind(channel, expiring)}
           layout='inline'
-          title='Needs attention'
-          description={sentence}
+          title={sentence}
           action={
             canManage && provider ? (
               <Button variant='glass' size='control' onClick={reconnect}>
@@ -281,7 +282,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
                 Reconnect
               </Button>
             ) : canManage && !provider ? (
-              <span className='text-muted-foreground text-xs'>This provider is not configured on this deployment, so it cannot be reconnected here.</span>
+              <span className='text-muted-foreground text-xs'>Reconnect isn&apos;t available for {channel.platform} yet.</span>
             ) : undefined
           }
           className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3'
@@ -290,45 +291,48 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
 
       <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />
       {channel.socialReadiness && (
-        <div className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Independent social permissions'>
-          <p>
-            {channel.socialReadiness.history === 'HISTORICAL_IMPORT_AVAILABLE'
-              ? 'Historical import available for the last verified grant. Each retrieval rechecks access.'
-              : channel.socialReadiness.connection === 'CONNECTED' && channel.platform === 'LinkedIn'
-                ? 'LinkedIn is connected, but LinkedIn has not granted this app permission to import your historical posts.'
-                : 'Historical import is not currently available. Verify or reconnect this account.'}
-          </p>
-          <p>
+        <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
+          <li>
             {channel.socialReadiness.publishing === 'PUBLISHING_AVAILABLE'
-              ? 'Publishing permission is available. Every post still needs your explicit approval.'
+              ? 'Can publish posts you approve.'
               : channel.socialReadiness.publishing === 'PUBLISHING_AWAITING_PROVIDER_REVIEW'
-                ? 'Publishing awaits confirmed platform review.'
-                : 'Publishing permission is unavailable for this connection.'}
-          </p>
-          {channel.socialReadiness.history !== 'HISTORICAL_IMPORT_AVAILABLE' && (
-            <Link href='/app/workspace/brand#manual-writing-samples' className='rafii-focus text-foreground w-fit rounded-sm underline underline-offset-2'>
-              Import writing samples manually
-            </Link>
-          )}
-        </div>
+                ? 'Publishing awaits platform review.'
+                : 'Can’t publish from this account.'}
+          </li>
+          <li>
+            {channel.socialReadiness.history === 'HISTORICAL_IMPORT_AVAILABLE' ? (
+              'Can import past posts.'
+            ) : (
+              <>
+                {channel.socialReadiness.connection === 'CONNECTED' && channel.platform === 'LinkedIn'
+                  ? 'LinkedIn hasn’t granted permission to import past posts.'
+                  : 'Can’t import past posts right now.'}{' '}
+                <Link href='/app/workspace/brand#manual-writing-samples' className='rafii-focus text-foreground rounded-sm underline underline-offset-2'>
+                  Add samples manually
+                </Link>
+              </>
+            )}
+          </li>
+        </ul>
       )}
 
       {/* A div, not a p: the scopes list expands a block inside this row. */}
       <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
         {channel.expiresAt ? (
-          <span className={cn((expiring || expired) && 'text-foreground font-medium')}>
-            {expired
-              ? `Access expired ${relativeTime(channel.expiresAt)} (${formatDate(channel.expiresAt)})`
-              : `Access until ${formatDate(channel.expiresAt)} · ${relativeTime(channel.expiresAt)}`}
-          </span>
-        ) : (
-          <span>No expiry reported</span>
-        )}
-        <span aria-hidden>·</span>
-        <span>{identityVerifiedAt ? `Verified ${relativeTime(identityVerifiedAt)}` : 'Not verified yet'}</span>
-        <span aria-hidden>·</span>
-        <span>Evidence: {channel.evidenceSource.replace(/_/g, ' ')}</span>
-        <span aria-hidden>·</span>
+          <>
+            <span className={cn((expiring || expired) && 'text-foreground font-medium')} title={formatDate(channel.expiresAt)}>
+              {expired ? `Expired ${relativeTime(channel.expiresAt)}` : `Expires ${relativeTime(channel.expiresAt)}`}
+            </span>
+            <span aria-hidden>·</span>
+          </>
+        ) : null}
+        {/* Secondary on phones: verification time and its evidence stay in the History sheet and the title. */}
+        <span className='hidden md:inline' title={`Evidence: ${channel.evidenceSource.replace(/_/g, ' ')}`}>
+          {identityVerifiedAt ? `Verified ${relativeTime(identityVerifiedAt)}` : 'Not verified yet'}
+        </span>
+        <span aria-hidden className='hidden md:inline'>
+          ·
+        </span>
         <ScopesList scopes={channel.scopes} />
       </div>
 
@@ -337,7 +341,13 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           href={`/app/queue?channel=${encodeURIComponent(channel.id)}`}
           className='rafii-focus text-muted-foreground hover:text-foreground w-fit rounded-sm text-xs underline-offset-2 hover:underline'
         >
-          {activity.scheduled} scheduled · {activity.held} held · {activity.published} published
+          {[
+            activity.scheduled > 0 && `${activity.scheduled} scheduled`,
+            activity.held > 0 && `${activity.held} on hold`,
+            activity.published > 0 && `${activity.published} published`
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </Link>
       )}
 

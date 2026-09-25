@@ -109,7 +109,7 @@ export function useHomeGeneration() {
         ]);
         return result;
       } catch (err) {
-        if (mine === ticket.current) setError(err instanceof ApiError ? err.message : 'The drafts could not be started.');
+        if (mine === ticket.current) setError(err instanceof ApiError ? err.message : 'Check your connection and try again.');
         return null;
       } finally {
         if (mine === ticket.current) setBusy(false);
@@ -123,7 +123,7 @@ export function useHomeGeneration() {
     try {
       await api.cancelRun(workspaceId, run.runId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The run could not be cancelled.');
+      setError(err instanceof ApiError ? err.message : 'Couldn’t cancel the drafts.');
     }
   }, [api, run, workspaceId]);
 
@@ -186,7 +186,7 @@ export function useHomeGeneration() {
       setSeed((value) => (value ? { ...value, status: 'applied' } : value));
       await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The drafts could not be saved.');
+      setError(err instanceof ApiError ? err.message : 'Couldn’t save the drafts.');
     } finally {
       setSaving(false);
     }

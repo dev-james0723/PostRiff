@@ -12,6 +12,7 @@
  * `timing.timestamp`) are read through the narrow local types below.
  */
 import type { Job, Review, SnapshotSource, SnapshotState, SnapshotVariant } from '@/lib/api/types';
+import { STATUS } from '@/lib/status-labels';
 import { FAILED, jobGroup, jobNote, LIVE_JOB, type JobGroup } from './job-state';
 
 /* ---------- fields the snapshot carries beyond the shared types ---------- */
@@ -147,47 +148,50 @@ export interface Board {
   wakeAt: number | null;
 }
 
+/** The draft chip a retraction adds; the board invariants look for it by this label. */
+const SOURCE_WITHDRAWN = 'Source withdrawn';
+
 export const COLUMN_META: Record<ColumnKey, Omit<BoardColumn, 'items' | 'footer'>> = {
   sources: {
     key: 'sources',
     title: 'Sources',
-    hint: 'What drafts may draw from',
+    hint: 'What drafts draw from',
     href: '/app/ideas',
     cta: 'Add a source',
-    empty: 'No sources yet. Drafts can start from a sentence; sources give them facts to draw on.'
+    empty: 'No sources yet.'
   },
   drafts: {
     key: 'drafts',
     title: 'Drafts',
-    hint: 'Candidates you added',
+    hint: 'Not scheduled yet',
     // Creating starts in the Home composer; Ideas holds the sources drafts draw on.
     href: '/app',
-    cta: 'Draft more',
-    empty: 'No drafts. Describe a post on Home and its drafts land here.'
+    cta: 'Create post',
+    empty: 'No drafts yet.'
   },
   review: {
     key: 'review',
-    title: 'Needs approval',
+    title: STATUS.needsReview,
     hint: 'Exact text, media, account and time',
     href: '/app/queue',
-    cta: 'Open the Queue',
-    empty: 'Nothing waiting. Schedule… on a draft prepares an exact review here.'
+    cta: 'Open Queue',
+    empty: 'Nothing to review.'
   },
   queue: {
     key: 'queue',
-    title: 'Queue',
-    hint: 'Approved; the worker publishes and the provider confirms',
+    title: STATUS.scheduled,
+    hint: 'Approved and waiting for its time',
     href: '/app/calendar',
     cta: 'See calendar',
-    empty: 'Nothing approved yet. Approve a review in the Queue and it waits here for its time.'
+    empty: 'Nothing scheduled.'
   },
   published: {
     key: 'published',
-    title: 'Published',
-    hint: 'Confirmed by the provider',
+    title: STATUS.published,
+    hint: 'Live on the platform',
     href: '/app/analytics',
     cta: 'See analytics',
-    empty: 'No provider-confirmed posts yet.'
+    empty: 'Nothing published yet.'
   }
 };
 
@@ -254,7 +258,7 @@ function sourceCard(source: PipelineSource): BoardCard {
   const facts = source.facts ?? [];
   const approved = facts.filter((f) => f.approved).length;
   const chips: CardChip[] = [];
-  if (source.sourcePolicy === 'prohibited') chips.push({ label: 'not for publication', tone: 'danger', title: 'This source may not be used in publications.' });
+  if (source.sourcePolicy === 'prohibited') chips.push({ label: 'Do not use', tone: 'danger', title: 'Left out of every draft.' });
   if (facts.length > 0) chips.push({ label: `${approved}/${facts.length} facts approved`, tone: 'neutral' });
   return {
     key: `source:${source.id}`,
@@ -272,14 +276,14 @@ function sourceCard(source: PipelineSource): BoardCard {
 
 function draftCard(variant: PipelineVariant, situation: DraftSituation, tag: string | undefined): BoardCard {
   const chips: CardChip[] = [];
-  if (situation.retracted) chips.push({ label: 'source retracted', tone: 'danger', title: 'A source this draft drew on was withdrawn. Draft it again from current sources.' });
-  if (situation.setAside) chips.push({ label: 'set aside', tone: 'neutral', title: 'Kept, not scheduled. Edit it to restore.' });
-  if (situation.updateProposed) chips.push({ label: 'update proposed', tone: 'info', title: 'A regenerated version is waiting; scheduling or editing accepts it first.' });
-  if (situation.voiceStale) chips.push({ label: 'earlier voice', tone: 'neutral', title: 'Written before the current voice profile, so Schedule… cannot offer it. Draft it again.' });
-  if (situation.needsReview) chips.push({ label: 'needs review', tone: 'warning', title: 'Unknown details must be confirmed as excluded; Schedule… asks for that.' });
-  if (situation.outcome === 'failed') chips.push({ label: 'failed', tone: 'danger', title: 'The last schedule for this draft failed.' });
-  if (situation.outcome === 'cancelled') chips.push({ label: 'cancelled', tone: 'neutral', title: 'The last schedule for this draft was cancelled.' });
-  if (situation.outcome === 'review expired') chips.push({ label: 'review expired', tone: 'neutral', title: 'The last review of this draft passed its approval deadline or went out of date before anyone approved it.' });
+  if (situation.retracted) chips.push({ label: SOURCE_WITHDRAWN, tone: 'danger', title: 'A source it used was withdrawn. Draft it again.' });
+  if (situation.setAside) chips.push({ label: 'Set aside', tone: 'neutral', title: 'Edit it to bring it back.' });
+  if (situation.updateProposed) chips.push({ label: 'Update ready', tone: 'info', title: 'Scheduling or editing accepts it.' });
+  if (situation.voiceStale) chips.push({ label: 'Older voice', tone: 'neutral', title: 'Written before your current voice, so it can’t be scheduled. Draft it again.' });
+  if (situation.needsReview) chips.push({ label: STATUS.needsReview, tone: 'warning', title: 'Unknown details must be left out; Schedule… asks for that.' });
+  if (situation.outcome === 'failed') chips.push({ label: STATUS.failed, tone: 'danger', title: 'Couldn’t publish this post' });
+  if (situation.outcome === 'cancelled') chips.push({ label: 'Cancelled', tone: 'neutral', title: 'Its last schedule was cancelled.' });
+  if (situation.outcome === 'review expired') chips.push({ label: 'Review expired', tone: 'neutral', title: 'Its last review wasn’t approved in time.' });
   return {
     key: `draft:${variant.id}`,
     kind: 'draft',
@@ -313,7 +317,7 @@ function reviewCard(review: PipelineReview, now: number): BoardCard {
     language: review.manifest.payload.language,
     title: review.manifest.account,
     body: review.manifest.payload.text,
-    chips: expired ? [{ label: 'expired', tone: 'danger', title: 'The approval deadline passed, so it can no longer be approved. Schedule… the draft again.' }] : [],
+    chips: expired ? [{ label: STATUS.expired, tone: 'danger', title: 'Not approved in time. Schedule the draft again.' }] : [],
     when: toEpoch(review.manifest.timing.utc),
     variantId: review.manifest.variantId,
     review
@@ -323,7 +327,7 @@ function reviewCard(review: PipelineReview, now: number): BoardCard {
 function jobCard(job: PipelineJob): BoardCard {
   const group = jobGroup(job.state);
   const chips: CardChip[] = [];
-  if (job.manifest.execution === 'synthetic') chips.push({ label: 'Fixture', tone: 'neutral', title: 'A synthetic provider, not a real post.' });
+  if (job.manifest.execution === 'synthetic') chips.push({ label: 'Test', tone: 'neutral', title: 'A test post, not a real one.' });
   const column: ColumnKey = group === 'verified' ? 'published' : 'queue';
   return {
     key: `job:${job.id}`,
@@ -564,7 +568,7 @@ export function boardInvariants(state: SnapshotState | undefined, board: Board, 
     if (n !== expected) problems.push(`draft ${variant.id} appears ${n} times, expected ${expected}`);
     const card = n === 1 ? findCard(board, `draft:${variant.id}`) : null;
     if (card && card.footer !== Boolean(variant.rejected)) problems.push(`draft ${variant.id} (set aside: ${Boolean(variant.rejected)}) is ${card.footer ? '' : 'not '}in the "Set aside" group`);
-    if (card && variant.blockedByRetraction && !card.chips.some((chip) => chip.label === 'source retracted')) problems.push(`draft ${variant.id} is blocked by a retraction but does not say so`);
+    if (card && variant.blockedByRetraction && !card.chips.some((chip) => chip.label === SOURCE_WITHDRAWN)) problems.push(`draft ${variant.id} is blocked by a retraction but does not say so`);
   }
   return problems;
 }

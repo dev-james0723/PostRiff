@@ -47,7 +47,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(callbackError ? 'Sign-in could not be completed. Please try again.' : null);
+  const [error, setError] = useState<string | null>(callbackError ? 'Couldn’t sign you in. Try again.' : null);
 
   useEffect(() => {
     const fromUrl = params.get('plan');
@@ -65,7 +65,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
     try {
       await task();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
     } finally {
       setBusy(false);
     }
@@ -109,15 +109,12 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
       type: 'email'
     });
     if (verifyError) throw verifyError;
-    if (!data.session) throw new Error('The code did not create a session. Request a new one.');
+    if (!data.session) throw new Error('That code didn’t work. Request a new one.');
     router.replace(verifyHref(next));
   }
 
-  const title = intent === 'sign-up' ? 'Create your PostRiff workspace' : 'Sign in to PostRiff';
-  const subtitle =
-    intent === 'sign-up'
-      ? '14-day trial. No card. Export everything, any time.'
-      : 'Welcome back. Your drafts are where you left them.';
+  const title = intent === 'sign-up' ? 'Create your Rafii workspace' : 'Sign in to Rafii';
+  const subtitle = intent === 'sign-up' ? '14-day free trial. No card needed.' : undefined;
 
   if (auth.status === 'loading') {
     return (
@@ -171,7 +168,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
           );
         })}
       </RadioGroup>
-      <p className='text-muted-foreground text-xs leading-relaxed'>You are not charged during the trial and nothing converts automatically.</p>
+      <p className='text-muted-foreground text-xs leading-relaxed'>No charge during the trial. You’re only billed if you choose a paid plan.</p>
     </fieldset>
   );
 
@@ -318,7 +315,7 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
             </>
           ) : (
             <>
-              New to PostRiff?{' '}
+              New to Rafii?{' '}
               <Link href={`${siteConfig.links.signUp}?next=${encodeURIComponent(next)}`} className={linkClass}>
                 Start a free trial
               </Link>

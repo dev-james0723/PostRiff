@@ -8,4 +8,4 @@ for (const [platform, format] of [['LinkedIn','text'],['Threads','image'],['Inst
     assert.match(value, /permission|scope/);
   });
 }
-test('unknown connector does not imply Direct publishing', () => assert.match(publishingSupport('Unknown'), /not implemented/));
+test('unknown connector does not imply Direct publishing', () => assert.match(publishingSupport('Unknown'), /isn't available/));

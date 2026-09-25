@@ -24,11 +24,8 @@ function PublishInfo({ content }: { content: InfobarContent }) {
 function PageSkeleton() {
   return (
     <div role='status' aria-label='Loading page' className='flex flex-1 flex-col gap-4'>
-      <div className='flex flex-col gap-2'>
-        <div className='bg-muted h-8 w-48 animate-pulse rounded-lg motion-reduce:animate-none' />
-        <div className='bg-muted h-4 w-80 max-w-full animate-pulse rounded motion-reduce:animate-none' />
-      </div>
-      <div className='rafii-quiet mt-4 h-40 w-full rounded-[var(--rafii-radius-card)]' />
+      <div className='bg-muted h-8 w-48 animate-pulse rounded-lg motion-reduce:animate-none' />
+      <div className='rafii-quiet mt-2 h-40 w-full rounded-[var(--rafii-radius-card)]' />
       <div className='rafii-quiet h-40 w-full rounded-[var(--rafii-radius-card)]' />
     </div>
   );
@@ -69,7 +66,7 @@ export default function PageContainer({
   if (!access) {
     return (
       <div className='flex flex-1 items-center justify-center p-4 md:px-6'>
-        {accessFallback ?? <StateMessage kind='permission' title='You do not have access to this page.' description='Ask a workspace owner or admin for the permission this page needs.' className='w-full max-w-md' />}
+        {accessFallback ?? <StateMessage kind='permission' title='No access' description='Ask a workspace owner or admin for access.' className='w-full max-w-md' />}
       </div>
     );
   }

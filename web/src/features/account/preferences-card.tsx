@@ -53,7 +53,7 @@ export function zoneLabel(zone: string, at = new Date()): string {
   }
 }
 
-/** Immediate preferences (DNA §21.15): each control applies on change and confirms with a toast. */
+/** Immediate preferences (DNA §21.15): each control applies on change; the control itself shows the result, so only failures toast. */
 export function PreferencesCard() {
   const prefs = usePreferences();
   const me = useMe();
@@ -64,14 +64,13 @@ export function PreferencesCard() {
   const savedZone = me.data?.preferences.timeZone ?? '';
   const savedLocale = me.data?.preferences.locale ?? '';
 
-  async function save(changes: ProfileChanges, done: string) {
+  async function save(changes: ProfileChanges) {
     setSaving(true);
     try {
       await api.updateProfile(changes);
       await client.invalidateQueries({ queryKey: keys.me });
-      toast.success(done);
     } catch (err) {
-      toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'The preference could not be saved.');
+      toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'Couldn’t save. Try again.');
     } finally {
       setSaving(false);
     }
@@ -81,7 +80,6 @@ export function PreferencesCard() {
     <SettingsSection
       id='profile-preferences'
       title='Preferences'
-      description='How times and numbers read for you, in every workspace. Leave either on “this device” to follow the browser you are using.'
       bodyClassName='grid gap-6 sm:grid-cols-2'
     >
       <div className='flex min-w-0 flex-col gap-2'>
@@ -92,7 +90,7 @@ export function PreferencesCard() {
           <Combobox
             items={zones}
             value={savedZone || null}
-            onValueChange={(zone) => void save({ timeZone: zone ?? '' }, zone ? `Times now follow ${zoneLabel(zone)}.` : 'Times follow this device again.')}
+            onValueChange={(zone) => void save({ timeZone: zone ?? '' })}
             itemToStringLabel={(zone: string) => zoneLabel(zone)}
             disabled={saving}
           >
@@ -103,11 +101,9 @@ export function PreferencesCard() {
             </ComboboxContent>
           </Combobox>
         )}
-        <p className='text-muted-foreground text-xs leading-relaxed'>
-          {savedZone
-            ? `Schedules and times are written in ${zoneLabel(savedZone)}.${savedZone !== prefs.browserTimeZone ? ` This device is on ${zoneLabel(prefs.browserTimeZone)}.` : ''}`
-            : `Following this device: ${zoneLabel(prefs.browserTimeZone)}. Set a zone if you schedule from more than one place.`}
-        </p>
+        {savedZone && savedZone !== prefs.browserTimeZone && (
+          <p className='text-muted-foreground text-xs leading-relaxed'>This device is on {zoneLabel(prefs.browserTimeZone)}.</p>
+        )}
       </div>
 
       <div className='flex min-w-0 flex-col gap-2'>
@@ -119,7 +115,7 @@ export function PreferencesCard() {
             value={savedLocale || DEVICE}
             onValueChange={(value) => {
               const locale = value === DEVICE ? '' : (value as string);
-              void save({ locale }, locale ? 'Dates and numbers now follow that language.' : 'Dates and numbers follow this device again.');
+              void save({ locale });
             }}
           >
             <SelectTrigger id='pref-locale' disabled={saving} className={rafiiSelectTrigger}>
@@ -138,7 +134,7 @@ export function PreferencesCard() {
           </Select>
         )}
         <p className='text-muted-foreground text-xs leading-relaxed'>
-          Changes how dates and numbers are written, for example {formatDateTime(Date.now() / 1000)}. The app&apos;s own text stays in English for now.
+          Example: {formatDateTime(Date.now() / 1000)}. App text stays in English.
         </p>
       </div>
 
@@ -148,9 +144,9 @@ export function PreferencesCard() {
           size='sm'
           className='min-h-9 w-fit sm:col-span-2'
           disabled={saving}
-          onClick={() => void save({ timeZone: '', locale: '' }, 'Both preferences follow this device again.')}
+          onClick={() => void save({ timeZone: '', locale: '' })}
         >
-          Follow this device for both
+          Follow this device
         </Button>
       )}
     </SettingsSection>

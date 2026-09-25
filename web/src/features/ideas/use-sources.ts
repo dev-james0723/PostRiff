@@ -142,11 +142,12 @@ export function useActError() {
       if (err instanceof ApiError && err.status === 409) {
         void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         if (/changed/i.test(err.message)) {
-          toast.error('This workspace changed in another tab. It has been reloaded; what you typed is kept.');
+          toast.error('Something changed. Reloaded; what you typed is kept.');
           return;
         }
       }
-      toast.error(err instanceof ApiError ? err.message : fallback);
+      // What happened as the headline; the server's own words as the detail.
+      toast.error(fallback, { description: err instanceof ApiError && err.message ? err.message : undefined });
     },
     [client, workspaceId]
   );

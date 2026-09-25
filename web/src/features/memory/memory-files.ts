@@ -8,9 +8,27 @@ import type { MemoryEgress, MemoryFile } from '@/lib/api/types';
 export type DraftGroup = 'given' | 'reference';
 
 export const DRAFT_GROUP_LABEL: Record<DraftGroup, string> = {
-  given: 'Given to writing routes',
+  given: 'Sent to writers',
   reference: 'For you to read'
 };
+
+/**
+ * The name a person reads for a memory file. The API keys them as files (`VOICE.md`), which is how writers
+ * receive them; people see what the file is about instead. Unknown files lose only the extension.
+ */
+const FILE_LABELS: Record<string, string> = {
+  'AGENT.md': 'How Rafii works',
+  'IDENTITY.md': 'Identity',
+  'VOICE.md': 'Voice',
+  'BOUNDARIES.md': 'Boundaries',
+  'BRAND.md': 'Brand'
+};
+
+export function memoryFileLabel(name: string): string {
+  if (FILE_LABELS[name]) return FILE_LABELS[name];
+  const base = name.replace(/\.md$/i, '').replace(/[_-]+/g, ' ').trim().toLowerCase();
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : name;
+}
 
 export interface GroupedMemoryFiles {
   /** Files a writing route receives, in the order the API lists them. */

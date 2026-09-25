@@ -6,13 +6,13 @@ export const MAX_SELECTED_POSTS = 50;
 /** Append only a continuous, bounded page chain for one authenticated account. */
 export function appendOwnedPage(pages: OwnedPostPage[], next: OwnedPostPage, cursor?: string): OwnedPostPage[] {
   if (!cursor) {
-    if (next.coverage?.startedFromBeginning === false) throw new Error('This is not the beginning of the retrieved history. Reload it.');
+    if (next.coverage?.startedFromBeginning === false) throw new Error("Couldn't load posts from the start. Reload to try again.");
     return [next];
   }
   const previous = pages.at(-1);
-  if (!previous || previous.nextCursor !== cursor || pages.length >= MAX_PREVIEW_PAGES) throw new Error('The page chain ended or reached its preview limit.');
+  if (!previous || previous.nextCursor !== cursor || pages.length >= MAX_PREVIEW_PAGES) throw new Error('No more posts to load here.');
   if (previous.connectionId !== next.connectionId || previous.providerAccountId !== next.providerAccountId) throw new Error('The connected account changed. Reload the posts.');
-  if (next.nextCursor && (next.nextCursor === cursor || pages.some((page) => page.nextCursor === next.nextCursor))) throw new Error('The provider repeated a cursor. Further coverage cannot be confirmed.');
+  if (next.nextCursor && (next.nextCursor === cursor || pages.some((page) => page.nextCursor === next.nextCursor))) throw new Error("Couldn't load more posts. Reload to try again.");
   return [...pages, next];
 }
 
@@ -24,16 +24,16 @@ export function loadedPosts(pages: OwnedPostPage[]): OwnedPost[] {
 
 /** One encrypted receipt per selected page; never send edits as provider-authored text. */
 export function selectedReceipts(pages: OwnedPostPage[], selected: string[], now = Date.now() / 1000): { receipt: string; postIds: string[] }[] {
-  if (!selected.length || selected.length > MAX_SELECTED_POSTS || new Set(selected).size !== selected.length) throw new Error('Choose between 1 and 50 distinct posts.');
+  if (!selected.length || selected.length > MAX_SELECTED_POSTS || new Set(selected).size !== selected.length) throw new Error('Choose 1–50 posts.');
   const available = new Map<string, OwnedPostPage>();
   for (const page of pages) for (const post of page.posts) available.set(post.id, page);
   const groups = new Map<OwnedPostPage, string[]>();
   for (const id of selected) {
     const page = available.get(id);
-    if (!page || page.expiresAt <= now) throw new Error('A selected post is unavailable or its preview expired. Reload before retaining it.');
+    if (!page || page.expiresAt <= now) throw new Error('A selected post expired. Reload and try again.');
     groups.set(page, [...(groups.get(page) ?? []), id]);
   }
-  if (groups.size > MAX_PREVIEW_PAGES) throw new Error('Retain from at most four verified pages at once.');
+  if (groups.size > MAX_PREVIEW_PAGES) throw new Error('Retain from up to 4 pages at once.');
   return [...groups].map(([page, postIds]) => ({ receipt: page.receipt, postIds }));
 }
 
@@ -44,7 +44,7 @@ export function coverageSummary(pages: OwnedPostPage[]): string {
   const range = dates.length ? ` from ${format.format(dates[0])}–${format.format(dates.at(-1)!)}` : '';
   const loaded = posts.length ? `Loaded ${posts.length} posts${range}.` : 'No eligible captions in the retrieved pages.';
   const complete = pages.length > 0 && pages[0].coverage?.startedFromBeginning === true && pages.at(-1)?.coverage?.endReached === true;
-  const coverage = complete ? 'Pagination reached the end of the API-visible results; excluded or inaccessible material is not counted.' : 'Coverage is incomplete; search includes only loaded posts.';
+  const coverage = complete ? 'Reached the end of the available posts.' : 'More posts may exist; search covers loaded posts only.';
   const undated = posts.length - dates.length;
-  return `${loaded} ${coverage}${undated ? ` ${undated} posts have no verified date.` : ''}`;
+  return `${loaded} ${coverage}${undated ? ` ${undated} undated.` : ''}`;
 }

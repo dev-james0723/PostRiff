@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Surface } from '@/components/rafii';
 import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import type { LearningSummary, Snapshot } from '@/lib/api/types';
 import { StatTile } from '../settings-section';
@@ -20,80 +21,53 @@ export function HoldingsSection({
   const learning = memory.data?.learning;
   const learned = learning ? learning.items.filter((item) => item.status === 'active').length : null;
 
+  const unread = 'Couldn’t read';
+
   return (
-    <PrivacySection
-      id='privacy-holdings'
-      title='What PostRiff holds'
-      description='Counted from this workspace just now. Unavailable means it could not be read, never zero.'
-      data-tour='privacy-holdings'
-    >
-      <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5'>
+    <PrivacySection id='privacy-holdings' title='Your data' data-tour='privacy-holdings'>
+      <Surface material='quiet' radius='card' padding='md' className='grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 xl:grid-cols-5'>
         {snapshot.isPending ? (
-          Array.from({ length: 4 }, (_, index) => <StatTile key={index} label='Loading' value='' loading />)
+          Array.from({ length: 4 }, (_, index) => <StatTile key={index} label='Loading' value='' loading bare />)
         ) : (
           <>
             <StatTile
+              bare
               label='Sources'
               value={holdings?.sources ?? 'Unavailable'}
-              footer={
-                !holdings
-                  ? 'Could not be read'
-                  : holdings.withdrawnSources > 0
-                    ? `${plural(holdings.withdrawnSources, 'source')} withdrawn`
-                    : holdings.sources === 0
-                      ? 'Nothing added yet'
-                      : 'Text, links and files you added'
-              }
+              footer={!holdings ? unread : holdings.withdrawnSources > 0 ? `${plural(holdings.withdrawnSources, 'source')} withdrawn` : undefined}
             />
             <StatTile
+              bare
               label='Drafts'
               value={holdings?.drafts ?? 'Unavailable'}
-              footer={
-                !holdings
-                  ? 'Could not be read'
-                  : holdings.blockedDrafts > 0
-                    ? `${holdings.blockedDrafts} blocked by a retracted source`
-                    : holdings.drafts === 0
-                      ? 'Nothing added yet'
-                      : 'Kept with their revision history'
-              }
+              footer={!holdings ? unread : holdings.blockedDrafts > 0 ? `${holdings.blockedDrafts} blocked by a retracted source` : undefined}
             />
+            <StatTile bare label='Media files' value={holdings?.media ?? 'Unavailable'} footer={!holdings ? unread : undefined} />
             <StatTile
-              label='Media files'
-              value={holdings?.media ?? 'Unavailable'}
-              footer={!holdings ? 'Could not be read' : holdings.media === 0 ? 'Nothing added yet' : 'Uploaded or generated images and video'}
-            />
-            <StatTile
+              bare
               label='Linked accounts'
               value={holdings?.linkedAccounts ?? 'Unavailable'}
               footer={
                 <Link href='/app/channels' className={linkClass}>
-                  Details on Channels <LearnMoreChevron className='size-3.5' />
+                  Channels <LearnMoreChevron className='size-3.5' />
                 </Link>
               }
             />
           </>
         )}
         {memory.isPending ? (
-          <StatTile label='Learned preferences' value='' loading />
+          <StatTile bare label='Learned preferences' value='' loading />
         ) : (
           <StatTile
+            bare
             label='Learned preferences'
             value={learned ?? 'Unavailable'}
-            footer={
-              learned === null
-                ? memory.error
-                  ? 'Could not be read'
-                  : 'Not reported for this workspace'
-                : learned === 0
-                  ? 'Nothing learned yet'
-                  : 'About how drafts should read'
-            }
+            footer={learned === null ? (memory.error ? unread : 'Not reported') : undefined}
           />
         )}
-      </div>
-      {snapshot.error ? <Unavailable query={snapshot} fallback='The workspace could not be read.' /> : null}
-      {memory.error ? <Unavailable query={memory} fallback='Learned preferences could not be read.' /> : null}
+      </Surface>
+      {snapshot.error ? <Unavailable query={snapshot} fallback='Couldn’t read this workspace.' /> : null}
+      {memory.error ? <Unavailable query={memory} fallback='Couldn’t read learned preferences.' /> : null}
     </PrivacySection>
   );
 }

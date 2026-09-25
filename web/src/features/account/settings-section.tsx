@@ -103,7 +103,8 @@ export function SettingsGroup({
 
 /**
  * A quiet stat tile (§20.1 honest counts): label, the real value or an explicit Unavailable, and a
- * hint. Numbers roll once inside the motion budget; strings render as they are.
+ * hint. Numbers roll once inside the motion budget; strings render as they are. `bare` drops the
+ * tile's own surface so several stats can share one (no card soup).
  */
 export function StatTile({
   label,
@@ -111,6 +112,7 @@ export function StatTile({
   hint,
   footer,
   loading,
+  bare = false,
   className
 }: {
   label: ReactNode;
@@ -118,10 +120,11 @@ export function StatTile({
   hint?: ReactNode;
   footer?: ReactNode;
   loading?: boolean;
+  bare?: boolean;
   className?: string;
 }) {
-  return (
-    <Surface material='quiet' radius='card' padding='none' className={cn('flex min-w-0 flex-col gap-1 p-4', className)}>
+  const body = (
+    <>
       <span className='text-muted-foreground text-xs font-medium'>{label}</span>
       <span className='text-foreground text-2xl font-semibold tracking-tight tabular-nums'>
         {loading ? (
@@ -134,6 +137,12 @@ export function StatTile({
       </span>
       {hint && <span className='text-foreground text-xs'>{hint}</span>}
       {footer && <span className='text-muted-foreground text-xs leading-relaxed'>{footer}</span>}
+    </>
+  );
+  if (bare) return <div className={cn('flex min-w-0 flex-col gap-1', className)}>{body}</div>;
+  return (
+    <Surface material='quiet' radius='card' padding='none' className={cn('flex min-w-0 flex-col gap-1 p-4', className)}>
+      {body}
     </Surface>
   );
 }

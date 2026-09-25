@@ -11,7 +11,7 @@ import { useMemory, useSnapshot } from '@/lib/api/hooks';
 import type { MemoryEgress, MemoryFile } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
 import { cn } from '@/lib/utils';
-import { DRAFT_GROUP_LABEL, draftGroupOf, groupMemoryFiles, type DraftGroup } from './memory-files';
+import { DRAFT_GROUP_LABEL, draftGroupOf, groupMemoryFiles, memoryFileLabel, type DraftGroup } from './memory-files';
 import { StaleNotice, Unavailable } from './memory-states';
 
 const BRAND_HREF = '/app/workspace/brand';
@@ -29,19 +29,15 @@ type WhatDraftsReadProps = {
   className?: string;
 } & Omit<ComponentPropsWithoutRef<'section'>, 'children' | 'className'>;
 
-/** What a writing route does with this file, from the API's own lists. Never a claim the API did not make. */
+/** What a writer does with this file, from the API's own lists. Never a claim the API did not make. */
 function routeLine(file: MemoryFile, group: DraftGroup | null, egress: MemoryEgress | undefined) {
-  if (group === null) return 'Which files writing routes receive is unavailable right now.';
-  if (group === 'reference') return 'For you to read. Writing routes don’t receive this file.';
-  const parts = [
-    egress?.cloud
-      ? 'Routes on your own machine receive this file when they draft, and so does the cloud model, because an owner allowed it.'
-      : 'Routes on your own machine receive this file when they draft. The cloud model doesn’t until an owner allows it.'
-  ];
-  if (file.name === 'VOICE.md') parts.push('When a draft names its channels, its copy lists only the learned preferences that apply to them.');
+  if (group === null) return 'Couldn’t check which writers receive this file.';
+  if (group === 'reference') return 'For you to read. Not sent to writers.';
+  const parts = [egress?.cloud ? 'Sent to local writers and the cloud model.' : 'Sent to local writers. The cloud model needs an owner’s OK.'];
+  if (file.name === 'VOICE.md') parts.push('Each draft gets only the learned preferences for its channels.');
   const withheld = egress?.withheldBoundaries ?? 0;
   if (file.name === 'BOUNDARIES.md' && egress?.cloud && withheld > 0) {
-    parts.push(`The cloud model’s copy leaves out ${withheld} private or local-only boundar${withheld === 1 ? 'y' : 'ies'}.`);
+    parts.push(`The cloud copy leaves out ${withheld} private boundar${withheld === 1 ? 'y' : 'ies'}.`);
   }
   return parts.join(' ');
 }
@@ -68,8 +64,8 @@ function FileMeta({ file, group, noVoice, nameId, showName }: { file: MemoryFile
       <div className='flex min-w-0 flex-col gap-1.5'>
         <div className='flex flex-wrap items-center gap-2'>
           {showName && (
-            <span id={nameId} className='text-foreground font-mono text-sm font-semibold'>
-              {file.name}
+            <span id={nameId} className='text-foreground text-sm font-semibold'>
+              {memoryFileLabel(file.name)}
             </span>
           )}
           {group && <StatusChip icon={group === 'given' ? 'send' : 'eye'}>{DRAFT_GROUP_LABEL[group]}</StatusChip>}
@@ -113,7 +109,7 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
 
   const memoryLink = showMemoryLink ? (
     <Link href={MEMORY_HREF} className='rafii-focus text-muted-foreground hover:text-foreground rounded-md text-xs underline-offset-4 hover:underline'>
-      Change who reads these on Memory
+      Change access on Memory
     </Link>
   ) : null;
 
@@ -128,7 +124,7 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
         <BodySkeleton />
       </>
     ) : (
-      <Unavailable className='p-5' message='Memory files are unavailable right now.' query={memory} />
+      <Unavailable className='p-5' message='Couldn’t load memory files.' query={memory} />
     );
   } else if (tabbed) {
     const given = grouped.given;
@@ -142,21 +138,20 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
           <h2 id={nameId} className='text-foreground text-base font-medium tracking-tight'>
             What drafts read
           </h2>
-          <p className='text-muted-foreground text-sm leading-relaxed'>The files a writing route receives before it drafts, as your workspace renders them right now.</p>
         </div>
         {!grouped.known ? (
-          <StateMessage kind='partial' layout='inline' className='px-5 pb-5' title='Which files writing routes receive is unavailable right now.' />
+          <StateMessage kind='partial' layout='inline' className='px-5 pb-5' title='Couldn’t check which files writers receive.' />
         ) : given.length === 0 ? (
-          <StateMessage kind='empty' layout='inline' className='px-5 pb-5' title='No memory files are given to writing routes.' />
+          <StateMessage kind='empty' layout='inline' className='px-5 pb-5' title='No files are sent to writers.' />
         ) : (
           <div className='flex flex-col'>
             <div className='relative scrollbar-hide overflow-x-auto px-5 pt-4 pb-2'>
               <SegmentedControl
-                options={given.map((file) => ({ value: file.name, label: <span className='font-mono text-xs'>{file.name}</span> }))}
+                options={given.map((file) => ({ value: file.name, label: <span className='text-xs'>{memoryFileLabel(file.name)}</span> }))}
                 value={current}
                 onChange={setTab}
                 pattern='tabs'
-                label='Memory files given to writing routes'
+                label='Files sent to writers'
                 size='sm'
                 widths='content'
                 panelIds={panelIds}
@@ -182,7 +177,7 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
     const file = files.find((f) => f.name === selected) ?? grouped.given[0] ?? files[0];
     const group = file ? draftGroupOf(grouped, file.name) : null;
     content = !file ? (
-      <StateMessage kind='empty' layout='inline' className='p-5' title='The workspace returned no memory files.' />
+      <StateMessage kind='empty' layout='inline' className='p-5' title='No memory files yet' />
     ) : (
       <>
         <div className='px-5 pt-5 pb-3'>

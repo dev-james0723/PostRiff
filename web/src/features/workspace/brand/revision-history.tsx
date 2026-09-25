@@ -49,10 +49,9 @@ function ProposedRow({ provisional, active }: { provisional: VoiceProfile; activ
     <li className='flex min-w-0 flex-col gap-1 py-2.5'>
       <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
         <span className='text-foreground text-sm font-medium'>Proposed</span>
-        <StatusChip icon='hourglass'>Waiting for approval</StatusChip>
+        <StatusChip icon='hourglass'>Needs approval</StatusChip>
         {tone && <StatusChip icon={null}>{tone}</StatusChip>}
       </div>
-      <p className='text-muted-foreground text-xs'>Not a revision until an owner approves it.</p>
       {active && <Changes changes={describeChanges(active.profile, provisional)} against={active.revision} />}
     </li>
   );
@@ -82,12 +81,11 @@ export function RevisionHistory({ state, query }: { state: SnapshotState | undef
         </>
       }
       titleId='brand-history-heading'
-      description='Each approval adds a revision; earlier ones stay listed. A revision records the tone, observations, sample and unknowns, not the purpose or audience.'
     >
       {!speaker || !revisions ? (
-        <SectionUnavailable message='The revision history could not be read from this workspace.' query={query} />
+        <SectionUnavailable message='Couldn’t load revisions.' query={query} />
       ) : revisions.length === 0 && !speaker.provisional ? (
-        <StateMessage kind='empty' layout='inline' title='No approved revisions yet.' description='The first one appears when an owner approves a voice.' />
+        <StateMessage kind='empty' layout='inline' title='No revisions yet' />
       ) : (
         <>
           <ol className='flex flex-col' aria-label='Voice revisions, newest first'>

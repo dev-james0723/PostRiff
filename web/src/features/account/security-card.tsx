@@ -164,7 +164,7 @@ function StepUpDialog({
               </Button>
               {hasCode && (
                 <Button type='button' variant='quiet' size='sm' className='min-h-9 w-fit' disabled={busy} onClick={() => setMode('code')}>
-                  Use a code from my authenticator app instead
+                  Use an authenticator code instead
                 </Button>
               )}
             </div>
@@ -252,7 +252,7 @@ function AuthenticatorDialog({
           <DialogHeader className='gap-1.5 pr-8'>
             <DialogTitle className={DIALOG_TITLE}>Set up an authenticator app</DialogTitle>
             <DialogDescription className='leading-relaxed'>
-              Scan the code with Google Authenticator, 1Password, Authy or any TOTP app, then enter the 6-digit code it shows.
+              Scan with any authenticator app, like 1Password or Google Authenticator. Then enter its 6-digit code.
             </DialogDescription>
           </DialogHeader>
           {error && <StateMessage kind='error' layout='inline' title={error} />}
@@ -268,7 +268,7 @@ function AuthenticatorDialog({
                 className='rafii-paper size-44 shrink-0 rounded-[var(--rafii-radius-control)] bg-white p-2'
               />
               <div className='flex min-w-0 flex-col gap-2 text-sm'>
-                <span className='text-muted-foreground'>Cannot scan? Enter this key by hand:</span>
+                <span className='text-muted-foreground'>Can’t scan? Enter this key:</span>
                 <code className='rafii-quiet rounded-[var(--rafii-radius-micro)] px-2 py-1.5 text-xs break-all'>{enrolment.secret}</code>
                 <Button
                   type='button'
@@ -347,8 +347,7 @@ function PasskeyDialog({
         <DialogHeader className='gap-1.5 pr-8'>
           <DialogTitle className={DIALOG_TITLE}>Set up Face ID / Touch ID</DialogTitle>
           <DialogDescription className='leading-relaxed'>
-            Your device will ask you to confirm with Face ID, Touch ID, Windows Hello or a security key. PostRiff keeps only a public key; the
-            biometric never leaves your device. Passkeys saved to iCloud Keychain or Google Password Manager also work on your other devices.
+            Confirm with Face ID, Touch ID, Windows Hello or a security key. Your biometric never leaves your device.
           </DialogDescription>
         </DialogHeader>
         {error && <StateMessage kind='error' layout='inline' title={error} />}
@@ -383,14 +382,14 @@ function MethodChooser({
     {
       kind: 'webauthn',
       title: 'Face ID / Touch ID',
-      note: passkeys ? 'A passkey on this device. Fastest, and phishing-resistant.' : 'This browser cannot create passkeys.',
+      note: passkeys ? 'A passkey on this device. Fastest and phishing-resistant.' : 'This browser can’t create passkeys.',
       icon: <Icons.key className='size-5' aria-hidden />,
       disabled: !passkeys
     },
     {
       kind: 'totp',
       title: 'Authenticator app',
-      note: 'Six-digit codes from Google Authenticator, 1Password, Authy…',
+      note: '6-digit codes from an authenticator app',
       icon: <Icons.phone className='size-5' aria-hidden />
     }
   ];
@@ -401,8 +400,8 @@ function MethodChooser({
           <DialogTitle className={DIALOG_TITLE}>{backup ? 'Add a backup method' : 'How do you want to confirm sign-ins?'}</DialogTitle>
           <DialogDescription className='leading-relaxed'>
             {backup
-              ? 'A second method keeps you signed in if you lose the first. There are no recovery codes.'
-              : 'Every sign-in will ask for this after your email or Google account. You can add a backup afterwards.'}
+              ? 'Use it if you lose the first. There are no recovery codes.'
+              : 'Every sign-in will ask for this.'}
           </DialogDescription>
         </DialogHeader>
         <div className='grid gap-2'>
@@ -463,13 +462,11 @@ function TwoFactor() {
     await Promise.all([client.invalidateQueries({ queryKey: keys.me }), client.invalidateQueries({ queryKey: FACTORS_KEY })]);
   }
 
+  /** The On badge and the method list show the result, so success is silent. */
   async function afterEnrol() {
-    if (enforced) {
-      toast.success('Backup method added.');
-    } else {
+    if (!enforced) {
       // The session is AAL2 now; the API records that this account must present a factor from here on.
       await api.enableMfa();
-      toast.success('Two-factor authentication is on.');
     }
     await refresh();
   }
@@ -479,22 +476,20 @@ function TwoFactor() {
     if (auth.supabase) {
       for (const factor of verified) await unenrollFactor(auth.supabase, factor.id);
     }
-    toast.success('Two-factor authentication is off.');
     await refresh();
   }
 
   async function removeFactor(factor: SecondFactor) {
     if (auth.supabase) await unenrollFactor(auth.supabase, factor.id);
-    toast.success(`${factor.name} removed.`);
     await refresh();
   }
 
   const methods = [count('webauthn') > 0 && 'Face ID / Touch ID', count('totp') > 0 && 'your authenticator app'].filter(Boolean).join(' or ');
   const explanation = !available
-    ? 'Not available with a dev identity. Two-factor authentication needs a real sign-in provider.'
+    ? 'Not available with a dev identity.'
     : enforced
-      ? `On since ${formatDate(me.data?.mfa.enforcedAt)}. Every sign-in needs ${methods || 'a second factor'}, and the API refuses sessions that have not shown one.`
-      : 'Confirm every sign-in with Face ID / Touch ID or an authenticator app. Once on, the API refuses any session that has not shown one.';
+      ? `Every sign-in needs ${methods || 'a second factor'}.`
+      : 'Confirm every sign-in with Face ID / Touch ID or an authenticator app.';
 
   return (
     <SettingsGroup
@@ -502,7 +497,13 @@ function TwoFactor() {
       title={
         <span className='flex flex-wrap items-center gap-2'>
           Two-factor authentication
-          {me.isLoading ? <Skeleton className='h-5 w-10' /> : <Badge variant={enforced ? 'default' : 'secondary'}>{enforced ? 'On' : 'Off'}</Badge>}
+          {me.isLoading ? (
+            <Skeleton className='h-5 w-10' />
+          ) : (
+            <Badge variant={enforced ? 'default' : 'secondary'} title={enforced && me.data?.mfa.enforcedAt ? `On since ${formatDate(me.data.mfa.enforcedAt)}` : undefined}>
+              {enforced ? 'On' : 'Off'}
+            </Badge>
+          )}
         </span>
       }
       description={me.isLoading ? <Skeleton className='h-4 w-64 max-w-full' /> : explanation}
@@ -549,9 +550,7 @@ function TwoFactor() {
             </ul>
           )}
           <div className='flex flex-wrap items-center justify-between gap-3'>
-            <p className='text-muted-foreground max-w-[52ch] text-xs leading-relaxed'>
-              This account has no recovery codes. A second method — a passkey on another device, or an authenticator app — is your backup.
-            </p>
+            <p className='text-muted-foreground max-w-[52ch] text-xs leading-relaxed'>No recovery codes. A second method is your backup.</p>
             <Button size='sm' variant='glass' className='min-h-10 px-3.5' onClick={() => setChoosing(true)}>
               <Icons.add className='size-4' />
               Add backup method
@@ -585,7 +584,7 @@ function TwoFactor() {
         open={turningOff}
         onOpenChange={setTurningOff}
         title='Turn off two-factor authentication?'
-        description='Sign-ins will need only your email or Google account. Confirm with your current method; every passkey and authenticator app is removed.'
+        description='Sign-ins will need only your email or Google account. All your methods are removed.'
         actionLabel='Turn off'
         destructive
         factors={verified}
@@ -595,7 +594,7 @@ function TwoFactor() {
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Remove ${removing?.name ?? 'this method'}?`}
-        description='Confirm with any of your current methods first.'
+        description='Confirm with a current method.'
         actionLabel='Remove'
         destructive
         factors={verified}
@@ -630,7 +629,6 @@ function Sessions() {
     setBusy(sessionId);
     try {
       await api.revokeSession(sessionId);
-      toast.success('Session revoked.');
       await client.invalidateQueries({ queryKey: keys.sessions });
     } catch (err) {
       reportChangeError(err, 'The session could not be revoked.');
@@ -643,7 +641,7 @@ function Sessions() {
     setBusy('others');
     try {
       const result = await api.revokeOtherSessions();
-      toast.success(result.revoked === 1 ? '1 other session signed out.' : `${result.revoked} other sessions signed out.`);
+      toast.success(result.revoked === 1 ? 'Signed out 1 other session' : `Signed out ${result.revoked} other sessions`);
       await client.invalidateQueries({ queryKey: keys.sessions });
     } catch (err) {
       reportChangeError(err, 'Other sessions could not be signed out.');
@@ -656,10 +654,10 @@ function Sessions() {
     <SettingsGroup
       icon={<Icons.laptop className='size-4' />}
       title='Where you are signed in'
-      description='Every browser or device that used this account. Revoke any you do not recognise.'
+      description='Revoke any you don’t recognise.'
       action={
         <Button variant='glass' size='control' disabled={others === 0 || busy !== null} onClick={() => setConfirmOthers(true)}>
-          Sign out all other sessions
+          Sign out others
         </Button>
       }
     >
@@ -669,7 +667,7 @@ function Sessions() {
         <StateMessage
           kind='error'
           layout='inline'
-          title='Sessions could not be loaded.'
+          title='Couldn’t load sessions'
           action={
             <Button size='sm' variant='glass' className='min-h-9' onClick={() => void sessions.refetch()}>
               Retry
@@ -740,7 +738,7 @@ function Sessions() {
           <AlertDialogHeader>
             <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Sign out every other session?</AlertDialogTitle>
             <AlertDialogDescription className='leading-relaxed'>
-              {others === 1 ? '1 other device' : `${others} other devices`} will be signed out. This device stays signed in. A recent sign-in is required; if yours is older, sign in again first.
+              {others === 1 ? '1 other device' : `${others} other devices`} will be signed out. This device stays signed in.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className={rafiiDialogFooter}>
@@ -774,8 +772,7 @@ function SecurityActivity() {
   return (
     <SettingsGroup
       icon={<Icons.history className='size-4' />}
-      title='Recent security activity'
-      description='Sign-ins, two-factor changes, revoked sessions and changes to your memberships. What happens to content lives in each workspace’s audit log.'
+      title='Recent activity'
     >
       {events.isLoading ? (
         <StateMessage kind='loading' title='Loading your account history' className='bg-transparent p-0' />
@@ -783,7 +780,7 @@ function SecurityActivity() {
         <StateMessage
           kind='error'
           layout='inline'
-          title='Activity could not be loaded.'
+          title='Couldn’t load activity'
           action={
             <Button size='sm' variant='glass' className='min-h-9' onClick={() => void events.refetch()}>
               Retry
@@ -791,7 +788,7 @@ function SecurityActivity() {
           }
         />
       ) : list.length === 0 ? (
-        <StateMessage kind='empty' layout='inline' title='Nothing recorded yet.' />
+        <StateMessage kind='empty' layout='inline' title='No activity yet' />
       ) : (
         <ol className='rafii-glass flex flex-col rounded-[var(--rafii-radius-card)] px-4 py-1'>
           {shown.map((event) => {
@@ -826,7 +823,7 @@ function SecurityActivity() {
 /** One quiet settings surface with three groups; spacing, not rules, separates them (DNA §5.5). */
 export function SecurityCard() {
   return (
-    <SettingsSection id='profile-security' title='Security' description='How this account is protected, where it is signed in, and what has happened to it.' bodyClassName='gap-8'>
+    <SettingsSection id='profile-security' title='Security' bodyClassName='gap-8'>
       <TwoFactor />
       <Sessions />
       <SecurityActivity />

@@ -11,20 +11,25 @@ export function defaultConnectCapability(provider: ProviderView | undefined, wan
 /** Browser hints only. The server rechecks identity, entitlement and actual read permission. */
 export function historyBlocker(channel: ChannelView | undefined, provider: ProviderView | undefined): string | null {
   if (!channel) return 'Choose a connected Instagram or LinkedIn account.';
-  if (provider?.executionPaused) return 'This connector is paused. Retained samples and manual imports remain available.';
-  if (!provider || provider.configured === false || provider.connectReady === false) return 'This connector needs server configuration. Open Channels for setup details.';
-  if (!['read_verified', 'publish_verified'].includes(channel.connectionState)) return 'Reconnect or verify this account before reading its posts.';
-  if (channel.platform === 'LinkedIn' && (!provider.historyAvailableForApp || !channel.scopes.includes('r_member_social'))) return 'LinkedIn is connected, but LinkedIn has not granted this app permission to import your historical posts. Separate provider approval and a granted r_member_social scope are required. Import writing samples manually instead.';
-  if (!provider.historyAvailableForApp) return 'Historical-post import requires separate provider approval. Import writing samples manually.';
+  const platform = channel.platform;
+  if (provider?.executionPaused) return `${platform} is paused. Add samples manually instead.`;
+  if (!provider || provider.configured === false || provider.connectReady === false) return `Importing from ${platform} isn't available yet.`;
+  if (!['read_verified', 'publish_verified'].includes(channel.connectionState)) return `Reconnect ${platform} to read its posts.`;
+  // LinkedIn needs both app approval and the member's r_member_social grant; either gap blocks the import.
+  if (platform === 'LinkedIn' && (!provider.historyAvailableForApp || !channel.scopes.includes('r_member_social'))) return "LinkedIn hasn't granted permission to import past posts. Add samples manually instead.";
+  if (!provider.historyAvailableForApp) return `${platform} hasn't granted permission to import past posts. Add samples manually instead.`;
   return null;
 }
 
+/** A platform's readiness in the customer's words; setup detail stays in the tile's Details. */
 export function providerReadinessLabel(provider: ProviderView): string {
-  if (provider.configurationState === 'partial_configuration') return 'Partial credentials';
-  if (provider.configurationState === 'invalid_configuration') return 'Invalid configuration';
-  if (provider.configured === false) return 'Not configured';
-  if (provider.executionPaused) return 'Paused';
-  if (provider.connectReady === false) return 'Configuration blocked';
-  return provider.productionReviewed ? 'Identity connection available' : 'Configured · review not confirmed';
+  if (
+    provider.configurationState === 'partial_configuration' ||
+    provider.configurationState === 'invalid_configuration' ||
+    provider.configured === false ||
+    provider.connectReady === false
+  )
+    return 'Not available yet';
+  if (provider.executionPaused) return 'Paused'; // STATUS.paused; a literal keeps this module loadable by its node test
+  return provider.productionReviewed ? 'Available' : 'Review pending';
 }
-

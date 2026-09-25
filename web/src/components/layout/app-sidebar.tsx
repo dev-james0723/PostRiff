@@ -212,14 +212,19 @@ export default function AppSidebar() {
                 <Icons.chevronsDown className='ml-auto size-4' />
               </DropdownMenuTrigger>
               <DropdownMenuContent className='w-(--anchor-width) min-w-56 rounded-lg' side='bottom' align='end' sideOffset={4}>
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className='p-0 font-normal'>
-                    <div className='px-1 py-1.5'>
-                      <UserAvatarProfile className='h-8 w-8 rounded-lg' showInfo user={user} />
-                    </div>
-                  </DropdownMenuLabel>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
+                {/* The trigger already shows who is signed in; the menu repeats it only on the icon rail, where the trigger is just the avatar. */}
+                {iconMode && (
+                  <>
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className='p-0 font-normal'>
+                        <div className='px-1 py-1.5'>
+                          <UserAvatarProfile className='h-8 w-8 rounded-lg' showInfo user={user} />
+                        </div>
+                      </DropdownMenuLabel>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuGroup>
                   <DropdownMenuItem onClick={() => { closeMenu(); router.push('/app/account/profile'); }}>
                     <Icons.account className='mr-2 h-4 w-4' />

@@ -104,7 +104,7 @@ class CodexCliRuntime(ClaudeCliRuntime):
     def list_supported_models(self):
         probe = self.detect()
         ready = probe["installed"] and probe["authStatus"] == "ok"
-        detail = "Runs the Codex CLI signed in on this machine in a read-only sandbox. Your ChatGPT/Codex plan pays; PostRiff spends $0 and records the run." if ready else (probe["guidance"] or "Codex is not available on this machine.")
+        detail = "Runs the Codex CLI signed in on this machine in a read-only sandbox. Your ChatGPT/Codex plan pays; Rafii spends $0 and records the run." if ready else (probe["guidance"] or "Codex is not available on this machine.")
         return [{"id": f"{MODEL_PREFIX}{alias}", "label": "Codex CLI · your default model" if alias == "default" else f"Codex CLI · {alias}", "qualified": ready, "costClass": "subscription", "route": ROUTE, "detail": detail} for alias in allowed_models()]
 
     def owns(self, model_id):

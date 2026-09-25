@@ -33,7 +33,7 @@ export function AcceptInvitation({ token }: { token: string }) {
       }
       router.replace(invitationLanding(result));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'This invitation could not be accepted.');
+      setError(err instanceof ApiError ? err.message : 'Couldn’t accept this invitation.');
     } finally {
       setBusy(false);
     }
@@ -50,11 +50,11 @@ export function AcceptInvitation({ token }: { token: string }) {
   return (
     <AuthSurface>
       <PageHeader
-        title='You’ve been invited to a PostRiff workspace'
-        description='Accepting adds you as a member with the role the inviter chose. You can leave at any time.'
+        title='You’re invited to a Rafii workspace'
+        description='You’ll join with the role the inviter chose. You can leave any time.'
       />
       {error && <StateMessage kind='error' layout='inline' title={error} />}
-      {auth.status === 'unavailable' && <StateMessage kind='offline' layout='inline' title={auth.error ?? 'PostRiff is unavailable right now.'} />}
+      {auth.status === 'unavailable' && <StateMessage kind='offline' layout='inline' title={auth.error ?? 'Rafii is unavailable right now.'} />}
       {auth.status === 'mfa-required' && (
         <Link href={verifyHref(here)} className={buttonVariants({ variant: 'action', size: 'control' })}>
           Confirm two-factor to accept
@@ -62,9 +62,7 @@ export function AcceptInvitation({ token }: { token: string }) {
       )}
       {auth.status === 'signed-out' && (
         <div className='flex flex-col gap-3'>
-          <p className='text-muted-foreground text-sm leading-relaxed'>
-            Sign in or create an account to accept this invitation. Anyone signed in with this link can accept; the workspace records who joined.
-          </p>
+          <p className='text-muted-foreground text-sm leading-relaxed'>Sign in to accept. Anyone with this link can accept it, and the workspace records who joined.</p>
           <Link href={`${siteConfig.links.signIn}?next=${encodeURIComponent(here)}`} className={buttonVariants({ variant: 'action', size: 'control' })}>
             Sign in to accept
           </Link>

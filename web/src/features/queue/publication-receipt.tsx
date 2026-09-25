@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Job } from '@/lib/api/types';
 
 function receiptUrl(job: Job) {
@@ -16,15 +17,32 @@ function receiptUrl(job: Job) {
   }
 }
 
-/** Container creation, acceptance and a provider lookup are separate evidence. */
-export function PublicationReceipt({ job }: { job: Job }) {
+/**
+ * Container creation, acceptance and a platform lookup are separate evidence. No app imports (only types): the
+ * receipt also renders on its own in a test, so a caller passes controls such as a copy button in `referenceAction`.
+ */
+export function PublicationReceipt({ job, referenceAction }: { job: Job; referenceAction?: ReactNode }) {
   const url = receiptUrl(job);
+  const verifiedAt = job.verification ? new Date(job.verification.at * 1000) : null;
   return (
     <div className='flex min-w-0 flex-col gap-2 text-sm' aria-label='Publication receipt'>
-      {job.container && <p className='break-all'>Container: {job.container} · not proof of publication</p>}
-      {job.providerReference && <p className='break-all'>Provider reference: {job.providerReference}</p>}
+      {job.container && <p className='break-all'>Upload: {job.container} · not yet published</p>}
+      {job.providerReference && (
+        <p className='flex items-start gap-1 break-all'>
+          <span className='min-w-0'>Post ID: {job.providerReference}</span>
+          {referenceAction}
+        </p>
+      )}
       {job.progress && <p>Stage: {job.progress.stage.replace(/_/g, ' ')}</p>}
-      <p>{job.verification ? `${job.verification.method.replace(/_/g, ' ')} · ${new Date(job.verification.at * 1000).toISOString()}` : 'Publication not verified'}</p>
+      <p>
+        {job.verification && verifiedAt ? (
+          <time dateTime={verifiedAt.toISOString()} title={verifiedAt.toISOString()}>
+            Verified · {job.verification.method.replace(/_/g, ' ')} · {verifiedAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+          </time>
+        ) : (
+          'Not verified yet'
+        )}
+      </p>
       {url && <a href={url} target='_blank' rel='noreferrer' className='text-primary rounded underline underline-offset-4 outline-none focus-visible:ring-2'>Open verified post</a>}
     </div>
   );

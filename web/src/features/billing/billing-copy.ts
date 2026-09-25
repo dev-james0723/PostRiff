@@ -6,34 +6,30 @@
  */
 import type { InfobarContent } from '@/components/ui/infobar';
 import { formatDate } from '@/lib/time';
-import { humanize, type LifecycleAlert, type PlanTimeline } from './billing-model';
+import { humanize, type PlanTimeline } from './billing-model';
 
 export const PAGE = {
-  title: 'Usage & plan',
-  description: 'What you have, what you have used, and what changes next.'
+  title: 'Usage & plan'
 };
 
 export const infoContent: InfobarContent = {
-  title: 'How billing works',
+  title: 'Billing',
   sections: [
     {
-      title: 'Allowances stop, they never overcharge',
-      description:
-        'When a writing or media allowance runs out, paid drafting stops and tells you. Nothing is charged silently and there is no automatic overage.'
+      title: 'No overage charges',
+      description: 'When an allowance runs out, drafting pauses. You are never charged for going over.'
     },
     {
       title: 'Trial',
-      description:
-        'A trial comes with a one-time allowance and needs no card. Nothing converts automatically; when it ends, you choose a plan yourself.'
+      description: 'No card needed. When it ends, you choose whether to subscribe.'
     },
     {
       title: 'Cancelling',
-      description: 'Your drafts stay readable and exportable after a cancellation.'
+      description: 'Your drafts stay available to read and export.'
     },
     {
-      title: 'What counts as a writing batch',
-      description:
-        'A batch is one paid drafting run. Runs that use no paid model show at $0 and do not use a batch. Each run reserves an estimate first, then settles to the real cost, or is released if it failed.',
+      title: 'Writing batches',
+      description: 'One batch is one paid drafting run. Free runs show at $0 and use no batch.',
       links: [{ title: 'Usage & billing guide', url: '/docs/usage-and-billing' }]
     }
   ]
@@ -45,7 +41,7 @@ export const LIFECYCLE_LABELS: Record<string, string> = {
   trial: 'Trial',
   active: 'Active',
   past_due: 'Payment failed',
-  grace: 'Grace period',
+  grace: 'Payment failed',
   cancelled: 'Cancelled',
   expired: 'Expired'
 };
@@ -55,88 +51,89 @@ export function lifecycleLabel(status: string | null | undefined) {
   return LIFECYCLE_LABELS[status] ?? humanize(status);
 }
 
-export function timelineText(timeline: PlanTimeline): string {
+/** The one action the plan summary offers: the billing portal, the plan list, or nothing at all. */
+export type PlanAction = 'portal' | 'plans' | null;
+
+export interface PlanSummary {
+  /** The plan's name, the page's first fact ("Trial", "Studio"). */
+  title: string;
+  /** A badge only when the state is not the plan's normal one (payment failed, cancelled, expired). */
+  badge: string | null;
+  /** The one line that says what happens next ("10 days left", "Renews Oct 3, 2026"). */
+  line: string;
+  /** The exact date behind a relative line, for the details disclosure; null when the line already has it. */
+  exactDate: string | null;
+  action: PlanAction;
+  /** Label for the action button. */
+  actionLabel: string | null;
+  /** True when the person has to act (payment failed): the line is announced as an alert. */
+  urgent: boolean;
+}
+
+/**
+ * Usage & plan in one glance (UI simplification spec §9, §41): the plan, the next thing that
+ * changes, and one action when there is one. When no action is possible the button is left out
+ * rather than explained. Deliberately absent: "nothing converts automatically", export commentary
+ * and anything about how billing is set up behind the scenes.
+ */
+export function planSummary(
+  input: {
+    timeline: PlanTimeline;
+    planLabel: string | null | undefined;
+    trial: boolean;
+    status: string | null | undefined;
+    isOwner: boolean;
+    portalAvailable: boolean;
+    checkoutAvailable: boolean;
+  }
+): PlanSummary {
+  const { timeline, trial, status, isOwner } = input;
+  const portal = isOwner && input.portalAvailable;
+  const plans = isOwner && input.checkoutAvailable;
+  const title = trial ? 'Trial' : input.planLabel || 'Plan unavailable';
+  const unusual = status && status !== 'active' && status !== 'trial' ? lifecycleLabel(status) : null;
+  const base = { title, badge: trial ? null : unusual, exactDate: null, urgent: false };
+  const manage = portal ? ({ action: 'portal', actionLabel: 'Manage plan' } as const) : ({ action: null, actionLabel: null } as const);
+  const choose = plans ? ({ action: 'plans', actionLabel: 'Choose a plan' } as const) : ({ action: null, actionLabel: null } as const);
+
   switch (timeline.kind) {
     case 'trial_left':
-      return `${plural(timeline.daysLeft, 'day')} left · ends ${formatDate(timeline.endsAt)}`;
+      return { ...base, line: `${plural(timeline.daysLeft, 'day')} left`, exactDate: `Ends ${formatDate(timeline.endsAt)}`, ...(portal ? manage : choose) };
     case 'trial_ended':
-      return `Trial ended ${formatDate(timeline.endedAt)}`;
+      return { ...base, badge: 'Ended', line: 'Publishing is paused', exactDate: `Ended ${formatDate(timeline.endedAt)}`, ...choose };
     case 'renews':
-      return `Renews ${formatDate(timeline.at)}`;
+      return { ...base, line: `Renews ${formatDate(timeline.at)}`, ...manage };
     case 'ends':
-      return `Ends ${formatDate(timeline.at)}`;
+      return { ...base, line: `Ends ${formatDate(timeline.at)} · won’t renew`, ...manage };
     case 'grace':
-      return timeline.until ? `Payment failed · grace period ends ${formatDate(timeline.until)}` : 'Payment failed · grace period end unavailable';
+      return {
+        ...base,
+        badge: 'Payment failed',
+        line: timeline.until ? `Update payment by ${formatDate(timeline.until)}` : 'Update your payment method',
+        urgent: true,
+        ...(portal ? { action: 'portal', actionLabel: 'Update payment' } : { action: null, actionLabel: null })
+      };
     case 'ended':
-      return timeline.at ? `Ended ${formatDate(timeline.at)}` : 'Subscription ended';
+      return { ...base, line: timeline.at ? `Ended ${formatDate(timeline.at)}` : 'Ended', ...choose };
     case 'unavailable':
-      return timeline.what === 'trial_end' ? 'End date unavailable' : 'Renewal date unavailable';
+      return { ...base, line: '', ...(portal || !trial ? manage : choose) };
   }
 }
 
 /**
- * The line under the Allowances title: when writing batches and media credits come back.
- * Allowances refill only when the payment provider reports an active subscription for a plan
- * (billing.py `_reconcile_entitlement`), so only a subscription that renews gets a reset date.
- * A trial, a subscription set to end, one that has ended and a failed payment all say "No reset".
+ * The line under the Usage heading: when writing batches and media credits come back. Only a
+ * subscription that renews refills them (billing.py `_reconcile_entitlement`), so every other
+ * state says nothing here; the plan summary already carries its date.
  */
-export function resetText(timeline: PlanTimeline, resetsAt: number | null): string {
-  switch (timeline.kind) {
-    case 'trial_left':
-      return `No reset during the trial · ends ${formatDate(timeline.endsAt)}`;
-    case 'trial_ended':
-      return `No reset during the trial · ended ${formatDate(timeline.endedAt)}`;
-    case 'ends':
-      return `No reset · the subscription ends ${formatDate(timeline.at)}`;
-    case 'ended':
-      return timeline.at ? `No reset · the subscription ended ${formatDate(timeline.at)}` : 'No reset · the subscription has ended';
-    case 'grace':
-      return 'No reset until the payment is fixed';
-    case 'unavailable':
-      return timeline.what === 'trial_end' ? 'No reset during the trial · end date unavailable' : 'Reset date unavailable';
-    case 'renews':
-      return resetsAt ? `Resets ${formatDate(resetsAt)}` : 'Reset date unavailable';
-  }
+export function resetText(timeline: PlanTimeline, resetsAt: number | null): string | null {
+  if (timeline.kind !== 'renews' || !resetsAt) return null;
+  return `Resets ${formatDate(resetsAt)}`;
 }
 
-export function alertCopy(alert: LifecycleAlert): { title: string; description: string } {
-  switch (alert.kind) {
-    case 'payment_failed':
-      return {
-        title: 'Payment failed',
-        description: alert.graceUntil
-          ? `The grace period ends ${formatDate(alert.graceUntil)}. Update the payment method in the billing portal before then.`
-          : 'The grace period end is unavailable. Update the payment method in the billing portal.'
-      };
-    case 'ended':
-      return {
-        title: 'Subscription ended',
-        description: `${alert.at ? `It ended ${formatDate(alert.at)}. ` : ''}Drafts stay readable and exportable.`
-      };
-    case 'trial_ended':
-      return {
-        title: `Trial ended on ${formatDate(alert.at)}`,
-        description: 'Publishing is paused. Drafts remain readable and exportable; choose a plan to resume publishing.'
-      };
-    case 'ending':
-      return {
-        title: `Your subscription ends ${formatDate(alert.at)}`,
-        description: 'It will not renew. Changes to it are made in the billing portal.'
-      };
-  }
-}
-
-/** Plans subtitle from the mounted provider, not from the API's fixed `note`. */
-export function providerNote(provider: string | undefined): string | null {
-  if (provider === 'disabled') return 'Checkout is not enabled on this deployment yet.';
-  if (provider === 'stripe') return 'Checkout and invoices are handled by Stripe. Nothing is charged until you confirm there.';
+/** Plans subtitle, only where it tells the person something about paying. */
+export function checkoutNote(provider: string | undefined): string | null {
+  if (provider === 'stripe') return 'Checkout by Stripe. Nothing is charged until you confirm.';
   return null;
-}
-
-export function budgetStatusLabel(status: string): string {
-  if (status === 'candidate') return 'Provisional ceiling';
-  if (status === 'approved') return 'Approved ceiling';
-  return humanize(status);
 }
 
 /** The allowances a plan card lists, in reading order. */
@@ -154,12 +151,10 @@ export const PRICE_STATUS: Record<string, string> = {
 };
 
 export const CONFIRM = {
-  loading: 'Waiting for the payment provider to confirm',
-  loadingHint: 'This page checks again on its own, less often as time passes.',
+  loading: 'Confirming payment…',
   success: 'Subscription confirmed',
-  successHint: 'Your plan and allowances below are updated.',
-  timeout: 'Still waiting for the payment provider',
-  timeoutHint: 'Refresh in a minute; nothing else is needed from you.',
+  timeout: 'Still confirming payment',
+  timeoutHint: 'Refresh in a minute.',
   cancelled: 'Checkout cancelled. Nothing was charged.'
 };
 

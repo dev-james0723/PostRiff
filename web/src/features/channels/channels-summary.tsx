@@ -27,10 +27,10 @@ function Dot() {
 }
 
 /**
- * One line of real numbers: connected, direct publish, needing attention, and the plan quota.
- * The quota segment reads `/usage`; while that request is loading or has failed the segment is
- * absent rather than showing a zero that nobody measured. Monochrome: attention is carried by
- * the count, its icon and the words (DNA §4.3).
+ * One line of real numbers: accounts (against the plan limit when `/usage` answered) and, only when
+ * non-zero, how many need attention. Direct and Assisted counts live on the filter tabs, so they are
+ * not repeated here. While usage is loading or failed the limit is absent rather than a guessed zero.
+ * Monochrome: attention is carried by the count, its icon and the words (DNA §4.3).
  */
 export function ChannelsSummary({
   counts,
@@ -50,39 +50,38 @@ export function ChannelsSummary({
   if (counts.connected === 0) {
     return (
       <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm' {...rest}>
-        <Stat value={0} label='connected' />
-        <Dot />
-        <Stat value={providersCount} label={providersCount === 1 ? 'platform available to connect' : 'platforms available to connect'} />
+        <Stat value={providersCount} label={providersCount === 1 ? 'platform available' : 'platforms available'} />
       </p>
     );
   }
 
   return (
     <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm' {...rest}>
-      <Stat value={counts.connected} label='connected' />
-      <Dot />
-      <Stat value={counts.direct} label='direct publish' />
-      <Dot />
-      <Stat
-        value={counts.attention}
-        label={counts.attention === 1 ? 'needs attention' : 'need attention'}
-        icon={counts.attention > 0 ? <Icons.warning className='size-3.5 self-center' aria-hidden /> : undefined}
-        className={cn(counts.attention > 0 && 'text-foreground')}
-      />
-      {typeof limit === 'number' && (
+      {typeof limit === 'number' ? (
+        <span className='inline-flex items-baseline gap-1'>
+          <DigitSwap value={counts.connected} className='text-foreground font-medium tabular-nums' />
+          <span>of {limit} accounts</span>
+        </span>
+      ) : (
+        <Stat value={counts.connected} label='connected' />
+      )}
+      {atLimit && (
         <>
           <Dot />
-          {atLimit ? (
-            <Link href='/app/account/billing' className='rafii-focus text-foreground inline-flex items-baseline gap-1 rounded-sm underline underline-offset-2'>
-              <DigitSwap value={counts.connected} className='font-medium tabular-nums' />
-              <span>of {limit} accounts on your plan · upgrade for more</span>
-            </Link>
-          ) : (
-            <span className='inline-flex items-baseline gap-1'>
-              <DigitSwap value={counts.connected} className='text-foreground font-medium tabular-nums' />
-              <span>of {limit} accounts on your plan</span>
-            </span>
-          )}
+          <Link href='/app/account/billing' className='rafii-focus text-foreground rounded-sm underline underline-offset-2'>
+            Upgrade for more
+          </Link>
+        </>
+      )}
+      {counts.attention > 0 && (
+        <>
+          <Dot />
+          <Stat
+            value={counts.attention}
+            label={counts.attention === 1 ? 'needs attention' : 'need attention'}
+            icon={<Icons.warning className='size-3.5 self-center' aria-hidden />}
+            className='text-foreground'
+          />
         </>
       )}
     </p>

@@ -62,10 +62,9 @@ export function ExportCard({ busy, setBusy }: BusyProps) {
       downloadBlob(blob, EXPORT_FILENAME);
       setFile({ filename: EXPORT_FILENAME, bytes: blob.size, sha256: await sha256Hex(blob) });
       button.settle('success');
-      toast.success('Export downloaded. Its fingerprint is on the Export card.');
     } catch (err) {
       button.settle('error');
-      toast.error(err instanceof ApiError ? err.message : 'The export could not be downloaded.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t download the export. Try again.');
     } finally {
       setBusy(null);
       void client.invalidateQueries({ queryKey: keys.dataRequests(workspaceId) });
@@ -77,16 +76,15 @@ export function ExportCard({ busy, setBusy }: BusyProps) {
     <SettingsSection
       id='privacy-export'
       title='Export'
-      description='Drafts, sources, approvals, receipts and the learned-preference ledger as a zip. No access tokens and no media files.'
+      description='Drafts, sources, approvals, receipts and learned preferences as a zip. No media or tokens.'
       className='h-full'
       bodyClassName='flex-1'
       data-tour='privacy-export'
     >
-      <p className='text-muted-foreground text-xs leading-relaxed'>Each export adds a row to Data requests with the size and fingerprint PostRiff recorded.</p>
       {file && (
         <Fingerprint
           file={file}
-          note='PostRiff records its receipt from a separate copy of the export, so this page does not claim the two match. Keep this fingerprint to show later that your file is unchanged.'
+          note='Keep it to show later that your file is unchanged. The receipt in Data requests is recorded from a separate copy.'
         />
       )}
       <div className='mt-auto pt-1'>
@@ -119,13 +117,12 @@ export function VoiceProfileCard({ busy, setBusy }: BusyProps) {
       downloadBlob(blob, VOICE_FILENAME);
       setFile({ filename: VOICE_FILENAME, bytes: blob.size, sha256: await sha256Hex(blob) });
       button.settle('success');
-      toast.success('Voice profile downloaded.');
     } catch (err) {
       button.settle('error');
       if (err instanceof ApiError) {
         toast.error(err.message);
       } else {
-        toast.error('The voice profile could not be downloaded.');
+        toast.error('Couldn’t download the voice profile. Try again.');
       }
     } finally {
       setBusy(null);
@@ -136,15 +133,13 @@ export function VoiceProfileCard({ busy, setBusy }: BusyProps) {
     <SettingsSection
       id='privacy-voice'
       title='Voice profile'
-      description='Your approved voice package as a zip, to keep or to use in another tool.'
+      description='Your approved voice as a zip.'
       className='h-full'
       bodyClassName='flex-1'
       data-tour='privacy-voice'
     >
-      <p className='text-muted-foreground text-xs leading-relaxed'>
-        Available once a voice package has been approved field by field. This download does not add a row to Data requests.
-      </p>
-      {file && <Fingerprint file={file} note='Keep this fingerprint to show later that your file is unchanged.' />}
+      <p className='text-muted-foreground text-xs leading-relaxed'>Available after you approve your voice.</p>
+      {file && <Fingerprint file={file} note='Keep it to show later that your file is unchanged.' />}
       <div className='mt-auto pt-1'>
         <StatefulButton
           variant='outline'

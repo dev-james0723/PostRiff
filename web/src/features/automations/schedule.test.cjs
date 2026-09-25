@@ -52,8 +52,8 @@ test('labels: days, zones, budget and plain run wording', () => {
   assert.equal(S.weeklyCeilingMicro(250_000, { weekdays: ['Monday', 'Thursday'] }), 500_000);
   assert.equal(S.usd(500_000), '$0.50');
   assert.equal(S.usd(20_000), '$0.020');
-  assert.equal(S.runText({ state: 'held', reason: 'destinations_unavailable' }).detail, 'None of its accounts is connected any more.');
-  assert.equal(S.runText({ state: 'cancelled', reason: 'definition_changed' }).detail, 'The automation was edited before this run.');
+  assert.equal(S.runText({ state: 'held', reason: 'destinations_unavailable' }).detail, 'No connected accounts.');
+  assert.equal(S.runText({ state: 'cancelled', reason: 'definition_changed' }).detail, 'Edited before this run.');
   assert.equal(S.statusText({ status: 'paused', pauseReason: 'destinations_unavailable' }).needsEdit, true);
   assert.equal(S.statusText({ status: 'draft' }).needsOwner, true);
   assert.deepEqual(S.missingFacts('Promote my spring recital', { date: '2026-04-18' }), ['venue']);
@@ -90,8 +90,8 @@ test('triggers: no scheduled runs, plain labels, a daily-limit ceiling', () => {
   const strong = { kind: 'on_strong_post', maxPerDay: 1, withinDays: 7, timeZone: 'UTC' };
   assert.equal(S.nextRun(idea, Date.UTC(2026, 2, 3)), null);
   assert.deepEqual(S.nextRuns(strong, Date.UTC(2026, 2, 3), 3), []);
-  assert.equal(S.scheduleSummary(idea), 'When you add a new idea or link to Ideas · up to 3 runs a day');
-  assert.equal(S.scheduleSummary(strong), 'After a post gets more replies or comments than usual (last 7 days) · up to 1 run a day');
+  assert.equal(S.scheduleSummary(idea), 'New idea or link in Ideas · up to 3 runs a day');
+  assert.equal(S.scheduleSummary(strong), 'After a strong post (last 7 days) · up to 1 run a day');
   assert.deepEqual(S.maxRuns(idea), { runs: 93, per: 'month' });
   assert.equal(S.ceilingText(100_000, strong), 'up to 31 runs a month · at most $3.10 a month');
   assert.equal(S.isTrigger(idea), true);

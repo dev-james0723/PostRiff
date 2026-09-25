@@ -8,7 +8,6 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
@@ -51,9 +50,7 @@ export function WorkspaceSwitcher() {
               )}
             >
               <span className='truncate font-medium'>{name}</span>
-              <span className='text-muted-foreground truncate text-xs'>
-                {membership ? ROLE_LABELS[membership.role] : 'Workspace'}
-              </span>
+              {membership && <span className='text-muted-foreground truncate text-xs'>{ROLE_LABELS[membership.role]}</span>}
             </div>
             <Icons.chevronsUpDown
               className={cn(
@@ -91,12 +88,6 @@ export function WorkspaceSwitcher() {
                   </DropdownMenuItem>
                 );
               })}
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator className='bg-transparent' />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className='text-muted-foreground px-2 pt-0 pb-1.5 text-xs font-normal'>
-                You join other workspaces by invitation.
-              </DropdownMenuLabel>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -6,6 +6,7 @@ import { useFlash } from '@/hooks/use-flash';
 import { useAct } from '@/lib/api/hooks';
 import type { Review } from '@/lib/api/types';
 import { reportActionError } from '@/features/queue/action-error';
+import { STATUS } from '@/lib/status-labels';
 
 /** Submits only the exact reviewed digest and verifies the returned receipt before claiming success. */
 export function ReviewApproveButton({ review, revision, allowed, nowSeconds, onReload, onOpenJob }: {
@@ -37,21 +38,23 @@ export function ReviewApproveButton({ review, revision, allowed, nowSeconds, onR
                     const approved = phase?.reviews.find((r) => r.id === review.id)?.status === 'approved';
                     const job = phase?.jobs.find((j) => j.manifest.idempotencyKey === manifest.idempotencyKey);
                     if (approved && job) {
-                      toast.success('Approved and scheduled.');
+                      // The card leaves at once, so a short toast carries the outcome.
+                      toast.success(STATUS.scheduled);
                       flashOutcome('success');
                     } else if (job) {
-                      toast.info('This exact post was already a job, so nothing new was scheduled.', {
-                        action: { label: 'Open job', onClick: () => onOpenJob(job.id) }
+                      toast.info('Already scheduled', {
+                        action: { label: 'Open', onClick: () => onOpenJob(job.id) }
                       });
                     } else {
-                      toast.error('The approval was answered, but no job appeared. Reload the queue to check.', {
+                      toast.error('Couldn’t confirm it was scheduled', {
+                        description: 'Reload to check.',
                         action: { label: 'Reload', onClick: onReload }
                       });
                       flashOutcome('error');
                     }
                   },
                   onError: (err) => {
-                    reportActionError(err, 'Approval failed.', onReload);
+                    reportActionError(err, 'Couldn’t approve this post', onReload);
                     flashOutcome('error');
                   }
                 }

@@ -22,9 +22,9 @@ test('LinkedIn connection alone is not historical-post permission', () => {
   const { historyBlocker } = helpers();
   const c = { platform: 'LinkedIn', connectionState: 'publish_verified', scopes: ['openid', 'profile', 'w_member_social'] };
   const p = { configured: true, connectReady: true, historyAvailableForApp: true };
-  assert.match(historyBlocker(c, p), /r_member_social/);
+  assert.match(historyBlocker(c, p), /permission to import past posts/);
   assert.equal(historyBlocker({ ...c, scopes: [...c.scopes, 'r_member_social'] }, p), null);
-  assert.match(historyBlocker(c, { ...p, historyAvailableForApp: false }), /approval/);
+  assert.match(historyBlocker(c, { ...p, historyAvailableForApp: false }), /permission to import past posts/);
 });
 test('paused, expired and disconnected channels cannot start imports', () => {
   const { historyBlocker } = helpers();

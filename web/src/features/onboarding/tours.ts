@@ -63,7 +63,7 @@ const heading = (route: string) => [`[data-tour="${route}-title"]`, 'main [data-
 
 export const WELCOME_TOUR: Tour = {
   id: 'welcome',
-  title: 'PostRiff in two minutes',
+  title: 'Rafii in two minutes',
   // Memory has its own page tips; the welcome walk stays at the pages a first post passes through.
   steps: [
     {
@@ -71,8 +71,8 @@ export const WELCOME_TOUR: Tour = {
       route: '/app',
       stop: 'Home',
       target: ['[data-tour="composer"]', 'main textarea'],
-      title: 'Say what you want to put out',
-      body: 'Type the topic, paste a link or drop your notes. Name a channel and a time in plain words and the plan follows them.',
+      title: 'Say what you want to post',
+      body: 'A topic, a link or your notes. Name a channel and time if you like.',
       when: (ctx) => ctx.canEdit
     },
     {
@@ -80,13 +80,11 @@ export const WELCOME_TOUR: Tour = {
       route: '/app',
       stop: 'Home',
       target: ['[data-tour="composer-channels"]', '[data-tour="composer"]'],
-      title: 'Channels you can draft for',
+      title: 'Channels',
       body: (ctx) =>
-        ctx.channelCount === null
-          ? 'Each dot shows an account’s real state, read from Channels. Drafts also work for channels you have not connected yet.'
-          : ctx.channelCount > 0
-            ? `Each dot shows an account’s real state. ${ctx.channelCount === 1 ? 'One account is' : `${ctx.channelCount} accounts are`} connected; drafts also work for channels you have not connected yet.`
-            : 'Each dot shows an account’s real state. Nothing is connected yet, and that is fine: drafts and previews work without a connection.',
+        ctx.channelCount === null || ctx.channelCount === 0
+          ? 'Drafts work before you connect anything.'
+          : `${ctx.channelCount === 1 ? 'One account' : `${ctx.channelCount} accounts`} connected. Drafts work for the rest too.`,
       when: (ctx) => ctx.canEdit
     },
     {
@@ -95,7 +93,7 @@ export const WELCOME_TOUR: Tour = {
       stop: 'Home',
       target: ['[data-tour="quick-starts"]', 'main section:has(h2)'],
       title: `${QUICK_STARTS.length} kinds of post to start from`,
-      body: 'Pick one, replace the brackets with your own words, send. Each one maps to a post type with its own checks.',
+      body: 'Pick one, fill in the brackets, send.',
       placement: 'top',
       when: (ctx) => ctx.canEdit
     },
@@ -104,8 +102,8 @@ export const WELCOME_TOUR: Tour = {
       route: '/app/channels',
       stop: 'Channels',
       target: ['[data-tour="channels-summary"]', '[data-tour="channels-connect"]', '[data-tour="channel-card"]', ...heading('channels')],
-      title: 'One card per account, one level per capability',
-      body: 'Publishing, scheduling, analytics and replies are verified one by one. Green is direct through the official API after your approval; amber means PostRiff prepares the post and you finish it.'
+      title: 'One card per account',
+      body: 'Green publishes directly after your approval; amber means you finish the post.'
     },
     {
       id: 'queue',
@@ -114,19 +112,17 @@ export const WELCOME_TOUR: Tour = {
       target: ['[data-tour="queue-approvals"]', '[data-tour="queue-list"]', 'main [role="tablist"]', ...heading('queue')],
       title: 'Nothing publishes on its own',
       body: (ctx) =>
-        ctx.needsReview === null
-          ? 'Every draft waits here until you approve the exact text, media and time.'
-          : ctx.needsReview > 0
-            ? `Every draft waits here until you approve the exact text, media and time. ${ctx.needsReview === 1 ? 'One draft is' : `${ctx.needsReview} drafts are`} waiting for you now.`
-            : 'Every draft waits here until you approve the exact text, media and time. Nothing is waiting right now; send something from Home and it lands here.'
+        ctx.needsReview !== null && ctx.needsReview > 0
+          ? `You approve the exact text, media and time. ${ctx.needsReview === 1 ? 'One draft is' : `${ctx.needsReview} drafts are`} waiting.`
+          : 'You approve the exact text, media and time first.'
     },
     {
       id: 'calendar',
       route: '/app/calendar',
       stop: 'Calendar',
       target: ['[data-tour="calendar-grid"]', 'main [role="tablist"]', ...heading('calendar')],
-      title: 'Your week at its exact times',
-      body: 'Approved and pending publications sit at the time you chose, with a phone preview of how each channel will show the post.'
+      title: 'Your week',
+      body: 'Every post at its exact time, with a phone preview.'
     },
     {
       id: 'brand',
@@ -135,11 +131,9 @@ export const WELCOME_TOUR: Tour = {
       target: ['[data-tour="voice-setup"]', ...heading('brand')],
       title: 'Your voice',
       body: (ctx) =>
-        ctx.hasVoice === null
-          ? 'Your voice profile lives here: what you make, who it is for, and the tone. Drafts are written from it.'
-          : ctx.hasVoice
-            ? `Your voice profile is active (revision ${ctx.voiceRevision ?? 1}). Drafts are written from it, and every change you approve becomes a new revision.`
-            : 'A good first stop: say what you make, who it is for, and the tone. You can draft and schedule before adding a voice; a reminder helps you review the tone.',
+        ctx.hasVoice === true
+          ? `Revision ${ctx.voiceRevision ?? 1} is active. Drafts are written from it.`
+          : 'Say what you make, who it’s for and the tone. Drafts are written from it.',
       when: (ctx) => ctx.canEdit
     },
     {
@@ -147,8 +141,8 @@ export const WELCOME_TOUR: Tour = {
       route: '/app/overview',
       stop: 'Overview',
       target: ['[data-testid="getting-started"]', '[data-tour="overview-stats"]', ...heading('overview')],
-      title: 'Four steps to your first scheduled post',
-      body: 'Voice, a channel, a draft, an approval. Each step ticks itself from the real workspace state, never from a click.'
+      title: 'Four steps to your first post',
+      body: 'Voice, a channel, a draft, an approval. Each ticks itself off.'
     },
     {
       id: 'help',
@@ -156,7 +150,7 @@ export const WELCOME_TOUR: Tour = {
       stop: 'Overview',
       target: ['[data-tour="help"]'],
       title: 'Come back any time',
-      body: 'Replay this tour or open the tips for any page from the help menu. ⌘K jumps to any page by name.',
+      body: 'Replay the tour or page tips from Help. ⌘K jumps to any page.',
       placement: 'bottom'
     }
   ]
@@ -180,7 +174,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Ideas',
         target: ['[data-tour="ideas-capture"]', ...heading('ideas')],
         title: 'Keep what could become a post',
-        body: 'Save a thought, pasted text, a link or a file. Saving drafts nothing; Draft now opens a conversation that writes from it.'
+        body: 'Save a thought, text, link or file. Draft now writes from it.'
       },
       {
         id: 'filters',
@@ -188,15 +182,15 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Ideas',
         target: ['[data-tour="ideas-filters"]'],
         title: 'Everything you saved',
-        body: 'Filter by kind, see which sources came from web research, and which ones you withdrew.'
+        body: 'Filter by kind, web research or withdrawn.'
       },
       {
         id: 'row',
         route: '/app/ideas',
         stop: 'Ideas',
         target: ['[data-tour="ideas-source-row"]'],
-        title: 'You decide how each source is used',
-        body: 'Open a source to approve the facts a draft may use, whether it can be quoted, and whether it may reach a cloud model. Drafts only read what you approved.'
+        title: 'You decide how sources are used',
+        body: 'Approve the facts a draft may use, quoting and cloud access.'
       }
     ]
   },
@@ -210,8 +204,8 @@ export const PAGE_TOURS: Tour[] = [
         route: '/app/channels',
         stop: 'Channels',
         target: ['[data-tour="channels-connect"]', '[data-tour="channels-summary"]', ...heading('channels')],
-        title: 'Connect when you need it',
-        body: 'You can draft and export without connecting anything. Connect an account when you want previews, scheduling, analytics or comments for it.'
+        title: 'Connect an account',
+        body: 'Connect to schedule posts and see analytics.'
       },
       {
         id: 'card',
@@ -219,15 +213,15 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Channels',
         target: ['[data-tour="channel-card"]', '[data-tour="channels-empty"]'],
         title: 'One card per account',
-        body: 'Each card is one account on one platform: who it is, what PostRiff has verified, and when access runs out.'
+        body: 'Who it is, what’s verified and when access runs out.'
       },
       {
         id: 'chips',
         route: '/app/channels',
         stop: 'Channels',
         target: ['[data-tour="capability-chips"]'],
-        title: 'Six capabilities, verified one by one',
-        body: 'Green is Direct through the official API after your approval. Amber is Assisted: PostRiff prepares the post and you finish it. Grey is not offered yet. Hover a chip to read the evidence.'
+        title: 'What each account can do',
+        body: 'Green is direct, amber is assisted, grey isn’t offered yet. Hover for details.'
       },
       {
         id: 'filter',
@@ -235,7 +229,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Channels',
         target: ['[data-tour="channels-filter"]'],
         title: 'Problems come first',
-        body: 'Expired access, missing permissions and accounts about to expire sort to the top and appear under Needs attention, with a Reconnect button on the card.'
+        body: 'Accounts that need a reconnect sort to the top.'
       },
       {
         id: 'companion',
@@ -243,7 +237,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Channels',
         target: ['[data-tour="companion-section"]'],
         title: 'Platforms without an API',
-        body: 'Some platforms offer no publishing API a small studio can use honestly. Those will run through a desktop companion on your own machine; this page says so until it exists.',
+        body: 'Some platforms will publish through a desktop companion app, coming later.',
         placement: 'top'
       }
     ]
@@ -259,7 +253,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Analytics',
         target: ['[data-tour="analytics-coverage"]', ...heading('analytics')],
         title: 'Which accounts report numbers',
-        body: 'Each connected account shows its own analytics level. Direct means PostRiff reads the provider’s official insights for posts it published. Unsupported means that provider does not offer them to this app.'
+        body: 'Direct accounts report official insights; unsupported ones don’t share them.'
       },
       {
         id: 'freshness',
@@ -267,7 +261,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Analytics',
         target: ['[data-tour="analytics-freshness"]'],
         title: 'When these numbers were read',
-        body: 'Nothing here is live and nothing is estimated. The badge tells you the state of the readings; every row carries its own time.'
+        body: 'Numbers are read, never estimated. Each row shows its time.'
       },
       {
         id: 'table',
@@ -275,7 +269,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Analytics',
         target: ['[data-tour="analytics-table"]'],
         title: 'Native names, never added together',
-        body: 'Threads reports views and reposts; Instagram reports reach and saves. Columns change with the account you pick and are never summed across providers.'
+        body: 'Each platform’s own metrics, never summed across platforms.'
       },
       {
         id: 'row',
@@ -283,7 +277,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Analytics',
         target: ['[data-tour="analytics-row"]'],
         title: 'Open a post',
-        body: 'Click a post for its full text, the provider’s receipt and every reading so far.'
+        body: 'See its full text, receipt and every reading.'
       },
       {
         id: 'unavailable',
@@ -291,7 +285,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Analytics',
         target: ['[data-tour="analytics-unavailable"]', '[data-tour="analytics-table"]'],
         title: 'Unavailable is not zero',
-        body: 'When a provider has not reported a metric yet, the cell says so. A real zero shows as 0.'
+        body: 'A missing metric says so. A real zero shows as 0.'
       }
     ]
   },
@@ -306,7 +300,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Queue',
         target: ['[data-tour="queue-tabs"]', ...heading('queue')],
         title: 'Drafts wait here',
-        body: 'The Drafts tab holds everything not scheduled yet. Choose Schedule… on a draft to pick an account and a time.'
+        body: 'Choose Schedule… on a draft to pick an account and time.'
       },
       {
         id: 'approvals',
@@ -314,38 +308,38 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Queue',
         target: ['[data-tour="queue-approvals"]', ...heading('queue')],
         title: 'Approve the exact post',
-        body: 'Each review freezes the text, media, account and minute. Approving it is the only way a post enters the queue.'
+        body: 'Approval locks the text, media, account and time.'
       },
       {
         id: 'list',
         route: '/app/queue',
         stop: 'Queue',
         target: ['[data-tour="queue-list"]'],
-        title: 'Where every approved post is now',
-        body: 'Each approved post becomes a job here, with what the worker did and what the provider confirmed.'
+        title: 'Where each approved post is',
+        body: 'Each approved post shows its status here.'
       },
       {
         id: 'filters',
         route: '/app/queue',
         stop: 'Queue',
         target: ['[data-tour="queue-filters"]', '[data-tour="queue-list"]'],
-        title: 'Filter by where a job is',
-        body: 'Held means something changed after approval, so the job needs a new review before it can go out.'
+        title: 'Filter by status',
+        body: 'Needs action means it changed after approval.'
       },
       {
         id: 'row',
         route: '/app/queue',
         stop: 'Queue',
         target: ['[data-tour="queue-job-row"]', '[data-tour="queue-list"]'],
-        title: 'Open the receipt',
-        body: 'Open a job for its full receipt: every event, every attempt and what the provider said.',
+        title: 'Open details',
+        body: 'Every event and attempt for that post.',
         placement: 'top'
       },
       {
         id: 'cancel', route: '/app/queue', stop: 'Queue',
         target: ['[data-tour="queue-cancel"]', '[data-tour="queue-job-row"]'],
         title: 'Cancel before submission',
-        body: 'Hold Cancel to stop a waiting or held job. Once a post reaches the provider, cancellation cannot recall it.',
+        body: 'Hold Cancel to stop it. A post already sent can’t be recalled.',
         when: (ctx) => ctx.canApprove && (ctx.jobCount ?? 0) > 0
       }
     ]
@@ -361,7 +355,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Calendar',
         target: ['[data-tour="calendar-grid"]', 'main [role="tablist"]', ...heading('calendar')],
         title: 'Month, week or day',
-        body: 'Every post sits at its exact time. Open one to see the phone preview for its channel, what happens next, and the receipt once it is published.'
+        body: 'Open a post for its preview and status.'
       },
       {
         id: 'legend',
@@ -369,7 +363,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Calendar',
         target: ['[data-tour="calendar-legend"]'],
         title: 'Filter by state or account',
-        body: 'The chips count the posts in the period on screen. Tap one to show only that state; expired or out-of-date reviews stay visible so nothing quietly disappears.'
+        body: 'Tap a chip to show only that state.'
       },
       {
         id: 'schedule',
@@ -377,7 +371,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Calendar',
         target: ['[data-tour="calendar-schedule"]'],
         title: 'Add a post',
-        body: 'Schedule a draft you already have, or start a new post from Home. Nothing goes out until the exact text and time are approved.'
+        body: 'Schedule a draft or start one from Home.'
       }
     ]
   },
@@ -392,7 +386,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Overview',
         target: ['[data-tour="getting-started"]', '[data-tour="overview-stats"]', ...heading('overview')],
         title: 'Real numbers only',
-        body: 'Every count here comes from the workspace itself. The setup checklist ticks itself from what you have done, and disappears once the four steps are done.'
+        body: 'The checklist ticks itself and hides when you’re done.'
       },
       {
         id: 'next-up',
@@ -400,7 +394,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Overview',
         target: ['[data-tour="overview-next-up"]'],
         title: 'What goes out next',
-        body: 'The next approved post, the account it goes to, and the coming seven days in your time zone. Open a day to see it in the calendar.'
+        body: 'The next post and the coming seven days.'
       },
       {
         id: 'attention',
@@ -408,7 +402,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Overview',
         target: ['[data-tour="overview-attention"]'],
         title: 'What needs you',
-        body: 'Expired access, drafts waiting for approval and anything that failed. When something could not be read, this card says so instead of looking all clear.'
+        body: 'Expired access, waiting drafts and failures.'
       },
       {
         id: 'activity',
@@ -416,7 +410,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Overview',
         target: ['[data-tour="overview-activity"]'],
         title: 'Who did what',
-        body: 'Recent changes in the workspace, in plain words: connections, approvals, members and plan changes.',
+        body: 'Recent changes to connections, approvals, members and plan.',
         placement: 'top'
       }
     ]
@@ -432,7 +426,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Brand',
         target: ['[data-tour="brand-status"]', '[data-tour="voice-setup"]', ...heading('brand')],
         title: 'Your voice at a glance',
-        body: 'Which voice revision is active and how many drafts and scheduled posts depend on it.'
+        body: 'The active revision and the drafts that use it.'
       },
       {
         id: 'setup',
@@ -440,17 +434,17 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Brand',
         target: ['[data-tour="voice-setup"]'],
         title: 'What you make, for whom, in what tone',
-        body: 'Describe it once. You can draft and preview before an owner approves it.'
+        body: 'Describe it once. Drafts work before it’s approved.'
       },
       {
         id: 'proposal', route: '/app/workspace/brand', stop: 'Brand',
         target: ['[data-tour="brand-proposal"]', '[data-tour="voice-setup"]'],
-        title: 'Review before changing the voice', body: 'Only an owner approves a voice. The review explains what happens to existing drafts and waiting posts.'
+        title: 'Review a new voice', body: 'Only an owner approves it.'
       },
       {
         id: 'files', route: '/app/workspace/brand', stop: 'Brand',
         target: ['[data-tour="brand-drafts-read"]'],
-        title: 'What writing routes read', body: 'Read the current memory files, including the writing sample, and see which routes receive them.'
+        title: 'What drafts read', body: 'The memory files every draft is written from.'
       },
       {
         id: 'history',
@@ -458,7 +452,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Brand',
         target: ['[data-tour="brand-history"]', '[data-tour="voice-setup"]'],
         title: 'Every revision stays listed',
-        body: 'Each approved voice stays here, with what changed since the one before it.',
+        body: 'Each approved voice, with what changed.',
         placement: 'top'
       }
     ]
@@ -474,7 +468,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Memory',
         target: ['[data-tour="memory-files"]', ...heading('memory')],
         title: 'Files, not a black box',
-        body: 'Files marked “Given to writing routes” are what a draft is written from; the rest are here for you to read.'
+        body: 'Files marked “Sent to writers” are what drafts are written from.'
       },
       {
         id: 'viewer',
@@ -482,7 +476,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Memory',
         target: ['[data-tour="memory-viewer"]', '[data-tour="memory-files"]'],
         title: 'Read exactly what is sent',
-        body: 'Each file as your workspace renders it now, with a line saying which writers receive it.'
+        body: 'Each file as writers receive it now.'
       },
       {
         id: 'access',
@@ -490,7 +484,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Memory',
         target: ['[data-tour="memory-access"]'],
         title: 'Who reads these files',
-        body: 'An owner decides, and confirms, whether a cloud model and web research may read them too.'
+        body: 'An owner decides if the cloud model and web research can.'
       },
       {
         id: 'learning',
@@ -498,7 +492,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Memory',
         target: ['[data-tour="memory-learning"]'],
         title: 'Preferences you decide on',
-        body: 'PostRiff suggests writing preferences from what you say and how you edit. Nothing changes until an owner accepts, and unanswered suggestions expire.',
+        body: 'Suggestions from how you edit. An owner accepts or dismisses them.',
         placement: 'top'
       }
     ]
@@ -514,7 +508,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Inbox',
         target: ['[data-tour="inbox-coverage"]', ...heading('inbox')],
         title: 'Which accounts can show comments',
-        body: 'Each account shows capability evidence and whether its provider supports comment ingestion in this release.'
+        body: 'Each account shows whether its comments can appear here.'
       },
       {
         id: 'threads',
@@ -522,15 +516,15 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Inbox',
         target: ['[data-tour="inbox-threads"]', '[data-tour="inbox-empty"]'],
         title: 'Comments waiting for you',
-        body: 'Pick a comment to read it in full. Unanswered lists the comments that have no approved reply yet.'
+        body: 'Unanswered lists comments without an approved reply.'
       },
       {
         id: 'reply',
         route: '/app/inbox',
         stop: 'Inbox',
         target: ['[data-tour="inbox-composer"]', '[data-tour="inbox-threads"]', '[data-tour="inbox-empty"]'],
-        title: 'Record an exact reply approval',
-        body: 'Write and save a reply, then review its exact account, comment and text. Sending is not enabled; each recorded approval needs reconfirmation before a real send.',
+        title: 'Approve an exact reply',
+        body: 'Sending isn’t on yet; approvals are saved for later.',
         when: (ctx) => ctx.canEdit || ctx.canReply
       }
     ]
@@ -546,7 +540,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Library',
         target: ['[data-tour="library-upload"]', '[data-tour="library-empty"]', ...heading('library')],
         title: 'Add images',
-        body: 'Add JPEG or PNG images. Pick several at once, or drop them anywhere on this page.',
+        body: 'JPEG or PNG. Drop several anywhere on the page.',
         when: (ctx) => ctx.canEdit
       },
       {
@@ -555,7 +549,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Library',
         target: ['[data-tour="library-filter"]', '[data-tour="library-empty"]'],
         title: 'Used and unused',
-        body: 'Switch between all images, the ones no post uses yet, and the ones already in a post. The numbers are live counts.',
+        body: 'Show all images, unused ones or ones in a post.',
         when: (ctx) => (ctx.assetCount ?? 0) > 0
       },
       {
@@ -564,7 +558,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Library',
         target: ['[data-tour="library-card"]', '[data-tour="library-empty"]'],
         title: 'Open an image',
-        body: 'See its size, its fingerprint and which posts use it. Right-click or long-press for quick actions.',
+        body: 'See its details and which posts use it.',
         when: (ctx) => (ctx.assetCount ?? 0) > 0,
         placement: 'top'
       }
@@ -581,7 +575,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'API & integrations',
         target: ['[data-tour="api-status"]', ...heading('api')],
         title: 'Read from the workspace',
-        body: 'Connected accounts, reviewed providers and the tool runner. Anything that cannot be read says Unavailable instead of a number.'
+        body: 'Connected accounts and platforms at a glance.'
       },
       {
         id: 'grants',
@@ -589,7 +583,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'API & integrations',
         target: ['[data-tour="api-grants"]'],
         title: 'What each account can do',
-        body: 'Capability by capability, with the evidence. Manage the accounts themselves on Channels.'
+        body: 'Capability by capability. Manage accounts on Channels.'
       },
       {
         id: 'tools',
@@ -597,10 +591,10 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'API & integrations',
         target: ['[data-tour="api-tools"]'],
         title: 'Tools an agent could use',
-        body: 'The tools an agent could be offered, and whether they run in isolation on this deployment.'
+        body: 'The tools an agent could be offered, and whether each runs isolated.'
       },
       {
-        id: 'tokens', route: '/app/account/api', stop: 'API & integrations', target: ['[data-tour="api-create-token"]', '[data-tour="api-tokens"]'], title: 'An expiring token for your own scripts', body: 'Choose read-only or read, draft and propose. Copy the secret once; revoke it here any time. Drafts use the same writing allowance as the app.'
+        id: 'tokens', route: '/app/account/api', stop: 'API & integrations', target: ['[data-tour="api-create-token"]', '[data-tour="api-tokens"]'], title: 'Tokens for your own scripts', body: 'Copy the secret once. Drafts use your writing allowance.'
       },
       {
         id: 'roadmap',
@@ -608,7 +602,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'API & integrations',
         target: ['[data-tour="api-roadmap"]'],
         title: 'Not switched on yet',
-        body: 'Webhooks and an AI-agent server remain planned. Personal tokens above can read, draft and propose; approval and publishing stay in the app.',
+        body: 'Webhooks and an agent server are planned. Publishing stays in the app.',
         placement: 'top'
       }
     ]
@@ -624,7 +618,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Usage & plan',
         target: ['[data-tour="billing-plan"]', ...heading('billing')],
         title: 'Your plan',
-        body: 'The plan for the workspace you have open, its status and the next date that changes something.'
+        body: 'Your plan and what changes next.'
       },
       {
         id: 'allowances',
@@ -632,7 +626,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Usage & plan',
         target: ['[data-tour="billing-allowances"]'],
         title: 'Allowances',
-        body: 'Each bar reads your real allowance. When one runs out, paid drafting stops and says so. Nothing is charged silently.'
+        body: 'When one runs out, paid drafting stops. Nothing is charged silently.'
       },
       {
         id: 'plans',
@@ -640,20 +634,20 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Usage & plan',
         target: ['[data-tour="billing-plans"]'],
         title: 'Changing plan',
-        body: 'Checkout happens with the payment provider. A subscription shows as confirmed only after the provider tells PostRiff.',
+        body: 'A new plan shows once payment is confirmed.',
         when: (ctx) => ctx.isOwner,
         placement: 'top'
       },
       {
         id: 'manage', route: '/app/account/billing', stop: 'Usage & plan',
         target: ['[data-tour="billing-manage"]'], title: 'Manage billing',
-        body: 'The owner opens the billing provider to update payment details or a subscription.',
+        body: 'Update payment details or your subscription.',
         when: (ctx) => ctx.isOwner && ctx.portalAvailable === true
       },
       {
         id: 'ledger', route: '/app/account/billing', stop: 'Usage & plan',
         target: ['[data-tour="billing-ledger"]', '[data-tour="billing-ledger-empty"]'], title: 'Recorded usage',
-        body: 'Reservations, actual costs and allowance changes are recorded separately. Unknown costs stay unknown.',
+        body: 'Reserved and actual costs, listed separately.',
         when: (ctx) => ctx.isOwner
       }
     ]
@@ -668,8 +662,8 @@ export const PAGE_TOURS: Tour[] = [
         route: '/app/account/privacy',
         stop: 'Privacy & data',
         target: ['[data-tour="privacy-holdings"]', ...heading('privacy')],
-        title: 'What PostRiff holds',
-        body: 'These counts come from your workspace. Unavailable means a number could not be read, never that it is zero.'
+        title: 'Your data',
+        body: 'Counts from your workspace.'
       },
       {
         id: 'egress',
@@ -677,7 +671,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Privacy & data',
         target: ['[data-tour="privacy-egress"]'],
         title: 'Where your content may go',
-        body: 'Whether a cloud model may read your memory files, and whether drafting may look facts up on the web.'
+        body: 'Cloud model access and web research.'
       },
       {
         id: 'export',
@@ -685,7 +679,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Privacy & data',
         target: ['[data-tour="privacy-export"]'],
         title: 'Take everything with you',
-        body: 'Download everything as one file, and keep the fingerprint shown here to check later that your copy is unchanged.'
+        body: 'Download everything as one file.'
       },
       {
         id: 'retract',
@@ -693,47 +687,47 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Privacy & data',
         target: ['[data-tour="privacy-retract"]'],
         title: 'Retract a source',
-        body: 'Pick a source to see exactly what retracting it would change before you commit to it.',
+        body: 'See what changes before you retract.',
         placement: 'top'
       }
     ]
   },
   {
     id: 'models-tips',
-    title: 'Models & providers',
+    title: 'Models',
     route: '/app/account/models',
     steps: [
       {
         id: 'current',
         route: '/app/account/models',
-        stop: 'Models & providers',
+        stop: 'Models',
         target: ['[data-tour="models-current"]', ...heading('models')],
         title: 'Who is writing now',
-        body: 'The writer your drafts use right now in this browser, and who pays for it.'
+        body: 'The writer your drafts use, and who pays.'
       },
       {
         id: 'cli',
         route: '/app/account/models',
-        stop: 'Models & providers',
+        stop: 'Models',
         target: ['[data-tour="models-cli"]', '[data-tour="models-empty"]'],
         title: 'Writers you already pay for',
-        body: 'A coding assistant signed in on the machine that serves PostRiff can write drafts, paid by its own subscription.'
+        body: 'A signed-in coding assistant can write drafts on its own plan.'
       },
       {
         id: 'managed',
         route: '/app/account/models',
-        stop: 'Models & providers',
+        stop: 'Models',
         target: ['[data-tour="models-managed"]'],
-        title: 'PostRiff writers',
-        body: 'A managed model that uses writing batches, and a free preview that never calls a model.'
+        title: 'Built-in writers',
+        body: 'A managed model, and a free preview.'
       },
       {
         id: 'consent',
         route: '/app/account/models',
-        stop: 'Models & providers',
+        stop: 'Models',
         target: ['[data-tour="models-consent"]'],
         title: 'What may leave the workspace',
-        body: 'What a writer may read beyond your message. An owner changes this on the Memory page.',
+        body: 'What a writer may read. An owner changes it on Memory.',
         placement: 'top'
       }
     ]
@@ -749,7 +743,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Roles',
         target: ['[data-tour="roles-you"]', ...heading('roles')],
         title: 'Your access',
-        body: 'Your role in this workspace and what it lets you do. If something you need is missing, it says who can give it to you.'
+        body: 'Your role, what it allows and how to get more.'
       },
       {
         id: 'cards',
@@ -757,7 +751,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Roles',
         target: ['[data-tour="roles-cards"]'],
         title: 'Five roles',
-        body: 'From most to least trusted. Each number is how many active members hold that role right now.'
+        body: 'Most to least trusted, with who holds each.'
       },
       {
         id: 'matrix',
@@ -765,7 +759,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Roles',
         target: ['[data-tour="roles-matrix"]'],
         title: 'The rules behind every action',
-        body: 'Every action is checked against these rules. A grant adds one right without changing someone’s role.',
+        body: 'A grant adds one right without changing the role.',
         placement: 'top'
       }
     ]
@@ -781,7 +775,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Members',
         target: ['[data-tour="members-invite"]', ...heading('members')],
         title: 'Invite someone',
-        body: 'Enter an email, pick a role and any extra grants. They get a one-time link that works for 7 days.'
+        body: 'They get a one-time link that works for 7 days.'
       },
       {
         id: 'table',
@@ -789,7 +783,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Members',
         target: ['[data-tour="members-table"]'],
         title: 'Everyone in the workspace',
-        body: 'Each person with their role and grants. Changes are confirmed before anything is saved.'
+        body: 'Each person’s role and grants.'
       },
       {
         id: 'invitations',
@@ -797,7 +791,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Members',
         target: ['[data-tour="members-invitations"]', '[data-tour="members-table"]'],
         title: 'Invitations you sent',
-        body: 'Their state, and revoking one stops its link immediately.',
+        body: 'Revoking one stops its link at once.',
         placement: 'top'
       }
     ]
@@ -813,7 +807,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Audit log',
         target: ['[data-tour="audit-title"]', ...heading('audit')],
         title: 'Who did what',
-        body: 'A timeline of changes in this workspace, newest first. It records who and when, never the content itself.'
+        body: 'Who changed what, newest first. Never the content.'
       },
       {
         id: 'categories',
@@ -821,7 +815,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Audit log',
         target: ['[data-tour="audit-categories"]', '[data-tour="audit-empty"]'],
         title: 'Filter by kind or person',
-        body: 'Pick a kind or a person; the filter is kept in the address, so a link opens the same view.'
+        body: 'The link keeps your filter.'
       },
       {
         id: 'coverage',
@@ -829,7 +823,7 @@ export const PAGE_TOURS: Tour[] = [
         stop: 'Audit log',
         target: ['[data-tour="audit-coverage"]', '[data-tour="audit-empty"]'],
         title: 'How much you are seeing',
-        body: 'This line says whether you are looking at the whole log or only the newest events.'
+        body: 'Whether you see the whole log or the newest part.'
       }
     ]
   }

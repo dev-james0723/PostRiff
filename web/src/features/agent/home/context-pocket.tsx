@@ -80,10 +80,10 @@ export function ContextPocket({ open, onOpenChange, sources, included, onInclude
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>
       <RafiiDialogContent size='sm' aria-describedby={undefined}>
-        <RafiiDialogHeader eyebrow='Context pocket' title='A little' accent='backstory.' intro='Choose which of your usable sources the next drafts may read. Public quoting is decided per source, never here.' />
+        <RafiiDialogHeader eyebrow='Context pocket' title='A little' accent='backstory.' intro='Pick what the next drafts may read.' />
         <RafiiDialogBody className='flex flex-col gap-4'>
           {usable.length === 0 ? (
-            <StateMessage kind='empty' title='No usable sources yet.' description='Add a note below, or bring sources in on the Ideas page.' />
+            <StateMessage kind='empty' title='No sources yet' />
           ) : (
             <ul className='flex flex-col gap-2' aria-label='Usable sources'>
               {usable.map((source) => {
@@ -96,10 +96,8 @@ export function ContextPocket({ open, onOpenChange, sources, included, onInclude
                       label={source.title || 'Untitled source'}
                       className='min-w-0 flex-1 items-start gap-3 [&>button]:mt-0.5 [&>span]:text-sm'
                     />
-                    <span className='text-muted-foreground shrink-0 pt-0.5 text-[11px] leading-relaxed'>
-                      {source.kind}
-                      <br />
-                      {source.sourcePolicy ? POLICY[source.sourcePolicy] ?? source.sourcePolicy : 'Policy not set'}
+                    <span className='text-muted-foreground shrink-0 pt-0.5 text-[11px] leading-relaxed' title={source.kind}>
+                      {source.sourcePolicy ? POLICY[source.sourcePolicy] ?? source.sourcePolicy : 'Quoting not set'}
                     </span>
                   </li>
                 );
@@ -117,11 +115,11 @@ export function ContextPocket({ open, onOpenChange, sources, included, onInclude
               onChange={(event) => setNote(event.target.value)}
               maxLength={20000}
               rows={3}
-              placeholder='A brand detail, an idea, something to remember…'
+              placeholder='The course launches on 3 March'
               className='rafii-field rafii-focus min-h-24 w-full resize-y rounded-[var(--rafii-radius-control)] px-3.5 py-3 text-base outline-none md:text-sm'
             />
             <div className='flex items-center justify-between gap-3'>
-              <span className='text-muted-foreground text-xs'>Saved as a private source. Public quoting stays off until you decide it on the Ideas page.</span>
+              <span className='text-muted-foreground text-xs'>Saved privately. Never quoted publicly unless you allow it.</span>
               <Button variant='glass' size='sm' disabled={!note.trim() || adding} onClick={() => void addNote()}>
                 {adding ? <Icons.spinner className='animate-spin' /> : <Icons.add />}
                 Add note
@@ -135,7 +133,7 @@ export function ContextPocket({ open, onOpenChange, sources, included, onInclude
           </div>
           <p className='text-muted-foreground text-xs'>
             <Link href='/app/ideas' className='text-foreground underline underline-offset-2'>
-              Manage sources, facts and quoting permissions
+              Manage sources
             </Link>
           </p>
         </RafiiDialogBody>

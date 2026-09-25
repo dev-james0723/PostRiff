@@ -85,12 +85,28 @@ James approved the production release. The checks against the production databas
     authenticated select, service_role insert) and both indexes.
   - A public PostgREST probe after the deploy answered 42501 (exists and is private) for all four tables.
   - Record: `.codex/rafii-v9-migration-018-20260924-1241/migration.json`.
-- **The rest were read only and not applied**, because this release does not need them:
-  - 016 (`pr_api_tokens`) and 019 (`pr_research_requests`) are missing (PGRST205). While 019 is missing, the cron's
-    operations snapshot logs "unavailable" every minute.
+- **019 was missing and is now applied and verified** (2026-09-24, about 19:24 UTC, after the release, at James's request).
+  - It was applied with the exact reviewed file (sha256 `74ab96d7…0446`) using the same one-off, never-aliased
+    production-environment build as 018. The application was not redeployed.
+  - It was rehearsed first on a disposable PostgreSQL 17 with this schema minus 019. The rehearsal applied it, a
+    re-run skipped it, and a table of another shape was refused.
+  - The checks cover the columns, the primary key `(workspace_id, idempotency_key)`, the cascading foreign key to
+    `pr_workspaces`, the status check, and the primary-key index as the only index. RLS is enabled and forced, and
+    `trusted_write` is for `service_role` only. anon and authenticated have no access, and there is no PUBLIC grant.
+    The app's database role can use the table because it bypasses RLS.
+  - Production's own operations snapshot failed with "relation pr_research_requests does not exist" before the
+    migration and returns `ok` after it.
+  - The cron logged `cron.completed` "unavailable" (warn) on every run up to 19:24 UTC, and `ok` (info) from 19:25 UTC
+    onward.
+  - A public PostgREST probe answers 42501 (exists and is private).
+  - Record: `.codex/rafii-v9-migration-019-20260924-1522/migration.json`.
+- **The rest were checked read-only and not applied:**
+  - 016 (`pr_api_tokens`) is missing on purpose, pending a decision. It only backs the API-token feature (Account →
+    API & integrations and `Bearer prt_` requests). Opening that page today logs a 500, and the page says "Tokens are
+    unavailable". Applying 016 would switch on a new credential type: read/draft tokens valid for up to 365 days.
   - The 014 and 015 policies are not present.
   - The 017 reasoning constraint is not widened.
   - There is no migration ledger table.
   - 013 has 0 legacy rows, so nothing is left for it to rewrite.
-- The next step is unchanged from the recommended order above: 019, then 016, then the others, each additive except 013.
+- Next: 016 only together with the decision to launch API tokens, then the others. Each is additive except 013.
 

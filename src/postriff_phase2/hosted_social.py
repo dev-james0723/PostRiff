@@ -43,7 +43,7 @@ class HostedSocial:
         if not manifest.get("media"):
             return None
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503)
+            raise AlphaError("Media uploads aren't available yet.", 503, code="media_storage_not_configured")
         asset = manifest["media"][0]
         return self.assets.storage.signed_url(manifest["workspaceId"], "media", asset.get("objectName") or asset["id"], 600)
 
@@ -51,7 +51,7 @@ class HostedSocial:
     def submit(self, manifest):
         provider = self._provider(manifest)
         if provider is None:
-            return {"state": "held", "confirmed": "This provider is paused or awaiting production review; export only."}
+            return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
         grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
         required = {"LinkedIn": {"w_member_social"}, "Threads": {"threads_basic", "threads_content_publish"}, "Instagram": {"instagram_business_basic", "instagram_business_content_publish"}}.get(manifest["platform"], set())
         if not required or not required.issubset(grant.get("scopes", [])):
