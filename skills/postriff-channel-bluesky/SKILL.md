@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-bluesky
 description: Prepare and validate bluesky native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.0.0
 ---
 
 # bluesky adapter

@@ -1,0 +1,9 @@
+已發布並確認
+
+你在 LinkedIn 的貼文已發布，平台也已確認。
+
+查看貼文: https://app.rafii.example/app/queue
+
+你收到這封電子郵件，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電子郵件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

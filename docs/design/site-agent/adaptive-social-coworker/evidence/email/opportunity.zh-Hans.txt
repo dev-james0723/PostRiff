@@ -1,0 +1,9 @@
+一个可用于内容的机会
+
+A new device signed in。为什么可能重要：It matches your goal “Fill autumn preorders”.
+
+查看证据: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

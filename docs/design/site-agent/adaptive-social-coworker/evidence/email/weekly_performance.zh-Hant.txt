@@ -1,0 +1,12 @@
+上週概覽
+
+以下是你上週貼文的表現。規律只會以假設形式呈現並附上樣本數；單一貼文不會變成規則。
+Verified posts: 12
+Median views: 1,240
+Hypotheses: 2
+
+開啟摘要: https://app.rafii.example/app/queue
+
+你收到這封電子郵件，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電子郵件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

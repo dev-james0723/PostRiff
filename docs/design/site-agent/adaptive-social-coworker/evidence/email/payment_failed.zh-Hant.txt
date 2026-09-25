@@ -1,0 +1,8 @@
+你的付款未完成
+
+我們無法收取你最近一期的款項。請更新付款方式，以維持方案有效。
+
+更新付款方式: https://app.rafii.example/app/queue
+
+你收到這封電子郵件，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications

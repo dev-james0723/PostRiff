@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-xiaohongshu
 description: Prepare and validate xiaohongshu native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.1.0
 ---
 
 # xiaohongshu adapter
@@ -9,7 +11,7 @@ This adapter adds what is specific to xiaohongshu. The shared adapter contract (
 
 ## 1. Channel purpose
 
-Cover-first useful Chinese notes; keep RedFox research separate from browser publishing.
+Cover-first useful Chinese notes; keep third-party research signals separate from browser publishing.
 
 ## 2. Audience and expected language
 

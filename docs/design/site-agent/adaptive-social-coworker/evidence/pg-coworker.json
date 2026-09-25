@@ -1,0 +1,594 @@
+{
+  "generatedAt": "2026-09-25T05:52:13.499064+00:00",
+  "execution": "local disposable PostgreSQL; synthetic email and push providers; deterministic preview writer; no live provider",
+  "summary": {
+    "PASS": 35,
+    "FAIL": 0
+  },
+  "scenarios": [
+    {
+      "id": "N01",
+      "area": "notifications",
+      "claim": "migrations 024/025: tables exist, RLS enabled and forced, browser roles cannot read server-only tables",
+      "result": "PASS",
+      "evidence": {
+        "rlsForced": {
+          "pr_notification_provider_events": true,
+          "pr_notification_scan": true,
+          "pr_notification_events": true,
+          "pr_push_subscriptions": true,
+          "pr_notification_deliveries": true,
+          "pr_notification_preferences": true,
+          "pr_research_evidence": true,
+          "pr_strategy_hypotheses": true,
+          "pr_product_events": true,
+          "pr_experiment_assignments": true
+        },
+        "browserDenied": [
+          "pr_notification_events",
+          "pr_push_subscriptions",
+          "pr_notification_provider_events",
+          "pr_product_events"
+        ]
+      }
+    },
+    {
+      "id": "N02",
+      "area": "notifications",
+      "claim": "an event emitted twice creates one event and one delivery per person and channel (dedupe + idempotency)",
+      "result": "PASS",
+      "evidence": {
+        "created": [
+          true,
+          false
+        ],
+        "deliveries": 6,
+        "recipients": [
+          "00000000-0000-0000-0000-000000000001",
+          "00000000-0000-0000-0000-000000000005"
+        ]
+      }
+    },
+    {
+      "id": "N03",
+      "area": "notifications",
+      "claim": "delivery: claim → commit → send with the delivery's idempotency key → sent; routine events wait for the digest; failures are immediate",
+      "result": "PASS",
+      "evidence": {
+        "tick": {
+          "claimed": 2,
+          "sent": 2,
+          "retry": 0,
+          "failed": 0,
+          "suppressed": 0,
+          "cancelled": 0,
+          "lostLease": 0
+        },
+        "sent": 2
+      }
+    },
+    {
+      "id": "N04",
+      "area": "notifications",
+      "claim": "crash after claim: the lease expires, the row is re-claimed and resent with the SAME idempotency key (the provider dedupes; one email)",
+      "result": "PASS",
+      "evidence": {
+        "attempts": 2,
+        "uniqueSends": 1
+      }
+    },
+    {
+      "id": "N05",
+      "area": "notifications",
+      "claim": "transient failures retry with backoff, then dead-letter after the bound; the domain state is untouched",
+      "result": "PASS",
+      "evidence": {
+        "afterFirst": "pending",
+        "retryInSeconds": 78,
+        "final": "dead"
+      }
+    },
+    {
+      "id": "N06",
+      "area": "notifications",
+      "claim": "a hard bounce from the provider webhook fails the delivery and suppresses future non-transactional email; replays are duplicates",
+      "result": "PASS",
+      "evidence": {
+        "first": {
+          "outcome": "applied",
+          "kind": "email.bounced"
+        },
+        "replay": {
+          "outcome": "duplicate"
+        },
+        "forged": 401
+      }
+    },
+    {
+      "id": "N07",
+      "area": "notifications",
+      "claim": "quiet hours in the person's time zone defer push; the digest groups routine events into one email sent once",
+      "result": "PASS",
+      "evidence": {
+        "approvalEmailAt": "2026-09-23T11:00:00+08:00",
+        "digestEmails": 1,
+        "digestTick": {
+          "people": 2,
+          "sent": 2
+        }
+      }
+    },
+    {
+      "id": "N08",
+      "area": "notifications",
+      "claim": "web push: explicit subscription stored encrypted; minimal encrypted payload; 410 revokes; unlisted endpoints refused",
+      "result": "PASS",
+      "evidence": {
+        "ssrf": 400,
+        "payloadKeys": [
+          "body",
+          "category",
+          "tag",
+          "title",
+          "url"
+        ],
+        "revoked": "gone"
+      }
+    },
+    {
+      "id": "N09",
+      "area": "notifications",
+      "claim": "one-click unsubscribe with a signed token (GET confirms, POST applies); tampered tokens refused",
+      "result": "PASS",
+      "evidence": {
+        "tampered": 400
+      }
+    },
+    {
+      "id": "T01",
+      "area": "isolation",
+      "claim": "another workspace's member cannot read or change this workspace's notifications (identical 403), and RLS hides other people's deliveries",
+      "result": "PASS",
+      "evidence": {
+        "errors": [
+          [
+            403,
+            "Workspace unavailable."
+          ],
+          [
+            403,
+            "Workspace unavailable."
+          ],
+          [
+            403,
+            "Workspace unavailable."
+          ]
+        ],
+        "viewerMark": 404,
+        "foreignRows": 0
+      }
+    },
+    {
+      "id": "W01",
+      "area": "weekly",
+      "claim": "only an owner can save a weekly recipe; the saved recipe is re-read and verified",
+      "result": "PASS",
+      "evidence": {
+        "editor": 403,
+        "recipeId": "wr_cf0a884d39ba"
+      }
+    },
+    {
+      "id": "W02",
+      "area": "weekly",
+      "claim": "prepare next week end-to-end: plan → drafts through the writing pipeline → quality stage → ready_for_review, with one campaign.week_ready",
+      "result": "PASS",
+      "evidence": {
+        "state": "ready_for_review",
+        "slots": [
+          [
+            "LinkedIn",
+            "ready"
+          ],
+          [
+            "LinkedIn",
+            "ready"
+          ],
+          [
+            "Threads",
+            "ready"
+          ]
+        ],
+        "weekReadyEvents": 1,
+        "runs": [
+          {
+            "bound": [
+              "postriff-content-engine",
+              "postriff-content-craft",
+              "postriff-adapter-contract",
+              "postriff-channel-linkedin",
+              "rafii-weekly-operator"
+            ],
+            "omitted": [
+              "rafii-humanizer-en"
+            ]
+          },
+          {
+            "bound": [
+              "postriff-content-engine",
+              "postriff-content-craft",
+              "postriff-adapter-contract",
+              "postriff-channel-linkedin",
+              "rafii-weekly-operator"
+            ],
+            "omitted": [
+              "rafii-humanizer-en"
+            ]
+          },
+          {
+            "bound": [
+              "postriff-content-engine",
+              "postriff-content-craft",
+              "postriff-adapter-contract",
+              "postriff-channel-threads",
+              "rafii-weekly-operator"
+            ],
+            "omitted": [
+              "rafii-humanizer-zh"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "W03",
+      "area": "weekly",
+      "claim": "preparing again is idempotent: no new drafts, no second notification, same week",
+      "result": "PASS",
+      "evidence": {
+        "variants": 3
+      }
+    },
+    {
+      "id": "W04",
+      "area": "weekly",
+      "claim": "accept hands the draft to Queue; approved/scheduled are read back from real reviews and jobs, never set by Rafii",
+      "result": "PASS",
+      "evidence": {
+        "inQueue": "in_queue",
+        "after": "scheduled",
+        "jobState": "scheduled"
+      }
+    },
+    {
+      "id": "W05",
+      "area": "weekly",
+      "claim": "blocked states: a personal post asks one question (needs_input), a disconnected account is channel_unavailable; answering unblocks",
+      "result": "PASS",
+      "evidence": {
+        "first": "needs_input",
+        "then": "ready_for_review",
+        "slot": "ready"
+      }
+    },
+    {
+      "id": "W07",
+      "area": "weekly",
+      "claim": "answering a question in a week that is already ready for review reopens it, and the next preparation drafts that post",
+      "result": "PASS",
+      "evidence": {
+        "afterAnswer": "generating",
+        "slot": "ready",
+        "week": "ready_for_review"
+      }
+    },
+    {
+      "id": "W06",
+      "area": "weekly",
+      "claim": "the cron prepares a due recipe as its owner (private capability), and a disabled flag stops it",
+      "result": "PASS",
+      "evidence": {
+        "prepared": [
+          {
+            "workspaceId": "f40eff97-2cc1-4a32-abfb-b2fe4c76b196",
+            "recipeId": "wr_cf0a884d39ba",
+            "state": "quality_check"
+          },
+          {
+            "workspaceId": "f40eff97-2cc1-4a32-abfb-b2fe4c76b196",
+            "recipeId": "wr_0abfd94d1bd2",
+            "state": "channel_unavailable"
+          },
+          {
+            "workspaceId": "f40eff97-2cc1-4a32-abfb-b2fe4c76b196",
+            "recipeId": "wr_e81b31e75f68",
+            "state": "ready_for_review"
+          }
+        ]
+      }
+    },
+    {
+      "id": "S01",
+      "area": "source_campaign",
+      "claim": "one source → FactPack → brief → drafts linked to a new campaign; injected instructions are data; provenance ids survive every stage",
+      "result": "PASS",
+      "evidence": {
+        "claims": 3,
+        "drafts": 2,
+        "status": "ready_for_review",
+        "injectionFlags": 1
+      }
+    },
+    {
+      "id": "R01",
+      "area": "research",
+      "claim": "research results are stored with full provenance as search_snippet evidence and are never usable facts; provider failures are reported as failures",
+      "result": "PASS",
+      "evidence": {
+        "provider": "fixture",
+        "failure": "failed"
+      }
+    },
+    {
+      "id": "O01",
+      "area": "overlays",
+      "claim": "owner notes are scoped, explicit, reversible and exportable; editors can't add them; a note can't touch protected policy",
+      "result": "PASS",
+      "evidence": {
+        "editor": 403,
+        "protected": 400
+      }
+    },
+    {
+      "id": "E01",
+      "area": "engagement",
+      "claim": "triage is deterministic and never urgent; a suggested reply is a draft (never sent); spam gets no reply; viewers cannot draft",
+      "result": "PASS",
+      "evidence": {
+        "categories": [
+          "complaint",
+          "lead",
+          "praise",
+          "spam"
+        ],
+        "draft": [
+          "draft",
+          "copilot"
+        ],
+        "viewer": 403,
+        "n": 4
+      }
+    },
+    {
+      "id": "P01",
+      "area": "performance",
+      "claim": "comparable verified posts become a non-causal, sample-sized hypothesis; a causal row is refused; only an owner decides",
+      "result": "PASS",
+      "evidence": {
+        "cron": {
+          "workspaces": [
+            {
+              "workspaceId": "f40eff97-2cc1-4a32-abfb-b2fe4c76b196",
+              "posts": 12,
+              "hypotheses": 1,
+              "created": 1,
+              "updated": 0,
+              "superseded": 0,
+              "expired": 0
+            }
+          ]
+        },
+        "statement": "Opening with a question may reach more people on Threads for this account (6+ posts per group; not proven to cause it).",
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "A01",
+      "area": "attention",
+      "claim": "“What needs my attention?” is ordered by fixed rules, explains why, respects the person's permissions and never makes engagement urgent",
+      "result": "PASS",
+      "evidence": {
+        "order": [
+          "campaign.blocked",
+          "campaign.week_ready",
+          "campaign.week_ready",
+          "engagement.needs_attention",
+          "engagement.needs_attention"
+        ],
+        "viewerItems": 0
+      }
+    },
+    {
+      "id": "G01",
+      "area": "growth",
+      "claim": "growth metrics compute from authoritative tables; experiment assignment is deterministic, logged and not hard-coded",
+      "result": "PASS",
+      "evidence": {
+        "variant": "coworker_prepares",
+        "weeklyEnabled": {
+          "value": true
+        }
+      }
+    },
+    {
+      "id": "L01",
+      "area": "listening",
+      "claim": "a watchlist turns fresh, relevant, novel results into scored opportunities with evidence and expiry; decisions are recorded",
+      "result": "PASS",
+      "evidence": {
+        "score": 0.705,
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "H01",
+      "area": "http",
+      "claim": "hosted_app routes reach the coworker: notification centre, preferences, weekly, attention, status; API tokens refused; unknown routes 404",
+      "result": "PASS",
+      "evidence": {
+        "center": 200,
+        "prefs": 200,
+        "weekly": 200,
+        "attention": 200,
+        "status": 200,
+        "missing": 404,
+        "foreign": 403
+      }
+    },
+    {
+      "id": "H02",
+      "area": "http",
+      "claim": "the email webhook route verifies Svix signatures before any processing (401 on a forged request)",
+      "result": "PASS",
+      "evidence": {
+        "forged": 401,
+        "signed": 200
+      }
+    },
+    {
+      "id": "V01",
+      "area": "notifications",
+      "claim": "turning notifications on never mails people about the past: an existing workspace's first scan is a silent baseline; a new condition after it notifies",
+      "result": "PASS",
+      "evidence": {
+        "baseline": [
+          [
+            "reconnect:v01-old:token_expired",
+            0
+          ]
+        ],
+        "fresh": [
+          [
+            "reconnect:v01-new:token_expired",
+            3
+          ]
+        ],
+        "scan": {
+          "workspaces": 6,
+          "created": 2,
+          "baselined": 1
+        }
+      }
+    },
+    {
+      "id": "V02",
+      "area": "notifications",
+      "claim": "an idle workspace is re-checked hourly: a failed payment reaches its owner with no change to the workspace itself",
+      "result": "PASS",
+      "evidence": {
+        "events": 1,
+        "ownerDeliveries": 3,
+        "revision": [
+          4,
+          4
+        ]
+      }
+    },
+    {
+      "id": "V03",
+      "area": "notifications",
+      "claim": "an unsubscribe applies to email already queued (suppressed at send time, never sent); re-subscribing is read back as verified",
+      "result": "PASS",
+      "evidence": {
+        "delivery": [
+          "suppressed",
+          "preference",
+          "unsubscribed"
+        ],
+        "mailed": 0,
+        "resubscribeVerified": true
+      }
+    },
+    {
+      "id": "V04",
+      "area": "weekly",
+      "claim": "a $0 weekly drafting limit plans the week but starts no paid writer run",
+      "result": "PASS",
+      "evidence": {
+        "runs": 0,
+        "slots": [
+          [
+            "needs_input",
+            "The weekly drafting limit is $0, so Rafii planned this post but didn't draft it. Raise the limit, or write it yourself."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "V05",
+      "area": "weekly",
+      "claim": "viewers and approvers can open a week (read-only); only an editor's read saves the Queue sync",
+      "result": "PASS",
+      "evidence": {
+        "viewer": true,
+        "approver": true
+      }
+    },
+    {
+      "id": "V06",
+      "area": "research",
+      "claim": "a viewer's research search or link source is refused before any provider is called (no egress)",
+      "result": "PASS",
+      "evidence": {
+        "outcomes": {
+          "search": 403,
+          "link": 403
+        },
+        "providerCalls": 0
+      }
+    },
+    {
+      "id": "N10",
+      "area": "notifications",
+      "claim": "a notification delivery failure never rolls back domain work (the week stays ready; the delivery is failed/dead)",
+      "result": "PASS",
+      "evidence": {
+        "deliveries": [
+          [
+            "failed",
+            "permanent"
+          ],
+          [
+            "failed",
+            "permanent"
+          ]
+        ],
+        "week": [
+          "ready_for_review",
+          "ready_for_review"
+        ]
+      }
+    },
+    {
+      "id": "V07",
+      "area": "growth",
+      "claim": "the fleet growth report runs read-only (trial → paid and paid retention by positioning arm, exposure); the coworker cron runs every step inside its budget, including the retention sweep",
+      "result": "PASS",
+      "evidence": {
+        "arms": {},
+        "exposure": {
+          "coworker_prepares": {
+            "assigned": 1,
+            "exposed": 1
+          }
+        },
+        "cron": {
+          "notifications": {
+            "scan": {
+              "workspaces": 1,
+              "created": 0,
+              "baselined": 0
+            }
+          },
+          "weekly": {},
+          "learning": {},
+          "listening": {},
+          "retention": {
+            "productEventsRemoved": 1
+          }
+        },
+        "seconds": 0.2
+      }
+    }
+  ]
+}

@@ -177,6 +177,9 @@ def runtime_from_environment(environ=None):
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
     worker = PostgresWorker(database, social=social, on_verified=with_time_back(service.audience.on_post_verified, service.time_savings))
+    # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
+    from .coworker import runtime as coworker_runtime
+    coworker_runtime.attach(service, values)
     return service, worker, {"projectUrl": project_url, "publishableKey": publishable, "provider": "supabase", "flow": "pkce"}
 
 
@@ -396,6 +399,10 @@ class HostedApplication:
             if path == "/api/privacy/notice" and method == "GET":
                 from . import privacy
                 return self._json(start_response, 200, privacy.notice())
+            # Email-provider webhook and one-click unsubscribe authenticate by signature/token, before the origin guard.
+            from .coworker import http as coworker_http
+            if (routed := coworker_http.public(self, environ, start_response, method, path)) is not None:
+                return routed
             if path == "/api/billing/webhook" and method == "POST":
                 service = self._runtime()
                 length = int(environ.get("CONTENT_LENGTH") or "0")
@@ -456,6 +463,8 @@ class HostedApplication:
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()
+                from .coworker import runtime as coworker_runtime
+                result["coworker"] = coworker_runtime.cron(service)
                 learning = getattr(service, "learning", None)
                 if learning is not None:
                     result["learning"] = learning.sweep()
@@ -536,6 +545,8 @@ class HostedApplication:
                 # The Rafii Agent Runtime (text, voice, images); its routes live in agent_runtime_v2/http.py.
                 from .agent_runtime_v2.http import handle as agent_runtime_handle
                 return agent_runtime_handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
+                return coworker_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
                 return self._json(start_response, 200, service.billing_credit_packs(parts[2], token))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":

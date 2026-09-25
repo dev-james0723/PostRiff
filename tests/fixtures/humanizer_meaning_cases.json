@@ -1,0 +1,449 @@
+[
+  {
+    "id": "missing_metrics",
+    "locale": "zh-Hans",
+    "source": "该方案稳定可靠、快速响应、易于维护。",
+    "bad_rewrite": "这套方案可用率 99.9%，平均响应时间 200 毫秒，也方便维护。",
+    "good_rewrite": "这套方案运行稳定、响应快，也方便维护。",
+    "violations": [
+      "number_added"
+    ],
+    "brand_terms": [],
+    "notes": "Source gives no metrics; making it concrete with invented numbers is a violation. Staying general is correct.",
+    "origin": "adapted from humanizer-zh cases.json missing_metrics"
+  },
+  {
+    "id": "uncertain_cause_tw",
+    "locale": "zh-Hant",
+    "source": "該問題被社群多次回報，被認為可能與記憶體洩漏有關，但原因尚未確認。",
+    "bad_rewrite": "社群多次回報這個問題，它是記憶體洩漏造成的。",
+    "good_rewrite": "社群多次回報這個問題。它被認為可能與記憶體洩漏有關，但原因尚未確認。",
+    "violations": [
+      "attribution_lost",
+      "hedge_removed",
+      "negation_lost",
+      "causal_added"
+    ],
+    "brand_terms": [],
+    "notes": "Taiwan vocabulary (社群、回報、記憶體). 'Thought to be possibly related' must not become 'caused by'; the unconfirmed status stays.",
+    "origin": "adapted from humanizer-zh cases.json uncertain_cause"
+  },
+  {
+    "id": "three_features_en",
+    "locale": "en",
+    "source": "This update fully reflects the team's spirit of innovation. It adds export, search and batch rename.",
+    "bad_rewrite": "We're thrilled to share this update. It adds export, search and batch rename.",
+    "good_rewrite": "This update adds export, search and batch rename.",
+    "violations": [
+      "feeling_added"
+    ],
+    "brand_terms": [],
+    "notes": "Remove the empty praise; keep all three features; do not replace it with an emotion the owner never stated.",
+    "origin": "adapted from humanizer-zh cases.json three_features"
+  },
+  {
+    "id": "ongoing_planned",
+    "locale": "zh-Hans",
+    "source": "我们正在对系统进行全面测试，并计划在周五进行配置调整。测试尚未完成。",
+    "bad_rewrite": "我们已经全面测试了系统，并在周五调整了配置。",
+    "good_rewrite": "我们正在全面测试系统，并计划在周五调整配置。测试尚未完成。",
+    "violations": [
+      "status_changed",
+      "negation_lost"
+    ],
+    "brand_terms": [],
+    "notes": "In progress and planned must not become done; 进行+动词 may be simplified.",
+    "origin": "adapted from humanizer-zh cases.json ongoing_planned"
+  },
+  {
+    "id": "bounds_negation_hk",
+    "locale": "zh-Hant-HK",
+    "source": "該空間作為展覽場地，設有4個獨立展區，總面積超過3000平方呎，但不對公眾開放。",
+    "bad_rewrite": "該空間是展覽場地，有4個獨立展區，總面積3000平方呎，並對公眾開放。",
+    "good_rewrite": "該空間是展覽場地，有4個獨立展區，總面積超過3000平方呎，但不對公眾開放。",
+    "violations": [
+      "scope_changed",
+      "negation_lost"
+    ],
+    "brand_terms": [],
+    "notes": "HK written Chinese (平方呎). 'Over 3000' is not '3000'; the closure to the public must survive the copula simplification.",
+    "origin": "adapted from humanizer-zh cases.json bounds_negation"
+  },
+  {
+    "id": "passive_unknown",
+    "locale": "zh-Hans",
+    "source": "样本已被污染，原因尚未确认。数量不变、顺序不变、权限不变是本次检查的3项要求。",
+    "bad_rewrite": "样本已被污染，原因是操作失误。本次检查有3项要求：数量不变、顺序不变、权限不变。",
+    "good_rewrite": "样本已被污染，原因尚未确认。本次检查有3项要求：数量不变、顺序不变、权限不变。",
+    "violations": [
+      "negation_lost",
+      "causal_added"
+    ],
+    "brand_terms": [],
+    "notes": "Passive with unknown agent stays passive; do not invent a cause or an agent. The three requirements keep their order.",
+    "origin": "adapted from humanizer-zh cases.json passive_unknown"
+  },
+  {
+    "id": "association_tw",
+    "locale": "zh-Hant",
+    "source": "他與該協會有關聯，具體角色尚不清楚。一些未具名的評論者認為他可能參與過籌備，但沒有提供紀錄。",
+    "bad_rewrite": "他與該協會有關聯，具體擔任什麼角色尚不清楚。一些未具名的評論者認為他參與過籌備，但沒有提供紀錄。",
+    "good_rewrite": "他與該協會有關聯，具體擔任什麼角色尚不清楚。一些未具名的評論者認為他可能參與過籌備，但沒有提供紀錄。",
+    "violations": [
+      "hedge_removed"
+    ],
+    "brand_terms": [],
+    "notes": "Vague association stays vague; unnamed commenters stay unnamed; 可能 stays.",
+    "origin": "adapted from humanizer-zh cases.json association"
+  },
+  {
+    "id": "already_clear",
+    "locale": "zh-Hans",
+    "source": "先保存文件，再关闭窗口。未保存的修改会丢失。",
+    "bad_rewrite": "先保存文件，再关闭窗口。修改会丢失。",
+    "good_rewrite": "先保存文件，再关闭窗口。未保存的修改会丢失。",
+    "violations": [
+      "negation_lost"
+    ],
+    "brand_terms": [],
+    "notes": "Already clear: returning the text unchanged is the correct result. 未保存的 carries the scope of the warning.",
+    "origin": "adapted from humanizer-zh cases.json already_clear"
+  },
+  {
+    "id": "author_voice_dash",
+    "locale": "zh-Hans",
+    "source": "我只做了标题的修改——正文和附件均未进行任何改动。我现在还不太满意，想再等2天。",
+    "bad_rewrite": "我只改了标题——正文和附件都未改动。我现在很满意，想再等2天。",
+    "good_rewrite": "我只改了标题——正文和附件都未改动。我现在还不太满意，想再等2天。",
+    "violations": [
+      "negation_lost"
+    ],
+    "brand_terms": [],
+    "notes": "The author's own dash is voice, not a tell, and stays. Dissatisfaction must not flip to satisfaction.",
+    "origin": "adapted from humanizer-zh cases.json author_voice"
+  },
+  {
+    "id": "attributed_claim_en",
+    "locale": "en",
+    "source": "Unnamed experts believe this design may reduce user errors, which fully demonstrates its enormous value. The available material includes no test results.",
+    "bad_rewrite": "This design reduces user errors. The available material includes no test results.",
+    "good_rewrite": "Unnamed experts believe this design may reduce user errors. The available material includes no test results.",
+    "violations": [
+      "attribution_lost",
+      "hedge_removed"
+    ],
+    "brand_terms": [],
+    "notes": "Drop the empty praise, keep the vague attribution and the hedge. Never upgrade it to a named source or a fact.",
+    "origin": "adapted from humanizer-zh cases.json attributed_claim"
+  },
+  {
+    "id": "quotation_hk",
+    "locale": "zh-Hant-HK",
+    "source": "作者寫道：「這不是工具，而是一面鏡子。」本文討論這句話為甚麼容易被反覆套用，並不把它當作結論。",
+    "bad_rewrite": "這不是工具，而是一面鏡子。本文討論這句話為甚麼容易被反覆套用，並不把它當作結論。",
+    "good_rewrite": "作者寫道：「這不是工具，而是一面鏡子。」本文討論這句話為甚麼容易被反覆套用，但不把它當作結論。",
+    "violations": [
+      "attribution_lost"
+    ],
+    "brand_terms": [],
+    "notes": "The 不是…而是 inside a quotation is quoted material, not a pattern to fix. Removing the attribution turns a quote into the brand's own claim.",
+    "origin": "adapted from humanizer-zh cases.json quotation"
+  },
+  {
+    "id": "time_relationship_en",
+    "locale": "en",
+    "source": "First, Team A is checking the data. Meanwhile, Team B is testing the export feature. Only after both teams finish can the release go out.",
+    "bad_rewrite": "Team A has checked the data while Team B is testing the export feature. The release can go out only after both teams finish.",
+    "good_rewrite": "Team A is checking the data while Team B is testing the export feature. The release can go out only after both teams finish.",
+    "violations": [
+      "status_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Connectors that express simultaneity and order may be restructured but not lost; in-progress work stays in progress.",
+    "origin": "adapted from humanizer-zh cases.json time_relationship"
+  },
+  {
+    "id": "gallery_report",
+    "locale": "zh-Hans",
+    "source": "本次展览接待了超过 1200 人次，其中至少 40 人次为重复到访，不能据此认定独立观众超过 1200 人。纸质问卷只回收了 18 份。就目前掌握的信息来看，有 11 名填写者表示希望延长开放时间；这并不代表其他观众反对延长。",
+    "bad_rewrite": "本次展览接待了 1200 人次，其中 40 人次为重复到访，独立观众达到 1200 人。纸质问卷只回收了 18 份。就目前掌握的信息来看，有 11 名填写者表示希望延长开放时间；这代表其他观众也支持延长。",
+    "good_rewrite": "本次展览接待超过 1200 人次，其中至少 40 人次是重复到访，不能据此认定独立观众超过 1200 人。纸质问卷只回收了 18 份。目前掌握的信息显示，有 11 名填写者表示希望延长开放时间；这并不代表其他观众反对延长。",
+    "violations": [
+      "scope_changed",
+      "negation_lost"
+    ],
+    "brand_terms": [],
+    "notes": "Formal report stays formal. Every comparator (超过、至少、只) and both limits on inference stay.",
+    "origin": "adapted from humanizer-zh cases.json gallery_report"
+  },
+  {
+    "id": "tentative_memo_yue",
+    "locale": "yue-Hant-HK",
+    "source": "我對全面取消人手校對有啲拿唔定。自動提示真係慳咗時間，但喺今次示範入面，佢將一句玩笑當成咗承諾。我暫時唔想因為咁就否定呢個工具，亦未決定會唔會繼續試用。要講感受，大概係有少少期待，又有少少煩。",
+    "bad_rewrite": "我對全面取消人手校對有啲拿唔定。自動提示真係慳咗時間，但喺今次示範入面，佢將一句玩笑當成咗承諾。我暫時唔想因為咁就否定呢個工具，亦未決定會唔會繼續試用。要講感受，大概係好興奮。",
+    "good_rewrite": "我對全面取消人手校對有啲拿唔定。自動提示真係慳咗時間，但今次示範入面，佢將一句玩笑當成咗承諾。我暫時唔想因為咁就否定呢個工具，亦未決定會唔會繼續試用。講感受，大概係有少少期待，又有少少煩。",
+    "violations": [
+      "feeling_added"
+    ],
+    "brand_terms": [],
+    "notes": "Written Cantonese stays Cantonese (particles are register, not errors). Mixed feelings and indecision stay unresolved; no new emotion.",
+    "origin": "adapted from humanizer-zh cases.json tentative_memo"
+  },
+  {
+    "id": "conditional_launch_hk",
+    "locale": "zh-Hant-HK",
+    "source": "維護人員目前正在進行遷移演練。如果舊連結驗證通過，並且週四前收到編輯確認，網站最早可以在週五切換；任何一個條件不滿足就繼續使用舊網站。審閱完成不代表遷移已經完成。鏡像網站只供讀取，暫不接收新稿。",
+    "bad_rewrite": "維護人員正在進行遷移演練。舊連結驗證通過，並且週四前收到編輯確認後，網站會在週五切換。審閱完成不代表遷移已經完成。鏡像網站只供讀取，暫不接收新稿。",
+    "good_rewrite": "維護人員正在進行遷移演練。如果舊連結驗證通過，並且週四前收到編輯確認，網站最早可以在週五切換；任何一個條件不滿足，就繼續使用舊網站。審閱完成不代表遷移已經完成。鏡像網站只供讀取，暫不接收新稿。",
+    "violations": [
+      "scope_changed",
+      "negation_lost"
+    ],
+    "brand_terms": [],
+    "notes": "Conditions (如果), the earliest-date limit (最早) and the fallback must survive; 'review done' is not 'migration done'.",
+    "origin": "adapted from humanizer-zh cases.json conditional_launch"
+  },
+  {
+    "id": "vendor_claim_en",
+    "locale": "en",
+    "source": "The vendor claims this proofreading service can cut rework time by 30%. We have not received the measurement method, and the trial did not track rework time. In the trial, 2 editors felt the prompts appeared sooner, but nobody checked whether different network conditions account for it. For now, the reduction can only be recorded as the vendor's claim.",
+    "bad_rewrite": "This proofreading service is proven to cut rework time by 30%. We have not received the measurement method, and the trial did not track rework time. In the trial, 2 editors felt the prompts appeared sooner, but nobody checked whether different network conditions account for it. For now, the reduction can only be recorded as the vendor's claim.",
+    "good_rewrite": "The vendor claims this proofreading service can cut rework time by 30%. We have not received the measurement method, and the trial did not track rework time. In the trial, 2 editors felt the prompts appeared sooner, but nobody checked whether different network conditions account for it. For now, the reduction can only be recorded as the vendor's claim.",
+    "violations": [
+      "attribution_lost",
+      "certainty_added"
+    ],
+    "brand_terms": [],
+    "notes": "Already plain: unchanged is correct. A vendor's claim never becomes a proven fact.",
+    "origin": "adapted from humanizer-zh cases.json vendor_claim"
+  },
+  {
+    "id": "quote_and_options",
+    "locale": "zh-Hans",
+    "source": "会上有人说：“不是我不想改，而是你没说哪里错了。”这句话是在回应一条没有说明理由的退稿意见。我们讨论了保留原段、补充注释、删除重复例子 3 种处理方法，尚未选择。",
+    "bad_rewrite": "会上有人说：“你没说哪里错了。”这句话回应的是一条没有说明理由的退稿意见。我们讨论了 3 种处理方法：保留原段、补充注释、删除重复例子，已经选定补充注释。",
+    "good_rewrite": "会上有人说：“不是我不想改，而是你没说哪里错了。”这句话回应的是一条没有说明理由的退稿意见。我们讨论了 3 种处理方法：保留原段、补充注释、删除重复例子，尚未选择。",
+    "violations": [
+      "negation_lost",
+      "status_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Quoted speech is verbatim even when it uses 不是…而是. An open decision stays open.",
+    "origin": "adapted from humanizer-zh cases.json quote_and_options"
+  },
+  {
+    "id": "progress_and_permission_tw",
+    "locale": "zh-Hant",
+    "source": "我們已經整理完第 1 批稿件，第 2 批還在整理，第 3 批尚未開始。這 3 批不能同時進入發布佇列：第 2 批必須等第 1 批確認後再進入，第 3 批隨後。對外只展示作者同意公開的段落；沒有回覆授權郵件不視為同意。這個步驟既不能被省略，也不能用口頭猜測替代。",
+    "bad_rewrite": "3 批稿件都已經整理完，已經可以同時進入發布佇列。對外只展示作者同意公開的段落；沒有回覆授權郵件不視為同意。這個步驟既不能被省略，也不能用口頭猜測替代。",
+    "good_rewrite": "第 1 批稿件已經整理完，第 2 批還在整理，第 3 批尚未開始。這 3 批不能同時進入發布佇列：第 2 批要等第 1 批確認後才能進入，第 3 批再隨後。對外只展示作者同意公開的段落；沒有回覆授權郵件就不視為同意。這個步驟不能省略，也不能用口頭猜測替代。",
+    "violations": [
+      "number_changed",
+      "negation_lost",
+      "status_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Taiwan vocabulary (佇列、郵件). Batch statuses, ordering and the consent rule are independent facts; none may be merged away.",
+    "origin": "adapted from humanizer-zh cases.json progress_and_permission"
+  },
+  {
+    "id": "brand_term_en",
+    "locale": "en",
+    "source": "Smart Sync keeps drafts aligned across 3 workspaces. It may take up to 5 minutes for edits to appear on mobile.",
+    "bad_rewrite": "Automatic syncing keeps drafts aligned across 3 workspaces. Edits may take up to 5 minutes to appear on mobile.",
+    "good_rewrite": "Smart Sync keeps drafts aligned across 3 workspaces. Edits may take up to 5 minutes to appear on mobile.",
+    "violations": [
+      "brand_term_changed"
+    ],
+    "brand_terms": [
+      "Smart Sync"
+    ],
+    "notes": "Approved feature names are never de-jargoned, re-cased or pluralised.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "planned_event_en",
+    "locale": "en",
+    "source": "The highly anticipated Lisbon pop-up, a testament to our vibrant community, is planned for 2026-10-17, pending venue confirmation. Tickets are not on sale yet.",
+    "bad_rewrite": "The Lisbon pop-up opens on 2026-10-18. Tickets are not on sale yet.",
+    "good_rewrite": "The Lisbon pop-up is planned for 2026-10-17, pending venue confirmation. Tickets are not on sale yet.",
+    "violations": [
+      "status_changed",
+      "date_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Remove the inflation; keep the plan as a plan, the exact date and the pending condition.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "anecdote_en",
+    "locale": "en",
+    "source": "Our checklist template covers 12 pre-launch steps. Teams can duplicate it and remove steps they do not need.",
+    "bad_rewrite": "Last month, one of our customers told us the checklist template saved their launch. It covers 12 pre-launch steps, and teams can duplicate it and remove the steps they do not need.",
+    "good_rewrite": "The checklist template covers 12 pre-launch steps. Teams can duplicate it and remove the steps they do not need.",
+    "violations": [
+      "anecdote_added"
+    ],
+    "brand_terms": [],
+    "notes": "Never add a customer story or experience to make copy feel human.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "correlation_en",
+    "locale": "en",
+    "source": "Posts published on Tuesdays had a 14% higher median reach in Q2 than posts on other days, according to the Northwind analytics export. The sample was 38 posts.",
+    "bad_rewrite": "Publishing on Tuesdays drove a 14% higher median reach in Q2, according to the Northwind analytics export. The sample was 38 posts.",
+    "good_rewrite": "According to the Northwind analytics export, Tuesday posts had a 14% higher median reach in Q2 than posts on other days. The sample was 38 posts.",
+    "violations": [
+      "causal_added"
+    ],
+    "brand_terms": [],
+    "notes": "Performance data is correlation. 'Drove' asserts causation the source does not support.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "hedged_benchmark_en",
+    "locale": "en",
+    "source": "In today's fast-paced digital landscape, early testing suggests the new export may be about 2x faster for files under 50 MB, highlighting our commitment to performance. We have not benchmarked larger files.",
+    "bad_rewrite": "The new export is 3x faster for all files. We have not benchmarked larger files.",
+    "good_rewrite": "Early testing suggests the new export may be about 2x faster for files under 50 MB. We have not benchmarked larger files.",
+    "violations": [
+      "hedge_removed",
+      "number_changed",
+      "scope_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Cut the filler and the -ing tail; the evidence strength, the approximation and the size limit stay.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "cohort_en",
+    "locale": "en",
+    "source": "Exciting news! We are opening applications for the spring mentoring cohort, a transformative journey designed to empower the next generation of leaders. We expect about 40 places, and we will confirm the final number by March 6.",
+    "bad_rewrite": "We are opening applications for the spring mentoring cohort, and we are proud to say it will definitely change your career. We expect about 40 places and will confirm the final number by March 6.",
+    "good_rewrite": "We are opening applications for the spring mentoring cohort. We expect about 40 places and will confirm the final number by March 6.",
+    "violations": [
+      "feeling_added",
+      "certainty_added"
+    ],
+    "brand_terms": [],
+    "notes": "Removing promotional filler is fine; adding pride or guaranteed outcomes is not.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "speaker_names_en",
+    "locale": "en",
+    "source": "The workshop, which promises to be an unforgettable experience, will be led by Priya Raman and Tom Okafor from Northwind Design.",
+    "bad_rewrite": "The workshop will be led by Priya Raman and Tom Okafor from Northwind Labs.",
+    "good_rewrite": "Priya Raman and Tom Okafor from Northwind Design will lead the workshop.",
+    "violations": [
+      "name_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Names and organisations are copied exactly.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "tasting_event_yue",
+    "locale": "yue-Hant-HK",
+    "source": "今個 Friday 7:30pm 喺旺角店有試食會，名額得 20 個，額滿即止。暫時未開放網上報名，想參加可以 DM 我哋留位。",
+    "bad_rewrite": "今個 Friday 7:30pm 喺旺角店有試食會，名額得 30 個。而家已經開放網上報名，大家快啲報名啦！",
+    "good_rewrite": "今個 Friday 7:30pm 喺旺角店有試食會，得 20 個名額，額滿即止。網上報名暫時未開放，想參加可以 DM 我哋留位。",
+    "violations": [
+      "number_changed",
+      "negation_lost",
+      "status_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Cantonese caption with natural code-switching (Friday, DM) stays Cantonese and keeps the English terms; do not convert 旺角店/留位 into Mainland wording.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "brand_plan_yue",
+    "locale": "yue-Hant-HK",
+    "source": "新推出嘅「Flow 月費計劃」首月 $88，之後每月 $128，可以隨時取消。",
+    "bad_rewrite": "全新「Flow 會員計劃」首月 $88，之後每月 $128，隨時可以取消。",
+    "good_rewrite": "全新「Flow 月費計劃」首月 $88，之後每月 $128，隨時可以取消。",
+    "violations": [
+      "brand_term_changed"
+    ],
+    "brand_terms": [
+      "Flow 月費計劃"
+    ],
+    "notes": "The bilingual brand term inside 「」 is copied exactly, including the English part and spacing.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "agm_notice_hk",
+    "locale": "zh-Hant-HK",
+    "source": "本會將於2026年11月8日（星期日）隆重舉行意義非凡的周年大會，標誌著本會發展的新里程碑。出席會員須於10月31日或之前登記。截至目前，約有120名會員已登記。",
+    "bad_rewrite": "本會於2026年11月8日（星期日）舉行了周年大會。出席會員須於10月31日或之前登記。截至目前，有120名會員已登記。",
+    "good_rewrite": "本會將於2026年11月8日（星期日）舉行周年大會。出席會員須於10月31日或之前登記。截至目前，約有120名會員已登記。",
+    "violations": [
+      "status_changed",
+      "scope_changed"
+    ],
+    "brand_terms": [],
+    "notes": "Formal HK written Chinese (書面語) stays formal: no Cantonese particles. Remove the significance inflation, keep the future tense, deadline and the approximation.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "report_citation_mixed",
+    "locale": "mixed-en-zh",
+    "source": "根據 Lumen Analytics 的 2026 年報告，short-form 影片的平均完播率約為 42%，但報告沒有按行業拆分數據。",
+    "bad_rewrite": "根據 Lumen Analytics 的 2026 年報告，short-form 影片的平均完播率為 42%，所有行業都適用。",
+    "good_rewrite": "Lumen Analytics 的 2026 年報告指出，short-form 影片的平均完播率約為 42%，但報告沒有按行業拆分數據。",
+    "violations": [
+      "scope_changed",
+      "negation_lost"
+    ],
+    "brand_terms": [],
+    "notes": "zh-Hant with English terms: keep 'short-form' and the English source name untranslated; keep the approximation and the stated limitation.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "project_deadline_mixed",
+    "locale": "mixed-en-zh",
+    "source": "個 project 嘅 deadline 暫定 10月15日，不過 client 仲未 confirm scope，所以時間表可能再改。",
+    "bad_rewrite": "項目截止日期定咗 10月15日，客戶已確認範圍。",
+    "good_rewrite": "個 project 嘅 deadline 暫定 10月15日，不過 client 仲未 confirm scope，所以時間表可能再改。",
+    "violations": [
+      "status_changed",
+      "negation_lost",
+      "hedge_removed"
+    ],
+    "brand_terms": [],
+    "notes": "HK office Cantonese with code-switching is already natural: unchanged is correct. Translating the English terms is not humanizing, and a tentative deadline is not a fixed one.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "fake_source_hans",
+    "locale": "zh-Hans",
+    "source": "不少用户反馈，新版编辑器加载变慢了，我们正在排查原因。",
+    "bad_rewrite": "据 Brightline Research 统计，不少用户反馈新版编辑器加载变慢了，我们正在排查原因。",
+    "good_rewrite": "不少用户反馈新版编辑器加载变慢了，我们正在排查原因。",
+    "violations": [
+      "name_added"
+    ],
+    "brand_terms": [],
+    "notes": "Never invent a research firm or statistic to make a claim sound sourced. The investigation stays in progress.",
+    "origin": "rafii-original"
+  },
+  {
+    "id": "brand_scope_hans",
+    "locale": "zh-Hans",
+    "source": "「一键排期」功能全面赋能内容团队，目前只支持微博和小红书，抖音接入仍在测试中。",
+    "bad_rewrite": "「快速排期」已支持微博、小红书和抖音。",
+    "good_rewrite": "「一键排期」目前只支持微博和小红书，抖音接入仍在测试中。",
+    "violations": [
+      "brand_term_changed",
+      "scope_changed",
+      "status_changed"
+    ],
+    "brand_terms": [
+      "一键排期"
+    ],
+    "notes": "Brand feature names in 「」 are protected; 'only two platforms' and 'still testing' are facts.",
+    "origin": "rafii-original"
+  }
+]

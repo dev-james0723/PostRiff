@@ -1,0 +1,1645 @@
+{
+  "version": "1.0.0",
+  "schema_notes": {
+    "matching": "Compile every regex with re.IGNORECASE (Python 3.12). Case-sensitive parts use scoped (?-i:...) groups. Multiline patterns carry their own (?m).",
+    "use": "Detector hits are clues, judged in clusters and in context, never a blacklist. Skip hits inside approved brand terms, quotations, code, URLs, handles and protected spans. The deterministic stage flags only; it never rewrites.",
+    "pattern_fields": "id, family, regex, weight (0.25-1.0; low = weak clue), samples (strings each regex must match), optional note, scripts (zh), locales ('*' = locale-agnostic)",
+    "scoping": "en.* patterns apply to English text or English segments of mixed text; entries with locales ['*'] apply to every locale. zh.* apply to zh-Hans, zh-Hant, zh-Hant-HK and yue-Hant-HK. yue.* apply to yue-Hant-HK (and to zh-Hant-HK only for register_mix).",
+    "zh_regex_scripts": "zh regexes accept Simplified and Traditional forms of the same wording (character classes). They do not validate script consistency; use zh.script_markers for that.",
+    "meaning_lexicon": "Token lexicons for the meaning-preservation diff (see tests/fixtures/humanizer_meaning_cases.json and skills/rafii-humanizer-en/references/meaning-check.md). Losses are checked for negation/hedge/attribution/planned; additions for certainty/causal/anecdote/feeling/done; scope is compared as a multiset."
+  },
+  "sources": [
+    {
+      "name": "blader/humanizer v2.8.0 (English pattern catalogue)",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2025 Siqi Chen",
+      "use": "en families, vocabulary, signposting, residue (adapted)"
+    },
+    {
+      "name": "op7418/Humanizer-zh (families A-F, meaning-preservation cases)",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 歸藏",
+      "use": "zh families A-F, fixture intents (adapted)"
+    },
+    {
+      "name": "lieflat-less-ai-tone (translationese MARKERS, whitelist discipline)",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 shiujan",
+      "use": "zh.translationese regexes (adapted: full-width punctuation, Traditional variants, actionable flags)"
+    },
+    {
+      "name": "Wikipedia: Signs of AI writing (WikiProject AI Cleanup)",
+      "license": "CC BY-SA 4.0 (observations only; no text copied)",
+      "copyright": "Wikipedia contributors",
+      "use": "upstream observation source cited by blader/humanizer"
+    }
+  ],
+  "en": {
+    "ai_vocabulary": [
+      "delve",
+      "delves",
+      "delving",
+      "tapestry",
+      "testament",
+      "pivotal",
+      "crucial",
+      "intricate",
+      "intricacies",
+      "interplay",
+      "underscore",
+      "underscores",
+      "underscoring",
+      "showcase",
+      "showcasing",
+      "foster",
+      "fostering",
+      "garner",
+      "enduring",
+      "vibrant",
+      "landscape",
+      "realm",
+      "embark",
+      "navigating the complexities",
+      "seamless",
+      "seamlessly",
+      "robust",
+      "leverage",
+      "leveraging",
+      "elevate",
+      "empower",
+      "empowering",
+      "unlock",
+      "unleash",
+      "harness",
+      "holistic",
+      "synergy",
+      "paradigm",
+      "multifaceted",
+      "nuanced",
+      "meticulous",
+      "meticulously",
+      "commendable",
+      "noteworthy",
+      "groundbreaking",
+      "transformative",
+      "cutting-edge",
+      "game-changer",
+      "ever-evolving",
+      "bustling",
+      "beacon",
+      "cornerstone",
+      "myriad",
+      "plethora",
+      "moreover",
+      "furthermore",
+      "additionally",
+      "notably",
+      "resonate",
+      "resonates",
+      "captivating",
+      "profound",
+      "nestled",
+      "align with",
+      "streamline",
+      "enhance",
+      "invaluable",
+      "spearhead",
+      "bolster",
+      "revolutionize"
+    ],
+    "ai_vocabulary_note": "Match as whole words/phrases, case-insensitive. A single word is never a finding; count density and co-occurrence. Approved brand terms are excluded.",
+    "phrase_patterns": [
+      {
+        "id": "en.inflated_significance",
+        "family": "content",
+        "regex": "\\b(?:stands|serves) as an? (?:enduring |lasting |powerful )?(?:testament|reminder|symbol)\\b|\\bis an? (?:enduring |lasting )?testament to\\b|\\b(?:marks?|marking|represents?|representing) an? (?:pivotal|significant|key|crucial|major|defining|watershed) (?:moment|shift|milestone|turning point|step|chapter)\\b|\\b(?:plays?|playing) an? (?:vital|crucial|pivotal|key|significant|instrumental) role\\b",
+        "weight": 1.0,
+        "samples": [
+          "The launch marks a pivotal moment for the team."
+        ]
+      },
+      {
+        "id": "en.broader_trends",
+        "family": "content",
+        "regex": "\\breflect(?:s|ing)? (?:a |the )?broader\\b|\\bsetting the stage for\\b|\\b(?:ever-)?evolving landscape\\b|\\bindelible mark\\b|\\bdeeply rooted\\b|\\bshaping the future of\\b|\\bin today'?s (?:(?:fast-paced|rapidly evolving|ever-changing|digital|modern) )*(?:world|landscape|age|era|market)\\b",
+        "weight": 1.0,
+        "samples": [
+          "In today's fast-paced digital world, teams need clarity."
+        ]
+      },
+      {
+        "id": "en.notability_claims",
+        "family": "content",
+        "regex": "\\b(?:featured|covered|cited|mentioned) (?:in|by) (?:outlets|publications|media|major outlets) (?:such as|including|like)\\b|\\bactive social media presence\\b|\\b(?:independent|extensive|widespread|national|international) (?:media )?coverage\\b|\\bwritten by a leading expert\\b",
+        "weight": 1.0,
+        "samples": [
+          "Her work has been featured in outlets such as several national papers."
+        ]
+      },
+      {
+        "id": "en.ing_tail_analysis",
+        "family": "content",
+        "regex": ",\\s+(?:further\\s+)?(?:highlighting|underscoring|emphasizing|reflecting|symbolizing|showcasing|fostering|cultivating|ensuring|contributing to|solidifying|cementing|reinforcing|demonstrating)\\b",
+        "weight": 1.0,
+        "samples": [
+          "The palette uses blue and gold, reflecting the region's heritage."
+        ]
+      },
+      {
+        "id": "en.promotional",
+        "family": "content",
+        "regex": "\\b(?:nestled|in the heart of|boasts?|breathtaking|must-(?:visit|have|see|read)|world-class|renowned|stunning|vibrant|rich (?:cultural )?(?:heritage|history|tapestry)|unparalleled|second to none|game[- ]chang(?:er|ing)|cutting[- ]edge|state[- ]of[- ]the[- ]art|next[- ]level|best[- ]in[- ]class)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Nestled in the heart of the city, the cafe boasts stunning views."
+        ],
+        "note": "Skip matches inside approved brand terms or quoted product names."
+      },
+      {
+        "id": "en.vague_attribution",
+        "family": "content",
+        "regex": "\\b(?:experts|observers|critics|analysts|researchers|insiders|industry (?:reports|insiders|observers|leaders)|many (?:people|users|experts)|some (?:critics|experts|observers))\\s+(?:say|believe|argue|suggest|agree|note|have (?:noted|cited|argued))\\b|\\bstudies (?:show|suggest|have shown)\\b|\\bit is (?:widely|generally|often) (?:believed|said|thought|accepted)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Experts believe it plays a crucial role."
+        ],
+        "note": "Fix by keeping the vague attribution and its uncertainty, or by removing empty praise; never by inventing a named source."
+      },
+      {
+        "id": "en.challenges_formula",
+        "family": "content",
+        "regex": "\\bdespite (?:its|these|the|their|such) [^.]{0,40}?challenges\\b|\\bfaces? (?:several|many|numerous|a number of|significant) challenges\\b|\\b(?:challenges and (?:legacy|future prospects|opportunities)|future (?:outlook|prospects))\\b|\\bcontinues to thrive\\b",
+        "weight": 1.0,
+        "samples": [
+          "Despite these challenges, the town continues to thrive."
+        ]
+      },
+      {
+        "id": "en.speculative_gap_fill",
+        "family": "content",
+        "regex": "\\b(?:maintains a low profile|keeps (?:personal|private) (?:details|information|life) private|prefers to stay out of the spotlight|(?:details|information) (?:are|is|remain|remains) (?:limited|scarce)|not (?:extensively|widely|publicly) documented|based on (?:the )?available information|while specific details (?:are|remain))\\b",
+        "weight": 1.0,
+        "samples": [
+          "While specific details are limited, it appears to have started in the 1990s."
+        ]
+      },
+      {
+        "id": "en.copula_avoidance",
+        "family": "language",
+        "regex": "\\b(?:serves|stands|functions|acts) as (?:a|an|the)\\b|\\bboasts (?:a|an|over|more than)\\b",
+        "weight": 1.0,
+        "samples": [
+          "The room serves as the team's workspace and boasts over 40 seats."
+        ]
+      },
+      {
+        "id": "en.negative_parallelism",
+        "family": "language",
+        "regex": "\\b(?:it'?s|it is|this is|that'?s) not (?:just|only|merely|simply) (?:about )?[^.;!?]{1,60}[;,.]\\s*(?:it'?s|it is|this is|but)\\b|\\bnot only\\b[^.;!?]{1,80}\\bbut (?:also )?\\b|\\bnot (?:just|merely) an? [^.;!?]{1,40}[,;]\\s*(?:but )?an?\\b",
+        "weight": 1.0,
+        "samples": [
+          "It's not just a tool; it's a statement."
+        ],
+        "note": "Keep when the negated part corrects a real misunderstanding stated in the source."
+      },
+      {
+        "id": "en.tailing_negation",
+        "family": "language",
+        "regex": ",\\s+no (?:guessing|guesswork|fuss|hassle|friction|surprises|strings attached|wasted \\w+|extra \\w+|excuses|fluff)\\s*[.!]",
+        "weight": 1.0,
+        "samples": [
+          "The options come from the selected item, no guessing."
+        ]
+      },
+      {
+        "id": "en.rule_of_three_abstract",
+        "family": "language",
+        "regex": "\\b(?:innovation|inspiration|insights?|efficiency|creativity|collaboration|growth|excellence|engagement|connection|community|clarity|impact|transformation|empowerment|productivity|agility|resilience|synergy|alignment)\\s*,\\s*(?:innovation|inspiration|insights?|efficiency|creativity|collaboration|growth|excellence|engagement|connection|community|clarity|impact|transformation|empowerment|productivity|agility|resilience|synergy|alignment)\\s*,?\\s*and\\s+(?:innovation|inspiration|insights?|efficiency|creativity|collaboration|growth|excellence|engagement|connection|community|clarity|impact|transformation|empowerment|productivity|agility|resilience|synergy|alignment)\\b|\\b(?:seamless|intuitive|powerful|robust|scalable|innovative|dynamic|engaging|efficient|reliable|flexible|elegant|effortless|impactful|transformative|meaningful)\\s*,\\s*(?:seamless|intuitive|powerful|robust|scalable|innovative|dynamic|engaging|efficient|reliable|flexible|elegant|effortless|impactful|transformative|meaningful)\\s*,?\\s*and\\s+(?:seamless|intuitive|powerful|robust|scalable|innovative|dynamic|engaging|efficient|reliable|flexible|elegant|effortless|impactful|transformative|meaningful)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Attendees can expect innovation, inspiration, and insights."
+        ],
+        "note": "Only abstract/buzz triads. Concrete lists of three distinct items are fine."
+      },
+      {
+        "id": "en.false_range",
+        "family": "language",
+        "regex": "\\bfrom (?:the )?[a-z]+(?: [a-z]+){0,4} to (?:the )?[a-z]+(?: [a-z]+){0,4},\\s+(?:and )?from\\b",
+        "weight": 1.0,
+        "samples": [
+          "It took us from the birth of stars to the cosmic web, from dark matter to light."
+        ]
+      },
+      {
+        "id": "en.subjectless_fragment",
+        "family": "language",
+        "regex": "(?:^|(?<=[.!?]\\s))no (?:\\w+ ){0,2}(?:needed|required)\\s*[.!]",
+        "weight": 0.5,
+        "samples": [
+          "Setup is quick. No configuration file needed."
+        ]
+      },
+      {
+        "id": "en.bold_overuse",
+        "family": "style",
+        "regex": "\\*\\*[^*\\n]{1,60}\\*\\*",
+        "weight": 0.5,
+        "samples": [
+          "It blends **OKRs** and **KPIs**."
+        ],
+        "note": "Count per text; a single bold warning in a long post is normal."
+      },
+      {
+        "id": "en.inline_header_list",
+        "family": "style",
+        "regex": "(?m)^\\s*(?:[-*\\u2022]|\\d+[.)])\\s+\\*\\*[^*\\n]{1,40}:?\\*\\*:?",
+        "weight": 1.0,
+        "samples": [
+          "- **Speed:** Generation is faster."
+        ]
+      },
+      {
+        "id": "en.title_case_heading",
+        "family": "style",
+        "regex": "(?m)^#{1,6}\\s+(?-i:(?:[A-Z][a-z]+\\s+){2,}(?:And|Or|Of|The|For|With|To|In|On)\\s+[A-Z][a-z]+)",
+        "weight": 1.0,
+        "samples": [
+          "## Strategic Negotiations And Global Partnerships"
+        ],
+        "note": "Case-sensitive inside (?-i:...)."
+      },
+      {
+        "id": "en.emoji_label",
+        "family": "style",
+        "regex": "(?m)^\\s*(?:[-*\\u2022]\\s*)?[\\U0001F300-\\U0001FAFF\\u2600-\\u27BF\\u2B50]\\uFE0F?\\s*(?:\\*\\*)?[A-Za-z][^:\\n]{0,30}:",
+        "weight": 1.0,
+        "samples": [
+          "🚀 **Launch Phase:** The product launches in Q3"
+        ],
+        "note": "Keep emoji that belong to the approved voice or platform convention."
+      },
+      {
+        "id": "en.curly_double_quotes",
+        "family": "style",
+        "regex": "[\\u201C\\u201D]",
+        "weight": 0.25,
+        "samples": [
+          "He said “the project is on track”."
+        ],
+        "locales": [
+          "en"
+        ],
+        "note": "English only: “” are the standard quotes in zh-Hans. Auto-curling editors produce these; count only inside a cluster."
+      },
+      {
+        "id": "en.cutoff_disclaimer",
+        "family": "communication",
+        "regex": "\\b(?:as of my (?:last|latest) (?:training|knowledge)(?: update| cutoff)?|up to my (?:last|latest) training(?: update)?|my knowledge cutoff)\\b",
+        "weight": 1.0,
+        "samples": [
+          "As of my last training update, the company had two offices."
+        ]
+      },
+      {
+        "id": "en.sycophancy",
+        "family": "communication",
+        "regex": "\\b(?:great|excellent|fantastic|good) question\\b|\\byou'?re (?:absolutely|totally|completely) right\\b|\\bwhat a (?:great|fantastic|wonderful) (?:idea|question|point)\\b|\\bthat'?s an? (?:excellent|great) point\\b",
+        "weight": 1.0,
+        "samples": [
+          "Great question! The fee is monthly."
+        ]
+      },
+      {
+        "id": "en.announce_formula",
+        "family": "communication",
+        "regex": "\\b(?:i'?m|we'?re|i am|we are) (?:so |incredibly |truly |super )?(?:thrilled|excited|delighted|humbled|proud|honou?red) to (?:announce|share|introduce|unveil)\\b",
+        "weight": 1.0,
+        "samples": [
+          "We're thrilled to announce our new plan."
+        ],
+        "note": "If the owner's draft contains it, it is their voice; never ADD it (feeling_added)."
+      },
+      {
+        "id": "en.engagement_bait",
+        "family": "communication",
+        "regex": "(?:^|(?<=\\s))(?:agree\\?|thoughts\\?|drop a comment|comment ['\\\"]?\\w+['\\\"]? below|tag (?:someone|a friend) who|like if you|repost if|smash that|follow for more)",
+        "weight": 1.0,
+        "samples": [
+          "Agree? Drop a comment below."
+        ],
+        "note": "Approved CTAs from the brief stay."
+      },
+      {
+        "id": "en.filler",
+        "family": "filler",
+        "regex": "\\b(?:in order to|due to the fact that|at this point in time|in the event that|ha(?:s|ve) the ability to|it is important to note that|it'?s (?:important|worth) (?:to note|noting) that|it is worth noting that|needless to say|for all intents and purposes|at the end of the day)\\b",
+        "weight": 1.0,
+        "samples": [
+          "In order to join, register by Friday."
+        ]
+      },
+      {
+        "id": "en.stacked_hedge",
+        "family": "filler",
+        "regex": "\\b(?:could|might|may)\\s+(?:potentially|possibly|perhaps|conceivably)\\b|\\b(?:potentially|possibly|perhaps)\\s+(?:could|might|may)\\b|\\bit could (?:potentially |possibly )?be argued\\b",
+        "weight": 1.0,
+        "samples": [
+          "The update could potentially reduce load times."
+        ],
+        "note": "Collapse to ONE hedge of the same strength. Never remove the last hedge."
+      },
+      {
+        "id": "en.generic_conclusion",
+        "family": "filler",
+        "regex": "\\b(?:the future (?:looks|is) (?:bright|promising)|exciting times (?:lie|are) ahead|a (?:major |big )?step in the right direction|only time will tell|the possibilities are endless|journey (?:toward|towards) excellence|the sky'?s the limit|here'?s to (?:the future|many more))\\b",
+        "weight": 1.0,
+        "samples": [
+          "The future looks bright for the team."
+        ]
+      },
+      {
+        "id": "en.hyphen_predicate",
+        "family": "filler",
+        "regex": "\\b(?:is|are|was|were|be|been|being)\\s+(?:high-quality|data-driven|cross-functional|client-facing|well-known|real-time|long-term|end-to-end|user-friendly)\\b",
+        "weight": 0.25,
+        "samples": [
+          "The report is high-quality."
+        ]
+      },
+      {
+        "id": "en.authority_trope",
+        "family": "filler",
+        "regex": "\\b(?:the real question is|at its core|in reality|what really matters|the deeper issue|the heart of the matter|the truth is|make no mistake)\\b|\\bfundamentally,",
+        "weight": 1.0,
+        "samples": [
+          "At its core, what really matters is readiness."
+        ]
+      },
+      {
+        "id": "en.fragmented_header",
+        "family": "filler",
+        "regex": "(?m)^#{1,6}[^\\n]+\\n+[ \\t]*[A-Za-z][^.!?\\n]{0,24}[.!?][ \\t]*\\n",
+        "weight": 1.0,
+        "samples": [
+          "## Performance\n\nSpeed matters.\n\nSlow pages lose readers."
+        ]
+      },
+      {
+        "id": "en.diff_anchored",
+        "family": "filler",
+        "regex": "\\b(?:was|were|has been|have been) (?:added|introduced|updated|changed) to (?:replace|fix|address)\\b|\\bthe (?:previous|old|original) (?:approach|version|implementation)\\b",
+        "weight": 0.5,
+        "samples": [
+          "This function was added to replace the previous approach."
+        ],
+        "note": "Changelogs, release notes and migration guides are legitimately version-scoped."
+      },
+      {
+        "id": "en.staccato",
+        "family": "filler",
+        "regex": "(?:^|(?<=[.!?]\\s))(?:(?-i:[A-Z])[^.!?\\n]{0,28}[.!?]\\s+){3,}(?-i:[A-Z])",
+        "weight": 1.0,
+        "samples": [
+          "Then it arrived. No preference. No prior. No nostalgia. The old rules were gone."
+        ],
+        "note": "One short emphatic sentence is normal; flag runs."
+      },
+      {
+        "id": "en.aphorism",
+        "family": "filler",
+        "regex": "\\b(?:is|are) the (?:language|currency|architecture|engine|heartbeat|backbone|operating system|new oil) of\\b|\\bbecomes? a trap\\b|\\bis(?:n'?t| not) an? \\w+[,;]?\\s+(?:it'?s|but) an? \\w+\\b",
+        "weight": 1.0,
+        "samples": [
+          "Symmetry is the language of trust."
+        ]
+      },
+      {
+        "id": "en.rhetorical_opener",
+        "family": "filler",
+        "regex": "(?:^|(?<=[.!?]\\s))(?:honestly\\?|look,|here'?s the thing[:.,]|the thing is[:,]|let'?s be honest[:,.]|real talk[:,.]|spoiler(?: alert)?:|plot twist:)",
+        "weight": 1.0,
+        "samples": [
+          "Is it worth it? Honestly? It depends."
+        ]
+      },
+      {
+        "id": "en.hashtag_block",
+        "family": "style",
+        "regex": "(?:#\\w+\\s*){6,}",
+        "weight": 0.5,
+        "samples": [
+          "#a #b #c #d #e #f"
+        ],
+        "note": "Platform lint owns hashtag limits; this is only a clue."
+      }
+    ],
+    "signposting": [
+      {
+        "id": "en.sign.dive_in",
+        "family": "filler",
+        "regex": "\\blet'?s (?:dive|delve|jump) (?:in|into|deeper)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Let's dive into caching."
+        ]
+      },
+      {
+        "id": "en.sign.explore",
+        "family": "filler",
+        "regex": "\\blet'?s (?:explore|unpack|break (?:this|it) down|take a (?:closer |deeper )?look)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Let's unpack this."
+        ]
+      },
+      {
+        "id": "en.sign.need_to_know",
+        "family": "filler",
+        "regex": "\\bhere'?s (?:what you need to know|everything you need to know|the breakdown|how it works)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Here's what you need to know."
+        ]
+      },
+      {
+        "id": "en.sign.now_lets",
+        "family": "filler",
+        "regex": "\\bnow,? let'?s (?:look at|turn to|move on to)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Now let's look at pricing."
+        ]
+      },
+      {
+        "id": "en.sign.without_ado",
+        "family": "filler",
+        "regex": "\\bwithout further ado\\b",
+        "weight": 1.0,
+        "samples": [
+          "Without further ado, the list."
+        ]
+      },
+      {
+        "id": "en.sign.in_this_post",
+        "family": "filler",
+        "regex": "\\bin this (?:post|article|guide|thread|video),? (?:we|i)(?:'ll| will)\\b",
+        "weight": 1.0,
+        "samples": [
+          "In this post, we'll cover pricing."
+        ]
+      },
+      {
+        "id": "en.sign.read_on",
+        "family": "filler",
+        "regex": "\\b(?:buckle up|read on to (?:find out|learn|discover)|keep reading to|stay tuned)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Read on to find out why."
+        ]
+      },
+      {
+        "id": "en.sign.hook_formula",
+        "family": "filler",
+        "regex": "\\b(?:unpopular opinion:|hot take:|nobody talks about|here'?s what (?:nobody|no one) tells you|let that sink in|read that again|this changed everything)",
+        "weight": 1.0,
+        "samples": [
+          "Unpopular opinion: meetings are fine."
+        ]
+      },
+      {
+        "id": "en.sign.kicker",
+        "family": "filler",
+        "regex": "\\bbut here'?s the (?:thing|catch|kicker|twist)\\b|\\bthe answer (?:might|will|may) surprise you\\b",
+        "weight": 1.0,
+        "samples": [
+          "But here's the catch: it costs more."
+        ]
+      }
+    ],
+    "chatbot_residue": [
+      {
+        "id": "en.res.hope_helps",
+        "family": "communication",
+        "regex": "\\b(?:i )?hope this helps\\b",
+        "weight": 1.0,
+        "samples": [
+          "I hope this helps!"
+        ]
+      },
+      {
+        "id": "en.res.exclaim_opener",
+        "family": "communication",
+        "regex": "(?:^|(?<=[.!?]\\s))(?:of course|certainly|absolutely|sure)!",
+        "weight": 1.0,
+        "samples": [
+          "Certainly! Here is the caption."
+        ]
+      },
+      {
+        "id": "en.res.offer_more",
+        "family": "communication",
+        "regex": "\\b(?:would you like (?:me to|more)|want me to|shall i|should i continue|let me know if you(?:'d| would) like|feel free to (?:ask|reach out|let me know))\\b",
+        "weight": 1.0,
+        "samples": [
+          "Let me know if you'd like more options."
+        ]
+      },
+      {
+        "id": "en.res.here_is",
+        "family": "communication",
+        "regex": "(?:^|(?<=[.!?]\\s))(?:here is|here'?s|below is) (?:a|an|the|your) (?:revised |updated |draft |short |quick |polished )?(?:overview|summary|draft|breakdown|version|post|caption|list|rewrite)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Here is a revised caption for your post."
+        ]
+      },
+      {
+        "id": "en.res.meta_rewrite",
+        "family": "communication",
+        "regex": "\\bhere'?s (?:a|the) (?:more )?(?:humani[sz]ed|natural(?:-sounding)?|revised|polished) version\\b|\\b(?:i'?ve|i have) (?:rewritten|revised|humani[sz]ed|polished) (?:the|your|this)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Here's a more natural version of your post."
+        ],
+        "note": "Residue of the editing stage itself; must never reach final copy."
+      },
+      {
+        "id": "en.res.as_an_ai",
+        "family": "communication",
+        "regex": "\\bas an ai(?: language model| assistant)?\\b|\\bi (?:cannot|can'?t|don'?t have the ability to) (?:browse|access (?:the internet|real-time))",
+        "weight": 1.0,
+        "samples": [
+          "As an AI, I cannot browse."
+        ]
+      },
+      {
+        "id": "en.res.happy_to_help",
+        "family": "communication",
+        "regex": "\\b(?:i'?d be happy to help|happy to help|glad i could help)\\b",
+        "weight": 1.0,
+        "samples": [
+          "Happy to help with more drafts."
+        ]
+      },
+      {
+        "id": "en.res.placeholder",
+        "family": "communication",
+        "regex": "\\[(?:insert|your|add|link|name|date|company|product|brand|cta|url)[^\\]\\n]{0,40}\\]|\\{\\{[^}\\n]{1,40}\\}\\}|<(?:insert|your)[^>\\n]{0,40}>",
+        "weight": 1.0,
+        "samples": [
+          "Book now at [insert link]."
+        ],
+        "locales": [
+          "*"
+        ],
+        "note": "Unfilled template slot. Locale-agnostic; apply to Chinese copy too."
+      },
+      {
+        "id": "en.res.citation_artifact",
+        "family": "communication",
+        "regex": "oaicite|oai_citation|contentReference\\[|\\bturn\\d+(?:search|news|view|file)\\d+\\b|utm_source=(?:chatgpt\\.com|openai|copilot)|\\u3010\\d+\\u2020[^\\u3011\\n]{0,40}\\u3011",
+        "weight": 1.0,
+        "samples": [
+          "Revenue grew 4% :contentReference[oaicite:0]"
+        ],
+        "locales": [
+          "*"
+        ],
+        "note": "Chatbot citation/tool markup. Locale-agnostic."
+      }
+    ]
+  },
+  "zh": {
+    "phrase_patterns": [
+      {
+        "id": "zh.fake_contrast",
+        "family": "A",
+        "regex": "(?:不是|[并並併]非|[并並併]不是|不在[于於])[^，。！？\\n]{1,24}[，,]?\\s*而(?:是|在[于於])|[与與]其[说說][^，。\\n]{1,24}不如[说說]|看似[^，。\\n]{1,20}[实實][则則]|表面上?[^，。\\n]{1,20}[，,]\\s*[实實][际際]上",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "真正的壁垒不是技术，而是认知。",
+          "真正的壁壘不是技術，而是認知。"
+        ],
+        "note": "翻案腔. Keep when both halves carry information or the negation corrects a misunderstanding stated in the source; never edit inside quotations."
+      },
+      {
+        "id": "zh.not_only_more",
+        "family": "A",
+        "regex": "不[仅僅](?:[仅僅])?是?[^，。！？\\n]{1,24}[，,]\\s*更(?:是)?|不只是[^，。！？\\n]{1,24}[，,]\\s*更是|[远遠]不止是?",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "这不仅是一个导出按钮，更是全新入口。",
+          "這不僅是一個導出按鈕，更是全新入口。"
+        ]
+      },
+      {
+        "id": "zh.you_think_actually",
+        "family": "A",
+        "regex": "你以[为為爲][^。！？\\n]{1,30}其[实實]|答案恰恰相反|回[头頭]才[发發][现現]",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "你以为用户在乎功能多少，其实他们只在乎能不能马上用。",
+          "你以為用戶在乎功能多少，其實他們只在乎能不能馬上用。"
+        ]
+      },
+      {
+        "id": "zh.runway_signpost",
+        "family": "A",
+        "regex": "[让讓]我[们們](?:一起)?(?:[来來])?(?:深入)?(?:看看|探[讨討]|了解|聊聊|拆解)|接下[来來](?:[让讓]我[们們]|我[们們][来來]|我[们們][将將])|以下是你需要知道的|[话話]不多[说說]|[废廢][话話]不多[说說]|[干乾幹][货貨][来來]了",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "接下来让我们深入看看缓存的作用。",
+          "接下來讓我們深入看看緩存的作用。"
+        ]
+      },
+      {
+        "id": "zh.blunt_opener",
+        "family": "A",
+        "regex": "[说說]白了|[说說]穿了|先[说說][结結][论論]|[划劃畫]重[点點]",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "说白了，这个项目没有足够的预算。",
+          "說白了，這個項目沒有足夠的預算。"
+        ]
+      },
+      {
+        "id": "zh.strawman_defense",
+        "family": "A",
+        "regex": "不要[误誤][会會]|[别別][误誤][会會]|我[并並併]不是(?:[说說]|在)|[这這][并並併]不是[说說]",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "不要误会，我并不是在制造焦虑。",
+          "不要誤會，我並不是在製造焦慮。"
+        ]
+      },
+      {
+        "id": "zh.reveal_colon",
+        "family": "A",
+        "regex": "(?:一句[话話][总總][结結]|[简簡][单單][说說]|核心(?:是|在[于於])|[关關][键鍵](?:是|在[于於])|本[质質](?:是|上)|答案是|[结結][论論]|原因(?:如下|在[于於]))[:：]",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "一句话总结：先备份再删除。",
+          "一句話總結：先備份再刪除。"
+        ],
+        "note": "Only prompt-word + colon; a colon introducing direct speech or a list item is fine."
+      },
+      {
+        "id": "zh.hedge_stack",
+        "family": "B",
+        "regex": "(?:也[许許]|或[许許]|可能|大概|似乎)[^，。\\n]{0,2}(?:也[许許]|或[许許]|可能|大概|似乎)",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "这项调整也许可能会减少读取时间。",
+          "這項調整也許可能會減少讀取時間。"
+        ],
+        "note": "Collapse to one hedge of the same strength; never remove the last hedge."
+      },
+      {
+        "id": "zh.dash_reveal",
+        "family": "B",
+        "regex": "——[^—\\n]{1,24}——",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "结果终于出现了——答案揭晓了——文件无法导出。",
+          "結果終於出現了——答案揭曉了——文件無法導出。"
+        ],
+        "note": "Dash density is a clue only; dashes in the approved voice stay."
+      },
+      {
+        "id": "zh.dunhao_dense",
+        "family": "B",
+        "regex": "[^，。！？；\\n、]{1,12}(?:、[^，。！？；\\n、]{1,12}){3,}",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "提升效率、降低成本、优化体验、增强协作",
+          "提升效率、降低成本、優化體驗、增強協作"
+        ],
+        "note": "4+ items joined by 、 in one clause. Legal lists, specs and required item lists stay."
+      },
+      {
+        "id": "zh.four_char_parallel",
+        "family": "B",
+        "regex": "[\\u4e00-\\u9fff]{4}、[\\u4e00-\\u9fff]{4}、[\\u4e00-\\u9fff]{4}(?![\\u4e00-\\u9fff])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "该方案稳定可靠、快速响应、易于维护。",
+          "該方案穩定可靠、快速響應、易於維護。"
+        ],
+        "note": "Four-character rhythm is normal Chinese; only empty or synonym-stacked ones need work."
+      },
+      {
+        "id": "zh.coined_compound",
+        "family": "B",
+        "regex": "[“\\\"「][^”\\\"」\\n]{1,10}-[^”\\\"」\\n]{1,10}(?:-[^”\\\"」\\n]{1,10})*(?:一[体體]化|[闭閉][环環]|[体體][系係繫]|[机機][制製制])[”\\\"」]",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "我们采用“文稿-校对-发布一体化”机制。",
+          "我們採用「文稿-校對-發佈一體化」機制。"
+        ]
+      },
+      {
+        "id": "zh.ai_vocab",
+        "family": "C",
+        "regex": "[赋賦]能|至[关關]重要|深入探[讨討]|[无無][缝縫]|抓手|底[层層][逻邏][辑輯]|[颗顆]粒度|全方位|多[维維]度|全[链鏈]路|深度融合|降本增效|提[质質]增效|重塑|[焕煥]新|破圈",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "本文将深入探讨一个至关重要的问题。",
+          "本文將深入探討一個至關重要的問題。"
+        ],
+        "note": "Density clue. Engineering terms (闭环控制) and approved brand terms are not hits."
+      },
+      {
+        "id": "zh.significance",
+        "family": "C",
+        "regex": "[标標][志誌][着著]|具有(?:重要|深[远遠]|[里裡裏]程碑)?意[义義]|[里裡裏]程碑|[开開][启啟]了?[^，。\\n]{0,8}新(?:篇章|[时時]代|[纪紀]元|征程)|[划劃畫][时時]代|[历歷]史性的?(?:一步|突破|[时時]刻)|翻[开開]了?新的?一[页頁]",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "团队开放了文件导出，标志着协作新时代的到来。",
+          "團隊開放了文件導出，標誌著協作新時代的到來。"
+        ]
+      },
+      {
+        "id": "zh.tail_praise",
+        "family": "C",
+        "regex": "[，,](?:充分)?(?:彰[显顯]|[体體][现現]|展[现現]|凸[显顯]|[诠詮][释釋]|印[证證])了?[^。！？\\n]{0,20}(?:追求|[决決]心|[实實]力|[担擔][当當]|精神|[价價]值|魅力|初心|承[诺諾])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "页面提供全文搜索，彰显了团队对创新的不懈追求。",
+          "頁面提供全文搜索，彰顯了團隊對創新的不懈追求。"
+        ]
+      },
+      {
+        "id": "zh.promo",
+        "family": "C",
+        "regex": "堪[称稱]|[梦夢]想(?:天堂|之地)|不容[错錯][过過]|一站式|匠心|[极極]致|[颠顛]覆(?:性|式)?|[惊驚][艳豔艷]|[宝寶]藏|天花板|[绝絕][绝絕]子|yyds|[闭閉]眼入",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "这家咖啡馆堪称咖啡爱好者的梦想天堂。",
+          "這家咖啡館堪稱咖啡愛好者的夢想天堂。"
+        ],
+        "note": "Skip matches inside approved brand terms or campaign names."
+      },
+      {
+        "id": "zh.vague_authority",
+        "family": "C",
+        "regex": "(?:[专專]家|[业業][内內]人士|分析人士|研究人[员員]|[观觀]察人士)(?:普遍)?(?:[认認][为為爲]|指出|表示)|有研究(?:表明|[显顯]示|指出)|研究(?:表明|[显顯]示)|[众眾衆]所[周週周]知|[据據]相[关關](?:人士|[数數][据據])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "一些专家认为，这一设计可能减少误操作。",
+          "一些專家認為，這一設計可能減少誤操作。"
+        ],
+        "note": "Keep the vague attribution and its uncertainty; never replace it with an invented institution."
+      },
+      {
+        "id": "zh.vague_association",
+        "family": "C",
+        "regex": "有[着著]?(?:密切|深厚|[紧緊]密|千[丝絲][万萬][缕縷])的?(?:[联聯][系係繫]|[渊淵]源|[关關][系係繫]|[关關][联聯])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "他与该协会有着密切联系。",
+          "他與該協會有著密切聯繫。"
+        ]
+      },
+      {
+        "id": "zh.copula_avoid",
+        "family": "C",
+        "regex": "作[为為爲][^，。\\n]{1,12}[，,]\\s*(?:[设設]有|[拥擁]有|坐[拥擁]|囊括)",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "这个空间作为展览场地，设有四个独立展区。",
+          "這個空間作為展覽場地，設有四個獨立展區。"
+        ]
+      },
+      {
+        "id": "zh.personified_tool",
+        "family": "C",
+        "regex": "(?:像|如同|相[当當][于於]|好比)(?:一位|一[个個]|一名)?(?:永不疲倦|不知疲倦|智慧|[贴貼]心|全能|忠[实實]|[专專][属屬])的?[\\u4e00-\\u9fff]{0,4}?(?:[导導][师師]|秘[书書]|助手|[顾顧][问問]|管家|[审審]查[员員]|[实實][习習]生|[伙夥伙]伴|[军軍][师師])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "这个工具就像一位永不疲倦的导师。",
+          "這個工具就像一位永不疲倦的導師。"
+        ]
+      },
+      {
+        "id": "zh.emoji_heading",
+        "family": "D",
+        "regex": "(?m)^\\s*(?:#{1,6}\\s*)?[\\U0001F300-\\U0001FAFF\\u2600-\\u27BF\\u2B50]",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "🚀 发布安排：产品计划在第三季度发布。",
+          "🚀 發佈安排：產品計劃在第三季度發佈。"
+        ],
+        "note": "Emoji that belong to the approved voice or platform stay."
+      },
+      {
+        "id": "zh.bold_decor",
+        "family": "D",
+        "regex": "\\*\\*[^*\\n]{1,30}\\*\\*",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "支持 **CSV** 和 **JSON** 导出。",
+          "支援 **CSV** 和 **JSON** 匯出。"
+        ]
+      },
+      {
+        "id": "zh.ordinal_headings",
+        "family": "D",
+        "regex": "(?m)^(?:#{1,6}\\s*|\\*\\*)(?:[一二三四五六七八九十]+、|第[一二三四五六七八九十]+[，,、：:部分]?)",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "## 一、背景",
+          "## 一、背景"
+        ],
+        "note": "Only whole-document numbering of headings (3+); body 首先/其次 and ordered lists are fine."
+      },
+      {
+        "id": "zh.list_intro_colon",
+        "family": "D",
+        "regex": "(?m)^[^\\n]{2,30}[:：][ \\t]*\\n[ \\t]*(?:[-*\\u2022]|\\d+[.、])\\s",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "主要有以下几点：\n- 第一项",
+          "主要有以下幾點：\n- 第一項"
+        ]
+      },
+      {
+        "id": "zh.straight_quotes",
+        "family": "D",
+        "regex": "(?<=[\\u4e00-\\u9fff])\\\"[^\\\"\\n]{1,40}\\\"|\\\"[^\\\"\\n]{1,40}\\\"(?=[\\u4e00-\\u9fff])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "他说\"项目进展顺利\"，但其他人不同意。",
+          "他說\"項目進展順利\"，但其他人不同意。"
+        ],
+        "note": "Normalize to the target locale's quotes (“” for zh-Hans, 「」 usually for zh-Hant) unless VOICE.md says otherwise; JSON/code stay."
+      },
+      {
+        "id": "zh.chatbot_residue",
+        "family": "E",
+        "regex": "好[问問][题題][！!]?|希望(?:以上|[这這]些|[这這])?(?:[内內]容|信息|回答)?(?:[对對]您|[对對]你|能)有(?:所)?[帮幫]助|如果您?[还還]有(?:任何|其他)(?:[问問][题題]|疑[问問])|[随隨][时時](?:告[诉訴]|[联聯][系係繫]|[问問])我|作[为為爲]一[个個]?(?:AI|人工智能|[语語]言模型)|以下是(?:[为為爲]您|一份|[关關][于於]|[润潤]色[后後]|修改[后後]|改[写寫][后後])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "好问题！导出功能支持 CSV。希望这对您有帮助！",
+          "好問題！導出功能支持 CSV。希望這對您有幫助！"
+        ]
+      },
+      {
+        "id": "zh.cutoff_disclaimer",
+        "family": "E",
+        "regex": "截至我的(?:知[识識]|[训訓][练練])|(?:[现現]有|可用|公[开開])的?(?:信息|[资資]料|材料)(?:[确確][实實]|十分|比[较較]|[较較][为為爲]){0,2}有限|由[于於]缺乏(?:公[开開])?(?:信息|[资資]料)",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "关于这一点，可用信息确实比较有限。",
+          "關於這一點，可用信息確實比較有限。"
+        ]
+      },
+      {
+        "id": "zh.restate_heading",
+        "family": "E",
+        "regex": "(?:本[节節]|本章)(?:[将將]|主要)?(?:介[绍紹]|[讨討][论論]|探[讨討])|下面(?:我[们們])?(?:[来來])?(?:介[绍紹]|[说說]明|看看)",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "本节介绍导出限制。下面说明导出限制。",
+          "本節介紹導出限制。下面說明導出限制。"
+        ]
+      },
+      {
+        "id": "zh.draft_talk",
+        "family": "E",
+        "regex": "(?:[刚剛]|[刚剛][刚剛])(?:[补補]充|修改|改[写寫])的|上一(?:版|稿)(?:中|[里裡裏])?|前面改成了",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "这一段是刚补充的说明。",
+          "這一段是剛補充的說明。"
+        ],
+        "note": "Changelogs and release notes legitimately describe changes."
+      },
+      {
+        "id": "zh.de_chain",
+        "family": "F",
+        "regex": "的[^，,。、；\\n的]{1,8}的[^，,。、；\\n的]{1,8}的",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "这是一个十亿参数的开源小模型的微调的完整方案。",
+          "這是一個十億參數的開源小模型的微調的完整方案。"
+        ]
+      },
+      {
+        "id": "zh.light_verb",
+        "family": "F",
+        "regex": "[进進]行了?(?:全面|深入|有效|[进進]一步)?的?(?:分析|[调調]整|[优優]化|[测測][试試]|[讨討][论論]|[评評]估|[检檢]查|[处處]理|研究|[沟溝]通|[审審]核|修改)",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "我们正在对系统进行全面测试。",
+          "我們正在對系統進行全面測試。"
+        ],
+        "note": "Keep 正在/计划/已经/次数/范围 when replacing with a direct verb; 进行 is normal in formal registers."
+      },
+      {
+        "id": "zh.bei_stack",
+        "family": "F",
+        "regex": "被[^，。！？\\n]{1,12}[，,][^。！？\\n]{0,12}被",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "该问题被社区多次报告，被认为可能与内存泄漏有关。",
+          "該問題被社群多次回報，被認為可能與記憶體洩漏有關。"
+        ],
+        "note": "Passive with an unknown agent stays; never invent the agent."
+      },
+      {
+        "id": "zh.suizhe_opener",
+        "family": "F",
+        "regex": "[随隨][着著][^，。\\n]{1,20}的?(?:不[断斷]|日益|快速|[飞飛]速)?(?:[发發]展|[进進]步|普及|深入|到[来來]|[兴興]起)|在[^，。\\n]{0,16}(?:[时時]代|背景|浪潮|大[环環]境)下",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "在技术不断发展的时代背景下，本文讨论文稿校对。",
+          "在技術不斷發展的時代背景下，本文討論文稿校對。"
+        ]
+      },
+      {
+        "id": "zh.cliche_close",
+        "family": "F",
+        "regex": "[总總]而言之|[综綜]上所述|[让讓]我[们們](?:一起)?拭目以待|未[来來]可期|期待更多(?:可能|精彩)|一起[见見][证證]|未[来來]已[来來]|共[创創](?:美好|[辉輝]煌)|[扬揚]帆起航",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "总而言之，让我们拭目以待。",
+          "總而言之，讓我們拭目以待。"
+        ]
+      },
+      {
+        "id": "zh.zero_subject_para",
+        "family": "F",
+        "regex": "(?m)^(?:[听聽]起[来來]|看起[来來]|值得注意的是|更重要的是|[关關][键鍵]在[于於]|[问問][题題]在[于於]|不[难難]看出|意味[着著])",
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "weight": 0.5,
+        "samples": [
+          "值得注意的是，配置数据本来就分层存放。",
+          "值得注意的是，配置數據本來就分層存放。"
+        ],
+        "note": "Only non-first paragraphs without a back-reference (这/那/其/此)."
+      }
+    ],
+    "translationese": [
+      {
+        "id": "zh.tl.passive_abstract",
+        "regex": "被(?:[认認][为為爲]|[视視][为為爲]|[称稱][为為爲]|[设設][计計][为為爲]|[应應]用[于於]|[赋賦]予|看作)",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "被认为可能…"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.receive_attention",
+        "regex": "受到[^，,。]{0,12}的(?:[关關]注|影[响響]|重[视視]|挑[战戰])",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "受到广泛的关注"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.formal_subject",
+        "regex": "值得注意的是|有必要指出的是|可以[说說]的是|需要指出的是",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "需要指出的是，"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.existential",
+        "regex": "存在[着著]|有[着著]",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "存在着差异"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.when_clause",
+        "regex": "[当當][^，,。]{2,20}[时時][，,]",
+        "actionable": true,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "当所有人都能用工具写文章时，内容不再稀缺。"
+        ],
+        "note": "One of the five structures that may justify an edit."
+      },
+      {
+        "id": "zh.tl.when_de_shihou",
+        "regex": "[当當][^，,。]{2,20}的[时時]候[，,]",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "当我们开会的时候，"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.in_process",
+        "regex": "在[^，,。]{2,20}(?:的[过過]程中|的情[况況]下)",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "在迁移的过程中"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.if_dehua",
+        "regex": "如果[^，,。]{2,20}的[话話]",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "如果时间允许的话"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.conj_dense",
+        "regex": "[并並併]且|而且",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "并且"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.light_verb",
+        "regex": "(?:[进進]行|作出|[给給]予|予以)了?[^，,。]{0,6}(?:分析|[调調]整|[优優]化|支持|[评評]估|[检檢]查|[讨討][论論])",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "进行了调整"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.not_merely",
+        "regex": "不[仅僅][仅僅]是|[远遠]不止是|不[过過]是|[无無]非是",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "不仅仅是工具"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.precisely",
+        "regex": "正是|恰恰是",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "正是这个原因"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.plural_calque",
+        "regex": "一[系係繫]列的|各[种種]各[样樣]的|[诸諸]多",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "一系列的问题"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.degree_calque",
+        "regex": "在某[种種]程度上|一定程度上|[从從]某[种種]意[义義]上[说說]|在很大程度上|相[对對]而言",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "在某种程度上"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.sentence_initial_connective",
+        "regex": "(?:^|\\n)\\s*(?:然而|因此|此外|[与與]此同[时時]|[换換]言之|[总總]而言之)[，,、]",
+        "actionable": true,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "此外，成本也是一个需要考虑的因素。"
+        ],
+        "note": "One of the five structures that may justify an edit."
+      },
+      {
+        "id": "zh.tl.this_means",
+        "regex": "[这這]意味[着著]|[这這]表明|[这這][说說]明|[换換]句[话話][说說]",
+        "actionable": true,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "留存率涨到了 72%。这意味着产品找到了方向。"
+        ],
+        "note": "One of the five structures that may justify an edit."
+      },
+      {
+        "id": "zh.tl.topic_shell",
+        "regex": "[对對][于於][^，,。]{2,15}[来來][说說]|[对對][^，,。]{2,15}而言|就[^，,。]{2,15}而言|在[^，,。]{2,12}方面|(?:^|[。！？\\n])\\s*[关關][于於][^，,。]{2,15}[，,]",
+        "actionable": true,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "对于早期团队来说，招人是最难的事。"
+        ],
+        "note": "One of the five structures that may justify an edit."
+      },
+      {
+        "id": "zh.tl.play_role",
+        "regex": "(?:扮演|承[担擔])了?[^，,。]{0,8}角色",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "扮演着重要角色"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.in_a_way",
+        "regex": "以一[种種][^，,。]{2,12}的(?:方式|形式)",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "以一种全新的方式"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.enable",
+        "regex": "使得?[^，,。]{0,12}(?:能[够夠]|可以)",
+        "actionable": false,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "使得团队能够"
+        ],
+        "note": "Measured below the inclusion threshold upstream: informational only, never a rewrite reason on its own."
+      },
+      {
+        "id": "zh.tl.long_premodifier",
+        "regex": "(?:一[个個]|一[种種]|一套|[这這][种種]|[这這][个個])[^，,。、;；:：!！?？\\n]{15,}的[\\u4e00-\\u9fff]{2,5}",
+        "actionable": true,
+        "scripts": [
+          "Hans",
+          "Hant"
+        ],
+        "samples": [
+          "这是一个能够让团队在不增加人力的情况下显著提升审核速度的工具。"
+        ],
+        "note": "One of the five structures that may justify an edit."
+      }
+    ],
+    "script_markers": {
+      "hans_only": "这们说为个时发来会对国过还进现应该实经动产业与开关问题头书长门车东买卖让认识请读写语话边网络视频页热爱气电钱从众优质选择双岁务条华义乐习乡临举价传样当声听讲设计报场员级师线",
+      "hant_only": "這們說為個時發來會對國過還進現應該實經動產業與開關問題頭書長門車東買賣讓認識請讀寫語話邊網絡視頻頁熱愛氣電錢從眾優質選擇雙歲務條華義樂習鄉臨舉價傳樣當聲聽講設計報場員級師線",
+      "note": "Characters used in only one script. Any hans_only char in zh-Hant/zh-Hant-HK/yue-Hant-HK copy (or hant_only in zh-Hans) is a script-mixing lint error, except inside quotations, names, URLs or Japanese text. Never auto-convert: 简->繁 is one-to-many (发->發/髮, 后->後/后, 干->幹/乾/干)."
+    }
+  },
+  "yue": {
+    "colloquial_markers": [
+      "嘅",
+      "咗",
+      "喺",
+      "唔",
+      "係",
+      "啲",
+      "嘢",
+      "佢",
+      "佢哋",
+      "我哋",
+      "你哋",
+      "冇",
+      "咁",
+      "點解",
+      "乜嘢",
+      "咩",
+      "嚟",
+      "嗰",
+      "呢個",
+      "睇",
+      "諗",
+      "攞",
+      "畀",
+      "俾",
+      "啱",
+      "搵",
+      "瞓",
+      "㗎",
+      "喎",
+      "囉",
+      "嘞",
+      "啫",
+      "吖",
+      "咪",
+      "而家",
+      "琴日",
+      "尋日",
+      "聽日",
+      "邊度",
+      "幾多",
+      "唔該",
+      "多謝晒",
+      "好正"
+    ],
+    "exclude_compounds": [
+      "關係",
+      "关系",
+      "係數",
+      "干係",
+      "唔唔",
+      "呢喃"
+    ],
+    "note": "Presence is register evidence (written Cantonese, yue-Hant-HK), not an error. Never 'correct' 口語 into 書面語 or the reverse; flag only when the target register in VOICE.md/the brief differs, or when 書面語 and 口語 are mixed inside one sentence by accident. 係/咁/睇/啦/呢 are weak on their own.",
+    "phrase_patterns": [
+      {
+        "id": "yue.not_only_more",
+        "family": "A",
+        "regex": "唔(?:單止|止|淨係)[^，。！？\\n]{0,20}[，,]?\\s*(?:仲|更)(?:係|加)?",
+        "scripts": [
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "呢個唔單止係一個掣，仲係全新入口。"
+        ],
+        "note": "Cantonese fake contrast; same handling as zh.not_only_more."
+      },
+      {
+        "id": "yue.lets_together",
+        "family": "A",
+        "regex": "(?:等我哋|讓我們|一齊)(?:一齊)?(?:嚟|來)?(?:深入)?(?:睇下|睇睇|探索|了解|拆解)",
+        "scripts": [
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "等我哋一齊深入了解下。"
+        ]
+      },
+      {
+        "id": "yue.hope_helps",
+        "family": "E",
+        "regex": "希望(?:以上|呢啲)?(?:資料|內容)?(?:可以|能夠)?幫到你|有(?:咩|乜嘢|任何)(?:問題|疑問)(?:都)?(?:隨時|歡迎)(?:搵|問|聯絡)(?:我|我哋)|以下係(?:修改|改寫|潤色)咗?嘅版本",
+        "scripts": [
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "希望以上資料幫到你！有咩問題隨時搵我哋。"
+        ]
+      },
+      {
+        "id": "yue.era_opener",
+        "family": "F",
+        "regex": "喺(?:呢個|今時今日)?[^，。\\n]{0,10}(?:嘅)?(?:時代|年代)(?:入面|裡面|裏面)?",
+        "scripts": [
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "喺呢個瞬息萬變嘅時代入面，品牌要講故事。"
+        ]
+      },
+      {
+        "id": "yue.register_mix",
+        "family": "register",
+        "regex": "(?:我們|他們|你們|這個|那個|沒有|是否|怎麼)[^。！？\\n]{0,12}(?:嘅|咗|喺|啲|嘢|冇|嚟)|(?:嘅|咗|喺|啲|嘢|冇|嚟)[^。！？\\n]{0,12}(?:我們|他們|你們|這個|那個|沒有|是否|怎麼)",
+        "scripts": [
+          "Hant"
+        ],
+        "weight": 1.0,
+        "samples": [
+          "我們今日去咗睇展覽。"
+        ],
+        "note": "Accidental 書面語/口語 half-and-half inside one sentence. Clue only: some writers mix on purpose; follow VOICE.md."
+      }
+    ]
+  },
+  "thresholds": {
+    "cluster_min_hits": 3,
+    "cluster_min_distinct_families": 2,
+    "density_per_100_words_warn": 2.0,
+    "dash_density_per_100_words_clue": 1.5,
+    "zh_density_per_1000_chars_warn": 4.0,
+    "zh_dash_density_per_1000_chars_clue": 2.0,
+    "min_words_for_density": 40,
+    "min_cjk_chars_for_density": 80,
+    "note": "Below the minimum length only the cluster rule applies. Weighted hits = sum(weight). Dash density is a clue, never a ban. Thresholds are starting points; record evaluator version with findings."
+  },
+  "meaning_lexicon": {
+    "date_regex": "\\b\\d{4}-\\d{2}-\\d{2}\\b|\\d{4}\\s*年(?:\\s*\\d{1,2}\\s*月(?:\\s*\\d{1,2}\\s*[日号號])?)?|\\d{1,2}\\s*月\\s*\\d{1,2}\\s*[日号號]|(?-i:\\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?\\s+\\d{1,2}(?:,\\s*\\d{4})?\\b)|\\b(?:mon|tues|wednes|thurs|fri|satur|sun)days?\\b|(?:周|週|星期|礼拜|禮拜)[一二三四五六日天]|\\b\\d{1,2}:\\d{2}\\s*(?:am|pm)?|\\bQ[1-4]\\b",
+    "number_regex": "(?<![\\w.])\\d+(?:[.,]\\d+)*%?",
+    "latin_name_regex": "(?-i:\\b[A-Z][a-z][A-Za-z'\\u2019-]*(?:\\s+(?:[A-Z][a-z][A-Za-z'\\u2019-]*|[A-Z]\\b))*)",
+    "name_leading_stopwords": [
+      "The",
+      "A",
+      "An",
+      "This",
+      "That",
+      "These",
+      "Those",
+      "Our",
+      "Your",
+      "Their",
+      "Its",
+      "We",
+      "It",
+      "In",
+      "On",
+      "At",
+      "For",
+      "From",
+      "According",
+      "After",
+      "Before",
+      "When",
+      "If",
+      "Meanwhile",
+      "First",
+      "Only"
+    ],
+    "en": {
+      "negation": [
+        "\\b(?:not|no|never|none|nobody|nothing|neither|nor|cannot|without)\\b",
+        "n't\\b"
+      ],
+      "hedge": [
+        "\\b(?:might|could|possibly|perhaps|probably|likely|unlikely|appears?|seems?|suggests?|reportedly|allegedly|apparently|estimated|tentative(?:ly)?)\\b",
+        "\\bmay\\b(?!\\s+\\d)"
+      ],
+      "certainty": [
+        "\\b(?:definitely|certainly|undoubtedly|clearly|obviously|proven|proves?|proved|guaranteed?|guarantees|always|without (?:a )?doubt|for sure)\\b"
+      ],
+      "attribution": [
+        "\\b(?:according to|said|says|say|claims?|claimed|believes?|believed|argues?|argued|reported|reports|stated|told|noted|wrote|writes)\\b"
+      ],
+      "scope": [
+        "\\b(?:only|some|all|every|most|many|few|at least|at most|up to|over|more than|less than|fewer than|under|about|around|approximately|roughly|nearly|almost|partly|partially|if|unless|except|within|before|after)\\b"
+      ],
+      "planned": [
+        "\\b(?:plans?|planned|planning|will|shall|scheduled|upcoming|pending|draft|in progress|in review|beta|proposed|expected to|(?:is|are|am) \\w+ing)\\b"
+      ],
+      "done": [
+        "(?<!not )(?<!n't )\\b(?:launched|released|completed|finished|shipped|done|approved|confirmed|published|opened|closed|signed|hired|raised|won|sold out|delivered|achieved|reached|is live|went live|now available|(?:has|have|had) (?:been )?\\w+ed)\\b"
+      ],
+      "causal": [
+        "\\b(?:because|caused?|causes|causing|due to|leads? to|led to|results? in|resulted in|drives?|drove|driven by|thanks to|as a result|therefore|so that|which means)\\b"
+      ],
+      "anecdote": [
+        "\\b(?:last (?:week|month|year|time|summer|spring|winter|fall)|yesterday|the other day|i remember|we remember|when i was|i once|we once|one of our (?:customers|clients|users|members)|a (?:customer|client|user) (?:told|said|wrote)|in my experience|i'?ve seen|i have seen|years ago)\\b"
+      ],
+      "feeling": [
+        "\\b(?:thrilled|excited|exciting|delighted|proud|love|loved|happy|glad|can't wait|cannot wait|amazed|grateful|heartbroken|frustrated|nervous|worried|overjoyed|ecstatic|honou?red)\\b"
+      ]
+    },
+    "zh": {
+      "negation": [
+        "不(?![仅僅但过過断斷少久同错錯管论論愧妨只])",
+        "[没沒]",
+        "未(?![来來])",
+        "[无無](?![缝縫论論疑])",
+        "非(?![常凡洲])",
+        "勿",
+        "唔",
+        "冇"
+      ],
+      "hedge": [
+        "可能|或[许許]|也[许許]|大概|似乎|好像|好似|[据據][称稱]|估[计計]|恐怕|未必|不一定|有望|[说說]不定|[话話]唔定|疑似"
+      ],
+      "certainty": [
+        "一定(?!程度)|必然|肯定|[无無]疑|毫[无無]疑[问問]|[证證]明|必定|[绝絕][对對]|保[证證]|[确確]保|百分百|梗[系係繫]|[实實][会會]",
+        "梗係|實會"
+      ],
+      "attribution": [
+        "[认認][为為爲]|表示|指出|[声聲][称稱]|[据據][称稱]|[据據]悉|[报報]道|[报報][导導]|[写寫]道|引述|根[据據]|透露|[据據][讲講]|[听聽][讲講]|[说說讲講][：:]",
+        "報導|報道|寫道|聽講|據講"
+      ],
+      "scope": [
+        "只有|[仅僅]|只|部分|所有|全部|至少|最多|超[过過]|不足|以上|以下|大[约約]|(?<![预預])[约約](?![定束会會])|左右|如果|除非|若|一些|多[数數]|少[数數]|最早|最晚|之[内內]|以[内內]|之前|低[于於]|高[于於]|少[于於]|多[于於]|[净淨][系係繫]|淨係|得(?=\\s*\\d)",
+        "淨係"
+      ],
+      "planned": [
+        "[计計][划劃畫]|[计計][画畫]|打算|[准準][备備]|正在|仍在|[还還]在|即[将將]|[预預][计計]|[将將][于於]|[将將][会會]|[暂暫]定|草稿|待定|[筹籌][备備]中|[测測][试試]中|(?<![要抓收赶趕])[紧緊](?![张張急要])",
+        "計畫"
+      ],
+      "done": [
+        "已[经經]|(?<![未没沒不])已|(?<![未没沒不尚])完成|上[线線]了|[发發][布佈布]了|推出了|搞掂|做完|定咗"
+      ],
+      "causal": [
+        "[导導]致|造成|因[为為爲]|所以|由[于於]|因此|因而|使得|引起|致使|原因是|[带帶][来來]|搞到|令到|害到|[结結]果是"
+      ],
+      "anecdote": [
+        "上次|上[个個]月|上[周週周]|上星期|昨天|前[几幾]天|那天|有一次|有次|[记記]得|琴日|[寻尋]日|嗰次|之前有[个個]|曾[经經]|[亲親]眼|一位客[户戶]|有位客",
+        "尋日"
+      ],
+      "feeling": [
+        "[兴興][奋奮]|激[动動]|[开開]心|感[动動]|[骄驕]傲|自豪|迫不及待|高[兴興]|欣喜|期待|(?<!麻)[烦煩]|[担擔]心|焦[虑慮]|失望|[难難][过過]|[惊驚]喜|好正"
+      ]
+    },
+    "note": "Extract dates first and remove them before numbers; remove approved brand terms before names. Sentence-initial single capitalised words are not names; a sentence-initial stopword is dropped from a multi-word match. Chinese person/place names are not detected: use brand_terms or quoted terms when they must be protected."
+  }
+}

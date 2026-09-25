@@ -11,7 +11,7 @@ it. Separate sourced facts from the creator's observation and from another speak
 opinion. For a neutral summary, retain attribution without adding first-person
 beliefs. Reuse known answers; do not mine unrelated files or memories for stories.
 
-A concrete detail can be a musical phrase, a design decision, a real object or a
+A concrete detail can be a phrase from the work, a design decision, a real object or a
 specific question. It does not need a number or uncomfortable personal disclosure.
 If the only material is a generic topic and a personal story is necessary, ask
 one question about an actual moment. Ask a clarifying follow-up only if useful,
@@ -36,7 +36,7 @@ language. Keep the central claim, evidence, qualifications and attribution stabl
 Change context, pacing, length, examples and media roles as needed. Remove obsolete
 platform references, wrong handles and irrelevant CTAs; retain useful citations,
 disclosures and source credit. Do not copy a master caption and trim it seven ways.
-An English LinkedIn paragraph and a Cantonese-facing Threads observation should
+An English LinkedIn paragraph and a Threads observation in the audience's own language should
 feel native to their audiences without claiming different facts.
 
 Length follows substance and current adapter constraints. A concise reflection
@@ -52,7 +52,7 @@ Read as the creator talking to one thoughtful person. Replace vague praise with 
 existing detail or a more precise statement; do not add facts to make text vivid.
 Remove corporate boilerplate, repeated dramatic fragments, mechanical triads,
 engagement bait and generic inspiration when they distract. Preserve intentional
-punctuation, natural Cantonese, literary rhythm, humour and honest uncertainty.
+punctuation, the creator's natural dialect or code-switching, literary rhythm, humour and honest uncertainty.
 Do not insert typos, hedges, sensory detail, confession or abrupt fragments to
 simulate humanity. If the user requests verbatim copy, retain it and report
 material issues separately. No detector scoring or claims of detector evasion.

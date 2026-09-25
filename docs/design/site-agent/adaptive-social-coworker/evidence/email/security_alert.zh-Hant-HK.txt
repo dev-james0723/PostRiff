@@ -1,0 +1,8 @@
+A new device signed in
+
+如果這是你本人，無需處理。如果不是，請開啟安全設定，登出其他工作階段，並啟用兩步驗證。
+
+檢查安全設定: https://app.rafii.example/app/queue
+
+你收到這封電郵，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications

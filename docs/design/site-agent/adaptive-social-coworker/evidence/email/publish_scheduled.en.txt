@@ -1,0 +1,9 @@
+A post is scheduled
+
+A post for LinkedIn is scheduled. Scheduled is not published yet; Rafii confirms each post after it goes out.
+
+Open Queue: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

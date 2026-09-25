@@ -1,0 +1,8 @@
+你的方案已生效
+
+谢谢。你的 Pro 方案已生效，你可以随时查看发票、更改方案或取消。
+
+管理账单: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications

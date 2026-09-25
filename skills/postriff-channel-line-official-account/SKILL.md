@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-line-official-account
 description: Prepare and validate line-official-account native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.0.0
 ---
 
 # line-official-account adapter

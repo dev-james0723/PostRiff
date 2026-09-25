@@ -107,6 +107,14 @@ def _delete(service, workspace_id, principal):
         cur.execute("UPDATE public.pr_data_requests SET receipt=receipt||%s::jsonb WHERE id=%s", (json.dumps({'knownCostUsdMicro':int(cost), 'ledgerEntries':entries}),receipt_id))
         cur.execute('DELETE FROM public.pr_trials WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_memberships WHERE workspace_id=%s', (workspace_id,))
+        # Person-keyed notification data (migration 024) has no FK to pr_profiles by design; remove it explicitly.
+        cur.execute('DELETE FROM public.pr_push_subscriptions WHERE user_id=%s', (principal,))
+        cur.execute('DELETE FROM public.pr_notification_preferences WHERE user_id=%s', (principal,))
+        cur.execute('DELETE FROM public.pr_notification_deliveries WHERE user_id=%s', (principal,))
+        cur.execute('DELETE FROM public.pr_notification_events WHERE scope_key=%s', (f'user:{principal}',))
+        # Person-keyed growth data (migration 025): events carry a user id without an FK; assignments are keyed by subject.
+        cur.execute('DELETE FROM public.pr_product_events WHERE user_id=%s', (principal,))
+        cur.execute('DELETE FROM public.pr_experiment_assignments WHERE subject_key IN (%s, %s)', (str(principal), str(workspace_id)))
         cur.execute('DELETE FROM public.pr_profiles WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
     # A failed identity call cannot undo deleted data. Keep the pending receipt for operator recovery.

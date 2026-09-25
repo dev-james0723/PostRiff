@@ -1,0 +1,14 @@
+{
+  "execution": "local static HTML in headless browsers; nothing sent",
+  "summary": {
+    "checked": 768,
+    "passed": 768,
+    "failed": 0,
+    "browsers": [
+      "chromium",
+      "webkit"
+    ],
+    "errors": []
+  },
+  "failures": []
+}

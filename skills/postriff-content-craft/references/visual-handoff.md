@@ -15,15 +15,15 @@ For a YouTube title/thumbnail pair, state what each contributes. Pick a single
 focal subject and an emotionally truthful treatment. Consider up to three concepts
 only when the choice matters. Judge at a small phone/feed preview; exact dimensions
 come from the target's current spec. No universal four-word limit, shocked face,
-oversized metric or blanket ban on shared title words. A calm piece of music can
-have a calm image. Use genuine performance frames and real UI when documenting
+oversized metric or blanket ban on shared title words. A calm subject can
+have a calm image. Use genuine frames of the work and real UI when documenting
 the creator's work. A conceptual illustration must be recognisable as conceptual.
 
 For TikTok/Reels/Shorts, write separate fields for speech, editorial on-screen
 headline, accessibility captions and the real/proposed opening visual. Spoken and
 headline text may differ to divide their jobs; verbatim accessibility captions
 remain valid. Name asset gaps and approximate performance timing honestly. Preserve
-musical pauses and coherent thought; no compulsory fast cuts or looping gimmick.
+natural pauses and coherent thought; no compulsory fast cuts or looping gimmick.
 
 Pass the selected target/language, visual thesis, ordered text, media source,
 rights notes, evidence/caveats, alt-text needs and title/cover relationship to

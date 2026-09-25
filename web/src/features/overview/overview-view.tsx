@@ -7,6 +7,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { StateMessage, Surface } from '@/components/rafii';
 import { GettingStarted } from './getting-started';
+import { CoworkerAttention } from '@/features/coworker/attention-panel';
 import { HeatCalendar } from '@/components/charts/heat-calendar';
 import { addDays, GAP, mondayOf, PITCH, startOfDay } from '@/components/charts/heat-calendar/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -282,6 +283,7 @@ export function OverviewView() {
     <PageContainer pageTitle='Overview' infoContent={infoContent} pageHeaderAction={newIdea}>
       <div className='flex flex-1 flex-col gap-4 md:gap-5'>
         <GettingStarted />
+        <CoworkerAttention />
         <StatStrip
           stats={[
             { label: 'Scheduled', loading: snapshot.isPending, ...scheduledStat },

@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-weibo
 description: Prepare and validate weibo native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.0.0
 ---
 
 # weibo adapter
