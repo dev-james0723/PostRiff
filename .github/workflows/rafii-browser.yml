@@ -1,5 +1,5 @@
 name: Rafii browser scenes
-# Real-input Playwright scenes for Home and Automations against the local dev harness (disposable
+# Real-input Playwright scenes for Home, Automations and the site agent panel against the local dev harness (disposable
 # PostgreSQL, synthetic providers, research off). Drafting uses the fixture writer only; nothing is
 # scheduled or published and no external network is reached from the pages under test.
 on:
@@ -77,6 +77,13 @@ jobs:
         run: node web/tests/rafii-workflow.cjs --only=workflow,library,drafts
       - name: Theme bars (header and phone tab bar match light and dark under any stored theme)
         run: node web/tests/rafii-theme-bars.cjs
+      - name: Site agent journey, Chromium (panel on every page, grounded answers, proposals, voice check, compound request, help, tablet, phone, axe)
+        run: node web/tests/site-agent-browser.cjs --browser=chromium --out=docs/design/site-agent/evidence/ci-browser-chromium
+      - name: Install WebKit for Playwright
+        # Linux WebKit: the pinned Playwright's macOS WebKit build needs macOS 15.4 or later.
+        run: npx --prefix web playwright install --with-deps webkit
+      - name: Site agent journey, WebKit (the same checks)
+        run: node web/tests/site-agent-browser.cjs --browser=webkit --out=docs/design/site-agent/evidence/ci-browser-webkit
       - name: Keep the evidence for this commit
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -86,6 +93,8 @@ jobs:
             docs/design/rafii-v9/evidence/automations/
             docs/design/rafii-v9/evidence/workflow/
             docs/design/rafii-v9/evidence/theme-bars/
+            docs/design/site-agent/evidence/ci-browser-chromium/
+            docs/design/site-agent/evidence/ci-browser-webkit/
             harness.log
             web.log
           retention-days: 14

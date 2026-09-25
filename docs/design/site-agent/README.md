@@ -119,23 +119,28 @@ deterministic and testable. Revisit this when the corpus grows past a few hundre
 - **Model routing:** routing follows the chosen writer. There is no silent provider switch and no invisible paid
   fallback; out of budget means no call and a grounded answer that says so.
 
-## Verification (2026-09-24, local)
+## Verification (release branch `raffi/site-agent-release`, 2026-09-24)
+
+This branch is the site agent alone: 064982b and bc44eee unchanged, then 32ffaaa cherry-picked, then PR #2
+(`raffi/launch-final`) merged in by `ideas-merge-plan.md`. The results below were measured on that integration commit.
 
 | Suite | Command | Result |
 |---|---|---|
-| Python unit (whole repo) | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` | 841 OK, 8 skipped (56 site agent) |
-| PostgreSQL (whole repo) | `PYTHONPATH=src:tests python scripts/postriff_pg_suite.py` | 40/40 scripts. Run with an interpreter that has `openai-agents`, so `postgres_agent_runtime` ran all 43 of its scenarios; the shared `.venv` skips that script |
-| Site-agent scenarios | `… postriff_pg_suite.py postgres_site_agent_scenarios` | 98 scenarios: 98 PASS, 0 PARTIAL, 0 FAIL (I01: 213 answer links checked against stored ids) |
-| Web contracts | CI set `node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs`; all web node tests | 48/48; 112/112 |
+| Python unit (whole repo) | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` | 865 OK |
+| PostgreSQL (whole repo) | `PYTHONPATH=src:tests python scripts/postriff_pg_suite.py` | 53/53 scripts |
+| Site-agent scenarios | `… postriff_pg_suite.py postgres_site_agent_scenarios` | 98 scenarios: 98 PASS, 0 PARTIAL, 0 FAIL (I01: every answer link checked against stored ids) |
+| Web contracts | CI set `node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs`; all web node tests | 86/86; 150/150 |
 | Types, lint, build | `npm --prefix web run typecheck`, `run lint`, `npx next build` | pass, 0 lint findings, build pass |
-| Browser | `node web/tests/site-agent-browser.cjs [--browser=webkit --shots=off] [--sections=…]` on the dev harness started with `POSTRIFF_RESEARCH=0` | Chromium 39/39. WebKit 39/39 over two section runs; see the note below |
-| Secret scan | `scripts/consumer_ready_secrets.py` (detect-secrets with the reviewed allowlist) | PASS: 1,314 files, 287 reviewed findings, 0 unexpected |
-| Live writer | `scripts/site_agent_live_writer.py --model claude-code:haiku` | see [Live writer](#live-writer) |
+| Browser, Chromium | `node web/tests/site-agent-browser.cjs` on the dev harness started with `POSTRIFF_RESEARCH=0` | 39/39 |
+| Browser, WebKit | the same journey in CI (`.github/workflows/rafii-browser.yml`, Ubuntu 24.04, Playwright's Linux WebKit) | recorded on the pull request |
+| Secret scan | `scripts/consumer_ready_secrets.py` (detect-secrets with the reviewed allowlist) | PASS: 1,332 files, 293 reviewed findings, 0 unexpected |
+| Live writer | `scripts/site_agent_live_writer.py --model claude-code:haiku` | see [Live writer](#live-writer) (run on the site-agent code before the PR #2 merge) |
 
-WebKit note: the local Playwright WebKit build aborts at random points while text is entered (`-[NSTextInputContext
-textInputClientDidUpdateSelection]: unrecognized selector`). The journey runs in sections, and a crashed section is
-run again. Six attempts crashed; none had a failed check. `evidence/browser-webkit/site-agent-browser.json` lists
-the runs.
+WebKit note: the pinned Playwright's macOS WebKit build (`webkit-2359`, Playwright 1.62.1) declares macOS 15.4 as
+its minimum. On an older macOS it calls an AppKit method that isn't there (`-[NSTextInputContext
+textInputClientDidUpdateSelection]`) and aborts whenever a focused text field's selection changes, so local runs
+stop at random points. Twelve such local attempts stopped with 0 failed checks. The journey therefore runs on Linux
+WebKit in CI, where that build is supported. `--sections` still lets a local run resume after a crash.
 
 ### Defects the first verification found, all fixed
 
