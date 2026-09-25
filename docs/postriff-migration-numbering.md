@@ -8,17 +8,19 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 |---|---|---|---|
 | 001–019 | existing chain (003 is local-only) | — | See "Production shape" below: not every one of them is applied in production. |
 | 020–022 | `020_credit_quotes`, `021_credit_purchases`, `022_credit_payment_lifecycle` | credits (PR #2) | **Applied in production** (according to the release session and its local runner logs). Permanently occupied. |
-| 023 | none | — | Retired; never reuse it. The runner accepts gaps. |
+| 023 | none | — | Retired; never reuse it. The runner accepts gaps. **Conflict found 2026-09-25:** uncommitted Time Back work (`feat/time-back-mvp`, worktree `James-Au-Studio-time-back`) adds `023_time_savings.sql` and loads it in `rls.sql`. It must take a free number instead: 030, if still free when it lands. |
 | 024–025 | `024_notification_core`, `025_coworker_evidence_growth` | Rafii Adaptive Social Coworker (`ecb3ff3`) | Local only. Do not renumber them unless a real dependency requires it. |
 | 026–029 | ai-routing's four migrations, renumbered from 020–023 | ai-routing | Reserved. The files still carry 020–023 on `ai-routing` and must be renamed before that branch lands (checklist below). |
 | 030 and up | — | next new migration | Free. |
 
-## Inventory (scan of 2026-09-25, after `git fetch origin`)
+## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
-- 020–022 (credits): `origin/consumer-saas`, `origin/raffi/agent-runtime-merge`, `origin/raffi/launch-final`, `origin/raffi/site-agent-release`, `origin/fix/channel-lifecycle` and their local branches, plus `feat/time-back-mvp`, `release/pr2-reconcile`, `release/pr2-update` and `rafii/integration-runtime-coworker`.
+- 020–022 (credits): `origin/consumer-saas`, `origin/raffi/agent-runtime-merge`, `origin/raffi/launch-final`, `origin/raffi/site-agent-release`, `origin/fix/channel-lifecycle` and their local branches, plus `feat/time-back-mvp`, `release/pr2-reconcile`, `release/pr2-update`, `rafii/coworker-integration` and `rafii/integration-runtime-coworker`.
 - 020–023 (ai-routing's own files, same numbers): only the local `ai-routing` branch and its worktree. There is no remote branch.
-- 024–025: only `rafii/coworker-wp0-wp11` and `rafii/integration-runtime-coworker`.
-- 026–035: unused on every local and remote ref, in every worktree's `migrations/postriff/` (tracked or not) and in the stash.
+- 023 (Time Back, untracked): `James-Au-Studio-time-back/migrations/postriff/023_time_savings.sql`. See the 023 row above.
+- 024–025: only `rafii/coworker-wp0-wp11`, `rafii/coworker-integration` and `rafii/integration-runtime-coworker`.
+- 026–029: only `rafii/ai-routing-renumber-026-029` and its worktree.
+- 030–035: unused on every local and remote ref and in every worktree's `migrations/postriff/`, tracked or not.
 
 Re-run this before choosing or applying any number:
 
