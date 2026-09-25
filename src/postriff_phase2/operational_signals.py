@@ -13,7 +13,10 @@ def snapshot(connection_factory, now=None):
           count(*) FILTER (WHERE job->>'state'='held')
           FROM public.pr_workspaces w CROSS JOIN LATERAL jsonb_array_elements(coalesce(w.state->'phase2'->'jobs','[]'::jsonb)) job""", (now, now-120))
         stuck, delayed, failed, held = cur.fetchone()
-        cur.execute("SELECT count(*) FROM public.pr_agent_runs WHERE status='running' AND updated_at<to_timestamp(%s)", (now-600,))
+        # Writing runs only. The Rafii Agent Runtime's rows (agent:/task:/voice:) are not stalled models: a task plan stays
+        # 'running' until the person finishes its steps, and the runtime closes its own dead turns and live sessions.
+        cur.execute("SELECT count(*) FROM public.pr_agent_runs WHERE status='running' AND updated_at<to_timestamp(%s) "
+                    "AND idempotency_key NOT LIKE 'agent:%%' AND idempotency_key NOT LIKE 'task:%%' AND idempotency_key NOT LIKE 'voice:%%'", (now-600,))
         model_stuck = cur.fetchone()[0]
         cur.execute("SELECT count(*) FROM public.pr_research_requests WHERE status='pending' AND created_at<to_timestamp(%s)", (now-600,))
         research_stuck = cur.fetchone()[0]
