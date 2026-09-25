@@ -396,6 +396,18 @@ async function axe(page) {
     await tp.waitForFunction(() => document.querySelector('[data-rafii-voice]')?.getAttribute('data-rafii-voice') === 'live', null, { timeout: 60000 });
     check('tablet: Voice Mode runs in the sheet; nothing scrolls sideways', await tp.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1));
     await shot(tp, 'voice-tablet.png');
+    // "New conversation" during a call: the next spoken request starts it, and the panel stays there.
+    await say(tp, 'What is on the calendar this week?');
+    const conversationLink = () => panel(tp).locator('a[href^="/app/agent/"]').first().getAttribute('href').catch(() => null);
+    const firstConversation = await conversationLink();
+    await panel(tp).getByRole('button', { name: 'Start a new conversation' }).click();
+    await tp.waitForFunction(() => document.querySelectorAll('#rafii-panel article[aria-label^="Rafii"]').length === 0, null, { timeout: 10000 }).catch(() => null);
+    await say(tp, 'Anything to watch today?');
+    await tp.waitForTimeout(1500);
+    const afterNew = await answers(tp).count();
+    const secondConversation = await conversationLink();
+    check('“New conversation” during a call: the next spoken request lands there and the panel stays on it',
+      afterNew === 1 && Boolean(firstConversation) && Boolean(secondConversation) && firstConversation !== secondConversation, { afterNew, firstConversation, secondConversation });
     // Leaving the signed-in app with the call on (as signing out does, a client-side navigation): the call ends with it.
     await tp.evaluate(() => window.next.router.push('/auth/sign-in'));
     await tp.waitForFunction(() => (window.rafiiLiveHarness?.sent ?? []).some((e) => e.type === 'session.close'), null, { timeout: 30000 }).catch(() => null);

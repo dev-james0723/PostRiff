@@ -1119,8 +1119,8 @@ def _():
     return {"actual": {"status": code, "turn": body["runId"], "voice": started["voiceSessionId"]}}
 
 
-@scenario("R13", "A voice session the tab never ended is reaped: closed and billed at the session cap (never free, never held forever)", "(tab closed mid-call)",
-          "on the next start in the workspace, a session past the cap is ended with reason not_ended_by_client and settled at the cap")
+@scenario("R13", "A voice session the tab never ended is reaped: closed and billed to its last activity (never free, never held forever)", "(tab closed mid-call)",
+          "on the next start in the workspace, a session past the cap is ended with reason not_ended_by_client and settled from start to last activity plus a minute")
 def _():
     stale = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
     with connection() as db:
@@ -1129,8 +1129,9 @@ def _():
     status, artifact = one("SELECT status,artifact FROM public.pr_agent_runs WHERE id::text=%s", stale["voiceSessionId"])
     settled = one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='settle' AND run_id::text=%s", wid, stale["voiceSessionId"])
     voice.end(wid, OWNER, fresh["voiceSessionId"], {"usageSeconds": 2, "reason": "user_ended"})
-    cap = -(-(30 * 60 + 15) * CFG.live_usd_micro_per_minute // 60)
-    assert status == "completed" and artifact["voice"]["reason"] == "not_ended_by_client" and settled and settled[0] == "actual" and settled[1] == cap, (status, artifact["voice"], settled)
+    # No activity after connecting: a minute plus the 15 s creation charge (an estimate, at most the cap).
+    expected = -(-75 * CFG.live_usd_micro_per_minute // 60)
+    assert status == "completed" and artifact["voice"]["reason"] == "not_ended_by_client" and settled and settled[0] == "actual" and settled[1] == expected, (status, artifact["voice"], settled)
     return {"actual": {"status": status, "reason": artifact["voice"]["reason"], "cost": settled[0], "usdMicro": settled[1]}}
 
 

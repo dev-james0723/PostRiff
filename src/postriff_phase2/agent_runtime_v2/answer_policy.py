@@ -64,6 +64,10 @@ _DID = re.compile(
     rf"|{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})", re.I)
 
 
+# The tools that prepare or apply proposals (automation changes are MUTATE_REVERSIBLE proposals, not PREPARE_EXTERNAL).
+_PROPOSAL_TOOLS = {"schedule_propose", "automation_change_propose", "proposal_apply"}
+
+
 def _claims_forbidden(text: str) -> bool:
     if _NEVER.search(text):
         return True
@@ -93,7 +97,7 @@ def check(answer: str, ledger: EffectLedger) -> str | None:
         return "claims_forbidden_effect"
     # Scheduling and automation changes are only ever proposals: in a turn that prepared (or tried to prepare) one, saying it
     # already happened is false — including when preparing it failed and nothing is waiting.
-    tried = ledger.proposals or any(a.get("effect") == "PREPARE_EXTERNAL" for a in ledger.tool_activity)
+    tried = ledger.proposals or any(a.get("effect") == "PREPARE_EXTERNAL" or a.get("tool") in _PROPOSAL_TOOLS for a in ledger.tool_activity)
     if tried and _PASSIVE_EFFECT.search(answer):
         return "claims_pending_proposal_applied"
     verified = [c for c in ledger.changed if c.get("verified")] + [a for a in ledger.assets if a.get("verified")]

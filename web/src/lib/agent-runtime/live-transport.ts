@@ -148,7 +148,8 @@ export class WebRtcLiveTransport implements LiveTransport {
   }
 
   connected() {
-    return !this.closed && this.channel?.readyState === 'open';
+    // The data channel can stay "open" while the connection underneath is down; both must be up.
+    return !this.closed && this.channel?.readyState === 'open' && this.pc?.connectionState === 'connected';
   }
 
   send(event: Record<string, unknown>) {

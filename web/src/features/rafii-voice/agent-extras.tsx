@@ -61,7 +61,7 @@ export function AgentExtras({ result, conversationId }: { result: AgentResult; c
     // Polls only while this answer's task is still the conversation's running task; stops when it finishes or moves on.
     refetchInterval: (query) => {
       const current = query.state.data?.task;
-      if (!query.state.data) return 2500;
+      if (!query.state.data) return query.state.status === 'error' ? false : 2500;
       return current && current.taskId === result.task?.taskId && current.status === 'running' ? 2500 : false;
     }
   });

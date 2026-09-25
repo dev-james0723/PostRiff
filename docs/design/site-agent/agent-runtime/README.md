@@ -71,8 +71,10 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
   relation; audited; reversible). **What is only ever a proposal**: scheduling or moving a post (which then still needs
   its own approval to publish) and automation changes.
 - **HITL:** `proposal_apply` always pauses the run (SDK `needs_approval`); the paused run is stored server-side with
-  identifiers only (never the session token). When the person approves, the site agent's path applies it and the
-  resumed call only re-reads and verifies.
+  identifiers only (never the session token), and its answer names the proposal so the next "yes" binds to it. When the
+  person approves, the site agent's path applies it, the paused run is taken off its task, and the resumed call (a
+  reserved model run) only re-reads and verifies; if it can't resume, the deterministic "Done and checked" answer
+  stands. A finished task keeps no paused model state.
 
 ## Tasks, memory, relationships
 
@@ -102,7 +104,8 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
   stored as text on the voice session row as the call goes (batches of 50; no audio), a request takes exactly the words
   said since the previous one, and a brief connection drop that recovers returns to live by itself.
 - Billing: a call is billed on the server's clock (+15 s at creation); what the client reports can't lower it. A session
-  a tab never ended is closed on the next start in the workspace and billed at the 30-minute cap (an upper bound).
+  a tab never ended (or a sign-out, which can't end it without a session) is closed on the next start in the workspace
+  and billed from its start to its last recorded activity plus a minute, at most the 30-minute cap.
 
 ## Images
 

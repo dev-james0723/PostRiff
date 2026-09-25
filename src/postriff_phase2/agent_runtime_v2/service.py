@@ -281,6 +281,9 @@ class AgentRuntimeService:
         else:
             answer = f"Left it: {summary}. Nothing was changed." if wants == "dismiss" else f"It wasn't applied (it is {decided['outcome']}). Nothing was changed."
             spoken = answer
+        # A Manager run paused on this proposal is taken off its task first: resolving the step may finish the task, and a
+        # finished task keeps no paused model state.
+        claimed = self._claim_pending_run(workspace_id, token, conversation_id, item["proposalId"]) if decided["outcome"] == "applied" else None
         self._resolve_task_steps(workspace_id, token, conversation_id, item["proposalId"], decided["outcome"] if wants == "apply" else "dismissed",
                                  verified=decided["verified"], outputs=[{"type": "review", "id": (decided.get("result") or {}).get("reviewId")}] if (decided.get("result") or {}).get("reviewId") else [])
         result.update({"answerText": answer, "speakableSummary": contracts.speakable(spoken)})
@@ -291,8 +294,9 @@ class AgentRuntimeService:
         waited = round(self.clock() - float(proposal.get("createdAt") or self.clock()), 1)
         approval_trace = {"approval": {"proposalId": item["proposalId"], "decision": wants, "outcome": decided["outcome"], "verified": decided["verified"],
                                        "waitSeconds": waited, "via": modality, "checks": [c["what"] for c in decided["checks"] if not c["verified"]]}}
-        if decided["outcome"] == "applied":
-            resumed = self._resume_pending_run(workspace_id, token, conversation_id, item["proposalId"], run_id=run_id, trace_id=trace_id, modality=modality, zone=zone)
+        if claimed is not None:
+            resumed = self._resume_pending_run(workspace_id, token, conversation_id, item["proposalId"], claimed, run_id=run_id, trace_id=trace_id, modality=modality,
+                                               zone=zone, approved=result["changedEntities"])
             if resumed is not None:
                 return resumed
         return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, blocks, trace_extra=approval_trace)
@@ -321,12 +325,15 @@ class AgentRuntimeService:
                 if steps:
                     task_state.save(cur, self.service.ideas, workspace_id, plan)
             bound = approvals.bind(cur, workspace_id, conversation_id, self.clock())
-        dismissed = None
+        dismissed, not_dismissed = None, None
         if "bind" in bound:
             item = bound["bind"]
-            decided = approvals.decide(self.service, workspace_id, token, conversation_id=conversation_id, message_id=item["messageId"], proposal_id=item["proposalId"],
-                                       digest=item["proposal"].get("digest"), decision="dismiss")
-            dismissed = decided["outcome"]
+            try:
+                decided = approvals.decide(self.service, workspace_id, token, conversation_id=conversation_id, message_id=item["messageId"], proposal_id=item["proposalId"],
+                                           digest=item["proposal"].get("digest"), decision="dismiss")
+                dismissed = decided["outcome"]
+            except AlphaError as error:
+                not_dismissed = str(error)
         # Confirm by re-reading before saying it (live-delegation guidance: "confirm it succeeded before telling the user").
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             still = [r for r in cancelled_runs if self._run_status(cur, workspace_id, r) == "running"]
@@ -337,6 +344,8 @@ class AgentRuntimeService:
             parts.append(f"Cancelled {len(steps)} open step(s): " + "; ".join(s.label for s in steps)[:200] + ".")
         if dismissed:
             parts.append("Left the proposal unapplied.")
+        if not_dismissed:
+            parts.append(f"The waiting proposal is still open ({not_dismissed[:160]}); nothing was applied.")
         if not parts:
             parts.append("There was nothing running to cancel.")
         parts.append("Anything already finished stays as it is; nothing more was changed.")
@@ -563,8 +572,17 @@ class AgentRuntimeService:
         """Insert the run and the person's message; reserve the Manager's estimated cost (a refusal is a truthful budget stop)."""
         repo, ideas = self.service.repository, self.service.ideas
         reservation = None
-        with repo.transaction(token, workspace_id) as (cur, _row, principal):
+        if reserve_for and self.model_factory is None:
+            # Specialists run on the fast model and images are read by the vision model: an unpriced route would leave the
+            # turn's spend unknown, so the turn doesn't start (the budget fallback answers instead).
+            for load in ("fast_language", "vision"):
+                route = self.cfg.route(load, reason="price check")
+                if route.available and self.cfg.estimate_usd_micro(route.model or "", 1, 1) is None:
+                    raise AlphaError(f"Configure a verified price for {route.model} before using the agent runtime.", 503, code="price_unknown")
+        with repo.transaction(token, workspace_id) as (cur, _row, _principal):
+            # Its own transaction: closing dead turns must not depend on this turn's reservation being accepted.
             self._reap_stale_turns(cur, workspace_id)
+        with repo.transaction(token, workspace_id) as (cur, _row, principal):
             context = {"trace": trace_id, "modality": modality, "attachments": [a["assetId"] for a in attachments]}
             cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) "
                         "VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text",
@@ -765,6 +783,13 @@ class AgentRuntimeService:
         """A turn whose function was killed never finalised. The writing-recovery cron leaves the runtime's rows alone, so the
         runtime closes its own dead turns here: each is failed, the person sees why, and its reservations are booked at the
         reserved amount (the calls it made are unknown; never free, and never held forever)."""
+        # A turn cancelled after its function died never settled either: its open reservations are booked the same way.
+        cur.execute("SELECT r.id::text,r.estimated_usd_micro FROM public.pr_usage_ledger r JOIN public.pr_agent_runs a ON a.id=r.run_id "
+                    "WHERE r.workspace_id=%s AND a.idempotency_key LIKE 'agent:%%' AND a.status='cancelled' AND a.updated_at<now()-make_interval(secs=>%s) AND r.kind='reserve' "
+                    "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=r.workspace_id AND t.reservation_id=r.id AND t.kind IN ('settle','release')) LIMIT 20",
+                    (workspace_id, STALE_TURN_SECONDS))
+        for reservation_id, estimate in cur.fetchall():
+            self.service.ledger.settle(cur, workspace_id, reservation_id, "completed", int(estimate or 0))
         cur.execute("SELECT id::text,conversation_id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'agent:%%' AND status='running' "
                     "AND updated_at<now()-make_interval(secs=>%s) ORDER BY created_at LIMIT 10 FOR UPDATE SKIP LOCKED", (workspace_id, STALE_TURN_SECONDS))
         for run_id, conversation_id in cur.fetchall():
@@ -798,49 +823,54 @@ class AgentRuntimeService:
         artifact["pendingRun"] = {"state": state_json, "proposalIds": proposal_ids, "storedAt": self.clock()}
         cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
 
-    def _resume_pending_run(self, workspace_id, token, conversation_id, proposal_id, *, run_id, trace_id, modality, zone):
-        """The person approved a proposal a paused Manager run was waiting on (its proposal_apply call). The application has
-        already applied and verified it; resume that run from its stored state with the call approved — the tool then only
-        re-reads and verifies — and let the Manager finish the answer. Other paused calls are rejected, never applied."""
-        from agents import RunConfig, Runner
-        from agents.run_state import RunState
-
-        from . import manager as manager_mod
-
-        workload = "standard_reasoning"
-        reservation = None
-        with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
-            member = self.service.ideas._member(row)
-            # The task that paused on this proposal, whatever its status now (approving the last step may have finished it).
+    def _claim_pending_run(self, workspace_id, token, conversation_id, proposal_id):
+        """Take the Manager run paused on this proposal off its task: (task id, paused state), or None."""
+        with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
                         "AND artifact->'pendingRun'->'proposalIds' ? %s ORDER BY created_at DESC LIMIT 1 FOR UPDATE", (workspace_id, conversation_id, proposal_id))
             found = cur.fetchone()
             if not found:
                 return None
             task_id, artifact = found[0], found[1] or {}
-            pending = artifact.get("pendingRun") or {}
-            if not pending.get("state"):
+            pending = artifact.pop("pendingRun", None) or {}
+            cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
+        return (task_id, pending) if pending.get("state") else None
+
+    def _resume_pending_run(self, workspace_id, token, conversation_id, proposal_id, claimed, *, run_id, trace_id, modality, zone, approved=()):
+        """The person approved a proposal a paused Manager run was waiting on (its proposal_apply call). The application has
+        already applied and verified it; resume that run from its stored state with the call approved — the tool then only
+        re-reads and verifies — and let the Manager finish the answer. Other paused calls are rejected, never applied.
+        None when it can't resume (no price, no budget, or a failure): the deterministic "Done and checked" answer stands."""
+        from agents import RunConfig, Runner
+        from agents.run_state import RunState
+
+        from . import manager as manager_mod
+
+        task_id, pending = claimed
+        workload = "standard_reasoning"
+        reservation = None
+        if self.model_factory is None:
+            # The resumed Manager is a paid model run like any other: reserved first, or not run (the approval stands).
+            route = self.cfg.route(workload, reason="resume after approval")
+            estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
+            if estimate is None:
                 return None
-            if self.model_factory is None:
-                # The resumed Manager is a paid model run like any other: reserved first, or not run (the approval stands).
-                route = self.cfg.route(workload, reason="resume after approval")
-                estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
-                if estimate is None:
-                    return None
-                try:
+            try:
+                with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
                     reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent-resume:{run_id}", charge_batch=False,
                                                               provider=route.provider or "", model=route.model or "", run_id=run_id,
                                                               meta={"via": "rafii_agent_resume", "traceId": trace_id})
-                except AlphaError:
-                    return None
-            artifact.pop("pendingRun", None)
-            cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
+            except AlphaError:
+                return None
+        with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
+            member = self.service.ideas._member(row)
             plan = task_state.load(cur, workspace_id, task_id)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, zone=zone, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
                               vision=self.vision, request_text="(approved)")
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
+        ctx.ledger.changed.extend(dict(change) for change in approved)  # the approval the application applied and verified
         try:
             manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
             collector = manager_mod.collector(self.cfg)
@@ -869,8 +899,16 @@ class AgentRuntimeService:
             return self._finalize(ctx, run_id, reservation, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
                                   workload=workload, why="resume after approval", spans=collector.take(trace_id), elapsed_ms=round((time.monotonic() - started) * 1000),
                                   superseded=[])
-        except Exception as error:  # noqa: BLE001 — the resumed run ends settled and closed whatever failed
-            return self._abort_run(workspace_id, token, conversation_id, run_id, reservation, trace_id, modality, error, ctx)
+        except Exception as error:  # noqa: BLE001 — the approval stands: settle what the resume spent, answer deterministically
+            log.error(json.dumps({"event": "agent_resume.failed", "errorClass": type(error).__name__, "traceId": trace_id}))
+            if reservation is not None:
+                with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+                    spent = self._spend(ctx.ledger, None)
+                    if not ctx.ledger.spans:
+                        self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
+                    else:
+                        self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+            return None
 
 
 # --- endpoints beyond the turn ----------------------------------------------------------------------------------------------

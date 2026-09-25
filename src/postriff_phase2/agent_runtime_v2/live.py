@@ -184,20 +184,27 @@ class VoiceSessions:
                 "model": route.model, "locale": locale, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
 
     def _reap(self, cur, workspace_id, principal):
-        """A tab closed mid-call never ends its session. Any member's session past the cap has ended at Live (sessions
-        expire at the cap), so it is closed and billed at the cap — an upper bound, never free and never held forever."""
+        """A tab closed mid-call (or a sign-out, which can't end it without a session) never ends its session. Any member's
+        session past the cap has ended at Live (sessions expire at the cap; a dropped connection ends sooner), so it is
+        closed and billed from its start to its last recorded activity plus a minute, at most the cap — never free, and
+        never held forever."""
         _ = principal
         cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
                     "AND created_at<=now()-make_interval(mins=>%s) FOR UPDATE SKIP LOCKED", (workspace_id, self._cap_minutes() + 5))
         for run_id, artifact in cur.fetchall():
             artifact = artifact or {}
             voice = artifact.setdefault("voice", {})
-            seconds = self._cap_minutes() * 60 + 15
+            connected = voice.get("connectedAt")
+            said = [t.get("at") for t in voice.get("transcript") or [] if isinstance(t, dict) and isinstance(t.get("at"), (int, float))]
+            if isinstance(connected, (int, float)):
+                seconds = min(max(0.0, max(said + [connected]) - connected) + 60, self._cap_minutes() * 60) + 15
+            else:
+                seconds = 75  # never confirmed live: at most the creation charge and a minute
             cost = int(math.ceil(seconds * self.cfg.live_usd_micro_per_minute / 60))
             if voice.get("reservationId"):
                 self.service.ledger.settle(cur, workspace_id, voice["reservationId"], "completed", cost)
             voice.update({"state": "ended", "reason": "not_ended_by_client", "endedAt": self._now(), "usageSeconds": seconds, "costUsdMicro": cost,
-                          "billingBasis": "the session cap (upper bound): the client never ended it"})
+                          "billingBasis": "estimated: start to last activity plus a minute, at most the cap (the client never ended it)"})
             self._save(cur, workspace_id, run_id, artifact, status="completed")
             self.service.ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed", usage={"provenance": "voice", "seconds": seconds}))
 

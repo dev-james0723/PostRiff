@@ -29,6 +29,9 @@ from .tool_adapter import register
 
 MAX_RESPONSE_BYTES = 24 * 1024 * 1024
 TIMEOUT_SECONDS = 150
+# A provider call started with less of the turn left than this would time out and leave its spend unknown: not started.
+MIN_IMAGE_SECONDS = 90
+MIN_VISION_SECONDS = 45
 ALLOWED_ENDPOINTS = (
     "https://api.openai.com/v1/responses", "https://api.openai.com/v1/images/generations", "https://api.openai.com/v1/images/edits",
     "https://ai-gateway.vercel.sh/v1/images/generations", "https://ai-gateway.vercel.sh/v1/images/edits", "https://ai-gateway.vercel.sh/v1/chat/completions",
@@ -297,6 +300,9 @@ def image_analyze(ctx: RafiiRunContext, args: dict) -> dict:
         if args.get("compareWithBrand") and memory_layers.cloud_allowed(state):
             brand = memory_layers.read(state, layers=["brand"])["layers"]["brand"]
             rules = "\n".join((brand.get("files") or {}).values()) or None
+    left = ctx.remaining()
+    if left is not None and left < MIN_VISION_SECONDS:
+        raise AlphaError("There isn't enough time left in this turn to look at the image; ask again and I'll start with it.", 409, code="turn_time")
     raw, mime = _bytes(ctx, asset)
     analyzer = ctx.vision or VisionAnalyzer(ctx.config)
     result = analyzer.analyze(raw, mime, question=args["question"], brand_rules=rules, width=asset.get("width"), height=asset.get("height"),
@@ -326,6 +332,9 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
     route = studio.route(quality, reason=operation)
     if not route.available:
         raise CreativeError(route.blocker or "No image route is configured.", 503, code="route_unavailable")
+    left = ctx.remaining()
+    if left is not None and left < MIN_IMAGE_SECONDS:
+        raise AlphaError("There isn't enough time left in this turn to make an image; ask again and I'll start with it.", 409, code="turn_time")
     key = "agent-image:" + hashlib.sha256(f"{ctx.trace_id}|{operation}|{prompt}|{args.get('assetId')}|{args.get('index')}|{quality}".encode()).hexdigest()[:40]
     parent = None
     sources = []

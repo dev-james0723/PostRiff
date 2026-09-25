@@ -164,7 +164,7 @@ export function VoiceMode({
         </div>
       )}
       {state === 'live' && snapshot.error && (
-        <p className='text-muted-foreground text-xs' data-rafii-voice-error>
+        <p className='text-muted-foreground text-xs' role='status' data-rafii-voice-error>
           The voice service reported a problem: {snapshot.error.message}
         </p>
       )}

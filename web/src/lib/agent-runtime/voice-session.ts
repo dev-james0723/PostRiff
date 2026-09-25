@@ -99,6 +99,7 @@ let nextSeq = 0;
 let lastDelegatedSeq = 0;
 let unsent: TranscriptLine[] = [];
 let flushing: Promise<void> | null = null;
+let lastFlushFailure = 0;
 let closedEarly = false;
 
 function set(patch: Partial<VoiceSnapshot>) {
@@ -136,8 +137,9 @@ function appendTranscript(role: 'user' | 'assistant', delta: string, startMs: nu
     lines.push({ id: newKey(), seq: ++nextSeq, role, text: delta.trimStart(), final: false, startMs, endMs });
   }
   set({ transcript: lines.slice(-MAX_LINES), speaker: role === 'user' ? 'user' : 'rafii' });
-  // Stored as it goes (text only), so a long call or a closed tab keeps what was said and the backend sees it.
-  if (unsent.length >= 20) void flushTranscript();
+  // Stored as it goes (text only), so a long call or a closed tab keeps what was said and the backend sees it (with a
+  // pause after a failed upload, so a failing endpoint isn't hit on every word).
+  if (unsent.length >= 20 && Date.now() - lastFlushFailure > 5000) void flushTranscript();
 }
 
 function commentaryLimit(content: string) {
@@ -189,6 +191,12 @@ async function onDelegation(id: string) {
   });
   const request = userTextSinceLastDelegation();
   if (!request) {
+    if (snapshot.delegations.some((d) => d.id !== id && (d.status === 'running' || d.status === 'collecting'))) {
+      // Two delegations for one request: the other one already has the words.
+      updateDelegation(id, { status: 'cancelled', error: 'Same request as the one already running.' });
+      say('I’m already working on that.', id);
+      return;
+    }
     updateDelegation(id, { status: 'failed', error: 'Nothing was heard to act on.' });
     say('I didn’t catch a request there. Could you say it again?', id);
     return;
@@ -197,23 +205,27 @@ async function onDelegation(id: string) {
   think(`Working on: ${request}. No result yet — don't state one.`, id);
   const images = snapshot.pendingImages;
   set({ pendingImages: [] });
-  const progress = startProgress(id);
+  // The request belongs to the conversation it was sent in, even if the panel moves on while it runs.
+  const sentIn = snapshot.conversationId;
+  const progress = startProgress(id, sentIn);
   await flushTranscript(); // the backend reads what was just said (recentVoiceTranscript)
   try {
     const response = await current.api.turn(current.workspaceId, {
       // One key per delegation: a repeated event or a retried request is the same turn on the server.
-      message: request, idempotencyKey: `voice:${snapshot.voiceSessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: snapshot.conversationId, modality: 'voice', pageContext: current.pageContext(),
+      message: request, idempotencyKey: `voice:${snapshot.voiceSessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: sentIn, modality: 'voice', pageContext: current.pageContext(),
       attachments: images.map((image) => ({ assetId: image.assetId })), timeZone: current.timeZone, locale: snapshot.locale, model: current.model,
       traceId: newTraceId(), delegationId: id, voiceSessionId: snapshot.voiceSessionId ?? undefined
     });
     progress.stop();
-    if (response.conversationId && response.conversationId !== snapshot.conversationId) {
+    // A request sent without a conversation started one: adopt it, unless the call has moved to another since.
+    if (!sentIn && response.conversationId && snapshot.conversationId === null) {
       set({ conversationId: response.conversationId });
       current.onConversation(response.conversationId);
     }
     current.onAnswer(response);
     const result = response.result;
     updateDelegation(id, { status: 'done', runId: response.runId, result, finishedAt: Date.now() });
+    if (snapshot.error && snapshot.error.code !== 'connection_lost') set({ error: null }); // the service is answering again
     // Only what the server returned is said; with no spoken summary, nothing is claimed beyond "it's in the panel".
     const spoken = result?.speakableSummary?.trim() || (result?.errors?.length ? 'That didn’t fully work. The details are in the panel.' : 'I’ve put the answer in the panel.');
     say(spoken, id);
@@ -229,13 +241,12 @@ async function onDelegation(id: string) {
 }
 
 /** While a delegated request runs, pass real step progress to GPT-Live quietly (it can answer "how's it going?"). */
-function startProgress(delegationId: string) {
+function startProgress(delegationId: string, conversationId: string | null) {
   let stopped = false;
   let seen = '';
   let timer: ReturnType<typeof setTimeout> | null = null;
   const poll = async () => {
     const current = host;
-    const conversationId = snapshot.conversationId;
     if (stopped || !current || !conversationId) return;
     try {
       const state = await current.api.conversationState(current.workspaceId, conversationId);
@@ -294,9 +305,23 @@ function onLiveEvent(event: LiveEvent) {
   }
 }
 
+/** Upload lines to one voice session in batches of at most TRANSCRIPT_BATCH (the server's limit); what fails is returned. */
+async function sendLines(api: AgentApi, workspaceId: string, sessionId: string, lines: TranscriptLine[]): Promise<TranscriptLine[]> {
+  for (let index = 0; index < lines.length; index += TRANSCRIPT_BATCH) {
+    const batch = lines.slice(index, index + TRANSCRIPT_BATCH);
+    try {
+      await api.voiceTranscript(workspaceId, sessionId, batch.map((l) => ({ role: l.role, text: l.text, startMs: Math.round(l.startMs) })));
+    } catch {
+      lastFlushFailure = Date.now();
+      return lines.slice(index);
+    }
+  }
+  return [];
+}
+
 async function flushTranscript(includeOpen = false) {
-  // One flush at a time; batches of at most TRANSCRIPT_BATCH lines (the server's limit).
-  if (flushing) await flushing;
+  // One flush at a time: wait for any running one (and any that started meanwhile) before taking lines.
+  for (let running = flushing; running; running = flushing) await running;
   const current = host;
   const sessionId = snapshot.voiceSessionId;
   const lines = unsent.splice(0);
@@ -306,21 +331,15 @@ async function flushTranscript(includeOpen = false) {
     unsent.unshift(...lines);
     return;
   }
-  flushing = (async () => {
-    for (let index = 0; index < lines.length; index += TRANSCRIPT_BATCH) {
-      const batch = lines.slice(index, index + TRANSCRIPT_BATCH);
-      try {
-        await current.api.voiceTranscript(current.workspaceId, sessionId, batch.map((l) => ({ role: l.role, text: l.text, startMs: Math.round(l.startMs) })));
-      } catch {
-        unsent.unshift(...lines.slice(index));
-        return;
-      }
-    }
+  const mine = (async () => {
+    const failed = await sendLines(current.api, current.workspaceId, sessionId, lines);
+    if (failed.length && snapshot.voiceSessionId === sessionId) unsent.unshift(...failed);
   })();
+  flushing = mine;
   try {
-    await flushing;
+    await mine;
   } finally {
-    flushing = null;
+    if (flushing === mine) flushing = null;
   }
 }
 
@@ -418,7 +437,7 @@ export const voiceSession = {
       if (snapshot.state !== 'idle') set({ state: 'ended' });
       return;
     }
-    if (!transport.connected()) {
+    if (!transport.connected() || snapshot.state === 'reconnecting') {
       // Nothing can hear a close request (still connecting, or the connection dropped): finish now, locally and on the server.
       closedEarly = false;
       await finish('close_requested', snapshot.usageSeconds);
@@ -438,7 +457,12 @@ export const voiceSession = {
     if (!previous) return;
     if (levelTimer) clearInterval(levelTimer);
     levelTimer = null;
-    await flushTranscript(true);
+    // The old session's words are stored in the background: nothing is awaited before the new connection, so its audio is
+    // still set up inside the person's click (WebKit requires that).
+    const oldSession = snapshot.voiceSessionId;
+    const last = snapshot.transcript.at(-1);
+    const oldLines = [...unsent.splice(0), ...(last && !last.final ? [{ ...last, final: true }] : [])];
+    if (oldSession && oldLines.length) void sendLines(previous.api, previous.workspaceId, oldSession, oldLines);
     if (transport) {
       for (const off of unsubscribe.splice(0)) off();
       transport.close();

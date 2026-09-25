@@ -33,7 +33,7 @@ async function fitForUpload(file: File): Promise<Blob | null> {
   let bitmap: ImageBitmap;
   try {
     // Decoded upright (camera photos carry their rotation in EXIF).
-    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
   } catch {
     throw new UnreadableImage('This image could not be read here. Try a PNG or JPEG exported from your photos app.');
   }
@@ -125,7 +125,7 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
         {justAdded && <span aria-hidden className='pointer-events-none absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500' />}
         {problem && message && (
           // Visible to everyone (not only screen readers), above the button so the composer keeps its width.
-          <span aria-hidden className='bg-popover text-popover-foreground pointer-events-none absolute right-0 bottom-full z-10 mb-1.5 w-max max-w-56 rounded-md px-2 py-1 text-[11px] leading-snug shadow-md' data-rafii-attach-error>
+          <span aria-hidden className='bg-popover text-popover-foreground pointer-events-none absolute bottom-full left-0 z-10 mb-1.5 w-max max-w-56 rounded-md px-2 py-1 text-[11px] leading-snug shadow-md' data-rafii-attach-error>
             {message}
           </span>
         )}

@@ -237,8 +237,12 @@ def save(cur, ideas, workspace_id: str, plan: TaskPlan, *, trace_id: str | None 
         ideas._insert_event(cur, workspace_id, plan.task_id, safe_event("progress.updated", stage="task_step", taskId=plan.task_id, **change))
     if status != "running":
         ideas._insert_event(cur, workspace_id, plan.task_id, safe_event("run.completed", usage={"provenance": "task", "steps": len(plan.steps)}))
-    # The plan owns its own keys; anything else on the row (a paused Manager run waiting for an approval) is kept.
+    # The plan owns its own keys; anything else on the row (a paused Manager run waiting for an approval) is kept while the
+    # task runs. A finished task drops the paused run: its model state must not outlive the task (a finished run's artifact
+    # is readable through the run's events).
     merged = {**(row[0] or {}), **plan.artifact()}
+    if status != "running":
+        merged.pop("pendingRun", None)
     cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb,status=%s,updated_at=now() WHERE id::text=%s",
                 (json.dumps(merged, ensure_ascii=False, default=str), status, plan.task_id))
     plan.changes = []
