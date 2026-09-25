@@ -1147,6 +1147,73 @@ export interface Usage {
   membership: Membership;
 }
 
+/* ---------- time back (time_savings.py) ---------- */
+
+/** Atomic tasks Time Back counts. `campaign_plan` has a default but no completion boundary yet. */
+export type TimeSavingsTaskKind = 'draft' | 'adapt' | 'publish' | 'campaign_plan' | 'recurring_setup';
+/** Provenance of a saving: Rafii's defaults, the person's own answers, or measured active time in Rafii. */
+export type TimeSavingsConfidence = 'estimated' | 'personalized' | 'measured';
+export type TimeSavingsRange = '7d' | '30d' | 'year' | 'all';
+export type TimeSavingsBaselineSource = 'raffi_default' | 'personalized' | 'user_override';
+
+export interface TimeSavingsBreakdown {
+  taskKind: TimeSavingsTaskKind;
+  savedSeconds: number;
+  /** Whole minutes to display; the parts add up exactly to `totalMinutes`. */
+  minutes: number;
+  count: number;
+}
+
+export interface TimeSavingsBaseline {
+  taskKind: TimeSavingsTaskKind;
+  seconds: number;
+  source: TimeSavingsBaselineSource;
+  samples: number;
+  defaultSeconds: number;
+  /** What applies without an explicit setting: personalized once there are enough answers, else the default. */
+  automaticSeconds: number;
+}
+
+export interface TimeSavingsCalibration {
+  /** Task kinds the person may be asked about now (after completed work, at most once a month each). */
+  due: TimeSavingsTaskKind[];
+  baselines: TimeSavingsBaseline[];
+  personalizeAfter: number;
+}
+
+export interface TimeSavingsSummary {
+  range: TimeSavingsRange;
+  since: number | null;
+  until: number;
+  /** `empty` means nothing completed yet: show that, never "0h". */
+  state: 'ready' | 'empty';
+  totalSavedSeconds: number;
+  totalMinutes: number;
+  completedTasks: number;
+  basis: TimeSavingsConfidence | null;
+  breakdown: TimeSavingsBreakdown[];
+  confidence: Record<TimeSavingsConfidence, number>;
+  calculatorVersion: string;
+  hasCalibrationPrompt: boolean;
+  calibration: TimeSavingsCalibration;
+}
+
+/** A cumulative, idempotent heartbeat: aggregate seconds only, never what was typed or clicked. */
+export interface ActiveTimeBeat {
+  clientSessionKey: string;
+  workflowKey: string;
+  taskKind: TimeSavingsTaskKind;
+  activeSeconds: number;
+  sequence: number;
+  closed?: boolean;
+}
+
+export type TimeSavingsCalibrationInput =
+  | { taskKind: TimeSavingsTaskKind; source: 'prompt'; manualSeconds: number }
+  | { taskKind: TimeSavingsTaskKind; source: 'prompt'; dismissed: true }
+  | { taskKind: TimeSavingsTaskKind; source: 'settings_override'; manualSeconds: number }
+  | { taskKind: TimeSavingsTaskKind; source: 'settings_override'; clear: true };
+
 /* ---------- analytics & audience ---------- */
 
 export interface Metric {

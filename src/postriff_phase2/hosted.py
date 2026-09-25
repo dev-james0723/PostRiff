@@ -364,6 +364,10 @@ class HostedWorkspaceService:
         self.repository.effects.append(self.learning.capture)
         from .planning_store import sync as sync_planning
         self.repository.effects.append(sync_planning)
+        from .time_savings import TimeSavingsService
+        # Time Back: a draft accepted for use or an automation activated is recorded in the command that completed it.
+        self.time_savings = TimeSavingsService(self.repository, clock)
+        self.repository.effects.append(self.time_savings.capture)
         self.ideas.learning = self.learning
         from .site_agent.service import SiteAgentService
         # The site-wide Rafii panel: the same conversations, runs, events and approval paths as Home (site agent spec §4.2).
