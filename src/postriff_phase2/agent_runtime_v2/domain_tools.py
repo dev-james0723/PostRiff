@@ -560,11 +560,28 @@ def proposal_apply(ctx: RafiiRunContext, args: dict) -> dict:
     return {"ok": verified, "verified": verified, "proposalId": proposal["id"], "result": proposal.get("result"), "checks": checks}
 
 
+# Optional packages that extend the runtime (their `register()` registers tools, scopes and hooks; idempotent).
+EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools",)
+
+
 def ensure_registered() -> None:
-    """Import side effects in one place (the registry is filled at import)."""
+    """Import side effects in one place (the registry is filled at import), then optional extensions if installed."""
+    import importlib
     from . import creative, specialists  # noqa: F401 — both register tools at import (image_*, web_research)
     from .tool_adapter import register_site_tools
     register_site_tools()
+    for name in EXTENSION_MODULES:
+        try:
+            module = importlib.import_module(name)
+        except ImportError:
+            continue
+        register = getattr(module, "register", None)
+        if callable(register):
+            try:
+                register()
+            except Exception:  # noqa: BLE001 — a broken extension never takes the runtime down
+                import logging
+                logging.getLogger("postriff.agent_runtime").error("agent_runtime.extension_failed %s", name)
 
 
 _ = (copy, time)  # kept for callers that patch clocks in tests

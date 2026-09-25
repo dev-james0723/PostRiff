@@ -442,6 +442,8 @@ def _():
     assert "checked" in body["speakableSummary"].lower()
     audit = one("SELECT kind FROM public.pr_audit_events WHERE workspace_id=%s AND kind='post.review_prepared_by_proposal' ORDER BY at DESC LIMIT 1", wid)
     assert audit
+    approval = one("SELECT artifact->'trace'->'approval' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
+    assert approval["decision"] == "apply" and approval["verified"] is True and approval["via"] == "voice" and approval["waitSeconds"] >= 0, approval
     task = runtime_service.task_view(runtime, wid, OWNER, STATE["task"])
     return {"actual": body["answerText"], "review": reviews[0]["id"], "taskSteps": [(s["label"], s["state"]) for s in task["task"]["steps"]]}
 

@@ -121,8 +121,34 @@ def web_research(ctx: RafiiRunContext, args: dict) -> dict:
     return {"ok": True, "verified": bool(pages), "data": {"query": found.get("query"), "pages": pages, "warnings": found.get("warnings") or []}}
 
 
+# Extension points for other Rafii packages (e.g. the coworker package): they register their tools with
+# tool_adapter.register and scope them here; nothing here imports them. Scope changes still pass the gate.
+EXTRA_SCOPES: dict[str, list[str]] = {}
+INSTRUCTION_HOOKS: list = []
+
+
+def extend_scope(agent_key: str, names) -> None:
+    """Give an agent ("rafii_manager" or a SPECIALISTS key) more registered tools. Unknown agents are refused."""
+    if agent_key != "rafii_manager" and agent_key not in SPECIALISTS:
+        raise ValueError(f"unknown agent {agent_key!r}")
+    current = EXTRA_SCOPES.setdefault(agent_key, [])
+    current.extend(name for name in names if name not in current)
+
+
+def instructions_for(agent_key: str, base: str) -> str:
+    """Instruction extensions (a hook returns the base text unchanged when its own feature is off); a failing hook is ignored."""
+    for hook in INSTRUCTION_HOOKS:
+        try:
+            changed = hook(agent_key, base)
+        except Exception:  # noqa: BLE001 — an extension never breaks a turn
+            continue
+        if isinstance(changed, str) and changed.strip():
+            base = changed
+    return base
+
+
 def available(names) -> list[str]:
-    return [name for name in names if name in REGISTRY]
+    return [name for name in dict.fromkeys(names) if name in REGISTRY]
 
 
 def build(model_for, settings_for=None) -> dict:
@@ -133,10 +159,10 @@ def build(model_for, settings_for=None) -> dict:
 
     tools = {}
     for key, spec in SPECIALISTS.items():
-        names = available(spec["tools"])
+        names = available(list(spec["tools"]) + EXTRA_SCOPES.get(key, []))
         if not names:
             raise AlphaError(f"The {spec['title']} specialist has no tools.", 500)
-        agent = Agent(name=key, instructions=COMMON + "\n\n" + spec["instructions"], tools=sdk_tools(names, scope_name=key),
+        agent = Agent(name=key, instructions=instructions_for(key, COMMON + "\n\n" + spec["instructions"]), tools=sdk_tools(names, scope_name=key),
                       model=model_for(spec["workload"], key), handoffs=[], **({"model_settings": settings_for(spec["workload"])} if settings_for else {}))
 
         async def extract(result, key=key):

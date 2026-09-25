@@ -40,6 +40,13 @@ TURN_BUDGET_SECONDS = 240
 SUPERSEDE_WINDOW_SECONDS = 180
 HISTORY_MESSAGES = 12
 RUNTIME_VERSION = "agent-runtime-1"
+# Extensions add blocks to a run's trace (e.g. the skill provenance of the turn): fn(ctx=..., routes=...) -> dict.
+TRACE_HOOKS: list = []
+
+
+def register_trace_hook(fn) -> None:
+    if fn not in TRACE_HOOKS:
+        TRACE_HOOKS.append(fn)
 EPOCH = digest({"runtime": RUNTIME_VERSION})
 log = logging.getLogger("postriff.agent_runtime")
 _IMAGE_ORDINAL = re.compile(r"\b(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:image|picture|photo|pic|one\s+you\s+made)\b"
@@ -269,11 +276,15 @@ class AgentRuntimeService:
         blocks = [site_contracts.text(answer)]
         if decided.get("proposal"):
             blocks.append({"type": "proposal_diff", "proposal": decided["proposal"]})
+        # How long the approval waited, from when Rafii presented it to the person's decision (§30).
+        waited = round(self.clock() - float(proposal.get("createdAt") or self.clock()), 1)
+        approval_trace = {"approval": {"proposalId": item["proposalId"], "decision": wants, "outcome": decided["outcome"], "verified": decided["verified"],
+                                       "waitSeconds": waited, "via": modality, "checks": [c["what"] for c in decided["checks"] if not c["verified"]]}}
         if decided["outcome"] == "applied":
             resumed = self._resume_pending_run(workspace_id, token, conversation_id, item["proposalId"], run_id=run_id, trace_id=trace_id, modality=modality, zone=zone)
             if resumed is not None:
                 return resumed
-        return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, blocks)
+        return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, blocks, trace_extra=approval_trace)
 
     def _resolve_task_steps(self, workspace_id, token, conversation_id, proposal_id, outcome, *, verified, outputs=(), reason=None):
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
@@ -532,10 +543,10 @@ class AgentRuntimeService:
                                                           provider=route.provider or "", model=route.model or "", run_id=run_id, meta={"via": "rafii_agent", "traceId": trace_id})
         return run_id, reservation
 
-    def _finish_simple(self, workspace_id, token, conversation_id, run_id, trace_id, result, blocks, *, pending=None) -> dict:
+    def _finish_simple(self, workspace_id, token, conversation_id, run_id, trace_id, result, blocks, *, pending=None, trace_extra=None) -> dict:
         from ..site_agent import contracts as site_contracts
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
-            self._persist(cur, workspace_id, conversation_id, run_id, result, blocks, [], [], trace={"traceId": trace_id, "composedBy": result["composedBy"]}, pending=pending,
+            self._persist(cur, workspace_id, conversation_id, run_id, result, blocks, [], [], trace={"traceId": trace_id, "composedBy": result["composedBy"], **(trace_extra or {})}, pending=pending,
                           status="completed", usage={"provenance": "deterministic", "modelRequests": 0})
             out = self._stored(cur, workspace_id, run_id)
         _ = site_contracts
@@ -591,6 +602,13 @@ class AgentRuntimeService:
                  "specialists": sorted({a["specialist"] for a in ledger.tool_activity if a.get("specialist")}), "guardrails": ledger.guardrail_trips,
                  "generations": ledger.spans[:40], "sdkSpans": spans[:120], "elapsedMs": elapsed_ms, "superseded": [s["runId"] for s in superseded],
                  "interruptions": [{"tool": getattr(i, "name", None)} for i in interruptions][:5]}
+        for hook in TRACE_HOOKS:
+            try:
+                extra = hook(ctx=ctx, routes=routes)
+            except Exception:  # noqa: BLE001 — trace extensions never break a turn
+                extra = {"traceHookError": getattr(hook, "__name__", "hook")}
+            if isinstance(extra, dict):
+                trace.update({k: v for k, v in extra.items() if k not in trace})
         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
             status = self._run_status(cur, ctx.workspace_id, run_id)
             final_status = "cancelled" if status == "cancelled" else "completed"

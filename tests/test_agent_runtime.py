@@ -515,6 +515,27 @@ class ManagerOrchestrationTest(unittest.TestCase):
         self.assertEqual(ctx.ledger.changed, [])
 
 
+class ExtensionPointsTest(unittest.TestCase):
+    def test_scopes_and_hooks_extend_without_importing_extensions(self):
+        spec = contracts.ToolSpec("ext_probe_read", contracts.READ, "read", "An extension's read tool.")
+        if "ext_probe_read" not in tool_adapter.REGISTRY:
+            tool_adapter.REGISTRY["ext_probe_read"] = tool_adapter.Tool(spec, {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+                                                                        lambda ctx, args: {"ok": True, "verified": True}, "probe")
+        with self.assertRaises(ValueError):
+            specialists.extend_scope("no_such_agent", ["ext_probe_read"])
+        specialists.extend_scope("research", ["ext_probe_read"])
+        specialists.INSTRUCTION_HOOKS.append(lambda key, base: base + "\nEXT" if key == "research" else base)
+        specialists.INSTRUCTION_HOOKS.append(lambda key, base: 1 / 0)
+        try:
+            self.assertTrue(specialists.instructions_for("research", "base").endswith("EXT"))
+            self.assertEqual(specialists.instructions_for("content", "base"), "base")
+            self.assertIn("ext_probe_read", specialists.available(specialists.SPECIALISTS["research"]["tools"] + specialists.EXTRA_SCOPES["research"]))
+        finally:
+            specialists.INSTRUCTION_HOOKS.clear()
+            specialists.EXTRA_SCOPES.pop("research", None)
+            tool_adapter.REGISTRY.pop("ext_probe_read", None)
+
+
 class HarnessGuardTest(unittest.TestCase):
     def test_qa_harness_never_runs_on_a_deployment(self):
         import os
