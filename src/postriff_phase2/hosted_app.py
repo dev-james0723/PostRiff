@@ -22,6 +22,7 @@ from .hosted_storage import PrivateAssetService, SupabaseStorage
 from .hosted_identity import SupabaseIdentityAdmin, verified_aal, verified_auth_time, verified_session_id
 from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
+from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
 from . import tools
 from .agent_runtime import FixtureAgentRuntime
@@ -174,7 +175,8 @@ def runtime_from_environment(environ=None):
     social = HostedSocial(service.oauth, providers, storage) if any(p.production_reviewed for p in providers.values()) else None
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
-    worker = PostgresWorker(database, social=social, on_verified=service.audience.on_post_verified)
+    # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(service.audience.on_post_verified, service.time_savings))
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -466,6 +468,9 @@ class HostedApplication:
                 learning = getattr(service, "learning", None)
                 if learning is not None:
                     result["learning"] = learning.sweep()
+                time_savings = getattr(service, "time_savings", None)
+                if time_savings is not None:
+                    result["timeSavings"] = time_savings.maintain()
                 if getattr(service, 'identity', None) is not None:
                     from .account_deletion import reconcile_identity
                     result['identityDeletion'] = reconcile_identity(service)
@@ -561,6 +566,16 @@ class HostedApplication:
                 return self._json(start_response, 201, service.data_request(parts[2], token, body.get("kind"), body))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "analytics" and parts[4] in ("summary", "posts") and method == "GET":
                 return self._json(start_response, 200, service.analytics(parts[2], token))
+            if len(parts) in (4, 5) and parts[:2] == ["api", "workspaces"] and parts[3] == "time-savings":
+                # Time Back: the person's own estimate, a separate endpoint from platform analytics (time_savings.py).
+                if len(parts) == 4 and method == "GET":
+                    from urllib.parse import parse_qs
+                    range_key = parse_qs(environ.get("QUERY_STRING", "")).get("range", ["30d"])[0]
+                    return self._json(start_response, 200, service.time_savings.summary(parts[2], token, range_key))
+                if len(parts) == 5 and parts[4] == "activity" and method == "POST":
+                    return self._json(start_response, 200, service.time_savings.activity(parts[2], token, self._body(environ)))
+                if len(parts) == 5 and parts[4] == "calibrations" and method == "POST":
+                    return self._json(start_response, 200, service.time_savings.calibrate(parts[2], token, self._body(environ)))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "audience":
                 audience = service.audience
                 if len(parts) == 5 and parts[4] == "threads" and method == "GET":

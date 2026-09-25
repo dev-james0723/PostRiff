@@ -15,6 +15,7 @@ import Header from './header';
 import { MobileTabBar } from './mobile-tab-bar';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { SiteAgentAbove, SiteAgentDock, SiteAgentHotkeys, SiteAgentOverlay } from '@/features/site-agent/panel';
+import { PostApprovalCalibration } from '@/features/time-back/post-approval-calibration';
 
 /**
  * Client shell for /app/*: session → workspace → gate → sidebar + Cmd+K +
@@ -52,6 +53,8 @@ export function AppShell({ defaultOpen, children, initial }: { defaultOpen: bool
                 <SiteAgentHotkeys />
                 <MobileTabBar />
                 <ShortcutsDialog />
+                {/* Time back: the optional, rate-limited calibration question after a post approval, on any page. */}
+                <PostApprovalCalibration />
               </SidebarProvider>
             </KBar>
             </PreferencesProvider>

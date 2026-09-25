@@ -40,6 +40,7 @@ from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
 from postriff_phase2.hosted_app import HostedApplication  # noqa: E402
 from postriff_phase2.hosted_worker import PostgresWorker  # noqa: E402
 from postriff_phase2.hosted_social import HostedSocial  # noqa: E402
+from postriff_phase2.time_savings import with_time_back  # noqa: E402
 from postriff_phase2.oauth import CredentialVault  # noqa: E402
 from postriff_phase2 import insights  # noqa: E402
 
@@ -239,7 +240,7 @@ def main():
         else:
             insights.ingest_post_insights(cur, transport, service.oauth, workspace_id, manifest["channelId"], provider, job["providerReference"], job["id"], time.time())
 
-    worker = PostgresWorker(connection, social=social, on_verified=on_verified)
+    worker = PostgresWorker(connection, social=social, on_verified=with_time_back(on_verified, service.time_savings))
     app = HostedApplication(service, worker, {"provider": "dev", "execution": "dev-synthetic", "flow": "dev"}, "d" * 24)
     static = args.static.resolve()
 

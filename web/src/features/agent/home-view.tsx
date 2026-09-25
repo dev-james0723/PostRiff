@@ -57,6 +57,8 @@ import { createSubmissionGate } from './submission-gate';
 import { briefStorageKey, decodeBrief, encodeBrief } from './brief-recovery';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
 import type { ChatAutomation } from '@/lib/api/types';
+import { workflowKey } from '@/lib/time-back/active-time';
+import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 
 /*
  * Home's dialogs are code-split: none is needed to paint Home, so each loads when the browser is idle
@@ -215,6 +217,8 @@ function HomeWorkspace() {
   const voiceAvailable = voiceSourceIds.length > 0;
   const imageCapability = models.data?.imageGeneration;
   const generation = useHomeGeneration(params.get('run'));
+  // Time back: once a writing run has a conversation, active time here counts toward its first approved draft.
+  useActiveWorkTimer({ workflowKey: workflowKey('conversation', generation.conversationId), taskKind: 'draft' });
   const chosenContent = contentChoice(library);
 
   useEffect(() => {
