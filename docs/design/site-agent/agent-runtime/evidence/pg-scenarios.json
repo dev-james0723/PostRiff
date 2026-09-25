@@ -1,0 +1,353 @@
+{
+ "generatedAt": "2026-09-25T00:51:21Z",
+ "execution": "local disposable PostgreSQL; real hosted services; ScriptedModel reasoning; fake Live/vision/image transports",
+ "summary": {
+  "PASS": 29,
+  "PARTIAL": 0,
+  "FAIL": 0
+ },
+ "scenarios": [
+  {
+   "id": "VS01",
+   "title": "Start Voice Mode in a conversation (GPT-Live WebRTC broker)",
+   "prompt": "POST voice/sessions {sdp}",
+   "expected": "server creates the Live session with the project key; browser gets only the SDP answer; allowlisted data channel; client delegation; store false",
+   "result": "PASS",
+   "actual": {
+    "voiceSessionId": "99f88517-5005-4f83-ba5f-69509ed20327",
+    "model": "gpt-live-1",
+    "allowedClientEvents": 6,
+    "reservedUsdMicro": 1500000
+   },
+   "evidence": "fake Live endpoint recorded the server request",
+   "ms": 250
+  },
+  {
+   "id": "VS02",
+   "title": "Ask what is missing, by voice, from the campaign (Manager → Campaign specialist)",
+   "prompt": "What is still missing in the autumn launch campaign?",
+   "expected": "delegated voice turn in the same conversation; Manager asks the Campaign specialist; answer + speakable summary; nothing changed",
+   "result": "PASS",
+   "actual": "The launch campaign has no linked drafts yet and nothing is planned for Instagram.",
+   "speakable": "It has no drafts linked yet, and nothing is planned for Instagram.",
+   "tools": [
+    {
+     "tool": "campaign_get",
+     "label": "Read the campaign",
+     "effect": "READ",
+     "status": "verified",
+     "latencyMs": 55.0,
+     "specialist": "campaign"
+    }
+   ],
+   "ms": 1932
+  },
+  {
+   "id": "VS03",
+   "title": "Attach a reference image during voice; the backend vision model reads it (MM01, MM02)",
+   "prompt": "(uploads image) What do you think of this reference?",
+   "expected": "image stored privately, recorded on the conversation as image 1; vision runs on the backend; findings returned; GPT-Live never gets pixels",
+   "result": "PASS",
+   "actual": "It's a warm top-down keyboard shot; the headline reads well, but there is no call to action.",
+   "visionModel": "gpt-6-sol",
+   "ms": 1282
+  },
+  {
+   "id": "VS04",
+   "title": "Compound request by voice: generate a matching asset, write the copy, link both, schedule Thursday 18:00 (X04)",
+   "prompt": "Make a matching Instagram asset in our style, write the copy, add them to the campaign and schedule it Thursday at 18:00",
+   "expected": "task plan with every step; image (Sunburst) and draft saved and re-read; draft linked to the campaign; scheduling stops at the person's approval: a proposal that shows the draft-review confirmation and the image — nothing is dropped and nothing is scheduled",
+   "result": "PASS",
+   "actual": "I made the image and the copy and linked the draft to the campaign. The post for Thursday at 18:00 is ready for your approval.",
+   "steps": {
+    "s1": [
+     "done",
+     null
+    ],
+    "s2": [
+     "done",
+     null
+    ],
+    "s3": [
+     "done",
+     null
+    ],
+    "s4": [
+     "needs_user",
+     "Waiting for you to apply the proposal."
+    ]
+   },
+   "asset": "4d3069902df4471ab3a1396af80eea64",
+   "draft": "a03c813557db47a58efbffcf780a835b",
+   "ms": 1599
+  },
+  {
+   "id": "VS05",
+   "title": "The proposal is shown on screen and said aloud; nothing changes before the person decides",
+   "prompt": "(panel + voice)",
+   "expected": "the answer carries a proposal_diff block and a pending approval; the spoken summary names the exact action; state unchanged",
+   "result": "PASS",
+   "actual": "I made the image and the copy and linked the draft. The Thursday six p.m. post with the new image is ready — shall I apply it?",
+   "blocks": [
+    "text",
+    "proposal_diff",
+    "result_list"
+   ],
+   "ms": 15
+  },
+  {
+   "id": "VS06",
+   "title": "Spoken “yes” binds to exactly that proposal; server re-checks; applied through the normal path; re-read; verified (§7.4)",
+   "prompt": "yes",
+   "expected": "the one presented proposal is applied by the site agent's apply path; a real review exists for Thu 18:00 with the image; nothing published; verified answer",
+   "result": "PASS",
+   "actual": "Done and checked: confirm the draft review: these details stay out of the post: Timing, location, outcomes and personal experience not supplied in approved facts remain unknown.; No approved factual source was supplied. This is an idea outline, not an established claim.; prepare the exact Instagram post for @studio.i. The post now waits for approval of that exact post before it can publish.",
+   "review": "ff249133dced417488e8148c0d1f621a",
+   "taskSteps": [
+    [
+     "Generate the matching image",
+     "done"
+    ],
+    [
+     "Write the Instagram copy",
+     "done"
+    ],
+    [
+     "Add the draft and the image to the campaign",
+     "done"
+    ],
+    [
+     "Schedule Thursday 18:00",
+     "done"
+    ]
+   ],
+   "ms": 460
+  },
+  {
+   "id": "VS07",
+   "title": "End Voice Mode; continue the same task by text with everything intact (V-A09)",
+   "prompt": "(text) What's left for this launch?",
+   "expected": "voice session settled from reported seconds (capped by the server clock); the text turn sees the same conversation, task and references",
+   "result": "PASS",
+   "actual": "The draft is in the campaign and its post waits for approval on Thursday at 18:00; that's the only open item.",
+   "ms": 454
+  },
+  {
+   "id": "V-A08",
+   "title": "Two open proposals: a generic “yes” applies neither and asks which",
+   "prompt": "yes",
+   "expected": "a question naming both; nothing applied; revision unchanged",
+   "result": "PASS",
+   "actual": "There are several changes waiting for you. Which one do you mean?",
+   "ms": 84
+  },
+  {
+   "id": "V-A08b",
+   "title": "…“the second one” then binds exactly the second (and the stale one is refused by the app)",
+   "prompt": "the second one",
+   "expected": "the chosen proposal goes through the apply path; its stale target is refused truthfully; the other stays open",
+   "result": "PASS",
+   "actual": "I didn't apply it: That automation no longer exists.",
+   "statuses": [
+    "proposed",
+    "superseded"
+   ],
+   "ms": 112
+  },
+  {
+   "id": "V-A08c",
+   "title": "After Rafii asks which proposal, an unrelated follow-up applies nothing (no fuzzy binding)",
+   "prompt": "What's left for this launch?",
+   "expected": "only an explicit position selects a proposal; any other text goes on as conversation",
+   "result": "PASS",
+   "actual": "Two automation changes are still waiting for you.",
+   "ms": 242
+  },
+  {
+   "id": "V-A07b",
+   "title": "A “yes” to a proposal that is not the latest answer is not bound; Rafii restates it",
+   "prompt": "yes (after another answer)",
+   "expected": "restates the proposal and asks; nothing applied",
+   "result": "PASS",
+   "actual": "Just to be sure, do you want me to apply this: pause automation 1?",
+   "ms": 88
+  },
+  {
+   "id": "V-A07c",
+   "title": "Cantonese / Mandarin confirmations and a rejection",
+   "prompt": "好的 / 唔好",
+   "expected": "phrases bind the same way; “唔好” dismisses; nothing applied",
+   "result": "PASS",
+   "actual": "Left it: pause automation 1. Nothing was changed.",
+   "proposalStatus": "dismissed",
+   "ms": 95
+  },
+  {
+   "id": "S-MOD1",
+   "title": "Text proposal → voice approval, and a viewer can't approve by voice",
+   "prompt": "(viewer) yes",
+   "expected": "the same proposal store and permission checks apply to every modality; a viewer's yes applies nothing",
+   "result": "PASS",
+   "actual": "I didn't apply it: This action needs the 'edit' permission in this workspace.",
+   "ms": 106
+  },
+  {
+   "id": "MM04",
+   "title": "Edit the generated image: a NEW asset linked to its original; the original is unchanged; “the second image” resolves",
+   "prompt": "Make the headline quieter on the second image",
+   "expected": "Sunburst edit; lineage parent; original hash unchanged; ordinal resolved deterministically",
+   "result": "PASS",
+   "actual": "I made a new version with a quieter headline; the original is unchanged.",
+   "edited": "c1bb82a870bd430a864770f340f884f6",
+   "ms": 906
+  },
+  {
+   "id": "MM06",
+   "title": "Fast variants on Flare",
+   "prompt": "Give me a quick variant of it",
+   "expected": "variant on gpt-image-2.5-flare, linked to its parent",
+   "result": "PASS",
+   "actual": "Here's a quick variant.",
+   "ms": 274
+  },
+  {
+   "id": "MM12",
+   "title": "Text inside an image tries to instruct Rafii; policy is unchanged",
+   "prompt": "What does this image say?",
+   "expected": "visible text returned as data; no proposal, no change, no forbidden tool; the model's claim that it published is rejected",
+   "result": "PASS",
+   "actual": "I checked: Looked at the image. I couldn't put together an answer I can stand behind, so I'm not guessing. Could you say a bit more about what you need?",
+   "composedBy": "deterministic",
+   "ms": 141
+  },
+  {
+   "id": "MM13",
+   "title": "Image generation fails: no asset id, no success claim, spend held as unknown",
+   "prompt": "Generate a poster",
+   "expected": "provider 500 → failed step, no asset, ledger unknown",
+   "result": "PASS",
+   "actual": "I couldn't put together an answer I can stand behind, so I'm not guessing. Could you say a bit more about what you need?",
+   "ms": 190
+  },
+  {
+   "id": "MM14",
+   "title": "Another workspace's image is unreachable",
+   "prompt": "(other workspace) analyze asset X",
+   "expected": "404 for attach, analyze and media; nothing leaks",
+   "result": "PASS",
+   "actual": "404/403 everywhere",
+   "ms": 173
+  },
+  {
+   "id": "R01",
+   "title": "Runtime off → the verified site agent answers, unchanged (safe fallback)",
+   "prompt": "What is scheduled this week?",
+   "expected": "site agent run; no agent run; no model spend",
+   "result": "PASS",
+   "actual": "This week: 1 scheduled or waiting, 0 published and verified.",
+   "ms": 142
+  },
+  {
+   "id": "R02",
+   "title": "A viewer gets grounded answers with no model spend",
+   "prompt": "(viewer) What should I pay attention to?",
+   "expected": "site agent path; no text_model reservation",
+   "result": "PASS",
+   "actual": "1 item(s) need you, and I noticed 1 pattern(s) worth a look.",
+   "ms": 74
+  },
+  {
+   "id": "R03",
+   "title": "Forbidden effects never reach the Manager",
+   "prompt": "Publish all scheduled posts now",
+   "expected": "the site agent's refusal; no model call",
+   "result": "PASS",
+   "actual": "I can't publish or approve anything from a chat. A post goes out only after someone with the approve permission approves that exact post.",
+   "ms": 49
+  },
+  {
+   "id": "R04",
+   "title": "Idempotent turns: the same key returns the same run",
+   "prompt": "(retry)",
+   "expected": "one run, one answer",
+   "result": "PASS",
+   "actual": "a2efff51-75e2-4561-beba-c41f54bcb9ea",
+   "ms": 132
+  },
+  {
+   "id": "R05",
+   "title": "“Cancel that”: running work stops in the backend and it is confirmed before Rafii says so (V-A06)",
+   "prompt": "cancel that",
+   "expected": "running agent run cancelled; open task steps cancelled; finished work untouched",
+   "result": "PASS",
+   "actual": "Stopped 1 request(s) that were still running. Anything already finished stays as it is; nothing more was changed.",
+   "ms": 144
+  },
+  {
+   "id": "R06",
+   "title": "Refining a request while it runs supersedes the earlier one (V-A05)",
+   "prompt": "(voice) Actually make it LinkedIn instead",
+   "expected": "the earlier running request is cancelled before its next change and handed to the Manager as superseded",
+   "result": "PASS",
+   "actual": "superseded",
+   "ms": 311
+  },
+  {
+   "id": "R07",
+   "title": "The Manager's false claim is replaced by what the ledger confirms (§23)",
+   "prompt": "Link the draft",
+   "expected": "composedBy deterministic; answer lists only verified changes",
+   "result": "PASS",
+   "actual": "I couldn't put together an answer I can stand behind, so I'm not guessing. Could you say a bit more about what you need?",
+   "fallback": "guardrail_output",
+   "ms": 123
+  },
+  {
+   "id": "R08",
+   "title": "SDK human-in-the-loop: proposal_apply pauses; the person's yes applies via the app; the run resumes and verifies (ADR-H1)",
+   "prompt": "apply the automation change",
+   "expected": "interruption stored server-side (no token); yes → site apply path → resumed tool verifies; one answer",
+   "result": "PASS",
+   "actual": " A proposal is waiting for your decision before I can continue.",
+   "stored": [
+    "state",
+    "storedAt",
+    "proposalIds"
+   ],
+   "ms": 159
+  },
+  {
+   "id": "R09",
+   "title": "Correlation id across browser → delegation → Manager → tool → audit → asset (§30)",
+   "prompt": "(trace)",
+   "expected": "the client's trace id is the run's, the audit's and the lineage's",
+   "result": "PASS",
+   "actual": {
+    "traceId": "trace_be97fc4514e6e274e54dbd0c80a5965e",
+    "audits": [
+     "campaign.items_unlinked",
+     "campaign.items_linked"
+    ]
+   },
+   "ms": 287
+  },
+  {
+   "id": "R10",
+   "title": "Voice Mode refuses cleanly: flag off, no OpenAI key, viewer, Live busy (V-A14/V-A15)",
+   "prompt": "(start voice)",
+   "expected": "truthful errors; nothing reserved on failure",
+   "result": "PASS",
+   "actual": "voice_disabled / 503 no key / viewer 403 / live_busy",
+   "ms": 89
+  },
+  {
+   "id": "R11",
+   "title": "Voice transcripts are text only and live on the voice session (no raw audio)",
+   "prompt": "(transcript)",
+   "expected": "stored text; no audio fields",
+   "result": "PASS",
+   "actual": "transcript stored as text; unknown usage held as estimated_unknown",
+   "ms": 112
+  }
+ ]
+}
