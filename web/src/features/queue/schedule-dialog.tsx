@@ -164,7 +164,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const staleDrafts = (state?.variants ?? []).filter((v) => !v.blockedByRetraction && !usable(v)).length;
 
   const [variantId, setVariantId] = useState<string>(preselected ?? '');
-  const [channelId, setChannelId] = useState<string>('');
+  const [chosenChannelId, setChannelId] = useState<string>('');
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
   const [rights, setRights] = useState(false);
@@ -181,13 +181,15 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const timePassed = chosenAt !== null && chosenAt <= Date.now();
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
-  const channelsForVariant = channels.filter((c) => !variant || c.platform === variant.platform);
+  // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
+  const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
+  const channelId = variant?.channelId ?? chosenChannelId;
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
   const channel = channelsForVariant.find((c) => c.id === channelId);
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
-      channelId &&
+      channel &&
       localTime &&
       rights &&
       !steps.blocked &&
@@ -332,11 +334,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           <div className='flex flex-col gap-1.5'>
             <Label htmlFor='schedule-channel'>Account</Label>
             <Select value={channelId} onValueChange={(value) => setChannelId(String(value))}>
-              <SelectTrigger id='schedule-channel' disabled={!variant} className='h-12 w-full text-base'>
+              <SelectTrigger id='schedule-channel' disabled={!variant || Boolean(variant.channelId)} className='h-12 w-full text-base'>
                 <SelectValue>{channelsForVariant.find((c) => c.id === channelId)?.account ?? (variant ? `Choose a ${variant.platform} account` : 'Choose a draft first')}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {channelsForVariant.length === 0 && <SelectItem value='__none' disabled>No {variant?.platform ?? ''} account connected</SelectItem>}
+                {channelsForVariant.length === 0 && <SelectItem value='__none' disabled>{variant?.channelId ? `The ${variant.platform} account this draft was written for is not connected` : `No ${variant?.platform ?? ''} account connected`}</SelectItem>}
                 {channelsForVariant.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     <span className='flex items-center gap-2'>

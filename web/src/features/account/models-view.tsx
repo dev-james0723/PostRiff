@@ -29,7 +29,7 @@ const infoContent = {
     },
     {
       title: 'Your pick',
-      description: 'Used for all drafts in this browser. If it becomes unavailable, the first available writer is used and this page says so.'
+      description: 'Used for all drafts in this browser. If it becomes unavailable, drafting waits until you choose another writer; nothing is switched for you.'
     },
     {
       title: 'Your own CLI',
@@ -121,6 +121,16 @@ function ModelsBody() {
             picked={picked}
           />
 
+          <PostriffRoutes
+            loading={loading}
+            listed={Boolean(models.data)}
+            options={options}
+            agents={agents}
+            current={choice.model}
+            onChoose={onChoose}
+            consent={{ loading: memory.isLoading, egress: memory.data?.egress }}
+          />
+
           <section data-tour='models-cli' className='flex flex-col gap-3' aria-labelledby='models-cli-heading'>
             <div className='flex flex-wrap items-center gap-x-1 gap-y-1 px-1'>
               <h2 id='models-cli-heading' className='text-foreground text-lg font-medium tracking-tight'>
@@ -152,15 +162,6 @@ function ModelsBody() {
             )}
           </section>
 
-          <PostriffRoutes
-            loading={loading}
-            listed={Boolean(models.data)}
-            options={options}
-            agents={agents}
-            current={choice.model}
-            onChoose={onChoose}
-            consent={{ loading: memory.isLoading, egress: memory.data?.egress }}
-          />
         </div>
 
         <div className='flex min-w-0 flex-col gap-8'>

@@ -23,7 +23,7 @@ def sign(body, ts=int(NOW), secret=SECRET):
 
 
 def stripe_event(kind, obj, event_id="evt_1", created=int(NOW) - 5):
-    return json.dumps({"id": event_id, "type": kind, "created": created, "data": {"object": obj}}).encode()
+    return json.dumps({"id": event_id, "type": kind, "created": created, "livemode": False, "data": {"object": obj}}).encode()
 
 
 class RecordingTransport:
@@ -135,7 +135,7 @@ class EventMapping(unittest.TestCase):
         self.assertIsNone(Billing.TRANSITIONS.get(event["type"]))
 
     def test_missing_created_falls_back_to_clock(self):
-        body = json.dumps({"id": "evt_nc", "type": "invoice.paid", "data": {"object": {}}}).encode()
+        body = json.dumps({"id": "evt_nc", "type": "invoice.paid", "livemode": False, "data": {"object": {}}}).encode()
         self.assertEqual(provider().parse_webhook(f"t={int(NOW)},v1={sign(body)}", body)["createdAt"], NOW)
 
 

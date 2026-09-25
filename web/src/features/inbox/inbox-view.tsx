@@ -316,7 +316,7 @@ function InboxEmpty({ channels, providers }: { channels: ChannelView[] | undefin
           noAccounts
             ? undefined
             : anyDirect
-              ? 'Comments on posts Rafii publishes appear here.'
+              ? 'Comments are read once, when Rafii verifies a post it published. Later comments aren’t collected yet.'
               : `Comments appear for ${commentReadNames(providers)} accounts with Direct comments.`
         }
         media={

@@ -12,6 +12,8 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 
 from postriff_alpha.domain import AlphaError, clean
 
+from .model_runtime import gateway_routing, provider_map
+
 
 DEFAULT_ENDPOINT = "https://ai-gateway.vercel.sh/v1/images/generations"
 DEFAULT_MODEL = "openai/gpt-image-2.5-flare"
@@ -28,9 +30,10 @@ class _NoRedirect(HTTPRedirectHandler):
 class ImageGenerationError(AlphaError):
     """A provider failure with an explicit spend-reconciliation state."""
 
-    def __init__(self, message, status=502, *, uncertain=False):
+    def __init__(self, message, status=502, *, uncertain=False, cost_usd=None):
         super().__init__(message, status)
         self.uncertain = uncertain
+        self.cost_usd = cost_usd
 
 
 def image_transport(method, url, headers=None, body=None, timeout=TIMEOUT_SECONDS):
@@ -69,7 +72,7 @@ class GatewayImageRuntime:
     provider = "vercel-ai-gateway"
     cost_class = "paid"
 
-    def __init__(self, api_key, model=DEFAULT_MODEL, *, transport=None, estimate_usd_micro=DEFAULT_ESTIMATE_USD_MICRO):
+    def __init__(self, api_key, model=DEFAULT_MODEL, *, transport=None, estimate_usd_micro=DEFAULT_ESTIMATE_USD_MICRO, allowed_providers=None):
         if not isinstance(api_key, str) or not api_key:
             raise AlphaError("An image gateway key is required.", 503)
         if not isinstance(model, str) or "/" not in model or len(model) > 160:
@@ -80,6 +83,8 @@ class GatewayImageRuntime:
         self.model = model
         self.transport = transport or image_transport
         self.estimate_usd_micro = estimate_usd_micro
+        # Execution providers the gateway may route this model to (and fall back between); default: its maker.
+        self.allowed_providers = [str(p) for p in allowed_providers] if allowed_providers else [model.split("/", 1)[0]]
 
     def generate(self, prompt, *, count=1, emit=lambda _event: None):
         prompt = clean(prompt, 4000)
@@ -98,6 +103,7 @@ class GatewayImageRuntime:
                 "n": 1,
                 "size": "1024x1024",
                 "response_format": "b64_json",
+                "providerOptions": {"gateway": {"only": list(self.allowed_providers)}},
             },
         )
         status, body = response.get("status"), response.get("body") or {}
@@ -107,6 +113,16 @@ class GatewayImageRuntime:
             raise ImageGenerationError("The image request outcome is unknown. Usage must be reconciled before retrying.", uncertain=True)
         if status != 200:
             raise ImageGenerationError("The image provider rejected this request; no image was saved.", status=502, uncertain=False)
+        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+        final_provider, gateway_cost = gateway_routing(body)
+        reported = usage.get("cost")
+        cost = float(reported) if type(reported) in (int, float) and reported >= 0 else gateway_cost
+        if final_provider and final_provider not in self.allowed_providers:
+            raise ImageGenerationError(
+                f"The image was made by {final_provider}, outside the approved providers, so it was not kept.",
+                uncertain=cost is None,
+                cost_usd=cost,
+            )
         try:
             encoded = body["data"][0]["b64_json"]
             raw = base64.b64decode(encoded, validate=True)
@@ -114,9 +130,6 @@ class GatewayImageRuntime:
             raise ImageGenerationError("The image provider returned no usable image bytes.", uncertain=True) from error
         if not 1 <= len(raw) <= 8 * 1024 * 1024 or not (raw.startswith(b"\x89PNG\r\n\x1a\n") or raw.startswith(b"\xff\xd8\xff")):
             raise ImageGenerationError("The generated image failed the media boundary checks.", uncertain=True)
-        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
-        reported = usage.get("cost")
-        cost = float(reported) if type(reported) in (int, float) and reported >= 0 else None
         emit({"type": "progress.updated", "stage": "image_generation", "percent": 75})
         return {
             "images": [raw],
@@ -126,6 +139,7 @@ class GatewayImageRuntime:
                 "costUsd": cost,
                 "model": self.model,
                 "provider": self.provider,
+                **({"executionProvider": final_provider} if final_provider else {}),
             },
         }
 
@@ -139,4 +153,5 @@ def from_environment(values):
         estimate = int(raw_estimate)
     except (TypeError, ValueError) as error:
         raise AlphaError("POSTRIFF_IMAGE_ESTIMATE_USD_MICRO must be an integer.", 503) from error
-    return GatewayImageRuntime(key, values.get("POSTRIFF_IMAGE_MODEL") or DEFAULT_MODEL, estimate_usd_micro=estimate)
+    model = values.get("POSTRIFF_IMAGE_MODEL") or DEFAULT_MODEL
+    return GatewayImageRuntime(key, model, estimate_usd_micro=estimate, allowed_providers=provider_map(values).get(model))

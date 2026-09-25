@@ -7,6 +7,7 @@ never interprets it as an instruction and never emits `action.proposed` on its o
 from postriff_alpha.domain import AlphaError, clean
 from postriff_alpha.generation import FixtureAdapter
 from .contracts import digest
+from .source_policy import exclusion_message
 from . import locale_lint, locales
 
 SAFE_EVENTS = ("run.started", "progress.updated", "source.added", "artifact.created", "message.delta", "message.completed", "warning.created", "action.proposed", "run.completed", "run.failed", "run.cancelled")
@@ -127,7 +128,7 @@ class FixtureAgentRuntime(AgentRuntime):
         for source in context["sources"]:
             emit(safe_event("source.added", sourceId=source["id"], policy=source["policy"], candidateOnly=source["candidateOnly"], facts=len(source["facts"])))
         for item in context["excluded"]:
-            emit(safe_event("warning.created", sourceId=item["id"], message=f"Source excluded: {item['reason']}."))
+            emit(safe_event("warning.created", sourceId=item["id"], reason=item["reason"], message=exclusion_message(item["reason"])))
         emit(safe_event("progress.updated", stage="drafting", percent=25))
         facts = [f for s in context["sources"] for f in s["facts"]]
         style = request.get("styleDirectives") or {}

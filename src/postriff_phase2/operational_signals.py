@@ -19,8 +19,10 @@ def snapshot(connection_factory, now=None):
         research_stuck = cur.fetchone()[0]
         cur.execute("SELECT count(*) FROM public.pr_usage_ledger r WHERE kind='reserve' AND at<to_timestamp(%s) AND NOT EXISTS(SELECT 1 FROM public.pr_usage_ledger s WHERE s.reservation_id=r.id AND s.cost_state IN ('actual','released'))", (now-600,))
         unsettled = cur.fetchone()[0]
-        cur.execute("SELECT count(*) FROM public.pr_budgets WHERE status='approved' AND spent_usd_micro+reserved_usd_micro>=stop_usd_micro")
-        budgets = cur.fetchone()[0]
+        cur.execute("SELECT count(*) FILTER (WHERE spent_usd_micro+reserved_usd_micro>=stop_usd_micro), "
+                    "count(*) FILTER (WHERE spent_usd_micro+reserved_usd_micro>=warn_usd_micro AND spent_usd_micro+reserved_usd_micro<stop_usd_micro) "
+                    "FROM public.pr_budgets WHERE status='approved'")
+        budgets, budget_warnings = cur.fetchone()
         cur.execute("SELECT count(*) FROM public.pr_billing_events WHERE outcome='rejected' AND processed_at>to_timestamp(%s)", (now-86400,))
         billing = cur.fetchone()[0]
         cur.execute("SELECT count(*) FROM public.pr_notifications WHERE NOT sent AND created_at<to_timestamp(%s)", (now-600,))
@@ -29,6 +31,6 @@ def snapshot(connection_factory, now=None):
         deletions = cur.fetchone()[0]
     counts = dict(publicationUncertain=stuck, queueDelayed=delayed, publicationFailed=failed, publicationHeld=held,
                   modelStuck=model_stuck, researchStuck=research_stuck, costUnsettled=unsettled,
-                  budgetStops=budgets, billingRejected24h=billing, notificationsUnsent=notifications, deletionPending=deletions)
+                  budgetStops=budgets, budgetWarnings=budget_warnings, billingRejected24h=billing, notificationsUnsent=notifications, deletionPending=deletions)
     return {'status':'attention' if any(counts.values()) else 'ok', 'observedAt':now, 'counts':counts,
             'notificationDelivery':'not_configured'}

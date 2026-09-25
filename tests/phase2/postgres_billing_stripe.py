@@ -66,7 +66,7 @@ class Identity:
 
 
 def signed(event_type, obj, event_id, created=None):
-    body = json.dumps({"id": event_id, "type": event_type, "created": int(created or clock[0]), "data": {"object": obj}}).encode()
+    body = json.dumps({"id": event_id, "type": event_type, "created": int(created or clock[0]), "livemode": False, "data": {"object": obj}}).encode()
     ts = int(clock[0])
     sig = hmac.new(b"whsec_test", f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
     return f"t={ts},v1={sig}", body

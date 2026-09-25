@@ -100,6 +100,7 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
     <StateMessage
       kind='stale'
       title={`${waiting} ${waiting === 1 ? 'post' : 'posts'} waiting for a first read`}
+      description='Readings aren’t collected automatically yet.'
       action={<NextStep href='/app/queue'>See posts</NextStep>}
     />
   );

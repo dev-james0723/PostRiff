@@ -39,6 +39,8 @@ interface ComposerProps {
   onSubmit: () => void;
   busy?: boolean;
   disabled?: boolean;
+  /** A caller-side block such as an invalid credit limit; the send button stays disabled. */
+  submitDisabled?: boolean;
   placeholder: string;
   chips: ChannelChip[];
   /** Selected channels and each channel's languages (useChannelLanguages). */
@@ -70,10 +72,11 @@ interface ComposerProps {
  * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, placeholder, chips, languages, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel },
+  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel },
   ref
 ) {
-  const canSend = !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use) && (!imageGeneration?.enabled || imageGeneration.available);
+  // An unavailable model is never swapped for another paid one: the person chooses again.
+  const canSend = !submitDisabled && models.some((m) => m.id === model && m.qualified) && !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use) && (!imageGeneration?.enabled || imageGeneration.available);
   const parsed = useMemo(() => locales.parseMessageLanguages(value), [value]);
   // One chip per selected account (two accounts on one platform stay two chips); a platform with no
   // selected account keeps its single platform chip.
@@ -205,7 +208,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
       {consent && (
         <div className='border-border/60 flex flex-wrap items-center gap-x-5 gap-y-2 border-t px-4 py-2.5'>
           <Checkbox checked={consent.use} onCheckedChange={consent.onUse} disabled={disabled} label='Use this text to draft with' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
-          <Checkbox checked={consent.own} onCheckedChange={consent.onOwn} disabled={disabled} label='My own writing (may be quoted publicly)' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
+          <Checkbox checked={consent.own} onCheckedChange={consent.onOwn} disabled={disabled} label='Allow public quotes from my own writing' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
           {hint && <span className='text-muted-foreground ml-auto text-xs'>{hint}</span>}
         </div>
       )}

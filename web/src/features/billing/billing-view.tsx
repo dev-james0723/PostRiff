@@ -11,6 +11,8 @@ import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { relativeTime } from '@/lib/time';
 import { Allowances } from './allowances';
+import { CreditBalance } from './credit-balance';
+import { CreditPacks } from './credit-packs';
 import { PAGE, infoContent } from './billing-copy';
 import { Ledger } from './ledger';
 import { GLASS_STATEFUL } from './lifecycle-alert';
@@ -112,8 +114,9 @@ export function BillingView() {
           {phase !== 'idle' && <CheckoutConfirmation phase={phase} />}
           {usage.isError && <LoadError error={usage.error} hasData updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />}
           <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
-          <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />
+          {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
           <Plans usage={data} isOwner={isOwner} redirect={redirect} />
+          {data.credits && isOwner && <CreditPacks />}
           {/* Run-by-run costs are the owner's; other members simply don't see the section. */}
           {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} />}
         </div>

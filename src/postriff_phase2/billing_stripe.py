@@ -86,10 +86,20 @@ def _invoice_fields(obj):
     lines = (obj.get("lines") or {}).get("data") if isinstance(obj.get("lines"), dict) else None
     line = lines[0] if isinstance(lines, list) and lines and isinstance(lines[0], dict) else {}
     period = line.get("period") if isinstance(line.get("period"), dict) else {}
+    payments = (obj.get("payments") or {}).get("data") if isinstance(obj.get("payments"), dict) else None
+    first_payment = payments[0].get("payment") if isinstance(payments, list) and payments and isinstance(payments[0], dict) and isinstance(payments[0].get("payment"), dict) else {}
+    amount_paid = obj.get("amount_paid")
     return {
         "workspaceId": meta.get("workspace_id") or "", "planTermsId": meta.get("plan_terms_id") or None,
         "customerId": _ref(obj.get("customer")), "subscriptionId": _ref(obj.get("subscription")) or _ref(details.get("subscription")),
-        "currentPeriodEnd": _epoch(period.get("end")),
+        "currentPeriodEnd": _epoch(period.get("end")), "periodStart": _epoch(period.get("start")),
+        # Monthly credits (FINAL-07) bind to the invoice itself, never to the event that delivered it.
+        "invoiceId": _ref(obj.get("id")), "billingReason": obj.get("billing_reason") if isinstance(obj.get("billing_reason"), str) else None,
+        "invoicePaid": obj.get("status") == "paid" or obj.get("paid") is True,
+        "amountPaid": amount_paid if type(amount_paid) is int and amount_paid >= 0 else None,
+        "currency": obj.get("currency") if isinstance(obj.get("currency"), str) else None,
+        # Older API versions carry payment_intent on the invoice; 2025+ versions list invoice payments.
+        "paymentIntentId": _ref(obj.get("payment_intent")) or _ref(first_payment.get("payment_intent")),
     }
 
 
@@ -101,6 +111,18 @@ def _checkout_fields(obj):
     }
 
 
+CREDIT_CHECKOUT_TTL_SECONDS = 3600
+KEY_MODES = (("sk_live_", True), ("rk_live_", True), ("sk_test_", False), ("rk_test_", False))
+
+
+def key_mode(secret_key):
+    """True for live keys, False for test keys (standard or restricted); any other format is refused."""
+    for prefix, live in KEY_MODES:
+        if secret_key.startswith(prefix):
+            return live
+    raise AlphaError("The Stripe secret key is not a recognised live or test key.", 503)
+
+
 class StripePaymentProvider:
     """Live provider. `parse_webhook` verifies and maps; `create_*` call Stripe through `transport`."""
     id = "stripe"
@@ -109,6 +131,7 @@ class StripePaymentProvider:
         if not secret_key or not webhook_secret:
             raise AlphaError("Stripe credentials are required.", 503)
         self.secret_key, self.webhook_secret = secret_key, webhook_secret.encode()
+        self.live = key_mode(secret_key)
         self.transport, self.clock, self.tolerance = transport or http_transport, clock, int(tolerance)
 
     # --- webhooks ------------------------------------------------------------------------
@@ -137,6 +160,8 @@ class StripePaymentProvider:
             raise AlphaError("Webhook body invalid.", 400) from error
         if not isinstance(raw, dict) or not isinstance(raw.get("id"), str) or not isinstance(raw.get("type"), str):
             raise AlphaError("Webhook event incomplete.", 400)
+        if raw.get("livemode") is not self.live:
+            raise AlphaError("Payment environment mismatch.", 400)
         obj = (raw.get("data") or {}).get("object") if isinstance(raw.get("data"), dict) else None
         obj = obj if isinstance(obj, dict) else {}
         return self.map_event(raw["id"], raw["type"], _epoch(raw.get("created")) or self.clock(), obj)
@@ -161,6 +186,7 @@ class StripePaymentProvider:
             fields = _invoice_fields(obj)
         event.update({k: v for k, v in fields.items() if v is not None})
         event["type"] = internal
+        event["stripeType"] = stripe_type
         return event
 
     # --- sessions ----------------------------------------------------------------------------
@@ -202,6 +228,25 @@ class StripePaymentProvider:
         if not isinstance(body.get("url"), str) or not isinstance(body.get("id"), str):
             raise AlphaError("Checkout could not be started.", 502)
         return {"url": body["url"], "sessionId": body["id"]}
+
+    def create_credit_checkout_session(self, *, order_id, workspace_id, price_id, customer_email, success_url, cancel_url):
+        """Prepare one-time Checkout through the injected transport; no credit is granted here."""
+        for value in (order_id, workspace_id, price_id, customer_email, success_url, cancel_url):
+            if not isinstance(value, str) or not value:
+                raise AlphaError("Credit checkout is missing a required field.", 400)
+        form = {"mode": "payment", "line_items[0][price]": price_id, "line_items[0][quantity]": "1",
+                # An unpaid session ends on its own; checkout.session.expired then closes the order.
+                "expires_at": str(int(self.clock()) + CREDIT_CHECKOUT_TTL_SECONDS),
+                "client_reference_id": workspace_id, "customer_email": customer_email,
+                "metadata[credit_order_id]": order_id, "payment_intent_data[metadata][credit_order_id]": order_id,
+                "success_url": success_url, "cancel_url": cancel_url}
+        body = self._post("/checkout/sessions", form, "credit-order:" + order_id, "Credit checkout could not be started.")
+        from urllib.parse import urlparse
+        url = body.get("url")
+        parsed = urlparse(url) if isinstance(url, str) else None
+        if not parsed or parsed.scheme != "https" or parsed.netloc != "checkout.stripe.com" or not isinstance(body.get("id"), str):
+            raise AlphaError("Stripe did not return a valid checkout session.", 502)
+        return {"sessionId": body["id"], "url": url}
 
     def create_portal_session(self, *, customer_id, return_url):
         if not isinstance(customer_id, str) or not customer_id or not isinstance(return_url, str) or not return_url:

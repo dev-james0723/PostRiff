@@ -40,7 +40,7 @@ const infoContent = {
     },
     { title: 'Unavailable isn’t zero', description: 'A metric the platform hasn’t reported shows “Unavailable”. A real zero shows 0.' },
     { title: 'Rates', description: 'Every rate shows both of its numbers. Fewer than three posts is too few to compare.' },
-    { title: 'When numbers update', description: 'Rafii reads a post’s numbers after the platform confirms it was published. There’s no fixed schedule yet; each row shows when it was read.' },
+    { title: 'When numbers update', description: 'Numbers aren’t collected automatically yet. A row shows numbers only after a reading, with the time it was read.' },
     {
       title: 'Accounts without numbers',
       description: 'Analytics is a separate permission, granted per account. Some platforms, like LinkedIn, don’t share analytics with Rafii.',

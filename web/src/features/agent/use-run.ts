@@ -5,6 +5,7 @@ import type { Run } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 const ACTIVE = new Set(['running', 'queued']);
+const MAX_POLL_FAILURES = 20;
 
 /**
  * Follows one Ideas run: replays its safe events from cursor 0 and keeps polling while the
@@ -24,15 +25,19 @@ export function useRun(runId: string | null, seed: Run | null = null) {
       return;
     }
     let disposed = false;
+    let failures = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
         const next = await api.runEvents(workspaceId, runId, 0);
         if (disposed) return;
+        failures = 0;
         setRun(next);
         if (ACTIVE.has(next.status)) timer = setTimeout(poll, 1200);
       } catch {
-        /* keep the last known state; the page offers a manual retry through navigation */
+        // Keep the last known state and keep asking with backoff: a dropped poll is not a finished run.
+        failures += 1;
+        if (!disposed && failures <= MAX_POLL_FAILURES) timer = setTimeout(poll, Math.min(15000, 1200 * 2 ** failures));
       }
     };
     if (!seed || seed.runId !== runId || ACTIVE.has(seed.status)) void poll();

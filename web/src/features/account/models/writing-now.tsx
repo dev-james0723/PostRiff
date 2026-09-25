@@ -39,8 +39,8 @@ export interface WritingNowProps {
 }
 
 /**
- * The page's one glass work surface (DNA §21.14): the applied choice, shown separately from the
- * saved preference when the two differ, and what it costs.
+ * The page's one glass work surface (DNA §21.14): the chosen writer and what it costs. A saved writer
+ * that is unavailable stays chosen until the person picks another; nothing is substituted for them.
  */
 export function WritingNow({ loading, error, onRetry, options, agents, model, option, saved, picked }: WritingNowProps) {
   const body = () => {
@@ -66,14 +66,15 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
         />
       );
     }
+    if (!option && saved && options.length > 0) {
+      return <StateMessage kind='stale' layout='inline' title={`${shortLabel(undefined, saved)} isn’t available`} description='Drafting waits until you choose another writer below. Nothing is switched for you.' />;
+    }
     if (!option) {
       return <StateMessage kind='empty' layout='inline' title='No writer available' description='Drafting can’t start until one is. Try Check again.' />;
     }
 
     const kind = routeKind(option, agents);
     const cost = costCopy(option.costClass);
-    const savedOption = saved ? options.find((m) => m.id === saved) : undefined;
-    const fellBack = Boolean(saved) && saved !== model;
 
     return (
       <div className='flex flex-col gap-2'>
@@ -86,15 +87,7 @@ export function WritingNow({ loading, error, onRetry, options, agents, model, op
           <span>{option.costClass === 'none' ? 'Free' : option.costClass === 'subscription' ? 'Paid by your CLI subscription' : cost.line}</span>
           {option.costClass === 'paid' && <BatchesLeft />}
         </p>
-        {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} />}
-        {fellBack && saved && (
-          <StateMessage
-            kind='stale'
-            layout='inline'
-            title={`${shortLabel(savedOption, saved)} isn’t available. Using ${shortLabel(option, model)}.`}
-            description={savedOption ? savedOption.detail : 'It’s no longer listed.'}
-          />
-        )}
+        {!option.qualified && <StateMessage kind='unsupported' layout='inline' title={option.detail} description='Drafting waits until you choose another writer below. Nothing is switched for you.' />}
         <p className='text-muted-foreground text-xs leading-relaxed'>Used for all drafts. Saved in this browser only.</p>
       </div>
     );

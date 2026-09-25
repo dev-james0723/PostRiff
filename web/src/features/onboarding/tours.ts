@@ -706,20 +706,20 @@ export const PAGE_TOURS: Tour[] = [
         body: 'The writer your drafts use, and who pays.'
       },
       {
-        id: 'cli',
-        route: '/app/account/models',
-        stop: 'Models',
-        target: ['[data-tour="models-cli"]', '[data-tour="models-empty"]'],
-        title: 'Writers you already pay for',
-        body: 'A signed-in coding assistant can write drafts on its own plan.'
-      },
-      {
         id: 'managed',
         route: '/app/account/models',
         stop: 'Models',
         target: ['[data-tour="models-managed"]'],
         title: 'Built-in writers',
         body: 'A managed model, and a free preview.'
+      },
+      {
+        id: 'cli',
+        route: '/app/account/models',
+        stop: 'Models',
+        target: ['[data-tour="models-cli"]', '[data-tour="models-empty"]'],
+        title: 'Writers you already pay for',
+        body: 'Optional, when you run the app yourself: a signed-in coding assistant can write drafts on its own plan.'
       },
       {
         id: 'consent',

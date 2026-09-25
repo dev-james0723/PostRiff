@@ -319,7 +319,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -346,9 +346,12 @@ class HostedWorkspaceService:
         # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
         self.publishing_live = False
         self.ideas.service_ref = self
-        self.ledger = Ledger()
+        self.ledger = Ledger(credits_enabled=credits_enabled, clock=clock)
         self.ideas.ledger = self.ledger
         self.billing = Billing(provider=billing_provider, ledger=self.ledger, clock=clock)
+        from .credit_purchases import CreditPurchases
+        self.credit_purchases = CreditPurchases(self.ledger._credit_book, self.billing.provider, clock) if self.billing.provider.id == "stripe" else None
+        self.credit_purchases_enabled = credit_purchases_enabled and credits_enabled
         from .email import Mailer, NullTransport, Reminders
         # Unconfigured deployments get a recording NullTransport: business actions never depend on email.
         self.mailer = mailer or Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", self.public_base_url or "https://postriff.invalid")
@@ -380,14 +383,19 @@ class HostedWorkspaceService:
             return view
 
     def billing_webhook(self, signature, body):
+        notice = None
         with self.connection_factory() as db:
             with db.cursor() as cur:
+                credits = self.credit_purchases.process_webhook(cur, signature, body) if self.credit_purchases else None
+                if credits is not None: return credits
                 result = self.billing.process_webhook(cur, signature, body)
                 if result.get("outcome") == "applied":
                     notice = self._billing_notice(cur, result)
-                    if notice:
-                        result["notification"] = notice
-                return result
+        # The address lookup and the email are network calls: only after the billing change is committed
+        # and every row lock is released.
+        if notice:
+            result["notification"] = self._deliver_billing_notice(notice)
+        return result
 
     # --- live billing (Stripe) and transactional email ------------------------------------
     def _email_for(self, user_id):
@@ -442,6 +450,34 @@ class HostedWorkspaceService:
         key = digest({"checkout": workspace_id, "plan": plan_terms_id, "hour": int(self.clock() // 3600)})
         return provider.create_checkout_session(workspace_id=workspace_id, plan_terms_id=plan_terms_id, price_id=terms[1], success_url=success, cancel_url=cancel, customer_id=customer_id, customer_email=customer_email, idempotency_key=key)
 
+    def billing_credit_packs(self, workspace_id, token):
+        with self.repository.transaction(token, workspace_id) as (cur, row, actor):
+            if not self.credit_purchases_enabled or not self.credit_purchases or not _membership(row).allows("owner"):
+                return {"available": False, "packs": []}
+            packs = self.credit_purchases.packs(cur, workspace_id)
+            return {"available": bool(packs), "packs": packs}
+
+    def billing_credit_checkout(self, workspace_id, token, pack_id, request_id):
+        if not self.credit_purchases_enabled or not self.credit_purchases:
+            raise AlphaError("Credit purchases are not enabled.", 503)
+        success = self._app_url(None, "/app/account/billing?creditCheckout=returned")
+        cancel = self._app_url(None, "/app/account/billing?creditCheckout=cancelled")
+        with self.repository.transaction(token, workspace_id) as (cur, row, actor):
+            require(_membership(row), "owner")
+            throttle(cur, "credit-checkout:" + workspace_id, 5, 60)
+            order = self.credit_purchases.prepare_order(cur, workspace_id, actor, pack_id, request_id)
+            if order.get("status") == "funded": return {"orderId": order["orderId"], "status": "funded", "url": None}
+            if order["url"]: return {"orderId": order["orderId"], "url": order["url"]}
+            cur.execute("SELECT price_id FROM public.pr_credit_orders WHERE id::text=%s", (order["orderId"],))
+            price = cur.fetchone()[0]
+        email = self._email_for(actor)
+        if not email: raise AlphaError("The account email could not be resolved for checkout.", 502)
+        session = self.billing.provider.create_credit_checkout_session(order_id=order["orderId"], workspace_id=workspace_id, price_id=price, customer_email=email, success_url=success, cancel_url=cancel)
+        with self.repository.transaction(token, workspace_id) as (cur, row, actor):
+            require(_membership(row), "owner")
+            self.credit_purchases.attach_checkout(cur, workspace_id, order["orderId"], session)
+        return {"orderId": order["orderId"], **session}
+
     def billing_portal(self, workspace_id, token, return_path=None):
         """Owner-only. The provider-hosted portal handles payment method, plan change, cancellation and invoices."""
         provider = self._live_provider()
@@ -477,22 +513,33 @@ class HostedWorkspaceService:
         inserted = cur.fetchone()
         if not inserted:
             return {"kind": kind, "sent": False, "reason": "duplicate"}
-        address = self._email_for(owner[0])
-        if not address:
-            return {"kind": kind, "sent": False, "reason": "no address"}
-        billing_url = f"{self.public_base_url}/app/account/billing"
         if kind == "subscription_activated":
             from .billing import plan_display_label
             cur.execute("SELECT p.label FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))
             label = cur.fetchone()
-            outcome = self.mailer.subscription_activated(address, plan_display_label(label[0] if label else None), billing_url)
+            detail = plan_display_label(label[0] if label else None)
         else:
             cur.execute("SELECT extract(epoch from grace_until) FROM public.pr_subscriptions WHERE workspace_id=%s", (workspace_id,))
             grace = cur.fetchone()
-            outcome = self.mailer.payment_failed(address, float(grace[0]) if grace and grace[0] else self.clock() + 7 * 86400, billing_url)
+            detail = float(grace[0]) if grace and grace[0] else self.clock() + 7 * 86400
+        return {"kind": kind, "pending": True, "notificationId": inserted[0], "owner": owner[0], "detail": detail}
+
+    def _deliver_billing_notice(self, notice):
+        """Sends a notice recorded by `_billing_notice`, outside any transaction; marks it sent after."""
+        if not notice.get("pending"):
+            return notice
+        address = self._email_for(notice["owner"])
+        if not address:
+            return {"kind": notice["kind"], "sent": False, "reason": "no address"}
+        billing_url = f"{self.public_base_url}/app/account/billing"
+        if notice["kind"] == "subscription_activated":
+            outcome = self.mailer.subscription_activated(address, notice["detail"], billing_url)
+        else:
+            outcome = self.mailer.payment_failed(address, notice["detail"], billing_url)
         if outcome.get("sent"):
-            cur.execute("UPDATE public.pr_notifications SET sent=true WHERE id=%s", (inserted[0],))
-        return {"kind": kind, "sent": bool(outcome.get("sent"))}
+            with self.connection_factory() as db, db.cursor() as cur:
+                cur.execute("UPDATE public.pr_notifications SET sent=true WHERE id=%s", (notice["notificationId"],))
+        return {"kind": notice["kind"], "sent": bool(outcome.get("sent"))}
 
     def data_request(self, workspace_id, token, kind, payload):
         from . import privacy

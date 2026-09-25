@@ -40,6 +40,12 @@ export function variantForRow(state: SnapshotState, run: Run, row: { platform: s
   return undefined;
 }
 
+export function defaultPlanAccount<T extends { id: string; platform: string; displayState?: string }>(channels: readonly T[], destination: { platform: string; channelId?: string }, readyState: string): T | undefined {
+  const matches = channels.filter((channel) => channel.platform === destination.platform);
+  if (destination.channelId) return matches.find((channel) => channel.id === destination.channelId);
+  return matches.find((channel) => channel.displayState === readyState) ?? matches[0];
+}
+
 export async function approvePlan(input: {
   api: PostRiffApi;
   workspaceId: string;

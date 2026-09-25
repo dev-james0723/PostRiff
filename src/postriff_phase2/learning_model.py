@@ -165,22 +165,32 @@ class GatewayCall:
     """One JSON answer from the managed cloud route (Vercel AI Gateway, OpenAI-compatible)."""
     local = False
 
-    def __init__(self, api_key, model=CLOUD_MODEL, endpoint=None, transport=None):
+    def __init__(self, api_key, model=CLOUD_MODEL, endpoint=None, transport=None, allowed_providers=None):
         from .model_runtime import DEFAULT_ENDPOINT, model_transport
         self.api_key, self.model, self.endpoint, self.transport = api_key, model, endpoint or DEFAULT_ENDPOINT, transport or model_transport
+        # Same approved-provider restriction as drafting: routing and fallbacks stay inside this list.
+        self.allowed_providers = [str(p) for p in allowed_providers] if allowed_providers else [model.split("/", 1)[0]]
 
     def __call__(self, system, user, schema):
         cost_usd_micro = None
         body = {"model": self.model, "temperature": 0.2, "max_tokens": 1200, "response_format": {"type": "json_object"},
-                "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}]}
+                "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}],
+                "providerOptions": {"gateway": {"only": list(self.allowed_providers)}}}
         response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body)
         data = response.get("body") or {}
         if response.get("status") != 200 or not isinstance(data, dict):
             raise AlphaError("The extraction model call failed.", 502)
+        from .model_runtime import gateway_routing
+        final_provider, gateway_cost = gateway_routing(data)
+        if final_provider and final_provider not in self.allowed_providers:
+            raise AlphaError("The extraction answer came from a provider outside the approved list; it was not used.", 502)
         usage = data.get('usage') or {}
         cost = usage.get('cost')
-        if isinstance(cost, (int, float)) and not isinstance(cost, bool) and __import__('math').isfinite(cost) and cost >= 0:
-            cost_usd_micro = __import__('math').ceil(cost * 1_000_000)
+        if not (isinstance(cost, (int, float)) and not isinstance(cost, bool) and __import__('math').isfinite(cost) and cost >= 0):
+            cost = gateway_cost
+        if cost is not None:
+            from decimal import ROUND_CEILING, Decimal
+            cost_usd_micro = int((Decimal(str(cost)) * 1_000_000).to_integral_value(rounding=ROUND_CEILING))
         else:
             from .model_runtime import DEFAULT_PRICES
             prompt, completion = usage.get('prompt_tokens'), usage.get('completion_tokens')
@@ -214,5 +224,6 @@ def extractor_from_environment(values):
         return ModelExtractor(ClaudeCliCall(ClaudeCliRuntime()), model=f"claude-code:{CLI_ALIAS}", local=True)
     key = values.get("AI_GATEWAY_API_KEY")
     if key:
-        return ModelExtractor(GatewayCall(key, endpoint=values.get("AI_GATEWAY_ENDPOINT")), model=CLOUD_MODEL, local=False)
+        from .model_runtime import provider_map
+        return ModelExtractor(GatewayCall(key, endpoint=values.get("AI_GATEWAY_ENDPOINT"), allowed_providers=provider_map(values).get(CLOUD_MODEL)), model=CLOUD_MODEL, local=False)
     return None

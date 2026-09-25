@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Finishing connection' };
 
 export default function ConnectReturnPage() {
   return (
-    <Suspense fallback={<PageContainer pageTitle='Finishing connection' width='reading' isLoading />}>
+    <Suspense fallback={<PageContainer pageTitle='Finishing connection' width='reading' isLoading>{null}</PageContainer>}>
       <ConnectReturn />
     </Suspense>
   );

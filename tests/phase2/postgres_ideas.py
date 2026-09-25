@@ -107,7 +107,8 @@ checks.append("apply is exact-hash and policy-epoch bound; a stale candidate is 
 service.mutate(wid_a, "one", state["revision"], "source_policy", {"sourceId": src["id"], "policy": "internal_reference", "egressConsent": [], "confirmed": True})
 run = ideas.turn(wid_a, "one", conv, {"text": "", "sourceIds": [src["id"]], "destinations": [{"platform": "LinkedIn", "language": "English"}]})
 assert not any(e["type"] == "source.added" for e in run["events"])
-assert any(e["type"] == "warning.created" and "internal_reference" in e.get("message", "") for e in run["events"])
+# FINAL-03: the warning names the reason code in `reason` and says it in words in `message`.
+assert any(e["type"] == "warning.created" and e.get("reason") == "internal_reference_excluded_from_public_draft" and "internal references stay out of public drafts" in e.get("message", "") for e in run["events"])
 assert not any(src["facts"][0]["text"] in json.dumps(e) for e in run["events"])
 checks.append("internal_reference source is excluded from the public draft projection and its text never appears in events")
 

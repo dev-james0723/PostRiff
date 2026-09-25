@@ -13,6 +13,7 @@ import { runLabel, scheduleSummary, statusText } from '@/features/automations/sc
 import { automationsOf, finished, unseen } from '@/features/automations/use-automations';
 import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
+import { relativeTime } from '@/lib/time';
 import type { SnapshotState } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
@@ -30,6 +31,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
   const [busy, setBusy] = useState(false);
   const automations = automationsOf(state).filter((item) => item.task.status !== 'cancelled');
   const active = automations.filter((item) => item.task.status === 'active');
+  const checkedAt = state.raffi?.suggestionsCheckedAt;
   const suggestions = state.raffi?.suggestions ?? [];
   const open = suggestions.filter((item) => item.status === 'open').length;
 
@@ -55,6 +57,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
     if (!ref?.targetId || ref.workspaceId !== workspaceId) return;
     if (ref.targetType === 'job') router.push(`/app/queue?job=${encodeURIComponent(ref.targetId)}`);
     else if (ref.targetType === 'asset') router.push(`/app/queue?asset=${encodeURIComponent(ref.targetId)}`);
+    else if (ref.targetType === 'channel') router.push('/app?new=1');
     else if (ref.targetType === 'campaign') router.push(`/app/automations?campaign=${encodeURIComponent(ref.targetId)}`);
   }
 
@@ -105,7 +108,11 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
 
       <Surface material='glass' padding='md'>
         <div className='mb-3 flex items-center justify-between gap-3'>
-          <h2 className='text-foreground text-lg font-normal tracking-[-0.01em]'>{open > 0 ? `${open} idea${open === 1 ? '' : 's'} for you` : 'Suggestions'}</h2>
+          <div className='flex min-w-0 flex-col gap-0.5'>
+            <h2 className='text-foreground text-lg font-normal tracking-[-0.01em]'>{open > 0 ? `${open} idea${open === 1 ? '' : 's'} for you` : 'Suggestions'}</h2>
+            {/* Suggestions change only when someone presses Refresh, so the header says when that last happened. */}
+            <p className='text-muted-foreground text-xs'>{checkedAt ? `Last checked ${relativeTime(checkedAt)}. Refresh to check again.` : 'Not checked yet.'}</p>
+          </div>
           {canEdit && <Button variant='glass' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_refresh', {})}>Refresh</Button>}
         </div>
         <ul className='flex flex-col gap-2'>
@@ -113,7 +120,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
           {/* The evidence behind each suggestion stays one hover away, not a line of ids under every item. */}
           {suggestions.filter((item) => item.status === 'open' || item.status === 'accepted').slice(-4).toReversed().map((item) => <li key={item.id} className='rafii-quiet flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--rafii-radius-control)] px-3 py-2'>
             <p className='min-w-0 flex-[1_1_12rem] text-sm' title={item.evidence.length ? `Based on ${item.evidence.map((entry) => `${entry.type} ${entry.id.slice(0, 8)}`).join(', ')}` : undefined}>{item.reason}</p>
-            {canEdit && <div className='flex gap-1'><Button variant='action' size='sm' className='min-h-11' disabled={busy} aria-label={`Review: ${item.reason}`} onClick={() => void openSuggestion(item.id)}>Review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} aria-label={`Dismiss: ${item.reason}`} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button></div>}
+            {canEdit && <div className='flex flex-wrap gap-1'><Button variant='action' size='sm' className='min-h-11' disabled={busy} aria-label={`Review: ${item.reason}`} onClick={() => void openSuggestion(item.id)}>Review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} aria-label={`Dismiss: ${item.reason}`} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button>{item.status === 'open' && <Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_snooze', { suggestionId: item.id, until: Date.now() / 1000 + 86400 })}>Snooze 1 day</Button>}</div>}
           </li>)}
         </ul>
       </Surface>

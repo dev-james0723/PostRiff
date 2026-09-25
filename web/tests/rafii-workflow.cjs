@@ -227,8 +227,14 @@ async function workflow(browser) {
     await modelDialog.waitFor();
     await page.waitForTimeout(600);
     mark('model dialog open');
-    await modelDialog.getByRole('radio', { name: 'CLI', exact: true }).click();
-    await page.waitForTimeout(700);
+    // The CLI switch appears only where the API host reports a CLI (CI's harness runs with POSTRIFF_LOCAL_CLI=0).
+    const cliMode = modelDialog.getByRole('radio', { name: 'CLI', exact: true });
+    const hasCli = (await cliMode.count()) > 0;
+    check('model dialog offers CLI only where the API host reports one', true, hasCli ? 'CLI reported: API and CLI modes' : 'no CLI reported: API models only');
+    if (hasCli) {
+      await cliMode.click();
+      await page.waitForTimeout(700);
+    }
     const providerTabs = modelDialog.getByRole('tablist', { name: 'Model providers' }).getByRole('tab');
     const providerCount = await providerTabs.count();
     for (let i = providerCount - 1; i >= 0; i -= 1) {
@@ -236,8 +242,10 @@ async function workflow(browser) {
       mark(`provider swap ${i}`);
       await page.waitForTimeout(650);
     }
-    await modelDialog.getByRole('radio', { name: 'API models', exact: true }).click();
-    await page.waitForTimeout(600);
+    if (hasCli) {
+      await modelDialog.getByRole('radio', { name: 'API models', exact: true }).click();
+      await page.waitForTimeout(600);
+    }
     await modelDialog.getByRole('radio', { name: /Deterministic preview/ }).click();
     await page.waitForTimeout(300);
     const applied = await modelDialog.getByRole('radio', { name: /sends standard/ }).count();
@@ -349,8 +357,13 @@ async function motion(browser) {
     const dialog = s.page.getByRole('dialog');
     await dialog.waitFor();
     await s.page.waitForTimeout(700);
-    await dialog.getByRole('radio', { name: 'CLI', exact: true }).click();
-    await s.page.waitForTimeout(700);
+    // The CLI switch (and its five-level reasoning ladder) exists only where the API host reports a CLI.
+    const cliMode = dialog.getByRole('radio', { name: 'CLI', exact: true });
+    const hasCli = (await cliMode.count()) > 0;
+    if (hasCli) {
+      await cliMode.click();
+      await s.page.waitForTimeout(700);
+    }
     const tabs = dialog.getByRole('tablist', { name: 'Model providers' }).getByRole('tab');
     for (const index of [1, 0, 1, 0]) {
       if (index < (await tabs.count())) {
@@ -359,15 +372,19 @@ async function motion(browser) {
         await s.page.waitForTimeout(700);
       }
     }
-    // Stage (not apply) a CLI model so the five-level ladder shows; Cancel discards it.
-    await dialog.getByRole('radiogroup', { name: 'Models' }).getByRole('radio').first().click();
-    await s.page.waitForTimeout(500);
-    for (const segment of [/sends medium/, /sends high/, /sends xhigh/, /sends max/, /sends low/]) {
-      await dialog.getByRole('radio', { name: segment }).click();
-      mark(`reasoning ${segment.source}`);
-      await s.page.waitForTimeout(550);
+    if (hasCli) {
+      // Stage (not apply) a CLI model so the five-level ladder shows; Cancel discards it.
+      await dialog.getByRole('radiogroup', { name: 'Models' }).getByRole('radio').first().click();
+      await s.page.waitForTimeout(500);
+      for (const segment of [/sends medium/, /sends high/, /sends xhigh/, /sends max/, /sends low/]) {
+        await dialog.getByRole('radio', { name: segment }).click();
+        mark(`reasoning ${segment.source}`);
+        await s.page.waitForTimeout(550);
+      }
+      await shot(s.page, s.dir, 'reasoning-bars');
+    } else {
+      check('CLI reasoning ladder skipped: the API host reports no CLI', true);
     }
-    await shot(s.page, s.dir, 'reasoning-bars');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await s.page.waitForTimeout(500);
     check('Cancel keeps the fixture model', /Deterministic preview/.test(await settingButton(s.page, 'Model').innerText()), await settingButton(s.page, 'Model').innerText());
@@ -618,10 +635,29 @@ async function drafts(browser) {
     return response.json();
   };
   try {
-    // Save the seeded run's drafts, as Home's Save does, so there is something to schedule (an earlier scene may have).
-    const snapshot = await api('GET', '');
-    const run = await api('GET', `/ideas/runs/${seed.runId}/events?cursor=0`);
-    await api('POST', `/ideas/runs/${seed.runId}/apply`, { expectedRevision: snapshot.revision, artifactHash: run.artifactHash }).catch(() => {});
+    // Save the seeded run's drafts, as Home's Save does, so there is something to schedule. Earlier scenes add
+    // sources, and the server then refuses to save that older candidate ("draft again from current context"), so
+    // in that case draft again for the same three destinations and save the new candidate.
+    const save = async (runId) => {
+      const snapshot = await api('GET', '');
+      let run = await api('GET', `/ideas/runs/${runId}/events?cursor=0`);
+      for (let i = 0; run.status === 'running' && i < 120; i++) { await page.waitForTimeout(500); run = await api('GET', `/ideas/runs/${runId}/events?cursor=0`); }
+      return api('POST', `/ideas/runs/${runId}/apply`, { expectedRevision: snapshot.revision, artifactHash: run.artifactHash });
+    };
+    let redrafted = false;
+    try { await save(seed.runId); } catch {
+      const snapshot = await api('GET', '');
+      const fresh = await api('POST', '/ideas/quick-start', {
+        expectedRevision: snapshot.revision,
+        text: 'A second thought from practice: short daily sessions carry further than rare long ones.',
+        ownContent: true, confirmUse: true,
+        destinations: seed.variants.map((v) => ({ platform: v.platform, language: v.language, ...(v.channelId ? { channelId: v.channelId } : {}) })),
+        model: 'deterministic-preview', reasoning: 'quick', voiceMode: 'neutral', timeZone: 'Asia/Hong_Kong'
+      });
+      await save(fresh.runId);
+      redrafted = true;
+    }
+    check('drafts saved for scheduling', true, redrafted ? 'seeded candidate was stale; drafted again from current context' : 'seeded candidate saved');
     await page.goto(`${base}/app/pipeline`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await settle(page);
     await page.waitForURL(/\/app\/queue\?view=drafts/, { timeout: 120000 });

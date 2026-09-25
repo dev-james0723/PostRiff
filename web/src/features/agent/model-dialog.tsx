@@ -126,6 +126,8 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
   const [query, setQuery] = useState('');
   const [listKey, setListKey] = useState(0);
 
+  /* Most people draft with the writers under PostRiff; the CLI switch appears only where the API host reports one. */
+  const hasCli = groups.some((group) => group.mode === 'cli') || (catalog?.agents?.length ?? 0) > 0;
   const rail = groups.filter((group) => group.mode === mode);
   const activeGroup = rail.find((group) => group.id === provider) ?? rail[0];
   const stagedOption = models.find((model) => model.id === staged);
@@ -239,8 +241,12 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
         ) : (
           <>
             <div className='mb-3 flex flex-wrap items-center justify-between gap-3'>
-              <SegmentedControl<Mode> label='Connection mode' size='sm' widths='content' value={mode} onChange={switchMode} options={[{ value: 'api', label: 'API models' }, { value: 'cli', label: 'CLI' }]} />
-              <InfoTip label='About API and CLI models' description='API models run through Rafii. CLI models run on the computer that hosts Rafii, with your own CLI sign-in.' className='size-9' />
+              {hasCli && (
+                <>
+                  <SegmentedControl<Mode> label='Connection mode' size='sm' widths='content' value={mode} onChange={switchMode} options={[{ value: 'api', label: 'API models' }, { value: 'cli', label: 'CLI' }]} />
+                  <InfoTip label='About API and CLI models' description='API models run through Rafii. CLI models run on the computer that hosts Rafii, with your own CLI sign-in.' className='size-9' />
+                </>
+              )}
             </div>
 
             <div className='rafii-quiet grid min-h-[22rem] grid-cols-[3.25rem_minmax(0,1fr)] overflow-hidden rounded-[var(--rafii-radius-card)] md:grid-cols-[4.25rem_minmax(0,1fr)]'>

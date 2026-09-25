@@ -153,6 +153,7 @@ function ProviderTile({
                 Callback: <code className='rafii-field rounded-md px-1.5 py-0.5 font-mono'>{provider.callbackUri}</code>
               </p>
             )}
+            <p className='text-muted-foreground text-xs'>Credentials go in the server settings, never in the browser.</p>
           </CollapsibleContent>
         </Collapsible>
       )}
@@ -193,7 +194,7 @@ function CompanionDirectory() {
   );
 }
 
-const COMPANION_SENTENCE = 'For platforms without a public API. It will publish from your computer, with your own sign-in — never from our servers.';
+const COMPANION_SENTENCE = 'For platforms without a public API. It will publish from your computer, with your own sign-in — never from our servers. Not available yet.';
 
 function ChannelsPage() {
   const channelsQuery = useChannels();

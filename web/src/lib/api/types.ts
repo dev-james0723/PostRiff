@@ -160,6 +160,8 @@ export interface SnapshotVariant {
   customized?: boolean;
   /** Which Ideas run produced this variant (set by `apply`). */
   provenance?: { runId?: string; contextDigest?: string; policyEpoch?: number; model?: string };
+  /** Later runs that refreshed this unscheduled draft in place (most recent last). */
+  runRefs?: string[];
   /** A regenerated version (for example after a voice change) waiting to be accepted. */
   proposedUpdate?: {
     text: string;
@@ -336,6 +338,8 @@ export interface SnapshotState {
       recurringTasks: RecurringTask[];
       occurrences: RecurringOccurrence[];
     };
+    /** When suggestions were last recomputed (epoch seconds); absent until the first check. */
+    suggestionsCheckedAt?: number;
     suggestions?: { id: string; kind: string; reason: string; status: string; evidence: { type: string; id: string; revision: number }[]; action: string; actionRef?: { id: string; type: string; authority: string; workspaceId?: string; targetType?: string; targetId?: string; targetRevision?: number } | null }[];
   };
   [key: string]: unknown;
@@ -698,6 +702,18 @@ export interface SchedulePlan {
   destinations: SchedulePlanDestination[];
   unsupported: string[];
   warnings: string[];
+}
+
+/** Server estimate for the exact request a credit quote would bind (FINAL-05). */
+export interface CreditEstimate {
+  estimateMilliCredits: number;
+  ceilingMilliCredits: number;
+  availableMilliCredits: number;
+  basis: string;
+  model: string;
+  provider: string;
+  policy: string;
+  reasoning?: string;
 }
 
 export interface Run {
@@ -1100,7 +1116,18 @@ export interface LedgerEntry {
   model: string;
 }
 
+export interface CreditBalance {
+  mode: "credits";
+  availableMilliCredits: number;
+  heldMilliCredits: number;
+  usedMilliCredits: number;
+  debtMilliCredits: number;
+  quoteType: "spending_limit";
+  textOnly: boolean;
+}
+
 export interface Usage {
+  credits?: CreditBalance | null;
   entitlement: Entitlement;
   subscription: SubscriptionView | null;
   budget: {

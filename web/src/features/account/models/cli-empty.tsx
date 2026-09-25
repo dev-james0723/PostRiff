@@ -7,6 +7,18 @@ import { StateMessage, Surface } from '@/components/rafii';
  * Hosted: a CLI would need the desktop companion, which does not exist yet, so there is nothing to do.
  * Self-run: the setup steps sit behind a disclosure for the person who runs the app.
  */
+function CliSteps() {
+  return (
+    <ol className='text-muted-foreground mx-auto mt-2 flex max-w-md list-decimal flex-col gap-1.5 pl-5 text-left text-sm leading-relaxed'>
+      <li>Install Claude Code or the Codex CLI on the computer that runs the app.</li>
+      <li>
+        Sign in there in Terminal with <code className='font-mono text-xs'>claude auth login</code> or <code className='font-mono text-xs'>codex login</code>. We never ask for that password.
+      </li>
+      <li>Restart the app, then press Check again.</li>
+    </ol>
+  );
+}
+
 export function CliEmpty({ hosted }: { hosted: boolean | null }) {
   return (
     <Surface material='quiet' radius='card' padding='md' data-tour='models-empty' className='flex flex-col gap-4'>
@@ -24,14 +36,7 @@ export function CliEmpty({ hosted }: { hosted: boolean | null }) {
       {hosted !== true && (
         <details className='mx-auto w-full max-w-md text-sm'>
           <summary className='rafii-focus text-foreground -mx-1 inline-flex min-h-9 cursor-pointer items-center rounded-md px-1 font-medium'>How to add a CLI</summary>
-          <ol className='text-muted-foreground mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-left leading-relaxed'>
-            <li>Install Claude Code or the Codex CLI on the computer that runs the app.</li>
-            <li>
-              Sign in there in Terminal with <code className='font-mono text-xs'>claude auth login</code> or <code className='font-mono text-xs'>codex login</code>. We never ask
-              for that password.
-            </li>
-            <li>Restart the app, then press Check again.</li>
-          </ol>
+          <CliSteps />
         </details>
       )}
     </Surface>
