@@ -1305,6 +1305,35 @@ def _():
     return {"actual": body["speakableSummary"]}
 
 
+@scenario("R20", "After a Rafii answer, 2–3 follow-up suggestions from the light model; never a decision; tapping one only sends it as a message (E2)",
+          "What should I post this week?", "the Manager offered none, so the light model's suggestions are stored with the answer; one that reads as a decision is dropped; its call is on the same run")
+def _():
+    conversation = fresh_conversation("follow-ups")
+    SCRIPTS.set(rafii_manager=[[assistant_message(json.dumps({"answer": "A teaser for the practice journal early in the week and a behind-the-scenes clip later on.",
+                                                              "speakable": "A teaser early in the week, a clip later.", "language": "en", "follow_ups": []}))]])
+    calls = []
+
+    def light(method, url, headers=None, body=None, timeout=None):
+        calls.append({"url": url, "body": body})
+        return {"status": 200, "body": {"output_text": json.dumps({"followUps": ["Yes, apply it", "Draft the teaser", "What should the clip show?"]}),
+                                        "usage": {"input_tokens": 420, "output_tokens": 30}}}
+    runtime.followup_transport = light
+    try:
+        result = turn("What should I post this week?", conversationId=conversation)
+    finally:
+        runtime.followup_transport = None
+    SCRIPTS.complete()
+    chips = message_body(result["messageId"])["siteAgent"]["followUps"]
+    assert chips == ["Draft the teaser", "What should the clip show?"], chips
+    sent = calls[0]["body"] if calls else {}
+    assert len(calls) == 1 and calls[0]["url"] == "https://api.openai.com/v1/responses" and sent["model"] == "gpt-6-luna", calls
+    assert sent["reasoning"] == {"effort": "none"} and sent["max_output_tokens"] == 240 and "What should I post this week?" in sent["input"][0]["content"][0]["text"], sent
+    trace = one("SELECT artifact->'trace' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
+    assert trace["followUps"] == {"skipped": None, "count": 2}, trace["followUps"]
+    assert any(g.get("agent") == "follow_ups" and g.get("model") == "gpt-6-luna" for g in trace["generations"]), trace["generations"]
+    return {"actual": chips}
+
+
 # --- write evidence ------------------------------------------------------------------------------------------------------------
 out_dir = ROOT / "docs/design/site-agent/agent-runtime/evidence"
 out_dir.mkdir(parents=True, exist_ok=True)
