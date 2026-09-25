@@ -62,6 +62,8 @@ It loads 001, 002, 004–012, 018, 019, then 024 and 025 (and later 026–029). 
 
 ## ai-routing renumbering checklist (later, when that stage is authorized)
 
+**Prepared (local only, 2026-09-25):** branch `rafii/ai-routing-renumber-026-029` @ `0a69f78` (worktree `James-Au-Studio-ai-routing-renumber`), one commit on `ai-routing` `d2f23f7`. It covers steps 3 and 4 for the tracked files. On that branch, all 19 PostgreSQL script runs pass and 486 unit tests pass. Steps 1, 2, 5 and 6 are still open, and so are the untracked ai-routing docs in its own worktree. The `ai-routing` branch itself is unchanged.
+
 1. Re-run the inventory above. If 026–029 are no longer all free, use the next free contiguous range and update this file.
 2. Confirm that ai-routing's 020–023 were never applied to any shared database (staging or production ledger, or the runner records).
 3. `git mv` the files: `020_ai_routing` → `026_ai_routing`, `021_ai_connections` → `027_ai_connections`, `022_mcp_connector` → `028_mcp_connector`, `023_companion_relay` → `029_companion_relay`.
