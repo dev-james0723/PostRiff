@@ -161,11 +161,16 @@ class IdeasService:
         self.researcher = None if researcher is False else (researcher or (research.Researcher() if research.enabled() else None))
 
     # --- routes and models ---------------------------------------------------------
+    @staticmethod
+    def _voice_route(runtime, model_id):
+        """The exact writer route voice-sample consent is checked against (and recorded on each draft)."""
+        return f"cloud:{runtime.provider}:{model_id}" if getattr(runtime, "provider_class", "local") == "cloud" else "local-cli"
+
     def model_catalog(self):
         """Every model a client may name in a turn, with the agent (CLI) behind each route."""
         models, agents = [], []
         for runtime in self.runtimes:
-            models.extend({**model, "voiceAnalysisAvailable": callable(getattr(runtime, 'analyze_voice', None)), "provider": runtime.provider, "egress": getattr(runtime, "provider_class", "local"), "voiceRoute": (f"cloud:{runtime.provider}:{model['id']}" if getattr(runtime, "provider_class", "local") == "cloud" else "local-cli"), "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
+            models.extend({**model, "voiceAnalysisAvailable": callable(getattr(runtime, 'analyze_voice', None)), "provider": runtime.provider, "egress": getattr(runtime, "provider_class", "local"), "voiceRoute": self._voice_route(runtime, model["id"]), "voiceRouteClass": voice_sources.route_class(self._voice_route(runtime, model["id"])), "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
             info = runtime.describe()
             if info:
                 agents.append(info)
@@ -1172,14 +1177,13 @@ class IdeasService:
             requested_voice = payload.get("voiceSourceIds") if isinstance(payload.get("voiceSourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("kind") == "voice_sample" and s.get("active") and s.get("selected")]
             try:
                 voice_projection = voice_sources.retrieve(state, requested_voice, "generation", voice_route, query=idea)
-            except AlphaError:
-                if not recurring:
-                    raise
+            except AlphaError as error:
+                if not recurring and error.status not in (404, 409):
+                    raise   # a malformed request, not a missing or disallowed sample
             if not (voice_projection or {}).get("samples"):
-                if not recurring:
-                    raise AlphaError("Select and allow at least one writing sample for this writer route.", 409)
-                # An automation keeps preparing drafts when its writing samples are gone or not allowed for this
-                # writer; this draft is neutral and says so, never a failed run.
+                # No chosen sample may be used by this writer right now (none selected, removed, or not allowed for
+                # this route): every caller (Home, a conversation, Rafii, an automation) still gets its draft, in a
+                # neutral voice that says so, never a refusal.
                 voice_mode, voice_projection = "neutral", None
                 reminders.append(VOICE_FALLBACK_NOTE)
         shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)

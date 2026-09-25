@@ -804,6 +804,8 @@ export interface ModelOption {
   provider?: string;
   egress?: 'local' | 'cloud';
   voiceRoute?: string;
+  /** The class grant that also covers voiceRoute (every Rafii AI writer model), if any. */
+  voiceRouteClass?: string | null;
   voiceAnalysisAvailable?: boolean;
   reasoning?: { id: string; available: boolean; detail: string }[];
 }

@@ -44,7 +44,7 @@ import { SettingButtons } from './setting-buttons';
 import { selectionKey, useChannelLanguages, type ChannelTarget } from './use-channel-languages';
 import { useDestinations } from './use-destinations';
 import { useModelChoice } from './use-model';
-import { eligibleVoiceSources } from './voice-consent';
+import { effectiveVoiceMode, eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
 import { useAuth } from '@/lib/auth/session';
@@ -163,7 +163,7 @@ function HomeWorkspace() {
   }
   const [own, setOwn] = useState(false);
   const [use, setUse] = useState(true);
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>('neutral');
+  const [voiceChoice, setVoiceChoice] = useState<VoiceMode | null>(null);
   const [imageRequested, setImageRequested] = useState(false);
   const [template, setTemplate] = useState<QuickStart | null>(null);
   const [library, setLibrary] = useState<LibraryValue>(DEFAULT_LIBRARY);
@@ -206,6 +206,7 @@ function HomeWorkspace() {
   const choice = useModelChoice(models.data);
   const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
+  const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
   const maximum = parseCreditLimit(creditLimit);
   const estimateRequest = useMemo(
     () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds, timeZone, sourceIds: included })),
@@ -628,7 +629,7 @@ function HomeWorkspace() {
       <PlatformOnlyDialog open={dialog === 'platforms'} onOpenChange={(open) => setDialog(open ? 'platforms' : null)} value={destinations.platformOnly.filter(isDraftable)} onApply={(platforms) => destinations.setPlatformOnly(platforms)} />
       {opened.current.has('language') && <LanguageDialog open={dialog === 'language'} onOpenChange={(open) => setDialog(open ? 'language' : null)} selection={languages.selection} languages={languages} accountLabel={(item) => (item.channelId ? `${item.platform} · ${accounts.find((a) => a.id === item.channelId)?.account ?? 'account'}` : item.platform)} id={ids.language} />}
       {opened.current.has('model') && <ModelDialog open={dialog === 'model'} onOpenChange={(open) => setDialog(open ? 'model' : null)} catalog={models.data} value={{ model: choice.model, reasoning: choice.reasoningMapping.preference }} onApply={(next) => { choice.choose(next.model); choice.setReasoningFor(next.model, next.reasoning); }} reasoningFor={choice.reasoningFor} id={ids.model} />}
-      {opened.current.has('voice') && <VoiceDialog open={dialog === 'voice'} onOpenChange={(open) => setDialog(open ? 'voice' : null)} value={voiceMode} onApply={setVoiceMode} available={voiceAvailable} sampleCount={voiceSourceIds.length} voiceRevision={voiceRevision} modelLabel={choice.label} />}
+      {opened.current.has('voice') && <VoiceDialog open={dialog === 'voice'} onOpenChange={(open) => setDialog(open ? 'voice' : null)} value={voiceMode} onApply={setVoiceChoice} available={voiceAvailable} sampleCount={voiceSourceIds.length} voiceRevision={voiceRevision} modelLabel={choice.label} />}
     </PageContainer>
   );
 }

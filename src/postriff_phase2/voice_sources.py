@@ -22,6 +22,26 @@ MAX_RETRIEVAL_SAMPLES = 6
 MAX_RETRIEVAL_CHARS = 12_000
 PURPOSES = ("analysis", "generation")
 LABELS = ("representative", "outdated", "sponsored", "guest", "ai_generated")
+# A writing (generation) grant names one exact writer route, or this class: every model Rafii's managed writer offers
+# through the Vercel AI Gateway, now or later. Each draft still records the exact route it used (voiceContext.route) and
+# the sample revisions it read (bindings). Analysis always names one exact route.
+MANAGED_WRITER_ROUTE = "cloud:vercel-ai-gateway:*"
+_CLASS_PREFIXES = {MANAGED_WRITER_ROUTE: MANAGED_WRITER_ROUTE[:-1]}
+
+
+def route_class(route: str) -> str | None:
+    """The class grant that covers this exact writer route, if any."""
+    return next((grant for grant, prefix in _CLASS_PREFIXES.items() if isinstance(route, str) and route.startswith(prefix) and len(route) > len(prefix) and not route.endswith("*")), None)
+
+
+def route_granted(source: dict, purpose: str, route: str) -> bool:
+    """Whether this sample may be used for this purpose on this exact writer route: an exact grant, or (writing only)
+    the class grant that covers the route."""
+    grants = [grant for grant in source.get("useGrants", []) if isinstance(grant, dict) and grant.get("purpose") == purpose]
+    if any(grant.get("route") == route for grant in grants):
+        return True
+    covering = route_class(route) if purpose == "generation" else None
+    return covering is not None and any(grant.get("route") == covering for grant in grants)
 
 
 def _bounded(value: Any, limit: int) -> str:
@@ -178,6 +198,8 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             route = grant.get("route")
             if not isinstance(route, str) or not route.strip() or len(route) > 120:
                 raise AlphaError("Choose the exact writer route for every voice-use grant.")
+            if route.strip() in _CLASS_PREFIXES and grant["purpose"] != "generation":
+                raise AlphaError("AI analysis needs one exact model; only writing may be allowed for every Rafii AI writer model.")
             normalized.append({"purpose": grant["purpose"], "route": route.strip()})
         source["useGrants"] = sorted({(item["purpose"], item["route"]) for item in normalized})
         source["useGrants"] = [{"purpose": purpose, "route": route} for purpose, route in source["useGrants"]]
@@ -223,7 +245,7 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
 def project(state: dict, source_ids: list[str], purpose: str, route: str) -> dict:
     if purpose not in PURPOSES:
         raise AlphaError("Unsupported voice sample purpose.")
-    if not isinstance(route, str) or not route or len(route) > 120:
+    if not isinstance(route, str) or not route or len(route) > 120 or route in _CLASS_PREFIXES:
         raise AlphaError("Choose an exact writer route.")
     if not isinstance(source_ids, list) or len(source_ids) > MAX_RECORDS or any(not isinstance(source_id, str) for source_id in source_ids) or len(set(source_ids)) != len(source_ids):
         raise AlphaError("Select at most 50 distinct voice samples.")
@@ -237,7 +259,7 @@ def project(state: dict, source_ids: list[str], purpose: str, route: str) -> dic
             reason = "not_selected"
         elif purpose not in source.get("purposeGrants", []):
             reason = "purpose_not_granted"
-        elif {"purpose": purpose, "route": route} not in source.get("useGrants", []):
+        elif not route_granted(source, purpose, route):
             reason = "route_not_granted"
         if reason:
             excluded.append({"id": source_id, "revision": source.get("revision"), "reason": reason})
