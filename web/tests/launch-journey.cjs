@@ -49,7 +49,7 @@ async function call(method,url,body){
   assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'A small practice habit makes room for creativity.');
   await page.getByRole('button',{name:'Expand writing space',exact:true}).click();
   await page.getByLabel('Expanded writing space',{exact:true}).fill('A small practice habit makes room for creativity. One step each day.');
-  await page.getByRole('button',{name:'Use this draft',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Done',exact:true}).click();
   assert.match(await page.getByLabel('Message',{exact:true}).inputValue(),/One step each day/);
   results.steps.push('explicit brief save/reload and expanded editor share text; permissions are not restored');
   await page.getByRole('button',{name:/^Choose channels,/}).click();
@@ -143,7 +143,7 @@ async function call(method,url,body){
    await page.screenshot({path:path.join(out,`${creditMode ? "credit-" : ""}journey-${width}.png`),fullPage:true});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   }
-  await page.goto(base+'/app/channels');await page.getByRole('heading',{name:'Saved folders',exact:true}).waitFor();
+  await page.goto(base+'/app/channels');await page.getByRole('heading',{name:'Folders',exact:true}).waitFor();
   await page.getByRole('button',{name:'New folder',exact:true}).first().click();
   await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});
   if(creditMode){
