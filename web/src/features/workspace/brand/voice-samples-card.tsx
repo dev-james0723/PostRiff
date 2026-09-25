@@ -24,6 +24,9 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
   const models = useModels();
   const [writerRoute, setWriterRoute] = useState('');
   const writers = models.data?.models.filter((model) => model.qualified && model.voiceRoute) ?? [];
+  // One grant for every model Rafii's managed writer offers (the server names the class); each draft still records
+  // the exact model it used.
+  const managedClass = writers.find((model) => model.voiceRouteClass)?.voiceRouteClass ?? null;
 
   async function update(action: string, payload: Record<string, unknown>) {
     try {
@@ -53,7 +56,7 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
         <Checkbox aria-label={`Select ${source.title || 'writing sample'}`} checked={source.selected === true} disabled={act.isPending || !source.active} onCheckedChange={(checked) => void update('voice_sample_select', { selected: checked === true })} />
       </div>
       <p className='text-foreground text-sm whitespace-pre-wrap'>{source.text}</p>
-      <p className='text-muted-foreground text-xs' title={allowed ? (source.routeGrants ?? []).join(', ') : undefined}>
+      <p className='text-muted-foreground text-xs' title={allowed ? (source.routeGrants ?? []).map((route) => (route.endsWith('*') ? 'any Rafii AI writer model' : route)).join(', ') : undefined}>
         {allowed ? `Allowed for ${(source.purposeGrants ?? []).join(' and ')}.` : 'Not allowed for analysis or writing yet.'}
       </p>
       <div className='flex flex-wrap gap-2'>
@@ -97,13 +100,18 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
         <div className='flex flex-col gap-2'>
           <SelectField label='Writer for this sample' aria-label={`Writer for ${source.title || 'writing sample'}`} value={writerRoute} onChange={(event) => setWriterRoute(event.target.value)}>
             <option value=''>Choose a writer</option>
+            {managedClass && <option value={managedClass}>Any Rafii AI writer model · cloud processing</option>}
             {writers.map((model) => (
               <option key={model.id} value={model.voiceRoute}>
                 {model.label} · {model.egress === 'cloud' ? 'cloud processing' : 'local preview'}
               </option>
             ))}
           </SelectField>
-          <p className='text-muted-foreground text-xs'>Only style signals reach this writer, never the sample’s facts. Cloud writers include Claude Code and Codex CLI.</p>
+          <p className='text-muted-foreground text-xs'>
+            {writerRoute && writerRoute === managedClass
+              ? 'Covers every model Rafii’s AI writer offers through Vercel AI Gateway, including models added later; each draft records the model it used. Only style signals reach the writer, never the sample’s facts.'
+              : 'Only style signals reach this writer, never the sample’s facts. Cloud writers include Claude Code and Codex CLI.'}
+          </p>
           <Button
             size='default'
             variant='glass'

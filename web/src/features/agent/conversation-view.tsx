@@ -6,7 +6,7 @@ import { useCreditEstimate } from './use-credit-estimate';
 import { parseCreditLimit } from './credit-limit';
 import { CreditLimitField } from './credit-limit-field';
 
-import { eligibleVoiceSources } from './voice-consent';
+import { effectiveVoiceMode, eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
@@ -146,7 +146,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const [learning, setLearning] = useState<(VoiceLearningRequest & { workspaceId: string; conversationId: string; id: string }) | null>(null);
   const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [busy, setBusy] = useState(false);
-  const [voiceMode, setVoiceMode] = useState<'neutral' | 'personalized'>('neutral');
+  const [voiceChoice, setVoiceChoice] = useState<'neutral' | 'personalized' | null>(null);
   const [imageRequested, setImageRequested] = useState(false);
   const [variantIndex, setVariantIndex] = useState(0);
   const [inspectorTab, setInspectorTab] = useState<'preview' | 'sources'>('preview');
@@ -172,6 +172,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
   const maximum = parseCreditLimit(creditLimit);
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
+  const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
   const voiceAvailable = voiceSourceIds.length > 0;
   // One chip per platform; the composer expands it into one row per selected account (accountLabel).
   const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
@@ -503,7 +504,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               reasoningOptions={choice.reasoningOptions}
               onReasoning={choice.chooseReasoning}
               voiceMode={voiceMode}
-              onVoiceMode={setVoiceMode}
+              onVoiceMode={setVoiceChoice}
               voiceAvailable={voiceAvailable}
               imageGeneration={{
                 enabled: imageRequested,
