@@ -109,7 +109,9 @@ export interface SiteAgentBody {
   grounding?: { required: boolean; sufficient: boolean; missing: string[] };
   proposals?: SiteAgentProposalView[];
   context?: SiteAgentContextSummary;
-  model?: { id: string | null; composedBy: 'model' | 'grounded' };
+  /** 'agent': phrased by Rafii's agent-runtime model (not the person's chosen writer); see agent_runtime_v2. */
+  /** phrasedBy: the model that actually wrote a 'model' answer (picked by the answer's tier on the chosen writer's route). */
+  model?: { id: string | null; composedBy: 'model' | 'grounded' | 'agent'; phrasedBy?: string };
   followUps?: string[];
   feedback?: { value: 'helpful' | 'not_helpful'; reason?: string | null; at: string } | null;
   refs?: { type: string; id: string; title?: string }[];

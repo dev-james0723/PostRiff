@@ -2,6 +2,7 @@
  "base": "http://localhost:3190",
  "engine": "webkit",
  "principal": "synthetic",
+ "sections": "desktop (run A) + help, tablet, phone (run B)",
  "results": [
   {
    "name": "seed: workspace, LinkedIn account and a confirmed draft",
@@ -29,6 +30,14 @@
   },
   {
    "name": "desktop: scheduling on an account that cannot post is refused with the app's reason, nothing prepared",
+   "ok": true
+  },
+  {
+   "name": "desktop: \"Does this sound like me?\" with no stored voice says so and judges nothing",
+   "ok": true
+  },
+  {
+   "name": "desktop: a compound request lists each step: revised, linked, scheduling needs you on this account, nothing prepared",
    "ok": true
   },
   {
@@ -151,5 +160,46 @@
    "name": "phone: after an answer the composer is fully on screen",
    "ok": true
   }
- ]
+ ],
+ "runs": [
+  {
+   "id": "A",
+   "sections": "desktop",
+   "passed": 27,
+   "failed": 0
+  },
+  {
+   "id": "B",
+   "sections": "help,tablet,phone",
+   "passed": 13,
+   "failed": 0
+  }
+ ],
+ "crashedAttempts": [
+  {
+   "run": "full journey attempt 1",
+   "passedBeforeStop": 26,
+   "failed": 0,
+   "stoppedBy": "WebKit aborted: -[NSTextInputContext textInputClientDidUpdateSelection]: unrecognized selector"
+  },
+  {
+   "run": "full journey attempt 2",
+   "passedBeforeStop": 8,
+   "failed": 0,
+   "stoppedBy": "WebKit aborted: -[NSTextInputContext textInputClientDidUpdateSelection]: unrecognized selector"
+  },
+  {
+   "run": "full journey attempt 3",
+   "passedBeforeStop": 8,
+   "failed": 0,
+   "stoppedBy": "WebKit aborted: -[NSTextInputContext textInputClientDidUpdateSelection]: unrecognized selector"
+  },
+  {
+   "run": "desktop attempt 1",
+   "passedBeforeStop": 24,
+   "failed": 0,
+   "stoppedBy": "WebKit aborted: -[NSTextInputContext textInputClientDidUpdateSelection]: unrecognized selector"
+  }
+ ],
+ "note": "The local Playwright WebKit build (webkit-2359) on this macOS aborts at random points while text is entered (an AppKit selector it calls is missing). The journey was run in sections (--sections) and a crashed attempt was re-run; no crashed attempt had a failed check. Screenshots are off in WebKit (--shots=off) for the same reason."
 }

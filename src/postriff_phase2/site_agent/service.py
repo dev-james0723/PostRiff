@@ -313,6 +313,10 @@ class SiteAgentService:
     def _delegate(self, workspace_id, token, delegate, text, key, model_id, zone, payload):
         """Writing requests go to the writing pipeline itself (IdeasService.turn), in the same conversation."""
         request = {"text": text, "idempotencyKey": key, "timeZone": zone}
+        said = payload.get("message") if isinstance(payload.get("message"), str) else ""
+        if said.strip() and said.strip() != (text or "").strip():
+            # The writer gets one step's instruction ("Shorten this draft"); the conversation keeps what the person typed.
+            request["messageText"] = said
         if model_id:
             request["model"] = model_id
         for name in ("reasoning", "destinations", "language", "voiceMode", "voiceSourceIds", "sourceIds"):
@@ -480,7 +484,9 @@ class SiteAgentService:
         from . import compound as flow, reads
         steps = reading["steps"]
         ctx = tools.Context(state=state, membership=member, principal=principal, workspace_id=workspace_id, now=now, zone=zone)
-        plan = {"steps": steps, "status": {}, "conversationId": conversation_id, "proposals": []}
+        # The request itself is kept with the plan: a writer that finishes after the turn (the Claude Code CLI route)
+        # continues the plan later, and the schedule step still reads the day and time from these words.
+        plan = {"steps": steps, "status": {}, "conversationId": conversation_id, "proposals": [], "text": text[:2000]}
         wants_campaign = bool(re.search(r"\bcampaigns?\b|活動", text, re.I)) or "link" in steps or "gaps" in steps
         campaign = None
         if wants_campaign:
@@ -828,7 +834,7 @@ class SiteAgentService:
         ids.update(re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{24,64}", blob))
         return sorted(ids)[:200]
 
-    def _finalize(self, cur, workspace_id, conversation_id, run_id, answer, summary, trace, reading, proposal_list, *, composed_by, model_id, follow_ups, usage):
+    def _finalize(self, cur, workspace_id, conversation_id, run_id, answer, summary, trace, reading, proposal_list, *, composed_by, model_id, follow_ups, usage, phrased_by=None):
         blocks = answer["blocks"]
         for block in blocks[:MAX_BLOCK_EVENTS]:
             self._emit(cur, workspace_id, run_id, "artifact.created", artifact="site_agent.block", block=block)
@@ -846,7 +852,8 @@ class SiteAgentService:
         body = {"text": answer["text"], "runId": run_id, "siteAgent": {"version": contracts.VERSION, "runId": run_id, "status": "completed", "intent": reading["intent"],
                                                                        "language": reading.get("language"), "blocks": blocks, "citations": answer["citations"],
                                                                        "grounding": answer["grounding"], "proposals": proposal_list, "context": summary,
-                                                                       "model": {"id": model_id, "composedBy": composed_by}, "followUps": follow_ups, "feedback": None,
+                                                                       "model": {"id": model_id, "composedBy": composed_by, **({"phrasedBy": phrased_by} if phrased_by else {})},
+                                                                       "followUps": follow_ups, "feedback": None,
                                                                        "refs": refs}}
         if answer.get("pending"):
             body["siteAgent"]["pending"] = answer["pending"]
@@ -898,7 +905,10 @@ class SiteAgentService:
                 return self._response(cur, workspace_id, run_id)
             claimed = {**run["usage"], "composeClaimedAt": now, "reservationId": (reservation or {}).get("reservationId"), "provenance": "pending"}
             cur.execute("UPDATE public.pr_agent_runs SET usage=%s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(claimed), run_id))
-        answer, reason, actual = None, None, None
+        answer, reason, actual, failed, rejected, detail = None, None, None, False, None, None
+        # The chosen writer picks the route; the model that phrases on it is picked by the answer's tier (light or
+        # strong), so the answer names the model that actually wrote it.
+        phrased_by = getattr(call, "model", None) or (f"claude-code:{call.alias}" if getattr(call, "alias", None) else None) or pending["model"]
         try:
             result = call(prompts.SYSTEM_PROMPT, user, prompts.SCHEMA)
             actual = getattr(result, "cost_usd_micro", None)
@@ -907,8 +917,16 @@ class SiteAgentService:
             action_refs = {a["ref"] for a in pending["actions"]}
             answer, reason = policy.validate_answer(dict(result) if isinstance(result, dict) else result, help_refs=help_refs, fact_refs=fact_refs,
                                                     action_refs=action_refs, known_ids=set(pending.get("knownIds") or []), grounding_required=pending["grounding"])
+            if reason == "unknown_reference" and isinstance(result, dict):
+                # Diagnostics for the trace: the ids the writer cited without being given them (ids only, never text).
+                given = {"citations": help_refs, "facts": fact_refs, "actions": action_refs}
+                rejected = {key: [str(item)[:40] for item in result.get(key) if not isinstance(item, str) or item not in allowed][:6]
+                            for key, allowed in given.items() if isinstance(result.get(key), list)}
+                rejected = {key: items for key, items in rejected.items() if items} or None
         except Exception as error:  # noqa: BLE001 — a failed model answer never loses the grounded one
+            failed = True
             reason = "error" if not isinstance(error, AlphaError) else (error.code or "error")
+            detail = str(error)[:200] if isinstance(error, AlphaError) else type(error).__name__
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
             self.ideas._lock_run_events(cur, workspace_id, run_id)
             run = self._run(cur, workspace_id, run_id, lock=True)
@@ -916,12 +934,14 @@ class SiteAgentService:
                 self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if actual is not None else "unknown", actual)
             if run["status"] != "running":
                 return self._response(cur, workspace_id, run_id)
-            usage = {"provenance": "model" if answer else "grounded", "modelRequests": 1, "tier": pending["tier"],
+            usage = {"provenance": "model" if answer else "grounded", "modelRequests": 1, "tier": pending["tier"], "phrasedBy": phrased_by,
                      "costUsd": (actual / 1_000_000) if actual is not None else None, "billing": "metered" if reservation else "subscription_or_local"}
             if answer is None:
-                message = {"error": "Rafii's writer didn't answer, so this answer comes straight from Rafii's help and your workspace."}.get(
-                    reason, "Rafii's written answer didn't pass its checks, so this answer comes straight from Rafii's help and your workspace.")
-                self._finish_grounded(cur, workspace_id, run, run_id, pending, {"code": f"model_{reason}", "message": message}, usage=usage)
+                # A call that failed (a timeout, a CLI that exited, a refused request) did not answer; only an answer that
+                # came back and failed validation "didn't pass its checks".
+                message = ("Rafii's writer didn't answer, so this answer comes straight from Rafii's help and your workspace." if failed
+                           else "Rafii's written answer didn't pass its checks, so this answer comes straight from Rafii's help and your workspace.")
+                self._finish_grounded(cur, workspace_id, run, run_id, pending, {"code": f"model_{reason}", "message": message, **({"rejectedRefs": rejected} if rejected else {}), **({"detail": detail} if detail else {})}, usage=usage)
                 return self._response(cur, workspace_id, run_id)
             grounded = pending["grounded"]
             text = prompts.restore(answer["answer"], mapping) if mapping else answer["answer"]
@@ -933,7 +953,13 @@ class SiteAgentService:
             if not citations and answer["citations"]:
                 passages = [p for p in pending["passages"] if p["ref"] in answer["citations"]]
                 citations = composer.citation_objects(passages, contracts.iso(now), used=set(answer["citations"]))
-            blocks = [contracts.text(text)] + structured + navs + ([contracts.citations(citations)] if citations else [])
+            if pending["intent"] == "voice_check":
+                # The measurements stay first and as they were; the model's words are labelled as its judgement.
+                judged = f"**Writer's judgement** ({phrased_by}; a model's reading of tone and word choice, not a measurement):\n{text}"
+                blocks = structured + [contracts.text(judged)] + navs + ([contracts.citations(citations)] if citations else [])
+                text = judged
+            else:
+                blocks = [contracts.text(text)] + structured + navs + ([contracts.citations(citations)] if citations else [])
             if not answer["sufficient"] and answer["missing"]:
                 blocks.append(contracts.warning("Not covered by Rafii's help or your workspace: " + "; ".join(answer["missing"]), "grounding_insufficient"))
             final = {"blocks": blocks, "text": text, "citations": citations, "refs": grounded.get("refs") or [],
@@ -941,14 +967,15 @@ class SiteAgentService:
             trace = {**pending["trace"], "modelFacts": answer["facts"]}
             reading = {"intent": pending["intent"], "language": pending["language"]}
             self._finalize(cur, workspace_id, run["conversationId"], run_id, final, pending["summary"], trace, reading, [], composed_by="model",
-                           model_id=pending["model"], follow_ups=answer["followUps"], usage=usage)
+                           model_id=pending["model"], follow_ups=answer["followUps"], usage=usage, phrased_by=phrased_by)
             return self._response(cur, workspace_id, run_id)
 
     def _finish_grounded(self, cur, workspace_id, run, run_id, pending, note, usage=None):
         grounded = pending["grounded"]
         blocks = [contracts.warning(note["message"], note["code"])] + list(grounded["blocks"])
         answer = {**grounded, "blocks": blocks}
-        trace = {**pending["trace"], "fallback": note["code"]}
+        trace = {**pending["trace"], "fallback": note["code"], **({"rejectedRefs": note["rejectedRefs"]} if note.get("rejectedRefs") else {}),
+                 **({"fallbackDetail": note["detail"]} if note.get("detail") else {})}
         reading = {"intent": pending["intent"], "language": pending["language"]}
         self._finalize(cur, workspace_id, run["conversationId"], run_id, answer, pending["summary"], trace, reading, [], composed_by="grounded",
                        model_id=pending["model"], follow_ups=[], usage=usage or {"provenance": "grounded", "modelRequests": 0})

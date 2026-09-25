@@ -392,11 +392,12 @@ def _voice_check(get, classification, text):
     differs = [f for f in checked if f["verdict"] == "differs"]
     if differs:
         lines.append("Where it differs: " + "; ".join(f"{f['trait'].rstrip('.')} ({f['evidence'].rstrip('.')})" for f in differs[:3]) + ".")
-    lines.append("Tone and word choice weren't judged here: that needs a writer model, and none phrased this answer.")
     rows = [_item(f["verdict"], f"{'✓' if f['verdict'] == 'matches' else '✗'} {f['trait']}", excerpt=f["evidence"], meta=f"{BASIS[f['basis']]} · {f['source']}") for f in checked]
     blocks = [result_list("Checked against your stored voice", rows, empty="Nothing in your profile can be measured in this text.")]
     if judged:
         blocks.append(result_list("Needs a writer's judgement", [_item("unclear", f["trait"], meta=f["source"]) for f in judged]))
+    # Not a fact about the text: it says who answered, so it is dropped when a writer model phrases the answer.
+    blocks.append(contracts.text("Tone and word choice weren't judged here: that needs a writer model, and none phrased this answer."))
     refs = [_ref("draft", data["draftId"], data["subject"])] if data.get("draftId") else []
     return {"lines": lines, "blocks": blocks, "refs": [r for r in refs if r], "grounded": True, "nav": data.get("href") or data.get("profileHref")}
 

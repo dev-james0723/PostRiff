@@ -6,10 +6,11 @@
  * opens a drawer; no page scrolls sideways; axe finds no serious or critical issue in the open panel; the avatar's
  * thinking ring stops under reduced motion.
  *
- *   node web/tests/site-agent-browser.cjs [--browser=chromium|webkit] [--out=dir] [--shots=off]
+ *   node web/tests/site-agent-browser.cjs [--browser=chromium|webkit] [--out=dir] [--shots=off] [--sections=desktop,help,tablet,phone]
  *
  * Seeds its own principal through the harness API (canned LinkedIn consent, deterministic preview writer). Nothing
- * here reaches a real provider; no post is approved or published.
+ * here reaches a real provider; no post is approved or published. Start the harness with POSTRIFF_RESEARCH=0 (as the
+ * PostgreSQL runner does): otherwise a drafting turn may look its topic up on the live web, and the seed refuses to run.
  */
 const { chromium, webkit } = require('playwright');
 const fs = require('node:fs');
@@ -20,6 +21,8 @@ const base = process.env.RAFII_WEB_URL || 'http://localhost:3190';
 if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw new Error('Runs against the local harness only.');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')).map(([k, v]) => [k, v ?? true]));
 const engine = args.browser === 'webkit' ? webkit : chromium;
+// --sections runs part of the journey (each section starts from a fresh page): a browser that dies mid-run can be resumed.
+const want = (name) => !args.sections || String(args.sections).split(',').includes(name);
 const out = path.resolve(args.out || '.');
 fs.mkdirSync(out, { recursive: true });
 const principal = randomUUID();
@@ -67,6 +70,7 @@ async function seed() {
     payload: { name: 'Friday practice note', goal: 'A short note about practising slowly', audience: 'Adult piano learners', facts: {}, schedule: { weekdays: ['Friday'], localTime: '16:00', timeZone: 'Asia/Hong_Kong' },
                destinations: [{ platform: 'LinkedIn', language: 'en', channelId: linkedin.id }], contentType: null, route: 'deterministic-preview', reasoning: 'quick', maxCostUsdMicro: 0, sourceIds: [], include: null, voiceMode: 'neutral' }
   });
+  if (snapshot.state.sources.some((s) => s.origin && s.origin.kind === 'web_research')) throw new Error('The harness looked the seed up on the live web; start it with POSTRIFF_RESEARCH=0.');
   const task = snapshot.state.raffi.campaignPlanning.recurringTasks.find((t) => t.name === 'Friday practice note');
   snapshot = await call('POST', `/api/workspaces/${workspaceId}/actions`, { expectedRevision: snapshot.revision, action: 'raffi_recurrence_activate', payload: { taskId: task.id, confirmed: true } });
   return { workspaceId, draftId: draft.id, taskId: task.id };
@@ -132,7 +136,9 @@ async function axe(page) {
   check('seed: workspace, LinkedIn account and a confirmed draft', Boolean(seeded.workspaceId && seeded.draftId), seeded);
   const executablePath = (args.browser === 'webkit' ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
   const browser = await engine.launch({ headless: true, executablePath });
+  let answer;
   try {
+    if (want('desktop')) {
     // --- desktop: sheet above a dialog, docked column, keyboard, page awareness, proposal, navigation, reload, axe -----
     const desk = await context(browser, { width: 1440, height: 900 });
     const page = await desk.newPage();
@@ -147,7 +153,7 @@ async function axe(page) {
     check('desktop: the launcher reports the panel open', (await launcher(page).getAttribute('aria-expanded')) === 'true');
     check('desktop: over the draft dialog the panel is a sheet above it, not the inert column', (await panel(page).evaluate((el) => el.tagName)) !== 'ASIDE', await panel(page).evaluate((el) => el.tagName));
     check('desktop: suggestions fit the Queue page', (await panel(page).getByRole('group', { name: 'Suggested questions' }).count()) === 1);
-    let answer = await ask(page, 'What is the status of this draft?');
+    answer = await ask(page, 'What is the status of this draft?');
     const statusText = await answer.innerText();
     check('desktop: the answer reads the draft open in the dialog', /LinkedIn draft/.test(statusText) && /not scheduled|Still needed/.test(statusText), statusText.slice(0, 300));
     // The harness's canned LinkedIn consent grants no publishing scope, so the account is never "Ready for posting":
@@ -157,6 +163,21 @@ async function axe(page) {
     check('desktop: scheduling on an account that cannot post is refused with the app\'s reason, nothing prepared',
       /can't prepare that yet: Verify this exact fixture account/.test(await answer.innerText()) && (await answer.getByRole('button', { name: 'Apply change' }).count()) === 0
         && !snapshot.state.phase2.reviews.some((r) => r.manifest.variantId === seeded.draftId), (await answer.innerText()).slice(0, 300));
+    // "Does this sound like me?" with nothing stored to compare against: Rafii says so and judges nothing.
+    answer = await ask(page, 'Does this sound like me?');
+    const voiceText = await answer.innerText();
+    check('desktop: "Does this sound like me?" with no stored voice says so and judges nothing',
+      /no approved voice profile or learned preference to compare with/.test(voiceText) && !/Checked against your stored voice/.test(voiceText), voiceText.slice(0, 300));
+    // A compound request reports each step with its real state: revised through the writing pipeline (a proposed update
+    // on this draft), linked to the campaign, and scheduling on an account that cannot post needs the person.
+    answer = await ask(page, 'Shorten this draft, add it to the practising slowly campaign and schedule it for Thursday at 6 PM');
+    const compoundText = await answer.innerText();
+    snapshot = await call('GET', `/api/workspaces/${seeded.workspaceId}`);
+    const reworked = snapshot.state.variants.find((v) => v.id === seeded.draftId);
+    check('desktop: a compound request lists each step: revised, linked, scheduling needs you on this account, nothing prepared',
+      /Revise the draft/.test(compoundText) && /linked to “/.test(compoundText) && /Schedule it/.test(compoundText) && /Needs you/.test(compoundText)
+        && Boolean(reworked && reworked.proposedUpdate) && (await answer.getByRole('button', { name: 'Apply change' }).count()) === 0
+        && !snapshot.state.phase2.reviews.some((r) => r.manifest.variantId === seeded.draftId), compoundText.slice(0, 500));
     await shot(page, 'site-agent-desktop-over-dialog.png');
     await page.keyboard.press('Escape');
     await panel(page).waitFor({ state: 'hidden', timeout: 10000 });
@@ -230,7 +251,9 @@ async function axe(page) {
     const focused = await page.waitForFunction(() => document.activeElement?.id === 'rafii-launcher', null, { timeout: 5000 }).then(() => true, () => false);
     check('desktop: Escape closes the panel and focus returns to the launcher', focused, await page.evaluate(() => document.activeElement?.outerHTML?.slice(0, 120)));
     await desk.close();
+    }
 
+    if (want('help')) {
     // --- help pages hand a question to the panel ----------------------------------------------------------------------
     const help = await context(browser, { width: 1280, height: 860 });
     const hpage = await help.newPage();
@@ -246,6 +269,9 @@ async function axe(page) {
     await shot(hpage, 'site-agent-help.png');
     await help.close();
 
+    }
+
+    if (want('tablet')) {
     // --- tablet: the panel slides in as a sheet -------------------------------------------------------------------------
     const tablet = await context(browser, { width: 834, height: 1112 });
     const tpage = await tablet.newPage();
@@ -263,6 +289,9 @@ async function axe(page) {
     check('tablet: the close button closes the sheet', !(await panel(tpage).isVisible()));
     await tablet.close();
 
+    }
+
+    if (want('phone')) {
     // --- phone: a drawer, a 16px composer (no zoom on focus), no sideways scroll; reduced motion ------------------------
     const phone = await context(browser, { width: 390, height: 844 }, { reducedMotion: 'reduce' });
     const ppage = await phone.newPage();
@@ -290,14 +319,17 @@ async function axe(page) {
     check('phone: after an answer the composer is fully on screen', Boolean(composerBox) && composerBox.y >= 0 && composerBox.y + composerBox.height <= 844, composerBox);
     await shot(ppage, 'site-agent-phone.png');
     await phone.close();
+    }
   } finally {
     await browser.close();
   }
   const failed = results.filter((r) => !r.ok);
-  fs.writeFileSync(path.join(out, 'site-agent-browser.json'), JSON.stringify({ base, engine: args.browser || 'chromium', principal: 'synthetic', results }, null, 1));
+  fs.writeFileSync(path.join(out, 'site-agent-browser.json'), JSON.stringify({ base, engine: args.browser || 'chromium', principal: 'synthetic', sections: args.sections || 'all', results }, null, 1));
   console.log(`${results.length - failed.length}/${results.length} checks passed`);
   process.exit(failed.length ? 1 : 0);
 })().catch((error) => {
   console.error(error);
+  // A run that stops early (a browser crash) still records what it checked, and why it stopped.
+  fs.writeFileSync(path.join(out, 'site-agent-browser.json'), JSON.stringify({ base, engine: args.browser || 'chromium', principal: 'synthetic', sections: args.sections || 'all', results, stoppedBy: String(error && error.message || error).slice(0, 300) }, null, 1));
   process.exit(1);
 });

@@ -507,7 +507,11 @@ function AnswerMeta({ body, actions }: { body: SiteAgentBody; actions: AnswerAct
       <details className='group text-muted-foreground text-[11px]'>
         <summary className='rafii-focus flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md select-none'>
           <Icons.chevronRight className='size-3 transition-transform group-open:rotate-90 motion-reduce:transition-none' aria-hidden />
-          {body.model?.composedBy === 'model' ? 'Written by your chosen writer from what Rafii read' : 'Answered from Rafii help and your workspace'}
+          {body.model?.composedBy === 'model'
+            ? `Written by ${body.model.phrasedBy ?? 'your chosen writer'} from what Rafii read`
+            : body.model?.composedBy === 'agent'
+              ? "Rafii's agent model wrote this from what it read and checked"
+              : 'Answered from Rafii help and your workspace'}
         </summary>
         <div className='flex flex-col gap-1 pt-1 pl-4'>
           {body.context?.route && <span>Page: {body.context.route}{body.context.entity ? ` · selected ${body.context.entity.type}` : ''}</span>}

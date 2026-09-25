@@ -653,6 +653,10 @@ class IdeasService:
         if self.researcher is None or payload.get("research") is False:
             return [], None
         message = text or clean(payload.get("intentText", ""), MAX_TEXT)
+        if isinstance(payload.get("material"), str) and payload["material"].strip() and not research.urls_in(message):
+            # A turn that hands in material (a draft to rework, a campaign brief) writes from that material: its
+            # instruction ("Shorten this draft", "Adapt this for Instagram") is not a topic to look up on the web.
+            return [], None
         snapshot = self.repository.get(workspace_id, token)
         state = snapshot["state"]
         stamp(state)
@@ -950,7 +954,9 @@ class IdeasService:
             material = clean(payload["material"], MAX_TEXT) if isinstance(payload.get("material"), str) else ""
             material_ref = payload.get("materialRef") if isinstance(payload.get("materialRef"), dict) else None
             if text:
-                self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": parsed["intent"],
+                # A caller that hands the writer one step of a longer request records the person's own words.
+                said = clean(payload["messageText"], MAX_TEXT) if isinstance(payload.get("messageText"), str) and payload["messageText"].strip() else text
+                self._append_message(cur, workspace_id, conversation_id, "user", {"text": said, "sourceIds": source_ids, "intent": parsed["intent"],
                                                                                    **({"material": {k: str(v)[:120] for k, v in material_ref.items() if k in ("type", "id", "title")}} if material_ref else {})})
             run_idea = clean(payload["idea"], 3000) if isinstance(payload.get("idea"), str) else ""
             idea = (text or run_idea or state.get("brief", {}).get("idea", "")) + (f"\n\n{MATERIAL_LABEL}\n<<<\n{material}\n>>>" if material else "")
@@ -1180,7 +1186,10 @@ class IdeasService:
 
         def command(state, actor):
             stamp(state)
-            source_ids = sorted({sid for v in artifact["variants"] for sid in v["sourceIds"]})
+            # Every source the writer was given is re-checked, not only the ones it cited: a writer cites the subset it
+            # used (so comparing only those with all its bindings refused every such candidate), and it may still
+            # have leaned on a source it did not cite.
+            source_ids = sorted({item["id"] for item in artifact.get("sourceBindings", [])} | {sid for v in artifact["variants"] for sid in v["sourceIds"]})
             current = project_context(state, "draft", "local", source_ids)
             current_bindings = sorted(({"id": item["id"], "hash": item["hash"]} for item in current["sources"]), key=lambda item: item["id"])
             original_bindings = sorted(artifact.get("sourceBindings", []), key=lambda item: item["id"])

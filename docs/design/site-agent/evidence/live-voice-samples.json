@@ -1,0 +1,171 @@
+{
+ "what": "Live 'Does this sound like me?' answers on the Claude Code route: how often the writer's phrasing passed validation. Every rejected phrasing fell back to the measured answer with a warning (checked per attempt in each run's evidence).",
+ "phrasingModel": "The phrasing model is picked by the answer's tier on the chosen writer's route; the voice check runs at the strong tier, i.e. claude-code:sonnet. Runs before the phrasedBy fix labelled the answer with the chosen writer's id; the tier logic was the same.",
+ "summary": {
+  "beforeIdRule": {
+   "attempts": 5,
+   "accepted": 2,
+   "fallbacks": {
+    "model_unknown_reference": 2,
+    "model_upstream_error": 1
+   }
+  },
+  "afterIdRule": {
+   "attempts": 9,
+   "accepted": 6,
+   "fallbacks": {
+    "model_ungrounded": 1,
+    "model_upstream_error": 2
+   }
+  }
+ },
+ "runs": [
+  {
+   "run": "diagnostic, 5 attempts",
+   "chosenWriter": "claude-code:haiku",
+   "startedAt": "2026-09-25T02:20:54.616788+00:00",
+   "idRuleInPrompt": "before",
+   "attempts": [
+    {
+     "runId": "0bb4ff46-3f3e-4538-a1bb-bee08e8afd8b",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": null,
+     "rejectedRefs": null
+    },
+    {
+     "runId": "72b6bc5b-b964-4a19-8ba8-b1dad08e9da6",
+     "composedBy": "grounded",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": "model_upstream_error",
+     "rejectedRefs": null
+    },
+    {
+     "runId": "d9828b63-5098-4e5c-b856-b65e75d42af6",
+     "composedBy": "grounded",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": "model_unknown_reference",
+     "rejectedRefs": {
+      "citations": [
+       "R2",
+       "R3",
+       "R4",
+       "R6",
+       "R8",
+       "R9"
+      ]
+     }
+    },
+    {
+     "runId": "6f51904a-a87c-4989-9d69-bc31ba320ca2",
+     "composedBy": "grounded",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": "model_unknown_reference",
+     "rejectedRefs": {
+      "citations": [
+       "W1",
+       "R1",
+       "R2",
+       "R6",
+       "R9"
+      ]
+     }
+    },
+    {
+     "runId": "4e0346e2-4385-4db3-9f85-6cb6efabffe6",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": null,
+     "rejectedRefs": null
+    }
+   ]
+  },
+  {
+   "run": "full run",
+   "chosenWriter": "claude-code:haiku",
+   "startedAt": "2026-09-25T02:25:05.394514+00:00",
+   "idRuleInPrompt": "after",
+   "attempts": [
+    {
+     "runId": "b7982ca1-61d6-4509-a44e-aa2641c6c2d6",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": null,
+     "rejectedRefs": null
+    },
+    {
+     "runId": "dc874173-e503-490d-ac02-94dd6dadc51b",
+     "composedBy": "grounded",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": "model_ungrounded",
+     "rejectedRefs": null
+    },
+    {
+     "runId": "87e8af58-583b-4521-9767-452132571f26",
+     "composedBy": "grounded",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": "model_upstream_error",
+     "rejectedRefs": null
+    }
+   ]
+  },
+  {
+   "run": "chosen writer claude-code:sonnet, 3 attempts",
+   "chosenWriter": "claude-code:sonnet",
+   "startedAt": "2026-09-25T02:37:08.697452+00:00",
+   "idRuleInPrompt": "after",
+   "attempts": [
+    {
+     "runId": "d6e3d5e4-740c-4648-9465-b33c2ec9c4ea",
+     "composedBy": "grounded",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": "model_upstream_error",
+     "rejectedRefs": null
+    },
+    {
+     "runId": "3f1f8ed9-5d1e-441a-a80b-6f8edb0ca4da",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": null,
+     "rejectedRefs": null
+    },
+    {
+     "runId": "28c0acfd-8dd3-458b-89ef-ad158d87991b",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet (strong tier; recorded after the fix)",
+     "fallback": null,
+     "rejectedRefs": null
+    }
+   ]
+  },
+  {
+   "run": "final full run",
+   "chosenWriter": "claude-code:haiku",
+   "startedAt": "2026-09-25T02:41:41.922636+00:00",
+   "idRuleInPrompt": "after",
+   "attempts": [
+    {
+     "runId": "0a8cc47f-34dd-43a3-950b-508137dec8a0",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet",
+     "fallback": null,
+     "rejectedRefs": null
+    },
+    {
+     "runId": "9a7c1bac-bcb2-44e9-8548-fadd52c5eee0",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet",
+     "fallback": null,
+     "rejectedRefs": null
+    },
+    {
+     "runId": "eca955b2-e389-4a2e-a87e-6173f3d5d78c",
+     "composedBy": "model",
+     "phrasedBy": "claude-code:sonnet",
+     "fallback": null,
+     "rejectedRefs": null
+    }
+   ]
+  }
+ ]
+}

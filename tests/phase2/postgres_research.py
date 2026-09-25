@@ -195,4 +195,15 @@ except AlphaError as error: assert error.status==409
 else: raise AssertionError('revoked research accepted')
 assert service.get(wid,'one')['state']['sources']==before
 del os.environ['POSTRIFF_HOSTED']
-print('PASS durable research: committed claim, concurrent/replay/crash no duplicate I/O, revoked consent discards pages')
+
+# A rework hands in its material (the draft): the instruction is not a topic, so nothing is looked up on the web and no
+# page becomes a source the rewrite could cite. A link in the message is still read.
+reworker=FakeResearcher();ideas.researcher=reworker
+before=[s['id'] for s in service.get(wid,'one')['state']['sources']]
+for instruction in ('Shorten this draft','Adapt this draft for Instagram','Create alternate hooks for this draft'):
+    reworked=ideas.turn(wid,'one',cid,{'text':instruction,'material':'Slow practice builds accuracy that lasts. Pick one bar and play it three times.','timeZone':'Asia/Hong_Kong','idempotencyKey':f'rework-{instruction}'})
+    assert reworked['status']=='completed', reworked['status']
+assert reworker.calls==[] and [s['id'] for s in service.get(wid,'one')['state']['sources']]==before, reworker.calls
+linked=ideas.turn(wid,'one',cid,{'text':'Shorten this draft using https://example.org/suno-notes','material':'Slow practice builds accuracy that lasts.','timeZone':'Asia/Hong_Kong','idempotencyKey':'rework-with-link'})
+assert linked['status']=='completed' and reworker.calls==['Shorten this draft using https://example.org/suno-notes'], reworker.calls
+print('PASS durable research: committed claim, concurrent/replay/crash no duplicate I/O, revoked consent discards pages; reworks look nothing up unless linked')

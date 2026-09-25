@@ -2,6 +2,7 @@
  "base": "http://localhost:3190",
  "engine": "chromium",
  "principal": "synthetic",
+ "sections": "all",
  "results": [
   {
    "name": "seed: workspace, LinkedIn account and a confirmed draft",
@@ -29,6 +30,14 @@
   },
   {
    "name": "desktop: scheduling on an account that cannot post is refused with the app's reason, nothing prepared",
+   "ok": true
+  },
+  {
+   "name": "desktop: \"Does this sound like me?\" with no stored voice says so and judges nothing",
+   "ok": true
+  },
+  {
+   "name": "desktop: a compound request lists each step: revised, linked, scheduling needs you on this account, nothing prepared",
    "ok": true
   },
   {

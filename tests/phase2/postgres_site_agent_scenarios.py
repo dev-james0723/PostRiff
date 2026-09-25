@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -29,6 +30,7 @@ import psycopg
 from postriff_alpha import learning, visuals
 from postriff_alpha.domain import AlphaError
 from postriff_phase2 import campaigns
+from postriff_phase2.agent_runtime import AgentRuntime, identity_fields
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.site_agent import routes
 from consumer_fixtures import approve_budgets
@@ -72,7 +74,7 @@ SOURCES = {
     "L01": "raffi_campaign_link (campaign's own action)", "L02": "campaign.membership", "L03": "plural reference → raffi_campaign_link (posts)",
     "L03b": "campaign.list (no match)", "L04": "raffi_campaign_unlink", "L05": "role check (edit)", "L06": "campaign.list (no match)",
     "X05": "compound: campaign → writing pipeline → apply → link → schedule proposal", "X06": "compound: rework → apply → link → schedule proposal (uses the rewrite)",
-    "X06b": "apply_proposal: accept_update → p2_variant_review → p2_review", "H06": "member.activity (review records + audit log)", "H07": "record.attribution (post record)",
+    "X06b": "apply_proposal: accept_update → p2_variant_review → p2_review", "X06c": "compound on an asynchronous writer: compound_continue → apply → link → schedule proposal", "H06": "member.activity (review records + audit log)", "H07": "record.attribution (post record)",
     "H08": "record.attribution (automation record)", "H09": "member.activity (no such member)", "H10": "member.activity (viewer: no audit log)",
     "T05": "schedule proposal with review confirmation", "T05b": "apply_proposal: p2_variant_review → p2_review", "T05c": "apply_proposal permission (edit + approve)",
 }
@@ -293,13 +295,13 @@ command(seed_outcomes)
 
 
 # --- helpers ---------------------------------------------------------------------------------------------------------
-def ask(message, route="/app", entity=None, token=OWNER, conversation=None, workspace=None, visible=None):
+def ask(message, route="/app", entity=None, token=OWNER, conversation=None, workspace=None, visible=None, model="deterministic-preview"):
     page = {"route": route}
     if entity:
         page["selectedEntity"] = entity
     if visible:
         page["visibleState"] = visible
-    body = {"message": message, "idempotencyKey": uuid.uuid4().hex, "model": "deterministic-preview", "timeZone": HK, "pageContext": page}
+    body = {"message": message, "idempotencyKey": uuid.uuid4().hex, "model": model, "timeZone": HK, "pageContext": page}
     if conversation:
         body["conversationId"] = conversation
     started = time.monotonic()
@@ -373,6 +375,11 @@ def campaign_items(kind="draft"):
     key = {"draft": "variantId", "post": "jobId"}[kind]
     campaign = next(c for c in state()["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)
     return {i.get(key) for i in campaign.get("items") or [] if i.get("kind") == kind}
+
+
+def user_said(result):
+    """The person's last message in that conversation, as the conversation stores it."""
+    return [m for m in ideas.messages(wid, OWNER, result["conversationId"])["messages"] if m["role"] == "user"][-1]["body"]["text"]
 
 
 def compound_of(result):
@@ -687,8 +694,9 @@ record("X06", "compound", "Shorten this draft, add it to the launch campaign and
        "revised as a proposed update on this draft, saved, linked; scheduling for Thu 18:00 is a proposal that uses the rewrite, waiting for approval",
        [st.get(k, {}).get("state") for k in ("revise", "save", "link")] == ["done"] * 3 and st.get("schedule", {}).get("state") == "waiting"
        and proposal.get("localTime") == "2026-09-24T18:00" and "use the rewrite" in " ".join(proposal.get("summary") or [])
-       and (variant(A["id"]).get("proposedUpdate") or {}).get("runId") == comp.get("runId") and variant(A["id"])["text"] == a_before["text"] and A["id"] in campaign_items(),
-       state_checked="A.proposedUpdate from this run, A's text unchanged, A in campaign.items, proposal stored")
+       and (variant(A["id"]).get("proposedUpdate") or {}).get("runId") == comp.get("runId") and variant(A["id"])["text"] == a_before["text"] and A["id"] in campaign_items()
+       and user_said(r) == "Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM",
+       state_checked="A.proposedUpdate from this run, A's text unchanged, A in campaign.items, proposal stored; the conversation shows what was typed")
 applied = agent.apply_proposal(wid, OWNER, {"conversationId": r["conversationId"], "messageId": r["messageId"], "proposalId": proposal["id"], "digest": proposal["digest"],
                                              "expectedRevision": revision()})
 a_after = variant(A["id"])
@@ -817,6 +825,70 @@ except AlphaError as error:
 record("T05c", "permissions", "Approver applies a proposal that also confirms a draft review", r, "refused: confirming a draft review needs the edit permission; nothing changes",
        refused is not None and refused.status == 403 and not any(x["manifest"]["variantId"] == D06_TH for x in state()["phase2"]["reviews"]) and variant(D06_TH).get("needsReview"),
        state_checked="no review for the draft; the draft still needs review")
+
+# === X06c: the X06 request on a writer that finishes after the turn (the Claude Code CLI route) ===========================
+class AsyncWriter(AgentRuntime):
+    """Finishes on its own thread after the turn has answered, like the Claude Code CLI route. It keeps the material's
+    first sentence (a shortening) and cites nothing."""
+    provider, cost_class, asynchronous, model = "claude-code", "subscription", True, "claude-code:scenario"
+
+    def __init__(self):
+        self.release, self.threads = threading.Event(), []
+
+    def list_supported_models(self):
+        return [{"id": self.model, "label": "Claude Code · scenario", "qualified": True, "costClass": "subscription", "route": "claude-code", "detail": "scenario writer"}]
+
+    def list_supported_reasoning(self):
+        return [{"id": "quick", "available": True, "detail": "scenario writer"}]
+
+    def describe(self):
+        return {"id": "claude-code", "name": "Claude Code", "installed": True, "authStatus": "ok", "version": "0.0.0", "models": [self.model]}
+
+    def supported_platforms(self):
+        return ("LinkedIn", "Instagram", "Threads")
+
+    def start_conversation(self, workspace_id, actor):
+        return {}
+
+    def dispatch(self, run_id, request, sink):
+        def work():
+            self.release.wait(10)
+            material = request["idea"].split("<<<", 1)[-1].rsplit(">>>", 1)[0].strip()
+            shorter = re.split(r"(?<=[.!?])\s+", material)[0]
+            sink.complete({"variants": [{"platform": d["platform"], "language": d["language"], **identity_fields(d), "text": shorter, "sourceIds": [], "unknowns": [],
+                                         "warnings": [], "candidateOnly": False} for d in request["destinations"]]},
+                          {"provenance": "reported_by_cli", "billing": "subscription", "modelRequests": 1, "costUsd": 0})
+        thread = threading.Thread(target=work)
+        self.threads.append(thread)
+        thread.start()
+
+
+later = AsyncWriter()
+ideas.runtimes = [*ideas.runtimes, later]
+x6_run = ideas.quick_start(wid, OWNER, revision(), {"text": "Slow practice builds accuracy that lasts. Pick one bar and play it three times at half speed.", "confirmUse": True,
+                                                    "ownContent": True, "destinations": [{"platform": "LinkedIn", "language": "en", "channelId": LI}],
+                                                    "model": "deterministic-preview", "timeZone": HK, "voiceMode": "neutral"})
+ideas.apply(wid, OWNER, revision(), x6_run["runId"], x6_run["artifactHash"], separate=True)
+X6 = next(v for v in state()["variants"] if (v.get("provenance") or {}).get("runId") == x6_run["runId"])
+r = ask("Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM", "/app/queue", {"type": "draft", "id": X6["id"]}, model=later.model)
+first, first_props = compound_of(r)
+answered_first = bool(first.get("pending")) and not first_props and (first.get("status") or {}).get("schedule", {}).get("state") != "waiting" and X6["id"] not in campaign_items()
+later.release.set()
+later.threads[-1].join(10)
+cont = agent.compound_continue(wid, OWNER, {"conversationId": r["conversationId"], "messageId": r["messageId"], "timeZone": HK})
+again = agent.compound_continue(wid, OWNER, {"conversationId": r["conversationId"], "messageId": r["messageId"], "timeZone": HK})
+comp, props = compound_of(cont)
+st = comp.get("status") or {}
+proposal = props[0] if props else {}
+record("X06c", "compound", "Shorten this draft, add it to the launch campaign and schedule it for Thursday at 6 PM (a writer that finishes after the turn)", cont,
+       "first answer: the writer is running and nothing else is claimed; when it finishes: revised as a proposed update, saved, linked, and scheduling for Thu 18:00 "
+       "is a proposal that uses the rewrite, waiting for approval; continuing again changes nothing",
+       answered_first and cont["status"] == "advanced" and again["status"] == "unchanged"
+       and [st.get(k, {}).get("state") for k in ("revise", "save", "link")] == ["done"] * 3 and st.get("schedule", {}).get("state") == "waiting"
+       and len(props) == 1 and proposal.get("localTime") == "2026-09-24T18:00" and "use the rewrite" in " ".join(proposal.get("summary") or [])
+       and (variant(X6["id"]).get("proposedUpdate") or {}).get("runId") == comp.get("runId") and variant(X6["id"])["text"] == X6["text"] and X6["id"] in campaign_items()
+       and not any(x["manifest"]["variantId"] == X6["id"] for x in state()["phase2"]["reviews"]),
+       state_checked="first answer pending; X6.proposedUpdate from this run, X6 text unchanged, X6 in campaign.items, one proposal stored, no review for X6")
 
 # === §13 inspectability: every link any answer above offered opens a real page and, when it names one, a real item ========
 final = state()
