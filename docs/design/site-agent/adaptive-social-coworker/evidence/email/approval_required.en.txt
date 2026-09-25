@@ -1,0 +1,9 @@
+A post needs your approval
+
+A post for LinkedIn is waiting for your approval. It is only published if you approve it before its publish time.
+
+Review and approve: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

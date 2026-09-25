@@ -1,0 +1,9 @@
+你的草稿已准备好
+
+Weekly plan 已准备 5 份草稿供你审阅，没有排期，也没有发布。
+
+审阅草稿: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

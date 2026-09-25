@@ -3,6 +3,7 @@ name: postriff-social-graphics
 description: Create, adapt, and validate platform-native static social graphics, carousels, editorial covers, thumbnails, and vertical-video covers for a workspace's campaigns. Use after a CanonicalBrief and target ChannelDrafts exist; do not use for writing full captions, producing finished video, or publishing.
 license: MIT
 metadata:
+  version: 1.0.0
   status: project-local-not-globally-installed
   derived-from: SocialMediaGraphicSkill.md
   project-contract: postriff-social-media-suite-design-revision-12

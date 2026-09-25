@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-reddit
 description: Prepare and validate Reddit drafts and approval-gated controlled-browser publishing route with exact account, destination and format bindings.
+metadata:
+  version: 1.0.0
 ---
 
 # reddit adapter

@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-kakaotalk-channel
 description: Prepare and validate kakaotalk-channel native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.0.0
 ---
 
 # kakaotalk-channel adapter

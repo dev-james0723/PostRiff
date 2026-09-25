@@ -23,12 +23,24 @@ def snapshot(connection_factory, now=None):
         budgets = cur.fetchone()[0]
         cur.execute("SELECT count(*) FROM public.pr_billing_events WHERE outcome='rejected' AND processed_at>to_timestamp(%s)", (now-86400,))
         billing = cur.fetchone()[0]
-        cur.execute("SELECT count(*) FROM public.pr_notifications WHERE NOT sent AND created_at<to_timestamp(%s)", (now-600,))
+        from .coworker import flags
+        from .email import V2_KINDS
+        v2 = flags.enabled("RAFII_NOTIFICATIONS_V2_ENABLED")
+        # With notifications v2 on, the legacy ledger still records the kinds v2 now sends (unsent by design).
+        cur.execute("SELECT count(*) FROM public.pr_notifications WHERE NOT sent AND created_at<to_timestamp(%s) AND NOT (kind = ANY(%s))",
+                    (now-600, sorted(V2_KINDS) if v2 else []))
         notifications = cur.fetchone()[0]
+        delivery_backlog = delivery_dead = 0
+        if v2:
+            cur.execute("""SELECT count(*) FILTER (WHERE status IN ('pending','claimed') AND next_attempt_at < to_timestamp(%s)),
+                                  count(*) FILTER (WHERE status='dead' AND updated_at > to_timestamp(%s))
+                           FROM public.pr_notification_deliveries WHERE channel IN ('email','push')""", (now-600, now-86400))
+            delivery_backlog, delivery_dead = cur.fetchone()
         cur.execute("SELECT count(*) FROM public.pr_data_requests WHERE kind='deletion' AND status='requested'")
         deletions = cur.fetchone()[0]
     counts = dict(publicationUncertain=stuck, queueDelayed=delayed, publicationFailed=failed, publicationHeld=held,
                   modelStuck=model_stuck, researchStuck=research_stuck, costUnsettled=unsettled,
-                  budgetStops=budgets, billingRejected24h=billing, notificationsUnsent=notifications, deletionPending=deletions)
+                  budgetStops=budgets, billingRejected24h=billing, notificationsUnsent=notifications, deletionPending=deletions,
+                  notificationBacklog=delivery_backlog, notificationDead24h=delivery_dead)
     return {'status':'attention' if any(counts.values()) else 'ok', 'observedAt':now, 'counts':counts,
-            'notificationDelivery':'not_configured'}
+            'notificationDelivery':'rafii_v2' if v2 else 'not_configured'}

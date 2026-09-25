@@ -1,6 +1,8 @@
 ---
 name: postriff-conversation-director
 description: Use when a content campaign needs guided intake, express-mode review, an automation interview, setup channel selection, or recovery of a paused conversation.
+metadata:
+  version: 1.0.0
 ---
 
 # Conversation director

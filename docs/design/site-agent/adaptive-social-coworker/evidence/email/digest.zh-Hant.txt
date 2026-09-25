@@ -1,0 +1,11 @@
+你的摘要
+
+以下是自上次摘要以來的情況。任何緊急事項都已即時通知你。
+- Published and confirmed: LinkedIn
+- Your drafts are ready: Weekly plan
+
+開啟 Rafii: https://app.rafii.example/app/queue
+
+你收到這封電子郵件，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電子郵件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

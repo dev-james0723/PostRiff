@@ -50,6 +50,18 @@ AUTOMATION_NOTICES = {
     "run_skipped": ("Skipped this time: {name}", "Your automation “{name}” skipped this run.", "Open the automation"),
 }
 
+# Notices the Rafii NotificationService sends when RAFII_NOTIFICATIONS_V2_ENABLED is on (architecture lock N5).
+# Invitations and welcome mail stay here: they are synchronous account operations that report `emailSent`.
+V2_KINDS = frozenset({"review_ready", "approval_expired", "platform_disconnected", "publish_failed", "run_skipped", "drafts_ready",
+                      "trial_ending", "payment_failed", "subscription_activated", "new_device"})
+# trial_ended stays legacy: v2 has no trial-ended event, and routing it away would drop the email.
+
+
+def _notifications_v2():
+    from postriff_phase2.coworker import flags
+    return flags.enabled("RAFII_NOTIFICATIONS_V2_ENABLED")
+
+
 class NullTransport:
     """Fixture transport: records every message in `.sent` and delivers nothing."""
 
@@ -79,7 +91,14 @@ class ResendTransport:
             "text": message["text"],
             "tags": [{"name": str(t["name"]), "value": str(t["value"])} for t in message.get("tags", [])],
         }
-        response = self.transport("POST", RESEND_URL, headers={"Authorization": f"Bearer {self.api_key}"}, body=payload)
+        if message.get("headers"):
+            # List-Unsubscribe / List-Unsubscribe-Post from the notification renderer (RFC 8058); values are single-line.
+            payload["headers"] = {str(k): " ".join(str(v).split())[:500] for k, v in message["headers"].items()}
+        request_headers = {"Authorization": f"Bearer {self.api_key}"}
+        if message.get("idempotencyKey"):
+            # Resend deduplicates a retried send with the same key (NotificationService delivery id).
+            request_headers["Idempotency-Key"] = str(message["idempotencyKey"])[:256]
+        response = self.transport("POST", RESEND_URL, headers=request_headers, body=payload)
         status, body = response.get("status"), response.get("body")
         if not isinstance(status, int) or not 200 <= status < 300:
             raise AlphaError("The email service did not accept this message.", 502)
@@ -184,6 +203,10 @@ class Mailer:
 
     # ---- delivery --------------------------------------------------------------------------------
     def _deliver(self, kind, to, **ctx):
+        if kind in V2_KINDS and _notifications_v2():
+            # The notification service owns these notices (events derived from state, planned per preferences, HTML
+            # templates, retries); sending here too would email the person twice.
+            return {"sent": False, "kind": kind, "reason": "routed_to_notifications_v2"}
         try:
             if not valid_address(to):
                 raise AlphaError("Enter a valid email address.")

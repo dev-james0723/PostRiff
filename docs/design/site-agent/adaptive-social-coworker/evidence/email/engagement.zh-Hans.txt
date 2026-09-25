@@ -1,0 +1,9 @@
+需要回复的评论
+
+LinkedIn 上有评论提出问题或需要回答。Rafii 可以建议回复；未经你同意，不会发出任何内容。
+
+打开收件箱: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

@@ -3,6 +3,7 @@ name: postriff-source-extraction-providers
 description: Normalize an already discovered exact public article URL into provenance-rich source material. Use after RSS, search, a source pack, or the user supplies a URL; do not use for broad discovery, authenticated scraping, factual verification, media reuse, or publishing.
 license: MIT
 metadata:
+  version: 1.0.0
   status: project-local-phase0-fixture-only
   project-contract: postriff-social-media-suite-design-revision-14
 ---

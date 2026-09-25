@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-whatsapp-channels
 description: Prepare and validate whatsapp-channels native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.0.0
 ---
 
 # whatsapp-channels adapter

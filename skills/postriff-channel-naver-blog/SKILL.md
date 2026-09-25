@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-naver-blog
 description: Prepare and validate naver-blog native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.0.0
 ---
 
 # naver-blog adapter

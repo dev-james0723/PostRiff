@@ -1,0 +1,9 @@
+下週的內容已準備好
+
+Rafii 已為 2026-09-28 那一週準備了 5 則貼文，每則都依平台撰寫，並對照你的語氣檢查過；有資料來源的貼文，也已對照來源檢查。未經你核准，一律不會排程。
+
+審閱這一週: https://app.rafii.example/app/queue
+
+你收到這封電子郵件，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電子郵件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

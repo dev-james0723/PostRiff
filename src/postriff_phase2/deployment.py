@@ -41,7 +41,8 @@ def isolated_environment(values):
         raise ValueError('Staging secret fingerprints must be a JSON object.') from error
     if not isinstance(pins, dict):
         raise ValueError('Staging secret fingerprints must be a JSON object.')
-    names = {'POSTRIFF_SUPABASE_SECRET_KEY', 'POSTRIFF_CREDENTIAL_KEY', 'CRON_SECRET', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AI_GATEWAY_API_KEY', 'RESEND_API_KEY'}
+    names = {'POSTRIFF_SUPABASE_SECRET_KEY', 'POSTRIFF_CREDENTIAL_KEY', 'CRON_SECRET', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AI_GATEWAY_API_KEY', 'RESEND_API_KEY',
+             'RESEND_WEBHOOK_SECRET', 'POSTRIFF_VAPID_PRIVATE_KEY', 'POSTRIFF_NOTIFICATION_SIGNING_KEY'}
     names.update(key for key in result if key.startswith('POSTRIFF_OAUTH_') and key.endswith(('CLIENT_ID', 'CLIENT_SECRET')))
     for name in names:
         value = result.get(name)
@@ -52,4 +53,10 @@ def isolated_environment(values):
         raise ValueError('Preview research and local CLI must remain disabled.')
     result['POSTRIFF_RESEARCH'] = '0'
     result['POSTRIFF_LOCAL_CLI'] = '0'
+    # Rafii coworker features that reach an outside service (email, push, the public web) stay off in preview.
+    egress = ('RAFII_NOTIFICATIONS_V2_ENABLED', 'RAFII_WEB_PUSH_ENABLED', 'RAFII_RESEARCH_BROKER_ENABLED', 'RAFII_LISTENING_ENABLED')
+    if any(str(result.get(name, '')).strip().lower() in ('1', 'true', 'yes', 'on') for name in egress):
+        raise ValueError('Preview Rafii notifications, web push, research and listening must remain disabled.')
+    for name in egress:
+        result[name] = ''
     return result

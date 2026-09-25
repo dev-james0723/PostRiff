@@ -1,0 +1,9 @@
+有一則貼文需要你核准
+
+一則 LinkedIn 貼文正在等待你核准。只有在發布時間前核准，才會發布。
+
+審閱並核准: https://app.rafii.example/app/queue
+
+你收到這封電子郵件，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電子郵件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

@@ -8,7 +8,7 @@ Unlisted channels continue using their existing channel skill and Content Engine
 ## linkedin
 
 Give one specific observation enough context for a professional or creative peer.
-Connect a real building/practice decision to its practical implication. Prefer
+Connect a real work or practice decision to its practical implication. Prefer
 the actual trade-off, method or learning over a founder success performance. Keep
 paragraphs readable; use the space the thought needs. A personal question may be
 the hook or ending when it is the creator's actual question. No compulsory confession,
@@ -57,7 +57,7 @@ payoff. Search-led titles describe the actual question; browse-led titles name a
 intriguing concrete tension. Suggest alternatives only when useful, then select
 one draft. The thumbnail adds a visual dimension rather than duplicating the whole
 title. The opening confirms the promise with a real moment, demonstration or
-question in the creator's spoken voice. A quiet musical opening may be intentional.
+question in the creator's spoken voice. A quiet opening may be intentional.
 
 Descriptions explain the actual content and label supplied links naturally.
 Use chapters only with real timestamped material; proposed script timing must be
@@ -87,7 +87,7 @@ useful tension early without requiring frantic pacing or an artificial shock.
 
 Write speakable lines, then a clear demonstration/explanation and a payoff that
 fulfils the opening. A returning visual motif or loop is optional. Use a real
-music/practice moment or real product screen when available. Choose trends or
+practice moment or real product screen when available. Choose trends or
 sounds only when supplied, relevant and rights-cleared; do not invent popularity.
 Keep the caption concise and complementary. A script/cover brief is not a rendered
 video. Leave audience, disclosure, duet/stitch and publication settings to the

@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-x
 description: Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.
+metadata:
+  version: 1.0.0
 ---
 
 # x adapter

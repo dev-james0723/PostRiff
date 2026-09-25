@@ -4,10 +4,11 @@ import { usePathname } from 'next/navigation';
 import { Icons } from '@/components/icons';
 import { useSidebar } from '@/components/ui/sidebar';
 import { navGroups } from '@/config/nav-config';
+import { useCoworkerNavGroups } from '@/features/coworker/nav';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import { cn } from '@/lib/utils';
 
-const DESTINATIONS = ['/app', '/app/calendar', '/app/queue', '/app/inbox'];
+const DESTINATIONS = ['/app', '/app/calendar', '/app/weekly', '/app/queue', '/app/inbox'];
 
 /**
  * The fixed mobile navigation (DNA §8.3): the frequent top-level destinations plus More, on a
@@ -16,7 +17,7 @@ const DESTINATIONS = ['/app', '/app/calendar', '/app/queue', '/app/inbox'];
 export function MobileTabBar() {
   const pathname = usePathname();
   const { toggleSidebar } = useSidebar();
-  const items = useFilteredNavGroups(navGroups).flatMap((g) => g.items).filter((i) => DESTINATIONS.includes(i.url));
+  const items = useFilteredNavGroups(useCoworkerNavGroups(navGroups)).flatMap((g) => g.items).filter((i) => DESTINATIONS.includes(i.url));
   const slots = items.length + 1;
   const activeIndex = items.findIndex((item) => (item.url === '/app' ? pathname === item.url : pathname.startsWith(item.url)));
   return (

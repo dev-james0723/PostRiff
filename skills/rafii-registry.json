@@ -1,0 +1,4800 @@
+{
+ "schema": "rafii.capability-registry.v1",
+ "note": "Product-owned capability registry. Edit only with a version bump, then run scripts/rafii_skill_registry.py --lock. Global skills are immutable at runtime; workspaces personalise through overlays only.",
+ "capabilities": [
+  {
+   "id": "postriff-content-engine",
+   "version": "1.1.0",
+   "kind": "knowledge",
+   "sha256": "sha256:bef9fe3135847c250a519b2c99a774c9aebc14ca0ffc4b95be5489176428c147",
+   "description": "Use when creating, researching, localizing, reviewing, or scheduling social content for a PostRiff workspace, in any language and for any channel the workspace has connected.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "medium",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-content-engine"
+    }
+   ],
+   "lockedVersion": "1.1.0"
+  },
+  {
+   "id": "postriff-content-craft",
+   "version": "1.2.0",
+   "kind": "knowledge",
+   "sha256": "sha256:61664bec94c6e8103b58e52e3d09b6c4cdd3b8c71a8287201889e96b7b47bdc9",
+   "description": "Use when drafting, adapting or reviewing natural, human-sounding social posts, carousel copy, video packaging or spoken hooks for LinkedIn, X, Instagram, YouTube, Threads, TikTok and Facebook.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ]
+     }
+    },
+    {
+     "ref": "postriff_phase2.skill_compiler:compile",
+     "probe": {
+      "task": {
+       "agent": "content",
+       "intent": "draft"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "medium",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-content-craft"
+    }
+   ],
+   "aliases": [
+    "rafii-content-craft"
+   ],
+   "priority": 10,
+   "lockedVersion": "1.2.0"
+  },
+  {
+   "id": "postriff-research-and-source-log",
+   "version": "1.1.0",
+   "kind": "knowledge",
+   "sha256": "sha256:b285cdcddc9694fb631a6769abd8c8cb93d4e719f9ab16d7585aeb3514325a9a",
+   "description": "Verify atomic claims and maintain versioned source evidence for a workspace's content, including attribution, contradictory findings, corrections and retractions. Use before news, launch or high-stakes drafting.",
+   "intents": [
+    "research",
+    "source_to_campaign",
+    "fact_pack"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ],
+      "intent": "research"
+     }
+    },
+    {
+     "ref": "postriff_phase2.skill_compiler:compile",
+     "probe": {
+      "task": {
+       "agent": "research",
+       "intent": "research"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "medium",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-research-and-source-log"
+    }
+   ],
+   "aliases": [
+    "rafii-research-provenance"
+   ],
+   "lockedVersion": "1.1.0"
+  },
+  {
+   "id": "postriff-adapter-contract",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:b4d2b01e5d2c4851bc937518aa180cac045e7a8128cfbeabcb2b3098398466c3",
+   "description": "The shared contract every PostRiff channel adapter inherits — asset rules, setup, browser fallback, approval and safety, draft payload mapping, and verification. Bound once per turn alongside whichever channel adapters the turn uses.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-adapter-contract"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-bilibili",
+   "version": "1.1.0",
+   "kind": "knowledge",
+   "sha256": "sha256:571b7ac37cc49cb41b293121c4464612c1e311a75ae97b09de3c570c85429af9",
+   "description": "Prepare and validate bilibili native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Bilibili"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Bilibili",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-bilibili"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.1.0"
+  },
+  {
+   "id": "postriff-channel-bluesky",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:5c3119dfa19dd0b18e878d0ff30227332631982d48f6d725e292a58d7c3117c5",
+   "description": "Prepare and validate bluesky native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Bluesky"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Bluesky",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-bluesky"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-dcard",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:74d9c1482d7d65c55c5a38a954f4f3c95e48acbeaba0281f467278ad706f3a94",
+   "description": "Prepare and validate dcard native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Dcard"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Dcard",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-dcard"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-discord",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:e52ac0a08be1c85ed34b5910062c50b45206a741cb8a7e0ee8407832e24ca3f7",
+   "description": "Prepare and validate discord native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Discord"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Discord",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-discord"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-douyin",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:2ed2595f8d852be85749b524281ec584ff8217510b0cbf03589f1d17c7455907",
+   "description": "Prepare and validate douyin native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Douyin"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Douyin",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-douyin"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-facebook",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:c941056a4224f30383d11771c36e93f0a0342acaa469acedf021c83c9b5e8b1c",
+   "description": "Prepare and validate facebook native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Facebook"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Facebook",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-facebook"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-feishu-lark",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:557d2ddd3f19c8ac2741f296ad1b5c108e050a83b3aeaba976cb11d8a2420f93",
+   "description": "Prepare and validate feishu-lark native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Feishu / Lark"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Feishu / Lark",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-feishu-lark"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-google-business-profile",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:9b332818d1ec17ceacf445371d3faea2e68cc605fa7b80226c137b950ffb4417",
+   "description": "Prepare and validate google-business-profile native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Google Business Profile"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Google Business Profile",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-google-business-profile"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-instagram",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:f3dbecabe43a3f5927e00116490822f92c96d7011a5b0aa66e1322a179dfee01",
+   "description": "Prepare and validate instagram native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Instagram"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Instagram",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-instagram"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-kakaotalk-channel",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:a02ff60e530bddb4b4791cc583c188d5e3c53f175e9846063295f11b452dbf90",
+   "description": "Prepare and validate kakaotalk-channel native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "KakaoTalk Channel"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "KakaoTalk Channel",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-kakaotalk-channel"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-kuaishou",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:71c73ecd262f147399c7c9c2dcdcecee6e03e1656620c73f46cf5dc5c2aca7da",
+   "description": "Prepare and validate kuaishou native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Kuaishou"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Kuaishou",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-kuaishou"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-line-official-account",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:c921accd7ea623e22269b83d3e3691801d3001eb6de19c365287ae0f0b20d8ba",
+   "description": "Prepare and validate line-official-account native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "LINE Official Account"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LINE Official Account",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-line-official-account"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-linkedin",
+   "version": "1.1.0",
+   "kind": "knowledge",
+   "sha256": "sha256:b96a66ed3a87300c70e1eb3c19c2c5f8d5600d9164b50f37696ffaed3443b6e5",
+   "description": "Prepare and validate linkedin native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "LinkedIn"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-linkedin"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.1.0"
+  },
+  {
+   "id": "postriff-channel-mastodon",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:539d7cdd7d88ee1c1890c13034f4ce56b69a5500d037918b187c2436a9a2ae59",
+   "description": "Prepare and validate mastodon native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Mastodon"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Mastodon",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-mastodon"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-moj",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:864823759e374b22f332c6c79f863c9975068a0f181f9f103ed73ac48996b113",
+   "description": "Prepare and validate moj native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Moj"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Moj",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-moj"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-naver-blog",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:4060c40667f8a1b53fdca5b21ace49c36f7a910bfad4a85e220acdf337458eee",
+   "description": "Prepare and validate naver-blog native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Naver Blog"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Naver Blog",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-naver-blog"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-note-jp",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:86f5d6b06af473dd23f267e014eacc53cf5761670056ce39fd850afba85792a6",
+   "description": "Prepare and validate note-jp native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "note"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "note",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-note-jp"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-pinterest",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:1aa80ea24bf99a67cd0ad9ac92b631609d16f3b7f17d9d9113b8c4c81572f38a",
+   "description": "Prepare and validate pinterest native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Pinterest"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Pinterest",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-pinterest"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-pixelfed",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:cf18512fd77983d5d36cdc527efaf35ccb199845738a3c3df18d314004090fa5",
+   "description": "Prepare and validate pixelfed native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Pixelfed"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Pixelfed",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-pixelfed"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-reddit",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:e250372bc077b6237a3dacb81a98b67b22079ac289323f7307dcdac69a6740ad",
+   "description": "Prepare and validate Reddit drafts and approval-gated controlled-browser publishing route with exact account, destination and format bindings.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Reddit"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Reddit",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-reddit"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-sharechat",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:d6fea72b73e346797e08c49389535b479f669b830150bc5cf90bb9ae818ad76b",
+   "description": "Prepare and validate sharechat native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "ShareChat"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "ShareChat",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-sharechat"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-snapchat",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:6f89a11640dd7a19c576dcc25b6a1b0199dc47eea3a06339a9a2ca658c27336c",
+   "description": "Prepare and validate snapchat native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Snapchat"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Snapchat",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-snapchat"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-telegram",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:2c7539ca23292555cdac01c2e1d75a8ba02e20a03ae1c171192b52a3daa047d1",
+   "description": "Prepare and validate telegram native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Telegram"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Telegram",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-telegram"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-tencent-qq",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:12cfc7a68c733434922af9764f2613997d76e5cdfc4abf4ba6bc7bb190fbf9f1",
+   "description": "Prepare and validate tencent-qq native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Tencent QQ"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Tencent QQ",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-tencent-qq"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-threads",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:4f764cf4df1d17a21a698745ad2e54a01741a0782aebbf27679f790524fc8211",
+   "description": "Prepare and validate threads native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Threads"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Threads",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-threads"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-tiktok",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:4e090b2e2fa80e8c0067d88f54586e72292ed07437a7e2e93da3ea8b03965417",
+   "description": "Prepare and validate tiktok native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "TikTok"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "TikTok",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-tiktok"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-wechat-channels",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:aeba13d6ef342f52f1c8f6a03ee3ab3d4696145d0fa843e71037cd1ace008754",
+   "description": "Prepare and validate wechat-channels native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "WeChat Channels"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "WeChat Channels",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-wechat-channels"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-weibo",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:24d5eae0ea410f84c9746bcde68e765a35a90bad978f815ce90cb60a344051b6",
+   "description": "Prepare and validate weibo native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Weibo"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Weibo",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-weibo"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-whatsapp-channels",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:1271ab5a2d963858872a00eb5cf94912f88c323befbfea7658e5cd5a9b357af1",
+   "description": "Prepare and validate whatsapp-channels native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "WhatsApp Channels"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "WhatsApp Channels",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-whatsapp-channels"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-x",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:9c47245d6512e6c081ea7a6254bd5e9e0d5c426d94c46d6826ec36016f2d6a7b",
+   "description": "Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "X"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "X",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-x"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-xiaohongshu",
+   "version": "1.1.0",
+   "kind": "knowledge",
+   "sha256": "sha256:378607aa558f9c8299206fd8e83d6bfd1d60b92b01f8428f681a07cd21f78346",
+   "description": "Prepare and validate xiaohongshu native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Xiaohongshu"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Xiaohongshu",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-xiaohongshu"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.1.0"
+  },
+  {
+   "id": "postriff-channel-youtube",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:c470a0bb8e89ac032696cfa413c1a1a4a19fdd04737579bfdf55353c7d6bc4e9",
+   "description": "Prepare and validate youtube native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "YouTube"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "YouTube",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-youtube"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-channel-zhihu",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:fab00d230271a6a50d1d72342471a98c80c70d12ca70f3b07910e6cbec1d98cc",
+   "description": "Prepare and validate zhihu native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "Zhihu"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "Zhihu",
+        "language": "en"
+       }
+      ]
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_postriff_skills.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-channel-zhihu"
+    }
+   ],
+   "requires": [
+    {
+     "id": "postriff-adapter-contract",
+     "version": "^1.0.0"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-discoverability",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:1f5dc00bc9e8914a4af6215b7f948fe8bc51d4d2f535a7a9b85ed9d24a5cb15f",
+   "description": "Plan and validate search, AI-answer, local, and platform-native discoverability for a workspace's content after a CanonicalBrief exists. Use for article SEO, topic clusters, metadata, schema, YouTube search packaging, local visibility, and per-platform discovery hints; do not use to promise virality",
+   "intents": [
+    "source_to_campaign",
+    "campaign",
+    "discoverability"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ],
+      "workflow": "rafii-source-to-campaign",
+      "flags": {
+       "RAFII_SKILL_REGISTRY_V2_ENABLED": "1"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-discoverability"
+    }
+   ],
+   "writer": {
+    "workflows": [
+     "rafii-source-to-campaign"
+    ]
+   },
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-social-graphics",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:517166b9d94776f8b51a74316084bceab6df08b775e00203d3daf006aa1d273e",
+   "description": "Create, adapt, and validate platform-native static social graphics, carousels, editorial covers, thumbnails, and vertical-video covers for a workspace's campaigns. Use after a CanonicalBrief and target ChannelDrafts exist; do not use for writing full captions, producing finished video, or publishing",
+   "intents": [
+    "creative_brief",
+    "image",
+    "carousel",
+    "thumbnail"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "creative"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skill_compiler:compile",
+     "probe": {
+      "task": {
+       "agent": "creative",
+       "intent": "creative_brief"
+      }
+     },
+     "callers": [
+      "postriff_phase2.coworker.creative:plan_assets"
+     ]
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-social-graphics"
+    }
+   ],
+   "aliases": [
+    "rafii-visual-craft"
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii-humanizer-en",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:e6b8a2e4959d013473a5e301328ebe9b7bf7f9535166251089ac629e6f8e5dad",
+   "description": "Hidden editorial quality pass (English): remove synthetic patterns while preserving facts, attribution, uncertainty, scope and the workspace's approved voice.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "en"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ],
+      "flags": {
+       "RAFII_SKILL_REGISTRY_V2_ENABLED": "1"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_humanizer.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-humanizer-en"
+    }
+   ],
+   "writer": {
+    "languages": [
+     "en"
+    ]
+   },
+   "priority": 20,
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii-humanizer-zh",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:9c411022aaa55ec2671fee93a5b7a3b2e99bbced036f925b164931ae847e45d5",
+   "description": "Hidden editorial quality pass (Chinese: zh-Hans, zh-Hant, Hong Kong written and Cantonese register): remove synthetic patterns while preserving facts, attribution, uncertainty, scope and the workspace's approved voice.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "zh",
+    "yue"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "zh-Hant-HK"
+       }
+      ],
+      "flags": {
+       "RAFII_SKILL_REGISTRY_V2_ENABLED": "1"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_humanizer.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-humanizer-zh"
+    }
+   ],
+   "writer": {
+    "languages": [
+     "zh",
+     "yue"
+    ]
+   },
+   "priority": 20,
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii-weekly-operator",
+   "version": "1.0.0",
+   "kind": "workflow",
+   "sha256": "sha256:449adfcee80c083eae398af0c4a91aab7148e867f943f6ebcf927a1a699bc2bc",
+   "description": "Use when planning or preparing next week's social content from a workspace's weekly recipe - turning goals, cadence, content mix, campaigns and approved sources into a reviewable week plan with platform-native drafts.",
+   "intents": [
+    "weekly_plan"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "rafii_manager",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ],
+      "workflow": "rafii-weekly-operator",
+      "flags": {
+       "RAFII_SKILL_REGISTRY_V2_ENABLED": "1"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-weekly-operator"
+    }
+   ],
+   "writer": {
+    "self": true
+   },
+   "priority": 5,
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii-source-to-campaign",
+   "version": "1.0.0",
+   "kind": "workflow",
+   "sha256": "sha256:fb530712c4c141349c7150231f95a35ce5e072ee38bbe7b59a9076862062ce55",
+   "description": "Use when turning one source (article, URL, PDF, transcript, voice memo, image, social post, announcement or raw idea) into a full multi-channel campaign through a FactPack and a canonical brief.",
+   "intents": [
+    "source_to_campaign",
+    "campaign"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "rafii_manager",
+    "content",
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ],
+      "workflow": "rafii-source-to-campaign",
+      "flags": {
+       "RAFII_SKILL_REGISTRY_V2_ENABLED": "1"
+      }
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-source-to-campaign"
+    }
+   ],
+   "writer": {
+    "self": true
+   },
+   "priority": 5,
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii-listening-opportunity",
+   "version": "1.0.0",
+   "kind": "workflow",
+   "sha256": "sha256:72d2eb1178683a5937967cfff1078861cb7e0593566ca9944184610a14d90619",
+   "description": "Use when judging whether a signal from a workspace watchlist (a topic, source, account or keyword the workspace follows through a lawful, available source) is worth acting on, and proposing the action.",
+   "intents": [
+    "opportunity",
+    "listening"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "dormant",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-listening-opportunity"
+    }
+   ],
+   "priority": 5,
+   "lockedVersion": "1.0.0",
+   "deprecationReason": "No production path applies this method yet: listening scores and records opportunities deterministically, and 'Act on it' records a decision without drafting. Kept for when an opportunity drafts through the writer; not bound, not advertised."
+  },
+  {
+   "id": "rafii-engagement-triage",
+   "version": "1.0.0",
+   "kind": "workflow",
+   "sha256": "sha256:972c104d1e4932c027a587b9b5e26a1f8c2deb6843ec9666363732e36eaef95e",
+   "description": "Use when sorting supported comments, mentions, reviews or messages into what needs a person, summarising a thread, or drafting a reply for approval.",
+   "intents": [
+    "engagement",
+    "engagement_reply"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "content",
+    "rafii_manager"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skill_compiler:compile",
+     "probe": {
+      "task": {
+       "agent": "content",
+       "intent": "engagement_reply",
+       "workflow": "rafii-engagement-triage"
+      }
+     },
+     "callers": [
+      "postriff_phase2.coworker.engagement:draft_reply"
+     ]
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-engagement-triage"
+    }
+   ],
+   "priority": 5,
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-source-extraction-providers",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:c5d5ba3dd08f0f4d2bc39498922fa150f2f265a7b66939abd18037fea1196efb",
+   "description": "Normalize an already discovered exact public article URL into provenance-rich source material. Use after RSS, search, a source pack, or the user supplies a URL; do not use for broad discovery, authenticated scraping, factual verification, media reuse, or publishing.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.research_broker:ResearchBroker.fetch_item"
+    }
+   ],
+   "tool": "research_fetch",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-source-extraction-providers"
+    },
+    {
+     "type": "tool",
+     "name": "research_fetch"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-video-transcript-intake",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:27c5ebfbd10a2642bc98e46d66ed3d0e1125570f88246e3ab4ac4cd05bcbc415",
+   "description": "Inspect a permitted public video source and prepare provenance-rich caption or transcript artifacts for analysis. Use for caption discovery, transcript acquisition planning, and ASR fallback decisions; do not use for protected-media bypass, translation, content approval, or publishing.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "research",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.source_intake:parse_captions"
+    }
+   ],
+   "tool": "source_normalize",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-video-transcript-intake"
+    },
+    {
+     "type": "tool",
+     "name": "source_normalize"
+    }
+   ],
+   "notes": "Caption-first: SRT/WebVTT/timestamped transcripts supplied by the person. No hosted speech recognition.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.research-search",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:e382c4e92360c246f6da34995614c9666bff182a6c23ab365e307c640ec52c50",
+   "description": "Public web search through the Research Broker; results are leads with provenance.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.research_broker:ResearchBroker.search_items"
+    }
+   ],
+   "tool": "research_search",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "research_search"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.draft-create",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:82e87fe0b407e4532ce449f341ff8b5b98b60db67ac696f987439c29e85da16a",
+   "description": "Agent Runtime v2 typed tool `draft_create` (owned by the runtime; recorded here for run provenance).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "draft_create",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "draft_create"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.draft-rewrite",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:ebd55afcfe4d18bf799a7e1b5f6c51e3718f93bf9190eea6ca6280f956899957",
+   "description": "Agent Runtime v2 typed tool `draft_rewrite` (owned by the runtime; recorded here for run provenance).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "draft_rewrite",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "draft_rewrite"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.web-research",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:760d33445ef89d5ddb2c1105d9fcee29b9dcb2de7567e52a58340fc76ef709e5",
+   "description": "Agent Runtime v2 typed tool `web_research` (owned by the runtime; recorded here for run provenance).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "web_research",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "web_research"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.image-generate",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:b7ab8526f1c383c7d7f8bc9a8ace916c01bd0f0b9da3898382cef46af5f3890c",
+   "description": "Agent Runtime v2 typed tool `image_generate` (owned by the runtime; recorded here for run provenance).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "creative"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "image_generate",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "image_generate"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.image-edit",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:e497ba33cb5afcab7bc8f16305aeeebb03e55f31f28f861b4448a98ce9f52cef",
+   "description": "Agent Runtime v2 typed tool `image_edit` (owned by the runtime; recorded here for run provenance).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "creative"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "image_edit",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "image_edit"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.image-analyze",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:5aa80c29d4270fea00160b219de831c5dea9998c828d64607e924ba55a456656",
+   "description": "Agent Runtime v2 typed tool `image_analyze` (owned by the runtime; recorded here for run provenance).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "creative"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "image_analyze",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "image_analyze"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.schedule-propose",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:3fa8b4c6ec3fc9ba1d251be2f9ac23734f103727a9b0560afcf839b2e4f2986c",
+   "description": "Agent Runtime v2 typed tool `schedule_propose` (owned by the runtime; recorded here for run provenance).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "publishing_ops"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "schedule_propose",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "high",
+   "tests": [
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "schedule_propose"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-security-and-approval",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:0d8589b8125b7f415f6a32fa3e7a33ecfa2aa2165539373e1bf2b0efc00babf5",
+   "description": "Use when reviewing campaign permissions, freezing an exact approval manifest, checking route freshness, cancelling pending jobs, or handling identity and credential incidents.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.permissions:require"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.permissions:require",
+    "postriff_phase2.permissions:ACTION_CLASSES",
+    "postriff_phase2.agent_runtime_v2.contracts:FORBIDDEN_EFFECTS",
+    "postriff_phase2.agent_runtime_v2.approvals:decide",
+    "postriff_phase2.site_agent.proposals:check"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/phase2/postgres_isolation.py",
+    "tests/test_agent_runtime.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-security-and-approval"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.permissions:ACTION_CLASSES"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.permissions:CLASSES"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.permissions:STEP_UP_ACTIONS"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.agent_runtime_v2.contracts:FORBIDDEN_EFFECTS"
+    }
+   ],
+   "notes": "Deterministic application policy. The skill text is documentation; it is never injected as an instruction.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-publish-and-verify",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:e00899fa6443a4eb948cf631587dbe445803ed7378010ecf43bd4c4026d57538",
+   "description": "Use when executing an exactly approved campaign job, inspecting scheduled or published results, or reconciling a submission whose remote outcome is uncertain.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.outcomes:normalize_result"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.outcomes:normalize_result",
+    "postriff_phase2.lifecycle:job_item_state",
+    "postriff_phase2.billing:require_publishing",
+    "postriff_phase2.agent_runtime_v2.approvals:verify_applied"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_postriff_receipt_contract.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-publish-and-verify"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.lifecycle:JOB_ITEM"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.lifecycle:TRANSITIONS"
+    }
+   ],
+   "notes": "prepared != scheduled != sent != provider-accepted != verified-published is enforced by outcomes.normalize_result and lifecycle.JOB_ITEM.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.tenant-isolation",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:3fb645fd420eb2bddf1be0bf03d61463bf46bf31def9f94126876e22705d6f9d",
+   "description": "Every data and tool path is scoped to one workspace through the membership-checked repository transaction; cross-tenant access is indistinguishable from absence.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.hosted:PostgresWorkspaceRepository.transaction"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.hosted:PostgresWorkspaceRepository.transaction"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.billing-authorization",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:c43cd639ec23cac454dddebed4c53baff8d20e2081d880c7fe2609549bffc005",
+   "description": "Paid work reserves in the usage ledger before it runs; publishing requires an active plan.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.billing:Ledger.reserve"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.billing:Ledger.reserve",
+    "postriff_phase2.billing:Ledger.settle",
+    "postriff_phase2.billing:require_publishing"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.rights-check",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:13c30027bc291eb6f9eb9f77c469c4395ace2310cd10b709cdb1a6c22b9a2861",
+   "description": "Source rights and use approvals gate publication.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.source_policy:publication_issues"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.source_policy:publication_issues"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.research-egress",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:e87c68b595d919513c10f8259d8c5cb1fe3fb73e5919f8e350f036ce3df728cc",
+   "description": "Hosted research needs the owner's web-research consent.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.research:allowed"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.research:allowed"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "object",
+     "ref": "postriff_phase2.research:PROCESSORS"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.memory-egress",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:05f371801129e365f9cc55da3cfde300be411748c4ed7f01cff760b0a022d18c",
+   "description": "Memory reaches a cloud model only with the owner's cloud-memory decision.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.memory:egress"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.memory:egress",
+    "postriff_phase2.memory:projection"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.state-verification",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:18a1ccc7e199fc65b58446ad3fece153c5101346dedffbadd3cd1e7c3c473234",
+   "description": "Every mutation is re-read and compared before success is reported.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.approvals:verify_applied"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.agent_runtime_v2.approvals:verify_applied"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.overlay-protection",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:0fbd994dde9156150b547a756e0937a22e4d64c8d1ed054b017810b94620f18a",
+   "description": "User overlays may personalise only overlay_only capabilities and never a policy.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skill_registry:validate_overlay"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.skill_registry:validate_overlay"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.voice-fit",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:145c423403f1ad04cf3c9281dc4d101485b43e530e56ea824e6a2950a10ed4ed",
+   "description": "Deterministic check of a text against the workspace's stored voice profile.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content",
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.site_agent.voice_check:analyze"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.site_agent.voice_check:analyze",
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.locale-lint",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:b6d38c03115a507a5400ca90e05abc299b7438275b4ac8b54f71518975038559",
+   "description": "Deterministic locale reminders (script mix, region words, platform rules).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content",
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.locale_lint:reminders"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.locale_lint:reminders",
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.platform-length",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:9001cd5efcdfcc44eb412d854eb2d4494811a595301335938ccd54d4c86971b0",
+   "description": "Per-platform length measurement.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content",
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.text_measure:measure"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.text_measure:measure",
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.injection-scan",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:1ab2776d0ef507c8019dc126f1df33ab19c54ac5c4ed63d59a33ad216486b8a0",
+   "description": "Flags instruction-like text in fetched or uploaded content; the content stays data.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer",
+    "content",
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.research_broker:injection_flags"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.coworker.research_broker:injection_flags",
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.research_broker:INJECTION_PATTERNS"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-conversation-director",
+   "version": "1.0.0",
+   "kind": "workflow",
+   "sha256": "sha256:4ee9a06dcd360a078cbec4f62ad70ee85b0dbd2dd37765908792e8abdf6c5ea7",
+   "description": "Use when a content campaign needs guided intake, express-mode review, an automation interview, setup channel selection, or recovery of a paused conversation.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "overlay_only",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "deprecated",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-conversation-director"
+    }
+   ],
+   "deprecationReason": "Duplicates runtime intake (intent.py, onboarding_chat, the Rafii Manager's instructions). Its one-blocking-question rule is implemented by coworker.weekly_operator needs_input questions. Not bound, not advertised.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "postriff-hyperframes-motion",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:b6bc47170085ed935c5cf701c0cf488494e29218f76c0168cd1734a7c274b06a",
+   "description": "Plan and validate target-native HyperFrames motion explainers from an approved article, transcript translation, or CanonicalBrief. Use for local motion briefs and 16:9, 1:1, or 9:16 composition plans; do not use for source verification, unreviewed rendering, upload, scheduling, or publishing.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "dormant",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "postriff-hyperframes-motion"
+    }
+   ],
+   "deprecationReason": "No hosted motion renderer exists (HyperFrames rendering is local-only). Kept for the local studio; not bound, not advertised, not counted as a hosted capability.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "james-au-content-craft",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:5006d9f541e81c80f7dee3727c108d06e55e8b246dac1fc9ee55dea1903fb3d0",
+   "description": "Private local-Studio material for one person (james-au-content-craft); never part of the product bundle.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [
+    {
+     "ref": "james_au_social.studio_codex:BINDING_FILES"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": true,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "james-au-content-craft"
+    }
+   ],
+   "notes": "Excluded from the hosted build (.vercelignore skills/james-au-*/), refused by the hosted SkillLibrary.load, forbidden by scripts/consumer_ready_artifact.cjs.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "james-au-conversation-director",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:28a52187ad52bdf5bb431ffa8a257eda7b3de542738cf71ff0d8450a17da33fa",
+   "description": "Private local-Studio material for one person (james-au-conversation-director); never part of the product bundle.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [
+    {
+     "ref": "james_au_social.studio_codex:BINDING_FILES"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": true,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "james-au-conversation-director"
+    }
+   ],
+   "notes": "Excluded from the hosted build (.vercelignore skills/james-au-*/), refused by the hosted SkillLibrary.load, forbidden by scripts/consumer_ready_artifact.cjs.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "james-au-security-and-approval",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:b0059c3a952ebf3b479d335df9d66c889f1201e0144060ed9f67a41e580df066",
+   "description": "Private local-Studio material for one person (james-au-security-and-approval); never part of the product bundle.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [
+    {
+     "ref": "james_au_social.studio_codex:BINDING_FILES"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": true,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "james-au-security-and-approval"
+    }
+   ],
+   "notes": "Excluded from the hosted build (.vercelignore skills/james-au-*/), refused by the hosted SkillLibrary.load, forbidden by scripts/consumer_ready_artifact.cjs.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "james-au-social-graphics",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:cca28375bc544db89814131cca3bdeef364038e4599799a88076bc35913150fd",
+   "description": "Private local-Studio material for one person (james-au-social-graphics); never part of the product bundle.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [
+    {
+     "ref": "james_au_social.studio_codex:BINDING_FILES"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": true,
+   "hashSources": [
+    {
+     "type": "file",
+     "path": "skills/james-au-social-graphics/references/guizang-visual-catalog.md"
+    }
+   ],
+   "notes": "Excluded from the hosted build (.vercelignore skills/james-au-*/), refused by the hosted SkillLibrary.load, forbidden by scripts/consumer_ready_artifact.cjs.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "james-au-social-orchestrator",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:dea14fbd2baf9ed8685992097d23d5ce55f12bb4a88216561149df5b69e69b67",
+   "description": "Private local-Studio material for one person (james-au-social-orchestrator); never part of the product bundle.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [],
+   "consumers": [
+    {
+     "ref": "james_au_social.studio_codex:BINDING_FILES"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": true,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "james-au-social-orchestrator"
+    }
+   ],
+   "notes": "Excluded from the hosted build (.vercelignore skills/james-au-*/), refused by the hosted SkillLibrary.load, forbidden by scripts/consumer_ready_artifact.cjs.",
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.humanizer",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:f87a50bc7d127b9b4456bad26f651c660826acbc178e238f683e2a2d2d864df6",
+   "description": "Hidden quality stage: voice fit, synthetic-writing clusters, meaning preservation and platform/locale lint; annotates, never rewrites.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "en",
+    "zh",
+    "yue"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.humanizer:evaluate"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.coworker.humanizer:evaluate",
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_humanizer.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "file",
+     "path": "src/postriff_phase2/coworker/humanizer_patterns.json"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.humanizer:VERSION"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.meaning-preservation",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:5d230d59a455e115b0f86d8bdab78dfefa862f12c7d1bb09ab41f3c8e687f3c2",
+   "description": "Deterministic fact/meaning diff between a source and a candidate: numbers, dates, names, negation, hedges, attribution, scope, status, causality, invented feelings or anecdotes, brand terms.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "en",
+    "zh",
+    "yue"
+   ],
+   "agents": [
+    "writer",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.humanizer:meaning_diff"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.coworker.humanizer:meaning_diff",
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_humanizer.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.humanizer:VIOLATIONS"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.humanizer:VERSION"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.weekly-plan-get",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:1b304cc3a22b90fe5076151d2c2a29fab980cac83d69e22a8449dacfa54e6b1a",
+   "description": "Read weekly recipes and the week plan.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "rafii_manager",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "weekly_plan_get",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "weekly_plan_get"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.weekly-plan-prepare",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:46cdc422ce222c595822dc3747604ac5278eaab6981480e5cd7f65940759078a",
+   "description": "Prepare next week: plan, draft, check, stop at review or a real blocker.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "weekly_plan_prepare",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "weekly_plan_prepare"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.attention-summary-v2",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:34f012aa78f54d174ec9bdbae1a39363be4b3406c0236b41a4192a928148e162",
+   "description": "What needs attention, by fixed rules.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "rafii_manager",
+    "analytics"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "attention_summary_v2",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "attention_summary_v2"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.overlay-context",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:6e1af9273a6a9624cc8e71bbc59814e4b769dd8dda105e805c1c5a09641ba4ac",
+   "description": "Workspace voice/brand notes and learned preferences (cloud-memory gated).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "content",
+    "brand_intelligence"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "overlay_context",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "overlay_context"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.strategy-context",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:6c11cd82e26a2777c5166b4b690a932d5f40dbdaebefa523277b7e656de4069c",
+   "description": "Performance hypotheses (never rules or causes).",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "analytics",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "strategy_context",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "strategy_context"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.notification-list",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:7ce25dd5ae217eae56487d9d9f264fae6e653a9df88bc49f88932be5e1a0c060",
+   "description": "Recent notifications and unread count.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "rafii_manager"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "notification_list",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "notification_list"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.engagement-triage",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:6aa40ed9f627677cb71001a212ec6a3a903d035807de56aa6d88e136b5504a9e",
+   "description": "Deterministic comment triage with summaries.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "rafii_manager",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "engagement_triage",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "engagement_triage"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.engagement-draft-create",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:8abd93ce74e855607b9e31a48065665d225b7ff29ce26fcb7e7e6bd1d481a0e1",
+   "description": "Save a suggested reply as a draft; never sends.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "engagement_draft_create",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "engagement_draft_create"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.creative-plan",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:1cbecf5927ed67d65b4efbd9060479a04c9297897bc9e2369d4001712240ccc5",
+   "description": "Deterministic visual plan per platform.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "creative"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "creative_plan",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "low",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "creative_plan"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.tool.source-campaign-create",
+   "version": "1.0.0",
+   "kind": "tool",
+   "sha256": "sha256:1f51d83d55f544396bb8bddd33a884eabc2423d4f5fadec7aab5af8077dae387",
+   "description": "One source to a campaign of reviewable drafts.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "content",
+    "research"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.agent_runtime_v2.tool_adapter:execute"
+    }
+   ],
+   "tool": "source_campaign_create",
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_skill_registry.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "tool",
+     "name": "source_campaign_create"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.policy.notification-planning",
+   "version": "1.0.0",
+   "kind": "policy",
+   "sha256": "sha256:13319593f3d5d809f4658aeff47c30f4e569ad0134e813a00f68e656e56f0159",
+   "description": "Deterministic notification planning: recipients by permission class, urgency, transactional status, quiet hours, digest, mute, unsubscribe, rate limits and dedupe. A model never decides these.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "*"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.notifications.store:emit"
+    }
+   ],
+   "tool": null,
+   "policy": [
+    "postriff_phase2.notifications.planner:plan",
+    "postriff_phase2.notifications.planner:audience",
+    "postriff_phase2.notifications.store:emit"
+   ],
+   "evaluator": null,
+   "personalization": "protected",
+   "risk": "high",
+   "tests": [
+    "tests/test_rafii_notifications.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "object",
+     "ref": "postriff_phase2.notifications.catalog:EVENTS"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.notifications.catalog:RATE_LIMITS"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.notifications.catalog:BREAKS_QUIET_HOURS"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.claim-evidence",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:eb089b31bc9ff7dc793acb5a118d45520cd4da676403b482475cd5da9eaa0a86",
+   "description": "FactPack claim assessment: snippets are unverified, first-party claims attributed, corroboration across hosts, contradictions kept and excluded from drafts, injection text never a claim.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "research",
+    "content"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.fact_pack:build"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.coworker.fact_pack:build",
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_workflows.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.fact_pack:STATUSES"
+    },
+    {
+     "type": "manifest"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  },
+  {
+   "id": "rafii.evaluator.performance-hypothesis",
+   "version": "1.0.0",
+   "kind": "evaluator",
+   "sha256": "sha256:a152f2e0592c7c20220dc51d79064ee7045bf02ed26162736780021876dd43bf",
+   "description": "Like-for-like performance comparison: only verified posts, unavailable is never zero, at least 5 posts per arm, a material difference, counter-evidence kept; the output is a non-causal hypothesis, never a rule.",
+   "intents": [
+    "*"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "analytics"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.coworker.performance:refresh"
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": "postriff_phase2.coworker.performance:hypotheses_from",
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_rafii_workflows.py",
+    "tests/phase2/postgres_coworker.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.performance:DIMENSIONS"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.performance:MIN_ARM"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.coworker.performance:MIN_RELATIVE"
+    }
+   ],
+   "lockedVersion": "1.0.0"
+  }
+ ]
+}

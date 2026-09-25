@@ -7,6 +7,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { GettingStarted } from './getting-started';
+import { CoworkerAttention } from '@/features/coworker/attention-panel';
 import { HeatCalendar } from '@/components/charts/heat-calendar';
 import { addDays, GAP, mondayOf, PITCH, startOfDay } from '@/components/charts/heat-calendar/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -268,6 +269,7 @@ export function OverviewView() {
     <PageContainer pageTitle='Overview' pageDescription='What is scheduled, what needs you, and how much of your plan is left.' infoContent={infoContent} pageHeaderAction={newIdea}>
       <div className='flex flex-1 flex-col gap-4 md:gap-5'>
         <GettingStarted />
+        <CoworkerAttention />
         <div data-tour='overview-stats' className='grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-4'>
           <StatTile label='Scheduled' loading={snapshot.isPending} {...scheduledStat} />
           <StatTile label='Published · 30 days' loading={snapshot.isPending} {...publishedStat} />

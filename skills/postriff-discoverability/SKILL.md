@@ -3,6 +3,7 @@ name: postriff-discoverability
 description: Plan and validate search, AI-answer, local, and platform-native discoverability for a workspace's content after a CanonicalBrief exists. Use for article SEO, topic clusters, metadata, schema, YouTube search packaging, local visibility, and per-platform discovery hints; do not use to promise virality, keyword-stuff captions, or publish.
 license: MIT
 metadata:
+  version: 1.0.0
   status: project-local-not-globally-installed
   inspired-by: AgriciDaniel/claude-seo and AgriciDaniel/codex-seo
   project-contract: postriff-social-media-suite-design-revision-10

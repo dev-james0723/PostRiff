@@ -1,0 +1,9 @@
+帖子已排期
+
+一篇 LinkedIn 帖子已排期。已排期不等于已发布；每篇帖子发出后，Rafii 都会再确认。
+
+打开发布队列: https://app.rafii.example/app/queue
+
+你收到这封邮件，是因为你在 Harbour Bakery 使用 Rafii。
+通知设置: https://app.rafii.example/app/account/notifications
+退订此类邮件: https://app.rafii.example/api/notifications/unsubscribe?token=preview

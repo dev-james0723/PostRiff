@@ -16,6 +16,8 @@ import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
+import { NotificationSettings } from '@/features/coworker/notifications/notification-settings';
+import { useCoworkerFlag } from '@/lib/coworker/hooks';
 import { SettingsSection } from './settings-section';
 
 const EMAILS = [
@@ -76,10 +78,16 @@ export function NotificationsView() {
   const auth = useAuth();
   const access = useWorkspaceAccess();
   const owner = checkAccess(access, { permission: 'owner' });
+  // With Rafii's notification centre on, the person chooses what reaches them; otherwise only transactional email exists.
+  const centre = useCoworkerFlag('RAFII_NOTIFICATIONS_V2_ENABLED') === true;
   return (
     <PageContainer
       pageTitle='Notifications'
-      pageDescription='PostRiff sends a small number of transactional emails and nothing else. No marketing, no tracking pixels.'
+      pageDescription={
+        centre
+          ? 'Choose what reaches you, where and when. No marketing, no tracking pixels; security and billing emails always reach you.'
+          : 'PostRiff sends a small number of transactional emails and nothing else. No marketing, no tracking pixels.'
+      }
       width='reading'
     >
       <div className='flex flex-col gap-8'>
@@ -117,6 +125,8 @@ export function NotificationsView() {
             </p>
           )}
         </SettingsSection>
+
+        <NotificationSettings />
 
         <SecurityAlerts />
       </div>

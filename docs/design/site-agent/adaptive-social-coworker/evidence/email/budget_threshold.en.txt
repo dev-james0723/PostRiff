@@ -1,0 +1,9 @@
+Your budget is nearly used
+
+This workspace has used most of its AI budget for this period. At the limit, paid work pauses; nothing is charged beyond it.
+
+Review usage: https://app.rafii.example/app/queue
+
+You received this because you use Rafii for Harbour Bakery.
+Notification settings: https://app.rafii.example/app/account/notifications
+Unsubscribe from these emails: https://app.rafii.example/api/notifications/unsubscribe?token=preview

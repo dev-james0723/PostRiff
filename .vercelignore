@@ -20,6 +20,8 @@ studio-install-manifest.json
 /tests/
 /vendor/
 src/james_au_social/
+# Person-specific Studio skills (private in skills/rafii-registry.json) never ship with the hosted product.
+skills/james-au-*/
 src/postriff_alpha/__pycache__/
 src/postriff_phase2/__pycache__/
 studio/README.md

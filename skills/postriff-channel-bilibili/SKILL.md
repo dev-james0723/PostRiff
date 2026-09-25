@@ -1,6 +1,8 @@
 ---
 name: postriff-channel-bilibili
 description: Prepare and validate bilibili native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
+metadata:
+  version: 1.1.0
 ---
 
 # bilibili adapter
@@ -9,7 +11,7 @@ This adapter adds what is specific to bilibili. The shared adapter contract (`po
 
 ## 1. Channel purpose
 
-Music and software experiments with community context and useful depth.
+Deep-dive, hobbyist and creator content with community context and useful depth.
 
 ## 2. Audience and expected language
 
@@ -25,4 +27,4 @@ The following are implemented **local draft schemas**, not current API capabilit
 
 ## 4. Caption/title/description rules
 
-Write independently authored audience-facing `text`; put any required title or description in `notes`, labelled. Do not invent personal experience or product facts. Music and software experiments with community context and useful depth. Character limits remain unverified until a current account-specific constraint record exists; never silently truncate copy to fit an assumed limit.
+Write independently authored audience-facing `text`; put any required title or description in `notes`, labelled. Do not invent personal experience or product facts. Deep-dive, hobbyist and creator content with community context and useful depth. Character limits remain unverified until a current account-specific constraint record exists; never silently truncate copy to fit an assumed limit.
