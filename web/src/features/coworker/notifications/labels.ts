@@ -27,7 +27,8 @@ export const EVENT_LABELS: Record<string, string> = {
   'security.account_change': 'Account change'
 };
 
-export const CATEGORY_LABELS: Record<string, { label: string; hint: string }> = {
+/** `emailNote` is shown only where email is set up: it promises email delivery. */
+export const CATEGORY_LABELS: Record<string, { label: string; hint: string; emailNote?: string }> = {
   approvals: { label: 'Approvals', hint: 'A post needs someone to approve it.' },
   publishing: { label: 'Publishing', hint: 'A post failed, may not have gone out, or was published.' },
   weekly: { label: 'Weekly review', hint: 'Next week is drafted and ready for you.' },
@@ -41,8 +42,8 @@ export const CATEGORY_LABELS: Record<string, { label: string; hint: string }> = 
   research: { label: 'Research', hint: 'Research needs your input.' },
   assets: { label: 'Images', hint: 'An image needs review.' },
   budget: { label: 'Budget', hint: 'A spending limit was reached.' },
-  billing: { label: 'Billing', hint: 'Payments and trial. Emails always reach the owner.' },
-  security: { label: 'Security', hint: 'New sign-ins and account changes. Emails always reach you.' }
+  billing: { label: 'Billing', hint: 'Payments and trial.', emailNote: 'Emails always reach the owner.' },
+  security: { label: 'Security', hint: 'New sign-ins and account changes.', emailNote: 'Emails always reach you.' }
 };
 
 export function eventLabel(type: string): string {

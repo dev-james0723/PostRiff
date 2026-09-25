@@ -11,6 +11,7 @@ class for each mutation and re-reads what it changed.
 from __future__ import annotations
 
 import html
+import time
 from urllib.parse import parse_qs
 
 from postriff_alpha.domain import AlphaError
@@ -19,6 +20,8 @@ from . import runtime
 
 RESOURCES = ("coworker", "notifications", "notification-preferences", "push-subscriptions")
 MAX_WEBHOOK = 65_536
+# A person's "prepare now" stops starting writer runs once it could no longer finish inside the function's time limit.
+HTTP_PREPARE_SECONDS = 240
 
 
 def _query(environ, key):
@@ -45,13 +48,17 @@ def _page(start_response, status, title, message, form_token=None):
 def public(app, environ, start_response, method, path):
     if path == "/api/notifications/email/webhook" and method == "POST":
         service = runtime.ensure(app._runtime())
-        length = int(environ.get("CONTENT_LENGTH") or "0")
+        # Off means off before anything is read; then a size that is not a number is the caller's error, not a 500.
+        if not service.notifications.enabled():
+            raise AlphaError("Email webhooks are not enabled.", 404, code="feature_disabled")
+        try:
+            length = int(environ.get("CONTENT_LENGTH") or "0")
+        except ValueError:
+            raise AlphaError("Webhook body size invalid.", 400) from None
         if not 0 < length <= MAX_WEBHOOK:
             raise AlphaError("Webhook body size invalid.", 413)
         raw = environ["wsgi.input"].read(length)
         headers = {"svix-id": environ.get("HTTP_SVIX_ID"), "svix-timestamp": environ.get("HTTP_SVIX_TIMESTAMP"), "svix-signature": environ.get("HTTP_SVIX_SIGNATURE")}
-        if not service.notifications.enabled():
-            raise AlphaError("Email webhooks are not enabled.", 404, code="feature_disabled")
         return app._json(start_response, 200, service.notifications.provider_webhook(headers, raw))
     if path == "/api/notifications/unsubscribe" and method in ("GET", "POST"):
         service = runtime.ensure(app._runtime())
@@ -83,6 +90,9 @@ def handle(app, environ, start_response, service, token, method, parts):
             before = _query(environ, "before")
             return json_(200, notifications.center(workspace_id, token, before=float(before) if before and before.replace(".", "", 1).isdigit() else None,
                                                    unread_only=_query(environ, "unread") == "1"))
+        if rest == ["read-all"] and method == "POST":
+            body()
+            return json_(200, notifications.mark_all_read(workspace_id, token))
         if len(rest) == 2 and method == "POST":
             body()
             return json_(200, notifications.mark(workspace_id, token, rest[0], rest[1]))
@@ -117,8 +127,12 @@ def handle(app, environ, start_response, service, token, method, parts):
             if len(tail) == 3 and tail[0] == "recipes" and tail[2] == "status" and method == "POST":
                 return json_(200, coworker.weekly_recipe_status(workspace_id, token, tail[1], body().get("status")))
             if len(tail) == 3 and tail[0] == "recipes" and tail[2] == "prepare" and method == "POST":
-                payload = body()
-                return json_(200, coworker.weekly_prepare(workspace_id, token, tail[1], week_of=None, max_slots=min(12, int(payload.get("maxSlots") or 8))))
+                raw = body().get("maxSlots")
+                if raw is not None and (isinstance(raw, bool) or not isinstance(raw, int)):
+                    raise AlphaError("Choose how many posts to draft, from 1 to 12.", 400)
+                max_slots = 8 if raw is None else max(1, min(12, raw))
+                return json_(200, coworker.weekly_prepare(workspace_id, token, tail[1], week_of=None, max_slots=max_slots,
+                                                          deadline=time.monotonic() + HTTP_PREPARE_SECONDS))
             if len(tail) == 2 and tail[0] == "weeks" and method == "GET":
                 return json_(200, coworker.weekly_week(workspace_id, token, tail[1]))
             if len(tail) == 5 and tail[0] == "weeks" and tail[2] == "slots" and method == "POST":

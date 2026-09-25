@@ -161,6 +161,15 @@ def read_unsubscribe_token(key, token, now=None):
 
 
 def apply_unsubscribe(cur, token_data):
+    """A deleted account's links stop working, and a repeated click changes nothing and records nothing new."""
+    cur.execute("SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s", (token_data["userId"],))
+    if cur.fetchone():
+        raise AlphaError("This unsubscribe link is not valid.", 400)
+    cur.execute("SELECT email_unsubscribed FROM public.pr_notification_preferences WHERE user_id=%s AND scope_key=%s AND category=%s",
+                (token_data["userId"], token_data["scope"], token_data["category"]))
+    current = cur.fetchone()
+    if current and current[0] is True:
+        return {"unsubscribed": True}
     cur.execute("""INSERT INTO public.pr_notification_preferences(user_id,scope_key,category,email_unsubscribed,updated_at) VALUES(%s,%s,%s,true,now())
                    ON CONFLICT (user_id,scope_key,category) DO UPDATE SET email_unsubscribed=true, updated_at=now() RETURNING email_unsubscribed""",
                 (token_data["userId"], token_data["scope"], token_data["category"]))

@@ -9,6 +9,7 @@ import type {
   CoworkerStatus,
   EngagementSummary,
   ListeningView,
+  MarkAllResult,
   MarkResult,
   NoteInput,
   NotificationCenter,
@@ -97,6 +98,7 @@ export function createCoworkerApi(getToken: TokenSource) {
     },
     markNotification: (w: string, deliveryId: string, action: 'read' | 'acted' | 'dismissed') =>
       send<MarkResult>('POST', `${ws(w)}/notifications/${seg(deliveryId)}/${action}`),
+    markAllNotificationsRead: (w: string) => send<MarkAllResult>('POST', `${ws(w)}/notifications/read-all`),
     preferences: (w: string) => get<NotificationPreferences>(`${ws(w)}/notification-preferences`),
     setPreference: (w: string, patch: PreferencePatch) => send<PreferenceSaved>('PATCH', `${ws(w)}/notification-preferences`, patch),
     pushDevices: (w: string) => get<{ devices: PushDevice[] }>(`${ws(w)}/push-subscriptions`),

@@ -110,7 +110,7 @@ export function PushOptIn({ available, vapidPublicKey }: { available: boolean; v
   }
 
   if (!available) {
-    return <StateMessage kind='unsupported' layout='inline' title='Push notifications aren’t available yet.' description='In-app and email notifications still work.' />;
+    return <StateMessage kind='unsupported' layout='inline' title='Push notifications aren’t available yet.' description='In-app notifications still work.' />;
   }
 
   const now = Date.now() / 1000;
@@ -127,7 +127,7 @@ export function PushOptIn({ available, vapidPublicKey }: { available: boolean; v
               : support === 'ios-install'
                 ? 'On iPhone and iPad, push works only from the Home Screen app: tap Share, then “Add to Home Screen”, open Rafii from there and turn push on.'
                 : support === 'unsupported'
-                  ? 'This browser can’t receive push notifications. In-app and email notifications still work.'
+                  ? 'This browser can’t receive push notifications. In-app notifications still work.'
                   : permission === 'denied'
                     ? 'Notifications are blocked for this site. Allow them in your browser’s site settings, then come back.'
                     : phase === 'on'

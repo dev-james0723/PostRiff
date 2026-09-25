@@ -178,5 +178,5 @@ def security_events(cur, since_seconds=86400):
         event_type = "security.new_device" if kind == "session.alerted" else "security.account_change"
         out.append({"event_type": event_type, "dedupe_key": f"{event_type}:{audit_id}", "user_id": actor, "entity_type": "audit_event", "entity_id": audit_id,
                     "payload": {"title": {"session.alerted": "A new device signed in", "mfa.enabled": "Two-step sign-in was turned on", "mfa.disabled": "Two-step sign-in was turned off",
-                                          "session.revoked_others": "Other sessions were signed out"}[kind], "href": "/app/account/security"}})
+                                          "session.revoked_others": "Other sessions were signed out"}[kind], "href": "/app/account/profile"}})
     return out

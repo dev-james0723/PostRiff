@@ -16,6 +16,7 @@ Every mutation answers with `verified: true|false`: the result was re-read and c
 |---|---|---|
 | `GET /api/workspaces/{id}/notifications?unread=1&before=<epoch>` | — | `{items:[{id, status (delivered or read or acted), createdAt, type, category, severity, entity:{type,id}, payload:{title?, platform?, reason?, href, count?, …}, readAt, actedAt, actionable}], unread, catalogVersion}` |
 | `POST /api/workspaces/{id}/notifications/{deliveryId}/{read or acted or dismissed}` | `{}` | `{changed, status, verified}` |
+| `POST /api/workspaces/{id}/notifications/read-all` | `{}` | `{changed, unread, verified}`: every unread in-app notification of the caller in this workspace (and account-wide ones) becomes read; `verified` when the recount is 0 |
 | `GET /api/workspaces/{id}/notification-preferences` | — | `{catalog:{version, categories[], events{type:{category,severity,email,push,transactional}}}, rows[], effective{category:{…}}, push:{available, vapidPublicKey, devices}, email:{available}}` |
 | `PATCH /api/workspaces/{id}/notification-preferences` | `{scope: "workspace" or "all", category: "*" or a category, in_app?, email_mode? (immediate, digest or off), push_mode? (immediate or off), digest_frequency? (daily, weekly or off), quiet_start?/quiet_end? (minutes 0–1439 or null), time_zone?, mute_hours? (1–720 or null), email_unsubscribed?}` | `{scope, category, stored, verified}` |
 | `GET /api/workspaces/{id}/push-subscriptions` | — | `{devices:[{id,label,createdAt,lastSuccessAt}]}` |
@@ -23,8 +24,8 @@ Every mutation answers with `verified: true|false`: the result was re-read and c
 | `POST /api/workspaces/{id}/push-subscriptions/unsubscribe` | `{endpoint}` | `{revoked, verified}` |
 | `DELETE /api/workspaces/{id}/push-subscriptions/{subscriptionId}` | — | `{revoked, verified}` |
 | `GET /api/notifications/unsubscribe?token=` (public) | — | An HTML confirmation page with a POST button |
-| `POST /api/notifications/unsubscribe?token=` (public; RFC 8058 one-click) | — | An HTML "unsubscribed" page |
-| `POST /api/notifications/email/webhook` (public; Svix-signed) | Resend event | `{outcome}` |
+| `POST /api/notifications/unsubscribe?token=` (public; RFC 8058 one-click) | — | An HTML "unsubscribed" page. A repeat click changes and records nothing; a deleted account's link is refused. |
+| `POST /api/notifications/email/webhook` (public; Svix-signed) | Resend event | `{outcome}`. With notifications v2 off: 404 `feature_disabled` before the body is read. |
 
 ## Coworker (`/api/workspaces/{id}/coworker/…`)
 
@@ -36,7 +37,7 @@ Every mutation answers with `verified: true|false`: the result was re-read and c
 | `POST weekly/recipes` | WEEKLY (owner) | `201 {recipe, verified}`. Body: `{name, goals[], destinations:[{channelId, postsPerWeek 0–7, language}], contentMix{type:weight}, planningDay 0–6, planningHour, timeZone, voiceMode, expectImages, useResearch, maxCostUsdMicroPerWeek, model?}` |
 | `PATCH weekly/recipes/{recipeId}` | WEEKLY (owner) | `{recipe, verified}` |
 | `POST weekly/recipes/{recipeId}/status` | WEEKLY (owner) | Body `{status: active, paused or deleted}` → `{recipe, verified}` |
-| `POST weekly/recipes/{recipeId}/prepare` | WEEKLY (edit) | `{week, advanced, drafted, verified}` |
+| `POST weekly/recipes/{recipeId}/prepare` | WEEKLY (edit) | Body `{maxSlots?}`: a whole number, clamped to 1–12, 8 when absent; anything else is a 400. A writer run starts only if it can finish within 240 s of the request (each run is budgeted 95 s), so none starts after about 145 s; a later call continues. `{week, advanced, drafted, verified}` |
 | `GET weekly/weeks/{weekId}` | WEEKLY | `{week:{id, weekOf, state, blockedReason, slots:[{id, day, localTime, platform, account, language, contentType, goal, angle, status, reason, question, variantId, quality:{evaluator, meaning[], style[], lint[], voiceFit}, creative, draft:{text, unknowns, needsReview}}], history[]}, counts, queueHref}` |
 | `POST weekly/weeks/{weekId}/slots/{slotId}/{accept, reject, answer, redo or skip}` | WEEKLY (edit) | Body `{answer?}` or `{reason?}` → `{week, slot, verified, next}` |
 | `POST research/search` | RESEARCH (edit) | Body `{query}` → `{status (ok, failed or unavailable), provider, errors[], items:[{title, url, snippet, provenance{…}, evidenceId, usableForDraft:false, note}]}` |

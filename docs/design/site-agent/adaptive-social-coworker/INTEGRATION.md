@@ -67,14 +67,19 @@ Scene outputs that write into tracked evidence folders (`docs/design/rafii-v9/ev
 2. **Environment:** nothing new is required. The 11 coworker `RAFII_*` flags default to off; leave them unset.
 3. **Flags-off behaviour that ships unconditionally:**
    - the coworker status route answers, and so does the public unsubscribe page (which rejects every link, since no email is sent with the feature off);
-   - the email webhook and the feature routes answer 404 `feature_disabled`;
+   - the email webhook and the feature routes answer 404 `feature_disabled`. `GET …/coworker/research/providers` and the owner/admin `GET …/coworker/growth` are ungated, and `GET …/coworker/experiments/{name}` answers `200 {enabled:false}`;
    - the bell and the attention panel make no feature request;
    - the Notifications settings section renders nothing;
    - account deletion covers the new tables.
 
 ## Before any coworker flag goes on
 
-- rebind `credit_requests` in the coworker's copied writer service, and decide how autonomous drafting works on credit-policy workspaces;
-- the runtime's credit wiring and its Preview isolation;
-- a security review of the flags-off public routes;
-- site-agent route-manifest entries for `/app/weekly` and personalization.
+Status on 2026-09-25. Branch `rafii/coworker-flag-fixes` is the follow-up to PR #8. The verdict for each flag is in ROLLOUT.md, under "Production readiness".
+- **`credit_requests` rebind:** fixed on the follow-up. The cron's writer copy now checks credits through its own repository (`CoworkerService._bound_ideas`). The owner still has to decide how autonomous drafting works on credit-policy workspaces. The same missing rebind in `consumer-saas`'s `automation_runs.py:268-270` predates this work and needs its own PR.
+- **The runtime's credit wiring:** not done. It needs a product decision. **Its Preview isolation:** not done; the fix is small.
+- **Security review of the public and flags-off routes:** a static review was done on 2026-09-25. It found nothing critical, high or medium. The follow-up fixes these low findings:
+  - the webhook reads its body only after the flag check, and a size that is not a number gets a 400;
+  - unsubscribe: a repeat click is a no-op, and a deleted account's link is refused;
+  - weekly prepare validates `maxSlots` and has a time budget.
+  Still open, all low: the unsubscribe key falls back to the credential key or `CRON_SECRET`; sign-out does not revoke push subscriptions (latent until push has keys).
+- **Route manifest:** `/app/weekly` and `/app/workspace/personalization` are added on the follow-up, in both byte-identical files.

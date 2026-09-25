@@ -81,7 +81,7 @@ export function NotificationsView() {
   return (
     <PageContainer
       pageTitle='Notifications'
-      pageDescription={centre ? 'Choose what reaches you, where and when. No marketing, no tracking pixels; security and billing emails always reach you.' : 'No marketing emails. No tracking pixels.'}
+      pageDescription={centre ? 'Choose what reaches you, where and when. No marketing, no tracking pixels.' : 'No marketing emails. No tracking pixels.'}
       width='reading'
     >
       <div className='flex flex-col gap-8'>
