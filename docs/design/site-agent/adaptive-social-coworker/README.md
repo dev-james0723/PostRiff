@@ -17,4 +17,6 @@ This work implements `../RAFII_ADAPTIVE_SOCIAL_COWORKER_ENGINEERING_SPEC_2026-09
 | [ROLLOUT.md](ROLLOUT.md) | Flags, rollout order, rollback |
 | [TEST_MATRIX.md](TEST_MATRIX.md) | Every requirement mapped to its test and command |
 | [HANDOFF.md](HANDOFF.md) | Status, evidence, blockers, next action |
+| [INTEGRATION.md](INTEGRATION.md) | The local integration with the Agent Runtime onto `consumer-saas`: commits, resolutions, verification |
+| [`../../../postriff-migration-numbering.md`](../../../postriff-migration-numbering.md) | Migration number reservations, inventory, apply order, ai-routing checklist |
 | `evidence/` | `verification.json` (generated), `pg-coworker.json`, `email-render.json`, email previews and screenshots |

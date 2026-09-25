@@ -38,9 +38,10 @@ Rolling those back means reverting the `skills/postriff-*` changes (and `skills.
 ## Order (each step needs owner authorization; none has been done)
 
 1. **Migrations.** `024_notification_core.sql` and `025_coworker_evidence_growth.sql` are forward-only and idempotent. They have only run on local disposable databases.
-   - `scripts/postriff_migrate.py --apply-local` refuses a non-local host, and its docstring reserves remote execution for the separately reviewed runner. Staging and production use that reviewed runner (or the owner's reviewed procedure), never this script.
-   - `postriff_migrate.plan` refuses a database whose ledger has migrations the running branch lacks. So 024/025 go to a shared staging database only after this branch is merged or rebased into every branch that deploys there; otherwise those branches can no longer migrate.
-   - Re-check numbering first: `raffi/launch-final` holds 020–022 and `ai-routing` holds 020–023 (not in this branch).
+   - Production has no migration ledger, so `scripts/postriff_migrate.py` refuses it. Staging and production use a one-off runner pinned to each file's sha256, as 018, 019 and 020–022 were applied, never that script.
+   - Apply 024, then 025, before any build containing this code is deployed against that database: account deletion deletes from their tables whatever the flags say.
+   - A production-shaped rehearsal passed on 2026-09-25 (no ledger, no 014–017, with 018–022; both files applied twice).
+   - Numbering and inventory: `docs/postriff-migration-numbering.md`. 020–022 are the production credit migrations, 023 is retired, 024–025 are these, and 026–029 are reserved for ai-routing.
    - Production comes only after staging is verified.
 2. **Registry v2, adaptive skills, creative, performance, growth.** Turn these on in staging; they have no new egress. Watch the writer's recorded `skillOmissions` for budget pressure.
 3. **Notifications v2.** Staging first, with the Resend webhook configured and the DNS health check passing (see NOTIFICATIONS.md). Then an owner-only production cohort. Watch `operations.counts.notificationBacklog` and `notificationDead24h` in the cron log.
