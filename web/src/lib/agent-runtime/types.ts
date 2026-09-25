@@ -3,7 +3,7 @@
  * The turn result is surface-neutral: the panel renders `blocks` (site-agent block types), Voice Mode speaks
  * `speakableSummary`, and everything that happened is structured (no client parses prose to learn it).
  */
-import type { SiteAgentBlock, SiteAgentPageContext } from '@/lib/site-agent/types';
+import type { SiteAgentBlock, SiteAgentPageContext, SiteAgentTurnResult } from '@/lib/site-agent/types';
 
 export type Modality = 'text' | 'voice' | 'image';
 export type StepState = 'planned' | 'running' | 'done' | 'needs_user' | 'blocked' | 'failed' | 'canceled';
@@ -78,6 +78,8 @@ export interface AgentTurnResponse {
   fallback?: string | null;
   delegated?: boolean;
   traceId?: string;
+  /** Present when the runtime answered through the site agent (runtime off, viewer, no route, budget, forbidden, greeting). */
+  siteAgent?: SiteAgentTurnResult;
 }
 
 export interface AgentTurnRequest {

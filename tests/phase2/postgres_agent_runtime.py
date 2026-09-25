@@ -609,6 +609,24 @@ def _():
     return {"actual": result["result"]["answerText"], "edited": edited[0]["id"]}
 
 
+@scenario("MM05", "Edit an uploaded image: a new version linked to the upload; the upload itself is untouched", "Crop the first image to a portrait",
+          "Sunburst edit of image 1 (the person's upload); lineage parent = the upload; the upload's bytes and record unchanged")
+def _():
+    before = next(a for a in service.get(wid, OWNER)["state"]["phase2"]["assets"] if a["id"] == STATE["reference"])
+    SCRIPTS.set(rafii_manager=[[function_call("ask_creative", {"input": "Edit image 1 into a portrait crop."}, call_id="m1")], [reply("Here's a portrait version; your upload is unchanged.")]],
+                creative=[[function_call("image_edit", {"index": 1, "instruction": "Crop to a portrait composition, keep the subject centred", "aspect": "portrait"}, call_id="e1")],
+                          [assistant_message("Edited.")]])
+    result = turn("Crop the first image to a portrait", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    state = service.get(wid, OWNER)["state"]
+    edits = [a for a in state["phase2"]["assets"] if (a.get("lineage") or {}).get("parentAssetId") == STATE["reference"] and (a.get("lineage") or {}).get("operation") == "edit"]
+    after = next(a for a in state["phase2"]["assets"] if a["id"] == STATE["reference"])
+    assert len(edits) == 1 and after["hash"] == before["hash"] and not after.get("deleted") and not after.get("lineage"), (len(edits), after.get("hash") == before.get("hash"))
+    edit_call = [c for c in PROVIDER.calls if (c["body"] or {}).get("tools")][-1]
+    assert edit_call["body"]["tools"][0]["size"] == "1024x1536" and edit_call["body"]["tools"][0]["model"] == "gpt-image-2.5-sunburst"
+    return {"actual": result["result"]["answerText"], "edit": edits[0]["id"]}
+
+
 @scenario("MM06", "Fast variants on Flare", "Give me a quick variant of it", "variant on gpt-image-2.5-flare, linked to its parent")
 def _():
     SCRIPTS.set(rafii_manager=[[function_call("ask_creative", {"input": "Quick variant of image 3."}, call_id="m1")], [reply("Here's a quick variant.")]],
