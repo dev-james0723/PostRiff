@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import { Tooltip } from '@/components/motion/tooltip';
 import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatTile, StatusChip } from '@/features/workspace/rafii-parts';
-import { ApiError } from '@/lib/api/client';
+import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useAnalytics, useChannels, useSnapshot } from '@/lib/api/hooks';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -34,53 +32,43 @@ import { PostsTable, type PostRowData } from './posts-table';
 import { RulesCollapsible } from './rules-collapsible';
 
 const infoContent = {
-  title: 'Native numbers, side by side',
+  title: 'Analytics',
   sections: [
     {
-      title: 'Each provider keeps its own definitions',
-      description: 'A “view” on Threads is not a “view” on Instagram. Metrics are shown with their native names and never added across platforms.'
+      title: 'Each platform’s own numbers',
+      description: 'A “view” on Threads isn’t a “view” on Instagram. Metrics keep their native names and are never added across platforms.'
     },
+    { title: 'Unavailable isn’t zero', description: 'A metric the platform hasn’t reported shows “Unavailable”. A real zero shows 0.' },
+    { title: 'Rates', description: 'Every rate shows both of its numbers. Fewer than three posts is too few to compare.' },
+    { title: 'When numbers update', description: 'Numbers aren’t collected automatically yet. A row shows numbers only after a reading, with the time it was read.' },
     {
-      title: 'Unavailable is not zero',
-      description: 'When a provider has not reported a metric, PostRiff shows “Unavailable”. A real zero is shown as 0.'
-    },
-    {
-      title: 'Rates carry their denominator',
-      description: 'Every rate shows numerator and denominator; fewer than three posts is an insufficient sample.'
-    },
-    {
-      title: 'When PostRiff reads',
-      description:
-        'Readings are not collected automatically yet. A row shows numbers only after a reading has been taken, with the time of that reading; nothing here is synced in the background.'
-    },
-    {
-      title: 'Why some accounts have no numbers',
-      description:
-        'Analytics is a separate permission from publishing, granted per account. Some providers do not offer insights to this app at all — LinkedIn’s official API is one — and those accounts stay Unsupported rather than “coming soon”.',
+      title: 'Accounts without numbers',
+      description: 'Analytics is a separate permission, granted per account. Some platforms, like LinkedIn, don’t share analytics with Rafii.',
       links: [{ title: 'Channels', url: '/app/channels' }]
     }
   ]
 };
 
-const REFRESH_NOTE = 'Refresh arrives with scheduled readings. Nothing on this page is live; each row carries the time of its own reading.';
-
-function errorMessage(error: unknown, what: string) {
-  if (error instanceof ApiError) return `${what} could not be read (HTTP ${error.status}).`;
-  return `${what} could not be read.`;
-}
-
 function RetryState({ title, error, onRetry }: { title: string; error: unknown; onRetry: () => void }) {
   return (
     <StateMessage
       kind='error'
-      title={errorMessage(error, title)}
-      description={error instanceof Error && error.message ? error.message : 'Try again in a moment.'}
+      title={`Couldn't load ${title}`}
+      description={error instanceof Error && error.message ? error.message : undefined}
       action={
         <Button variant='glass' size='default' onClick={onRetry}>
-          <Icons.refresh /> Retry
+          <Icons.refresh /> Try again
         </Button>
       }
     />
+  );
+}
+
+function Dot() {
+  return (
+    <span aria-hidden className='text-muted-foreground/60'>
+      ·
+    </span>
   );
 }
 
@@ -135,10 +123,8 @@ export function AnalyticsView() {
   const allPosts = useMemo(() => [...coverage.connections.flatMap((c) => c.posts), ...coverage.unmatchedPosts], [coverage]);
   const visiblePosts: AnalyticsPostRow[] = current ? current.posts : allPosts;
   const connectionsInView = current ? [current] : coverage.connections;
-  const verifiedInView = connectionsInView.reduce((n, c) => n + c.verifiedJobs.length, 0);
   const unreadInView = unreadVerifiedCount(connectionsInView);
   const directCount = coverage.connections.filter((c) => c.direct).length;
-  const latest = latestObservedAt(visiblePosts);
   const latestOverall = latestObservedAt(allPosts);
 
   const rows = useMemo<PostRowData[]>(() => {
@@ -170,56 +156,50 @@ export function AnalyticsView() {
       )}
       {data && (
         <span className='text-muted-foreground hidden text-xs whitespace-nowrap sm:inline' title={latestOverall ? formatDateTime(latestOverall) : undefined}>
-          {latestOverall ? `Last read ${relativeTime(latestOverall, now)}` : 'No reading yet'}
+          {latestOverall ? `Last read ${relativeTime(latestOverall, now)}` : 'Not read yet'}
         </span>
       )}
-      <Tooltip content={REFRESH_NOTE} side='bottom'>
-        <Button variant='glass' size='control' disabled aria-label='Refresh (arrives with scheduled readings)'>
-          <Icons.refresh />
-          Refresh
-        </Button>
-      </Tooltip>
     </div>
   );
 
   return (
-    <PageContainer pageTitle='Analytics' pageDescription='Post performance from providers that report it, with their own definitions.' infoContent={infoContent} pageHeaderAction={headerAction}>
+    <PageContainer pageTitle='Analytics' infoContent={infoContent} pageHeaderAction={headerAction}>
       <div className='flex min-w-0 flex-col gap-6'>
         {channels.error ? (
-          <RetryState title='Accounts' error={channels.error} onRetry={() => channels.refetch()} />
+          <RetryState title='accounts' error={channels.error} onRetry={() => channels.refetch()} />
         ) : coverage.connections.length > 0 || channels.isLoading ? (
           <CoverageStrip coverage={coverage} value={tab} onValueChange={setTab} loading={channels.isLoading} canManage={canManage} showNotes={emptyKind !== 'no-analytics-capability'} />
         ) : null}
 
-        {analytics.error && <RetryState title='Analytics' error={analytics.error} onRetry={() => analytics.refetch()} />}
-        {snapshot.error && <RetryState title='Published posts' error={snapshot.error} onRetry={() => snapshot.refetch()} />}
+        {analytics.error && <RetryState title='analytics' error={analytics.error} onRetry={() => analytics.refetch()} />}
+        {snapshot.error && <RetryState title='published posts' error={snapshot.error} onRetry={() => snapshot.refetch()} />}
 
-        <section className='flex flex-col gap-2' aria-label='Reading summary'>
-          <div className='grid gap-3 sm:grid-cols-3 md:gap-4'>
-            <StatTile
-              label='Posts read'
-              value={postsReady ? visiblePosts.length : '—'}
-              loading={!postsReady && !analytics.error}
-              hint={postsReady && snapshot.data ? `of ${verifiedInView} verified` : undefined}
-              footer={analytics.error ? 'Unavailable' : 'Posts with at least one reading'}
-            />
-            <StatTile
-              label='Latest read'
-              value={data ? (latest ? relativeTime(latest, now) : '—') : '—'}
-              loading={analytics.isLoading}
-              hint={latest ? formatDateTime(latest) : data ? 'No reading yet' : undefined}
-              footer={analytics.error ? 'Unavailable' : 'Each row carries its own reading time'}
-            />
-            <StatTile
-              label='Accounts reporting'
-              value={channels.data ? directCount : '—'}
-              loading={channels.isLoading}
-              hint={channels.data ? `of ${coverage.connections.length} connected` : undefined}
-              footer={channels.error ? 'Unavailable' : 'Direct analytics only'}
-            />
-          </div>
-          <p className='text-muted-foreground text-xs leading-relaxed'>There is no “next reading” time: PostRiff does not schedule readings yet. {REFRESH_NOTE}</p>
-        </section>
+        {/* One line of numbers instead of three tiles; the latest reading time sits in the header. */}
+        {postsReady ? (
+          <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm' aria-label='Reading summary'>
+            <span>
+              <span className='text-foreground font-medium tabular-nums'>{visiblePosts.length}</span> {visiblePosts.length === 1 ? 'post' : 'posts'} read
+            </span>
+            {snapshot.data && unreadInView > 0 && (
+              <>
+                <Dot />
+                <span>
+                  <span className='text-foreground font-medium tabular-nums'>{unreadInView}</span> waiting for a first read
+                </span>
+              </>
+            )}
+            {channels.data && (
+              <>
+                <Dot />
+                <span>
+                  <span className='text-foreground font-medium tabular-nums'>{directCount}</span> of {coverage.connections.length} accounts reporting
+                </span>
+              </>
+            )}
+          </p>
+        ) : analytics.error ? null : (
+          <Skeleton className='h-5 w-64 rounded-md' aria-hidden />
+        )}
 
         {analytics.error ? null : !postsReady ? (
           <StateMessage kind='loading' title='Loading readings…' />
@@ -228,29 +208,23 @@ export function AnalyticsView() {
         ) : rows.length === 0 ? (
           <StateMessage
             kind='empty'
-            title={current ? `No readings for ${current.account} yet` : 'No readings to show'}
+            title={current ? `No numbers for ${current.account} yet` : 'No numbers yet'}
             description={
               !current
-                ? 'The summary has no posts with a reading.'
+                ? undefined
                 : !current.direct
                   ? capabilitySummary(current)
                   : current.verifiedJobs.length > 0
-                    ? `${current.verifiedJobs.length} verified ${current.verifiedJobs.length === 1 ? 'post is' : 'posts are'} waiting for a first reading.`
-                    : 'Nothing published through PostRiff on this account has been verified yet.'
+                    ? `${current.verifiedJobs.length} ${current.verifiedJobs.length === 1 ? 'post' : 'posts'} waiting for a first read.`
+                    : 'No published posts on this account yet.'
             }
           />
         ) : (
           <section className='flex min-w-0 flex-col gap-2' aria-label='Posts with readings'>
             <PostsTable rows={rows} families={families} onOpen={open} metricSort={current !== null} />
-            {unreadInView > 0 && (
-              <p className='text-muted-foreground text-xs'>
-                {unreadInView === 1 ? 'One verified post has' : `${unreadInView} verified posts have`} no reading yet and {unreadInView === 1 ? 'is' : 'are'} not listed.
-              </p>
-            )}
             {!current && coverage.unmatchedPosts.length > 0 && (
               <p className='text-muted-foreground text-xs'>
-                {coverage.unmatchedPosts.length === 1 ? 'One post' : `${coverage.unmatchedPosts.length} posts`} could not be matched to a connected account, so{' '}
-                {coverage.unmatchedPosts.length === 1 ? 'it appears' : 'they appear'} under All only.
+                {coverage.unmatchedPosts.length === 1 ? '1 post isn’t linked to an account and shows' : `${coverage.unmatchedPosts.length} posts aren’t linked to an account and show`} under All only.
               </p>
             )}
           </section>

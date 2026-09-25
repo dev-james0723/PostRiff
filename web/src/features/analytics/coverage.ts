@@ -41,8 +41,8 @@ export interface Coverage {
 }
 
 export const STATE_LABEL: Record<CoverageState, string> = {
-  unavailable: 'No analytics source',
-  pending: 'Waiting for first reading',
+  unavailable: 'No analytics',
+  pending: 'Waiting for first read',
   partial: 'Some posts unread',
   ready: 'All posts read'
 };
@@ -207,10 +207,10 @@ export function enableAnalyticsHref(providerId: string | null) {
 
 /** The honest sentence for a provider whose adapter does not offer analytics. Never "coming soon". */
 export function notOfferedSentence(platform: string) {
-  return `Not offered by ${platform}’s API for this app.`;
+  return `${platform} doesn’t share analytics.`;
 }
 
-/** What PostRiff can say about one connection's analytics capability, from the matrix alone. */
+/** What Rafii can say about one connection's analytics capability, from the matrix alone. */
 export function capabilitySummary(connection: ConnectionCoverage) {
   if (!connection.providerOffersAnalytics) {
     return connection.evidence
@@ -219,8 +219,8 @@ export function capabilitySummary(connection: ConnectionCoverage) {
   }
   if (connection.evidence) return connection.evidence;
   if (connection.direct)
-    return 'Direct: this account allows reading the provider’s official insights for posts PostRiff published. Automatic reading is not switched on yet.';
-  return 'Analytics has not been granted for this account. It is a separate permission from publishing.';
+    return 'Direct: numbers for posts Rafii published. Readings aren’t collected automatically yet.';
+  return 'Analytics not granted for this account.';
 }
 
 /**

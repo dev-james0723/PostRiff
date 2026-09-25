@@ -23,6 +23,7 @@ import { ApiError } from '@/lib/api/client';
 import type { Invitation, InvitationCreated, Member, Membership } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { allows, ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/auth/permissions';
+import { STATUS } from '@/lib/status-labels';
 import { formatDate, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspace, useWorkspaceApi } from '@/lib/workspace/provider';
@@ -36,18 +37,17 @@ const infoContent = {
   title: 'Members and invitations',
   sections: [
     {
-      title: 'Roles set the baseline',
-      description: 'Owner, admin, editor, approver and viewer. A grant adds one right (approve, reply, moderate, manage connections) to anyone but a viewer.',
+      title: 'Roles and grants',
+      description: 'A role sets what someone can do. A grant adds one right (approve, reply, moderate, manage connections) to anyone but a viewer.',
       links: [{ title: 'Roles', url: '/app/workspace/roles' }]
     },
     {
-      title: 'Some changes need a recent sign-in',
-      description:
-        'Inviting, changing someone’s access and removing a member only work shortly after a fresh sign-in. If yours is too old, sign out, sign in again and retry. Revoking an invitation does not need it.'
+      title: 'Recent sign-in needed',
+      description: 'Inviting, changing access and removing members need a recent sign-in. If yours is too old, sign in again and retry.'
     },
     {
       title: 'Invitations',
-      description: 'Links work once and expire after 7 days. When email is set up the invitee gets the link by email; you can always copy it after sending.'
+      description: 'Each link works once and expires after 7 days.'
     }
   ]
 };
@@ -61,7 +61,7 @@ function LoadError({ title, error, onRetry, retrying }: { title: string; error: 
     <StateMessage
       kind='error'
       title={title}
-      description={error instanceof ApiError ? error.message : 'The server did not answer.'}
+      description={error instanceof ApiError ? error.message : 'Check your connection and try again.'}
       action={
         <Button size='default' variant='glass' onClick={onRetry} disabled={retrying}>
           <Icons.refresh className={cn(retrying && 'motion-safe:animate-spin')} /> Retry
@@ -138,7 +138,7 @@ function InviteForm({ actor, onCreated }: { actor: Membership | null; onCreated:
               );
             })}
           </div>
-          {unheld && <p className='text-muted-foreground text-xs'>Greyed-out grants are ones you do not hold, so you cannot hand them out.</p>}
+          {unheld && <p className='text-muted-foreground text-xs'>You can only give grants you hold.</p>}
         </fieldset>
       )}
       <Button type='submit' variant='action' size='control' disabled={busy || !email.includes('@')} className='w-fit'>
@@ -170,7 +170,7 @@ function MemberActions({ member, onEdit }: { member: Member; onEdit: (member: Me
     try {
       const result = await api.removeMember(workspaceId, member.userId);
       const note = result.note;
-      toast.success('Member removed.', note && holdsApprovals ? { description: APPROVAL_HOLD_NOTE } : undefined);
+      toast.success('Member removed', note && holdsApprovals ? { description: APPROVAL_HOLD_NOTE } : undefined);
       await Promise.all([client.invalidateQueries({ queryKey: keys.members(workspaceId) }), client.invalidateQueries({ queryKey: keys.audit(workspaceId) })]);
     } catch (err) {
       reportError(err, 'The member could not be removed.');
@@ -217,6 +217,13 @@ function MemberActions({ member, onEdit }: { member: Member; onEdit: (member: Me
   );
 }
 
+/** The API's lower-case states ("active", "pending") as the short capitalised labels used everywhere else. */
+function stateLabel(state: string) {
+  if (state === 'active') return STATUS.active;
+  if (state === 'expired') return STATUS.expired;
+  return state ? state[0].toUpperCase() + state.slice(1).replace(/_/g, ' ') : state;
+}
+
 function memberFacts(member: Member) {
   const flags = FLAGS.filter((f) => member[f.key]).map((f) => f.label.replace('Can ', ''));
   // An owner already holds every right, and a viewer's grants never apply (`Membership.allows`).
@@ -249,7 +256,7 @@ function MemberRow({ member, canManage, justSaved, onEdit }: { member: Member; c
       </TableCell>
       <TableCell className={cn(CELL_CLASS, 'text-muted-foreground text-xs whitespace-normal')}>{grants}</TableCell>
       <TableCell className={CELL_CLASS}>
-        <StatusChip icon={member.status === 'active' ? 'check' : 'circle'}>{member.status}</StatusChip>
+        <StatusChip icon={member.status === 'active' ? 'check' : 'circle'}>{stateLabel(member.status)}</StatusChip>
       </TableCell>
       <TableCell className={cn(CELL_CLASS, 'text-muted-foreground text-xs')}>{relativeTime(member.updatedAt)}</TableCell>
       <TableCell className={cn(CELL_CLASS, 'text-right')}>{editable && <MemberActions member={member} onEdit={onEdit} />}</TableCell>
@@ -265,7 +272,7 @@ function MemberCard({ member, canManage, justSaved, onEdit }: { member: Member; 
     <li className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-control)] p-4'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <MemberName member={member} />
-        <StatusChip icon={member.status === 'active' ? 'check' : 'circle'}>{member.status}</StatusChip>
+        <StatusChip icon={member.status === 'active' ? 'check' : 'circle'}>{stateLabel(member.status)}</StatusChip>
       </div>
       <dl className='grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm'>
         <dt className='text-muted-foreground text-xs'>Role</dt>
@@ -275,8 +282,6 @@ function MemberCard({ member, canManage, justSaved, onEdit }: { member: Member; 
         </dd>
         <dt className='text-muted-foreground text-xs'>Extra grants</dt>
         <dd className='text-muted-foreground text-xs'>{grants}</dd>
-        <dt className='text-muted-foreground text-xs'>Updated</dt>
-        <dd className='text-muted-foreground text-xs'>{relativeTime(member.updatedAt)}</dd>
       </dl>
       {editable && (
         <div className='flex flex-wrap gap-2'>
@@ -298,7 +303,7 @@ function RevokeInvitation({ invitation }: { invitation: Invitation }) {
     setBusy(true);
     try {
       await api.revokeInvitation(workspaceId, invitation.invitationId);
-      toast.success('Invitation revoked.');
+      toast.success('Invitation revoked');
       await client.invalidateQueries({ queryKey: keys.invitations(workspaceId) });
       void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
     } catch (err) {
@@ -348,7 +353,7 @@ function InvitationRow({ invitation }: { invitation: Invitation }) {
       <TableCell className={cn(CELL_CLASS, 'whitespace-normal break-all')}>{invitation.email}</TableCell>
       <TableCell className={CELL_CLASS}>{ROLE_LABELS[invitation.role as WorkspaceRole] ?? invitation.role}</TableCell>
       <TableCell className={CELL_CLASS}>
-        <StatusChip icon={invitation.state === 'pending' ? 'hourglass' : 'circle'}>{invitation.state}</StatusChip>
+        <StatusChip icon={invitation.state === 'pending' ? 'hourglass' : 'circle'}>{stateLabel(invitation.state)}</StatusChip>
       </TableCell>
       <TableCell className={cn(CELL_CLASS, 'text-muted-foreground text-xs')}>{formatDate(invitation.expiresAt)}</TableCell>
       <TableCell className={cn(CELL_CLASS, 'text-right')}>
@@ -365,7 +370,7 @@ function InvitationCard({ invitation }: { invitation: Invitation }) {
       className='flex-wrap py-3'
       title={<span className='break-all'>{invitation.email}</span>}
       meta={`${ROLE_LABELS[invitation.role as WorkspaceRole] ?? invitation.role} · expires ${formatDate(invitation.expiresAt)}`}
-      state={<StatusChip icon={invitation.state === 'pending' ? 'hourglass' : 'circle'}>{invitation.state}</StatusChip>}
+      state={<StatusChip icon={invitation.state === 'pending' ? 'hourglass' : 'circle'}>{stateLabel(invitation.state)}</StatusChip>}
       actions={<RevokeInvitation invitation={invitation} />}
     />
   );
@@ -401,55 +406,52 @@ function TransferOwnershipCard({ members }: { members: Member[] }) {
   }
 
   return (
-    <section className='flex flex-col gap-3' aria-labelledby='ownership-heading'>
-      <SectionHeading id='ownership-heading' title='Ownership' description='A lower-priority change kept apart from everyday member management.' />
-      <Panel data-tour='members-transfer-ownership' title='Transfer ownership' titleId='members-transfer-heading' description='Make an active admin the owner. You become an admin with every grant. This needs a recent sign-in.'>
-        {admins.length === 0 ? (
-          <StateMessage kind='empty' layout='inline' title='Make someone an admin first' description='Ownership can only move to an active admin.' />
-        ) : (
-          <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
-            <Select value={newOwnerId} onValueChange={(value) => setNewOwnerId(value ?? '')}>
-              <SelectTrigger aria-label='Choose the new owner' className={cn(SELECT_TRIGGER_CLASS, 'sm:w-72')}>
-                <SelectValue placeholder='Choose the new owner' />
-              </SelectTrigger>
-              <SelectContent className='rafii-elevated rounded-[var(--rafii-radius-control)] ring-0'>
-                {admins.map((admin) => (
-                  <SelectItem key={admin.userId} value={admin.userId}>
-                    {targetLabel(admin)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant='glass' size='control' disabled={!target || busy} onClick={() => setConfirming(true)}>
+    <Panel data-tour='members-transfer-ownership' title='Transfer ownership' titleId='members-transfer-heading' description='Hand ownership to an active admin. Needs a recent sign-in.'>
+      {admins.length === 0 ? (
+        <StateMessage kind='empty' layout='inline' title='Make someone an admin first' description='Ownership can only move to an active admin.' />
+      ) : (
+        <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
+          <Select value={newOwnerId} onValueChange={(value) => setNewOwnerId(value ?? '')}>
+            <SelectTrigger aria-label='Choose the new owner' className={cn(SELECT_TRIGGER_CLASS, 'sm:w-72')}>
+              <SelectValue placeholder='Choose the new owner' />
+            </SelectTrigger>
+            <SelectContent className='rafii-elevated rounded-[var(--rafii-radius-control)] ring-0'>
+              {admins.map((admin) => (
+                <SelectItem key={admin.userId} value={admin.userId}>
+                  {targetLabel(admin)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant='glass' size='control' disabled={!target || busy} onClick={() => setConfirming(true)}>
+            Transfer ownership
+          </Button>
+        </div>
+      )}
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent className={DIALOG_CLASS}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Make {target ? targetLabel(target) : 'this admin'} the owner?</AlertDialogTitle>
+            <AlertDialogDescription>They get billing, deletion and full member control. You become an admin with every grant instead.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel variant='glass' size='control'>
+              Keep ownership
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant='action'
+              size='control'
+              onClick={() => {
+                setConfirming(false);
+                void transfer();
+              }}
+            >
               Transfer ownership
-            </Button>
-          </div>
-        )}
-        <AlertDialog open={confirming} onOpenChange={setConfirming}>
-          <AlertDialogContent className={DIALOG_CLASS}>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Make {target ? targetLabel(target) : 'this admin'} the owner?</AlertDialogTitle>
-              <AlertDialogDescription>They get billing, deletion and full member control. You become an admin with every grant instead.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel variant='glass' size='control'>
-                Keep ownership
-              </AlertDialogCancel>
-              <AlertDialogAction
-                variant='action'
-                size='control'
-                onClick={() => {
-                  setConfirming(false);
-                  void transfer();
-                }}
-              >
-                Transfer ownership
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </Panel>
-    </section>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Panel>
   );
 }
 
@@ -481,7 +483,7 @@ function MembersContent() {
   return (
     <>
       <div className='flex flex-col gap-6 md:gap-8'>
-        <Panel material='glass' data-tour='members-invite' title='Invite someone' titleId='members-invite-heading' description='They get a one-time link. You can copy it below after sending.'>
+        <Panel material='glass' data-tour='members-invite' title='Invite someone' titleId='members-invite-heading'>
           <InviteForm
             actor={actor}
             onCreated={(result, email) => {
@@ -496,7 +498,7 @@ function MembersContent() {
                 kind='success'
                 layout='inline'
                 title={`Invitation for ${shown.email} ${shown.result.emailSent ? 'sent' : 'created'}`}
-                description={`${shown.result.emailSent ? 'An email is on its way. The link below works once and expires ' : 'Email delivery is not configured on this deployment, so share the link directly. It works once and expires '}${formatDate(shown.result.expiresAt)}.`}
+                description={`${shown.result.emailSent ? 'Email sent. The link works once and expires ' : 'Share this link. It works once and expires '}${formatDate(shown.result.expiresAt)}.`}
                 action={
                   <span className='flex max-w-full flex-wrap items-center gap-2'>
                     <code className='rafii-field text-foreground max-w-full truncate rounded-[var(--rafii-radius-micro)] px-2 py-1 text-xs'>{acceptLink}</code>
@@ -505,8 +507,8 @@ function MembersContent() {
                       variant='glass'
                       onClick={() => {
                         navigator.clipboard.writeText(acceptLink).then(
-                          () => toast.success('Link copied.'),
-                          () => toast.error('Copy failed. Select the link and copy it manually.')
+                          () => toast.success('Link copied'),
+                          () => toast.error('Couldn’t copy. Select the link and copy it.')
                         );
                       }}
                     >
@@ -532,7 +534,7 @@ function MembersContent() {
           {members.isPending ? (
             <StateMessage kind='loading' title='Loading members…' />
           ) : members.error ? (
-            <LoadError title='Members could not be loaded.' error={members.error} onRetry={() => void members.refetch()} retrying={members.isFetching} />
+            <LoadError title='Couldn’t load members.' error={members.error} onRetry={() => void members.refetch()} retrying={members.isFetching} />
           ) : isMobile ? (
             <ul className='flex flex-col gap-2'>
               {memberList.map((member) => (
@@ -569,9 +571,9 @@ function MembersContent() {
           {invitations.isPending ? (
             <StateMessage kind='loading' title='Loading invitations…' />
           ) : invitations.error ? (
-            <LoadError title='Invitations could not be loaded.' error={invitations.error} onRetry={() => void invitations.refetch()} retrying={invitations.isFetching} />
+            <LoadError title='Couldn’t load invitations.' error={invitations.error} onRetry={() => void invitations.refetch()} retrying={invitations.isFetching} />
           ) : invitationList.length === 0 ? (
-            <StateMessage kind='empty' title='No invitations yet.' description='Invite someone above; their one-time link appears here until it is used or revoked.' />
+            <StateMessage kind='empty' title='No invitations yet' />
           ) : isMobile ? (
             <ul className='flex flex-col gap-2'>
               {invitationList.map((invitation) => (
@@ -617,7 +619,6 @@ export function MembersView() {
   return (
     <PageContainer
       pageTitle='Members'
-      pageDescription='Who can do what in this workspace.'
       infoContent={infoContent}
       access={canManage}
       accessFallback={
@@ -625,7 +626,7 @@ export function MembersView() {
           kind='permission'
           className='w-full max-w-md'
           title='Only owners and admins manage members.'
-          description={membership ? `Your role here is ${ROLE_LABELS[membership.role]}. Ask the owner or an admin to invite people or change access.` : undefined}
+          description={membership ? `Your role: ${ROLE_LABELS[membership.role]}.` : undefined}
           action={
             <Link href='/app/workspace/roles' className={cn('t-learn', buttonVariants({ variant: 'glass', size: 'default' }))}>
               See what each role can do <LearnMoreChevron />

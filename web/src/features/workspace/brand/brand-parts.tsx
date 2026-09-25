@@ -56,7 +56,7 @@ export function CardSkeleton({ lines = 3, className }: { lines?: number; classNa
 /** A date from an ISO string, with the full time on hover. Unreadable dates say so. */
 export function ApprovedDate({ iso }: { iso: string | undefined | null }) {
   const epoch = isoToEpoch(iso);
-  if (!epoch) return <span>date not recorded</span>;
+  if (!epoch) return <span>date unknown</span>;
   return (
     <time dateTime={iso ?? undefined} title={formatDateTime(epoch)}>
       {formatDate(epoch)}

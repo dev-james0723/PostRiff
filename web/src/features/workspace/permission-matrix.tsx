@@ -41,7 +41,7 @@ function GrantCell({ role, flags }: { role: WorkspaceRole; flags: FlagKey[] }) {
         </StatusChip>
       </TooltipTrigger>
       <TooltipContent className='rafii-elevated max-w-64 rounded-2xl px-3.5 py-3 text-left'>
-        {ROLE_LABELS[role]} role: only with the {grantNames(flags)} grant. The owner, or an admin who holds that grant, can add it without changing the role.
+        {ROLE_LABELS[role]}: only with the {grantNames(flags)} grant, which an owner or admin can add.
       </TooltipContent>
     </Tooltip>
   );
@@ -188,7 +188,7 @@ export function PermissionMatrix({ yourRole }: { yourRole: WorkspaceRole | null 
         title='Permission matrix'
         description={
           <>
-            ✓ the role includes it · <span className='text-foreground font-medium'>with grant</span> an owner or admin can add that one right without changing the role (never for viewers) · — not available
+            ✓ included · <span className='text-foreground font-medium'>with grant</span> can be added · — not available
           </>
         }
       />

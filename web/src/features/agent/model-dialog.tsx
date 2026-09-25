@@ -4,7 +4,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Keyb
 import Link from 'next/link';
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { IconCheck, IconChevronDown, IconSearch, IconX } from '@tabler/icons-react';
-import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, SegmentedControl, StateMessage } from '@/components/rafii';
+import { InfoTip, RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, SegmentedControl, StateMessage } from '@/components/rafii';
 import { ReasoningBars } from '@/components/rafii/reasoning-bars';
 import { Button } from '@/components/ui/button';
 import { billingLabel, ProviderIcon, providerName, routeLabel } from '@/components/ui/model-selector';
@@ -217,7 +217,7 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
   return (
     <>
       <div className='flex shrink-0 items-center justify-between gap-4 px-5 pt-4 md:px-7 md:pt-6'>
-        <span className='rafii-eyebrow'>Your creative engine</span>
+        <span className='rafii-eyebrow'>Model</span>
         <DialogPrimitive.Title id={titleId} className='sr-only'>
           Choose a model
         </DialogPrimitive.Title>
@@ -237,12 +237,16 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
         {!catalog ? (
           <StateMessage kind='loading' title='Loading the model catalog' />
         ) : models.length === 0 ? (
-          <StateMessage kind='empty' title='No writers are available' description='No writer is set up for this workspace yet. Try again later; whoever runs this PostRiff can add one.' />
+          <StateMessage kind='empty' title='No models available' action={<Link href='/app/account/models' className='text-foreground text-sm underline underline-offset-2'>Set up models</Link>} />
         ) : (
           <>
             <div className='mb-3 flex flex-wrap items-center justify-between gap-3'>
-              {hasCli && <SegmentedControl<Mode> label='Connection mode' size='sm' widths='content' value={mode} onChange={switchMode} options={[{ value: 'api', label: 'API models' }, { value: 'cli', label: 'CLI' }]} />}
-              <span className='text-muted-foreground text-xs'>{mode === 'cli' ? 'Runs on the machine that serves the API' : 'Runs through the workspace'}</span>
+              {hasCli && (
+                <>
+                  <SegmentedControl<Mode> label='Connection mode' size='sm' widths='content' value={mode} onChange={switchMode} options={[{ value: 'api', label: 'API models' }, { value: 'cli', label: 'CLI' }]} />
+                  <InfoTip label='About API and CLI models' description='API models run through Rafii. CLI models run on the computer that hosts Rafii, with your own CLI sign-in.' className='size-9' />
+                </>
+              )}
             </div>
 
             <div className='rafii-quiet grid min-h-[22rem] grid-cols-[3.25rem_minmax(0,1fr)] overflow-hidden rounded-[var(--rafii-radius-card)] md:grid-cols-[4.25rem_minmax(0,1fr)]'>
@@ -300,7 +304,7 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
                   {mode === 'cli' && !trimmed && (
                     <div className='mb-3 flex flex-col gap-2'>
                       {agents.length === 0 ? (
-                        <p className='text-muted-foreground px-1 text-xs leading-relaxed'>The API host has not reported a CLI for this provider. Models below show their own availability.</p>
+                        <p className='text-muted-foreground px-1 text-xs leading-relaxed'>No CLI found.</p>
                       ) : (
                         agents.map((agent) => {
                           const ready = agent.installed && agent.authStatus === 'ok';
@@ -311,9 +315,8 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
                                 {agent.vendor && <span className='text-muted-foreground'>{agent.vendor}</span>}
                                 <span className={cn('ml-auto rounded-full px-2 py-0.5', ready ? 'bg-foreground text-background' : 'rafii-quiet text-muted-foreground')}>{ready ? 'Ready' : 'Setup needed'}</span>
                               </div>
-                              <p className='text-muted-foreground'>
-                                {agent.installed ? `Installed${agent.version ? ` · ${agent.version}` : ''}` : 'Not installed'} · {authLabel(agent.authStatus)}
-                                {agent.host ? ` · ${agent.host}` : ''}
+                              <p className='text-muted-foreground' title={[agent.version, agent.host].filter(Boolean).join(' · ') || undefined}>
+                                {agent.installed ? 'Installed' : 'Not installed'} · {authLabel(agent.authStatus)}
                               </p>
                               {agent.guidance && <p className='text-foreground'>{agent.guidance}</p>}
                             </div>
@@ -327,7 +330,7 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
                     <div data-swap-current className='min-w-0'>
                       <p className='rafii-eyebrow px-2 pb-2'>{trimmed ? `Search results · ${visible.length}` : providerLabel(activeGroup?.name ?? 'Models')}</p>
                       {visible.length === 0 ? (
-                        <StateMessage kind='empty' layout='inline' title='No models found.' description='Try a provider or model name.' className='px-2' />
+                        <StateMessage kind='empty' layout='inline' title='No models found.' className='px-2' />
                       ) : (
                         <div role='radiogroup' aria-label='Models' className='flex max-h-[19rem] flex-col gap-1 overflow-y-auto overscroll-contain'>
                           {visible.map((model) => {
@@ -339,7 +342,7 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
                                 role='radio'
                                 aria-checked={chosen}
                                 disabled={!model.qualified}
-                                title={model.detail}
+                                title={`${providerLabel(providerName(model))} · ${routeLabel(model)}${model.detail ? ` · ${model.detail}` : ''}`}
                                 onClick={() => stage(model)}
                                 className={cn(
                                   'rafii-focus flex min-h-16 w-full items-start gap-3 rounded-[var(--rafii-radius-card)] px-3 py-3 text-left transition-colors duration-200',
@@ -353,10 +356,8 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
                                     {model.label}
                                     {chosen && <IconCheck aria-hidden className='size-4 shrink-0' />}
                                   </span>
-                                  <span className='text-muted-foreground text-xs leading-relaxed'>
-                                    {providerName(model)} · {routeLabel(model)} · {billingLabel(model.costClass)}
-                                  </span>
-                                  <span className={cn('text-xs leading-relaxed', model.qualified ? 'text-muted-foreground' : 'text-foreground')}>{model.qualified ? 'Ready' : `Unavailable · ${model.detail}`}</span>
+                                  {/* Who pays stays visible; provider and route live in the row's tooltip. */}
+                                  <span className={cn('text-xs leading-relaxed', model.qualified ? 'text-muted-foreground' : 'text-foreground')}>{model.qualified ? billingLabel(model.costClass) : `Unavailable · ${model.detail}`}</span>
                                 </span>
                               </button>
                             );
@@ -369,7 +370,9 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
                   <div className='mt-4 px-0.5'>
                     <div className='text-muted-foreground mb-2.5 flex items-center gap-2.5 px-2 text-sm'>
                       <ReasoningBars count={mapping.applied ? (mapping.selected?.bars ?? 0) : REASONING_BARS[preference]} muted={!mapping.applied} />
-                      <span id={`${ids}-reasoning`}>Reasoning</span>
+                      <span id={`${ids}-reasoning`} title={mapping.summary}>
+                        Reasoning
+                      </span>
                       <span className='text-muted-foreground ml-auto truncate text-xs'>{stagedOption?.label ?? staged}</span>
                     </div>
                     <SegmentedControl
@@ -389,10 +392,8 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
                       }))}
                       className={cn(!mapping.applied && 'opacity-60')}
                     />
-                    <p className='text-muted-foreground mt-2 px-2 text-xs leading-relaxed' aria-live='polite'>
-                      {mapping.summary}
-                      {mapping.applied && mapping.selected?.detail ? ` · ${mapping.selected.detail}` : ''}
-                      {!mapping.applied && stagedOption ? ` · ${routeLabel(stagedOption)} has no reasoning setting; your preference is kept for other models.` : ''}
+                    <p className='text-muted-foreground mt-2 min-h-4 px-2 text-xs leading-relaxed' aria-live='polite'>
+                      {mapping.applied ? (mapping.selected?.detail ?? '') : 'This model has no reasoning setting.'}
                     </p>
                   </div>
                 </div>
@@ -404,7 +405,7 @@ function ModelStage({ catalog, value, reasoningFor, titleId, onApply, onCancel }
       <RafiiDialogFooter>
         <div className='flex flex-col-reverse gap-2 sm:flex-row sm:items-center'>
           <Link href='/app/account/models' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center rounded-[var(--rafii-radius-control)] px-2 text-xs'>
-            Models &amp; providers <span aria-hidden>↗</span>
+            Manage models <span aria-hidden>↗</span>
           </Link>
           <div className='flex flex-1 flex-col-reverse gap-2 sm:flex-row sm:justify-end'>
             <Button variant='quiet' size='control' onClick={onCancel}>

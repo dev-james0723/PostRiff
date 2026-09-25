@@ -15,12 +15,12 @@ import {
   countdown,
   epochOf,
   isSynthetic,
-  jobBadge,
   MAX_ATTEMPTS,
   stateNote,
   WAITING,
   type QueueJob
 } from './job-state';
+import { jobStatus } from './job-status';
 import { StatusChip } from './status-chip';
 
 export interface JobRowProps {
@@ -40,7 +40,7 @@ export interface JobRowProps {
 }
 
 export function JobStateBadge({ job }: { job: QueueJob }) {
-  const badge = jobBadge(job);
+  const badge = jobStatus(job);
   return (
     <StatusChip tone={badge.status} pulse={badge.pulse} title={badge.title}>
       {badge.label}
@@ -50,8 +50,8 @@ export function JobStateBadge({ job }: { job: QueueJob }) {
 
 export function FixtureBadge() {
   return (
-    <StatusChip tone='neutral' showIcon={false} title='Synthetic provider; nothing reaches a real account'>
-      Fixture
+    <StatusChip tone='neutral' showIcon={false} title='Test post; nothing reaches a real account'>
+      Test
     </StatusChip>
   );
 }
@@ -66,6 +66,26 @@ export function JobNote({ children, className, title }: { children: ReactNode; c
   );
 }
 
+/**
+ * The reason under a state. A failed post leads with what happened; the worker's own words stay one hover (or one
+ * open of its details) away instead of being the headline.
+ */
+function StateNote({ job, note, className }: { job: QueueJob; note: string; className?: string }) {
+  if (job.state === 'failed') {
+    return (
+      <JobNote className={className} title={note}>
+        Couldn’t publish this post
+        <span className='sr-only'>: {note}</span>
+      </JobNote>
+    );
+  }
+  return (
+    <JobNote className={className} title={note}>
+      {note}
+    </JobNote>
+  );
+}
+
 function Destination({ job }: { job: QueueJob }) {
   return (
     <span className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1'>
@@ -77,19 +97,17 @@ function Destination({ job }: { job: QueueJob }) {
   );
 }
 
+/** One representation of when: relative by default (a countdown while it waits), the exact time in the tooltip. */
 function Scheduled({ job, nowSeconds }: { job: QueueJob; nowSeconds: number }) {
   const at = epochOf(job.manifest.timing.utc);
   // A waiting job counts down to its time, then reads "due" until the worker changes its state.
-  const left = WAITING.has(job.state) && at !== null ? (countdown(at, nowSeconds) ?? 'due') : null;
+  const when = WAITING.has(job.state) && at !== null ? (countdown(at, nowSeconds) ?? 'due') : relativeTime(at, nowSeconds);
+  const exact = formatDateTime(at);
   return (
-    <span className='flex flex-col'>
-      <span className='whitespace-nowrap'>{formatDateTime(at)}</span>
-      {left && (
-        <span aria-hidden className='text-muted-foreground text-xs tabular-nums'>
-          {left}
-        </span>
-      )}
-    </span>
+    <time className='whitespace-nowrap tabular-nums' dateTime={at ? new Date(at * 1000).toISOString() : undefined} title={exact}>
+      {when}
+      <span className='sr-only'> ({exact})</span>
+    </time>
   );
 }
 
@@ -104,7 +122,7 @@ function Actions({ job, canApprove, cancelPending, holdEpoch, tourCancel, onCanc
     <span className={cn('flex items-center gap-2', layout === 'table' ? 'justify-end' : 'justify-between')}>
       <span className='flex items-center gap-1'>
         <Popover>
-          <PopoverTrigger render={<Button variant='quiet' size='icon-control' />} aria-label={`Preview the ${job.manifest.platform} post`} title='Preview in the app'>
+          <PopoverTrigger render={<Button variant='quiet' size='icon-control' />} aria-label={`Preview the ${job.manifest.platform} post`} title='Preview'>
             <Icons.eye />
           </PopoverTrigger>
           <PopoverContent align={layout === 'table' ? 'end' : 'start'} className='rafii-elevated w-auto max-w-[calc(100vw-1rem)] rounded-[1.375rem] p-3 shadow-none ring-0'>
@@ -116,8 +134,8 @@ function Actions({ job, canApprove, cancelPending, holdEpoch, tourCancel, onCanc
         <Button
           variant='quiet'
           size='icon-control'
-          aria-label={`Open the receipt for the ${job.manifest.platform} post`}
-          title='Timeline, attempts and what the provider confirmed'
+          aria-label={`Open details for the ${job.manifest.platform} post`}
+          title='Details'
           onClick={() => onOpen(job.id)}
         >
           <Icons.history />
@@ -171,15 +189,19 @@ export function JobRow(props: JobRowProps) {
         </div>
         <div className='text-muted-foreground flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs'>
           <Scheduled job={job} nowSeconds={nowSeconds} />
-          <span className='tabular-nums'>
-            Attempts {attempts}
-            {checks && ` · ${checks}`}
-          </span>
+          {job.attempts.length > 1 && (
+            <span className='hidden tabular-nums md:inline'>
+              Attempts {attempts}
+              {checks && ` · ${checks}`}
+            </span>
+          )}
         </div>
-        {note && <JobNote>{note}</JobNote>}
-        <p className='text-muted-foreground truncate text-xs' title={last?.message}>
-          {lastLine ?? 'No events recorded'}
-        </p>
+        {note && <StateNote job={job} note={note} />}
+        {lastLine && (
+          <p className='text-muted-foreground hidden truncate text-xs md:block' title={last?.message}>
+            {lastLine}
+          </p>
+        )}
         <Actions {...props} />
       </li>
     );
@@ -194,7 +216,7 @@ export function JobRow(props: JobRowProps) {
       <TableCell className='px-4 py-3 align-top'>
         <span className='flex max-w-[14rem] flex-col items-start gap-1'>
           <JobStateBadge job={job} />
-          {note && <JobNote className='line-clamp-2 whitespace-normal' title={note}>{note}</JobNote>}
+          {note && <StateNote job={job} note={note} className='line-clamp-2 whitespace-normal' />}
         </span>
       </TableCell>
       <TableCell className='px-3 py-3 align-top'>
@@ -208,9 +230,6 @@ export function JobRow(props: JobRowProps) {
           {attempts}
           {checks && <span className='text-muted-foreground text-xs whitespace-nowrap'>{checks}</span>}
         </span>
-      </TableCell>
-      <TableCell className='hidden max-w-[10rem] truncate px-3 py-3 align-top font-mono text-xs @min-[76rem]:table-cell' title={job.providerReference}>
-        {job.providerReference || job.providerConfirmed || '—'}
       </TableCell>
       <TableCell className='text-muted-foreground hidden max-w-[14rem] truncate px-3 py-3 align-top text-xs @min-[66rem]:table-cell' title={last?.message}>
         {lastLine ?? '—'}

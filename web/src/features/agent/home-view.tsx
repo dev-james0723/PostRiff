@@ -12,7 +12,7 @@ import { Icons } from '@/components/icons';
 import { Checkbox } from '@/components/motion/checkbox';
 import { NotificationStack } from '@/components/motion/notification-stack';
 import { SharedLayoutBg } from '@/components/motion/shared-layout-bg';
-import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, SemanticIllustration, Surface } from '@/components/rafii';
+import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, SemanticIllustration, StateMessage, Surface } from '@/components/rafii';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,7 +24,8 @@ import { deriveAttention } from '@/lib/attention';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { languageLabel } from '@/lib/locales';
 import { useTimeZone } from '@/lib/preferences';
-import { relativeTime } from '@/lib/time';
+import { STATUS } from '@/lib/status-labels';
+import { formatDateTime, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { DRAFT_PLATFORMS, type DraftPlatform } from './composer';
@@ -80,7 +81,7 @@ const CREATOR_PACK = { packId: 'pack.creator', version: '1.0.0' };
 const DEFAULT_LIBRARY: LibraryValue = { editorialId: 'status_update', nativeId: 'text' };
 /** Platform-level defaults before any account is chosen (the existing composer default). */
 const DEFAULT_TARGETS: ChannelTarget<DraftPlatform>[] = [{ platform: 'LinkedIn' }, { platform: 'Instagram' }];
-const PLACEHOLDER = 'Drop a thought, a link, or a beautifully messy idea…';
+const PLACEHOLDER = 'Launch post for my new course';
 
 /** Something on Home that is waiting on the writer; built only from the workspace snapshot. */
 interface NeedsYou {
@@ -93,11 +94,11 @@ interface NeedsYou {
 }
 
 const infoContent = {
-  title: 'How the agent works',
+  title: 'How Rafii works',
   sections: [
-    { title: 'Destinations are accounts', description: 'Pick the connected accounts (or folders of accounts) a draft is for. Two accounts on one app get two drafts. Channels and times you name in the message still win.' },
-    { title: 'Everything is a proposal', description: 'Drafts, schedule plans and memory notes are candidates until you approve them. The chat has no way to publish on its own.' },
-    { title: 'Sources you chose', description: 'The agent reads only the sources you included in the Context Pocket and marked usable; nothing else in your workspace is visible to it.' }
+    { title: 'One draft per account', description: 'Channels and times you name in the message win.' },
+    { title: 'You approve everything', description: 'Chat never publishes on its own.' },
+    { title: 'Only the sources you pick', description: 'Rafii reads what you include in Context.' }
   ]
 };
 
@@ -236,7 +237,7 @@ function HomeWorkspace() {
     const tags = Array.from(new Set(languages.selection.flatMap((item) => languages.languagesOf(item))));
     return tags.length === 0 ? 'Choose' : tags.length === 1 ? languageLabel(tags[0]) : `Per destination · ${tags.length} languages`;
   }, [languages]);
-  const modelSummary = `${choice.label}${choice.reasoningMapping.applied ? ` · ${REASONING_LABELS[choice.reasoningMapping.preference]} reasoning` : ''}`;
+  const modelSummary = `${choice.label}${choice.reasoningMapping.applied ? ` · ${REASONING_LABELS[choice.reasoningMapping.preference]}` : ''}`;
   const destinationCount = languages.destinations.length;
   const accountsSelected = targets.filter((t) => t.channelId).length;
   const channelsLabel = destinations.selected.length > 0 ? destinations.summary : accounts.length === 0 ? 'Platforms only' : 'Channels';
@@ -264,7 +265,7 @@ function HomeWorkspace() {
       setLibrary(value);
       setTemplate(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The content type could not be selected.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t select that content type.');
     }
   }
 
@@ -307,7 +308,7 @@ function HomeWorkspace() {
       setCreditLimit('');
       router.replace(`/app?run=${encodeURIComponent(result.runId)}`, { scroll: false });
     } catch (error) {
-      if (submission.alive()) toast.error(error instanceof Error ? error.message : 'Draft preparation failed.');
+      if (submission.alive()) toast.error(error instanceof Error ? error.message : 'Couldn’t prepare the drafts. Try again.');
     } finally {
       submission.leave();
       if (submission.alive()) setPreparing(false);
@@ -345,7 +346,7 @@ function HomeWorkspace() {
         router.push(`/app/agent/${encodeURIComponent(target.id)}`);
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Your answer could not be sent. Try again from the conversation.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t send your answer. Try again in the conversation.');
     }
   }
 
@@ -356,18 +357,18 @@ function HomeWorkspace() {
   }, [generation, router]);
 
   const helpText = !canEdit
-    ? 'You need the edit permission to draft in this workspace.'
+    ? 'Only editors can draft here.'
     : generation.busy || generation.running
-      ? 'Writing your drafts. Nothing publishes without your approval.'
+      ? 'Writing your drafts…'
       : destinationCount === 0
-        ? 'Choose at least one destination.'
+        ? 'Choose a channel.'
         : !text.trim()
-          ? 'Start with an idea. We’ll take it from there.'
+          ? 'Add an idea to start.'
           : !use
-            ? 'Confirm the text may be used to draft with.'
+            ? 'Tick “Use this text to draft with”.'
             : imageRequested && !imageCapability?.available
-              ? (imageCapability?.detail ?? 'Image generation is not available on this route.')
-              : `${destinationCount} draft${destinationCount === 1 ? '' : 's'} · one per destination and language · ⌘↵ to send`;
+              ? (imageCapability?.detail ?? 'Image generation isn’t available yet.')
+              : `${destinationCount} draft${destinationCount === 1 ? '' : 's'} · ⌘↵ to send`;
 
   const recent = conversations.data?.conversations ?? [];
   const firstName = greetingName(me.data?.displayName);
@@ -379,9 +380,6 @@ function HomeWorkspace() {
         {/* Creation column */}
         <div className='flex min-w-0 flex-col gap-6'>
           <div className='flex flex-col gap-3'>
-            <span className='rafii-eyebrow inline-flex items-center gap-2.5'>
-              <span aria-hidden className='bg-foreground/70 h-px w-4' />A little idea. A bigger reach.
-            </span>
             <h1 className='text-foreground text-[2.5rem] leading-[1.05] font-normal tracking-[-0.03em] md:text-[2.75rem] xl:text-[3.05rem]'>
               What’s the idea
               {firstName ? (
@@ -395,7 +393,6 @@ function HomeWorkspace() {
                 </>
               )}
             </h1>
-            <p className='text-muted-foreground max-w-[450px] text-[15px] leading-relaxed'>Give it a thought. Rafii drafts one version per destination for your review.</p>
           </div>
 
           {canEdit && <div className='flex flex-wrap items-center gap-2 text-xs'>
@@ -408,7 +405,7 @@ function HomeWorkspace() {
               ref={composer}
               value={text}
               onChange={setText}
-              placeholder={template ? `${template.title}: replace the brackets and send.` : PLACEHOLDER}
+              placeholder={template ? `${template.title}…` : PLACEHOLDER}
               disabled={!models.data || !snapshot.data || preparing || generation.busy || generation.running}
               busy={preparing || generation.busy || generation.running}
               onExpand={() => setDialog('expand')}
@@ -421,7 +418,7 @@ function HomeWorkspace() {
                   aria-pressed={imageRequested}
                   disabled={creditMode || !imageCapability?.available || preparing || generation.busy || generation.running}
                   onClick={() => setImageRequested((v) => !v)}
-                  title={imageCapability?.detail ?? 'Checking the managed image route…'}
+                  title={imageCapability?.detail ?? 'Checking…'}
                   className={cn('rafii-focus inline-flex min-h-11 items-center gap-1.5 rounded-md text-xs font-medium', imageRequested ? 'text-foreground' : 'text-muted-foreground hover:text-foreground', !imageCapability?.available && 'opacity-50')}
                 >
                   <Icons.media className='size-3.5' />
@@ -440,7 +437,7 @@ function HomeWorkspace() {
                   </span>
                 ),
                 label: template ? template.title : (chosenContent?.summary ?? 'Content type'),
-                detail: template ? 'Quick start template' : chosenContent?.planningOnly ? chosenContent.planningOnly.label : (chosenContent?.formatLabel ?? undefined),
+                detail: template ? 'Template' : chosenContent?.planningOnly ? chosenContent.planningOnly.label : (chosenContent?.formatLabel ?? undefined),
                 ariaLabel: `Choose content type and native format, ${chosenContent?.summary ?? 'not chosen'}`,
                 onOpen: () => setDialog('library'),
                 open: dialog === 'library'
@@ -462,7 +459,7 @@ function HomeWorkspace() {
               settings={
                 <SettingButtons
                   language={{ value: languageSummary, onClick: () => setDialog('language'), expanded: dialog === 'language', controls: ids.language, disabled: languages.selection.length === 0 }}
-                  model={{ value: modelSummary, onClick: () => setDialog('model'), expanded: dialog === 'model', controls: ids.model, disabled: !models.data }}
+                  model={{ value: modelSummary, title: choice.reasoningMapping.applied ? `${REASONING_LABELS[choice.reasoningMapping.preference]} reasoning` : undefined, onClick: () => setDialog('model'), expanded: dialog === 'model', controls: ids.model, disabled: !models.data }}
                   voice={{ value: voiceMode === 'personalized' ? 'Writing like you' : 'Neutral', onClick: () => setDialog('voice'), expanded: dialog === 'voice', controls: ids.voice }}
                 />
               }
@@ -472,17 +469,11 @@ function HomeWorkspace() {
                 <div className='mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pt-3'>
                   <Checkbox checked={use} onCheckedChange={setUse} label='Use this text to draft with' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
                   <Checkbox checked={own} onCheckedChange={setOwn} label='Allow public quotes from my own writing' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />
-                  <span className='text-muted-foreground ml-auto inline-flex items-center gap-1.5 text-xs'>
-                    <Icons.shieldCheck className='size-3.5' />
-                    You approve before publishing.
-                  </span>
                 </div>
               }
             />
           ) : (
-            <Surface material='quiet' padding='md'>
-              <p className='text-muted-foreground text-sm'>You need the edit permission to draft in this workspace.</p>
-            </Surface>
+            <StateMessage kind='permission' layout='inline' title='Viewing only.' description='Ask an owner for edit access.' />
           )}
 
           {canEdit && <StartingPoints onPick={(sample) => { setText(sample); composer.current?.focus(); }} disabled={generation.busy || generation.running} />}
@@ -506,8 +497,7 @@ function HomeWorkspace() {
                 <Icons.page className='size-3' />
                 Template · {template.title}
               </Badge>
-              <span className='text-muted-foreground'>Selects the “{template.title}” content type and its checks for this draft.</span>
-              <button type='button' className='rafii-focus text-muted-foreground hover:text-foreground rounded-md underline underline-offset-2' onClick={() => setTemplate(null)}>
+              <button type='button' aria-label='Clear template' className='rafii-focus text-muted-foreground hover:text-foreground rounded-md underline underline-offset-2' onClick={() => setTemplate(null)}>
                 Clear
               </button>
             </div>
@@ -516,14 +506,14 @@ function HomeWorkspace() {
           <div className='text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs'>
             <Link href='/app/workspace/brand' className='hover:text-foreground inline-flex min-h-8 items-center gap-1.5'>
               <Icons.user className='size-3.5' />
-              Voice · <span className='text-foreground font-medium'>{snapshot.isLoading ? '…' : voiceActive ? `rev ${voiceRevision}` : 'not set up'}</span>
+              Voice · <span className='text-foreground font-medium' title={voiceActive ? `Revision ${voiceRevision}` : undefined}>{snapshot.isLoading ? '…' : voiceActive ? STATUS.active : 'Not set up'}</span>
             </Link>
             <Link href='/app/workspace/memory' className='hover:text-foreground inline-flex min-h-8 items-center gap-1.5'>
               <Icons.page className='size-3.5' />
               Memory · <span className='text-foreground font-medium'>{memoryFiles === null ? '…' : `${memoryFiles} files`}</span>
               {pendingProposals > 0 && (
                 <span className='rafii-glass-selected text-foreground rounded-full px-1.5 py-0.5 text-[11px] font-medium' aria-label={`${pendingProposals} learned preference${pendingProposals === 1 ? '' : 's'} waiting for your decision`}>
-                  Rafii noticed {pendingProposals} · review
+                  {pendingProposals} to review
                 </span>
               )}
             </Link>
@@ -596,7 +586,7 @@ function HomeWorkspace() {
                 <Skeleton className='h-8 w-full' />
               </div>
             ) : recent.length === 0 ? (
-              <p className='text-muted-foreground p-4 text-sm'>No conversations yet. Your first message starts one.</p>
+              <p className='text-muted-foreground p-4 text-sm'>No conversations yet.</p>
             ) : (
               <SharedLayoutBg as='ul' inset={0} pillClassName='rounded-none rafii-glass-selected' className='divide-border/60 divide-y'>
                 {recent.slice(0, 8).map((c) => (
@@ -609,7 +599,9 @@ function HomeWorkspace() {
                         <span className='truncate text-sm font-medium'>{c.title || 'Untitled'}</span>
                       </span>
                       {c.archived && <Badge variant='outline'>Archived</Badge>}
-                      <span className='text-muted-foreground shrink-0 text-xs'>{relativeTime(c.updatedAt)}</span>
+                      <span className='text-muted-foreground shrink-0 text-xs' title={formatDateTime(c.updatedAt)}>
+                        {relativeTime(c.updatedAt)}
+                      </span>
                     </Link>
                   </li>
                 ))}
@@ -644,7 +636,7 @@ function PlatformOnlyDialog({ open, onOpenChange, value, onApply }: { open: bool
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>
       <RafiiDialogContent size='sm' aria-describedby={undefined}>
-        <RafiiDialogHeader eyebrow='Channels' title='Where should it' accent='go?' intro='No account is connected yet, so drafts are written per platform. Connect an account to choose real destinations.' />
+        <RafiiDialogHeader eyebrow='Channels' title='Where should it' accent='go?' intro='No accounts connected. Drafts only.' />
         <RafiiDialogBody className='flex flex-col gap-2'>
           {DRAFT_PLATFORMS.map((platform) => {
             const on = staged.includes(platform);
@@ -653,7 +645,7 @@ function PlatformOnlyDialog({ open, onOpenChange, value, onApply }: { open: bool
                 <ChannelIcon platform={platform} size='md' />
                 <span className='flex min-w-0 flex-1 flex-col'>
                   <span className='text-foreground text-sm font-medium'>{platform}</span>
-                  <span className='text-muted-foreground text-xs'>No account connected · drafts only</span>
+                  <span className='text-muted-foreground text-xs'>Drafts only</span>
                 </span>
                 <span aria-hidden className={cn('flex size-5 items-center justify-center rounded-full', on ? 'bg-foreground text-background' : 'rafii-quiet')}>{on && <Icons.check className='size-3' />}</span>
               </button>

@@ -370,7 +370,7 @@ export function LiveIsland({ className }: { className?: string }) {
                 <li>
                   <Link href='/app/queue' onClick={close} className={ROW_ACTION}>
                     <Glyph tone='approvals' />
-                    <span className='min-w-0 flex-1 truncate'>Waiting for approval</span>
+                    <span className='min-w-0 flex-1 truncate'>To approve</span>
                     <span className='font-medium tabular-nums'>{status.approvals}</span>
                     <Icons.chevronRight
                       aria-hidden='true'
@@ -412,7 +412,7 @@ export function LiveIsland({ className }: { className?: string }) {
                 <li>
                   <Link href='/app/queue' onClick={close} className={ROW_ACTION}>
                     <Glyph tone='failed' />
-                    <span className='min-w-0 flex-1 truncate'>Failed in the last 24 h</span>
+                    <span className='min-w-0 flex-1 truncate'>Failed (24 h)</span>
                     <span className='font-medium tabular-nums'>{status.failed}</span>
                     <Icons.chevronRight
                       aria-hidden='true'
@@ -423,7 +423,7 @@ export function LiveIsland({ className }: { className?: string }) {
               ) : null}
               {quiet ? (
                 <li className={cn(ROW, 'text-background/60')}>
-                  Nothing waiting, publishing or scheduled.
+                  Nothing scheduled
                 </li>
               ) : null}
             </ul>

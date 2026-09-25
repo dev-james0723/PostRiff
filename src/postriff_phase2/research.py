@@ -104,7 +104,7 @@ def apply_research_action(state, action, payload, actor, now):
         return False
     web = payload.get("web")
     if not isinstance(web, bool) or payload.get("confirmed") is not True:
-        raise AlphaError("Choose whether PostRiff may look facts up on the web for this workspace, and confirm it.")
+        raise AlphaError("Choose whether Rafii may look facts up on the web for this workspace, and confirm it.")
     state["researchEgress"] = {"web": web, "decidedBy": actor, "decidedAt": now, "processors": list(PROCESSORS)}
     return True
 

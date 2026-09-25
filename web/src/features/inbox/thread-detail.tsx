@@ -9,6 +9,7 @@ import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { ChannelView, Thread } from '@/lib/api/types';
 import { formatDateTime, relativeTime } from '@/lib/time';
+import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 import { InboxLevelBadge } from './level-badge';
 import { authorLabel, isAnswered, originLabel, providerName, replyStatusView, threadPermalink, threadTime, type ReplyRecord } from './model';
@@ -23,7 +24,9 @@ export function threadHeadline(thread: Thread, channel: ChannelView | undefined)
   const platform = providerName(thread.provider, channel);
   return {
     title: authorLabel(thread.author),
-    meta: `${channel?.account ?? platform} · ${platform} · ${time.firstSeen ? 'first seen ' : ''}${formatDateTime(time.at)}`,
+    // One date form: relative. The platform is carried by the icon beside it.
+    meta: `${channel?.account ?? platform} · ${relativeTime(time.at)}`,
+    exactTime: formatDateTime(time.at),
     platform
   };
 }
@@ -35,7 +38,9 @@ export function ThreadHeading({ thread, channel }: { thread: Thread; channel: Ch
       <ChannelIcon platform={headline.platform} name={headline.platform} />
       <div className='min-w-0'>
         <p className='text-foreground truncate font-medium'>{headline.title}</p>
-        <p className='text-muted-foreground truncate text-xs'>{headline.meta}</p>
+        <p className='text-muted-foreground truncate text-xs' title={headline.exactTime}>
+          {headline.meta}
+        </p>
       </div>
     </div>
   );
@@ -67,7 +72,6 @@ export function ThreadDetail({
   const permalink = threadPermalink(thread);
   const accountLabel = channel?.account ?? 'this account';
   const answered = replies.some(isAnswered);
-  const replyCapability = channel?.capabilities.reply;
 
   let composerArea;
   if (thread.tombstoned) {
@@ -75,12 +79,12 @@ export function ThreadDetail({
       <StateMessage
         kind='stale'
         layout='inline'
-        title={`${platform} no longer returns this comment, so replying from here is closed.`}
+        title='Replying is closed.'
         className={COMPOSER_STATE}
       />
     );
   } else if (thread.replyLevel !== 'Direct') {
-    // Reply grant shown honestly: the level PostRiff verified, its evidence, and the provider's own reply path.
+    // Reply grant shown honestly: the verified level and the platform's own reply path. Evidence lives on the coverage chips.
     composerArea = (
       <div data-tour='inbox-composer'>
         <StateMessage
@@ -88,10 +92,9 @@ export function ThreadDetail({
           layout='inline'
           title={
             <span className='inline-flex flex-wrap items-center gap-1.5'>
-              Replies are <InboxLevelBadge level={thread.replyLevel} /> for {accountLabel}, so PostRiff cannot reply here.
+              Can&apos;t reply from Rafii <InboxLevelBadge level={thread.replyLevel} />
             </span>
           }
-          description={replyCapability?.evidence?.trim() || undefined}
           action={
             permalink ? (
               <a href={permalink} target='_blank' rel='noreferrer' className={cn(buttonVariants({ variant: 'glass', size: 'control' }), 'gap-2')}>
@@ -107,7 +110,7 @@ export function ThreadDetail({
   } else if (!canEdit && !canReply) {
     composerArea = (
       <div data-tour='inbox-composer'>
-        <StateMessage kind='permission' layout='inline' title='You can read this comment' description={permissionSentence(false, false)} className={COMPOSER_STATE} />
+        <StateMessage kind='permission' layout='inline' title={STATUS.readOnly} description={permissionSentence(false, false)} className={COMPOSER_STATE} />
       </div>
     );
   } else if (answered && !writeAnother) {
@@ -115,11 +118,11 @@ export function ThreadDetail({
       <div className='rafii-quiet flex flex-wrap items-center justify-between gap-3 rounded-[var(--rafii-radius-control)] px-3 py-2.5 text-sm' data-tour='inbox-composer'>
         <span className='text-muted-foreground inline-flex items-center gap-2'>
           <Icons.check className='size-4 shrink-0' aria-hidden />
-          This comment already has an approved reply.
+          Reply approved
         </span>
         {canEdit && (
           <Button variant='glass' size='control' onClick={() => setWriteAnother(true)}>
-            Write another reply
+            Write another
           </Button>
         )}
       </div>
@@ -148,20 +151,20 @@ export function ThreadDetail({
       <div className='flex flex-col gap-2'>
         {thread.tombstoned && (
           <AnimatedBadge size='sm' status='neutral' className='rafii-quiet w-fit border-0'>
-            No longer returned by {platform}
+            No longer on {platform}
           </AnimatedBadge>
         )}
         <MessageBubble align='start' variant='soft'>
-          <MessageBubbleContent className='break-words whitespace-pre-wrap'>{thread.text || 'No text returned'}</MessageBubbleContent>
+          <MessageBubbleContent className='break-words whitespace-pre-wrap'>{thread.text || 'No text'}</MessageBubbleContent>
         </MessageBubble>
         <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
-          <span>On post {thread.providerPostId}</span>
           {/* When PostRiff cannot reply, the reply state below carries the same link as "Reply on …". */}
           {permalink && (thread.tombstoned || thread.replyLevel === 'Direct') && (
             <a
               href={permalink}
               target='_blank'
               rel='noreferrer'
+              title={`Post ${thread.providerPostId}`}
               className='rafii-focus hover:text-foreground inline-flex items-center gap-1 rounded-sm underline underline-offset-2'
             >
               Open on {platform}
@@ -178,7 +181,7 @@ export function ThreadDetail({
             return (
               <div key={reply.draftId} className='flex flex-col items-end gap-1'>
                 <MessageBubble align='end' variant='tint' animateIn={freshReplyIds.has(reply.draftId)}>
-                  <MessageBubbleContent className='break-words whitespace-pre-wrap'>{reply.text || 'No text returned'}</MessageBubbleContent>
+                  <MessageBubbleContent className='break-words whitespace-pre-wrap'>{reply.text || 'No text'}</MessageBubbleContent>
                 </MessageBubble>
                 <div className='text-muted-foreground flex flex-wrap items-center justify-end gap-1.5 text-xs'>
                   <AnimatedBadge size='sm' status={status.badge} contentKey={reply.status} className='rafii-quiet border-0'>
@@ -206,10 +209,10 @@ export function NoThreadSelected({ missing, onClear }: { missing: boolean; onCle
         <StateMessage
           kind='stale'
           layout='inline'
-          title='This comment is not in the list the server returned.'
+          title="This comment isn't available."
           action={
             <Button variant='glass' size='control' onClick={onClear}>
-              Close it
+              Close
             </Button>
           }
           className='max-w-sm'
@@ -219,7 +222,7 @@ export function NoThreadSelected({ missing, onClear }: { missing: boolean; onCle
           <span aria-hidden className='rafii-glass flex size-11 items-center justify-center rounded-full'>
             <Icons.messageCircle className='size-5' />
           </span>
-          <p>Pick a comment to read it and reply.</p>
+          <p>Pick a comment.</p>
         </>
       )}
     </div>

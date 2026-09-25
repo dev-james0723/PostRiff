@@ -15,8 +15,8 @@ function segmentTitle(connection: ConnectionCoverage) {
   const unread = connection.verifiedJobs.filter((job) => !connection.readJobIds.has(job.id)).length;
   return [
     capabilitySummary(connection),
-    connection.verifiedAt ? `Analytics level verified ${formatDateTime(connection.verifiedAt)}.` : 'No analytics verification recorded for this account.',
-    `${connection.posts.length} ${connection.posts.length === 1 ? 'post' : 'posts'} with a reading · ${unread} verified ${unread === 1 ? 'post' : 'posts'} without one.`
+    connection.verifiedAt ? `Verified ${formatDateTime(connection.verifiedAt)}.` : 'Not verified yet.',
+    `${connection.posts.length} read · ${unread} waiting.`
   ].join(' ');
 }
 
@@ -109,7 +109,7 @@ export function CoverageStrip({
           ))}
         </ul>
       )}
-      {coverage.usesPlatformFallback && <p className='text-muted-foreground text-xs'>Posts are matched to accounts by platform in this reading; the API did not name the connection.</p>}
+      {coverage.usesPlatformFallback && <p className='text-muted-foreground hidden text-xs md:block'>Some posts are matched to accounts by platform only.</p>}
     </div>
   );
 }

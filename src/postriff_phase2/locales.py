@@ -377,7 +377,7 @@ def apply_language_action(state, action, payload, actor, now=None):
             if not isinstance(platform, str) or not 1 <= len(platform) <= 60 or not isinstance(tags, list):
                 raise AlphaError("Choose a list of languages for each channel.")
             if any(canonical(tag) is None for tag in tags):
-                raise AlphaError("One of those languages isn't one PostRiff knows.")
+                raise AlphaError("One of those languages isn't one Rafii knows.")
             clean = list(dict.fromkeys(canonical(tag) for tag in tags))
             if len(clean) > MAX_LANGUAGES_PER_CHANNEL:
                 raise AlphaError(f"Use up to {MAX_LANGUAGES_PER_CHANNEL} languages on one channel.")
@@ -389,7 +389,7 @@ def apply_language_action(state, action, payload, actor, now=None):
     if "default" in payload:
         default = canonical(payload["default"]) if payload["default"] is not None else None
         if payload["default"] is not None and default is None:
-            raise AlphaError("That default language isn't one PostRiff knows.")
+            raise AlphaError("That default language isn't one Rafii knows.")
     self_reference = current.get("selfReference")
     if "selfReference" in payload:
         if payload["selfReference"] is not None and payload["selfReference"] not in SELF_REFERENCE:

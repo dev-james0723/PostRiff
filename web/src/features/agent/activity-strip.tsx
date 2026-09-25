@@ -7,6 +7,7 @@ import { Icons } from '@/components/icons';
 import { ActionSwapIcon, ActionSwapText } from '@/components/motion/action-swap';
 import type { MemoryBinding, Run, SchedulePlan } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
+import { STATUS } from '@/lib/status-labels';
 
 // On first mount the lines settle in one after another; a line that arrives later (a new warning) fades in on its own.
 const STRIP: Variants = { hidden: {}, shown: { transition: { staggerChildren: 0.04 } } };
@@ -31,9 +32,15 @@ function Row({ ok, running, children }: { ok?: boolean; running: boolean; childr
   );
 }
 
+/** A detail line inside the disclosure: plain text, no status icon. */
+function Detail({ children }: { children: ReactNode }) {
+  return <p className='text-muted-foreground [&_b]:text-foreground text-xs [&_b]:font-medium'>{children}</p>;
+}
+
 /**
- * What the run actually did, from its safe events only: detected intent, sources it was
- * allowed to read, warnings, cost. Lines with no data are omitted rather than faked.
+ * What the run actually did, from its safe events only. Visible by default: warnings, the run's
+ * state and its cost. Everything else (intent, destinations, skills, memory, sources, model and
+ * the raw event log) sits behind "Details". Lines with no data are omitted rather than faked.
  */
 export function ActivityStrip({ run, plan, intent, destinations, skills, memory }: { run: Run; plan?: SchedulePlan | null; intent?: string; destinations?: { platform: string; language: string; account?: string }[]; skills?: string[]; memory?: MemoryBinding | null }) {
   const [open, setOpen] = useState(false);
@@ -47,81 +54,81 @@ export function ActivityStrip({ run, plan, intent, destinations, skills, memory 
   const seconds = first && last ? Math.max(0, Math.round(last - first)) : null;
   const usage = run.usage as { modelRequests?: number; costUsd?: number; cliCostUsd?: number | null; billing?: string; provenance?: string };
   const running = run.status === 'running';
-  const cost = usage?.billing === 'subscription'
-    ? ` · your subscription paid${usage.cliCostUsd != null ? ` (CLI reported $${Number(usage.cliCostUsd).toFixed(3)})` : ''} · PostRiff $0`
-    : usage?.modelRequests === 0
-      ? ' · no model request · $0'
-      : usage?.costUsd != null
-        ? ` · $${usage.costUsd.toFixed(2)}`
-        : '';
+  // Money stays visible: what this run cost, and who paid for it.
+  const cost = usage?.billing === 'subscription' ? ' · Billed to your subscription · $0 here' : usage?.modelRequests === 0 ? ' · $0' : usage?.costUsd != null ? ` · $${usage.costUsd.toFixed(2)}` : '';
   const failed = run.status === 'failed' || run.status === 'cancelled';
 
   return (
     <motion.div variants={STRIP} initial={reduce ? false : 'hidden'} animate='shown' className='bg-muted/60 flex flex-col gap-0.5 rounded-lg px-3 py-2'>
-      {intent && (
-        <Row running={running}>
-          Detected <b>{intent.replace('_', ' ')}</b>
-          {destinations && destinations.length > 0 && (
-            <>
-              {' · '}
-              {destinations.length} destination{destinations.length === 1 ? '' : 's'} ({destinations.map((d) => (d.account ? `${d.platform} · ${d.account}` : d.platform)).join(', ')})
-            </>
-          )}
-          {plan && <> · times read in <b>{plan.timeZone}</b></>}
-        </Row>
-      )}
-      {skills && skills.length > 0 && (
-        <Row running={running}>
-          Skills ·{' '}
-          {skills.map((id, index) => (
-            <span key={id}>
-              {index > 0 && ', '}
-              <b>{id.replace(/^postriff-/, '')}</b>
-            </span>
-          ))}
-        </Row>
-      )}
-      {memory && memory.used.length > 0 && (
-        <Row running={running}>
-          Memory · <b>{memory.used.length}</b> learned rule{memory.used.length === 1 ? '' : 's'} used
-          {memory.omitted.length > 0 ? ` · ${memory.omitted.length} left out for space` : ''}: {memory.statements.join(' · ')}
-        </Row>
-      )}
-      <Row running={running}>
-        Sources · <b>{sources}</b> approved source{sources === 1 ? '' : 's'} read; nothing else from your workspace
-      </Row>
       {warnings.slice(0, 4).map((message, index) => (
         <Row key={index} ok={false} running={running}>
           {message}
         </Row>
       ))}
-      {warnings.length > 4 && <Row ok={false} running={running}>{warnings.length - 4} more warnings in the run log</Row>}
+      {warnings.length > 4 && <Row ok={false} running={running}>+{warnings.length - 4} more warnings</Row>}
       <motion.div variants={LINE} className='text-muted-foreground flex min-h-6 items-center justify-between gap-2 text-xs'>
         <span className='flex items-center gap-2'>
           <Icons.clock className='size-3.5 shrink-0' />
           <span>
-            {failed ? <b className='text-foreground font-medium'>{run.status}</b> : running ? 'Running' : `Run ${seconds ?? 0}s`} ·{' '}
-            <span className='font-mono'>{run.model}</span>
+            {failed ? <b className='text-foreground font-medium'>{run.status === 'failed' ? STATUS.failed : 'Cancelled'}</b> : running ? 'Running' : `Done in ${seconds ?? 0}s`}
             {running ? '' : cost}
           </span>
         </span>
         <button type='button' aria-expanded={open} aria-controls={logId} onClick={() => setOpen((v) => !v)}>
           {/* The underline sits on the text itself: decoration does not reach into the swap's inline-block layers. */}
           <ActionSwapText value={open ? 'hide' : 'show'} animation='roll'>
-            <span className='underline underline-offset-2'>{open ? 'Hide run log' : 'Show run log'}</span>
+            <span className='underline underline-offset-2'>{open ? 'Hide details' : 'Details'}</span>
           </ActionSwapText>
         </button>
       </motion.div>
-      {/* -mt-0.5 cancels the strip's gap while closed; open, the log sits 6px below the status line as before. */}
+      {/* -mt-0.5 cancels the strip's gap while closed; open, the details sit 6px below the status line. */}
       <AgentDisclosure id={logId} open={open} className='-mt-0.5'>
-        <ol className='mt-1.5 flex flex-col gap-1 border-t pt-2 text-xs'>
-          {events.map((event) => (
-            <li key={event.id} className='text-muted-foreground'>
-              <code className='bg-background rounded px-1'>{event.type}</code>
-              {event.message ? ` — ${event.message}` : event.stage ? ` — ${event.stage} ${event.percent ?? ''}%` : event.policy ? ` — ${event.policy}` : event.action ? ` — ${event.action}` : ''}
-            </li>
-          ))}
-        </ol>
+        <div className='mt-1.5 flex flex-col gap-1 border-t pt-2'>
+          {intent && (
+            <Detail>
+              Detected <b>{intent.replace('_', ' ')}</b>
+              {destinations && destinations.length > 0 && (
+                <>
+                  {' · '}
+                  {destinations.map((d) => (d.account ? `${d.platform} · ${d.account}` : d.platform)).join(', ')}
+                </>
+              )}
+              {plan && <> · times in <b>{plan.timeZone}</b></>}
+            </Detail>
+          )}
+          {skills && skills.length > 0 && (
+            <Detail>
+              Skills ·{' '}
+              {skills.map((id, index) => (
+                <span key={id}>
+                  {index > 0 && ', '}
+                  <b>{id.replace(/^postriff-/, '')}</b>
+                </span>
+              ))}
+            </Detail>
+          )}
+          {memory && memory.used.length > 0 && (
+            <Detail>
+              Memory · <b>{memory.used.length}</b> learned rule{memory.used.length === 1 ? '' : 's'} used
+              {memory.omitted.length > 0 ? ` · ${memory.omitted.length} left out for space` : ''}: {memory.statements.join(' · ')}
+            </Detail>
+          )}
+          <Detail>
+            Read <b>{sources}</b> approved source{sources === 1 ? '' : 's'} only
+          </Detail>
+          <Detail>
+            Model · <span className='font-mono'>{run.model}</span>
+            {usage?.billing === 'subscription' && usage.cliCostUsd != null ? ` · CLI reported $${Number(usage.cliCostUsd).toFixed(3)}` : ''}
+          </Detail>
+          <ol className='mt-1 flex flex-col gap-1 text-xs'>
+            {events.map((event) => (
+              <li key={event.id} className='text-muted-foreground'>
+                <code className='bg-background rounded px-1'>{event.type}</code>
+                {event.message ? ` — ${event.message}` : event.stage ? ` — ${event.stage} ${event.percent ?? ''}%` : event.policy ? ` — ${event.policy}` : event.action ? ` — ${event.action}` : ''}
+              </li>
+            ))}
+          </ol>
+        </div>
       </AgentDisclosure>
     </motion.div>
   );

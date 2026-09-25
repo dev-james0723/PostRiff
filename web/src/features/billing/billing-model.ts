@@ -75,31 +75,6 @@ export function planTimeline(usage: Pick<Usage, 'lifecycle' | 'entitlement' | 's
   return sub?.cancelAtPeriodEnd ? { kind: 'ends', at } : { kind: 'renews', at };
 }
 
-/** What the top-of-page alert should say, or null when nothing needs attention. */
-export type LifecycleAlert =
-  | { kind: 'payment_failed'; graceUntil: number | null }
-  | { kind: 'ended'; at: number | null }
-  | { kind: 'trial_ended'; at: number }
-  | { kind: 'ending'; at: number };
-
-export function lifecycleAlert(usage: Pick<Usage, 'lifecycle' | 'entitlement' | 'subscription'>, now = Date.now() / 1000): LifecycleAlert | null {
-  const status = usage.lifecycle?.status;
-  if (!status) return null;
-  const timeline = planTimeline(usage, now);
-  switch (timeline.kind) {
-    case 'grace':
-      return { kind: 'payment_failed', graceUntil: timeline.until };
-    case 'ended':
-      return { kind: 'ended', at: timeline.at };
-    case 'trial_ended':
-      return { kind: 'trial_ended', at: timeline.endedAt };
-    case 'ends':
-      return status === 'active' ? { kind: 'ending', at: timeline.at } : null;
-    default:
-      return null;
-  }
-}
-
 /* ---------- plans ---------- */
 
 function preferRow(candidate: PlanTerms, held: PlanTerms, currentTermsId: string | null | undefined) {
@@ -280,7 +255,7 @@ const STEPS: Record<string, string> = {
 const COST_STATES: Record<string, { label: string; tone: Tone }> = {
   actual: { label: 'Actual cost', tone: 'success' },
   estimated: { label: 'Estimate', tone: 'info' },
-  estimated_unknown: { label: 'Awaiting provider', tone: 'warning' },
+  estimated_unknown: { label: 'Awaiting final cost', tone: 'warning' },
   released: { label: 'Released', tone: 'neutral' }
 };
 

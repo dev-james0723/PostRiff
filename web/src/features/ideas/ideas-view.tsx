@@ -24,7 +24,7 @@ interface Reminder {
   /** The shared state grammar (DNA §20.1): a reminder nudges, it never blocks capture. */
   kind: StateKind;
   title: string;
-  description: string;
+  description?: string;
   href?: string;
   action?: string;
 }
@@ -79,19 +79,16 @@ export function IdeasView() {
   const batches = usage.isLoading ? '…' : usage.isError || !entitlement ? 'Unavailable' : String(entitlement.writingBatchesRemaining);
   const resets = entitlement?.resetsAt ? formatDate(entitlement.resetsAt) : null;
 
+  // Reminders only for what someone can act on. Research that is unavailable everywhere is not offered, so it is not mentioned.
   const reminders: Reminder[] = [];
   if (snapshot.isSuccess && !state?.speaker?.activeRevision) {
-    reminders.push({ id: 'voice', kind: 'partial', title: 'Set up your voice first', description: 'Sources and previews work now, but drafts can only be scheduled once a voice profile is active.', href: '/app/workspace/brand', action: 'Set up your voice' });
+    reminders.push({ id: 'voice', kind: 'partial', title: 'Set up your voice to schedule drafts', href: '/app/workspace/brand', action: 'Set up your voice' });
   }
-  if (memory.isSuccess && research) {
-    if (research.enabled === false) {
-      reminders.push({ id: 'research', kind: 'unsupported', title: 'Web research is switched off on this deployment', description: 'Drafts use only the sources you add here, and links stay unverified references.' });
-    } else if (research.hosted && !research.web) {
-      reminders.push({ id: 'research', kind: 'unsupported', title: 'Web research is off for this workspace', description: 'Drafts use only the sources you add here, and links stay unverified references. An owner can turn research on under Memory.', href: '/app/workspace/memory', action: 'Open Memory' });
-    }
+  if (memory.isSuccess && research && research.enabled !== false && research.hosted && !research.web) {
+    reminders.push({ id: 'research', kind: 'unsupported', title: 'Web research is off', description: 'Drafts use only the sources you add.', href: '/app/workspace/memory', action: 'Open Memory' });
   }
   if (usage.isSuccess && entitlement && entitlement.writingBatchesRemaining === 0) {
-    reminders.push({ id: 'allowance', kind: 'partial', title: 'No writing batches left this period', description: `You can still capture and review sources. A paid cloud model can draft again when the allowance resets${resets ? ` on ${resets}` : ''}.`, href: '/app/account/billing', action: 'Usage & plan' });
+    reminders.push({ id: 'allowance', kind: 'partial', title: 'No writing batches left', description: resets ? `Resets ${resets}.` : undefined, href: '/app/account/billing', action: 'Usage & plan' });
   }
 
   const infoContent: InfobarContent = {
@@ -100,37 +97,37 @@ export function IdeasView() {
       {
         title: 'Four ways to use a source',
         description:
-          'Quote it: your own words, which drafts may quote. Rewrite, then approve use: never quoted, and a draft from it is scheduled only after you approve public use of its exact facts. Internal only: left out of public drafts. Do not use: kept here, left out of every draft.'
+          'Quote it: your own words, quoted as written. Rewrite, then approve use: never quoted; you approve public use of its facts before scheduling. Internal only: left out of public drafts. Do not use: left out of every draft.'
       },
       {
         title: 'Facts',
-        description: 'Pasted text and files are split into paragraphs. Only the ones you approve can reach a draft; anything else stays out and is listed as unknown rather than guessed.'
+        description: 'Text and files split into paragraphs. Only approved ones reach a draft; the rest is listed as unknown, never guessed.'
       },
       {
-        title: 'Leaving this server',
+        title: 'Privacy',
         description:
-          'A paid cloud model reads a source’s approved facts only when its cloud switch is on. Other writing routes, such as an agent signed in on the machine that runs PostRiff, read them without that switch. The text you draft from (an idea, a link, your message) goes to whichever model you pick.'
+          'A cloud model reads a source’s approved facts only when its cloud switch is on. Other writing routes, like an agent on your own machine, read them without it. What you draft from goes to the model you pick.'
       },
-      {
-        title: 'Web research',
-        description: memory.isLoading
-          ? '…'
-          : !research
-            ? 'Unavailable: this server did not report whether web research is on.'
-            : research.enabled === false
-              ? 'Switched off on this deployment. Drafts use only what you add here.'
-              : !research.hosted
-                ? 'Always on when drafting on your own machine. A draft that needs facts you have not supplied looks them up, and each page read becomes a source here with its address.'
-                : research.web
-                  ? 'On for this workspace. A draft that needs facts you have not supplied looks them up, and each page read becomes a source here with its address.'
-                  : 'Off for this workspace. An owner can turn it on under Memory.'
-      },
+      ...(research?.enabled === false
+        ? []
+        : [
+            {
+              title: 'Web research',
+              description: memory.isLoading
+                ? '…'
+                : !research
+                  ? 'Status unavailable.'
+                  : !research.hosted || research.web
+                    ? 'On. A draft that needs missing facts looks them up; each page read becomes a source here.'
+                    : 'Off for this workspace. An owner can turn it on under Memory.'
+            }
+          ]),
       {
         title: 'Cost',
         description:
           batches === '…' || batches === 'Unavailable'
-            ? `Writing batches left: ${batches}. Saving and reviewing sources never uses one.`
-            : `${batches} writing batch${batches === '1' ? '' : 'es'} left${resets ? `, resets ${resets}` : ''}. Only a draft written by a paid cloud model uses one; saving and reviewing sources never does.`
+            ? `Writing batches left: ${batches}. Saving sources is free.`
+            : `${batches} writing batch${batches === '1' ? '' : 'es'} left${resets ? `, resets ${resets}` : ''}. Only cloud drafts use one; saving sources is free.`
       }
     ]
   };
@@ -162,18 +159,17 @@ export function IdeasView() {
   return (
     <PageContainer
       pageTitle='Ideas'
-      pageDescription='Capture a thought, paste text or add a link. Approve the facts, say how each source may be used, and draft from any of them in your voice.'
       infoContent={infoContent}
       pageHeaderAction={headerCount}
     >
       {snapshot.isError ? (
         <StateMessage
           kind='error'
-          title='Your sources could not be loaded.'
-          description={snapshot.error instanceof Error ? snapshot.error.message : 'The workspace did not answer.'}
+          title='Couldn’t load your sources'
+          description={snapshot.error instanceof Error ? snapshot.error.message : undefined}
           action={
             <Button variant='glass' size='control' onClick={() => void snapshot.refetch()} disabled={snapshot.isFetching}>
-              {snapshot.isFetching ? 'Retrying…' : 'Retry'}
+              {snapshot.isFetching ? 'Trying again…' : 'Try again'}
             </Button>
           }
         />
@@ -201,7 +197,7 @@ export function IdeasView() {
                 ))}
               </Surface>
             )}
-            {canEdit ? <CaptureCard ref={capture} onSelect={select} /> : <StateMessage kind='permission' layout='inline' title='You need the edit permission to add sources.' description='You can still open a source and read its facts and permissions.' />}
+            {canEdit ? <CaptureCard ref={capture} onSelect={select} /> : <StateMessage kind='permission' layout='inline' title='Only editors can add sources.' />}
             <SourceList selectedId={sourceId} onSelect={select} useApprovals={useApprovals} />
           </div>
 
@@ -216,7 +212,7 @@ export function IdeasView() {
               ) : (
                 <StateMessage
                   kind='empty'
-                  title={sources.length === 0 ? 'Once you save a source, pick it to review its facts and permissions.' : 'Pick a source to review its facts and permissions.'}
+                  title={sources.length === 0 ? 'Saved sources open here' : 'Pick a source to review'}
                 />
               )}
             </Surface>
@@ -236,7 +232,7 @@ export function IdeasView() {
           </SheetClose>
           <SheetHeader className='pr-16'>
             <SheetTitle>Source</SheetTitle>
-            <SheetDescription>Facts, how it may be used, and where it came from.</SheetDescription>
+            <SheetDescription className='sr-only'>Facts, how it may be used, and where it came from.</SheetDescription>
           </SheetHeader>
           <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]'>
             {sheetSource && <SourceInspector key={sheetSource.id} source={sheetSource} useApproved={useApprovals[sheetSource.id]} />}

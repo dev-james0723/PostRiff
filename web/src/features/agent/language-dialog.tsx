@@ -79,7 +79,7 @@ export function LanguageDialog<P extends string = string>({ open, onOpenChange, 
       }}
     >
       <RafiiDialogContent size='md' id={id}>
-        <RafiiDialogHeader eyebrow='Output language' title='Every audience.' accent='The right language.' intro='One voice can speak in more than one language.' closeLabel='Close language settings' />
+        <RafiiDialogHeader eyebrow='Output language' title='Every audience.' accent='The right language.' closeLabel='Close language settings' />
         <LanguageStage
           key={generation}
           selection={selection}
@@ -235,7 +235,7 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
 
   const catalogueId = `${ids}-catalogue`;
   const canApply = !applying && items.length > 0 && (!shared || Boolean(sharedTag));
-  const hint = shared ? (sharedTag ? 'One shared choice. Individual settings stay as they are until you apply.' : 'Choose a language below before applying.') : 'Individual settings are kept for later.';
+  const hint = shared ? (sharedTag ? 'Applies to every channel.' : 'Choose a language below.') : 'Each channel keeps its own.';
   const modeLabel = shared ? (sharedTag ? 'Shared language' : 'Choose a shared language') : 'Individual languages';
 
   function apply() {
@@ -257,7 +257,7 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
     <>
       <RafiiDialogBody>
         {items.length === 0 ? (
-          <StateMessage kind='empty' title='Choose a channel first' description='Output languages belong to the channels you draft for. Select at least one channel, then set its language here.' />
+          <StateMessage kind='empty' title='Choose a channel first' />
         ) : (
           <>
             <section ref={individualRef} aria-labelledby={`${ids}-target-label`} className='-mx-1 px-1'>
@@ -306,8 +306,7 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
               </div>
               <div ref={sharedRef} id={`${ids}-shared-content`}>
                 <div className='px-4 pb-4'>
-                  <h3 className='text-foreground text-sm font-medium'>Select a language for every channel</h3>
-                  <p className='text-muted-foreground mt-0.5 mb-3 text-xs'>Choose first. Apply when you’re ready.</p>
+                  <h3 className='text-foreground mb-3 text-sm font-medium'>Select a language for every channel</h3>
                   <button
                     ref={sharedButton}
                     type='button'
@@ -373,7 +372,7 @@ function LanguageStage<P extends string>({ selection, languages, accountLabel, i
                 );
               })}
             </ul>
-            <p className='text-muted-foreground mt-4 text-xs leading-relaxed'>Settings only. Future drafts use these languages; existing drafts are not translated or regenerated.</p>
+            <p className='text-muted-foreground mt-4 text-xs leading-relaxed'>Applies to new drafts only.</p>
           </>
         )}
       </RafiiDialogBody>

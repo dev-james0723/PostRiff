@@ -32,17 +32,20 @@ export function SettingButton({ icon, kicker, value, expanded = false, controls,
       aria-expanded={dialog ? expanded : undefined}
       aria-controls={dialog && expanded ? controls : undefined}
       className={cn(
-        'rafii-glass hover:rafii-glass-selected aria-expanded:rafii-glass-selected aria-pressed:rafii-glass-selected rafii-focus flex min-h-20 min-w-0 flex-col items-start justify-start gap-1 rounded-[var(--rafii-radius-card)] px-2.5 py-3 text-left min-[400px]:px-3.5 transition-[transform,background-color,box-shadow] duration-200 ease-[var(--rafii-ease-ui)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100',
+        'rafii-glass hover:rafii-glass-selected aria-expanded:rafii-glass-selected aria-pressed:rafii-glass-selected rafii-focus flex min-w-0 rounded-[var(--rafii-radius-card)] text-left transition-[transform,background-color,box-shadow] duration-200 ease-[var(--rafii-ease-ui)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100',
+        // Phones narrower than 420px get one compact row per setting (label left, value right) instead of three
+        // squeezed columns where a value like "English (US)" breaks over three lines.
+        'min-h-12 flex-row items-center gap-2 px-3.5 py-2.5 min-[420px]:min-h-20 min-[420px]:flex-col min-[420px]:items-start min-[420px]:justify-start min-[420px]:gap-1 min-[420px]:py-3',
         className
       )}
       {...props}
     >
-      <span aria-hidden className='text-muted-foreground mb-0.5 flex [&>svg]:size-[17px]'>
+      <span aria-hidden className='text-muted-foreground flex shrink-0 min-[420px]:mb-0.5 [&>svg]:size-[17px]'>
         {icon}
       </span>
-      <span className='text-foreground text-[13px] leading-tight font-medium'>{kicker}</span>
+      <span className='text-foreground shrink-0 text-[13px] leading-tight font-medium'>{kicker}</span>
       {/* Long values (model names) hyphenate at syllables before breaking, never mid-word at random. */}
-      <span className='text-muted-foreground w-full text-xs leading-snug break-words hyphens-auto'>{value}</span>
+      <span className='text-muted-foreground ml-auto min-w-0 text-right text-xs leading-snug break-words hyphens-auto min-[420px]:ml-0 min-[420px]:w-full min-[420px]:text-left'>{value}</span>
     </button>
   );
 }
@@ -65,10 +68,10 @@ export interface SettingButtonsProps {
   className?: string;
 }
 
-/** The composer's three settings, side by side; one column on the narrowest phones (≤374px). */
+/** The composer's three settings, side by side; one compact row each on phones narrower than 420px. */
 export function SettingButtons({ language, model, voice, label = 'Draft settings', className }: SettingButtonsProps) {
   return (
-    <div role='group' aria-label={label} className={cn('grid grid-cols-1 gap-2 min-[375px]:grid-cols-3', className)}>
+    <div role='group' aria-label={label} className={cn('grid grid-cols-1 gap-2 min-[420px]:grid-cols-3', className)}>
       <SettingButton icon={<IconWorld />} kicker='Language' value={language.value} expanded={language.expanded} controls={language.controls} disabled={language.disabled} title={language.title} onClick={language.onClick} />
       <SettingButton icon={<IconCpu />} kicker='Model' value={model.value} expanded={model.expanded} controls={model.controls} disabled={model.disabled} title={model.title} onClick={model.onClick} />
       <SettingButton

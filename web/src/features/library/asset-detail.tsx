@@ -13,7 +13,8 @@ import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { formatBytes, formatDateTime } from '@/lib/time';
+import { formatBytes, formatDateTime, relativeTime } from '@/lib/time';
+import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 import { badgeClass, copyHash, dimensionsOf, useAssetImage } from './asset-card';
 import { imageRuleChecks } from './image-rules';
@@ -35,25 +36,29 @@ interface AssetDetailProps {
   onDelete: (asset: LibraryAsset) => void;
 }
 
-/** The job vocabulary of `src/postriff_phase2/store.py`, one badge per group so "held" never reads as "scheduled". */
+/**
+ * The job vocabulary of `src/postriff_phase2/store.py` in the shared status words (`STATUS`), one badge per group so
+ * "held" never reads as "scheduled".
+ */
 function badgeFor(use: AssetUse): { status: AnimatedBadgeStatus; label: string } {
-  if (use.kind === 'review') return { status: 'info', label: 'waiting for approval' };
+  if (use.kind === 'review') return { status: 'info', label: STATUS.needsReview };
   const state = use.state;
   const ended = state === 'verified' || state === 'failed' || state === 'canceled';
-  if (use.cancelRequested && !ended) return { status: 'loading', label: 'cancelling' };
-  if (state === 'scheduled' || state === 'approved' || state === 'claimed') return { status: 'info', label: 'waiting' };
-  if (state === 'submitting' || state === 'provider_accepted' || state === 'published') return { status: 'loading', label: state.replace(/_/g, ' ') };
-  if (state === 'uncertain') return { status: 'warning', label: 'uncertain' };
-  if (state === 'held') return { status: 'warning', label: 'held' };
-  if (state === 'verified') return { status: 'success', label: 'verified' };
-  if (state === 'failed') return { status: 'danger', label: 'failed' };
-  if (state === 'canceled') return { status: 'neutral', label: 'cancelled' };
+  if (use.cancelRequested && !ended) return { status: 'loading', label: 'Cancelling…' };
+  if (state === 'scheduled' || state === 'approved' || state === 'claimed') return { status: 'info', label: STATUS.scheduled };
+  if (state === 'submitting' || state === 'provider_accepted' || state === 'published' || state === 'processing') return { status: 'loading', label: STATUS.publishing };
+  if (state === 'uncertain') return { status: 'warning', label: 'Result not confirmed' };
+  if (state === 'held') return { status: 'warning', label: 'Needs action' };
+  if (state === 'verified') return { status: 'success', label: STATUS.published };
+  if (state === 'failed') return { status: 'danger', label: STATUS.failed };
+  if (state === 'canceled') return { status: 'neutral', label: 'Cancelled' };
   return { status: 'neutral', label: state.replace(/_/g, ' ') };
 }
 
+/** Relative by default; the exact time goes in the tooltip. */
 function whenOf(use: AssetUse) {
   const parsed = Date.parse(use.timing.utc);
-  return Number.isNaN(parsed) ? `${use.timing.local} (${use.timing.timeZone})` : formatDateTime(parsed / 1000);
+  return Number.isNaN(parsed) ? { text: `${use.timing.local} (${use.timing.timeZone})`, exact: undefined } : { text: relativeTime(parsed / 1000), exact: formatDateTime(parsed / 1000) };
 }
 
 /* Elevated glass on the existing overlay primitives (DNA §12.2). */
@@ -100,11 +105,7 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
       ) : image.isError ? (
         <div className='text-muted-foreground flex aspect-video w-full flex-col items-center justify-center gap-3 p-4 text-center text-sm'>
           <span>
-            {image.errorStatus === 404
-              ? 'The image file is not in private storage'
-              : image.storageNotConfigured
-                ? 'Private media storage is not configured'
-                : 'Preview unavailable'}
+            {image.errorStatus === 404 ? 'Image file missing' : image.storageNotConfigured ? 'Previews aren’t available yet' : 'Preview unavailable'}
           </span>
           {image.canRetry && (
             <Button size='control' variant='glass' disabled={image.isFetching} onClick={() => void image.refetch()}>
@@ -122,6 +123,7 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
 
 function UseRow({ use }: { use: AssetUse }) {
   const badge = badgeFor(use);
+  const when = whenOf(use);
   return (
     <li className='flex items-start gap-3 py-2.5'>
       <ChannelIcon platform={use.platform} name={use.platform} size='sm' className='mt-0.5' />
@@ -133,8 +135,8 @@ function UseRow({ use }: { use: AssetUse }) {
           <AnimatedBadge size='sm' status={badge.status} pulse={false} title={use.state.replace(/_/g, ' ')} className={badgeClass(badge.status)}>
             {badge.label}
           </AnimatedBadge>
-          <span className='text-muted-foreground text-xs'>
-            {use.kind === 'review' ? 'Review' : 'Post'} · publish time {whenOf(use)}
+          <span className='text-muted-foreground text-xs' title={when.exact}>
+            {when.text}
           </span>
         </span>
       </div>
@@ -158,7 +160,7 @@ function ImageRules({ asset, platforms }: { asset: LibraryAsset; platforms: stri
         Image rules
       </h3>
       {checks.length === 0 ? (
-        <p className='text-muted-foreground py-2 text-sm'>No accounts are connected, so there are no platform rules to check.</p>
+        <p className='text-muted-foreground py-2 text-sm'>Connect an account to check platform rules.</p>
       ) : (
         <ul className='flex flex-col'>
           {checks.map((check) => (
@@ -170,14 +172,13 @@ function ImageRules({ asset, platforms }: { asset: LibraryAsset; platforms: stri
               </div>
               {check.fits === false && (
                 <AnimatedBadge size='sm' status='warning' pulse={false} className={badgeClass('warning')}>
-                  outside range
+                  Outside range
                 </AnimatedBadge>
               )}
             </li>
           ))}
         </ul>
       )}
-      <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>Every post with an image also needs alt text and your confirmation that you may use the image.</p>
     </section>
   );
 }
@@ -196,37 +197,27 @@ function DetailBody({
       <LargeImage asset={asset} />
 
       {publishing && (
-        <StateMessage
-          kind='loading'
-          layout='inline'
-          title='A post using this image is still being published or checked'
-          description='Delete it once that post has settled. The workspace refuses to delete an image while a post using it is in flight.'
-        />
+        <StateMessage kind='loading' layout='inline' title='A post using this image is publishing' description='You can delete it once that post finishes.' />
       )}
 
       {/* Provenance and rights are inspectable facts (DNA §21.9), read as quiet rows without dividers. */}
       <section aria-labelledby='asset-facts' className='flex flex-col gap-1'>
         <h3 id='asset-facts' className='rafii-eyebrow'>
-          Provenance
+          Details
         </h3>
         <dl className='flex flex-col'>
           <Fact term='Dimensions'>{dims ? `${dims} px` : 'Not recorded'}</Fact>
           <Fact term='Size'>{typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : 'Not recorded'}</Fact>
-          <Fact term='Format'>{reencoded ? 'JPEG, re-encoded on upload with metadata removed' : asset.mime}</Fact>
+          <Fact term='Format'>{reencoded ? 'JPEG · metadata removed' : asset.mime}</Fact>
           <HashFact term='Stored hash' hash={asset.hash} />
           {asset.sourceHash && <HashFact term='Source hash' hash={asset.sourceHash} />}
           {typeof asset.createdAt === 'number' && (
             <Fact term='Uploaded'>
-              {formatDateTime(asset.createdAt)}
-              {asset.uploadedBy ? ` · ${asset.uploadedBy === currentUserId ? 'by you' : 'by a workspace member'}` : ''}
+              <span title={formatDateTime(asset.createdAt)}>{relativeTime(asset.createdAt)}</span>
+              {asset.uploadedBy ? ` · ${asset.uploadedBy === currentUserId ? 'by you' : 'by a teammate'}` : ''}
             </Fact>
           )}
-          {asset.decoder && <Fact term='Decoder'>{asset.decoder}</Fact>}
         </dl>
-        <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
-          The stored hash names the exact bytes a post publishes; a post records it when it is prepared.
-          {asset.sourceHash ? ' The source hash names the file as you uploaded it, before it was re-encoded.' : ''}
-        </p>
       </section>
 
       <section aria-labelledby='asset-uses' className='flex flex-col gap-1'>
@@ -240,7 +231,7 @@ function DetailBody({
           </Link>
         </div>
         {uses.length === 0 ? (
-          <p className='text-muted-foreground py-2 text-sm'>Not used in a post yet.</p>
+          <p className='text-muted-foreground py-2 text-sm'>Not used yet</p>
         ) : (
           <ul className='flex flex-col'>
             {uses.map((use) => (
@@ -248,9 +239,6 @@ function DetailBody({
             ))}
           </ul>
         )}
-        <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
-          Counts posts in every state and reviews waiting for approval. The workspace keeps its 20 most recent reviews.
-        </p>
       </section>
 
       <ImageRules asset={asset} platforms={platforms} />
@@ -269,13 +257,7 @@ function DetailActions({
 }: Pick<AssetDetailProps, 'publishing' | 'canEdit' | 'canApprove' | 'deleting' | 'onDelete'> & { asset: LibraryAsset }) {
   return (
     <>
-      {canApprove ? (
-        <p className='text-muted-foreground text-xs leading-relaxed'>
-          Use in a post opens scheduling with this image selected. Its hash starts with <code className='font-mono'>{asset.hash.slice(0, 8)}</code>.
-        </p>
-      ) : canEdit ? (
-        <p className='text-muted-foreground text-xs leading-relaxed'>Preparing a post needs approve access. Keep drafting in Ideas; someone who approves posts attaches the image.</p>
-      ) : null}
+      {!canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use images in posts.</p>}
       <div className='flex flex-wrap gap-2'>
         {canApprove ? (
           <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'flex-1 sm:flex-none')}>
@@ -288,10 +270,6 @@ function DetailActions({
             <LearnMoreChevron />
           </Link>
         ) : null}
-        <Button variant='glass' size='control' onClick={() => void copyHash(asset.hash)}>
-          <Icons.copy aria-hidden />
-          Copy hash
-        </Button>
         {canEdit && (
           <Button
             variant='destructive'

@@ -31,37 +31,26 @@ function plural(count: number, one: string, many: string) {
   return count === 1 ? one : many;
 }
 
-/** The reminder under the chip. Rules are stated as what waits, never as what is blocked. */
-function reminder(status: VoiceStatus, earlier: number | null, isOwner: boolean) {
+/** One short line under the chip, only when there is something to do or watch. Rules are stated as what waits, never as what is blocked. */
+function reminder(status: VoiceStatus, earlier: number | null, isOwner: boolean): string | null {
   switch (status.kind) {
-    case 'active': {
-      if (status.waiting) {
-        return isOwner
-          ? `A proposed revision is waiting for your approval below. Drafts keep using revision ${status.revision} until you approve it.`
-          : `A proposed revision is waiting for an owner. Drafts keep using revision ${status.revision} until an owner approves it.`;
-      }
-      const base = `New drafts are written with revision ${status.revision}, and scheduling uses drafts written with it.`;
-      if (earlier && earlier > 0) {
-        return `${base} ${earlier} ${plural(earlier, 'draft was', 'drafts were')} written before it: you can still edit and preview ${plural(earlier, 'it', 'them')}, and redraft with this voice to schedule.`;
-      }
-      return base;
-    }
+    case 'active':
+      if (status.waiting) return isOwner ? 'A new revision is waiting for your approval.' : 'A new revision is waiting for an owner.';
+      if (earlier && earlier > 0) return `Redraft ${earlier === 1 ? 'the older draft' : `the ${earlier} older drafts`} with this voice to schedule ${plural(earlier, 'it', 'them')}.`;
+      return null;
     case 'waiting':
-      return isOwner
-        ? 'A proposed voice is waiting for your approval below. You can review and schedule drafts meanwhile; check their wording carefully.'
-        : 'A proposed voice is waiting for an owner. You can review and schedule drafts meanwhile; check their wording carefully.';
+      return isOwner ? 'A proposed voice is waiting for your approval. Check draft wording meanwhile.' : 'A proposed voice is waiting for an owner. Check draft wording meanwhile.';
     case 'none':
-      return status.earlier > 0
-        ? 'No voice is active right now. You can review and schedule drafts; check their wording carefully. Earlier revisions stay listed under Revisions.'
-        : 'You can review and schedule drafts now. A voice profile helps future drafts sound consistent.';
+      return status.earlier > 0 ? 'No active voice. Check draft wording carefully.' : 'Set up a voice so drafts sound consistent.';
     default:
-      return 'The voice status could not be read from this workspace.';
+      return 'Couldn’t load the voice status.';
   }
 }
 
+/** A label and a number. The consequence behind it sits in a tooltip and the accessible description, not on screen. */
 function Count({ label, value, hint }: { label: string; value: number | null | 'pending'; hint: string }) {
   return (
-    <div className='flex min-w-0 flex-col gap-0.5'>
+    <div className='flex min-w-0 flex-col gap-0.5' title={hint}>
       <span className='text-muted-foreground text-xs'>{label}</span>
       {value === 'pending' ? (
         <span className='text-muted-foreground text-xl font-semibold'>
@@ -75,7 +64,7 @@ function Count({ label, value, hint }: { label: string; value: number | null | '
           <DigitSwap value={value} />
         </span>
       )}
-      <span className='text-muted-foreground text-xs leading-snug'>{hint}</span>
+      <span className='sr-only'>{hint}</span>
     </div>
   );
 }
@@ -85,33 +74,34 @@ export function VoiceStatusStrip({ state, isOwner, memory }: { state: SnapshotSt
   const counts = voiceCounts(state);
   const badge = badgeFor(status);
   const learning = memory.data?.learning;
+  const note = reminder(status, counts.earlier, isOwner);
   const learned: number | null | 'pending' = memory.isLoading ? 'pending' : memory.isError || !learning || !Array.isArray(learning.items) ? null : learning.items.filter((item) => item.status === 'active').length;
 
   return (
-    <Surface as='section' material='glass' aria-label='Voice status' data-tour='brand-status' className='flex flex-col gap-5'>
+    <Surface as='section' material='glass' aria-label='Voice status' data-tour='brand-status' className='flex flex-col gap-4'>
       <div className='flex min-w-0 flex-col gap-2'>
         <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
           <StatusChip status={badge.status}>{badge.label}</StatusChip>
           {status.kind === 'active' && status.record && (
-            <span className='text-muted-foreground text-xs'>
+            <span className='text-muted-foreground hidden text-xs md:inline'>
               Approved <ApprovedDate iso={status.record.approvedAt} />
               {reasonLabel(status.record.reason) ? ` · ${reasonLabel(status.record.reason)}` : ''}
             </span>
           )}
         </div>
-        <p className='text-muted-foreground max-w-prose text-sm leading-relaxed text-pretty'>{reminder(status, counts.earlier, isOwner)}</p>
+        {note && <p className='text-muted-foreground max-w-prose text-sm leading-relaxed text-pretty'>{note}</p>}
       </div>
       <div className='grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4'>
         {status.kind === 'active' ? (
           <>
-            <Count label='Drafts on this voice' value={counts.onVoice} hint='Written with the active voice' />
-            <Count label='Written before it' value={counts.earlier} hint='Edit and preview; redraft to schedule' />
+            <Count label='On this voice' value={counts.onVoice} hint='Drafts written with the active voice.' />
+            <Count label='Older drafts' value={counts.earlier} hint='Edit and preview; redraft to schedule.' />
           </>
         ) : (
-          <Count label='Drafts' value={counts.drafts} hint='Edit and preview any time' />
+          <Count label='Drafts' value={counts.drafts} hint='Edit and preview any time.' />
         )}
-        <Count label='Approved or scheduled posts' value={counts.bound} hint='Held if the voice changes' />
-        <Count label='Learned preferences' value={learned} hint='Accepted on the Memory page' />
+        <Count label='Scheduled' value={counts.bound} hint='Approved or scheduled posts. Held if the voice changes.' />
+        <Count label='Learned preferences' value={learned} hint='Accepted on the Memory page.' />
       </div>
     </Surface>
   );

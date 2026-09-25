@@ -146,7 +146,7 @@ def billing_from_environment(values):
         if not values.get("EMAIL_FROM") or not base_url:
             raise ValueError("EMAIL_FROM and POSTRIFF_PUBLIC_BASE_URL are required when RESEND_API_KEY is set.")
         return provider, Mailer(ResendTransport(resend_key), values["EMAIL_FROM"], base_url)
-    return provider, Mailer(NullTransport(), "PostRiff <no-reply@postriff.invalid>", base_url or "https://postriff.invalid")
+    return provider, Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", base_url or "https://postriff.invalid")
 
 
 def runtime_from_environment(environ=None):

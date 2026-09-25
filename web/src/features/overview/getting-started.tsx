@@ -44,14 +44,8 @@ export function GettingStarted() {
     return {
       id: step.id,
       status: step.done ? 'completed' : current ? 'in-progress' : 'pending',
-      title: step.done ? (
-        step.title
-      ) : (
-        <span className='block truncate'>
-          {step.title}
-          <span className='opacity-70'> · {step.detail}</span>
-        </span>
-      ),
+      // The title says it; the one-line detail is a hover away.
+      title: <span title={step.done ? undefined : step.detail}>{step.title}</span>,
       detail: (
         <Link
           href={step.href}
@@ -77,7 +71,6 @@ export function GettingStarted() {
         </span>
       }
       titleId='getting-started-heading'
-      description='Four steps from a blank workspace to your first scheduled post.'
       actions={
         <span className='text-muted-foreground inline-flex items-center gap-1 text-xs tabular-nums'>
           <DigitSwap value={done} /> of {steps.length} done

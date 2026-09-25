@@ -96,13 +96,13 @@ export function RoleCards({ state, canManage, justSaved, onEdit }: { state: Memb
 
   return (
     <section className='flex flex-col gap-3' aria-labelledby='roles-cards-heading'>
-      <SectionHeading id='roles-cards-heading' title='Roles' description={`Active members, by role.${canManage ? ' Select a person to change their role or grants.' : ''}`} />
+      <SectionHeading id='roles-cards-heading' title='Roles' description={canManage ? 'Select a person to change their access.' : undefined} />
 
       {Boolean(state.error) && (
         <StateMessage
           kind='error'
-          title='Members could not be loaded'
-          description={state.error instanceof Error ? state.error.message : 'The member list did not respond.'}
+          title='Couldn’t load members'
+          description={state.error instanceof Error ? state.error.message : undefined}
           action={
             <Button size='default' variant='glass' onClick={() => state.refetch()}>
               <Icons.refresh /> Retry
@@ -158,7 +158,6 @@ export function RoleCards({ state, canManage, justSaved, onEdit }: { state: Memb
         <StateMessage
           kind='empty'
           title='You’re the only member'
-          description='Invite someone from Members and pick the role that matches what they should do: an approver for whoever signs off, an editor for whoever drafts, a viewer for whoever only needs to read.'
           action={
             <Link href='/app/workspace/members' className={cn('t-learn', buttonVariants({ variant: 'glass', size: 'control' }))}>
               Invite someone <LearnMoreChevron />

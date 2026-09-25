@@ -23,7 +23,7 @@ export function ImageGenerationCard({ image, running = false, className }: Image
   const reduce = useReducedMotion();
   const asset = useAssetImage(image?.id ?? '', Boolean(image?.id));
   const images = asset.data ? [asset.data] : [];
-  const label = running ? 'Generating your image…' : asset.isLoading ? 'Loading generated image…' : image ? 'Generated image candidate' : 'Preparing image generation…';
+  const label = running ? 'Generating image…' : asset.isLoading ? 'Loading image…' : image ? 'Generated image' : 'Preparing…';
 
   return (
     <figure className={cn('w-full max-w-[420px]', className)} aria-label={label} aria-busy={running || asset.isLoading}>
@@ -42,7 +42,7 @@ export function ImageGenerationCard({ image, running = false, className }: Image
           {asset.data ? (
             // Private media is fetched with the signed-in API client and cached as a blob URL.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={asset.data} alt={image?.alt ?? 'Generated image candidate'} className='size-full object-cover' />
+            <img src={asset.data} alt={image?.alt ?? 'Generated image'} className='size-full object-cover' />
           ) : (
             <Skeleton className='absolute inset-0 size-full rounded-none' />
           )}
@@ -52,7 +52,7 @@ export function ImageGenerationCard({ image, running = false, className }: Image
           </div>
         </div>
       </ImageGeneration>
-      {asset.isError && <figcaption className='text-foreground mt-2 text-xs font-medium'>The candidate was saved, but its private preview could not be loaded.</figcaption>}
+      {asset.isError && <figcaption className='text-foreground mt-2 text-xs font-medium'>Saved, but the preview couldn’t load.</figcaption>}
     </figure>
   );
 }

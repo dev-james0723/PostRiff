@@ -6,14 +6,14 @@ import { motion, useReducedMotion } from 'motion/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { NumberTicker } from '@/components/motion/number-ticker';
-import { Surface } from '@/components/rafii';
+import { InfoTip, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usd } from '@/lib/api/client';
 import type { ChannelView, Member, Membership, ProviderView, Usage } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
 import { cn } from '@/lib/utils';
-import { budgetStatusLabel, resetText } from './billing-copy';
+import { resetText } from './billing-copy';
 import {
   activeMemberCount,
   allowanceTotal,
@@ -96,10 +96,10 @@ function Meter({
       );
       break;
     case 'not_included':
-      reading = <span>Not included in this plan{state.value ? ` · ${state.value.toLocaleString()} in use` : ''}</span>;
+      reading = <span>Not included{state.value ? ` · ${state.value.toLocaleString()} in use` : ''}</span>;
       break;
     case 'no_total':
-      reading = <span>{state.value.toLocaleString()} · plan total unavailable</span>;
+      reading = <span>{state.value.toLocaleString()}</span>;
       break;
     case 'measured':
       reading = (
@@ -142,14 +142,15 @@ function OverNote({ children }: { children: ReactNode }) {
   );
 }
 
+/** Owner-only AI spend against the workspace limit. Money stays explicit: spent, limit, and that nothing goes over. */
 function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
   const guard = costGuardState(budget);
   return (
-    <div className='rafii-glass flex flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3 text-sm' data-tour='billing-cost-guard'>
-      <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5'>
-        <span className='text-foreground font-medium'>Model spend this {budget.windowKind}</span>
-        <span className='text-foreground tabular-nums'>
-          {usd(budget.spentUsdMicro)} <span className='text-muted-foreground'>of {usd(budget.stopUsdMicro)}</span>
+    <div className='flex flex-col gap-1.5 sm:col-span-2' data-tour='billing-cost-guard'>
+      <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-sm'>
+        <span className='text-foreground'>AI spend this {budget.windowKind}</span>
+        <span className='text-muted-foreground tabular-nums'>
+          <span className='text-foreground'>{usd(budget.spentUsdMicro)}</span> of {usd(budget.stopUsdMicro)}
         </span>
       </div>
       {budget.stopUsdMicro > 0 && (
@@ -157,14 +158,11 @@ function CostGuard({ budget }: { budget: NonNullable<Usage['budget']> }) {
           fill={guard.fill}
           warn={guard.warn}
           index={0}
-          label='Model spend against the ceiling'
+          label='AI spend against the limit'
           valueText={`${usd(guard.committed)} spent or reserved of ${usd(budget.stopUsdMicro)}`}
         />
       )}
-      <p className='text-muted-foreground text-xs leading-relaxed'>
-        Reserved {usd(budget.reservedUsdMicro)} · {budgetStatusLabel(budget.status)}. Requests are refused before the ceiling would be crossed, never
-        charged after.
-      </p>
+      <p className='text-muted-foreground text-xs'>{guard.stopped ? 'Limit reached. Drafting is paused.' : `Pauses at ${usd(budget.stopUsdMicro)}. Never charged over.`}</p>
     </div>
   );
 }
@@ -209,7 +207,7 @@ export function Allowances({
       onRetry: () => void channels.refetch(),
       over: (
         <OverNote>
-          Above this plan&apos;s {ent.connectedAccounts}. Remove an account or change plan before connecting another.{' '}
+          Over your plan&apos;s {ent.connectedAccounts}. Remove one to connect another.{' '}
           <Link href='/app/channels' className='underline underline-offset-2'>
             Channels
           </Link>
@@ -227,30 +225,33 @@ export function Allowances({
         error: members.isError && !members.data
       }),
       onRetry: () => void members.refetch(),
-      over: <OverNote>Above this plan&apos;s {ent.members}. Existing members stay; new joins require an available seat.</OverNote>
+      over: <OverNote>Over your plan&apos;s {ent.members}. New members need a free seat.</OverNote>
     }
   ];
 
+  const reset = resetText(planTimeline(usage, now), ent.resetsAt);
+
   return (
-    <Surface material='quiet' radius='card' padding='md' className='flex flex-col gap-5 lg:col-span-2' data-tour='billing-allowances'>
-      <div className='flex flex-col gap-1.5'>
-        <span className='rafii-eyebrow'>This period</span>
-        <h2 className='text-foreground text-lg font-medium tracking-tight'>Allowances</h2>
-        <p className='text-muted-foreground text-sm'>{resetText(planTimeline(usage, now), ent.resetsAt)}</p>
+    <section className='flex flex-col gap-3' aria-labelledby='usage-heading' data-tour='billing-allowances'>
+      <div className='flex items-center gap-1 px-1'>
+        <h2 id='usage-heading' className='text-foreground text-lg font-medium tracking-tight'>
+          Usage
+        </h2>
+        {usage.overage === 'stop' && (
+          <InfoTip label='About running out' description='When an allowance runs out, drafting pauses. You are never charged for going over.' />
+        )}
+        {reset && <span className='text-muted-foreground ml-auto text-sm'>{reset}</span>}
       </div>
-      <div className='flex flex-col gap-4'>
+      <Surface material='quiet' radius='card' padding='md' className='grid gap-x-8 gap-y-5 sm:grid-cols-2'>
         {meters.map((meter, index) => (
           <Meter key={meter.label} label={meter.label} state={meter.state} index={index} onRetry={meter.onRetry} over={meter.over} />
         ))}
         <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-sm'>
           <span className='text-foreground'>Storage</span>
-          <span className='text-muted-foreground'>{ent.storageMb.toLocaleString()} MB included · usage is not measured yet</span>
+          <span className='text-muted-foreground tabular-nums'>{ent.storageMb.toLocaleString()} MB</span>
         </div>
         {isOwner && usage.budget && <CostGuard budget={usage.budget} />}
-      </div>
-      {usage.overage === 'stop' && (
-        <p className='text-muted-foreground text-xs leading-relaxed'>When an allowance runs out, paid drafting stops and tells you. Nothing is charged silently.</p>
-      )}
-    </Surface>
+      </Surface>
+    </section>
   );
 }

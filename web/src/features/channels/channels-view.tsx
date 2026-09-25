@@ -8,7 +8,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Icons, type Icon } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
 import { DigitSwap } from '@/components/motion/digit-swap';
-import { SegmentedControl, StateMessage, Surface, type SegmentOption } from '@/components/rafii';
+import { InfoTip, SegmentedControl, StateMessage, Surface, type SegmentOption } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { HoverLiftGroup } from '@/components/ui/hover-lift-group';
@@ -38,34 +38,28 @@ import { ChannelsSummary } from './channels-summary';
 import { ConnectSheet, type ConnectRequest } from './connect-sheet';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
-const PAGE_DESCRIPTION = 'Each capability is verified on its own. A connected account is not the same as a publishable one.';
-
 const infoContent = {
-  title: 'Each capability, verified on its own',
+  title: 'Channels',
   sections: [
     {
-      title: 'A connection is not a permission',
-      description:
-        'Identity, publishing, scheduling, analytics and comments are separate grants. The card shows the level PostRiff has actually verified for each — never a blended “Ready”.'
+      title: 'Each permission is separate',
+      description: 'Publishing, analytics and comments are granted one by one. Each account shows what it can do.'
     },
     {
-      title: 'Direct · Assisted · Unsupported',
-      description:
-        'Direct: PostRiff acts through the official API after your approval. Assisted: PostRiff prepares the post and you complete the last step (for example while provider review is pending). Unsupported: not offered for this provider yet.'
+      title: 'Direct · Assisted · Local',
+      description: 'Direct: Rafii does it after your approval. Assisted: Rafii prepares it and you finish the last step. Local: runs on your own computer.'
     },
     {
-      title: 'What Re-verify checks',
-      description:
-        'Re-verify asks the provider, right now, whether the stored token still identifies the same account and still carries the scopes it was granted. It reports what it found; it does not renew anything.'
+      title: 'Re-verify',
+      description: 'Checks the account still signs in and still has its permissions. It doesn’t renew access.'
     },
     {
-      title: 'Reconnecting sends you to the provider again',
-      description:
-        'A reconnect repeats the grant for the same account. Sign in as that account when the provider asks; a different account becomes a new card and the old one still needs reconnecting.'
+      title: 'Reconnect',
+      description: 'Sign in as the same account. A different account is added as a new one.'
     },
     {
-      title: 'Disconnecting',
-      description: 'Stored tokens are wiped and revoked remotely where the provider supports it. Approved jobs for that account are held.'
+      title: 'Disconnect',
+      description: 'Removes Rafii’s access. Approved posts for that account are held.'
     }
   ]
 };
@@ -82,7 +76,7 @@ const FILTER_LABELS: Record<ChannelFilter, string> = {
 };
 
 /** The same identity block on the Suspense fallback and the page (DNA §9.1). */
-const PAGE_FRAME = { pageEyebrow: 'Connections', pageTitle: 'Channels', pageDescription: PAGE_DESCRIPTION, infoContent };
+const PAGE_FRAME = { pageTitle: 'Channels', infoContent };
 
 /** Loading keeps the page geometry and says what is being loaded (DNA §20.1). */
 function ChannelsSkeleton() {
@@ -105,7 +99,7 @@ function ProviderReadiness({ provider }: { provider: ProviderView }) {
     provider.executionPaused === true ||
     provider.configurationState === 'partial_configuration' ||
     provider.configurationState === 'invalid_configuration';
-  const IconMark: Icon = blocked ? Icons.warning : provider.productionReviewed ? Icons.check : Icons.info;
+  const IconMark: Icon = blocked ? Icons.warning : provider.productionReviewed ? Icons.check : Icons.clock;
   return (
     <span className='text-muted-foreground inline-flex shrink-0 items-center gap-1.5 text-xs'>
       <IconMark className='size-3.5 shrink-0' aria-hidden />
@@ -133,26 +127,24 @@ function ProviderTile({
         <div className='flex min-w-0 items-center gap-2.5'>
           <ChannelIcon platform={provider.platform} name={provider.platform} size='md' />
           <span className='text-foreground truncate font-medium'>{provider.platform}</span>
+          <InfoTip label={`What ${provider.platform} can publish`} description={publishingSupport(provider.platform)} className='-my-3 -ml-2' />
         </div>
         <ProviderReadiness provider={provider} />
       </div>
-      <p className='text-muted-foreground text-[13px] leading-relaxed'>
-        {provider.executionPaused
-          ? 'This connector is temporarily paused. Existing drafts and receipts remain available.'
-          : provider.configured === false || provider.connectReady === false
-            ? 'Not set up on this PostRiff yet, so it cannot be connected.'
-            : provider.productionReviewed
-              ? 'Direct candidate: confirm this account’s permissions and supported format before scheduling.'
-              : 'Platform review has not been confirmed. Eligible developer/test accounts may connect; public-user access, history and publishing remain separately checked.'}
-      </p>
       <p className='text-muted-foreground text-[13px] leading-relaxed'>{provider.accountRequirement}</p>
-      {/* Why Connect is blocked stays in the line above; the server settings that fix it are for whoever runs PostRiff. */}
-      {(Boolean(provider.setupIssues?.length) || (provider.callbackUri && provider.connectReady === false)) && (
-        <details className='text-[13px]'>
-          <summary className='rafii-focus text-muted-foreground cursor-pointer rounded-md'>Setup details for whoever runs this PostRiff</summary>
-          <div className='mt-2 flex flex-col gap-1.5'>
+      {/* Setup detail is for whoever runs the workspace: available, never the headline. */}
+      {Boolean(provider.setupIssues?.length || (provider.callbackUri && provider.connectReady === false)) && (
+        <Collapsible>
+          <CollapsibleTrigger
+            aria-label={`${provider.platform} setup details`}
+            className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-6 items-center gap-0.5 rounded-sm text-xs underline-offset-2 hover:underline'
+          >
+            Details
+            <Icons.chevronDown className='size-3' aria-hidden />
+          </CollapsibleTrigger>
+          <CollapsibleContent className='flex flex-col gap-1.5 pt-1.5'>
             {provider.setupIssues?.map((issue) => (
-              <p key={issue} className='text-destructive flex min-w-0 items-start gap-1.5 [overflow-wrap:anywhere]'>
+              <p key={issue} className='text-muted-foreground flex min-w-0 items-start gap-1.5 text-xs [overflow-wrap:anywhere]'>
                 <Icons.warning className='mt-0.5 size-3.5 shrink-0' aria-hidden />
                 {issue}
               </p>
@@ -162,11 +154,10 @@ function ProviderTile({
                 Callback: <code className='rafii-field rounded-md px-1.5 py-0.5 font-mono'>{provider.callbackUri}</code>
               </p>
             )}
-            <p className='text-muted-foreground text-xs'>Credentials go in the server configuration, never in the browser.</p>
-          </div>
-        </details>
+            <p className='text-muted-foreground text-xs'>Credentials go in the server settings, never in the browser.</p>
+          </CollapsibleContent>
+        </Collapsible>
       )}
-      <p className='text-muted-foreground text-[13px] leading-relaxed'>{publishingSupport(provider.platform)}</p>
       {offered.length > 0 && (
         <ul className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs' aria-label='Capabilities you can request'>
           {offered.map((key, index) => (
@@ -204,8 +195,7 @@ function CompanionDirectory() {
   );
 }
 
-const COMPANION_SENTENCE =
-  'No official publishing API. A desktop companion will publish from your own computer and session, never from our servers. Not available yet.';
+const COMPANION_SENTENCE = 'For platforms without a public API. It will publish from your computer, with your own sign-in — never from our servers. Not available yet.';
 
 function ChannelsPage() {
   const channelsQuery = useChannels();
@@ -318,7 +308,7 @@ function ChannelsPage() {
   }, [canManage, capabilityParam, connectParam, data, openConnect, providers, replaceParams]);
 
   const companionExpanded = companionOpen ?? (data ? counts.connected === 0 : false);
-  const errorMessage = error instanceof Error ? error.message : 'Channels could not be loaded.';
+  const errorMessage = error instanceof Error ? error.message : undefined;
 
   // WHAT: the account views, each with its real count (DNA §22.4).
   const filterOptions: SegmentOption<ChannelFilter>[] = (Object.keys(FILTER_LABELS) as ChannelFilter[]).map((key) => ({
@@ -332,13 +322,15 @@ function ChannelsPage() {
   }));
 
   // COMMIT: Connect channel is the page's one primary action (DNA §21.6); it stays visible with its label on phones.
-  const headerAction = canManage ? (
-    <Button data-tour='channels-connect' variant='action' size='control' onClick={() => openConnect({})} aria-label='Connect an account'>
+  // With no accounts yet, the empty state below carries that action, so the header does not repeat it.
+  const emptyOwnsAction = !isLoading && !error && channels.length === 0 && filter !== 'local';
+  const headerAction = emptyOwnsAction ? undefined : canManage ? (
+    <Button data-tour='channels-connect' variant='action' size='control' onClick={() => openConnect({})}>
       <Icons.add className='size-4' />
       Connect account
     </Button>
   ) : (
-    <p className='text-muted-foreground text-sm'>Ask an owner or admin to connect accounts</p>
+    <p className='text-muted-foreground text-sm'>Only owners and admins can connect accounts</p>
   );
 
   return (
@@ -350,12 +342,12 @@ function ChannelsPage() {
           {error ? (
             <StateMessage
               kind='error'
-              title='Channels could not be loaded'
+              title="Couldn't load channels"
               description={errorMessage}
               action={
                 <Button variant='glass' size='control' onClick={() => void refetch()}>
                   <Icons.refresh className='size-4' />
-                  Retry
+                  Try again
                 </Button>
               }
             />
@@ -368,13 +360,13 @@ function ChannelsPage() {
                 data-tour='channels-summary'
               />
 
-              {/* rafii-v9: folders — Saved folders (Phase2State.channelFolders) through Stream A's Channel Bloom package. */}
-              <ChannelFoldersSection accounts={folderAccounts} view={folderView} onViewChange={setFolderView} />
+              {/* rafii-v9: folders — Saved folders (Phase2State.channelFolders) through Stream A's Channel Bloom package. Hidden until there is an account to group. */}
+              {channels.length > 0 && <ChannelFoldersSection accounts={folderAccounts} view={folderView} onViewChange={setFolderView} />}
 
               <section className='flex flex-col gap-4' aria-labelledby='connected-heading'>
                 <div className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
                   <h2 id='connected-heading' className='text-foreground text-lg font-medium tracking-tight'>
-                    Connected accounts
+                    Accounts
                   </h2>
                   <div data-tour='channels-filter' className='relative -mx-1 max-w-full overflow-x-auto px-1 py-0.5 md:mx-0 md:px-0'>
                     <SegmentedControl options={filterOptions} value={filter} onChange={setFilter} label='Filter accounts' widths='content' />
@@ -391,7 +383,6 @@ function ChannelsPage() {
                     <StateMessage
                       kind='empty'
                       title='No accounts connected'
-                      description='You can draft and export without connecting anything. Connect an account when you want previews, scheduling, analytics or comments for it.'
                       media={
                         <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
                           <Icons.broadcast className='size-5' />
@@ -399,12 +390,12 @@ function ChannelsPage() {
                       }
                       action={
                         canManage ? (
-                          <Button variant='action' size='control' onClick={() => openConnect({})}>
+                          <Button data-tour='channels-connect' variant='action' size='control' onClick={() => openConnect({})}>
                             <Icons.add className='size-4' />
-                            Connect an account
+                            Connect account
                           </Button>
                         ) : (
-                          <span className='text-muted-foreground text-sm'>Ask an owner or admin to connect accounts</span>
+                          <span className='text-muted-foreground text-sm'>Only owners and admins can connect accounts</span>
                         )
                       }
                     />
@@ -419,13 +410,6 @@ function ChannelsPage() {
                           ? 'Nothing needs attention'
                           : `No ${FILTER_LABELS[filter].toLowerCase()} accounts`
                     }
-                    description={
-                      folderView.length > 0
-                        ? 'The folder you picked and the filter above leave nothing to show. The accounts are still connected.'
-                        : filter === 'attention'
-                          ? 'Tokens are checked when a post is claimed and when you re-verify.'
-                          : 'No connected account publishes at this level right now. The other accounts are still here; this view is only filtered.'
-                    }
                     action={
                       <Button
                         variant='quiet'
@@ -436,7 +420,7 @@ function ChannelsPage() {
                           setFolderView([]);
                         }}
                       >
-                        Show all accounts
+                        Show all
                       </Button>
                     }
                   />
@@ -475,18 +459,14 @@ function ChannelsPage() {
               <h2 id='providers-heading' className='text-foreground text-lg font-medium tracking-tight'>
                 Connect
               </h2>
-              <p className='text-muted-foreground max-w-[70ch] text-sm leading-relaxed'>
-                Hosted connectors use the provider’s official API. Each one clears its own review before it can publish directly.
-              </p>
             </div>
             {error ? (
-              <StateMessage kind='partial' layout='inline' title='Available connections could not be loaded.' />
+              <StateMessage kind='partial' layout='inline' title="Couldn't load platforms." />
             ) : providers.length === 0 ? (
               <StateMessage
                 kind='partial'
                 layout='inline'
-                title='Channel setup information is unavailable.'
-                description='Refresh this page or check the channel API; app sign-in configuration is separate from connecting social accounts.'
+                title='No platforms available yet.'
               />
             ) : (
               <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
@@ -516,7 +496,7 @@ function ChannelsPage() {
                     </h2>
                     <span className='text-muted-foreground inline-flex items-center gap-1.5 text-xs'>
                       <Icons.slash className='size-3.5' aria-hidden />
-                      Local · not available yet
+                      Not available yet
                     </span>
                   </span>
                   <Icons.chevronDown className={cn('text-muted-foreground size-4 shrink-0 transition-transform', companionExpanded && 'rotate-180')} />

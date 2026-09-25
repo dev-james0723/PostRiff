@@ -13,7 +13,6 @@ import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { orderMetricKeys, providerLabel } from './coverage';
 import { MetricCell } from './metric-value';
-import { PostReadings } from './post-readings';
 import type { PostRowData } from './posts-table';
 
 function Row({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
@@ -36,7 +35,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
           await navigator.clipboard.writeText(value);
           toast.success(`${label} copied.`);
         } catch {
-          toast.error('Could not copy.');
+          toast.error("Couldn't copy.");
         }
       }}
     >
@@ -77,14 +76,12 @@ export function PostSheet({ row, families, open, onOpenChange }: { row: PostRowD
                 {row?.connection && <span className='text-muted-foreground font-normal'>{row.connection.account}</span>}
                 <StatusChip icon={null}>{post.publishedState.replace(/_/g, ' ')}</StatusChip>
               </SheetTitle>
-              <SheetDescription>
-                {post.language || 'Language not recorded'} · {post.contentOrigin.replace(/_/g, ' ')}
-              </SheetDescription>
+              <SheetDescription>{[post.language, post.contentOrigin.replace(/_/g, ' ')].filter(Boolean).join(' · ')}</SheetDescription>
             </SheetHeader>
             <div className='flex flex-col gap-6 px-4 pb-4'>
               <section className='flex flex-col gap-2'>
                 <SectionTitle>Text</SectionTitle>
-                {text ? <p className='text-sm whitespace-pre-wrap'>{text}</p> : <p className='text-muted-foreground text-sm'>The text is not part of this reading. The queue shows the post as it was approved.</p>}
+                {text ? <p className='text-sm whitespace-pre-wrap'>{text}</p> : <p className='text-muted-foreground text-sm'>Text not available here. Open it in Queue.</p>}
               </section>
               <section className='rafii-quiet flex flex-col gap-2 rounded-[var(--rafii-radius-card)] p-4'>
                 <SectionTitle>{providerLabel(post)} metrics</SectionTitle>
@@ -114,40 +111,28 @@ export function PostSheet({ row, families, open, onOpenChange }: { row: PostRowD
                     ))}
                   </dl>
                 )}
-                <p className='text-muted-foreground text-xs'>Native names from {providerLabel(post)}; never added to another provider’s numbers.</p>
               </section>
-              <section className='flex flex-col gap-2'>
-                <SectionTitle>Readings</SectionTitle>
-                <PostReadings readings={[{ observedAt: post.freshness.observedAt }]} />
-                <p className='text-muted-foreground text-xs'>
-                  Read {formatDateTime(post.freshness.observedAt)} · stored {formatDateTime(post.freshness.ingestedAt)}
-                </p>
-              </section>
+              {/* One read per post today: the Readings section (PostReadings) returns when the API sends a history. The read time is in Details. */}
               <section className='flex flex-col gap-2'>
                 <SectionTitle>Details</SectionTitle>
                 <dl className='flex flex-col'>
-                  <Row label='Provider post id' mono>
+                  <Row label='Post ID' mono>
                     <span className='inline-flex max-w-full items-center gap-1'>
                       <span className='truncate'>{post.providerPostId}</span>
-                      <CopyButton value={post.providerPostId} label='Provider post id' />
+                      <CopyButton value={post.providerPostId} label='post ID' />
                     </span>
-                  </Row>
-                  <Row label='Job' mono>
-                    {post.jobId ?? <span className='text-muted-foreground font-sans text-sm'>Not linked to a job</span>}
                   </Row>
                   <Row label='Published'>
                     {job?.verification
                       ? `${formatDateTime(job.verification.at)} · ${job.verification.method.replace(/_/g, ' ')}`
                       : job
                         ? `${job.state.replace(/_/g, ' ')} · not verified`
-                        : 'The publishing job is not in this workspace snapshot'}
+                        : 'Not found in Queue'}
                   </Row>
-                  <Row label='Platform'>{post.platform || post.provider}</Row>
-                  <Row label='Account'>{row?.connection?.account ?? 'Not matched to a connected account'}</Row>
+                  {/* Platform and account are in the title; only an unmatched account is worth a row. */}
+                  {!row?.connection && <Row label='Account'>Not linked to an account</Row>}
                   {post.contentTypeId && <Row label='Content type'>{post.contentTypeId}</Row>}
-                  <Row label='Definitions'>{post.definitionVersion}</Row>
-                  <Row label='Observed'>{formatDateTime(post.freshness.observedAt)}</Row>
-                  <Row label='Ingested'>{formatDateTime(post.freshness.ingestedAt)}</Row>
+                  <Row label='Read'>{formatDateTime(post.freshness.observedAt)}</Row>
                 </dl>
               </section>
             </div>

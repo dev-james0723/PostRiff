@@ -37,19 +37,19 @@ class CredentialVault:
 
     def encrypt(self, plaintext):
         if not self.fernet:
-            raise AlphaError("Credential custody is not configured on this deployment.", 503)
+            raise AlphaError("Connecting accounts isn't available right now.", 503)
         return self.fernet.encrypt(plaintext.encode()).decode(), self.key_id
 
     def decrypt(self, ciphertext, key_id):
         if not self.fernet:
-            raise AlphaError("Credential custody is not configured on this deployment.", 503)
+            raise AlphaError("Connecting accounts isn't available right now.", 503)
         if key_id != self.key_id:
-            raise AlphaError("This credential was sealed under a rotated key; re-authorize the account.", 409)
+            raise AlphaError("This account needs to be reconnected.", 409)
         from cryptography.fernet import InvalidToken
         try:
             return self.fernet.decrypt(ciphertext.encode()).decode()
         except InvalidToken as error:
-            raise AlphaError("Stored credential could not be opened; re-authorize the account.", 409) from error
+            raise AlphaError("This account needs to be reconnected.", 409) from error
 
 
 def pkce_pair():
@@ -103,7 +103,7 @@ class OAuthService:
                             'productionReviewed': reviewed, 'executionPaused': paused,
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
-                            'accountRequirement': 'Instagram Creator or Business account. No Facebook Page required.' if pid == 'instagram' else 'LinkedIn member profile. History requires separately approved r_member_social access.' if pid == 'linkedin' else 'Threads profile.',
+                            'accountRequirement': 'Instagram Creator or Business account. No Facebook Page required.' if pid == 'instagram' else 'LinkedIn member profile.' if pid == 'linkedin' else 'Threads profile.',
                             'capabilities': {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}})
         # Keep explicitly injected/test providers visible without changing their authority.
         for pid, adapter in self.providers.items():
@@ -145,7 +145,7 @@ class OAuthService:
     def _provider(self, provider_id):
         adapter = self.providers.get(provider_id)
         if adapter is None:
-            raise AlphaError("This provider is not available for connection yet.", 404)
+            raise AlphaError("This platform isn't available yet.", 404)
         return adapter
 
     def callback_uri(self, provider_id):
@@ -158,7 +158,7 @@ class OAuthService:
     def start(self, workspace_id, token, provider_id, capability):
         adapter = self._provider(provider_id)
         if not getattr(adapter, "execution_enabled", True):
-            raise AlphaError("This provider is temporarily paused. Existing receipts remain available.", 503)
+            raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
         if capability not in (*CAPABILITIES, 'posts_read') or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
         scopes = adapter.capability_scopes(capability)
@@ -189,7 +189,7 @@ class OAuthService:
     def complete(self, workspace_id, token, provider_id, state, code, error=None):
         adapter = self._provider(provider_id)
         if not getattr(adapter, "execution_enabled", True):
-            raise AlphaError("This provider is temporarily paused. Start connection again when it resumes.", 503)
+            raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
             raise AlphaError("Connection request unavailable.", 404)
         state_hash = hashlib.sha256(state.encode()).hexdigest()
@@ -265,18 +265,18 @@ class OAuthService:
     @staticmethod
     def _capabilities(adapter, requested, granted, missing, now):
         matrix = assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()
-        set_level(matrix, "identity", "Direct", "Provider identity endpoint matched the confirmed account.", now, adapter.capability_version)
+        set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
         if requested in PUBLISH_CAPABILITIES:
             if missing:
-                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"Granted scopes lack {', '.join(missing)}; export only.", now, adapter.capability_version)
+                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
             elif not adapter.production_reviewed:
-                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Scopes granted, but the PostRiff app has not passed this provider's production review; export only.", now, adapter.capability_version)
+                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
             else:
-                set_level(matrix, "publish", "Direct", "Official publish scope granted to a production-reviewed PostRiff app.", now, adapter.capability_version)
-                set_level(matrix, "schedule", "Direct" if adapter.native_schedule else "Assisted", "Native scheduling" if adapter.native_schedule else "Scheduled by PostRiff workers; provider has no native schedule.", now, adapter.capability_version)
+                set_level(matrix, "publish", "Direct", "You approve each post; Rafii publishes it.", now, adapter.capability_version)
+                set_level(matrix, "schedule", "Direct" if adapter.native_schedule else "Assisted", f"Scheduled on {adapter.platform}." if adapter.native_schedule else "Rafii publishes at the scheduled time.", now, adapter.capability_version)
         for name in ("analytics", "comments_read", "reply", "moderate"):
             if name == requested and not missing:
-                set_level(matrix, name, "Direct" if adapter.production_reviewed else "Unsupported", "Scope granted." if adapter.production_reviewed else "Awaiting provider review.", now, adapter.capability_version)
+                set_level(matrix, name, "Direct" if adapter.production_reviewed else "Unsupported", "Granted." if adapter.production_reviewed else f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------
@@ -307,7 +307,7 @@ class OAuthService:
                     raise AlphaError("Connection unavailable.", 404)
                 provider, access_ct, refresh_ct, key_id, expires, refresh_supported, _, scopes, account_id, issued_at = row
                 if not getattr(self._provider(provider), "execution_enabled", True):
-                    raise AlphaError("This provider is temporarily paused. Existing receipts remain available.", 503)
+                    raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
                 now = self.clock()
                 expired = bool(expires and expires <= now)
                 if provider == 'instagram' and expired:

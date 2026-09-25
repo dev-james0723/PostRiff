@@ -40,8 +40,7 @@ export function TourMount() {
   useEffect(() => {
     if (!progressReady || !ready || !inApp || active || welcomeDecided || !alreadySetUp) return;
     tourStore.dismissWithoutStarting('welcome');
-    toast('Want a two-minute tour?', {
-      description: 'Your workspace is set up. The tour shows where everything lives.',
+    toast('Want a quick tour?', {
       action: { label: 'Take the tour', onClick: () => tourStore.start('welcome') },
       duration: 8000
     });
@@ -57,7 +56,6 @@ export function TourMount() {
     if (progress.completed.welcome && WELCOME_TOUR.steps.some((s) => s.route === pathname)) return;
     tourStore.markNudged(pageTourId);
     toast(`New to ${pageTitle}?`, {
-      description: 'A few tips on how this page works.',
       action: { label: 'Show me', onClick: () => tourStore.start(pageTourId) },
       duration: 8000
     });

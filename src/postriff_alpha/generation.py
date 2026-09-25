@@ -221,5 +221,5 @@ def routes():
         {"id": "codex", "label": "Codex", "status": "untested", "detail": "No alpha authentication, capability or model execution has been qualified. Personal Studio bindings are not reused."},
         {"id": "claude", "label": "Claude", "status": "untested", "detail": "Planned adapter; no alpha authentication or model execution tested."},
         {"id": "google", "label": "Google", "status": "untested", "detail": "Planned adapter; no alpha authentication or model execution tested."},
-        {"id": "managed", "label": "PostRiff managed writing", "status": "blocked", "detail": "Provider and billing are not provisioned in this private alpha."},
+        {"id": "managed", "label": "Rafii managed writing", "status": "blocked", "detail": "Provider and billing are not provisioned in this private alpha."},
     ]

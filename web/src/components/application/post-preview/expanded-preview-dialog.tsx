@@ -74,7 +74,8 @@ export function ExpandedPreviewDialog({ open, onOpenChange, items, activeKey, on
   const active = items.find((item) => item.key === activeKey) ?? items[0];
   const position = Math.max(0, keys.indexOf(activeKey));
   const channelName = active?.post.channelName ?? 'Post';
-  const intro = description ?? (active ? `How ${accountNames(active.post.account).display}'s post might sit inside ${channelName}. Switch apps to compare.` : undefined);
+  // The title already names the app; a caller can still pass its own line.
+  const intro = description;
 
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>

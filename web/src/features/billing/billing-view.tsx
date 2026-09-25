@@ -15,19 +15,20 @@ import { CreditBalance } from './credit-balance';
 import { CreditPacks } from './credit-packs';
 import { PAGE, infoContent } from './billing-copy';
 import { Ledger } from './ledger';
-import { GLASS_STATEFUL, LifecycleAlert } from './lifecycle-alert';
+import { GLASS_STATEFUL } from './lifecycle-alert';
 import { PlanCard } from './plan-card';
 import { CheckoutConfirmation, Plans } from './plans';
 import { useBillingRedirect } from './use-billing-redirect';
 import { useCheckoutReturn } from './use-checkout-return';
 
+/** What to do next, not what failed underneath; other errors keep the server's own sentence. */
 function loadErrorText(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Sign in again to see this page.';
     if (error.status === 403) return 'You no longer have access to this workspace.';
     return error.message;
   }
-  return 'The workspace did not answer.';
+  return 'Check your connection and try again.';
 }
 
 /** First load failed (nothing to show) or a refresh failed (older numbers stay, marked with their age). */
@@ -38,8 +39,8 @@ function LoadError({ error, hasData, updatedAt, onRetry }: { error: unknown; has
     <StateMessage
       kind={hasData ? 'stale' : 'error'}
       layout={hasData ? 'inline' : 'panel'}
-      title={hasData ? 'Usage could not be refreshed' : 'Usage could not be loaded'}
-      description={`${loadErrorText(error)}${hasData ? ` Showing what was loaded ${relativeTime(updatedAt / 1000)}.` : ''}`}
+      title={hasData ? `Couldn’t refresh · updated ${relativeTime(updatedAt / 1000)}` : 'Couldn’t load usage'}
+      description={loadErrorText(error)}
       className={hasData ? 'rafii-quiet rounded-[var(--rafii-radius-card)] px-5 py-4' : undefined}
       action={
         <StatefulButton
@@ -57,7 +58,7 @@ function LoadError({ error, hasData, updatedAt, onRetry }: { error: unknown; has
             flash(result.isError ? 'error' : 'success');
           }}
         >
-          Retry
+          Try again
         </StatefulButton>
       }
     />
@@ -68,9 +69,10 @@ function LoadError({ error, hasData, updatedAt, onRetry }: { error: unknown; has
 function BillingSkeleton() {
   return (
     <div role='status' aria-label='Loading usage and plan' className='flex flex-col gap-8'>
-      <div className='grid gap-4 lg:grid-cols-3'>
-        <Skeleton className='h-56 rounded-[var(--rafii-radius-card)]' />
-        <Skeleton className='h-56 rounded-[var(--rafii-radius-card)] lg:col-span-2' />
+      <Skeleton className='h-32 rounded-[var(--rafii-radius-card)]' />
+      <div className='flex flex-col gap-3'>
+        <Skeleton className='h-6 w-20' />
+        <Skeleton className='h-44 rounded-[var(--rafii-radius-card)]' />
       </div>
       <div className='flex flex-col gap-3'>
         <Skeleton className='h-6 w-24' />
@@ -100,7 +102,7 @@ export function BillingView() {
   const data = usage.data;
 
   return (
-    <PageContainer pageTitle={PAGE.title} pageDescription={PAGE.description} infoContent={infoContent}>
+    <PageContainer pageTitle={PAGE.title} infoContent={infoContent}>
       {!data ? (
         usage.isError ? (
           <LoadError error={usage.error} hasData={false} updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />
@@ -111,26 +113,12 @@ export function BillingView() {
         <div className='flex flex-col gap-8'>
           {phase !== 'idle' && <CheckoutConfirmation phase={phase} />}
           {usage.isError && <LoadError error={usage.error} hasData updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />}
-          <LifecycleAlert usage={data} isOwner={isOwner} redirect={redirect} now={now} />
-
-          <div className='grid gap-4 lg:grid-cols-3'>
-            <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
-            {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
-          </div>
-
+          <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
+          {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
           <Plans usage={data} isOwner={isOwner} redirect={redirect} />
           {data.credits && isOwner && <CreditPacks />}
-
-          {isOwner ? (
-            <Ledger entries={data.ledger} canEdit={canEdit} />
-          ) : (
-            <section className='flex flex-col gap-1 px-1' aria-labelledby='ledger-heading'>
-              <h3 id='ledger-heading' className='text-foreground text-lg font-medium tracking-tight'>
-                Recent usage
-              </h3>
-              <p className='text-muted-foreground text-sm'>Run-by-run costs are shown to the workspace owner.</p>
-            </section>
-          )}
+          {/* Run-by-run costs are the owner's; other members simply don't see the section. */}
+          {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} />}
         </div>
       )}
     </PageContainer>

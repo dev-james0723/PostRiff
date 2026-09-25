@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
-import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage, Surface } from '@/components/rafii';
+import { InfoTip, RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
@@ -32,12 +32,12 @@ import { AUTOMATION_CHANGED, usePanel } from '@/features/site-agent/store';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 const infoContent = {
-  title: 'How automations work',
+  title: 'Automations',
   sections: [
-    { title: 'Drafts, never posts, unless you choose', description: 'An automation built here prepares drafts on a schedule; nothing is scheduled or published without your approval. One set up with Rafii in chat says how its posts go out: drafts only, waiting for your approval of each exact post, or publishing automatically once the owner allows it, and only posts that pass every safety check.' },
-    { title: 'The owner activates', description: 'Editors can create and edit automations. Only a workspace owner activates, pauses, resumes or cancels one. Changing anything except the name returns it to draft.' },
-    { title: 'Exactly what you chose', description: 'Each run drafts for the accounts, languages, content type and writer you saved. Apps, times or instructions written inside the brief are treated as text, not settings.' },
-    { title: 'Budget', description: 'Each run stays under its cost limit; a run whose quote is higher is held, never charged. A disconnected account is skipped with a note.' }
+    { title: 'Drafts by default', description: 'Automations built here only draft. One set up in chat can also wait for your approval of each post, or publish automatically once an owner allows it.' },
+    { title: 'Owners activate', description: 'Editors create and edit. Only an owner activates, pauses or cancels. Editing anything but the name returns it to draft.' },
+    { title: 'Budget', description: 'A run quoted above its cost limit is held, never charged.' },
+    { title: 'Late runs', description: 'A run more than a day late, for example after a pause, is skipped rather than caught up.' }
   ]
 };
 
@@ -140,7 +140,7 @@ export function AutomationsView() {
       if (success) toast.success(success);
       return true;
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'Rafii could not change this automation.');
+      toast.error(error instanceof ApiError ? error.message : 'Couldn’t update this automation. Try again.');
       return false;
     }
   }
@@ -152,7 +152,8 @@ export function AutomationsView() {
       setActivating(automation);
       return;
     }
-    void run('raffi_recurrence_activate', automation, policy === 'review' ? 'Automation active. Each post waits for your approval.' : 'Automation active. Drafts will wait for your review.');
+    // The card's status chip shows the result; no toast.
+    void run('raffi_recurrence_activate', automation, null);
   }
 
   function decide(automation: Automation, occurrence: RecurringOccurrence, item: RunItem, decision: RunDecision) {
@@ -167,12 +168,11 @@ export function AutomationsView() {
 
   return (
     <PageContainer
-      pageEyebrow='Create'
       pageTitle='Automations'
-      pageDescription='Rafii prepares drafts on your schedule, for the accounts you choose. Every draft waits for your review.'
       infoContent={infoContent}
       pageHeaderAction={
-        canEdit ? (
+        // The empty state carries the one "New automation" action when there is nothing yet.
+        canEdit && (snapshot.isLoading || live.length > 0) ? (
           <Button variant='action' size='control' onClick={() => open(blankInitial(timeZone))}>
             <Icons.add />
             New automation
@@ -181,30 +181,30 @@ export function AutomationsView() {
       }
     >
       {snapshot.isLoading ? (
-        <div className='grid gap-3 md:grid-cols-4'>
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className='h-20 w-full rounded-[var(--rafii-radius-card)]' />
-          ))}
-        </div>
+        <Skeleton className='h-16 w-full rounded-[var(--rafii-radius-card)]' />
       ) : (
         <>
-          <section aria-label='Automation summary' className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
-            <Tile label='Active' value={String(active.length)} detail={live.length > active.length ? `${live.length - active.length} not running` : 'All running'} />
-            <Tile label='Needs you' value={String(waiting.length)} detail={waiting.length ? (isOwner ? 'Activate or review' : 'Waiting for the owner') : 'Nothing waiting'} />
-            <Tile label='Drafts to review' value={String(toReview)} detail={toReview ? `From ${toReview} run${toReview === 1 ? '' : 's'} not opened yet` : 'All caught up'} />
-            <Tile label='Next run' value={next && Number.isFinite(next.at) ? runLabel(next.at * 1000, next.a.task.schedule.timeZone) : '—'} detail={next ? next.a.name : 'Nothing active'} small />
-          </section>
-
-          {(active.length > 0 || spentThisMonth > 0) && (
-            <Surface material='quiet' padding='sm' className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm'>
-              <span className='rafii-eyebrow'>Budget</span>
-              <span>
-                Spent this month: <span className='font-medium'>{usd(spentThisMonth)}</span>. Active automations can spend at most <span className='font-medium'>{usd(ceiling)}</span> in a month (a countdown counts in full).
-              </span>
-              <Link href='/app/account/billing' className='text-muted-foreground hover:text-foreground ml-auto inline-flex min-h-11 items-center gap-1 text-xs'>
-                Usage and credits
-                <Icons.arrowRight className='size-3.5' />
-              </Link>
+          {/* One compact strip instead of a card per number: counts, the next run and this month's money. */}
+          {(live.length > 0 || spentThisMonth > 0) && (
+            <Surface as='section' aria-label='Automation summary' material='quiet' padding='sm' className='flex flex-wrap items-center gap-x-8 gap-y-3 px-4'>
+              <dl className='flex flex-wrap items-end gap-x-8 gap-y-3'>
+                <Stat label='Active' value={String(active.length)} />
+                {waiting.length > 0 && <Stat label='Needs you' value={String(waiting.length)} />}
+                {toReview > 0 && <Stat label='To review' value={String(toReview)} />}
+                {next && Number.isFinite(next.at) && <Stat label='Next run' value={runLabel(next.at * 1000, next.a.task.schedule.timeZone)} title={next.a.name} />}
+                <Stat label='Spent this month' value={usd(spentThisMonth)} />
+                {active.length > 0 && (
+                  <Stat
+                    label='Monthly limit'
+                    value={usd(ceiling)}
+                    tip={<InfoTip label='About the monthly limit' className='-my-3 -ml-2' description='The most your active automations can spend in a month. A countdown counts in full.' />}
+                  />
+                )}
+              </dl>
+              <Link href='/app/account/billing' className='rafii-focus text-muted-foreground hover:text-foreground ml-auto inline-flex min-h-11 items-center gap-1 rounded-md text-xs'>
+                  Usage
+                  <Icons.arrowRight className='size-3.5' />
+                </Link>
             </Surface>
           )}
 
@@ -212,7 +212,6 @@ export function AutomationsView() {
             <StateMessage
               kind='empty'
               title='No automations yet'
-              description='Tell Rafii what to prepare, when and for which accounts. It drafts on schedule; you review and approve.'
               action={
                 canEdit ? (
                   <Button variant='action' size='control' onClick={() => open(blankInitial(timeZone))}>
@@ -234,13 +233,13 @@ export function AutomationsView() {
                     busy={busy}
                     spent={spentSince(automation, sinceMonth)}
                     watching={Boolean(userId && automation.task.emailWatchers?.includes(userId))}
-                    onWatch={(email) => void run('raffi_recurrence_watch', automation, email ? 'You will get an email when its drafts are ready.' : 'Emails for this automation are off.', { email })}
-                    onSeen={() => void run('raffi_recurrence_seen', automation, 'Marked as seen.', {})}
+                    onWatch={(email) => void run('raffi_recurrence_watch', automation, null, { email })}
+                    onSeen={() => void run('raffi_recurrence_seen', automation, null, {})}
                     writer={automation.task.route ? (writerLabel.get(automation.task.route) ?? automation.task.route) : 'No writer'}
                     onEdit={() => open(initialFromAutomation(automation, timeZone))}
                     onActivate={() => activate(automation)}
-                    onPause={() => void run('raffi_recurrence_pause', automation, 'Automation paused.')}
-                    onResume={() => void run('raffi_recurrence_resume', automation, 'Automation resumed.')}
+                    onPause={() => void run('raffi_recurrence_pause', automation, null)}
+                    onResume={() => void run('raffi_recurrence_resume', automation, null)}
                     onCancel={() => setCancelling(automation)}
                     onOpenRun={(runId, conversationId) => void openRun(automation, runId, conversationId)}
                     onDecide={(occurrence, item, decision) => decide(automation, occurrence, item, decision)}
@@ -253,20 +252,22 @@ export function AutomationsView() {
           {briefs.length > 0 && (
             <section className='flex flex-col gap-2' aria-labelledby='automation-briefs'>
               <h2 id='automation-briefs' className='text-base font-semibold'>
-                Briefs without a schedule
+                Unscheduled briefs
               </h2>
-              <p className='text-muted-foreground text-sm'>Campaign briefs from earlier planning or suggestions. Give one a schedule to turn it into an automation.</p>
               <ul className='flex flex-col gap-2'>
                 {briefs.map((campaign) => (
                   <li key={campaign.id}>
                     <Surface material='quiet' radius='control' padding='sm' className='flex flex-wrap items-center gap-3'>
                       <span className='flex min-w-0 flex-[1_1_12rem] flex-col'>
                         <span className='text-sm font-medium'>{campaign.goal}</span>
-                        <span className='text-muted-foreground text-xs'>{campaign.audience}{campaign.missingFacts.length ? ` · needs ${campaign.missingFacts.join(' and ')}` : ''}</span>
+                        <span className='text-muted-foreground text-xs'>
+                          <span className='hidden md:inline'>{campaign.audience}</span>
+                          {campaign.missingFacts.length ? <span><span className='hidden md:inline'> · </span>needs {campaign.missingFacts.join(' and ')}</span> : null}
+                        </span>
                       </span>
                       {canEdit && (
-                        <Button variant='glass' size='sm' className='min-h-11' onClick={() => open(initialFromBrief(campaign, timeZone))}>
-                          Schedule it
+                        <Button variant='glass' size='sm' className='min-h-11' onClick={() => open(initialFromBrief(campaign, timeZone))} aria-label={`Schedule “${campaign.goal}”`}>
+                          Schedule
                         </Button>
                       )}
                     </Surface>
@@ -288,7 +289,7 @@ export function AutomationsView() {
                     <li key={automation.task.id}>
                       <Surface material='quiet' radius='control' padding='sm' className='flex flex-wrap items-center gap-3 text-sm'>
                         <span className='min-w-0 flex-[1_1_12rem] truncate'>{automation.name}</span>
-                        <span className='text-muted-foreground text-xs'>{automation.drafted.length} run{automation.drafted.length === 1 ? '' : 's'} with drafts</span>
+                        <span className='text-muted-foreground hidden text-xs md:inline'>{automation.drafted.length} run{automation.drafted.length === 1 ? '' : 's'} with drafts</span>
                         {automation.drafted[0]?.conversationId && (
                           <Button variant='quiet' size='sm' className='min-h-11' onClick={() => router.push(`/app/agent/${encodeURIComponent(automation.drafted[0].conversationId!)}`)}>
                             Latest drafts
@@ -327,14 +328,14 @@ export function AutomationsView() {
         busy={busy}
         onClose={() => setActivating(null)}
         onConfirm={async (target, sourceUse) => {
-          const ok = await run('raffi_recurrence_activate', target, 'Automation active. Posts that pass every check publish at their time.', { confirmed: true, publishAuthority: { confirmed: true, sourceUse } });
+          const ok = await run('raffi_recurrence_activate', target, null, { confirmed: true, publishAuthority: { confirmed: true, sourceUse } });
           if (ok) setActivating(null);
         }}
       />
 
       <RafiiDialog open={cancelling !== null} onOpenChange={(next) => !next && setCancelling(null)}>
         <RafiiDialogContent size='sm'>
-          <RafiiDialogHeader eyebrow='Automation' title='Cancel' accent={cancelling ? `“${cancelling.name}”?` : undefined} intro='No further drafts will be prepared. Drafts it already made stay in their conversations. A cancelled automation cannot be restarted; create a new one instead.' />
+          <RafiiDialogHeader title='Cancel' accent={cancelling ? `“${cancelling.name}”?` : undefined} intro='No more drafts will be prepared, and it can’t be restarted. Drafts it already made stay.' />
           <RafiiDialogBody>
             <p className='text-muted-foreground text-sm'>{cancelling ? scheduleSummary(cancelling.task.schedule) : ''}</p>
           </RafiiDialogBody>
@@ -349,7 +350,7 @@ export function AutomationsView() {
               onClick={() => {
                 const target = cancelling;
                 setCancelling(null);
-                if (target) void run('raffi_recurrence_cancel', target, 'Automation cancelled. No further drafts will be prepared.');
+                if (target) void run('raffi_recurrence_cancel', target, 'Automation cancelled');
               }}
             >
               Cancel automation
@@ -381,10 +382,9 @@ function ActivateAutoDialog({ automation, busy, onClose, onConfirm }: { automati
     <RafiiDialog open={automation !== null} onOpenChange={(next) => !next && onClose()}>
       <RafiiDialogContent size='sm'>
         <RafiiDialogHeader
-          eyebrow='Automation'
           title='Publish'
           accent='automatically?'
-          intro='Posts that pass every safety check publish at their time without asking you first. A post with unknown claims, unchecked sources, an unverified quote or a problem with its account is held for your approval instead, with the reason.'
+          intro='Posts that pass every safety check publish at their time without asking you. Anything else (unknown claims, unchecked sources, an unverified quote, an account problem) waits for your approval, with the reason.'
         />
         <RafiiDialogBody className='flex flex-col gap-3'>
           {automation && (
@@ -411,7 +411,7 @@ function ActivateAutoDialog({ automation, busy, onClose, onConfirm }: { automati
               className='min-h-11 items-start gap-2.5 [&>span]:text-sm'
             />
           )}
-          <p className='text-muted-foreground text-xs'>You can pause or change it at any time. Editing it returns it to draft until an owner activates it again.</p>
+          <p className='text-muted-foreground text-xs'>Pause it any time. Editing returns it to draft.</p>
         </RafiiDialogBody>
         <RafiiDialogFooter className='flex-row flex-wrap justify-end gap-2'>
           <Button variant='quiet' size='control' onClick={onClose}>
@@ -427,13 +427,18 @@ function ActivateAutoDialog({ automation, busy, onClose, onConfirm }: { automati
   );
 }
 
-function Tile({ label, value, detail, small }: { label: string; value: string; detail: string; small?: boolean }) {
+/** One number in the summary strip: a small label over the value. */
+function Stat({ label, value, title, tip }: { label: string; value: string; title?: string; tip?: React.ReactNode }) {
   return (
-    <Surface material='glass' padding='sm' className='flex min-w-0 flex-col gap-1'>
-      <span className='rafii-eyebrow'>{label}</span>
-      <span className={cn('text-foreground font-normal tracking-[-0.02em]', small ? 'text-base leading-snug' : 'text-2xl')}>{value}</span>
-      <span className='text-muted-foreground truncate text-xs'>{detail}</span>
-    </Surface>
+    <div className='flex min-w-0 flex-col gap-0.5'>
+      <dt className='text-muted-foreground flex items-center text-xs'>
+        {label}
+        {tip}
+      </dt>
+      <dd className='text-foreground text-base font-medium tabular-nums' title={title}>
+        {value}
+      </dd>
+    </div>
   );
 }
 
@@ -462,9 +467,9 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
   const done = finished(automation);
   const pausedUntil = pausedUntilLabel(task);
   const base = done
-    ? { label: 'Finished', detail: task.schedule.kind === 'once' ? 'Its date has passed.' : 'Every countdown date has passed. Edit the event date to use it again.', needsOwner: false, needsEdit: false }
+    ? { label: 'Finished', detail: task.schedule.kind === 'once' ? 'Its date has passed.' : 'All countdown dates have passed. Edit the event date to reuse it.', needsOwner: false, needsEdit: false }
     : statusText(task);
-  const status = pausedUntil ? { ...base, label: pausedUntil, detail: 'It resumes on its own then. An owner can resume it sooner.', needsOwner: false } : base;
+  const status = pausedUntil ? { ...base, label: pausedUntil, detail: 'Resumes on its own. An owner can resume it sooner.', needsOwner: false } : base;
   const workflow = task.workflow ?? null;
   const policy = workflow ? policyText(workflow.policy) : null;
   const rules = workflow ? stageRules(workflow) : [];
@@ -498,6 +503,7 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
           <p className='text-muted-foreground text-sm'>{scheduleSummary(task.schedule)}</p>
         </div>
         <span className='flex flex-wrap items-center gap-1.5'>
+          {waiting > 0 && <StatusChip tone='warning' size='md'>{waiting} to approve</StatusChip>}
           {fresh.length > 0 && <StatusChip tone='info' size='md' icon={<Icons.sparkles />}>{fresh.length} new</StatusChip>}
           <StatusChip tone={done ? 'neutral' : (STATUS_TONE[task.status] ?? 'neutral')} size='md' icon={pausedUntil ? <Icons.pause /> : undefined}>
             {status.label}
@@ -505,6 +511,7 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
         </span>
       </div>
 
+      {/* Always visible: where, what, the next run, how posts go out and the money. The rest is under Details. */}
       <dl className='grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-4'>
         <Fact term='Where'>
           <span className='inline-flex items-center gap-2'>
@@ -519,39 +526,6 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
           </span>
         </Fact>
         <Fact term='What'>{legacy ? 'One LinkedIn draft (earlier planner)' : (task.contentLabel ?? 'General writing')}</Fact>
-        <Fact term='Writer'>
-          {writer} · {task.reasoning ? `${task.reasoning[0].toUpperCase()}${task.reasoning.slice(1)}` : 'Quick'} · up to {usd(task.maxCostUsdMicro ?? 0)} a run
-          <span className='text-muted-foreground block text-xs'>{usd(spent)} spent this month</span>
-        </Fact>
-        {policy && (
-          <Fact term='Publishing'>
-            {policy.label}
-            <span className='text-muted-foreground block text-xs'>{policy.detail}</span>
-          </Fact>
-        )}
-        {rules.length > 0 && (
-          <Fact term='Each run'>
-            <ol className='flex flex-col gap-0.5'>
-              {rules.map((rule) => (
-                <li key={rule.step}>
-                  <span className='text-muted-foreground'>{rule.label}</span> {rule.when}
-                </li>
-              ))}
-            </ol>
-            {task.nextPublish && task.status === 'active' && <span className='text-muted-foreground block text-xs'>Next publish: {runLabel(Date.parse(task.nextPublish), task.schedule.timeZone)}</span>}
-          </Fact>
-        )}
-        {(research || workflow?.content?.instructions) && (
-          <Fact term='Research and writing'>
-            {research && <span className='block'>{research}</span>}
-            {workflow?.content?.instructions && <span className='text-muted-foreground block text-xs'>{workflow.content.instructions}</span>}
-            {Object.entries(workflow?.platformNotes ?? {}).map(([platform, note]) => (
-              <span key={platform} className='text-muted-foreground block text-xs'>
-                {platform}: {note}
-              </span>
-            ))}
-          </Fact>
-        )}
         <Fact term={task.status === 'active' && !done ? 'Next run' : 'Schedule'}>
           {done
             ? 'Finished'
@@ -559,51 +533,49 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
               ? nextAt
                 ? 'Starting now'
                 : task.schedule.kind === 'on_strong_post'
-                  ? 'Watching your published posts'
+                  ? 'Watching your posts'
                   : 'Waiting for something new in Ideas'
               : task.status === 'active' && nextAt
                 ? runLabel(nextAt * 1000, task.schedule.timeZone)
                 : task.status === 'draft'
                   ? 'Starts after activation'
                   : 'Not running'}
-          {isTrigger(task.schedule) && (task.skippedEvents ?? 0) > 0 && <span className='text-muted-foreground block text-xs'>{task.skippedEvents} skipped by the daily limit</span>}
-          <span className='text-muted-foreground block text-xs'>{ceilingText(task.maxCostUsdMicro, task.schedule)}</span>
+          {isTrigger(task.schedule) && (task.skippedEvents ?? 0) > 0 && <span className='text-muted-foreground block text-xs'>{task.skippedEvents} skipped (daily limit)</span>}
         </Fact>
+        <Fact term='Budget'>
+          Up to {usd(task.maxCostUsdMicro ?? 0)} a run
+          <span className='text-muted-foreground block text-xs'>{ceilingText(task.maxCostUsdMicro, task.schedule)}</span>
+          <span className='text-muted-foreground block text-xs'>{usd(spent)} spent this month</span>
+        </Fact>
+        {policy && (
+          <Fact term='Publishing'>
+            <span className='inline-flex items-center'>
+              {policy.label}
+              <InfoTip label={`About publishing: ${policy.label}`} className='-my-3' description={policy.detail} />
+            </span>
+          </Fact>
+        )}
       </dl>
 
-      {workflow && (
-        <p className='text-muted-foreground flex items-start gap-2 text-sm'>
-          <Icons.shieldCheck className='mt-0.5 size-4 shrink-0' />
-          <span>
-            {workflow.policy === 'review'
-              ? 'Nothing publishes without an approval: each post waits until someone who can approve posts approves that exact draft.'
-              : workflow.policy === 'auto'
-                ? 'Posts that pass every safety check publish at their time under the owner’s permission. A post that does not is held for approval, and says why.'
-                : workflow.policy === 'drafts'
-                  ? 'Drafts only: nothing is published.'
-                  : 'How posts go out is not chosen yet, so it cannot be activated. Answer Rafii in chat, or ask Rafii to change it.'}
-            {waiting > 0 && ` ${waiting} post${waiting === 1 ? '' : 's'} ${waiting === 1 ? 'waits' : 'wait'} for approval in the run history below.`}
-          </span>
-        </p>
-      )}
       {heldBack.length > 0 && (
         <ul className='flex flex-col gap-1 text-sm' aria-label='Held back for approval'>
           {heldBack.slice(0, 3).map(({ runId, item }) => (
             <li key={`${runId}:${item.key}`} className='text-muted-foreground flex items-start gap-2'>
               <Icons.warning className='mt-0.5 size-4 shrink-0' />
               <span className='min-w-0 break-words'>
-                {item.platform} held back for your approval: {item.reason}
+                {item.platform} held for approval: {item.reason}
               </span>
             </li>
           ))}
         </ul>
       )}
 
-      {(status.needsOwner || status.needsEdit || missing.length > 0 || legacy || done) && (task.status !== 'active' || done) && (
+      {(status.needsOwner || status.needsEdit || missing.length > 0 || legacy || done || noPolicy) && (task.status !== 'active' || done) && (
         <p className='text-muted-foreground flex items-start gap-2 text-sm'>
           <Icons.info className='mt-0.5 size-4 shrink-0' />
           <span>
-            {missing.length ? `Add the event ${missing.join(' and ')} before it can be activated. ` : ''}
+            {missing.length ? `Add the event ${missing.join(' and ')} to activate. ` : ''}
+            {noPolicy ? 'Choose how posts go out in chat to activate. ' : ''}
             {legacy ? 'Made with the earlier planner. Edit it to choose days, accounts and a content type. ' : ''}
             {status.detail}
           </span>
@@ -664,9 +636,46 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
       </div>
 
       <Label className='text-muted-foreground flex min-h-11 items-center justify-between gap-3 text-sm font-normal'>
-        <span>Email me when its drafts are ready</span>
+        <span>Email me when drafts are ready</span>
         <Switch checked={watching} disabled={busy} onCheckedChange={(checked) => onWatch(checked)} aria-label={`Email me when drafts from ${automation.name} are ready`} />
       </Label>
+
+      <Collapsible>
+        <CollapsibleTrigger className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm'>
+          <Icons.chevronDown className='size-4' />
+          Details
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <dl className='mt-2 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2'>
+            <Fact term='Writer'>
+              {writer} · {task.reasoning ? `${task.reasoning[0].toUpperCase()}${task.reasoning.slice(1)}` : 'Quick'}
+            </Fact>
+            {rules.length > 0 && (
+              <Fact term='Each run'>
+                <ol className='flex flex-col gap-0.5'>
+                  {rules.map((rule) => (
+                    <li key={rule.step}>
+                      <span className='text-muted-foreground'>{rule.label}</span> {rule.when}
+                    </li>
+                  ))}
+                </ol>
+                {task.nextPublish && task.status === 'active' && <span className='text-muted-foreground block text-xs'>Next publish: {runLabel(Date.parse(task.nextPublish), task.schedule.timeZone)}</span>}
+              </Fact>
+            )}
+            {(research || workflow?.content?.instructions) && (
+              <Fact term='Research and writing'>
+                {research && <span className='block'>{research}</span>}
+                {workflow?.content?.instructions && <span className='text-muted-foreground block text-xs'>{workflow.content.instructions}</span>}
+                {Object.entries(workflow?.platformNotes ?? {}).map(([platform, note]) => (
+                  <span key={platform} className='text-muted-foreground block text-xs'>
+                    {platform}: {note}
+                  </span>
+                ))}
+              </Fact>
+            )}
+          </dl>
+        </CollapsibleContent>
+      </Collapsible>
 
       {runs.length > 0 && (
         <Collapsible defaultOpen={canApprove && waiting > 0}>
@@ -692,11 +701,11 @@ function AutomationCard({ automation, canEdit, isOwner, canApprove, busy, spent,
                     <StatusChip tone={RUN_TONE[text.tone]}>{text.label}</StatusChip>
                     <span className='text-muted-foreground min-w-0 flex-[1_1_12rem] text-xs'>
                       {run.event?.kind === 'new_source' && `From “${run.event.title ?? 'a new item'}”. `}
-                      {run.event?.kind === 'strong_post' && `Following up a ${run.event.platform ?? ''} post from ${run.event.publishedAt ?? 'recently'}: ${run.event.value ?? '?'} ${run.event.metric ?? ''} vs a typical ${run.event.typical ?? '?'}. `}
+                      {run.event?.kind === 'strong_post' && `After a strong ${run.event.platform ?? ''} post: ${run.event.value ?? '?'} ${run.event.metric ?? ''} vs ${run.event.typical ?? '?'} typical. `}
                       {run.evergreen?.jobId && `Refreshed a ${run.evergreen.platform ?? ''} post from ${run.evergreen.publishedAt ?? 'earlier'}. `}
                       {text.detail}
                       {run.state === 'completed' && `${run.draftCount ? `${run.draftCount} draft${run.draftCount === 1 ? '' : 's'}` : 'Drafts'} · ${usd(run.costUsdMicro ?? 0)}${run.seenAt ? '' : ' · new'}`}
-                      {skipped.length > 0 && ` Skipped ${skipped.map((s) => s.account || s.platform).join(', ')}: no longer connected.`}
+                      {skipped.length > 0 && ` Skipped ${skipped.map((s) => s.account || s.platform).join(', ')}: disconnected.`}
                     </span>
                     {run.state === 'completed' && run.conversationId && (
                       <Button variant='quiet' size='sm' className='min-h-11' onClick={() => onOpenRun(run.id, run.conversationId!)}>

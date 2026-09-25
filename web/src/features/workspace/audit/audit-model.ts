@@ -106,7 +106,7 @@ function roleName(role: unknown) {
 /** The log stores ids only; a name comes from today's member list, and only when the member set one on their profile. */
 export function personOf(userId: string | null | undefined, lookup: AuditLookup): Person {
   if (!userId) {
-    return { kind: 'system', name: 'System', role: null, short: null, id: null, explains: 'Recorded by PostRiff itself, not by a person.' };
+    return { kind: 'system', name: 'System', role: null, short: null, id: null, explains: 'Recorded by Rafii itself, not by a person.' };
   }
   const short = userId.slice(0, 8);
   const member = lookup.members.get(userId);
@@ -289,7 +289,7 @@ export function describeAuditEvent(event: AuditEvent, lookup: AuditLookup): Audi
       const plan = planFromTerms(event.subject);
       return {
         headline: plan ? `Started checkout for ${plan}` : 'Started a checkout',
-        detail: 'Nothing changes until the payment provider confirms the subscription.',
+        detail: 'The plan changes once payment is confirmed.',
         tone: 'neutral'
       };
     }
@@ -329,14 +329,14 @@ export function describeAuditEvent(event: AuditEvent, lookup: AuditLookup): Audi
       const channel = channelName(event, lookup);
       return {
         headline: channel ? `A ${channel.platform} connection attempt was turned away` : 'A connection attempt was turned away',
-        detail: 'The answer from the provider did not match a request started here, so nothing was connected.',
+        detail: 'The response didn’t match a request started here. Nothing was connected.',
         tone: 'warning'
       };
     }
     case 'oauth.denied': {
       const channel = channelName(event, lookup);
       return {
-        headline: channel ? `Did not approve the connection at ${channel.platform}` : 'Did not approve a connection at the provider',
+        headline: channel ? `Did not approve the connection at ${channel.platform}` : 'Did not approve a connection',
         detail: 'Nothing was connected.',
         tone: 'warning'
       };
@@ -360,7 +360,7 @@ export function describeAuditEvent(event: AuditEvent, lookup: AuditLookup): Audi
     }
     case 'channel.disconnected': {
       const channel = channelName(event, lookup);
-      const where = channel?.platform ?? 'the provider';
+      const where = channel?.platform ?? 'the platform';
       return {
         headline: channel ? `Disconnected ${channel.full}` : 'Disconnected a channel',
         detail: meta.remoteRevoked === true ? `Access was withdrawn at ${where} too.` : `Access was removed here; ${where} did not confirm withdrawing it.`,
@@ -368,8 +368,8 @@ export function describeAuditEvent(event: AuditEvent, lookup: AuditLookup): Audi
       };
     }
     case 'reply.approved': {
-      const provider = providerName(text(meta.provider), lookup.providers);
-      return { headline: provider ? `Approved a reply on ${provider}` : 'Approved a reply to a comment', detail: null, tone: 'neutral' };
+      const platform = providerName(text(meta.provider), lookup.providers);
+      return { headline: platform ? `Approved a reply on ${platform}` : 'Approved a reply to a comment', detail: null, tone: 'neutral' };
     }
     default: {
       const words = event.kind.replace(/[._]/g, ' ').trim();
@@ -419,12 +419,12 @@ export function subjectLabel(event: AuditEvent): string | null {
 const META_LABELS: Record<string, string> = {
   role: 'Role',
   plan: 'Plan',
-  provider: 'Provider',
+  provider: 'Platform',
   capability: 'Asked for',
   missingScopes: 'Permissions not granted',
   publishLevel: 'Publishing level',
   state: 'Result',
-  remoteRevoked: 'Withdrawn at the provider',
+  remoteRevoked: 'Withdrawn on the platform',
   reason: 'Reason',
   bytes: 'Size',
   cloud: 'Cloud model may read memory',

@@ -504,7 +504,7 @@ class IdeasService:
             proposal = instruction_to_proposal(text, parsed.get("language"))
             created, refusal = None, None
             if hosted is None:
-                refusal = "Preference learning is not available on this deployment, so nothing was kept."
+                refusal = "Preference learning isn't available yet, so nothing was kept."
             else:
                 try:
                     created = hosted.propose_from_chat(cur, workspace_id, state, proposal, principal, self.clock())
@@ -516,7 +516,7 @@ class IdeasService:
             elif refusal:
                 view, reply = None, refusal
             else:
-                view, reply = None, "That is already how PostRiff writes for you, or a matching suggestion is waiting on the Memory page."
+                view, reply = None, "That is already how Rafii writes for you, or a matching suggestion is waiting on the Memory page."
             body = {"text": reply, "intent": "memory", "memoryProposal": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None}
             message = self._append_message(cur, workspace_id, conversation_id, "assistant", body)
         return {"runId": None, "conversationId": conversation_id, "status": "memory", "artifactHash": None, "artifact": None, "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0},
@@ -740,7 +740,7 @@ class IdeasService:
                     source = state["sources"][-1]
                     stamp(state)
                     source["origin"] = {"kind": "web_research", "url": page["url"], "host": page["host"], "query": result["query"], "published": page.get("published", ""), "fetchedAt": page["fetchedAt"]}
-                    source["unknowns"] = ["Fetched from the public web by PostRiff research; verify each claim against the page before publishing."]
+                    source["unknowns"] = ["Fetched from the public web by Rafii research; verify each claim against the page before publishing."]
                     # Public web pages may travel to any route; publishing their words still needs the person's use approval.
                     source["egressConsent"] = sorted(set(source.get("egressConsent", [])) | {"cloud"})
                     self.commands(state, actor, "approve_source", {"sourceId": source["id"], "factIds": [f["id"] for f in source["facts"]]})
@@ -790,9 +790,9 @@ class IdeasService:
     def _image_turn(self, workspace_id, token, conversation_id, payload, text, selected_model, fingerprint=None):
         """Generate and privately store one image without delegating the capability to the writer."""
         if self.image_runtime is None:
-            raise AlphaError("Image generation is not configured for this deployment.", 503, code="image_generation_not_configured")
+            raise AlphaError("Image generation isn't available yet.", 503, code="image_generation_not_configured")
         if self.assets is None:
-            raise AlphaError("Private media storage is not configured.", 503, code="media_storage_not_configured")
+            raise AlphaError("Media uploads aren't available yet.", 503, code="media_storage_not_configured")
         request = payload.get("imageGeneration")
         if request is not True and (not isinstance(request, dict) or set(request) - {"enabled", "count"}):
             raise AlphaError("Choose a supported image-generation request.", 400)
@@ -1373,7 +1373,7 @@ class IdeasService:
         if not text and not url:
             raise AlphaError("Paste a thought or text, or add a link, to start.")
         if payload.get("confirmUse") is not True:
-            raise AlphaError("Confirm that you want PostRiff to use this content for a draft.")
+            raise AlphaError("Confirm that you want Rafii to use this content for a draft.")
         own = payload.get("ownContent") is True
         runtime = self._select_runtime(payload.get("model"))  # refuse an unknown model before any source is stored
         if isinstance(runtime, ClaudeCliRuntime):

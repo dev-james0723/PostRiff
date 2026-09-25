@@ -8,7 +8,7 @@ export default function RenderResults() {
   if (!results.length) {
     return (
       <div className='flex h-full items-center justify-center px-5 text-center'>
-        <StateMessage kind='empty' layout='inline' title='No results found.' />
+        <StateMessage kind='empty' layout='inline' title='No results' />
       </div>
     );
   }

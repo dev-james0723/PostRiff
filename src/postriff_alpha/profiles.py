@@ -35,10 +35,10 @@ GUIDED = [
     {"key": "strengths", "section": "Strengths and support", "question": "When people value your work, what do they usually value about it?"},
     {"key": "support", "section": "Strengths and support", "question": "Where would support help?", "hint": "Organizing ideas, careful research, clear writing, consistency, languages, or different channels."},
     {"key": "voiceTraits", "section": "Your voice", "question": "How would you like your writing to feel?", "hint": "Choose up to three qualities in your own words. Warm, direct, reflective, precise…"},
-    {"key": "antiStyle", "section": "Your voice", "question": "What should PostRiff avoid making you sound like?", "hint": "For example: overly corporate, motivational, aggressive, casual, certain, or wordy."},
-    {"key": "languages", "section": "Language and culture", "question": "Which languages should PostRiff understand?"},
+    {"key": "antiStyle", "section": "Your voice", "question": "What should Rafii avoid making you sound like?", "hint": "For example: overly corporate, motivational, aggressive, casual, certain, or wordy."},
+    {"key": "languages", "section": "Language and culture", "question": "Which languages should Rafii understand?"},
     {"key": "culturalAudience", "section": "Language and culture", "question": "Which cultural audiences do you want to reach?", "hint": "Audience and language are separate choices. Leave either unknown if you prefer."},
-    {"key": "workingStyle", "section": "Working style", "question": "When information is missing, how would you like PostRiff to help?", "hint": "Ask one question, leave it unknown, draft around it, or describe your own approach."},
+    {"key": "workingStyle", "section": "Working style", "question": "When information is missing, how would you like Rafii to help?", "hint": "Ask one question, leave it unknown, draft around it, or describe your own approach."},
     {"key": "boundaries", "section": "Privacy and boundaries", "question": "Which topics or personal details should stay out of your content?", "hint": "Name categories to avoid, not secret values, identity numbers, addresses, or credentials."},
     {"key": "writingExample", "section": "Your voice", "question": "Is there a short piece of writing that sounds like you?", "hint": "Optional. Use writing you own. Choose whether an approved excerpt may be retained."},
     {"key": "selfDescription", "section": "Optional self-description", "question": "Do you use a self-description such as MBTI that helps explain how you work?", "hint": "Optional, self-described context only. Skip if it is not useful. No personality or clinical trait is inferred."},
@@ -181,7 +181,7 @@ def read_import(p):
                         raise ValueError("Profile archive contains a disallowed path, duplicate, symlink or oversized file.")
                     files[info.filename] = archive.read(info).decode("utf-8", errors="strict")
         except (zipfile.BadZipFile, UnicodeDecodeError, TypeError) as e:
-            raise ValueError("Use a valid UTF-8 PostRiff profile archive.") from e
+            raise ValueError("Use a valid UTF-8 Rafii profile archive.") from e
         if "manifest.json" not in files:
             raise ValueError("A profile archive needs manifest.json with file hashes.")
         manifest = json.loads(files["manifest.json"])
@@ -236,7 +236,7 @@ def read_import(p):
         fields.append(f)
     if not fields:
         raise ValueError("No supported profile fields were found. Use the builder's companion schema.")
-    return fields, {"state": "candidate_needs_review", "fileCount": len(files), "fields": len(fields), "excludedCategories": excluded, "instructions": "Imported commands, hooks and skill instructions were ignored.", "actualSourceAccess": "PostRiff read only the candidate you selected; external history access is unverified."}
+    return fields, {"state": "candidate_needs_review", "fileCount": len(files), "fields": len(fields), "excludedCategories": excluded, "instructions": "Imported commands, hooks and skill instructions were ignored.", "actualSourceAccess": "Rafii read only the candidate you selected; external history access is unverified."}
 
 
 def markdown_review(body):
@@ -405,7 +405,7 @@ def portable_files(s, profile):
     files["BRAND.md"] += "\n\nAgency mode: " + s["brandHub"]["mode"] + ". Speaker: " + s["speaker"]["label"] + ". No offer, credential or result is inferred."
     files["BOUNDARIES.md"] += "\n\nPublic fields may inform a reviewed draft. Workspace-only fields are context, private fields guide interaction, local-only fields must stay on the device, excluded values are omitted. Nothing here grants research, tools, payment, account, scheduling or publishing authority."
     sources = [{"id": source_id, "type": "direct_question" if source_id.startswith("direct") else "user_selected_candidate", "scope": "reviewed profile field", "recency": "unknown", "sensitivity": "customer-controlled", "confidence": "field-level only", "rawRetained": False} for source_id in sorted({source for f in fields for source in f["sourceIds"]})]
-    files["sources/manifest.json"] = json.dumps({"schema": "postriff.profile-sources.v1", "sources": sources, "grantedScope": profile.get("profileScope"), "actualExternalAccess": "none by PostRiff; any external-agent source access is unverified"}, ensure_ascii=False, indent=2)
+    files["sources/manifest.json"] = json.dumps({"schema": "postriff.profile-sources.v1", "sources": sources, "grantedScope": profile.get("profileScope"), "actualExternalAccess": "none by Rafii; any external-agent source access is unverified"}, ensure_ascii=False, indent=2)
     rows = []
     for r in profile.get("review", []):
         f = next((f for f in fields if f["key"] == r["key"]), None)

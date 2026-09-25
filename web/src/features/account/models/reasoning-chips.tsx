@@ -10,17 +10,15 @@ const LEVEL_NAME: Record<string, string> = { quick: 'Quick', standard: 'Standard
  * level says so in words (DNA §22.3), not in colour.
  */
 export function ReasoningChips({ levels }: { levels: ReasoningLevel[] }) {
+  // One row of chips; each level's note is its tooltip, not a visible line under it.
   return (
-    <span className='flex flex-col gap-1.5'>
-      <span className='text-foreground text-sm font-medium'>Reasoning levels</span>
+    <span className='flex flex-wrap items-center gap-1.5'>
+      <span className='text-muted-foreground text-xs'>Reasoning</span>
       {levels.map((level) => (
-        <span key={level.id} className='flex flex-wrap items-center gap-2 text-sm'>
-          <Badge variant='secondary' className={cn(!level.available && 'text-muted-foreground border-dashed')}>
-            {LEVEL_NAME[level.id] ?? level.id}
-            {level.available ? '' : ' · not available'}
-          </Badge>
-          {level.detail && <span className='text-muted-foreground text-xs'>{level.detail}</span>}
-        </span>
+        <Badge key={level.id} variant='secondary' title={level.detail || undefined} className={cn(!level.available && 'text-muted-foreground border-dashed')}>
+          {LEVEL_NAME[level.id] ?? level.id}
+          {level.available ? '' : ' · not available'}
+        </Badge>
       ))}
     </span>
   );

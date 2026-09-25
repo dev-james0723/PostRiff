@@ -14,6 +14,7 @@ import type { ChannelView } from '@/lib/api/types';
 import { publishLevel } from '@/lib/channels/state';
 import { useTimeZone } from '@/lib/preferences';
 import { timeDefaults } from '@/lib/time';
+import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 import { countdown, countSending, readStatus, readWeek, TICK_MS, type NextPost, type StripDay } from './queue-status';
 import { SectionUnavailable } from './retry';
@@ -116,7 +117,6 @@ export function NextUp({ className }: { className?: string }) {
       className={className}
       title='Next up'
       titleId='overview-next-up-heading'
-      description={`Approved posts only, shown in your time zone (${timeZone.replace(/_/g, ' ')}).`}
       actions={
         <Link href='/app/calendar' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }))}>
           Calendar <LearnMoreChevron />
@@ -124,7 +124,7 @@ export function NextUp({ className }: { className?: string }) {
       }
     >
       {snapshot.isError ? (
-        <SectionUnavailable message='Next up is unavailable right now.' query={snapshot} />
+        <SectionUnavailable message='Couldn’t load what’s next.' query={snapshot} />
       ) : !status || !week || now === null ? (
         <>
           <Skeleton className='h-12 w-full rounded-[var(--rafii-radius-control)]' />
@@ -140,23 +140,23 @@ export function NextUp({ className }: { className?: string }) {
                   {next.platform} · {next.account}
                 </p>
                 <p className='text-muted-foreground text-xs'>
-                  Approved for <time dateTime={new Date(next.at).toISOString()}>{formatSlot(next.at, now, timeZone)}</time>
+                  <time dateTime={new Date(next.at).toISOString()} title={timeZone.replace(/_/g, ' ')}>
+                    {formatSlot(next.at, now, timeZone)}
+                  </time>
                   <span className='tabular-nums'> · {countdown(next.at - now)}</span>
                 </p>
               </div>
               {nextChannel && (
-                <div className='flex shrink-0 items-center gap-1.5'>
-                  <span className='text-muted-foreground hidden text-xs sm:inline'>publish</span>
+                <div className='hidden shrink-0 items-center sm:flex'>
                   <LevelBadge level={publishLevel(nextChannel)} />
                 </div>
               )}
             </div>
           ) : (
-            <div className='flex flex-col items-start gap-1'>
-              <p className='text-foreground text-sm font-medium'>Nothing approved is waiting.</p>
-              <p className='text-muted-foreground text-sm'>Approve a draft in the Queue and its slot appears here.</p>
-              <Link href='/app/queue' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }), '-ml-2.5')}>
-                Open the Queue <LearnMoreChevron />
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='text-foreground text-sm font-medium'>Nothing scheduled</p>
+              <Link href='/app/queue' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }))}>
+                Open Queue <LearnMoreChevron />
               </Link>
             </div>
           )}
@@ -165,13 +165,14 @@ export function NextUp({ className }: { className?: string }) {
             <div className='flex flex-wrap gap-2'>
               {sending > 0 && (
                 <AnimatedBadge size='sm' status='info' pulse contentKey={sending}>
-                  {sending} sending now
+                  {sending} {STATUS.publishing.toLowerCase()}
                 </AnimatedBadge>
               )}
               {status.failed > 0 && (
                 <Link href='/app/queue' className='rafii-focus rounded-full'>
                   <AnimatedBadge size='sm' status='danger' contentKey={status.failed}>
-                    {status.failed} failed in the last 24 hours
+                    {status.failed} {STATUS.failed.toLowerCase()}
+                    <span className='sr-only'> in the last 24 hours</span>
                   </AnimatedBadge>
                 </Link>
               )}

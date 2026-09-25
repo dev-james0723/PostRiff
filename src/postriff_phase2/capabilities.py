@@ -13,13 +13,13 @@ from __future__ import annotations
 # Platforms with a hosted publisher (hosted_social.HostedSocial) and their provider ids.
 HOSTED_PUBLISHERS = {"LinkedIn": "linkedin", "Threads": "threads", "Instagram": "instagram"}
 NO_ROUTE = {
-    "X": "PostRiff can't publish to X yet, so the X version is prepared as a draft for you to post.",
-    "Xiaohongshu": "Xiaohongshu has no publishing connection in PostRiff, so the Xiaohongshu version is prepared as a draft for you to post.",
+    "X": "Rafii can't publish to X yet, so the X version is prepared as a draft for you to post.",
+    "Xiaohongshu": "Xiaohongshu has no publishing connection in Rafii, so the Xiaohongshu version is prepared as a draft for you to post.",
 }
 
 
 def _no_route(platform: str) -> str:
-    return NO_ROUTE.get(platform) or f"PostRiff can't publish to {platform} yet, so that version is prepared as a draft for you to post."
+    return NO_ROUTE.get(platform) or f"Rafii can't publish to {platform} yet, so that version is prepared as a draft for you to post."
 
 
 def publish_route(state: dict, destination: dict, *, providers: dict | None = None, live: bool = False, can_publish: bool | None = None,
@@ -38,13 +38,13 @@ def publish_route(state: dict, destination: dict, *, providers: dict | None = No
         return {"publish": False, "code": "needs_image", "reason": "Instagram posts need an image, and this automation writes text, so the Instagram version is kept as a draft to post with an image."}
     adapter = (providers or {}).get(provider_id)
     if adapter is None:
-        return {"publish": False, "code": "not_configured", "reason": f"Publishing to {platform} isn't set up on this PostRiff server yet, so the {platform} version is prepared as a draft."}
+        return {"publish": False, "code": "not_configured", "reason": f"Publishing to {platform} isn't available yet, so the {platform} version is prepared as a draft."}
     if not getattr(adapter, "production_reviewed", False):
-        return {"publish": False, "code": "awaiting_review", "reason": f"{platform} hasn't approved PostRiff's publishing access yet, so the {platform} version is prepared as a draft."}
+        return {"publish": False, "code": "awaiting_review", "reason": f"{platform} hasn't approved Rafii's publishing access yet, so the {platform} version is prepared as a draft."}
     if not getattr(adapter, "execution_enabled", True):
         return {"publish": False, "code": "paused", "reason": f"Publishing to {platform} is paused for maintenance, so the {platform} version waits as a draft."}
     if not live:
-        return {"publish": False, "code": "not_live", "reason": "Live publishing isn't switched on for this PostRiff deployment, so posts are prepared as drafts."}
+        return {"publish": False, "code": "not_live", "reason": "Publishing isn't switched on yet, so posts are prepared as drafts."}
     channels = [c for c in (state.get("phase2") or {}).get("channels", []) if isinstance(c, dict) and c.get("platform") == platform]
     channel_id = destination.get("channelId")
     channel = next((c for c in channels if c.get("id") == channel_id), None) if channel_id else None
@@ -60,9 +60,9 @@ def publish_route(state: dict, destination: dict, *, providers: dict | None = No
     if channel.get("evidenceSource", "synthetic") == "synthetic":
         return {"publish": False, "code": "demo_account", "reason": f"{channel.get('account') or platform} is a demo account, so nothing is really published there."}
     if not channel.get("identityVerified") or not channel.get("capabilityVerified"):
-        return {"publish": False, "code": "reauthorize", "reason": f"{channel.get('account') or platform} needs to be reconnected before PostRiff can publish there."}
+        return {"publish": False, "code": "reauthorize", "reason": f"{channel.get('account') or platform} needs to be reconnected before Rafii can publish there."}
     if channel_state is not None and channel_state(channel) != "Ready for posting":
-        return {"publish": False, "code": "disconnected", "reason": f"{channel.get('account') or platform} needs to be reconnected before PostRiff can publish there."}
+        return {"publish": False, "code": "disconnected", "reason": f"{channel.get('account') or platform} needs to be reconnected before Rafii can publish there."}
     if can_publish is False:
         return {"publish": False, "code": "plan", "reason": "Your plan doesn't include publishing right now, so posts wait as drafts. Choose a plan to publish."}
     return {"publish": True, "code": "ok", "reason": f"Publishes to {channel.get('account') or platform}."}

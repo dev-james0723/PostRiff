@@ -1,14 +1,26 @@
-/** Local production build with synthetic API: Raffi composer, campaign and suggestion UI. */
+/**
+ * Local production build with a synthetic API: Rafii's Home composer, Writing Voice setting, planning strip
+ * (Automations) and evidence-backed suggestions, at 1024px and 390px.
+ *
+ *   RAFFI_WEB_URL=http://127.0.0.1:4439 node web/tests/raffi-browser.mjs
+ *
+ * Campaigns are planned on the Automations page now, so Home only links there; the old inline campaign form is gone.
+ * Every /api request is answered from tests/fixtures/wp04a-workspace.json; nothing leaves the machine. Screenshots
+ * go to the system temp directory, never into the repository.
+ */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const require = createRequire(import.meta.url);
-const { chromium } = require('/Users/ouxianxing/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const { chromium } = require('playwright');
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/wp04a-workspace.json', import.meta.url), 'utf8'));
-const base = process.env.RAFFI_WEB_URL || 'http://127.0.0.1:4439';
+const base = process.env.RAFFI_WEB_URL || process.env.RAFII_WEB_URL || 'http://127.0.0.1:4439';
 assert.equal(new URL(base).hostname, '127.0.0.1');
-const out = new URL('../../docs/raffi-six-core-features/evidence/browser/', import.meta.url); mkdirSync(out, { recursive: true });
-const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
+const out = mkdtempSync(join(tmpdir(), 'raffi-browser-'));
+const REASON = 'This campaign has confirmed facts but no draft items yet.';
+const browser = await chromium.launch({ headless: true, executablePath: process.env.RAFII_CHROMIUM_PATH || undefined });
 try {
   for (const width of [1024, 390]) {
     const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: 'reduce' });
@@ -28,14 +40,13 @@ try {
       const path = url.pathname;
       if (route.request().method() === 'POST' && path === `/api/workspaces/${wid}/actions`) {
         const body = route.request().postDataJSON(); snapshot.revision += 1;
-        if (body.action === 'raffi_campaign_create') snapshot.state.raffi.campaignPlanning.campaigns.push({ id: 'campaign-browser', version: 1, goal: body.payload.goal, audience: body.payload.audience, facts: body.payload.facts, status: 'draft', missingFacts: [], items: [] });
-        if (body.action === 'raffi_suggestion_refresh') snapshot.state.raffi.suggestions.push({ id: 'suggestion-browser', kind: 'campaign_gap', reason: 'This campaign has confirmed facts but no draft items yet.', status: 'open', evidence: [{ type: 'campaign', id: 'campaign-browser', revision: 1 }], action: 'campaign', actionRef: null });
+        if (body.action === 'raffi_suggestion_refresh') snapshot.state.raffi.suggestions.push({ id: 'suggestion-browser', kind: 'campaign_gap', reason: REASON, status: 'open', evidence: [{ type: 'campaign', id: 'campaign-browser', revision: 1 }], action: 'campaign', actionRef: null });
         return send(snapshot);
       }
       if (route.request().method() !== 'GET') return send({ error: 'Unexpected mutation' }, 400);
       if (path === '/api/catalog') return send({ authMode: 'dev', execution: 'dev-synthetic', phase2: true, templates: [], routes: [], profileMetadata: {} });
-      if (path === '/api/workspaces') return send({ workspaces: [{ workspaceId: wid, membership: snapshot.membership, name: 'Raffi browser fixture', plan: 'studio', memberCounts: { owner: 1 } }] });
-      if (path === '/api/me') return send({ userId: '00000000-0000-0000-0000-000000000001', displayName: 'Raffi fixture', preferences: { timeZone: 'America/New_York', locale: 'en', alertNewDevice: false }, mfa: {} });
+      if (path === '/api/workspaces') return send({ workspaces: [{ workspaceId: wid, membership: snapshot.membership, name: 'Rafii browser fixture', plan: 'studio', memberCounts: { owner: 1 } }] });
+      if (path === '/api/me') return send({ userId: '00000000-0000-0000-0000-000000000001', displayName: 'Rafii fixture', preferences: { timeZone: 'America/New_York', locale: 'en', alertNewDevice: false }, mfa: {} });
       if (path === `/api/workspaces/${wid}`) return send(snapshot);
       if (path.endsWith('/channels')) return send({ channels: [], providers: [] });
       if (path.endsWith('/usage')) return send({ subscription: { plan: 'studio', status: 'active' }, trial: {}, balances: [] });
@@ -46,21 +57,40 @@ try {
       return send({ error: `Unhandled ${path}` }, 404);
     });
     await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: 'Neutral voice' }).waitFor();
-    await page.getByRole('button', { name: 'Neutral voice' }).click();
-    await page.getByRole('button', { name: 'Writing like me' }).waitFor();
-    await page.getByPlaceholder('Campaign goal').fill('Autumn concert launch');
-    await page.getByPlaceholder('Audience').fill('Local listeners');
-    await page.getByPlaceholder('Date, if relevant').fill('2027-10-01');
-    await page.getByPlaceholder('Venue, if relevant').fill('Hall A');
-    await page.getByRole('button', { name: 'Create reviewable campaign' }).click();
-    await page.getByText('Autumn concert launch', { exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Refresh' }).click();
-    await page.getByText('This campaign has confirmed facts but no draft items yet.', { exact: true }).waitFor();
+
+    // The composer shows an example of what to type, not instructions.
+    await page.getByPlaceholder('Launch post for my new course').waitFor();
+
+    // Writing Voice: a setting that opens a dialog; choosing a voice closes it and the setting says which.
+    const settings = page.getByRole('group', { name: 'Draft settings' });
+    const voice = settings.getByRole('button', { name: /Writing Voice/ });
+    await voice.click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('radiogroup', { name: 'Writing voice' }).waitFor();
+    await dialog.getByRole('radio', { name: /Neutral/ }).click();
+    await dialog.getByRole('button', { name: 'Use this voice' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.match(await voice.innerText(), /Neutral/);
+
+    const planner = page.getByRole('region', { name: 'Automations and Rafii suggestions' });
+    await planner.getByRole('heading', { name: 'Automations' }).waitFor();
+
+    // Suggestions: none, then Refresh brings one with its reason and one action to review it.
+    await planner.getByText('No suggestions right now', { exact: true }).waitFor();
+    await planner.getByRole('button', { name: 'Refresh' }).click();
+    await planner.getByRole('heading', { name: '1 idea for you' }).waitFor();
+    await planner.getByText(REASON, { exact: true }).waitFor();
+    await planner.getByRole('button', { name: `Review: ${REASON}` }).waitFor();
+    assert.equal(await planner.getByRole('button', { name: /Dismiss/ }).count(), 1);
+
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
-    await page.screenshot({ path: new URL(`raffi-home-${width}.png`, out).pathname, fullPage: true });
+    await page.screenshot({ path: join(out, `raffi-home-${width}.png`), fullPage: true });
+
+    // Campaigns and recurring posts are planned on Automations; Home sends you there instead of carrying a form.
+    await planner.getByRole('button', { name: /Open Automations/ }).click();
+    await page.waitForURL((url) => url.pathname === '/app/automations');
     await context.close();
   }
-  console.log('PASS: Raffi composer toggle, campaign persistence UI, evidence suggestion UI, 1024px and 390px');
+  console.log(`PASS: Rafii Home composer, Writing Voice, Automations link and suggestions at 1024px and 390px (screenshots in ${out})`);
 } finally { await browser.close(); }

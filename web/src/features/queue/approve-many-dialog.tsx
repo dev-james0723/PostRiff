@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFlash } from '@/hooks/use-flash';
 import { useAct } from '@/lib/api/hooks';
+import { formatDateTime } from '@/lib/time';
 import { reportActionError } from './action-error';
 import { epochOf, type QueueJob, type QueueReview } from './job-state';
 
@@ -53,15 +54,15 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
         onSuccess: (snapshot) => {
           // Read the count back from the jobs this approval created, not from what was sent.
           const scheduled = (snapshot.state.phase2?.jobs ?? []).filter((job) => keys.has(job.manifest.idempotencyKey) && !before.has(job.id)).length;
-          flashOutcome({ state: 'success', label: `Scheduled ${scheduled}` });
-          if (scheduled === count) toast.success(scheduled === 1 ? 'One post approved and scheduled.' : `${scheduled} posts approved and scheduled.`);
-          else if (scheduled === 0) toast.info('Nothing new was scheduled: these exact posts were already jobs.');
-          else toast.success(`${scheduled} of ${count} posts scheduled. The others were already jobs, so nothing new was scheduled for them.`);
+          flashOutcome({ state: 'success', label: `${scheduled} scheduled` });
+          // A full batch reads on the button; only a partial one needs saying.
+          if (scheduled === 0) toast.info('Already scheduled; nothing changed.');
+          else if (scheduled < count) toast.success(`${scheduled} of ${count} scheduled; the rest already were.`);
           window.setTimeout(() => onOpenChange(false), 900);
         },
         onError: (err) => {
           // All or nothing: nothing in the batch was approved, so the list stays as it was.
-          reportActionError(err, 'Approval failed.', onReload);
+          reportActionError(err, 'Couldn’t approve these posts', onReload);
           flashOutcome({ state: 'error', label: 'Try again' });
         }
       }
@@ -73,11 +74,9 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
       <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
           <DialogTitle className='text-lg font-medium tracking-tight'>
-            Approve {count} exact post{count === 1 ? '' : 's'}
+            Approve {count} post{count === 1 ? '' : 's'}?
           </DialogTitle>
-          <DialogDescription>
-            Each one is approved with exactly this text, media, account and time. All or nothing: if one cannot be approved, none are.
-          </DialogDescription>
+          <DialogDescription>Each publishes exactly as reviewed, at its time. If one can’t be approved, none are.</DialogDescription>
         </DialogHeader>
         <ul className='rafii-quiet flex max-h-[50dvh] flex-col gap-0.5 overflow-y-auto rounded-[var(--rafii-radius-control)] p-1.5 text-sm'>
           {reviews.map((review) => {
@@ -91,15 +90,12 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
                     {manifest.platform} · {manifest.account}
                   </span>
                 </span>
-                <span className='text-muted-foreground flex flex-wrap gap-x-2 text-xs'>
-                  <span>
-                    {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone})
-                  </span>
-                  <span className='font-mono'>{review.digest.slice(0, 8)}…</span>
+                <span className='text-muted-foreground flex flex-wrap gap-x-2 text-xs' title={`${manifest.timing.timeZone} · ${review.digest.slice(0, 12)}`}>
+                  <span>{formatDateTime(epochOf(manifest.timing.utc))}</span>
                   {passed && (
                     <span className='inline-flex items-center gap-1'>
                       <Icons.warning aria-hidden className='size-3' />
-                      time passed · publishes at the next worker run
+                      time passed · publishes soon
                     </span>
                   )}
                 </span>

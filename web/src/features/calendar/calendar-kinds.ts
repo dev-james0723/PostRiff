@@ -21,22 +21,24 @@ export interface KindMeta {
 
 // Monochrome by rule (DNA §4.3): a state that asks for the person's attention catches the lens, work in progress
 // sits on glass, a finished or dead entry stays quiet. Failed and expired are the only tinted ones (`--destructive`).
+// Labels use the shared status words (`STATUS` in lib/status-labels.ts), written out here because a Node test
+// imports this file directly, without the app's path aliases.
 export const KIND_META: Record<Kind, KindMeta> = {
-  review: { label: 'Needs approval', tone: 'attention', status: 'warning' },
-  expired: { label: 'Review expired', tone: 'failure', status: 'danger' },
+  review: { label: 'Needs review', tone: 'attention', status: 'warning' },
+  expired: { label: 'Expired', tone: 'failure', status: 'danger' },
   stale: { label: 'Out of date', tone: 'attention', status: 'warning' },
   waiting: { label: 'Scheduled', tone: 'neutral', status: 'info' },
   held: { label: 'Needs action', tone: 'attention', status: 'warning' },
   'in-flight': { label: 'Publishing', tone: 'active', status: 'loading' },
   processing: { label: 'Preparing media', tone: 'neutral', status: 'info' },
-  accepted: { label: 'Accepted; checking result', tone: 'neutral', status: 'info' },
+  accepted: { label: 'Checking result', tone: 'neutral', status: 'info' },
   uncertain: { label: 'Result not confirmed', tone: 'attention', status: 'warning' },
-  unknown: { label: 'Unknown status', tone: 'attention', status: 'warning' },
-  assisted: { label: 'Finish in the app', tone: 'attention', status: 'warning' },
-  manual: { label: 'Marked completed by you', tone: 'quiet', status: 'neutral' },
-  verified: { label: 'Published and verified', tone: 'success', status: 'success' },
+  unknown: { label: 'Unknown', tone: 'attention', status: 'warning' },
+  assisted: { label: 'Finish in app', tone: 'attention', status: 'warning' },
+  manual: { label: 'Marked done', tone: 'quiet', status: 'neutral' },
+  verified: { label: 'Published', tone: 'success', status: 'success' },
   failed: { label: 'Failed', tone: 'failure', status: 'danger' },
-  canceled: { label: 'Canceled', tone: 'quiet', status: 'neutral' }
+  canceled: { label: 'Cancelled', tone: 'quiet', status: 'neutral' }
 };
 
 /** Job states the worker still runs at their time (`store.py` treats these as cancellable). */

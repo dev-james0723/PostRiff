@@ -71,7 +71,7 @@ export function useDraftHandoff() {
       await handoff(result);
       return true;
     } catch (err) {
-      onError(err, 'The draft could not be started.');
+      onError(err, 'Couldn’t start the draft');
       setBusy(false);
       return false;
     }
@@ -98,7 +98,7 @@ export function useDraftHandoff() {
       await handoff(result);
       return true;
     } catch (err) {
-      onError(err, 'The draft could not be started.');
+      onError(err, 'Couldn’t start the draft');
       setBusy(false);
       return false;
     }

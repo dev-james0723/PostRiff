@@ -15,13 +15,13 @@ export interface PostReading {
  */
 export function PostReadings({ readings }: { readings: PostReading[] }) {
   if (readings.length === 0) {
-    return <p className='text-muted-foreground text-sm'>No reading yet.</p>;
+    return <p className='text-muted-foreground text-sm'>Not read yet.</p>;
   }
   if (readings.length < 2) {
     return (
       <p className='text-muted-foreground flex items-center gap-2 text-sm'>
         <Icons.hourglass className='size-4 shrink-0' aria-hidden />
-        One reading so far — no trend yet.
+        One read so far. No trend yet.
       </p>
     );
   }

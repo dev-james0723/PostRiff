@@ -99,15 +99,15 @@ class FixtureAgentRuntime(AgentRuntime):
 
     def list_supported_models(self):
         return [
-            {"id": self.model, "label": "Deterministic preview", "qualified": True, "costClass": "none", "detail": "Local authored templates and approved source quotations; no model request."},
-            {"id": "server-openai", "label": "PostRiff managed model", "qualified": False, "costClass": "paid", "detail": "Server-side production runtime identity is not yet qualified (account, key, cost authorization)."},
+            {"id": self.model, "label": "Deterministic preview", "qualified": True, "costClass": "none", "detail": "Writes from templates and your approved sources. No AI model."},
+            {"id": "server-openai", "label": "Rafii managed model", "qualified": False, "costClass": "paid", "detail": "Not available yet."},
         ]
 
     def list_supported_reasoning(self):
         return [
-            {"id": "quick", "available": True, "detail": "Deterministic preview only."},
-            {"id": "standard", "available": False, "detail": "Requires a qualified model route."},
-            {"id": "deep", "available": False, "detail": "Requires a qualified model route."},
+            {"id": "quick", "available": True, "detail": "One quick pass."},
+            {"id": "standard", "available": False, "detail": "Needs an AI writer."},
+            {"id": "deep", "available": False, "detail": "Needs an AI writer."},
         ]
 
     def cancel_run(self, run):

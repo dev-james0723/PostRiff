@@ -116,9 +116,9 @@ export function DraftsPanel() {
       act.mutate(
         { revision, action: 'p2_cancel', payload: { jobId: job.id } },
         {
-          onSuccess: () => toast.success('Cancel requested.'),
+          // The badge turns to "Cancelling…", so success needs no toast.
           onError: (err) => {
-            toast.error(err instanceof ApiError ? err.message : 'Could not cancel.');
+            toast.error('Couldn’t cancel this post', { description: err instanceof ApiError ? err.message : undefined });
             setHoldEpoch((epoch) => epoch + 1);
             if (err instanceof ApiError && err.status === 409 && workspaceId) void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
           }
@@ -156,16 +156,15 @@ export function DraftsPanel() {
         onClose={() => setOpened(null)}
         returnFocus={returnFocus}
       />
-      {readOnly && <StateMessage kind='unsupported' layout='inline' title='This is a sample workspace, so drafts are read-only.' />}
+      {readOnly && <StateMessage kind='unsupported' layout='inline' title='Sample workspace · read only' />}
       {nothing ? (
         <StateMessage
           kind='empty'
-          title='No drafts waiting'
-          description='Drafts from Home, conversations and automations wait here until you schedule them. Schedule… picks the account and time and prepares the exact post for approval.'
+          title='No drafts yet'
           action={
             canEdit && !readOnly ? (
               <Link href='/app' className={buttonVariants({ variant: 'action', size: 'control' })}>
-                Draft a post
+                Create post
               </Link>
             ) : undefined
           }

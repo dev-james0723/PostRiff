@@ -33,33 +33,27 @@ export function runStatus(run: RecurringOccurrence): { label: string; tone: Retu
   return { label: label(shown), tone: needs && (base === 'info' || base === 'neutral') ? 'warning' : base, attention: needs };
 }
 
-/** What happens next for one item, in plain words. */
+/** What happens next for one item, in a few words; empty when the status chip already says it all. */
 function itemLine(item: RunItem, policy: string | undefined, timeZone: string): string {
   const when = item.publishAt ? runLabel(item.publishAt * 1000, timeZone) : null;
   switch (item.state) {
     case 'ready_for_review':
-      if (!when) return 'Draft only: no publish time.';
-      return policy === 'auto' ? `Held back for your approval. Approve before ${when} to publish then.` : `Approve before ${when} to publish then. Nothing publishes without an approval.`;
+      if (!when) return 'Draft only.';
+      return policy === 'auto' ? `Held for your approval. Approve by ${when} to publish.` : `Approve by ${when} to publish.`;
     case 'needs_revision':
-      return when ? `Changes requested. It does not publish at ${when} unless a new version is approved.` : 'Changes requested.';
+      return when ? `Won’t publish at ${when} unless a new version is approved.` : '';
     case 'approved':
-      return when ? `Publishes ${when}, after a final check of the account.` : 'Approved.';
+      return when ? `Publishes ${when} after a final account check.` : '';
     case 'scheduled':
-      return when ? `Scheduled for ${when}.` : 'Scheduled.';
-    case 'publishing':
-      return 'Publishing now.';
+      return when ? `Publishes ${when}.` : '';
     case 'published':
-      return when ? `Published (planned for ${when}).` : 'Published.';
+      return when ? `Planned for ${when}.` : '';
     case 'rejected':
-      return 'Rejected; it will not be published.';
+      return 'Won’t be published.';
     case 'approval_expired':
-      return when ? `Not approved before ${when}, so it was not published.` : 'Not approved in time, so it was not published.';
+      return when ? `Not approved by ${when}, so not published.` : 'Not approved in time, so not published.';
     case 'platform_disconnected':
-      return 'The account needs reconnecting before this can publish.';
-    case 'failed':
-      return 'Publishing failed.';
-    case 'skipped':
-      return 'Skipped.';
+      return 'Reconnect the account to publish.';
     default:
       return '';
   }
@@ -123,7 +117,7 @@ export function RunDetail({ run, timeZone, canApprove, busy, onDecide, onOpenRun
           ) : (
             research.text
           )}
-          {quote && ` Quote by ${quote.author}: ${quote.verified ? 'attribution checked' : 'attribution not verified, so it is not presented as verified'}.`}
+          {quote && ` Quote by ${quote.author} (${quote.verified ? 'attribution checked' : 'attribution not verified'}).`}
         </p>
       )}
       {!research && run.lifecycle === 'skipped' && run.reason && <p className='text-muted-foreground text-xs'>{run.reason}</p>}
@@ -146,14 +140,17 @@ export function RunDetail({ run, timeZone, canApprove, busy, onDecide, onOpenRun
                     {label(item.state)}
                   </StatusChip>
                 </div>
-                <p className='text-muted-foreground text-xs leading-relaxed break-words'>
-                  {itemLine(item, policy, timeZone)}
-                  {item.reason && ` ${item.reason}`}
-                  {item.state === 'failed' && item.lastError && !item.reason && ` ${item.lastError}`}
-                  {item.approvedVia === 'owner_preauthorization' && ['approved', 'scheduled', 'publishing', 'published'].includes(item.state) && ' Approved by the owner’s standing permission to publish automatically.'}
-                  {item.decision?.note && ` Note: “${item.decision.note}”`}
-                  {cannotPublish && ` Drafts only: ${item.capability!.reason || `PostRiff can’t publish to ${item.platform} yet.`}`}
-                </p>
+                {(() => {
+                  const line = [
+                    itemLine(item, policy, timeZone),
+                    item.reason,
+                    item.state === 'failed' && !item.reason ? item.lastError : null,
+                    item.approvedVia === 'owner_preauthorization' && ['approved', 'scheduled', 'publishing', 'published'].includes(item.state) ? 'Approved by the owner’s standing permission.' : null,
+                    item.decision?.note ? `Note: “${item.decision.note}”` : null,
+                    cannotPublish ? `Drafts only: ${item.capability!.reason || `can’t publish to ${item.platform} yet.`}` : null
+                  ].filter(Boolean).join(' ');
+                  return line ? <p className='text-muted-foreground text-xs leading-relaxed break-words'>{line}</p> : null;
+                })()}
                 {showActions && (
                   <div className='flex flex-wrap gap-2'>
                     {canApproveItem && (

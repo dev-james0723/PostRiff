@@ -50,7 +50,6 @@ export function ChannelsCard({ className }: { className?: string }) {
   const channels = useChannels();
   const now = nowSeconds();
   const list = channels.data?.channels ?? [];
-  const counts = publishCounts(list);
   const ready = Boolean(channels.data) && !channels.isError;
 
   return (
@@ -59,16 +58,6 @@ export function ChannelsCard({ className }: { className?: string }) {
       className={className}
       title='Channels'
       titleId='overview-channels-heading'
-      description={
-        <>
-          What each connection can really do today.
-          {ready && counts.connected > 0 && (
-            <span className='text-foreground mt-1 block text-xs font-medium tabular-nums'>
-              Publish: {counts.direct} Direct · {counts.assisted} Assisted · {counts.local} Local
-            </span>
-          )}
-        </>
-      }
       footer={
         <Link href='/app/channels' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'default' }), '-ml-2.5 w-fit')}>
           {ready && list.length === 0 ? 'Connect a channel' : 'Manage channels'} <LearnMoreChevron />
@@ -76,11 +65,11 @@ export function ChannelsCard({ className }: { className?: string }) {
       }
     >
       {channels.isError ? (
-        <SectionUnavailable message='Channels are unavailable right now.' query={channels} />
+        <SectionUnavailable message='Couldn’t load channels.' query={channels} />
       ) : !channels.data ? (
         <Skeleton className='h-24 w-full rounded-[var(--rafii-radius-control)]' />
       ) : list.length === 0 ? (
-        <StateMessage kind='empty' layout='inline' title='No channels connected yet.' description='Connecting an account lets you schedule and publish.' />
+        <StateMessage kind='empty' layout='inline' title='No channels connected' />
       ) : (
         <ul className='flex flex-col gap-2'>
           {sortForAttention(list, now).map((channel) => {
@@ -102,8 +91,9 @@ export function ChannelsCard({ className }: { className?: string }) {
                 actions={
                   <span className='flex flex-wrap items-center gap-1.5'>
                     <StatusChip status={badge.status}>{badge.label}</StatusChip>
-                    <span className='text-muted-foreground text-xs'>publish</span>
-                    <LevelBadge level={channel.capabilities.publish?.level} />
+                    <span className='hidden md:inline-flex'>
+                      <LevelBadge level={channel.capabilities.publish?.level} />
+                    </span>
                   </span>
                 }
               />

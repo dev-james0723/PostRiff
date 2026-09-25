@@ -44,8 +44,7 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
       <StateMessage
         kind='empty'
         title='No accounts connected'
-        description='Analytics reads numbers for posts PostRiff published. Connect an account with the analytics capability first.'
-        action={canManage ? <NextStep href='/app/channels'>Connect a channel</NextStep> : <AskAdmin>Ask an owner or admin to connect an account.</AskAdmin>}
+        action={canManage ? <NextStep href='/app/channels'>Connect account</NextStep> : <AskAdmin>Only owners and admins can connect accounts.</AskAdmin>}
       />
     );
   }
@@ -54,7 +53,7 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
       <StateMessage
         kind='permission'
         title='No account reports analytics yet'
-        description='Analytics is a separate permission from publishing. Each connected account shows the level PostRiff has verified for it.'
+        description='Analytics is a separate permission, granted per account.'
         action={
           <ul className='flex w-full max-w-md flex-col gap-2 text-left'>
             {coverage.connections.map((connection) => (
@@ -75,7 +74,7 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
                           <LearnMoreChevron />
                         </Link>
                       ) : (
-                        <span className='mt-1 block'>Ask an owner or admin to enable analytics for this account.</span>
+                        <span className='mt-1 block'>Ask an owner or admin to enable it.</span>
                       ))}
                   </>
                 }
@@ -91,9 +90,8 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
     return (
       <StateMessage
         kind='empty'
-        title='Nothing published through PostRiff yet'
-        description='Numbers are read for posts PostRiff published once the provider verifies them. Approve and schedule a post to start.'
-        action={<NextStep href='/app/queue'>Open the queue</NextStep>}
+        title='No published posts yet'
+        action={<NextStep href='/app/queue'>Open queue</NextStep>}
       />
     );
   }
@@ -101,9 +99,9 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
   return (
     <StateMessage
       kind='stale'
-      title='Waiting for the first reading'
-      description={`${waiting === 1 ? 'One verified post has' : `${waiting} verified posts have`} no reading yet. Readings are not collected automatically yet, so there is no time to show.`}
-      action={<NextStep href='/app/queue'>See the verified posts</NextStep>}
+      title={`${waiting} ${waiting === 1 ? 'post' : 'posts'} waiting for a first read`}
+      description='Readings aren’t collected automatically yet.'
+      action={<NextStep href='/app/queue'>See posts</NextStep>}
     />
   );
 }

@@ -38,9 +38,9 @@ export interface DecisionTarget {
 const NOTE_LIMIT = 280;
 
 const TITLES: Record<RunDecision, { title: string; accent: string; action: string; done: string }> = {
-  approve: { title: 'Approve', accent: 'this post?', action: 'Approve post', done: 'Approved. It publishes at its time after a final check.' },
-  revise: { title: 'Request', accent: 'changes', action: 'Request changes', done: 'Changes requested. It will not publish until a new version is approved.' },
-  reject: { title: 'Reject', accent: 'this post?', action: 'Reject post', done: 'Rejected. This post will not be published.' }
+  approve: { title: 'Approve', accent: 'this post?', action: 'Approve post', done: 'Approved' },
+  revise: { title: 'Request', accent: 'changes', action: 'Request changes', done: 'Changes requested' },
+  reject: { title: 'Reject', accent: 'this post?', action: 'Reject post', done: 'Rejected' }
 };
 
 /** The draft's `rewrite_approval` sources and each one's current facts digest (null while hashing or unavailable). */
@@ -88,11 +88,11 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
   const blocked =
     decision === 'approve'
       ? !variant
-        ? 'The draft for this post is not in the workspace, so there is nothing exact to approve. Open the run’s drafts instead.'
+        ? 'This draft isn’t available to approve here. Open the run’s drafts instead.'
         : variant.rejected
           ? 'This draft was set aside, so it cannot be approved.'
           : rewriteSources.length > 0 && digests !== null && !digestsReady
-            ? 'This browser cannot compute the facts fingerprint the approval needs. Try another browser.'
+            ? 'This browser can’t verify the sources for this approval. Try another browser.'
             : null
       : null;
   const ready = !sending && !blocked && (decision !== 'approve' || (confirmed && digestsReady)) && (decision !== 'revise' || note.trim().length > 0);
@@ -115,8 +115,8 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
       toast.success(text.done);
       onClose();
     } catch (error) {
-      if (error instanceof ApiError && error.code === 'approval_expired') toast.error('Too late to approve: its publish time has passed, so it will not be published.');
-      else toast.error(error instanceof ApiError ? error.message : 'That did not go through. Try again.');
+      if (error instanceof ApiError && error.code === 'approval_expired') toast.error('Too late to approve: its publish time has passed.');
+      else toast.error(error instanceof ApiError ? error.message : 'Couldn’t send. Try again.');
       setSending(false);
     }
   }
@@ -124,11 +124,11 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
   const intro =
     decision === 'approve'
       ? when
-        ? `You approve this exact text for ${itemName(item)} at ${when}. Rafii checks the account again before it posts; if anything changed, it does not post.`
+        ? `You approve this exact text for ${itemName(item)} at ${when}. Rafii rechecks the account first and won’t post if anything changed.`
         : 'You approve this exact text.'
       : decision === 'revise'
-        ? 'Tell Rafii what to change. This post will not publish until a new version is approved.'
-        : 'This post will not be published. The other posts in this run are not affected.';
+        ? 'It won’t publish until a new version is approved.'
+        : 'This post won’t be published. Other posts in this run aren’t affected.';
 
   return (
     <RafiiDialogContent size='md'>
@@ -148,10 +148,10 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
             </p>
           </Surface>
         ) : (
-          <p className='text-muted-foreground text-sm'>The draft for this post is not in the workspace.</p>
+          <p className='text-muted-foreground text-sm'>This draft isn’t available.</p>
         )}
-        {edited && <Note>This draft was edited after Rafii wrote it. You are deciding on the text as it is now.</Note>}
-        {variant?.proposedUpdate && <Note>A newer version of this draft is waiting in Queue → Drafts. This decision is about the text shown here.</Note>}
+        {edited && <Note>Edited after Rafii wrote it. You’re deciding on the text as it is now.</Note>}
+        {variant?.proposedUpdate && <Note>A newer version is waiting in Queue → Drafts. This decision covers the text shown here.</Note>}
         {decision === 'approve' && unknowns.length > 0 && (
           <section className='flex flex-col gap-1.5'>
             <h3 className='text-sm font-medium'>Left out because they could not be checked</h3>

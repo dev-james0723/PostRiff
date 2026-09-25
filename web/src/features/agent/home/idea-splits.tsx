@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import type { GeneratedItem, useHomeGeneration } from './use-home-generation';
 
 /** Sample copy for the idle deck; always labelled as a sample, never presented as a draft. */
-const SAMPLE_TEXT = 'One thought, shaped for every place you post. Start writing above and this preview follows your words.';
+const SAMPLE_TEXT = 'One thought, shaped for every place you post.';
 
 type Generation = ReturnType<typeof useHomeGeneration>;
 
@@ -49,7 +49,8 @@ function Caption({ target, sample }: { target: PreviewTarget; sample?: boolean }
         {target.account ? ` · ${target.account}` : ''}
       </span>
       <span className='text-muted-foreground truncate text-xs'>
-        {languageLabel(target.language)} · iPhone preview{sample ? ' · sample text' : ''}
+        {languageLabel(target.language)}
+        {sample ? ' · Sample' : ''}
       </span>
     </span>
   );
@@ -71,27 +72,20 @@ export function IdlePreview({ targets, idea, timeZone, speaker }: { targets: Pre
   const dock = useMemo<DockItem[]>(() => targets.map((target) => ({ key: targetKey(target), channel: channelByPlatform(target.platform)?.slug ?? target.platform.toLowerCase(), name: dockName(target, targets) })), [targets]);
   const activeKey = items.some((item) => item.key === active) ? (active as string) : (items[0]?.key ?? '');
   if (items.length === 0) {
-    return <StateMessage kind='empty' title='Choose where this idea should go.' description='Pick accounts in the channel picker and the preview follows.' />;
+    return <StateMessage kind='empty' title='Choose a channel' />;
   }
   return (
     <div className='flex flex-col items-center gap-4 text-center'>
-      <div>
-        <span className='rafii-eyebrow'>03 / The idea splits</span>
-        <h2 className='text-foreground mt-3 text-[26px] leading-[1.1] font-normal tracking-[-0.02em] md:text-[28px]'>
-          One thought.
-          <br />
-          <em className='rafii-serif'>Everywhere, still you.</em>
-        </h2>
-      </div>
+      <h2 className='sr-only'>Preview</h2>
       <PreviewDock items={dock} activeKey={activeKey} onChange={setActive} label='Explore the destination previews' className='w-full max-w-[440px]' />
       <PreviewDeck items={items} activeKey={activeKey} onChange={setActive} scale={0.59} tools={false} label='Destination previews' className='w-full' />
       <div className='flex w-full max-w-[320px] items-center justify-between gap-3 text-left'>
-        <p className='text-muted-foreground text-xs leading-relaxed'>Swipe or tap a destination. An illustrative layout; no account is contacted.</p>
+        <p className='text-muted-foreground text-xs'>Preview only</p>
         <Button variant='glass' size='icon-control' className='shrink-0' aria-label='Expand iPhone preview' onClick={() => setExpanded(true)}>
           <Icons.arrowUpRight />
         </Button>
       </div>
-      <ExpandedPreviewDialog open={expanded} onOpenChange={setExpanded} items={items} activeKey={activeKey} onChange={setActive} dock={dock} tools={false} eyebrow='In your audience’s hands' />
+      <ExpandedPreviewDialog open={expanded} onOpenChange={setExpanded} items={items} activeKey={activeKey} onChange={setActive} dock={dock} tools={false} eyebrow='Preview' />
     </div>
   );
 }
@@ -128,10 +122,11 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
   const current = items.find((item) => item.key === activeKey) ?? null;
   const readyCount = ready.length;
   const notStarted = !generation.run && !busy && Boolean(error);
+  // A run that never started says so once, in the error below; the status line stays quiet.
   const status: ReactNode = busy
     ? 'Sending your idea…'
     : notStarted
-      ? 'Nothing was drafted.'
+      ? ''
       : running
       ? `Writing your drafts · ${readyCount} of ${items.length} ready`
       : failure
@@ -145,12 +140,7 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
   return (
     <section aria-label='Generated drafts' className='flex flex-col gap-4'>
       <div className='flex items-start justify-between gap-3'>
-        <div>
-          <span className='rafii-eyebrow'>The idea splits</span>
-          <h2 className='text-foreground mt-2 text-[26px] leading-[1.12] font-normal tracking-[-0.02em] md:text-[28px]'>
-            Your idea, <em className='rafii-serif'>unfolded.</em>
-          </h2>
-        </div>
+        <h2 className='text-foreground text-[26px] leading-[1.12] font-normal tracking-[-0.02em] md:text-[28px]'>Drafts</h2>
         {running && (
           <Button variant='quiet' size='sm' onClick={() => void generation.cancel()}>
             Cancel
@@ -161,7 +151,7 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
         {status}
       </p>
       {notStarted ? (
-        <StateMessage kind='error' title='The drafts could not be started.' description={error} action={<Button variant='glass' size='control' onClick={onDraftAgain}>Try again</Button>} />
+        <StateMessage kind='error' title='Couldn’t start the drafts' description={error} action={<Button variant='glass' size='control' onClick={onDraftAgain}>Try again</Button>} />
       ) : (
         error && (
           <p role='alert' className='text-foreground text-sm'>
@@ -173,8 +163,7 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
       {deck.length > 0 ? (
         <>
           <PreviewDeck items={deck} activeKey={activeKey} onChange={setActive} scale={0.57} tools={false} label='Draft previews' className='w-full' />
-          <div className='flex items-center justify-between gap-3'>
-            <p className='text-muted-foreground text-xs'>App-layout mockup, not a screenshot or a published post.</p>
+          <div className='flex items-center justify-end gap-3'>
             <Button variant='glass' size='sm' onClick={() => setExpanded(true)}>
               Expand
               <Icons.arrowUpRight />
@@ -186,7 +175,7 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
                 <label htmlFor='rafii-draft-editor' className='text-foreground font-medium'>
                   Edit your caption
                 </label>
-                <span className='rafii-eyebrow'>{applied ? 'Saved' : current.edited !== null ? 'Edited · not saved' : 'Updates live'}</span>
+                <span className='rafii-eyebrow'>{applied ? 'Saved' : current.edited !== null ? 'Edited · not saved' : ''}</span>
               </div>
               <textarea
                 id='rafii-draft-editor'
@@ -208,9 +197,9 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
           )}
         </>
       ) : running || busy ? (
-        <StateMessage kind='loading' title='Shaping your drafts' description='One draft per destination. This is a real run; cancel any time.' />
+        <StateMessage kind='loading' title='Writing your drafts…' />
       ) : failure ? (
-        <StateMessage kind='error' title='The run did not complete.' description={failure} action={<Button variant='glass' size='control' onClick={onDraftAgain}>Draft again</Button>} />
+        <StateMessage kind='error' title='Couldn’t finish the drafts' description={failure} action={<Button variant='glass' size='control' onClick={onDraftAgain}>Try again</Button>} />
       ) : null}
       <div className={cn('flex flex-wrap items-center gap-2', deck.length === 0 && 'hidden')}>
         {!applied && completed && (
@@ -224,9 +213,6 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
             <Link href='/app/queue?view=drafts' className='rafii-focus text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm underline underline-offset-2'>
               Open drafts
             </Link>
-            <Link href='/app/queue' className='rafii-focus text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm underline underline-offset-2'>
-              Review in Queue
-            </Link>
           </>
         )}
         {generation.conversationId && (
@@ -235,17 +221,17 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
             <Icons.arrowRight className='size-3.5' />
           </Link>
         )}
-        {saved && <span className='text-muted-foreground text-xs'>{saved.edited > 0 ? `${saved.edited} edited caption${saved.edited === 1 ? '' : 's'} recorded.` : 'Captions saved as generated.'}</span>}
+        {saved && saved.edited > 0 && <span className='text-muted-foreground text-xs'>{`${saved.edited} edited caption${saved.edited === 1 ? '' : 's'} recorded.`}</span>}
         {saved && saved.pendingReview > 0 && (
           <p className='text-muted-foreground basis-full text-xs leading-relaxed'>
-            {saved.pendingReview === 1 ? 'One account already had an unscheduled draft in this language, so this version waits on it as a proposed update.' : `${saved.pendingReview} accounts already had unscheduled drafts in these languages, so these versions wait on them as proposed updates.`}{' '}
+            {saved.pendingReview === 1 ? 'One account already had a draft here, so this one waits as a proposed update.' : `${saved.pendingReview} accounts already had drafts here, so these wait as proposed updates.`}{' '}
             <Link href='/app/queue?view=drafts' className='text-foreground underline underline-offset-2'>
               Review in Drafts
             </Link>
           </p>
         )}
       </div>
-      <ExpandedPreviewDialog open={expanded} onOpenChange={setExpanded} items={deck} activeKey={activeKey} onChange={setActive} dock={dock} tools={false} eyebrow='In your audience’s hands' description='Your edited draft inside its destination app. An illustrative layout, not a published post.' />
+      <ExpandedPreviewDialog open={expanded} onOpenChange={setExpanded} items={deck} activeKey={activeKey} onChange={setActive} dock={dock} tools={false} eyebrow='Preview' />
     </section>
   );
 }

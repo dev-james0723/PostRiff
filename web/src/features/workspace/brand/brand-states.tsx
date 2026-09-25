@@ -43,8 +43,8 @@ export function BrandLoadError({ query }: { query: Refetchable }) {
   return (
     <StateMessage
       kind='error'
-      title='This workspace could not be loaded'
-      description={detail ?? 'The voice and brand context are unavailable right now.'}
+      title='Couldn’t load this workspace'
+      description={detail ?? undefined}
       action={
         <Button variant='glass' size='control' disabled={query.isFetching} onClick={() => void query.refetch()}>
           <Icons.refresh className={query.isFetching ? 'motion-safe:animate-spin' : undefined} /> Try again
@@ -62,7 +62,7 @@ export function BrandStaleNotice({ query, updatedAt }: { query: Refetchable; upd
       layout='inline'
       className='rafii-quiet rounded-[var(--rafii-radius-card)] px-4 py-3'
       title={`Showing what loaded at ${formatDateTime(updatedAt / 1000)}`}
-      description={errorMessage(query.error) ?? 'The latest workspace state could not be read.'}
+      description={errorMessage(query.error) ?? undefined}
       action={<RetryButton query={query} />}
     />
   );

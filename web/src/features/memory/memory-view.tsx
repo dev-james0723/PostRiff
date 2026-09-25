@@ -17,7 +17,7 @@ import { downloadBlob } from '@/lib/download';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AccessCard } from './access-card';
 import { LearningPanel } from './learning-panel';
-import { DRAFT_GROUP_LABEL, groupMemoryFiles } from './memory-files';
+import { DRAFT_GROUP_LABEL, groupMemoryFiles, memoryFileLabel } from './memory-files';
 import { Unavailable } from './memory-states';
 import { WhatDraftsRead } from './what-drafts-read';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
@@ -28,22 +28,17 @@ const infoContent = {
     {
       title: 'Plain Markdown, yours',
       description:
-        'The files marked “Given to writing routes” are what a writing route receives before it drafts. Routes on your own machine always receive them; the cloud model reads them only if an owner allows it, and never a boundary marked private or local-only. The other files are here for you to read. Everything is rendered from your voice profile, brand context and the preferences an owner accepted; the agent cannot change the files itself.'
+        'Files marked “Sent to writers” are what a draft is written from. Local writers always get them; the cloud model only if an owner allows it, and never private boundaries. The agent can’t edit these files.'
     },
     {
       title: 'Proposals, never silent changes',
-      description:
-        'When you tell the agent how to write, or your edits show a pattern, it proposes a preference that an owner remembers, rewords or dismisses. A suggestion nobody decides expires. Accepted preferences appear in VOICE.md under “Learned from how you edit” and shape future drafts only.'
-    },
-    {
-      title: 'Readable, not hidden',
-      description: 'One topic per file, in plain text, rendered again from your workspace each time this page loads. What you read here is what the files say now.'
+      description: 'The agent proposes preferences from what you say and how you edit. An owner accepts, rewords or dismisses each one; unanswered ones expire.'
     }
   ]
 };
 
 function fileNode(file: MemoryFile) {
-  return <FileTreeFile key={file.name} value={file.name} name={file.name} className='font-mono text-[13px]' />;
+  return <FileTreeFile key={file.name} value={file.name} name={memoryFileLabel(file.name)} className='text-[13px]' />;
 }
 
 /** The file list, grouped by what a writing route receives. The groups come from the API, never from a fixed list. */
@@ -87,7 +82,7 @@ function MemoryFileList({ selected, onSelect }: { selected: string; onSelect: (n
             )}
           </FileTree>
         ) : (
-          <StateMessage kind='empty' layout='inline' className='px-2' title='The workspace returned no memory files.' />
+          <StateMessage kind='empty' layout='inline' className='px-2' title='No memory files yet' />
         )
       ) : memory.isLoading ? (
         <div className='flex flex-col gap-2 p-2' role='status' aria-label='Loading memory files'>
@@ -96,10 +91,9 @@ function MemoryFileList({ selected, onSelect }: { selected: string; onSelect: (n
           <Skeleton className='h-9 w-full rounded-[var(--rafii-radius-control)]' />
         </div>
       ) : (
-        <Unavailable className='px-2 py-1.5' message='Memory files are unavailable right now.' query={memory} />
+        <Unavailable className='px-2 py-1.5' message='Couldn’t load memory files.' query={memory} />
       )}
-      {memory.data && !grouped.known && <p className='text-muted-foreground px-2 py-1.5 text-xs'>Which files writing routes receive is unavailable right now.</p>}
-      <p className='text-muted-foreground mt-2 px-2 pt-2 pb-1 text-xs leading-relaxed'>Preferences an owner accepts appear in VOICE.md under “Learned from how you edit”. Each file names its source beside it.</p>
+      {memory.data && !grouped.known && <p className='text-muted-foreground px-2 py-1.5 text-xs'>Couldn’t check which files writers receive.</p>}
     </Surface>
   );
 }
@@ -117,7 +111,7 @@ export function MemoryView() {
       downloadBlob(await api.exportProfile(workspaceId), 'postriff-personal-voice.zip');
       flashExported('done');
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'The voice package could not be exported.');
+      toast.error(err instanceof ApiError ? err.message : 'Couldn’t export the voice package.');
     } finally {
       setExporting(false);
     }
@@ -126,7 +120,6 @@ export function MemoryView() {
   return (
     <PageContainer
       pageTitle='Memory'
-      pageDescription='Plain Markdown files behind every draft. You own them; the agent can only propose changes.'
       infoContent={infoContent}
       pageHeaderAction={
         <Button variant='glass' size='control' data-tour='memory-export' disabled={exporting} onClick={() => void exportPackage()}>

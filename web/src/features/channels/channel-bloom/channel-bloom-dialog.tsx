@@ -98,7 +98,7 @@ interface EditorState {
 
 const copySource = (source: FolderSource): FolderSource => ({ ...source, accountIds: [...source.accountIds] });
 const asSymbol = (symbol: string | undefined): FolderSymbol => ((FOLDER_SYMBOLS as readonly string[]).includes(symbol ?? '') ? (symbol as FolderSymbol) : 'folder');
-const LIMIT_MESSAGE = `This workspace already has ${FOLDER_MAX} folders. Delete one before adding another.`;
+const LIMIT_MESSAGE = `You have ${FOLDER_MAX} folders, the limit. Delete one first.`;
 
 function ChannelBloomPanel({ accounts, folders, selected: committed, context, onCommit, onOpenChange, escapeRef, searchRef }: PanelProps) {
   const uid = useId();
@@ -258,7 +258,7 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
     try {
       if (command === 'pin') {
         await folderApi.pin(folder, !folder.pinned);
-        announce(folder.pinned ? 'Folder unpinned.' : 'Folder pinned to the shelf.');
+        announce(folder.pinned ? 'Folder unpinned.' : 'Folder pinned.');
       } else if (command === 'duplicate') {
         if (folders.length >= FOLDER_MAX) {
           announce(LIMIT_MESSAGE);
@@ -266,14 +266,14 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
           const { folder: copy } = await folderApi.duplicate(folder);
           setAll(true);
           setInspecting(copy.id);
-          announce('Folder duplicated. Your draft selection is unchanged.');
+          announce('Folder duplicated.');
         }
       } else {
         await folderApi.move(folder.id, command === 'up' ? -1 : 1);
         announce('Folder order updated.');
       }
     } catch (error) {
-      announce(folderErrorMessage(error, 'The folder could not be changed. Nothing was lost.'));
+      announce(folderErrorMessage(error, "Couldn't change the folder."));
     }
     moreRef.current?.focus({ preventScroll: true });
   }
@@ -284,10 +284,10 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
       await folderApi.remove(folder.id);
       setConfirmingDelete(false);
       setInspecting(null);
-      announce('Folder deleted. Accounts and draft destinations are unchanged.');
+      announce('Folder deleted.');
       newFolderRef.current?.focus({ preventScroll: true });
     } catch (error) {
-      announce(folderErrorMessage(error, 'The folder could not be deleted. Nothing was changed.'));
+      announce(folderErrorMessage(error, "Couldn't delete the folder."));
     }
   }
 
@@ -338,7 +338,7 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
       }
       pendingChevron.current = saved.id;
       returnFocus.current = null;
-      announce('Folder saved. Draft destinations stay unchanged.');
+      announce('Folder saved.');
     } catch (error) {
       setEditor((current) => (current ? { ...current, error: folderErrorMessage(error) } : current));
     }
@@ -453,7 +453,7 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
         <RafiiDialogBody className='pt-0.5'>
           {showFolders && (
             <section aria-labelledby={`${uid}-folders`}>
-              <div className='flex min-h-[2.625rem] items-center justify-between gap-2.5'>
+              <div className='mb-3 flex min-h-[2.625rem] items-center justify-between gap-2.5'>
                 <h3 id={`${uid}-folders`} className='text-foreground flex items-center gap-2 text-sm font-medium'>
                   Your folders{' '}
                   <span className='rafii-quiet text-muted-foreground min-w-5 rounded-[7px] px-1.5 py-0.5 text-center text-[11px] leading-snug' aria-label={`${folders.length} ${folders.length === 1 ? 'folder' : 'folders'}`}>
@@ -464,12 +464,10 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
                   <IconPlus className='size-4' /> New folder
                 </Button>
               </div>
-              <p className='text-muted-foreground mb-3 text-xs leading-relaxed'>{folders.length ? 'Tap to select a group. Use the chevron to look inside.' : 'Save the accounts you use together. Start with a new folder.'}</p>
               {folders.length === 0 && !trimmed ? (
                 <StateMessage
                   kind='empty'
-                  title='Keep your usual accounts together.'
-                  description='A folder is a shortcut: the accounts you post to together, chosen in one tap.'
+                  title='No folders yet'
                   media={
                     <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
                       <IconFolder className='size-5' />
@@ -477,7 +475,7 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
                   }
                   action={
                     <Button variant='glass' size='control' onClick={() => openEditor(null)} disabled={!canEdit} title={readOnlyTitle}>
-                      Create your first folder <IconArrowRight className='size-4' />
+                      Create folder <IconArrowRight className='size-4' />
                     </Button>
                   }
                 />

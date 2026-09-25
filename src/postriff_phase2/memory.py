@@ -113,7 +113,7 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
             "## Unknowns kept explicit", *([f"- {item}" for item in profile.get("unknowns") or []] or ["- (none)"]),
         ])
     else:
-        voice = "# Voice\n\nNo active voice profile yet. Drafts can be reviewed and scheduled without a voice profile. Review their wording carefully; an approved voice helps future drafts sound consistent.\n\nSet it up in Brand → Voice (about two minutes)."
+        voice = "# Voice\n\nNo active voice profile yet. Drafts still work; review their wording before scheduling.\n\nSet it up in Brand → Voice."
 
     if boundaries:
         body = "\n".join(["# Boundaries", ""] + [f"- {f.get('label') or f.get('key') or f.get('id')}: {f.get('value', '')}" + (f" _({f['privacy']})_" if f.get("privacy") else "") for f in boundaries])
@@ -124,7 +124,7 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
     if withheld:
         body += f"\n\n> {withheld} more boundar{'y is' if withheld == 1 else 'ies are'} private or local-only and not shared here. Keep drafts conservative about personal details."
 
-    agent = "\n".join(["# Agent", "", "How the PostRiff agent works with you today. These are the rules the current build enforces, not aspirations.", ""] + [f"- {rule}" for rule in AGENT_RULES])
+    agent = "\n".join(["# Agent", "", "How Rafii works with you.", ""] + [f"- {rule}" for rule in AGENT_RULES])
     brand = "\n".join([
         "# Brand", "",
         _line("Workspace speaker", hub.get("speaker")), _line("Mode", hub.get("mode")),

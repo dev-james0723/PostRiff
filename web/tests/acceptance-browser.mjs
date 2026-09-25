@@ -46,7 +46,7 @@ try {
   writeFileSync(new URL(scenario+'-body.txt',out),await page.locator('body').innerText());
   try {await page.getByRole('heading',{name:/^Brand & voice/}).first().waitFor({timeout:30000});} catch(e) {console.log(await page.locator('body').innerText());throw e;}
   if(scenario==='snapshot-error') {
-   await page.getByText('This workspace could not be loaded',{exact:true}).waitFor({timeout:30000});
+   await page.getByText('Couldn’t load this workspace',{exact:true}).waitFor({timeout:30000});
    await page.getByRole('button',{name:'Try again'}).waitFor();
   } else {
    const strip=page.locator('section[aria-label="Voice status"]');
@@ -58,7 +58,7 @@ try {
   }
   await page.screenshot({path:new URL(scenario+'.png',out).pathname,fullPage:true});
   if(scenario==='ready') {
-   await page.getByRole('tab',{name:'IDENTITY.md',exact:true}).click();
+   await page.getByRole('tab',{name:'Identity',exact:true}).click();
    await page.keyboard.press('Tab');
    assert.ok(await page.locator(':focus').count());
    await page.setViewportSize({width:390,height:900});

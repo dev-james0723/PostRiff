@@ -23,7 +23,8 @@ import type { Manifest } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
 import { useMotionPreference } from '@/lib/rafii/motion';
-import { relativeTime } from '@/lib/time';
+import { formatDateTime, relativeTime } from '@/lib/time';
+import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useFlash } from '@/hooks/use-flash';
@@ -66,44 +67,45 @@ const TABLE_MIN_WIDTH = 832;
  * Publishing jobs carry the outcome. Cards arrive with one short fade, without a stagger (DNA §18).
  */
 const REVIEW_ENTER_S = 0.22;
+
+/** The filters in the shared status words; `lib/jobs` keeps the groups they match. */
+const FILTER_LABEL: Record<(typeof FILTERS)[number]['value'], string> = {
+  all: 'All',
+  waiting: STATUS.scheduled,
+  'in-flight': STATUS.publishing,
+  held: 'Needs action',
+  done: STATUS.published,
+  ended: 'Ended'
+};
 const REVIEW_EXIT = { opacity: 0, transition: { duration: 0.15, ease: EASE_OUT } };
 
 const infoContent = {
-  title: 'Drafts, approvals and the queue',
+  title: 'Queue',
   sections: [
     {
       title: 'Drafts',
-      description:
-        'The Drafts tab holds every draft that is not scheduled yet: from Home, conversations and automations. Schedule… picks the account and time and prepares the exact post for approval. Set-aside drafts stay at the bottom of the list; editing one brings it back.'
+      description: 'Drafts that aren’t scheduled yet. Schedule… picks the account and time. Editing a set-aside draft brings it back.'
     },
     {
-      title: 'Exact approvals',
-      description:
-        'A review freezes the text, media, account and time into a manifest with a digest. Approving that digest is the only way a post enters the queue. The same draft prepared twice for the same account and time is the same post: once one review is approved, the other schedules nothing.'
+      title: 'Approvals',
+      description: 'You approve the exact text, media, account and time. Only approved posts publish, and each post publishes once.'
     },
     {
-      title: 'Who does what',
-      description:
-        'Preparing a review, approving it and cancelling a job need the approve permission. When a draft has a newer version waiting or unknown details to confirm, someone who can edit drafts does that first.'
+      title: 'Who can do what',
+      description: 'Scheduling, approving and cancelling need approve access. Editors confirm new versions and unknown details.'
     },
     {
-      title: 'Job states',
-      description:
-        'Waiting → in flight → verified. “Uncertain” means the provider did not confirm; PostRiff reconciles before it ever retries, so nothing is posted twice.'
+      title: 'Result not confirmed',
+      description: 'The platform didn’t confirm the post. Nothing is retried until it’s checked, so it never posts twice.'
     },
     {
       title: 'Cancel',
-      description:
-        'Hold to cancel a waiting or held job before the provider has it. Once a post is submitted, a cancel cannot recall it; the job is reconciled instead.'
+      description: 'Hold to cancel before the post is sent. A sent post can’t be recalled.'
     },
     {
-      title: 'Held',
+      title: 'Needs action',
       description:
-        'A job is held when something changed after approval: the approver’s permission, the draft, the account’s connection, the plan, or the approval window closed. Nothing publishes from a held job, but it counts toward the account’s daily limit until it is cancelled. Prepare the draft again for a new review.'
-    },
-    {
-      title: 'Receipts',
-      description: 'Open any job for its timeline, every attempt and exactly what the provider confirmed.'
+        'Something changed after approval (access, the draft, the account, the plan) or the approval window closed. It won’t publish and still counts toward the daily limit until cancelled. Prepare it again.'
     }
   ]
 };
@@ -163,10 +165,11 @@ function ReviewCard({
   const timePassed = !expired && (epochOf(manifest.timing.utc) ?? Infinity) < nowSeconds;
   const needsReview = review.status === 'needs_review';
   const footnote = expired
-    ? 'The review window closed; prepare it again from the draft.'
+    ? 'Approval window closed. Prepare it again from the draft.'
     : timePassed
-      ? 'The approved time has passed; approving now publishes at the worker’s next run.'
-      : 'Approves exactly this text, media, account and time.';
+      ? 'Time has passed; approving publishes it soon.'
+      : 'Approves this exact text, media, account and time.';
+  const at = epochOf(manifest.timing.utc);
   return (
     <Surface material='glass' radius='card' padding='none' className='flex h-full flex-col' data-tour={tour ? 'queue-review-card' : undefined}>
       {/* The phone shows exactly what the approval covers, drawn in the destination app, beside the frozen details. */}
@@ -180,17 +183,22 @@ function ReviewCard({
               </span>
             </span>
             <StatusChip tone={needsReview ? 'warning' : 'neutral'} pulse={needsReview && !expired}>
-              {review.status.replace(/_/g, ' ')}
+              {needsReview ? STATUS.needsReview : review.status.replace(/_/g, ' ')}
             </StatusChip>
-            {expired && <StatusChip tone='danger'>expired</StatusChip>}
+            {expired && <StatusChip tone='danger'>{STATUS.expired}</StatusChip>}
             {manifest.execution === 'synthetic' && <FixtureBadge />}
           </div>
-          <p className='text-muted-foreground text-xs'>
-            {manifest.timing.local.replace('T', ' ')} ({manifest.timing.timeZone}) · {languageLabel(manifest.payload.language)} · {manifest.media.length} media ·{' '}
-            <span className='font-mono'>{review.digest.slice(0, 12)}…</span>
+          {/* When first; language and media are secondary and stay off phones. The zone and digest sit in the tooltip. */}
+          <p className='text-muted-foreground text-xs' title={`${manifest.timing.local.replace('T', ' ')} (${manifest.timing.timeZone}) · ${review.digest.slice(0, 12)}`}>
+            {formatDateTime(at)}
+            <span className='hidden md:inline'>
+              {' '}
+              · {languageLabel(manifest.payload.language)}
+              {manifest.media.length > 0 && ` · ${manifest.media.length} media`}
+            </span>
           </p>
           <p className='line-clamp-[12] text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
-          {manifest.voiceRevision === null && <JobNote>This draft has no approved voice profile. Review its wording carefully before approving.</JobNote>}
+          {manifest.voiceRevision === null && <JobNote>No voice profile. Check the wording before approving.</JobNote>}
         </div>
         <div data-tour={tour ? 'queue-review-phone' : undefined} className='md:pl-2'>
           <ManifestPreview manifest={manifest} scale={0.5} />
@@ -205,12 +213,12 @@ function ReviewCard({
           {timePassed ? (
             <JobNote>
               {footnote}
-              {!expired && twin && ' Another review here is the same post; approving either one schedules it once.'}
+              {!expired && twin && ' Same post as another review; it schedules once.'}
             </JobNote>
           ) : (
             <span className='text-muted-foreground text-xs'>
               {footnote}
-              {!expired && twin && ' Another review here is the same post; approving either one schedules it once.'}
+              {!expired && twin && ' Same post as another review; it schedules once.'}
             </span>
           )}
         </div>
@@ -231,7 +239,7 @@ function ReviewDisclosure({ group, summary, detail, children }: { group: string;
       >
         <span>
           {summary}
-          <span className='text-muted-foreground'> · {detail}</span>
+          <span className='text-muted-foreground hidden md:inline'> · {detail}</span>
         </span>
         <Icons.chevronDown
           aria-hidden
@@ -262,8 +270,8 @@ function StaleReviews({
   return (
     <ReviewDisclosure
       group='stale'
-      summary={`${reviews.length} review${reviews.length === 1 ? '' : 's'} went stale`}
-      detail='the draft, voice, account or sources changed after they were prepared'
+      summary={`${reviews.length} out of date`}
+      detail='something changed after they were prepared'
     >
       <ul className='flex flex-col gap-1.5'>
         {reviews.map((review) => {
@@ -281,7 +289,7 @@ function StaleReviews({
                   <span className='truncate'>
                     {manifest.platform} · {manifest.account}
                   </span>
-                  <span className='text-muted-foreground text-xs font-normal'>{manifest.timing.local.replace('T', ' ')}</span>
+                  <span className='text-muted-foreground hidden text-xs font-normal md:inline'>{manifest.timing.local.replace('T', ' ')}</span>
                 </span>
               }
               meta={
@@ -297,7 +305,7 @@ function StaleReviews({
                     size='control'
                     className='h-11 px-3.5 text-[13px]'
                     disabled={!available}
-                    title={available ? 'Prepare a new review of the same draft' : 'This draft is no longer available'}
+                    title={available ? undefined : 'This draft is gone'}
                     onClick={() => onPrepareAgain(manifest.variantId)}
                   >
                     Prepare again
@@ -330,8 +338,8 @@ function AlreadyJobs({
   return (
     <ReviewDisclosure
       group='dupes'
-      summary={`${reviews.length} review${reviews.length === 1 ? ' is' : 's are'} already a job`}
-      detail='the same post, account and time was approved before, so approving again schedules nothing'
+      summary={`${reviews.length} already scheduled`}
+      detail='approving again changes nothing'
     >
       <ul className='flex flex-col gap-1.5'>
         {reviews.map((review) => {
@@ -350,14 +358,14 @@ function AlreadyJobs({
                   <span className='truncate'>
                     {manifest.platform} · {manifest.account}
                   </span>
-                  <span className='text-muted-foreground text-xs font-normal'>{manifest.timing.local.replace('T', ' ')}</span>
+                  <span className='text-muted-foreground hidden text-xs font-normal md:inline'>{manifest.timing.local.replace('T', ' ')}</span>
                 </span>
               }
-              meta={ended ? 'That job has ended. To post this draft again, prepare a review for a different time.' : undefined}
+              meta={ended ? 'Ended. Prepare it for a new time to post again.' : undefined}
               state={<JobStateBadge job={job} />}
               actions={
                 <Button variant='glass' size='control' className='h-11 px-3.5 text-[13px]' onClick={() => onOpenJob(job.id)}>
-                  Open job
+                  Open
                 </Button>
               }
             />
@@ -374,11 +382,11 @@ function LoadError({ error, hasData, updatedAt, onRetry }: { error: unknown; has
   return (
     <StateMessage
       kind={hasData ? 'stale' : 'error'}
-      title={hasData ? 'The queue could not be refreshed.' : 'The queue could not be loaded.'}
+      title={hasData ? 'Couldn’t refresh the queue' : 'Couldn’t load the queue'}
       description={
         <>
-          {errorMessage(error, '')}
-          {hasData && ` Showing what was loaded ${relativeTime(updatedAt / 1000)}.`}
+          {hasData && `Showing what loaded ${relativeTime(updatedAt / 1000)}. `}
+          <span className='text-muted-foreground'>{errorMessage(error, '')}</span>
         </>
       }
       action={
@@ -395,63 +403,41 @@ function LoadError({ error, hasData, updatedAt, onRetry }: { error: unknown; has
             flash(result.isError ? 'error' : 'success');
           }}
         >
-          Retry
+          Try again
         </StatefulButton>
       }
     />
   );
 }
 
-/** The first-run teaching block: what belongs here and the one action that starts it (DNA §20.1). */
-function FirstRun({ canSchedule, hasDrafts, hasReadyAccount, onSchedule }: { canSchedule: boolean; hasDrafts: boolean; hasReadyAccount: boolean; onSchedule: () => void }) {
-  const steps = [
-    { title: 'Schedule a draft', text: 'Pick a draft, an account and an exact time.' },
-    { title: 'Approve it here', text: 'Approve the exact text, media and time.' },
-    { title: 'The worker publishes', text: 'At that time, and it records what the provider confirmed.' }
-  ];
+/**
+ * The first-run empty state (DNA §20.1): a short title and the one action that moves things forward. With no ready
+ * account that is connecting one; with no drafts, creating a post; otherwise scheduling a draft (also in the header).
+ */
+function FirstRun({ canSchedule, canEdit, hasDrafts, hasReadyAccount }: { canSchedule: boolean; canEdit: boolean; hasDrafts: boolean; hasReadyAccount: boolean }) {
+  const action = !hasReadyAccount ? (
+    <Link href='/app/channels' className={buttonVariants({ variant: 'action', size: 'control' })}>
+      Connect account
+    </Link>
+  ) : !hasDrafts && canEdit ? (
+    <Link href='/app' className={buttonVariants({ variant: 'action', size: 'control' })}>
+      Create post
+    </Link>
+  ) : undefined;
   return (
-    <Surface material='quiet' radius='card' padding='lg' className='flex flex-col items-center gap-5 text-center' data-tour='queue-approvals'>
-      <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-full'>
-        <Icons.listDetails className='size-5' />
-      </span>
-      <div className='flex max-w-md flex-col gap-1'>
-        <h2 className='text-foreground text-base font-medium text-balance'>Nothing publishes on its own</h2>
-        <p className='text-muted-foreground text-sm leading-relaxed'>Every post goes through the same three steps.</p>
-      </div>
-      <ol className='grid w-full max-w-2xl gap-3 text-left sm:grid-cols-3'>
-        {steps.map((step, index) => (
-          <li key={step.title} className='rafii-glass flex gap-3 rounded-[var(--rafii-radius-control)] p-4 sm:flex-col sm:gap-2'>
-            <span className='rafii-quiet text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-xs tabular-nums'>{index + 1}</span>
-            <span className='flex flex-col gap-0.5'>
-              <span className='text-sm font-medium'>{step.title}</span>
-              <span className='text-muted-foreground text-xs leading-relaxed'>{step.text}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-      {/* One next step: scheduling needs a draft, so without one the block points at Ideas instead. */}
-      <div className='flex flex-wrap justify-center gap-2'>
-        {hasDrafts ? (
-          canSchedule && (
-            <Button variant='action' size='control' onClick={onSchedule}>
-              Schedule a draft
-            </Button>
-          )
-        ) : (
-          <Link href='/app/ideas' className={buttonVariants({ variant: 'action', size: 'control' })}>
-            Draft something in Ideas
-          </Link>
-        )}
-      </div>
-      {!hasReadyAccount && (
-        <p className='text-muted-foreground text-xs'>
-          Connect and verify an account first; a review can only be prepared for an account that is ready for posting.{' '}
-          <Link href='/app/channels' className='text-foreground underline underline-offset-2'>
-            Open Channels
-          </Link>
-        </p>
-      )}
-    </Surface>
+    <div data-tour='queue-approvals'>
+      <StateMessage
+        kind='empty'
+        media={
+          <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-full'>
+            <Icons.listDetails className='size-5' />
+          </span>
+        }
+        title='Nothing scheduled'
+        description={!hasReadyAccount ? 'Connect an account to schedule posts.' : hasDrafts && canSchedule ? 'Schedule a draft, then approve it here.' : undefined}
+        action={action}
+      />
+    </div>
   );
 }
 
@@ -504,7 +490,7 @@ function Queue() {
     if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && !asset.deleted)) {
       setScheduling((previous) => ({ open: true, variantId: null, assetId, key: previous.key + 1 }));
     } else {
-      toast.error(canSchedule ? 'This image is no longer available.' : 'Preparing a post requires approval permission.');
+      toast.error(canSchedule ? 'This image is gone.' : 'Only approvers can prepare posts.');
     }
     void setParams({ asset: null });
   }, [params.asset, snapshot.data, access.hasWorkspace, canSchedule, setParams]);
@@ -590,9 +576,9 @@ function Queue() {
     act.mutate(
       { revision, action: 'p2_cancel', payload: { jobId: job.id } },
       {
-        onSuccess: () => toast.success('Cancel requested.'),
+        // The badge turns to "Cancelling…", so success needs no toast.
         onError: (err) => {
-          reportActionError(err, 'Could not cancel.', reload);
+          reportActionError(err, 'Couldn’t cancel this post', reload);
           setHoldEpoch((epoch) => epoch + 1);
         }
       }
@@ -613,19 +599,22 @@ function Queue() {
     value: option.value,
     label: (
       <>
-        {option.label}
+        {FILTER_LABEL[option.value]}
         {loaded && <DigitSwap value={jobs.filter((job) => matchesFilter(job.state, option.value)).length} className='text-muted-foreground text-xs' />}
       </>
     )
   }));
 
+  const hasReadyAccount = channels.some((c) => c.displayState === 'Ready for posting');
+  // On a first run whose empty state asks to connect an account or create a post, that is the page's one action.
+  const scheduleInHeader = canSchedule && !(firstRun && (!hasReadyAccount || variants.length === 0));
+
   return (
     <PageContainer
       pageTitle='Queue'
-      pageDescription='Drafts waiting to be scheduled, approvals waiting on you, then everything the worker is handling.'
       infoContent={infoContent}
       pageHeaderAction={
-        canSchedule ? (
+        scheduleInHeader ? (
           <Button variant='action' size='control' data-tour='queue-schedule' onClick={() => openSchedule()}>
             <Icons.calendar />
             Schedule a draft
@@ -676,10 +665,10 @@ function Queue() {
             onChange={(value) => void setParams({ view: value, job: null })}
             widths='content'
             options={[
-              { value: 'queue', label: 'Queue', title: 'Approvals waiting on you, then everything the worker is handling' },
+              { value: 'queue', label: 'Queue', title: 'Approvals and scheduled posts' },
               {
                 value: 'drafts',
-                title: 'Drafts that are not scheduled yet',
+                title: 'Drafts not scheduled yet',
                 label: (
                   <>
                     Drafts
@@ -695,14 +684,14 @@ function Queue() {
         ) : (
         <>
         {sample ? (
-          <StateMessage kind='unsupported' layout='inline' title='Sample workspaces are read-only.' description='Nothing here can be scheduled, approved or cancelled.' />
+          <StateMessage kind='unsupported' layout='inline' title='Sample workspace · read only' />
         ) : (
           !canApprove &&
           canEdit && (
             <StateMessage
               kind='permission'
               layout='inline'
-              title='Scheduling, approving and cancelling posts is for the owner, approvers and members who can approve publications.'
+              title='Only approvers can schedule, approve or cancel posts.'
             />
           )
         )}
@@ -720,7 +709,7 @@ function Queue() {
                   Showing {channelFilter.platform} · {channelFilter.account}
                 </span>
               ) : (
-                'Showing one account that is no longer in this workspace'
+                'Showing a removed account'
               )
             }
             onClear={() => void setParams({ channel: null })}
@@ -729,13 +718,13 @@ function Queue() {
         )}
 
         {firstRun ? (
-          // One teaching block instead of two small empty states; it carries both tour anchors of the sections it replaces.
-          <section aria-label='How the queue works' data-tour='queue-list'>
+          // One empty state instead of two; it carries both tour anchors of the sections it replaces.
+          <section aria-label='Queue' data-tour='queue-list'>
             <FirstRun
               canSchedule={canSchedule}
+              canEdit={canEdit}
               hasDrafts={variants.length > 0}
-              hasReadyAccount={channels.some((c) => c.displayState === 'Ready for posting')}
-              onSchedule={() => openSchedule()}
+              hasReadyAccount={hasReadyAccount}
             />
           </section>
         ) : (
@@ -744,7 +733,7 @@ function Queue() {
               <section className='flex flex-col gap-4' aria-labelledby='approvals-heading' data-tour='queue-approvals'>
                 <div className='flex flex-wrap items-center justify-between gap-3'>
                   <SectionHeading id='approvals-heading' count={reviews.length}>
-                    Waiting for approval
+                    {STATUS.needsReview}
                   </SectionHeading>
                   {/* The batch action only exists while there is a batch to confirm; the dialog lists exactly what it sends. */}
                   {approvable.length >= 2 && (
@@ -755,15 +744,15 @@ function Queue() {
                   )}
                 </div>
                 {loading ? (
-                  <StateMessage kind='loading' title='Loading the reviews waiting for you' />
+                  <StateMessage kind='loading' title='Loading reviews' />
                 ) : (
                   <AnimatePresence mode='wait' initial={false}>
                     {reviews.length === 0 ? (
                       <motion.div key='none' initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_OUT }}>
                         <StateMessage
                           kind='empty'
-                          title={channelId ? 'Nothing from this account is waiting for approval.' : 'Nothing to approve.'}
-                          description={channelId ? undefined : 'Use “Schedule a draft” to prepare one for a channel and time.'}
+                          layout='inline'
+                          title={channelId ? 'Nothing from this account to review' : 'Nothing to review'}
                         />
                       </motion.div>
                     ) : (
@@ -801,12 +790,10 @@ function Queue() {
 
               <section className='flex flex-col gap-4' aria-labelledby='jobs-heading' data-tour='queue-list'>
                 <div className='flex flex-col gap-3'>
-                  <div className='flex flex-col gap-0.5'>
-                    <SectionHeading id='jobs-heading'>Publishing jobs</SectionHeading>
-                    {loaded && (
-                      <p className='text-muted-foreground text-xs'>
-                        {workerActivity === null ? 'No worker events recorded yet' : `Latest worker event on a job · ${relativeTime(workerActivity, nowSeconds)}`}
-                      </p>
+                  <div className='flex flex-wrap items-baseline gap-x-3 gap-y-0.5'>
+                    <SectionHeading id='jobs-heading'>Posts</SectionHeading>
+                    {loaded && workerActivity !== null && (
+                      <p className='text-muted-foreground hidden text-xs md:block'>Updated {relativeTime(workerActivity, nowSeconds)}</p>
                     )}
                   </div>
                   {/* The counts widen the segments: on a narrow screen the group scrolls sideways instead of pushing the page wider. */}
@@ -825,20 +812,29 @@ function Queue() {
                 </div>
                 <div ref={listRef} id='queue-jobs-list' role='tabpanel' aria-labelledby='jobs-heading' className='@container min-w-0'>
                   {loading ? (
-                    <StateMessage kind='loading' title='Loading publishing jobs' />
+                    <StateMessage kind='loading' title='Loading posts' />
                   ) : visible.length === 0 ? (
-                    <StateMessage kind='empty' title={params.filter === 'all' ? 'No jobs yet' : `No ${filterLabel.label.toLowerCase()} jobs`} description={filterLabel.empty} />
+                    <StateMessage
+                      kind='empty'
+                      title={params.filter === 'all' ? 'Nothing scheduled' : `No ${FILTER_LABEL[filterLabel.value].toLowerCase()} posts`}
+                      action={
+                        params.filter === 'all' ? undefined : (
+                          <Button variant='glass' size='control' onClick={() => void setParams({ filter: 'all' })}>
+                            Show all
+                          </Button>
+                        )
+                      }
+                    />
                   ) : asTable ? (
                     <Surface material='quiet' radius='card' padding='none' className='relative overflow-x-auto'>
                       <Table>
                         <TableHeader className='[&_tr]:border-0'>
                           <TableRow className='border-0 hover:bg-transparent'>
-                            <TableHead className='rafii-eyebrow text-muted-foreground h-11 px-4'>State</TableHead>
-                            <TableHead className='rafii-eyebrow text-muted-foreground h-11 px-3'>Destination</TableHead>
-                            <TableHead className='rafii-eyebrow text-muted-foreground h-11 px-3'>Scheduled</TableHead>
+                            <TableHead className='rafii-eyebrow text-muted-foreground h-11 px-4'>Status</TableHead>
+                            <TableHead className='rafii-eyebrow text-muted-foreground h-11 px-3'>Account</TableHead>
+                            <TableHead className='rafii-eyebrow text-muted-foreground h-11 px-3'>Time</TableHead>
                             <TableHead className='rafii-eyebrow text-muted-foreground h-11 px-3'>Attempts</TableHead>
-                            <TableHead className='rafii-eyebrow text-muted-foreground hidden h-11 px-3 @min-[76rem]:table-cell'>Provider</TableHead>
-                            <TableHead className='rafii-eyebrow text-muted-foreground hidden h-11 px-3 @min-[66rem]:table-cell'>Last event</TableHead>
+                            <TableHead className='rafii-eyebrow text-muted-foreground hidden h-11 px-3 @min-[66rem]:table-cell'>Last update</TableHead>
                             <TableHead className='h-11 px-4'>
                               <span className='sr-only'>Actions</span>
                             </TableHead>

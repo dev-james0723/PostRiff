@@ -81,7 +81,7 @@ def lint(statement, rule_key="other"):
     if _EXPERIENCE.search(text):
         raise ValueError("That is about you, not about how you write. Add it under Brand → Identity if it belongs in public content.")
     if _AUTHORITY.search(text):
-        raise ValueError("A preference cannot change what PostRiff is allowed to do.")
+        raise ValueError("A preference cannot change what Rafii is allowed to do.")
     if _DIGITS.search(text) and rule_key != "length.target":
         raise ValueError("A preference describes how you write, not a number or a fact. Facts belong in Sources or Brand.")
     return text
@@ -415,7 +415,7 @@ def apply(store, s, action, p, now=None):
         return True
     if action == "learning_reset":
         if p.get("confirmed") is not True:
-            raise ValueError("Confirm that you want PostRiff to forget what it learned.")
+            raise ValueError("Confirm that you want Rafii to forget what it learned.")
         learning = ensure(s, now)
         learning.update({"active": [], "retired": [], "revision": learning["revision"] + 1, "resetAt": _iso(now)})
         for proposal in s.get("preferences") or []:

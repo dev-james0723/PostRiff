@@ -159,7 +159,7 @@ export function AuthProvider({ children, initial }: { children: ReactNode; initi
         detected = initial?.mode ?? ((await createApi(async () => null).catalog()).authMode === 'dev' ? 'dev' : 'supabase');
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : 'The PostRiff API is not reachable.');
+        setError(err instanceof ApiError ? err.message : 'Couldn’t reach Rafii. Check your connection and try again.');
         setStatus('unavailable');
         return;
       }
@@ -183,7 +183,7 @@ export function AuthProvider({ children, initial }: { children: ReactNode; initi
       }
 
       if (!hasSupabaseEnv()) {
-        setError('Supabase is not configured for this deployment.');
+        setError('Sign-in isn’t available right now.');
         setStatus('unavailable');
         return;
       }

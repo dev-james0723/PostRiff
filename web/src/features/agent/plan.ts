@@ -64,7 +64,7 @@ export async function approvePlan(input: {
 
   if (run.status !== 'applied') {
     if (!run.artifactHash) throw new Error('This candidate has no reviewable text yet.');
-    onProgress?.('Adding the candidates to your drafts…', { id: 'apply' });
+    onProgress?.('Saving drafts…', { id: 'apply' });
     await api.applyRun(workspaceId, run.runId, snapshot.revision, run.artifactHash);
     snapshot = await api.snapshot(workspaceId);
   }
@@ -82,7 +82,7 @@ export async function approvePlan(input: {
       variant = variantForRow(snapshot.state, run, row) ?? variant;
     }
     if (variant.needsReview || variant.unknowns.length > 0) {
-      onProgress?.(`Confirming unknowns stay out of the ${row.platform} draft…`, step);
+      onProgress?.(`Checking ${row.platform} unknowns…`, step);
       await act('p2_variant_review', {
         variantId: variant.id,
         variantRevision: variant.revision,
@@ -91,7 +91,7 @@ export async function approvePlan(input: {
       });
       variant = snapshot.state.variants?.find((v) => v.id === variant!.id) ?? variant;
     }
-    onProgress?.(`Preparing the exact ${row.platform} review…`, step);
+    onProgress?.(`Preparing ${row.platform}…`, step);
     await act('p2_review', {
       variantId: variant.id,
       channelId: row.channelId,

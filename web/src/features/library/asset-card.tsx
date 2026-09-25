@@ -30,7 +30,7 @@ import type { AssetUse, LibraryAsset } from './use-library';
  * delete_media and media). Any other 503, such as "Private storage is temporarily unavailable."
  * (`hosted_storage.py`) or a gateway or restart, is temporary and says nothing about configuration.
  */
-const STORAGE_NOT_CONFIGURED = /media storage is not configured/i;
+const STORAGE_NOT_CONFIGURED = /media storage is not configured|media uploads aren.t available/i;
 
 export function saysStorageNotConfigured(failure: { status: number; message: string; code?: string } | null | undefined) {
   return failure?.status === 503 && (failure.code === 'media_storage_not_configured' || (!failure.code && STORAGE_NOT_CONFIGURED.test(failure.message)));
@@ -74,9 +74,9 @@ export function useAssetImage(assetId: string, enabled = true) {
 export async function copyHash(hash: string) {
   try {
     await navigator.clipboard.writeText(hash);
-    toast.success('Hash copied.');
+    toast.success('Copied');
   } catch {
-    toast.error('Could not copy the hash.');
+    toast.error('Couldn’t copy');
   }
 }
 

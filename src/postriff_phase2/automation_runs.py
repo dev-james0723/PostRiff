@@ -169,7 +169,7 @@ def research_step(worker, claim, repository, capability):
     if not web_research.allowed(state):
         record = {**base, "decision": "unavailable", "reason": "Web research is off for this workspace, so Rafii couldn't look for a source. An owner can turn it on under Memory → Web research."}
     elif backends is None:
-        record = {**base, "decision": "unavailable", "reason": "Web research isn't available on this PostRiff server right now."}
+        record = {**base, "decision": "unavailable", "reason": "Web research isn't available right now."}
     else:
         from . import automation_research
         try:

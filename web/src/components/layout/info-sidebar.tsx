@@ -24,11 +24,11 @@ const defaultData: InfobarData = {
   sections: [
     {
       title: 'Take the tour',
-      description: 'The help menu (the question mark in the header) replays the two-minute tour and opens tips for the page you are on.'
+      description: 'Open the ? menu in the header for the tour and tips for this page.'
     },
     {
       title: 'Jump anywhere',
-      description: 'Press ⌘K (Ctrl+K on Windows) and type the name of any page or action.'
+      description: 'Press ⌘K (Ctrl+K) and type any page or action.'
     }
   ]
 };
@@ -46,7 +46,6 @@ export function InfoSidebar({ className, ...props }: React.ComponentProps<typeof
     <Infobar className={cn('rounded-tl-[var(--rafii-radius-card)] border-0', className)} {...props}>
       <InfobarHeader className='sticky top-0 z-10 flex flex-row items-start justify-between gap-3 px-5 pt-5 pb-3'>
         <div className='flex min-w-0 flex-1 flex-col gap-1'>
-          <span className='rafii-eyebrow'>About this page</span>
           <h2 className='text-foreground text-lg font-medium tracking-tight wrap-break-word'>{data.title}</h2>
         </div>
         <div className='shrink-0'>
@@ -85,7 +84,7 @@ export function InfoSidebar({ className, ...props }: React.ComponentProps<typeof
                   </div>
                 ))
               ) : (
-                <StateMessage kind='empty' layout='inline' title='No content available' />
+                <StateMessage kind='empty' layout='inline' title='No help for this page yet' />
               )}
             </div>
           </InfobarGroupContent>

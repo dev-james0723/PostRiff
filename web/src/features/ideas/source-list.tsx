@@ -67,17 +67,12 @@ export function SourceList({ selectedId, onSelect, useApprovals }: SourceListPro
       {loading ? (
         <StateMessage kind='loading' title='Loading sources' />
       ) : sources.length === 0 ? (
-        <StateMessage
-          kind='empty'
-          title='Nothing captured yet'
-          description='Save a thought, paste text or add a link above. Nothing here is sent to a model or published on its own: you approve the facts, how each source may be used, and every draft.'
-        />
+        <StateMessage kind='empty' title='Nothing captured yet' />
       ) : rows.length === 0 ? (
         // No matches is not an empty bank (DNA §13.5): the other filters keep their sources.
         <StateMessage
           kind='empty'
           title={current.empty}
-          description={filter === 'all' ? undefined : 'The other filters still hold your sources.'}
           action={
             filter === 'all' ? undefined : (
               <Button variant='quiet' size='lg' onClick={() => setFilter('all')}>
@@ -176,22 +171,23 @@ function SourceRow({ source, state, selected, first, onSelect, useApproved }: { 
                 Public use not approved
               </AnimatedBadge>
             )}
-            <span className='inline-flex items-center gap-1'>
+            {/* Secondary metadata stays off phones; the inspector has all of it. */}
+            <span className='hidden items-center gap-1 md:inline-flex'>
               <Icons.cloudUpload aria-hidden className={cn('size-3.5', cloud ? 'text-foreground' : 'opacity-60')} />
               {cloud ? 'Cloud on' : 'Cloud off'}
             </span>
             {web && source.origin?.host && (
-              <span className='inline-flex min-w-0 items-center gap-1'>
+              <span className='hidden min-w-0 items-center gap-1 md:inline-flex'>
                 <Icons.externalLink className='size-3 shrink-0' />
                 <span className='truncate'>{source.origin.host}</span>
               </span>
             )}
-            <span>{used > 0 ? `Used in ${plural(used, 'draft')}` : 'Not used yet'}</span>
+            {used > 0 && <span className='hidden md:inline'>Used in {plural(used, 'draft')}</span>}
           </span>
         ) : (
           <span className='text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs'>
             <span>Withdrawn {formatDate(toEpoch(source.withdrawnAt))}</span>
-            {blocked > 0 && <span>· {plural(blocked, 'draft')} blocked until regenerated</span>}
+            {blocked > 0 && <span>· {plural(blocked, 'draft')} blocked</span>}
           </span>
         )}
       </span>

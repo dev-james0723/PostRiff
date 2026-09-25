@@ -13,7 +13,7 @@ import { keys, useTokens } from '@/lib/api/hooks';
 import type { ApiTokenCreated, WorkspaceApiToken } from '@/lib/api/types';
 import { useChangeError } from '@/lib/auth/use-sign-in-again';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
-import { formatDateTime } from '@/lib/time';
+import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { SettingsSection } from '../settings-section';
 
@@ -87,7 +87,6 @@ function TokensForWorkspace() {
     try {
       await api.revokeToken(workspaceId, item.tokenId);
       await refresh();
-      toast.success('Token revoked.');
     } catch (error) {
       reportError(error, 'The token could not be revoked.');
     } finally {
@@ -109,7 +108,7 @@ function TokensForWorkspace() {
     <SettingsSection
       id='api-tokens'
       title='Personal access tokens'
-      description='For your own scripts and agents. Read the workspace; optionally draft and propose schedules. Approval, publishing, replies, account connections and billing stay in the app. Trial plans may use tokens.'
+      description='For your own scripts. Tokens can never approve or publish.'
       action={
         <Button variant='action' size='control' data-tour='api-create-token' disabled={busy} onClick={() => setOpen(true)}>
           Create token
@@ -122,7 +121,7 @@ function TokensForWorkspace() {
         <StateMessage
           kind='error'
           layout='inline'
-          title='Tokens are unavailable. No count is shown.'
+          title='Couldn’t load tokens'
           action={
             <Button variant='glass' size='sm' className='min-h-9' onClick={() => void tokens.refetch()}>
               Try again
@@ -132,11 +131,11 @@ function TokensForWorkspace() {
       )}
       {tokens.data && !tokens.isError && (
         <p className='text-muted-foreground text-sm'>
-          {list.filter((t) => !t.revokedAt && t.expiresAt > now).length} active tokens
+          {list.filter((t) => !t.revokedAt && t.expiresAt > now).length} active
         </p>
       )}
       {tokens.data?.tokens.length === 0 && (
-        <StateMessage kind='empty' layout='inline' title='No tokens yet.' description='Every token expires and can be revoked here.' />
+        <StateMessage kind='empty' layout='inline' title='No tokens yet' />
       )}
       {list.length > 0 && (
         <ul className='flex flex-col gap-2'>
@@ -150,13 +149,14 @@ function TokensForWorkspace() {
                   </span>
                 </p>
                 <p className='text-muted-foreground text-xs'>
-                  {item.prefix}… · {item.scopes.includes('draft') ? 'Read, draft and propose' : 'Read only'}
+                  {item.prefix}… · {item.scopes.includes('draft') ? 'Read and draft' : 'Read only'} ·{' '}
+                  <span title={formatDateTime(item.expiresAt)}>
+                    {item.expiresAt <= now ? 'expired' : 'expires'} {relativeTime(item.expiresAt)}
+                  </span>
                 </p>
-                <p className='text-muted-foreground text-xs'>
-                  Expires {formatDateTime(item.expiresAt)} · {item.lastUsedAt ? `Last used ${formatDateTime(item.lastUsedAt)}` : 'Never used'}
-                </p>
-                <p className='text-muted-foreground text-xs'>
-                  Created by {item.createdBy} {item.lastUsedClient ? `· ${item.lastUsedClient}` : ''}
+                <p className='text-muted-foreground hidden text-xs md:block'>
+                  {item.lastUsedAt ? <span title={formatDateTime(item.lastUsedAt)}>Last used {relativeTime(item.lastUsedAt)}</span> : 'Never used'} · by {item.createdBy}
+                  {item.lastUsedClient ? ` · ${item.lastUsedClient}` : ''}
                 </p>
               </div>
               {!item.revokedAt && (
@@ -179,13 +179,9 @@ function TokensForWorkspace() {
       )}
       <details className='text-sm'>
         <summary className='rafii-focus text-foreground -mx-1 inline-flex min-h-9 cursor-pointer items-center rounded-md px-1 font-medium'>Using a token</summary>
-        <p className='text-muted-foreground mt-2 leading-relaxed'>
-          Send it in the Authorization header as Bearer followed by the token. Keep it in your secret store. Never put it in a URL.
-        </p>
+        <p className='text-muted-foreground mt-2 leading-relaxed'>Send it as a Bearer token in the Authorization header. Never put it in a URL.</p>
         <code className='rafii-quiet mt-2 block rounded-[var(--rafii-radius-micro)] px-2.5 py-1.5 text-xs break-all'>GET /api/workspaces/{workspaceId}</code>
-        <p className='text-muted-foreground mt-2 leading-relaxed'>
-          Draft scope uses the same writing allowance and source-use confirmations as the app. A schedule proposal is a candidate for a person to approve.
-        </p>
+        <p className='text-muted-foreground mt-2 leading-relaxed'>Drafts use your writing allowance. Proposed schedules wait for a person to approve.</p>
       </details>
       <Dialog open={open} onOpenChange={close}>
         <DialogContent className={cn(rafiiDialog, 'gap-5')}>
@@ -193,8 +189,8 @@ function TokensForWorkspace() {
             <DialogTitle className='text-foreground text-xl font-medium tracking-tight'>{revealed ? 'Copy your token now' : 'Create a token'}</DialogTitle>
             <DialogDescription className='leading-relaxed'>
               {revealed
-                ? 'This is the only reveal. Closing this dialog clears the secret; create a replacement if you lose it.'
-                : 'Creation requires a recent verified sign-in. Every request is limited by both these scopes and your current workspace permissions.'}
+                ? 'You won’t see it again. Closing this dialog clears it.'
+                : 'Needs a recent sign-in. Limited to these scopes and your role.'}
             </DialogDescription>
           </DialogHeader>
           {revealed ? (
@@ -208,7 +204,7 @@ function TokensForWorkspace() {
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(revealed.secret);
-                    toast.success('Token copied.');
+                    toast.success('Copied');
                   } catch {
                     toast.error('Copy failed. Select and copy the token manually.');
                   }
@@ -237,11 +233,9 @@ function TokensForWorkspace() {
                 <input type='checkbox' aria-label='Also allow drafts and schedule proposals' checked={draft} onChange={(e) => setDraft(e.target.checked)} className={rafiiCheckbox} />
                 Also allow drafts and schedule proposals
               </Label>
-              <p className='text-muted-foreground text-xs leading-relaxed'>
-                Read is always included. Draft requests use writing allowance. No token can approve or publish.
-              </p>
+              <p className='text-muted-foreground text-xs leading-relaxed'>Read is always included. No token can approve or publish.</p>
               <Button variant='action' size='control' disabled={busy || !name.trim()} type='submit'>
-                {busy ? 'Creating…' : 'Create and reveal once'}
+                {busy ? 'Creating…' : 'Create token'}
               </Button>
             </form>
           )}
