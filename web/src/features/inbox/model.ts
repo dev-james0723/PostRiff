@@ -132,20 +132,21 @@ export function replyStatusShort(status: string) {
 }
 
 /**
- * Says what wrote a draft. `ai_fixture` is a fixed starter sentence with no model behind it
- * (`audience.py` draft_reply), so it is never called AI here, whatever label the API sends.
+ * Says what wrote a draft. `copilot` drafts are written by Rafii's managed AI writer (`reply_writer.py`). `ai_fixture`
+ * was a fixed starter sentence with no model behind it; only older drafts still carry it, and it is never called AI.
  */
 export function originLabel(origin: string | undefined, apiLabel?: string) {
   if (origin === 'manual') return 'Your reply';
   if (origin === 'ai_fixture') return 'Starter line (not written by AI)';
+  if (origin === 'copilot') return "Suggested by Rafii's AI writer";
   if (modelWrote(origin)) return apiLabel || 'AI suggestion';
   return apiLabel || 'Reply';
 }
 
-/** True when the draft's origin says a language model wrote it (for example a future `ai_model`). */
+/** True when the draft's origin says a language model wrote it (`copilot`, or for example a future `ai_model`). */
 export function modelWrote(origin: string | undefined) {
   if (!origin || origin === 'ai_fixture') return false;
-  return origin.startsWith('ai_') || /model/i.test(origin);
+  return origin === 'copilot' || origin.startsWith('ai_') || /model/i.test(origin);
 }
 
 /** One capability's evidence for the hover card; an empty evidence string is said as such, never invented. */

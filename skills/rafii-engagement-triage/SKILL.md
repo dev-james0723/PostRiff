@@ -3,7 +3,7 @@ name: rafii-engagement-triage
 description: Use when sorting supported comments, mentions, reviews or messages into what needs a person, summarising a thread, or drafting a reply for approval.
 license: Proprietary (Rafii product)
 metadata:
-  version: 1.0.0
+  version: 1.1.0
   kind: workflow
 ---
 
@@ -30,7 +30,9 @@ what an answer would need. Quote only what the item says.
 
 - Answer the actual question in the workspace's approved voice for that platform.
 - State only facts the workspace has approved. When the answer needs a fact you do
-  not have (a price, a date, a policy), leave a clear placeholder and say so.
+  not have (a price, a date, a policy), reply without stating it (thank them, say
+  you will follow up, or invite a direct message) and list the missing fact as
+  needed. Never leave a placeholder or brackets for someone to fill in.
 - No promises, discounts, legal or medical claims, and no private information.
 - For complaints: acknowledge, do not argue, offer the next step the workspace
   supports.

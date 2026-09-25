@@ -39,7 +39,7 @@ const infoContent = {
   title: 'Inbox',
   sections: [
     { title: 'One reply at a time', description: 'You see the comment first. Each reply is approved on its own; nothing is sent in bulk or automatically.' },
-    { title: 'Labelled suggestions', description: 'A suggestion says whether AI or a plain starter line wrote it. You edit, then approve the exact text.' },
+    { title: 'Labelled suggestions', description: "Suggestions are written by Rafii's AI writer from the comment and, where available, your post, facts you cleared for public use and the voice memory you allowed a cloud model to read. You edit, then approve the exact text." },
     { title: 'Which accounts appear', description: 'Accounts whose Comments level is Direct, on platforms Rafii reads comments from.' }
   ]
 };

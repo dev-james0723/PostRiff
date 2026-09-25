@@ -1,8 +1,8 @@
 """Engagement Copilot (adaptive coworker spec §12 AI Inbox / Engagement Copilot; architecture lock L1).
 
 Works only on what the workspace's connected, permitted integrations already ingested (`pr_audience_threads`).
-Triage and summaries are deterministic; the reply method (`rafii-engagement-triage`) is compiled for the drafting
-route. A drafted reply is a row in `pr_reply_drafts` with status `draft`: sending stays `AudienceService
+Triage and summaries are deterministic; replies are written by Rafii's AI writer (`reply_writer`), which compiles the
+reply method (`rafii-engagement-triage`) into what it sends. A drafted reply is a row in `pr_reply_drafts` with status `draft`: sending stays `AudienceService
 .approve_reply` (reply permission, exact digest, `confirmed: true`) and the worker's send path. Nothing here sends.
 
 Urgency is never manufactured: an item's priority comes from a fixed rule table (category and age), and no
@@ -16,7 +16,6 @@ import time
 
 from postriff_alpha.domain import AlphaError
 
-from .. import skill_compiler
 from ..permissions import require
 
 CATEGORIES = ("question", "complaint", "lead", "praise", "press_or_partner", "spam", "abusive", "other")
@@ -78,52 +77,41 @@ def triage(threads, now=None):
     return {"items": items, "counts": counts, "note": "Priorities come from fixed rules (category and age). Nothing here is urgent on its own."}
 
 
-def _starter(category, author, facts):
-    handle = f"@{author}" if author else "there"
-    if category == "question":
-        return f"Thanks for asking, {handle}. [ANSWER: add the approved answer here{' — known facts: ' + '; '.join(facts[:2]) if facts else ''}]"
-    if category == "complaint":
-        return f"Sorry this happened, {handle}. Could you send us the details by direct message so we can look into it? [NEXT STEP: the workspace's supported fix or contact route]"
-    if category == "lead":
-        return f"Thanks for your interest, {handle}! [DETAILS: price, availability or how to order — only approved facts]"
-    if category == "press_or_partner":
-        return f"Thank you for reaching out, {handle}. [CONTACT: the workspace's approved press or partnership contact]"
-    if category == "praise":
-        return f"Thank you, {handle}! That means a lot."
-    return f"Thanks for commenting, {handle}."
-
-
-def draft_reply(service, workspace_id, token, thread_id, *, now=None):
-    """A reply suggestion for one thread, saved as a draft for review. The compiled engagement method rides with the
-    request (and its provenance); on this deterministic route the text is a labelled starter with explicit
-    placeholders for any fact the workspace has not approved. Sending is a separate, approved action."""
+def draft_reply(service, workspace_id, token, thread_id, *, now=None, model=None):
+    """A reply suggestion for one thread, written by Rafii's managed AI writer (reply_writer: the comment, the post it
+    answers, approved facts, the channel skill and the consented brand and voice memory) and saved as a draft for
+    review. Never fixed text: when the writer is unavailable or the budget refuses, nothing is drafted and the reason
+    is returned. Sending is a separate, approved action."""
+    from .. import reply_writer
     now = now or time.time()
-    compiled = skill_compiler.compile({"agent": "content", "intent": "engagement_reply", "workflow": "rafii-engagement-triage"})
-    with service.repository.transaction(token, workspace_id) as (cur, row, principal):
-        member = service.ideas._member(row)
-        require(member, "edit")
-        cur.execute("SELECT text,author_handle,provider FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL", (thread_id, workspace_id))
+    with service.repository.transaction(token, workspace_id) as (cur, row, _principal):
+        require(service.ideas._member(row), "edit")
+        cur.execute("SELECT text FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL", (thread_id, workspace_id))
         thread = cur.fetchone()
         if not thread:
             raise AlphaError("Thread unavailable.", 404)
-        category = classify(thread[0])
-        if category in ("spam", "abusive"):
-            return {"drafted": False, "category": category, "reason": "Rafii does not draft replies to spam or abusive comments; hide or report them from the platform instead."}
-        state = service.ideas._state(row)
-        facts = [f["text"] for s in state.get("sources") or [] if s.get("active") for f in s.get("facts") or [] if f.get("approved")][:5]
-        text = _starter(category, thread[1], facts)
-        provenance = skill_compiler.provenance_for_run(compiled, state=state)
-        # Truthful provenance: the method was attached, but this deterministic starter was not written by a model.
-        provenance["route"] = {"kind": "deterministic_starter", "methodApplied": False}
-        for skill in provenance["skills"]:
-            skill["applied"] = False
-        events = [{"at": now, "state": "draft", "by": "engagement_copilot", "category": category, "provenance": provenance}]
+    category = classify(thread[0])
+    if category in ("spam", "abusive"):
+        return {"drafted": False, "category": category, "reason": "Rafii does not draft replies to spam or abusive comments; hide or report them from the platform instead."}
+    try:
+        written = reply_writer.write(service, workspace_id, token, thread_id, model=model)
+    except AlphaError as error:
+        if error.status == 404:
+            raise
+        return {"drafted": False, "category": category, "reason": str(error), "code": getattr(error, "code", None)}
+    # What the writer was actually sent (its skills, the compiled reply method, memory and facts) and its route.
+    provenance = written["provenance"]
+    events = [{"at": now, "state": "draft", "by": "engagement_copilot", "category": category, "provenance": provenance}]
+    with service.repository.transaction(token, workspace_id) as (cur, row, principal):
+        require(service.ideas._member(row), "edit")
         cur.execute("INSERT INTO public.pr_reply_drafts(workspace_id,thread_id,author,origin,text,status,events) VALUES(%s,%s,%s,'copilot',%s,'draft',%s::jsonb) RETURNING id::text",
-                    (workspace_id, thread_id, principal, text, json.dumps(events)))
+                    (workspace_id, thread_id, principal, written["text"], json.dumps(events)))
         draft_id = cur.fetchone()[0]
+        from ..hosted import audit
+        audit(cur, workspace_id, principal, "reply.drafted", draft_id, {"origin": "copilot", "category": category})
         cur.execute("SELECT status,origin,text FROM public.pr_reply_drafts WHERE id::text=%s AND workspace_id=%s", (draft_id, workspace_id))
         stored = cur.fetchone()
-        verified = stored is not None and stored[0] == "draft" and stored[2] == text
-    return {"drafted": True, "verified": verified, "draftId": draft_id, "category": category, "text": text, "status": "draft",
-            "label": "Suggested reply — review before sending", "placeholders": re.findall(r"\[[A-Z ]+:[^\]]*\]", text),
+        verified = stored is not None and stored[0] == "draft" and stored[2] == written["text"]
+    return {"drafted": True, "verified": verified, "draftId": draft_id, "category": category, "text": written["text"], "status": "draft",
+            "needs": written["needs"], "label": "Suggested by Rafii's AI writer — review before sending",
             "sending": "Not sent. Approving and sending use the existing reply approval.", "provenance": provenance}

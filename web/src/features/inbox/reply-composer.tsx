@@ -124,16 +124,16 @@ export function ReplyComposer({
     setPending('starter');
     setSaved(false);
     try {
-      const result = await api.draftReply(workspaceId, thread.threadId, { origin: 'ai_fixture' });
+      const result = await api.draftReply(workspaceId, thread.threadId, { origin: 'ai' });
       onChange({ text: result.text, draft: { draftId: result.draftId, text: result.text, origin: result.origin, label: result.label } });
       if (previous.trim() && previous.trim() !== result.text) {
-        toast('Starter line inserted', {
+        toast('Suggestion inserted', {
           description: 'It replaced your text.',
           action: { label: 'Undo', onClick: () => onChange({ text: previous }) }
         });
       }
     } catch (error) {
-      toast.error(errorMessage(error, "Couldn't insert a starter line."));
+      toast.error(errorMessage(error, "Couldn't suggest a reply."));
     } finally {
       setPending(null);
     }
@@ -181,7 +181,7 @@ export function ReplyComposer({
   }
 
   const reviewEnabled = canReply && !busy && (inSync || (unsaved && canEdit));
-  const starterLabel = modelWrote(draft?.origin) ? 'Suggest another' : 'Insert starter line';
+  const starterLabel = modelWrote(draft?.origin) ? 'Suggest another' : 'Suggest a reply';
   let draftLine: string | null = null;
   if (draft && inSync) draftLine = `Draft saved · ${originLabel(draft.origin, draft.label)}`;
   else if (unsaved && canEdit) draftLine = 'Unsaved changes';

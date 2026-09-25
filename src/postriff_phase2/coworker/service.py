@@ -852,9 +852,9 @@ class CoworkerService:
         result = engagement.triage(threads["threads"], self.clock())
         return {**result, "capabilities": threads.get("capabilities"), "replySendingEnabled": threads.get("replySendingEnabled"), "limits": threads.get("limits")}
 
-    def engagement_draft(self, workspace_id, token, thread_id):
+    def engagement_draft(self, workspace_id, token, thread_id, model=None):
         self._require("RAFII_ENGAGEMENT_COPILOT_ENABLED")
-        return engagement.draft_reply(self.hosted, workspace_id, token, thread_id, now=self.clock())
+        return engagement.draft_reply(self.hosted, workspace_id, token, thread_id, now=self.clock(), model=model)
 
     # === Attention + growth =========================================================================================================
     def attention(self, workspace_id, token):

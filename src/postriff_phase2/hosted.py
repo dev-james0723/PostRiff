@@ -358,6 +358,7 @@ class HostedWorkspaceService:
         self.reminders = Reminders(self.mailer, self._email_for, clock=clock)
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport)
+        self.audience._service = self   # reply suggestions are written by the drafting service's managed writer
         from .learning_service import HostedLearning
         # Preference learning: every command's implied events are captured in that command's transaction.
         self.learning = HostedLearning(connection_factory, clock)
