@@ -31,14 +31,14 @@ const check = (name, ok, detail) => {
   process.stdout.write(`${ok ? 'ok  ' : 'FAIL'} ${name}${!ok && detail !== undefined ? ` — ${JSON.stringify(detail).slice(0, 400)}` : ''}\n`);
 };
 async function call(method, url, body) {
-  const res = await fetch(base + url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const res = await fetch(base + url, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const text = await res.text();
   if (!res.ok) throw new Error(`${method} ${url} → ${res.status} ${text.slice(0, 300)}`);
   return text ? JSON.parse(text) : null;
 }
 
-/** A small valid PNG (solid colour), written without any image library. */
-function png(width = 480, height = 480) {
+/** A valid PNG written without any image library: solid colour, or random noise (which barely compresses, like a photo). */
+function png(width = 480, height = 480, noise = false) {
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -62,8 +62,8 @@ function png(width = 480, height = 480) {
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8;
   ihdr[9] = 2;
-  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x7a)]);
-  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  const row = () => Buffer.concat([Buffer.from([0]), noise ? require('node:crypto').randomBytes(width * 3) : Buffer.alloc(width * 3, 0x7a)]);
+  const raw = Buffer.concat(Array.from({ length: height }, row));
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
@@ -201,7 +201,7 @@ async function axe(page) {
     const desk = await context(browser, { width: 1440, height: 900 });
     const page = await desk.newPage();
     page.on('response', async (res) => {
-      if (/\/agent\/voice\/sessions$/.test(new URL(res.url()).pathname)) voiceResponses.push(await res.text().catch(() => ''));
+      if (new URL(res.url()).pathname.endsWith('/agent/voice/sessions')) voiceResponses.push(await res.text().catch(() => ''));
     });
     await page.goto(`${base}/app/automations`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(page);
@@ -313,6 +313,17 @@ async function axe(page) {
     await waitAnswers(page, endBefore + 1);
     check('V-A09: after voice ends, text continues the same conversation', (await answers(page).count()) === endBefore + 1);
     await shot(page, 'voice-desktop-ended.png');
+
+    // A photo bigger than a Vercel request allows (4.5 MB) is scaled down in the browser and still added.
+    const big = path.join(out, 'large-photo.png');
+    fs.writeFileSync(big, png(1600, 1300, true));
+    const upload = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/agent/attachments'), { timeout: 60000 });
+    await panel(page).locator('input[type="file"][accept="image/png,image/jpeg"]').setInputFiles(big);
+    const uploaded = await upload.catch(() => null);
+    const bodyBytes = Buffer.byteLength(uploaded?.request().postData() ?? '');
+    check('MM01: a photo larger than a request allows is scaled down in the browser (body under 4.5 MB) and added',
+      fs.statSync(big).size > 4_500_000 && bodyBytes > 0 && bodyBytes < 4_500_000 && uploaded?.status() === 201, { fileBytes: fs.statSync(big).size, bodyBytes, status: uploaded?.status() });
+    fs.rmSync(big, { force: true });
     await desk.close();
 
     // --- microphone denied: the real WebRTC transport, no fake; text still works ------------------------------------------

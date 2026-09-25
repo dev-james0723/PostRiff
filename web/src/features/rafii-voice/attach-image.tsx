@@ -11,15 +11,41 @@ import { ApiError } from '@/lib/api/client';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
 import { voiceSession } from '@/lib/agent-runtime/voice-session';
 
-const MAX_BYTES = 8 * 1024 * 1024;
+// Vercel Functions take request bodies up to 4.5 MB and base64 adds a third, so an image is sent at 3 MiB or less: a
+// larger photo is scaled down (long edge 2048 px, then smaller) and re-encoded here, before it leaves the browser.
+const MAX_PICK_BYTES = 30 * 1024 * 1024;
+const MAX_SEND_BYTES = 3 * 1024 * 1024;
+const EDGES = [2048, 1600, 1200];
 
-function toBase64(file: File): Promise<string> {
+function toBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.addEventListener('load', () => resolve(String(reader.result).split(',')[1] ?? ''));
     reader.addEventListener('error', () => reject(reader.error ?? new Error('The image could not be read.')));
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
+}
+
+async function fitForUpload(file: File): Promise<Blob | null> {
+  if (file.size <= MAX_SEND_BYTES) return file;
+  const bitmap = await createImageBitmap(file);
+  try {
+    for (const edge of EDGES) {
+      const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      // The original format first (a PNG keeps its transparency), then JPEG.
+      for (const [type, quality] of [[file.type, 0.9], ['image/jpeg', 0.85]] as const) {
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+        if (blob && blob.size <= MAX_SEND_BYTES) return blob;
+      }
+    }
+    return null;
+  } finally {
+    bitmap.close();
+  }
 }
 
 export function AttachImage({ conversationId, onAttached, disabled }: { conversationId: string | null; onAttached: (image: { assetId: string; index: number | null }) => void; disabled?: boolean }) {
@@ -39,10 +65,12 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
     if (!file || !conversationId) return;
     setMessage(null);
     if (!/^image\/(png|jpeg)$/.test(file.type)) return setMessage('Use a PNG or JPEG image.');
-    if (file.size > MAX_BYTES) return setMessage('Images must be at most 8 MB.');
+    if (file.size > MAX_PICK_BYTES) return setMessage('Images must be at most 30 MB.');
     setBusy(true);
     try {
-      const attached = await api.attach(workspaceId, { conversationId, data: await toBase64(file) });
+      const fitted = await fitForUpload(file).catch(() => null);
+      if (!fitted) return setMessage('This image is too large to send, even scaled down. Try a smaller one.');
+      const attached = await api.attach(workspaceId, { conversationId, data: await toBase64(fitted) });
       onAttached({ assetId: attached.assetId, index: attached.index });
       voiceSession.imageAttached(attached.assetId, attached.index);
       setMessage(`Image ${attached.index ?? ''} added. Ask Rafii about it.`);
