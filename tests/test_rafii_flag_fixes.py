@@ -292,12 +292,19 @@ class SourceCampaignRepeatTest(unittest.TestCase):
                "goal": "Fill the hall", "audience": "Local families", "destinations": [{"channelId": "ch1"}]}
 
     def record_id(self):
+        """The id the first request stored, an hour earlier than the repeat."""
         import hashlib
+        from postriff_phase2.coworker import source_intake
+        artifact = source_intake.normalize("text", self.payload, now=self.NOW - 3600)
+        return "sc_" + hashlib.sha256(json.dumps(["w1", artifact["id"], "Fill the hall", "Local families", None]).encode()).hexdigest()[:12]
+
+    def test_the_record_id_does_not_change_with_the_clock(self):
         from postriff_phase2.coworker import fact_pack, source_intake
-        artifact = source_intake.normalize("text", self.payload, now=self.NOW)
-        pack = fact_pack.build([artifact], self.NOW)
-        brief = fact_pack.canonical_brief(pack, goal="Fill the hall", audience="Local families", cta=None)
-        return "sc_" + hashlib.sha256(f"w1:{pack['hash']}:{brief['hash']}".encode()).hexdigest()[:12]
+        packs = [fact_pack.build([source_intake.normalize("text", self.payload, now=t)], t)["hash"] for t in (self.NOW, self.NOW + 60)]
+        self.assertNotEqual(packs[0], packs[1])   # why the pack hash cannot be the id
+        record = {"id": self.record_id(), "status": "ready_for_review", "drafts": [], "sourceId": "s1", "campaignId": "c1"}
+        result, _ideas = self.run_with(record)
+        self.assertTrue(result["existing"])
 
     def run_with(self, record):
         state = {"phase2": {"channels": [{"id": "ch1", "platform": "LinkedIn", "language": "en"}]}, "coworker": {"sourceCampaigns": [record]}}
@@ -336,7 +343,7 @@ class SourceCampaignRepeatTest(unittest.TestCase):
 class ListeningCronTest(unittest.TestCase):
     NOW = 1_790_000_000
 
-    def run_cron(self, watchlists, log):
+    def run_cron(self, watchlists, log, *, locked_state=None, lock_error=None, deadline=None):
         from postriff_phase2.coworker import listening
         state = {"coworker": {"listening": {"watchlists": watchlists, "opportunities": []}}}
 
@@ -344,19 +351,24 @@ class ListeningCronTest(unittest.TestCase):
             rowcount = 1
 
             def execute(self, sql, params=None):
-                log.append(" ".join(sql.split())[:160])
+                text = " ".join(sql.split())
+                log.append(text[:160])
+                if lock_error is not None and "FOR UPDATE" in text:
+                    raise lock_error
 
             def fetchall(self):
                 return [("w1",)]
 
             def fetchone(self):
-                return (copy.deepcopy(state),)
+                locked = any("FOR UPDATE" in entry for entry in log)
+                return (copy.deepcopy(locked_state if locked and locked_state is not None else state),)
 
         @contextlib.contextmanager
         def connection():
             db = mock.Mock()
             db.cursor.return_value = contextlib.nullcontext(Cursor())
             db.commit.side_effect = lambda: log.append("commit")
+            db.rollback.side_effect = lambda: log.append("rollback")
             yield db
 
         class Broker:
@@ -364,30 +376,66 @@ class ListeningCronTest(unittest.TestCase):
                 pass
 
             def search_items(self, query, _options):
-                log.append("search")
+                log.append(f"search {query}")
                 return {"status": "ok", "items": []}
 
         hosted = type("Hosted", (), {"connection_factory": staticmethod(connection)})()
         service = type("Service", (), {"hosted": hosted, "clock": staticmethod(lambda: self.NOW)})()
         with mock.patch("postriff_phase2.research.enabled", return_value=True), mock.patch("postriff_phase2.research.allowed", return_value=True), \
                 mock.patch("postriff_phase2.coworker.research_broker.ResearchBroker", Broker):
-            return listening.cron(service)
+            return listening.cron(service, deadline=deadline)
+
+    def due(self, query="piano recital"):
+        return [{"id": "wl1", "query": query, "active": True, "lastRunAt": None}]
 
     def test_the_search_runs_before_the_row_is_locked(self):
         log = []
-        self.run_cron([{"id": "wl1", "query": "piano recital", "active": True, "lastRunAt": None}], log)
-        self.assertIn("search", log)
+        self.run_cron(self.due(), log)
+        self.assertIn("search piano recital", log)
         locked = next(i for i, entry in enumerate(log) if "FOR UPDATE" in entry)
-        self.assertLess(log.index("search"), locked)
+        self.assertLess(log.index("search piano recital"), locked)
+        self.assertIn("SET LOCAL lock_timeout", log[locked - 1])
         self.assertTrue(any(entry.startswith("UPDATE public.pr_workspaces") for entry in log[locked:]))
         self.assertEqual(log[-1], "commit")
+
+    def test_discovery_asks_only_for_workspaces_that_may_search(self):
+        log = []
+        self.run_cron(self.due(), log)
+        self.assertIn("researchEgress", log[0])
 
     def test_a_workspace_with_nothing_due_is_never_locked_or_written(self):
         log = []
         result = self.run_cron([{"id": "wl1", "query": "piano recital", "active": True, "lastRunAt": self.NOW - 60}], log)
         self.assertEqual(result["workspaces"], [{"workspaceId": "w1", "skipped": "not_due"}])
         self.assertFalse(any("FOR UPDATE" in entry or entry.startswith("UPDATE") for entry in log))
-        self.assertNotIn("search", log)
+        self.assertFalse(any(entry.startswith("search") for entry in log))
+
+    def test_a_query_edited_while_searching_is_left_due_and_nothing_is_written(self):
+        log = []
+        edited = {"coworker": {"listening": {"watchlists": self.due("violin recital"), "opportunities": []}}}
+        result = self.run_cron(self.due(), log, locked_state=edited)
+        self.assertEqual(result["workspaces"], [{"workspaceId": "w1", "skipped": "not_due"}])
+        self.assertFalse(any(entry.startswith("UPDATE") for entry in log))
+        self.assertEqual(log[-1], "rollback")
+
+    def test_deletion_started_while_searching_drops_the_results(self):
+        log = []
+        deleting = {"accountDeletion": {"requestedAt": self.NOW}, "coworker": {"listening": {"watchlists": self.due(), "opportunities": []}}}
+        result = self.run_cron(self.due(), log, locked_state=deleting)
+        self.assertEqual(result["workspaces"], [{"workspaceId": "w1", "skipped": "account_deletion"}])
+        self.assertFalse(any(entry.startswith("UPDATE") for entry in log))
+
+    def test_a_row_locked_for_longer_than_the_wait_is_skipped_as_busy(self):
+        log = []
+        error = RuntimeError("canceling statement due to lock timeout")
+        error.sqlstate = "55P03"
+        result = self.run_cron(self.due(), log, lock_error=error)
+        self.assertEqual(result["workspaces"], [{"workspaceId": "w1", "skipped": "busy"}])
+
+    def test_no_search_starts_without_time_to_finish_it(self):
+        log = []
+        self.run_cron(self.due(), log, deadline=time.monotonic() + 5)
+        self.assertFalse(any(entry.startswith("search") for entry in log))
 
     def test_research_off_means_no_database_work_at_all(self):
         from postriff_phase2.coworker import listening

@@ -544,7 +544,9 @@ class CoworkerService:
         if not destinations:
             raise AlphaError("Choose at least one account to write for.", 400)
         usable = [c for c in pack["claims"] if c["usableForDraft"]]
-        record_id = "sc_" + hashlib.sha256(f"{workspace_id}:{pack['hash']}:{brief['hash']}".encode()).hexdigest()[:12]
+        # Content-addressed from inputs that do not change with the clock (the fact pack carries retrieval times, so its
+        # hash would give every repeat a new id): the source's own content-derived id and the brief's goal, audience, CTA.
+        record_id = "sc_" + hashlib.sha256(json.dumps([workspace_id, artifact["id"], goal, audience, brief.get("cta")], ensure_ascii=False).encode()).hexdigest()[:12]
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.hosted.ideas._member(row), "edit")
@@ -838,11 +840,11 @@ class CoworkerService:
             db.commit()
         return {"productEventsRemoved": removed}
 
-    def listening_cron(self, max_workspaces=20):
+    def listening_cron(self, max_workspaces=20, deadline=None):
         if not flags.enabled("RAFII_LISTENING_ENABLED"):
             return {"status": "disabled"}
         from . import listening
-        return listening.cron(self, max_workspaces)
+        return listening.cron(self, max_workspaces, deadline=deadline)
 
     def engagement_triage(self, workspace_id, token):
         self._require("RAFII_ENGAGEMENT_COPILOT_ENABLED")

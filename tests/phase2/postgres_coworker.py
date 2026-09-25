@@ -505,8 +505,12 @@ def _():
                "destinations": [{"channelId": LI, "language": "en"}, {"channelId": TH, "language": "en"}]}
     result = service.coworker.source_campaign(wid, OWNER, request)
     record_ = result["sourceCampaign"]
-    # The same source and brief again: the finished campaign comes back as it is; its drafts are never replaced.
-    again = service.coworker.source_campaign(wid, OWNER, request)
+    # The same source and brief again, a minute later: the finished campaign comes back as it is; its drafts are never replaced.
+    clock[0] += 60
+    try:
+        again = service.coworker.source_campaign(wid, OWNER, request)
+    finally:
+        clock[0] -= 60
     claims = record_["factPack"]["claims"]
     campaign = next(c for c in state()["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == record_["campaignId"])
     linked = {i.get("variantId") for i in campaign["items"]}

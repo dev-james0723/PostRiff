@@ -51,7 +51,7 @@ def cron(service, max_seconds=120):
     for name, step in (("notifications", lambda: service.notifications.cron(max_seconds=max(5, min(20, int(left()))))),
                        ("weekly", lambda: service.coworker.weekly_cron(max_seconds=left(10), deadline=deadline - 10)),
                        ("learning", lambda: service.coworker.performance_cron(deadline=deadline - 5)),
-                       ("listening", lambda: service.coworker.listening_cron()),
+                       ("listening", lambda: service.coworker.listening_cron(deadline=deadline - 5)),
                        ("retention", lambda: service.coworker.retention_sweep())):
         if name != "notifications" and left() <= 0:
             result[name] = {"status": "deferred", "reason": "the coworker cron budget is used up; the next minute continues"}
