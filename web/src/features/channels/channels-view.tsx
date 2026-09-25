@@ -22,6 +22,8 @@ import { publishingSupport } from '@/lib/channels/publishing-support';
 import {
   channelCounts,
   CONNECT_CAPABILITIES,
+  isConnected,
+  listedOnChannels,
   matchesFilter,
   nowSeconds,
   parseChannelFilter,
@@ -209,7 +211,6 @@ function ChannelsPage() {
   const canManage = checkAccess(access, { permission: 'manage_connections' });
 
   const { data, isLoading, isFetching, error, refetch } = channelsQuery;
-  const channels = useMemo(() => data?.channels ?? [], [data]);
   const providers = useMemo(() => data?.providers ?? [], [data]);
   const filter = parseChannelFilter(params.get('filter'));
   useSiteAgentPageContext({ visibleState: { filter } });
@@ -239,13 +240,17 @@ function ChannelsPage() {
     () => Object.fromEntries(Object.entries(activityByChannel).map(([id, activity]) => [id, activity.held])),
     [activityByChannel]
   );
+  const channels = useMemo(
+    () => (data?.channels ?? []).filter((channel) => listedOnChannels(channel, heldByChannel[channel.id] ?? 0)),
+    [data, heldByChannel]
+  );
 
   const now = nowSeconds();
   const counts = channelCounts(channels, now, heldByChannel);
   const sorted = useMemo(() => sortForAttention(channels, now, heldByChannel), [channels, now, heldByChannel]);
   const visible = sorted.filter((channel) => matchesFilter(channel, filter, now, heldByChannel[channel.id] ?? 0) && (folderView.length === 0 || folderView.includes(channel.id)));
   const folderAccounts = useMemo(() => toFolderAccounts(snapshot.data?.state.phase2?.channels), [snapshot.data]);
-  const connectedPlatforms = useMemo(() => new Set(channels.map((channel) => channel.platform)), [channels]);
+  const connectedPlatforms = useMemo(() => new Set(channels.filter((channel) => isConnected(channel)).map((channel) => channel.platform)), [channels]);
 
   const replaceParams = useCallback(
     (mutate: (next: URLSearchParams) => void) => {

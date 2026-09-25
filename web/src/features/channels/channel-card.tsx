@@ -188,6 +188,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const [verifyOutcome, flashVerifyOutcome] = useFlash<{ state: 'success' | 'error'; label: string }>();
 
   const held = activity?.held ?? 0;
+  // Listed only while posts for it are on hold (`listedOnChannels`): the card offers Reconnect and History, nothing else.
+  const disconnected = disconnectedByCustomer(channel);
   const badge = channelBadge(channel);
   const attention = needsAttention(channel, undefined, held);
   const expiring = expiringSoon(channel);
@@ -228,10 +230,13 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
     setBusy(true);
     try {
       await api.disconnectChannel(workspaceId, channel.id);
-      // No toast: the card's badge turns to Disconnected.
+      // The card leaves the list (`listedOnChannels`), so the toast is the confirmation.
+      toast.success(`${channel.platform} disconnected`, { description: channel.account });
       await refresh();
     } catch (err) {
-      reportChangeError(err, "Couldn't disconnect.");
+      // 404: already disconnected (another tab, or a list that had not caught up). Show the list as it is.
+      if (err instanceof ApiError && err.status === 404) await refresh();
+      else reportChangeError(err, "Couldn't disconnect.");
     } finally {
       setBusy(false);
     }
@@ -289,8 +294,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
-      <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />
-      {channel.socialReadiness && (
+      {!disconnected && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
+      {!disconnected && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
           <li>
             {channel.socialReadiness.publishing === 'PUBLISHING_AVAILABLE'
@@ -317,24 +322,26 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       {/* A div, not a p: the scopes list expands a block inside this row. */}
-      <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
-        {channel.expiresAt ? (
-          <>
-            <span className={cn((expiring || expired) && 'text-foreground font-medium')} title={formatDate(channel.expiresAt)}>
-              {expired ? `Expired ${relativeTime(channel.expiresAt)}` : `Expires ${relativeTime(channel.expiresAt)}`}
-            </span>
-            <span aria-hidden>·</span>
-          </>
-        ) : null}
-        {/* Secondary on phones: verification time and its evidence stay in the History sheet and the title. */}
-        <span className='hidden md:inline' title={`Evidence: ${channel.evidenceSource.replace(/_/g, ' ')}`}>
-          {identityVerifiedAt ? `Verified ${relativeTime(identityVerifiedAt)}` : 'Not verified yet'}
-        </span>
-        <span aria-hidden className='hidden md:inline'>
-          ·
-        </span>
-        <ScopesList scopes={channel.scopes} />
-      </div>
+      {!disconnected && (
+        <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
+          {channel.expiresAt ? (
+            <>
+              <span className={cn((expiring || expired) && 'text-foreground font-medium')} title={formatDate(channel.expiresAt)}>
+                {expired ? `Expired ${relativeTime(channel.expiresAt)}` : `Expires ${relativeTime(channel.expiresAt)}`}
+              </span>
+              <span aria-hidden>·</span>
+            </>
+          ) : null}
+          {/* Secondary on phones: verification time and its evidence stay in the History sheet and the title. */}
+          <span className='hidden md:inline' title={`Evidence: ${channel.evidenceSource.replace(/_/g, ' ')}`}>
+            {identityVerifiedAt ? `Verified ${relativeTime(identityVerifiedAt)}` : 'Not verified yet'}
+          </span>
+          <span aria-hidden className='hidden md:inline'>
+            ·
+          </span>
+          <ScopesList scopes={channel.scopes} />
+        </div>
+      )}
 
       {activityTotal > 0 && activity && (
         <Link
@@ -352,7 +359,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
-        {canManage && (
+        {canManage && !disconnected && (
           <StatefulButton
             variant='outline'
             className={cn(STATEFUL_GLASS, CONTROL_44)}
@@ -371,7 +378,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <Icons.history className='size-4' />
           History
         </Button>
-        {canManage && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
+        {canManage && !disconnected && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
       </div>
       <ChannelHistorySheet channel={channel} open={historyOpen} onOpenChange={setHistoryOpen} />
     </Surface>
