@@ -62,3 +62,38 @@ def cron(service, max_seconds=120):
             result[name] = {"error": type(error).__name__}
             log.warning(json.dumps({"event": "coworker.cron_step_failed", "step": name, "error": type(error).__name__}))
     return result
+
+
+def summary(result):
+    """What each coworker cron step did, for the cron.completed log line: statuses, exception type names and counts
+    only. Never a workspace id, a query, a reason or any other text (list rows become counts by outcome)."""
+    if isinstance((result or {}).get("status"), str):   # the whole step: {"status": "disabled"} or {"status": "unavailable", "error": …}
+        error = result.get("error")
+        return {"status": result["status"][:40], **({"error": error[:60] if error.isidentifier() else "error"} if isinstance(error, str) else {})}
+    out = {}
+    for step, value in (result or {}).items():
+        if not isinstance(value, dict):
+            continue
+        item = {}
+        for key, entry in value.items():
+            if key == "status" and isinstance(entry, str):
+                item["status"] = entry[:40]
+            elif key == "error" and isinstance(entry, str):
+                item["error"] = entry[:60] if entry.isidentifier() else "error"   # a type name, never a message
+            elif isinstance(entry, (bool, int, float)):
+                item[key] = entry
+            elif isinstance(entry, list):
+                outcomes = {}
+                for row in entry:
+                    if not isinstance(row, dict):
+                        continue
+                    label = ("skipped:" + row["skipped"] if isinstance(row.get("skipped"), str) else "error" if "error" in row
+                             else "state:" + row["state"] if isinstance(row.get("state"), str) else "done")[:40]
+                    outcomes[label] = outcomes.get(label, 0) + 1
+                item[key] = {"count": len(entry), **({"outcomes": outcomes} if outcomes else {})}
+            elif isinstance(entry, dict):
+                numbers = {k: v for k, v in entry.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+                if numbers:
+                    item[key] = numbers
+        out[step] = item
+    return out
