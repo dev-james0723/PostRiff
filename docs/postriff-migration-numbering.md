@@ -8,7 +8,7 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 |---|---|---|---|
 | 001–019 | existing chain (003 is local-only) | — | See "Production shape" below: not every one of them is applied in production. |
 | 020–022 | `020_credit_quotes`, `021_credit_purchases`, `022_credit_payment_lifecycle` | credits (PR #2) | **Applied in production** (according to the release session and its local runner logs). Permanently occupied. |
-| 023 | none | — | Retired; never reuse it. The runner accepts gaps. **Conflict found 2026-09-25:** uncommitted Time Back work (`feat/time-back-mvp`, worktree `James-Au-Studio-time-back`) adds `023_time_savings.sql` and loads it in `rls.sql`. It must take a free number instead: 030, if still free when it lands. |
+| 023 | `023_time_savings` | Time Back (PR #9) | **Taken, against the reservation.** The owner's decision retired 023, but PR #9 merged `023_time_savings.sql` into `consumer-saas` (`b5b7964`, 2026-09-25 17:30 UTC). Renumbering a migration on the shared branch is riskier than keeping it: once any database applies it, the runner refuses a changed ledger. So 023 now means Time Back, unless the owner decides otherwise. ai-routing's old `023_companion_relay` still moves to 029. The release executor confirms whether production has 023. |
 | 024–025 | `024_notification_core`, `025_coworker_evidence_growth` | Rafii Adaptive Social Coworker (`ecb3ff3`) | Local only. Do not renumber them unless a real dependency requires it. |
 | 026–029 | ai-routing's four migrations, renumbered from 020–023 | ai-routing | Reserved. The files still carry 020–023 on `ai-routing` and must be renamed before that branch lands (checklist below). |
 | 030 and up | — | next new migration | Free. |
@@ -17,7 +17,7 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 
 - 020–022 (credits): `origin/consumer-saas`, `origin/raffi/agent-runtime-merge`, `origin/raffi/launch-final`, `origin/raffi/site-agent-release`, `origin/fix/channel-lifecycle` and their local branches, plus `feat/time-back-mvp`, `release/pr2-reconcile`, `release/pr2-update`, `rafii/coworker-integration` and `rafii/integration-runtime-coworker`.
 - 020–023 (ai-routing's own files, same numbers): only the local `ai-routing` branch and its worktree. There is no remote branch.
-- 023 (Time Back, untracked): `James-Au-Studio-time-back/migrations/postriff/023_time_savings.sql`. See the 023 row above.
+- 023 (Time Back): `origin/consumer-saas` since `b5b7964`. See the 023 row above.
 - 024–025: only `rafii/coworker-wp0-wp11`, `rafii/coworker-integration` and `rafii/integration-runtime-coworker`.
 - 026–029: only `rafii/ai-routing-renumber-026-029` and its worktree.
 - 030–035: unused on every local and remote ref and in every worktree's `migrations/postriff/`, tracked or not.
@@ -60,7 +60,7 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read wt; do
 
 ## Test loader (`tests/phase2/rls.sql`)
 
-It loads 001, 002, 004–012, 018, 019, then 024 and 025 (and later 026–029). **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
+It loads 001, 002, 004–012, 018, 019, then 023, 024 and 025 (and later 026–029). **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
 
 ## ai-routing renumbering checklist (later, when that stage is authorized)
 

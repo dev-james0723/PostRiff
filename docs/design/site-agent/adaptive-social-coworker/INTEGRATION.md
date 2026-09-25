@@ -11,7 +11,9 @@ Integration branch `rafii/coworker-integration` (worktree `James-Au-Studio-integ
 | `8005ddd` C3 | Coworker customer copy passes `consumer-saas`'s copy audit. |
 | `4c9ed78` C4 | No coworker requests while a feature is off. |
 | `7cf1e70`, `093bf93` | Docs only: `docs/postriff-migration-numbering.md`, this file, corrected migration notes in ROLLOUT, HANDOFF and ARCHITECTURE_LOCK. |
-| this commit | Docs only: this file, for the rebuilt branch. |
+| `caaa60d` | Docs only: this file, for the rebuilt branch. PR #8 was opened at this commit, and CI passed on it. |
+| `812c56b` | Merge of `consumer-saas` `b5b7964` (Time Back, PR #9). Two conflicts. `hosted_app.py`: Time Back's worker hook, then the coworker's `runtime.attach`. `tests/phase2/rls.sql`: 023, then 024 and 025. |
+| this commit | Docs only: the 023 record and this table. |
 
 The code is final at `4c9ed78`. The Agent Runtime is no longer merged here: it shipped in PR #7.
 
