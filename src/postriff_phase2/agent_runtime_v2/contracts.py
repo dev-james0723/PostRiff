@@ -119,6 +119,14 @@ SPEAKABLE_MAX = 600
 _MARKDOWN = re.compile(r"[*_`#>\[\]]|\(\s*/app/[^)]*\)")
 
 
+def trim(value, limit: int) -> str:
+    """Text a model or provider produced, cut to size. `clean` refuses over-long input from a person (a 400); applied to
+    output that already cost money, it would turn a paid result into an error, so output is cut instead."""
+    if not isinstance(value, str):
+        value = "" if value is None else str(value)
+    return value.replace("\x00", "").strip()[:limit].strip()
+
+
 def speakable(text: str, limit: int = SPEAKABLE_MAX) -> str:
     """Plain words for GPT-Live to say: no markdown, links, ids or tables; short."""
     if not isinstance(text, str):

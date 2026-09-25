@@ -38,6 +38,8 @@ MAX_MESSAGE = 4000
 MAX_ATTACHMENTS = 4
 TURN_BUDGET_SECONDS = 240
 SUPERSEDE_WINDOW_SECONDS = 180
+# An agent turn still "running" this long after it last changed was killed (Vercel stops a function at 300 s).
+STALE_TURN_SECONDS = 600
 HISTORY_MESSAGES = 12
 RUNTIME_VERSION = "agent-runtime-1"
 # Extensions add blocks to a run's trace (e.g. the skill provenance of the turn): fn(ctx=..., routes=...) -> dict.
@@ -74,8 +76,10 @@ class AgentRuntimeService:
         voice = self.cfg.route("voice_front_end", reason="status")
         manager = self.cfg.route("standard_reasoning", reason="status")
         return {"runtime": RUNTIME_VERSION, **self.cfg.public(), "canUseModel": member.allows("edit"),
-                "voice": {"available": voice.available and self.cfg.enabled("RAFII_VOICE_ENABLED") and member.allows("edit"), "blocker": voice.blocker if not voice.available else
-                          (None if self.cfg.enabled("RAFII_VOICE_ENABLED") else "Voice Mode is not enabled on this deployment.")},
+                # Voice delegates every request to the agent runtime, so it needs both flags.
+                "voice": {"available": voice.available and self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") and member.allows("edit"),
+                          "blocker": voice.blocker if not voice.available else
+                          (None if self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") else "Voice Mode is not enabled on this deployment.")},
                 "manager": {"available": (manager.available or self.model_factory is not None) and self.cfg.enabled("RAFII_AGENT_V2_ENABLED"), "blocker": manager.blocker}}
 
     # --- turn --------------------------------------------------------------------------------------------------------
@@ -134,7 +138,8 @@ class AgentRuntimeService:
                 chosen = self._ordinal_choice(pending, text)
                 if chosen and chosen.get("type") == "proposal":
                     return {"mode": "choose", "proposalId": chosen["id"], "decision": pending.get("decision", "apply")}
-            if approvals.is_cancel_request(text):
+            if approvals.is_cancel_request(text) and member.allows("edit"):
+                # Stopping work changes it, so it needs edit (a viewer's "cancel that" goes to the site agent, which changes nothing).
                 return {"mode": "cancel"}
             if approvals.is_confirmation(text) or approvals.is_rejection(text):
                 bound = approvals.bind(cur, workspace_id, conversation_id, self.clock())
@@ -243,7 +248,10 @@ class AgentRuntimeService:
                                                                     for i, c in enumerate(target["candidates"])]))
             pending = {"request": "apply", "decision": wants, "candidates": target["candidates"]} if len(target["candidates"]) > 1 else None
             result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer)})
-            return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, outcome_blocks, pending=pending)
+            # Restating one proposal presents it again: the next "yes" (within the window) binds to it instead of asking forever.
+            presents = {"proposalIds": [target["restate"]["proposalId"]], "at": self.clock()} if target.get("restate") else None
+            return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, outcome_blocks, pending=pending,
+                                       site_extra={"presents": presents} if presents else None)
         if "none" in target:
             answer = "That proposal is no longer open, so nothing was changed."
             result.update({"answerText": answer, "speakableSummary": answer})
@@ -256,8 +264,11 @@ class AgentRuntimeService:
         except AlphaError as error:
             answer = f"I didn't apply it: {error}"
             result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer), "errors": [{"code": error.code or "not_applied", "message": str(error)}]})
-            self._resolve_task_steps(workspace_id, token, conversation_id, item["proposalId"], "failed", verified=False, reason=str(error))
-            return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, [site_contracts.warning(answer, error.code or "not_applied")])
+            # The proposal didn't change (a role, plan gate or staleness refusal), so a step waiting on it keeps waiting: someone
+            # who may apply it can still do so, and the step follows the stored proposal (_sync_task). It is still open, so this
+            # answer presents it again.
+            return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, [site_contracts.warning(answer, error.code or "not_applied")],
+                                       site_extra={"presents": {"proposalIds": [item["proposalId"]], "at": self.clock()}})
         summary = "; ".join(proposal.get("summary") or [])[:300]
         if decided["outcome"] == "applied" and decided["verified"]:
             answer = f"Done and checked: {summary}." + (" The post now waits for approval of that exact post before it can publish." if proposal.get("type") in ("schedule_draft", "reschedule_post") else "")
@@ -300,9 +311,12 @@ class AgentRuntimeService:
         from ..site_agent import contracts as site_contracts
         cancelled_runs = self.cancel_running(workspace_id, token, conversation_id, reason="You asked to cancel.")
         steps = []
-        with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+        with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
             plan = task_state.active(cur, workspace_id, conversation_id)
-            if plan is not None:
+            cur.execute("SELECT actor::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", ((plan.task_id if plan else None), workspace_id))
+            owner = (cur.fetchone() or [None])[0]
+            if plan is not None and owner == principal:
+                # Only the task's own person cancels its open steps.
                 steps = plan.cancel_open("You asked to cancel.", self.clock())
                 if steps:
                     task_state.save(cur, self.service.ideas, workspace_id, plan)
@@ -332,22 +346,24 @@ class AgentRuntimeService:
         result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer), "composedBy": "deterministic"})
         return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, [site_contracts.text(answer)])
 
-    def cancel_running(self, workspace_id, token, conversation_id, *, reason, exclude=None) -> list[str]:
-        with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
-            cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'agent:%%' AND status='running'",
-                        (workspace_id, conversation_id))
-            ids = [r[0] for r in cur.fetchall() if r[0] != exclude]
+    def cancel_running(self, workspace_id, token, conversation_id, *, reason, exclude=None, only=None) -> list[str]:
+        """Stop this member's own running agent turns in the conversation (never another member's)."""
+        with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
+            cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'agent:%%' AND status='running' "
+                        "AND actor=%s", (workspace_id, conversation_id, principal))
+            ids = [r[0] for r in cur.fetchall() if r[0] != exclude and (only is None or r[0] in only)]
             for run_id in ids:
                 self.service.ideas._insert_event(cur, workspace_id, run_id, safe_event("run.cancelled", message=reason))
                 cur.execute("UPDATE public.pr_agent_runs SET status='cancelled',updated_at=now() WHERE id::text=%s AND status='running'", (run_id,))
         return ids
 
     def cancel(self, workspace_id, token, run_id) -> dict:
-        with self.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
-            require(self.service.ideas._member(row), "read")
-            cur.execute("SELECT status,conversation_id::text,idempotency_key FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
+        with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(self.service.ideas._member(row), "edit")
+            cur.execute("SELECT status,conversation_id::text,idempotency_key,actor::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
             found = cur.fetchone()
-            if not found or not str(found[2]).startswith(KEY_PREFIX):
+            if not found or not str(found[2]).startswith(KEY_PREFIX) or found[3] != principal:
+                # Only the person who asked stops their request (the same answer as a missing one).
                 raise AlphaError("Run unavailable.", 404)
             if found[0] != "running":
                 return {"runId": run_id, "status": found[0], "note": "Already finished; nothing to stop."}
@@ -363,11 +379,7 @@ class AgentRuntimeService:
 
     # --- the Manager ------------------------------------------------------------------------------------------------------
     def _manager_turn(self, workspace_id, token, conversation_id, text, modality, run_key, trace_id, page, zone, payload, attachments, now) -> dict:
-        from agents import RunConfig, Runner
-        from agents.exceptions import InputGuardrailTripwireTriggered, MaxTurnsExceeded, OutputGuardrailTripwireTriggered
-
-        from . import manager as manager_mod
-
+        _ = now
         superseded = []
         if modality == "voice" or payload.get("supersede"):
             superseded = self._supersede(workspace_id, token, conversation_id)
@@ -380,6 +392,20 @@ class AgentRuntimeService:
                 # Out of budget or allowance, or no verified price: no model call, and no other paid route (spec §21, §36).
                 return self._fallback(workspace_id, token, {**payload, "conversationId": conversation_id}, text, modality, trace_id, reason="budget")
             raise
+        holder: dict = {}
+        try:
+            return self._run_manager(workspace_id, token, conversation_id, text, modality, trace_id, page, zone, payload, attachments, run_id, reservation,
+                                     workload, why, superseded, holder)
+        except Exception as error:  # noqa: BLE001 — whatever failed after the run opened, it ends settled and closed
+            return self._abort_run(workspace_id, token, conversation_id, run_id, reservation, trace_id, modality, error, holder.get("ctx"))
+
+    def _run_manager(self, workspace_id, token, conversation_id, text, modality, trace_id, page, zone, payload, attachments, run_id, reservation,
+                     workload, why, superseded, holder) -> dict:
+        from agents import RunConfig, Runner
+        from agents.exceptions import InputGuardrailTripwireTriggered, MaxTurnsExceeded, OutputGuardrailTripwireTriggered
+
+        from . import manager as manager_mod
+
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
             state = self.service.ideas._state(row)
@@ -400,6 +426,8 @@ class AgentRuntimeService:
                               conversation_assets=images, focus=focus, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
                               vision=self.vision, request_text=text, page_raw=payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
+        ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
+        holder["ctx"] = ctx
         items = self._assemble(ctx, text, history, refs_note, open_items, images, superseded, spoken, last)
         manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
         collector = manager_mod.collector(self.cfg)
@@ -413,6 +441,16 @@ class AgentRuntimeService:
             if interruptions:
                 # The paused run is kept server-side with identifiers only — never the session token (§13, SDK HITL).
                 state_json = result.to_state().to_json(context_serializer=lambda c: {"conversationId": c.conversation_id, "traceId": c.trace_id, "runId": c.run_id})
+                waiting = set()
+                for item in interruptions:
+                    try:
+                        waiting.add(json.loads(getattr(item, "arguments", "") or "{}").get("proposalId"))
+                    except ValueError:
+                        pass
+                named = [answer_policy.spoken_proposal(o["proposal"]) for o in open_items if o["proposalId"] in waiting]
+                if named:
+                    # Said in the application's words (the stored proposal), so a spoken "yes" is to exactly this.
+                    note = f"This waits for your decision: {named[0]}. Say yes to apply it, or no to leave it."
             else:
                 reply = result.final_output
         except OutputGuardrailTripwireTriggered:
@@ -440,14 +478,16 @@ class AgentRuntimeService:
 
     def _supersede(self, workspace_id, token, conversation_id) -> list[dict]:
         """A new spoken request while an earlier one still runs: the earlier one stops before its next change (voice refinement)."""
-        with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+        # Only this member's earlier spoken requests: a typed turn still running is not a voice refinement.
+        with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
             cur.execute("SELECT r.id::text,(SELECT m.body->>'text' FROM public.pr_messages m WHERE m.run_id=r.id AND m.role='user' LIMIT 1) FROM public.pr_agent_runs r "
-                        "WHERE r.workspace_id=%s AND r.conversation_id::text=%s AND r.idempotency_key LIKE 'agent:%%' AND r.status='running' AND r.created_at>now()-make_interval(secs=>%s)",
-                        (workspace_id, conversation_id, SUPERSEDE_WINDOW_SECONDS))
+                        "WHERE r.workspace_id=%s AND r.conversation_id::text=%s AND r.idempotency_key LIKE 'agent:%%' AND r.status='running' AND r.actor=%s "
+                        "AND r.created_at>now()-make_interval(secs=>%s) AND EXISTS (SELECT 1 FROM public.pr_messages m WHERE m.run_id=r.id AND m.role='user' "
+                        "AND m.body->'agent'->>'modality'='voice')", (workspace_id, conversation_id, principal, SUPERSEDE_WINDOW_SECONDS))
             rows = cur.fetchall()
         if not rows:
             return []
-        self.cancel_running(workspace_id, token, conversation_id, reason="Superseded by a newer request.")
+        self.cancel_running(workspace_id, token, conversation_id, reason="Superseded by a newer request.", only={r[0] for r in rows})
         return [{"runId": r[0], "request": (r[1] or "")[:500]} for r in rows]
 
     def _is_cancelled(self, workspace_id, token, run_id) -> bool:
@@ -524,6 +564,7 @@ class AgentRuntimeService:
         repo, ideas = self.service.repository, self.service.ideas
         reservation = None
         with repo.transaction(token, workspace_id) as (cur, _row, principal):
+            self._reap_stale_turns(cur, workspace_id)
             context = {"trace": trace_id, "modality": modality, "attachments": [a["assetId"] for a in attachments]}
             cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) "
                         "VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text",
@@ -543,11 +584,11 @@ class AgentRuntimeService:
                                                           provider=route.provider or "", model=route.model or "", run_id=run_id, meta={"via": "rafii_agent", "traceId": trace_id})
         return run_id, reservation
 
-    def _finish_simple(self, workspace_id, token, conversation_id, run_id, trace_id, result, blocks, *, pending=None, trace_extra=None) -> dict:
+    def _finish_simple(self, workspace_id, token, conversation_id, run_id, trace_id, result, blocks, *, pending=None, trace_extra=None, site_extra=None) -> dict:
         from ..site_agent import contracts as site_contracts
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             self._persist(cur, workspace_id, conversation_id, run_id, result, blocks, [], [], trace={"traceId": trace_id, "composedBy": result["composedBy"], **(trace_extra or {})}, pending=pending,
-                          status="completed", usage={"provenance": "deterministic", "modelRequests": 0})
+                          status="completed", usage={"provenance": "deterministic", "modelRequests": 0}, site_extra=site_extra)
             out = self._stored(cur, workspace_id, run_id)
         _ = site_contracts
         return out
@@ -564,12 +605,15 @@ class AgentRuntimeService:
             if reason is None:
                 answer = answer_policy.clean(answer_text)
                 speakable = contracts.speakable(spoken or answer)
-                result["followUps"] = [clean(f, 120) for f in (getattr(reply, "follow_ups", None) or [])][:3]
+                if ledger.proposals:
+                    # What a spoken "yes" would apply is said in the application's words (the stored proposal), not only the model's.
+                    speakable = answer_policy.compose(ledger, ctx.task)[1]
+                result["followUps"] = [f for f in (contracts.trim(item, 120) for item in (getattr(reply, "follow_ups", None) or [])) if f][:3]
                 result["language"] = getattr(reply, "language", None)
         if reply is None or reason is not None:
             composed_by = "deterministic"
             if interruptions:
-                note = (note or "") + " A proposal is waiting for your decision before I can continue."
+                note = note or "A proposal is waiting for your decision before I can continue."
             answer, speakable = answer_policy.compose(ledger, ctx.task, note=note)
             reason = reason or fallback_reason
         blocks = [site_contracts.text(answer)]
@@ -588,10 +632,8 @@ class AgentRuntimeService:
         if reason and composed_by == "deterministic":
             blocks.append(site_contracts.warning("I've shown only what the workspace confirms.", f"agent_{reason}"))
         usage_tokens = {"inputTokens": sum(s.get("inputTokens", 0) for s in ledger.spans), "outputTokens": sum(s.get("outputTokens", 0) for s in ledger.spans)}
-        cost = None
         manager_route = next((r for r in routes if r.get("agent") == "rafii_manager"), {})
-        if manager_route.get("model") and self.model_factory is None:
-            cost = self.cfg.estimate_usd_micro(manager_route["model"], usage_tokens["inputTokens"], usage_tokens["outputTokens"])
+        cost = self._spend(ledger, manager_route.get("model")) if self.model_factory is None else None
         result.update({"answerText": answer, "speakableSummary": speakable, "composedBy": composed_by, "references": ledger.references[:20], "citations": ledger.citations[:4],
                        "facts": ledger.facts[:20], "toolActivity": ledger.tool_activity[:40], "task": ctx.task.view() if ctx.task is not None else None,
                        "changedEntities": ledger.changed[:20], "generatedAssets": ledger.assets[:8], "warnings": ledger.warnings[:6], "errors": ledger.errors[:6],
@@ -626,12 +668,16 @@ class AgentRuntimeService:
                     except ValueError:
                         args = {}
                     ctx.ledger.interruptions.append({"tool": getattr(item, "name", None), "proposalId": args.get("proposalId")})
+            # A run paused on proposal_apply presents that proposal: the person's next "yes" binds to it.
+            waiting = [i["proposalId"] for i in ctx.ledger.interruptions if i.get("proposalId")]
             self._persist(cur, ctx.workspace_id, ctx.conversation_id, run_id, result, blocks, ledger.proposals, ledger.references, trace=trace, status=final_status,
                           usage={"provenance": composed_by, "modelRequests": ledger.model_requests, "costUsd": (cost / 1_000_000) if cost is not None else None,
-                                 "billing": result["usage"]["billing"]}, language=result.get("language"), follow_ups=result.get("followUps") or [])
+                                 "billing": result["usage"]["billing"]}, language=result.get("language"), follow_ups=result.get("followUps") or [],
+                          site_extra={"presents": {"proposalIds": waiting, "at": self.clock()}} if waiting else None)
             return self._stored(cur, ctx.workspace_id, run_id)
 
-    def _persist(self, cur, workspace_id, conversation_id, run_id, result, blocks, proposals, refs, *, trace, status, usage, pending=None, language=None, follow_ups=()):
+    def _persist(self, cur, workspace_id, conversation_id, run_id, result, blocks, proposals, refs, *, trace, status, usage, pending=None, language=None, follow_ups=(),
+                 site_extra=None):
         ideas = self.service.ideas
         from ..site_agent import contracts as site_contracts
         site = {"version": site_contracts.VERSION, "runId": run_id, "status": "completed" if status != "cancelled" else "cancelled", "intent": "agent",
@@ -645,6 +691,7 @@ class AgentRuntimeService:
                 "followUps": list(follow_ups)[:3], "feedback": None, "refs": [r for r in refs if isinstance(r, dict) and r.get("id")][:12]}
         if pending:
             site["pending"] = pending
+        site.update({k: v for k, v in (site_extra or {}).items() if k not in site})
         visible = {**result, "usage": {k: v for k, v in (result.get("usage") or {}).items() if k != "costUsdMicro"}}
         body = {"text": result["answerText"], "runId": run_id, "siteAgent": site, "agent": visible}
         message = ideas._append_message(cur, workspace_id, conversation_id, "assistant", body, run_id)
@@ -657,8 +704,11 @@ class AgentRuntimeService:
         for proposal in proposals:
             ideas._insert_event(cur, workspace_id, run_id, safe_event("action.proposed", action=proposal["type"], proposalId=proposal["id"], status="proposed"))
         ideas._insert_event(cur, workspace_id, run_id, safe_event("message.completed", text=result["answerText"][:12000]))
-        ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed" if status != "cancelled" else "run.cancelled",
-                                                                  **({"usage": {k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "billing")}} if status != "cancelled" else {"message": "Stopped."})))
+        if status == "failed":
+            ideas._insert_event(cur, workspace_id, run_id, safe_event("run.failed", message=(result.get("errors") or [{}])[0].get("message") or "The request stopped before it finished."))
+        else:
+            ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed" if status != "cancelled" else "run.cancelled",
+                                                                      **({"usage": {k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "billing")}} if status != "cancelled" else {"message": "Stopped."})))
         artifact = {"version": 1, "result": result, "trace": trace}
         cur.execute("UPDATE public.pr_agent_runs SET status=%s,artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s",
                     (status, json.dumps(artifact, ensure_ascii=False, default=str), digest(json.loads(json.dumps(artifact, default=str))), json.dumps(usage, default=str), run_id))
@@ -673,6 +723,64 @@ class AgentRuntimeService:
         artifact = row[2] or {}
         return {"conversationId": row[1], "runId": run_id, "status": row[0], "messageId": message[0] if message else None, "result": artifact.get("result"),
                 "traceId": (artifact.get("trace") or {}).get("traceId")}
+
+    def _spend(self, ledger, default_model) -> int | None:
+        """This turn's model spend: each metered call priced at its own model (a specialist on the fast model is not billed at
+        the Manager's price; vision calls count too). None when any call's model has no price."""
+        total = 0
+        for span in (ledger.spans if ledger is not None else []):
+            price = self.cfg.estimate_usd_micro(span.get("model") or default_model or "", span.get("inputTokens") or 0, span.get("outputTokens") or 0)
+            if price is None:
+                return None
+            total += price
+        return total
+
+    def _abort_run(self, workspace_id, token, conversation_id, run_id, reservation, trace_id, modality, error, ctx=None) -> dict:
+        """Something failed after the run opened (a bug, the database, a reply that couldn't be stored). The run still ends:
+        its spend is booked from the metered calls (released when no model was called), it is marked failed, and the
+        person gets a plain account instead of a request that stays "running" forever."""
+        from ..site_agent import contracts as site_contracts
+        log.error(json.dumps({"event": "agent_turn.aborted", "errorClass": type(error).__name__, "traceId": trace_id}))
+        ledger = ctx.ledger if ctx is not None else None
+        answer = (f"I stopped: {error} Anything already finished stays as it is; nothing more was changed." if isinstance(error, AlphaError) and error.status < 500 else
+                  "Something went wrong on Rafii's side before this finished, so I stopped. Anything already finished stays as it is; nothing more was changed.")
+        result = contracts.empty_result(trace_id, modality)
+        result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer), "composedBy": "deterministic",
+                       "errors": [{"code": "internal_error", "message": "The request stopped before it finished."}],
+                       "changedEntities": (ledger.changed if ledger else [])[:20], "generatedAssets": (ledger.assets if ledger else [])[:8]})
+        with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+            if reservation is not None:
+                spent = self._spend(ledger, None)
+                if ledger is None or not ledger.spans:
+                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
+                else:
+                    self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+            if self._run_status(cur, workspace_id, run_id) == "running":
+                self._persist(cur, workspace_id, conversation_id, run_id, result, [site_contracts.warning(answer, "internal_error")], [], [],
+                              trace={"traceId": trace_id, "composedBy": "deterministic", "fallback": "internal_error", "errorClass": type(error).__name__},
+                              status="failed", usage={"provenance": "deterministic", "modelRequests": ledger.model_requests if ledger else 0})
+            return self._stored(cur, workspace_id, run_id)
+
+    def _reap_stale_turns(self, cur, workspace_id):
+        """A turn whose function was killed never finalised. The writing-recovery cron leaves the runtime's rows alone, so the
+        runtime closes its own dead turns here: each is failed, the person sees why, and its reservations are booked at the
+        reserved amount (the calls it made are unknown; never free, and never held forever)."""
+        cur.execute("SELECT id::text,conversation_id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'agent:%%' AND status='running' "
+                    "AND updated_at<now()-make_interval(secs=>%s) ORDER BY created_at LIMIT 10 FOR UPDATE SKIP LOCKED", (workspace_id, STALE_TURN_SECONDS))
+        for run_id, conversation_id in cur.fetchall():
+            cur.execute("SELECT r.id::text,r.estimated_usd_micro FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.run_id::text=%s AND r.kind='reserve' "
+                        "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger t WHERE t.workspace_id=r.workspace_id AND t.reservation_id=r.id AND t.kind IN ('settle','release'))",
+                        (workspace_id, run_id))
+            for reservation_id, estimate in cur.fetchall():
+                self.service.ledger.settle(cur, workspace_id, reservation_id, "completed", int(estimate or 0))
+            answer = "This request stopped before it finished (the server ran out of time). Anything already finished stays as it is; please ask again."
+            result = contracts.empty_result(contracts.new_trace_id(), "text")
+            result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer), "composedBy": "deterministic",
+                           "errors": [{"code": "turn_stalled", "message": "The request stopped before it finished."}]})
+            from ..site_agent import contracts as site_contracts
+            self._persist(cur, workspace_id, conversation_id, run_id, result, [site_contracts.warning(answer, "turn_stalled")], [], [],
+                          trace={"traceId": result["traceId"], "composedBy": "deterministic", "fallback": "turn_stalled"}, status="failed",
+                          usage={"provenance": "deterministic", "billing": "reservation booked: the turn never finished"})
 
     # --- SDK human-in-the-loop resume (ADR-H1) ---------------------------------------------------------------------------
     def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions):
@@ -699,50 +807,70 @@ class AgentRuntimeService:
 
         from . import manager as manager_mod
 
+        workload = "standard_reasoning"
+        reservation = None
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
-            plan = task_state.active(cur, workspace_id, conversation_id)
-            if plan is None:
+            # The task that paused on this proposal, whatever its status now (approving the last step may have finished it).
+            cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
+                        "AND artifact->'pendingRun'->'proposalIds' ? %s ORDER BY created_at DESC LIMIT 1 FOR UPDATE", (workspace_id, conversation_id, proposal_id))
+            found = cur.fetchone()
+            if not found:
                 return None
-            cur.execute("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (plan.task_id, workspace_id))
-            artifact = (cur.fetchone() or [{}])[0] or {}
+            task_id, artifact = found[0], found[1] or {}
             pending = artifact.get("pendingRun") or {}
-            if proposal_id not in (pending.get("proposalIds") or []) or not pending.get("state"):
+            if not pending.get("state"):
                 return None
+            if self.model_factory is None:
+                # The resumed Manager is a paid model run like any other: reserved first, or not run (the approval stands).
+                route = self.cfg.route(workload, reason="resume after approval")
+                estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
+                if estimate is None:
+                    return None
+                try:
+                    reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent-resume:{run_id}", charge_batch=False,
+                                                              provider=route.provider or "", model=route.model or "", run_id=run_id,
+                                                              meta={"via": "rafii_agent_resume", "traceId": trace_id})
+                except AlphaError:
+                    return None
             artifact.pop("pendingRun", None)
-            cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), plan.task_id))
-            plan = task_state.load(cur, workspace_id, plan.task_id)
+            cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
+            plan = task_state.load(cur, workspace_id, task_id)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, zone=zone, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
                               vision=self.vision, request_text="(approved)")
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
-        workload = "standard_reasoning"
-        manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
-        collector = manager_mod.collector(self.cfg)
-        reply, note, fallback_reason = None, None, None
-        started = time.monotonic()
-
-        async def resume():
-            state = await RunState.from_json(manager, pending["state"], context_override=ctx)
-            for item in state.get_interruptions():
-                try:
-                    args = json.loads(getattr(item, "arguments", "") or "{}")
-                except ValueError:
-                    args = {}
-                if getattr(item, "name", None) == "proposal_apply" and args.get("proposalId") == proposal_id:
-                    state.approve(item)
-                else:
-                    state.reject(item, rejection_message="The person did not approve this.")
-            return await Runner.run(manager, state, context=ctx, max_turns=8, run_config=RunConfig(workflow_name="rafii.turn.resume", trace_id=trace_id,
-                                                                                                  group_id=conversation_id, trace_include_sensitive_data=False))
+        ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         try:
-            result = asyncio.run(asyncio.wait_for(resume(), timeout=TURN_BUDGET_SECONDS))
-            reply = result.final_output if not result.interruptions else None
-        except Exception as error:  # noqa: BLE001 — the approval stands; only the Manager's wording is lost
-            fallback_reason = getattr(error, "code", None) or type(error).__name__
-            note = "Your approval was applied and checked."
-        return self._finalize(ctx, run_id, None, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
-                              workload=workload, why="resume after approval", spans=collector.take(trace_id), elapsed_ms=round((time.monotonic() - started) * 1000), superseded=[])
+            manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
+            collector = manager_mod.collector(self.cfg)
+            reply, note, fallback_reason = None, None, None
+            started = time.monotonic()
+
+            async def resume():
+                state = await RunState.from_json(manager, pending["state"], context_override=ctx)
+                for item in state.get_interruptions():
+                    try:
+                        args = json.loads(getattr(item, "arguments", "") or "{}")
+                    except ValueError:
+                        args = {}
+                    if getattr(item, "name", None) == "proposal_apply" and args.get("proposalId") == proposal_id:
+                        state.approve(item)
+                    else:
+                        state.reject(item, rejection_message="The person did not approve this.")
+                return await Runner.run(manager, state, context=ctx, max_turns=8, run_config=RunConfig(workflow_name="rafii.turn.resume", trace_id=trace_id,
+                                                                                                      group_id=conversation_id, trace_include_sensitive_data=False))
+            try:
+                result = asyncio.run(asyncio.wait_for(resume(), timeout=TURN_BUDGET_SECONDS))
+                reply = result.final_output if not result.interruptions else None
+            except Exception as error:  # noqa: BLE001 — the approval stands; only the Manager's wording is lost
+                fallback_reason = getattr(error, "code", None) or type(error).__name__
+                note = "Your approval was applied and checked."
+            return self._finalize(ctx, run_id, reservation, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
+                                  workload=workload, why="resume after approval", spans=collector.take(trace_id), elapsed_ms=round((time.monotonic() - started) * 1000),
+                                  superseded=[])
+        except Exception as error:  # noqa: BLE001 — the resumed run ends settled and closed whatever failed
+            return self._abort_run(workspace_id, token, conversation_id, run_id, reservation, trace_id, modality, error, ctx)
 
 
 # --- endpoints beyond the turn ----------------------------------------------------------------------------------------------

@@ -56,7 +56,8 @@ DEFAULT_PRICES = {
     "gpt-6-astra": (10.0, 50.0),
     "gpt-5.6-terra": (2.0, 12.0),
 }
-# Per generated image (USD micro) for the reservation, by quality route.
+# Per generated image (USD micro), by quality route: the reservation, and the charge when the provider reports no cost
+# (the OpenAI Responses image tool reports tokens, not money). Override with RAFII_AGENT_IMAGE_PRICES='{"image_fast": 0.04, "image_quality": 0.19}' (USD).
 DEFAULT_IMAGE_ESTIMATE_USD_MICRO = {"image_fast": 40_000, "image_quality": 190_000}
 # Voice: GPT-Live costs $0.05 per minute, billed per second (15 s are billed at session creation and credited).
 DEFAULT_LIVE_USD_MICRO_PER_MINUTE = 50_000
@@ -119,9 +120,19 @@ class RuntimeConfig:
                 prices.update({k: (float(v[0]), float(v[1])) for k, v in json.loads(values["RAFII_AGENT_MODEL_PRICES"]).items()})
             except (ValueError, TypeError, IndexError, KeyError, AttributeError) as error:
                 raise ValueError("RAFII_AGENT_MODEL_PRICES must be a JSON object of model → [input, output] USD per million tokens.") from error
+        image_prices = dict(DEFAULT_IMAGE_ESTIMATE_USD_MICRO)
+        if values.get("RAFII_AGENT_IMAGE_PRICES"):
+            import json
+            try:
+                given = json.loads(values["RAFII_AGENT_IMAGE_PRICES"])
+                if not isinstance(given, dict):
+                    raise TypeError("not an object")
+                image_prices.update({k: int(round(float(given[k]) * 1_000_000)) for k in image_prices if k in given})
+            except (ValueError, TypeError, KeyError, AttributeError) as error:
+                raise ValueError("RAFII_AGENT_IMAGE_PRICES must be a JSON object of image_fast / image_quality → USD per image.") from error
         base = values.get("RAFII_AGENT_BASE_URL") or (OPENAI_BASE_URL if provider == "openai" else GATEWAY_BASE_URL if provider == "gateway" else None)
         return cls(flags={name: _flag(values, name) for name in FLAGS}, models=models, provider=provider, base_url=base, prices=prices,
-                   image_estimates=dict(DEFAULT_IMAGE_ESTIMATE_USD_MICRO), openai_tracing=_flag(values, "RAFII_AGENT_OPENAI_TRACING") and has_openai,
+                   image_estimates=image_prices, openai_tracing=_flag(values, "RAFII_AGENT_OPENAI_TRACING") and has_openai,
                    has_openai_key=has_openai, has_gateway_key=has_gateway, _env={k: values.get(k) for k in ("OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")})
 
     # --- flags -------------------------------------------------------------------------------------------------------

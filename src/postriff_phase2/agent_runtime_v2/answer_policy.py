@@ -36,8 +36,9 @@ _ZH_FORBIDDEN = (r"發佈|發布|发布|出咗|發咗|发咗|發送|发送|排�
                  r"|(?:post|schedule|reply)(?=\s*(?:咗|了|好|埋|上|喺|在|到))")
 _ZH_PREPARED = r"準備好|准备好|預備好|预备好|擬好|拟好|寫好|写好|(?:prepare|prepared|draft|drafted|set\s*up)\s*好"
 _ZH_CHANGED = (r"建立|創建|创建|生成|整咗|整好|加咗|加入|連結|连结|鏈接|链接|連接|连接|儲存|储存|保存|更新|修改|改咗|改好|改短|縮短|缩短|"
-               r"編輯|编辑|重寫|重写|製作|制作"
-               r"|(?:creat(?:e|ed)|generat(?:e|ed)|sav(?:e|ed)|link(?:ed)?|add(?:ed)?|edit(?:ed)?|updat(?:e|ed)|rewr(?:ite|ote)|shorten(?:ed)?)(?![a-z])")
+               r"編輯|编辑|重寫|重写|製作|制作|暫停|暂停|恢復|恢复|套用|應用|应用|啟用|启用|停用|改期|重新排程|關閉|关闭|開啟|开启"
+               r"|(?:creat(?:e|ed)|generat(?:e|ed)|sav(?:e|ed)|link(?:ed)?|add(?:ed)?|edit(?:ed)?|updat(?:e|ed)|rewr(?:ite|ote)|shorten(?:ed)?"
+               r"|appl(?:y|ied)|paus(?:e|ed)|resum(?:e|ed)|reschedul(?:e|ed)|enabl(?:e|ed)|disabl(?:e|ed))(?![a-z])")
 _ZH_COMPLETE = r"(?:咗|了|好|完)"
 # First-person claims of effects no Rafii tool can have (or, for "scheduled", that only a person's approval can have).
 _NEVER = re.compile(
@@ -48,15 +49,17 @@ _NEVER = re.compile(
 # ("我唔可以幫你發佈咗", "你想我幫你排程嗎？", "我發佈前會先問你").
 _ZH_UNMARKED = re.compile(rf"{_ZH_I}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_FORBIDDEN})|{_ZH_FOR}\s*{_ZH_OBJ}(?:{_ZH_FORBIDDEN})\s*{_ZH_COMPLETE}", re.I)
 _ZH_NOT_A_CLAIM = re.compile(r"不|冇|沒|没|未|唔|無|无|別|别|能|可以|會|会|要|想|應該|应该|如果|若")
-# Passive claims that a pending proposal already took effect ("your post has been scheduled").
+# Passive claims that a proposal this turn worked on already took effect ("your post has been scheduled", "it's paused now").
 _PASSIVE_EFFECT = re.compile(
-    r"\b(?:has|have)\s+been\s+(?:scheduled|published|posted|approved|applied|sent)\b|\b(?:is|are)\s+now\s+(?:scheduled|published|live|approved)\b"
+    r"\b(?:has|have)\s+been\s+(?:scheduled|rescheduled|published|posted|approved|applied|sent|paused|resumed|enabled|disabled|turned\s+(?:on|off))\b"
+    r"|\b(?:is|are)\s+(?:now\s+)?(?:scheduled|rescheduled|published|live|approved|paused|resumed|enabled|disabled|turned\s+(?:on|off))\b"
     r"|已(?:經|经)?\s*(?:排程|排好|排期|發佈|發布|发布|批准|套用|應用|应用|發送|发送|(?:schedul(?:e|ed)|publish(?:ed)?|approv(?:e|ed)|appl(?:y|ied))(?![a-z]))", re.I)
 # "I've prepared / proposed / set up …" claims a proposal (or a verified change) exists this turn.
 _PREPARED = re.compile(_EN_I + r"(?:prepared|proposed|set\s+up|queued|lined\s+up|drafted|written|wrote)\b"
                        rf"|{_ZH_I}\s*{_ZH_DONE}?\s*{_ZH_FOR}?\s*(?:{_ZH_PREPARED})", re.I)
 _DID = re.compile(
-    _EN_I + r"(?:created|linked|added|attached|generated|saved|changed|updated|edited|rewrote|rewritten|shortened|made|removed|moved)\b"
+    _EN_I + r"(?:created|linked|added|attached|generated|saved|changed|updated|edited|rewrote|rewritten|shortened|made|removed|moved"
+    r"|applied|paused|resumed|rescheduled|enabled|disabled|activated|deactivated|restarted|stopped|turned\s+(?:on|off)|switched\s+(?:on|off))\b"
     rf"|{_ZH_I}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})\s*{_ZH_COMPLETE}"
     rf"|{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})", re.I)
 
@@ -88,7 +91,10 @@ def check(answer: str, ledger: EffectLedger) -> str | None:
         return "secret_like"
     if _claims_forbidden(answer):
         return "claims_forbidden_effect"
-    if ledger.proposals and _PASSIVE_EFFECT.search(answer):
+    # Scheduling and automation changes are only ever proposals: in a turn that prepared (or tried to prepare) one, saying it
+    # already happened is false — including when preparing it failed and nothing is waiting.
+    tried = ledger.proposals or any(a.get("effect") == "PREPARE_EXTERNAL" for a in ledger.tool_activity)
+    if tried and _PASSIVE_EFFECT.search(answer):
         return "claims_pending_proposal_applied"
     verified = [c for c in ledger.changed if c.get("verified")] + [a for a in ledger.assets if a.get("verified")]
     if _DID.search(answer) and not verified:
@@ -105,6 +111,27 @@ def clean(text: str) -> str:
     """Links and markup are the panel's job (typed blocks, manifest routes only); the answer is plain prose."""
     from ..site_agent import policy as site_policy
     return site_policy.clean_answer(text)
+
+
+# --- how a proposal is said aloud -----------------------------------------------------------------------------------------
+_ISO_TIME = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})\b")
+_ZONE_ID = re.compile(r"\s*\((?:UTC|[A-Za-z_]+/[A-Za-z_/+-]+)\)")
+
+
+def _spoken_time(match) -> str:
+    from datetime import date
+    day = date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    return f"{day:%A} {day.day} {day:%B} at {match.group(4)}:{match.group(5)}"
+
+
+def spoken_proposal(proposal: dict) -> str:
+    """One proposal as it should be heard before a spoken "yes": its action line (not the review conditions listed in front
+    of it), with the stored time in words; the panel shows every condition."""
+    items = [item for item in (proposal.get("summary") or []) if isinstance(item, str) and item.strip()]
+    main = (next((item for item in items if item.startswith("prepare the exact")), None) or next((item for item in items if item.startswith("cancel the waiting")), None)
+            or (items[0] if items else "the change shown in the panel"))
+    text = _ZONE_ID.sub("", _ISO_TIME.sub(_spoken_time, main))
+    return text[:220] + (" (the panel lists what else you're confirming)" if len(items) > 1 else "")
 
 
 # --- deterministic composition from the ledger -------------------------------------------------------------------------
@@ -142,7 +169,7 @@ def compose(ledger: EffectLedger, task=None, *, language: str | None = None, not
         spoken.append(f"I confirmed {confirmed} change{'s' if confirmed != 1 else ''} in your workspace.")
     if ledger.proposals:
         first = ledger.proposals[0]
-        spoken.append("I've prepared this for your approval: " + "; ".join(first.get("summary") or [])[:220] + ". Say yes to apply it, or no to leave it.")
+        spoken.append("I've prepared this for your approval: " + spoken_proposal(first) + ". Say yes to apply it, or no to leave it.")
     if ledger.errors:
         spoken.append("Something didn't work: " + ledger.errors[0]["message"][:200])
     if not spoken:

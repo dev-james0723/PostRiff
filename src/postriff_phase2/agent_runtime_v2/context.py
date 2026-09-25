@@ -83,8 +83,18 @@ class RafiiRunContext:
     specialist: str | None = None             # set while a specialist agent's tools run
     request_text: str = ""                    # the person's request this turn (guardrails read it)
     page_raw: dict | None = None             # the page context as sent (re-validated by the site agent's contract)
+    deadline: float | None = None             # time.monotonic() by which the turn must be done (tools and providers fit inside it)
 
     # --- workspace access ------------------------------------------------------------------------------------------
+    def remaining(self) -> float | None:
+        """Seconds left in this turn's budget (None when the turn has no deadline, as in unit tests)."""
+        return None if self.deadline is None else self.deadline - time.monotonic()
+
+    def provider_timeout(self, default: float) -> float:
+        """A provider call's timeout: its usual one, shortened so it ends before the turn does (a thread can't be stopped)."""
+        left = self.remaining()
+        return default if left is None else max(1.0, min(default, left - 5))
+
     @contextmanager
     def workspace(self):
         """(cur, row, principal, member, state) in one short transaction; the member is re-read every time, so a role

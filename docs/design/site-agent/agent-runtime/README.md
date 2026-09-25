@@ -19,28 +19,39 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
    once on the conversation (`pr_attachments`), so "the second image" is stable.
 2. **Deterministic front door** (no model):
    - a bare "yes"/"no" (English, Cantonese, Mandarin) binds only to exactly one open proposal presented in the latest
-     answer within 10 minutes; several open → Rafii asks which, and only an explicit position ("the second one", "2",
+     answer within 10 minutes — on that answer, or presented again by it (Rafii restating it, a refused decision, or a
+     paused run naming it); several open → Rafii asks which, and only an explicit position ("the second one", "2",
      "第二個") picks one; older → Rafii restates it. The decision runs the site agent's own apply/dismiss path (digest,
-     staleness, role, plan gate, audit), then re-reads the workspace and compares;
-   - "cancel that" stops running agent work and open steps in the backend and confirms it by re-reading;
+     staleness, role, plan gate, audit), then re-reads the workspace and compares. A refused decision changes nothing and
+     leaves a waiting step waiting;
+   - "cancel that" (edit role) stops the person's own running agent work and their task's open steps in the backend and
+     confirms it by re-reading; a new spoken request supersedes only the same person's earlier spoken request;
    - forbidden effects (publish, approve, reply, delete, disconnect, buy, settings, secrets) and greetings go to the
      site agent (its refusals and links, no model cost); so do viewers, a disabled runtime, a missing model route and a
      refused budget reservation (`fallback` in the response).
-3. **Manager run** (Agents SDK, outside any workspace transaction). Input: the recent conversation (spoken turns
+3. **Manager run** (Agents SDK, outside any workspace transaction, 240 s budget: tool and provider calls are cut to fit
+   it, since a thread can't be stopped). Input: the recent conversation (spoken turns
    marked), and an `APP_STATE` block — page, member, resolved references, the active or last task, open approvals,
    conversation images, recent voice transcript, superseded requests. Tools read the workspace in their own short
    transactions and write an **effect ledger**: activity, references, facts, citations, verified changes, proposals,
    generated assets, errors.
 4. **Answer policy.** The Manager's reply is used only if it claims nothing the ledger doesn't hold (no
-   published/approved/sent/deleted/scheduled claims; "created/linked/generated…" needs a verified change; "prepared…"
-   needs a proposal), names only known ids and contains nothing secret-like. Otherwise the answer is composed from the
-   ledger. The same check runs as an SDK output guardrail.
+   published/approved/sent/deleted/scheduled claims; "created/linked/generated/paused/applied…" needs a verified change;
+   "prepared…" needs a proposal; in a turn that prepared or tried to prepare a proposal, no "has been scheduled/is
+   paused" either), names only known ids and contains nothing secret-like — in English, Cantonese and Mandarin
+   (Traditional or Simplified, with or without a subject, 將/把 objects) and code-switched sentences. Otherwise the answer
+   is composed from the ledger. The same check runs as an SDK output guardrail. When a proposal is waiting, what voice
+   says is the application's own description of it (its action and time in words), never only the model's.
 5. **Persist.** One assistant message in the site agent's block format (the panel renders it; Apply/Dismiss work
    unchanged) with the surface-neutral result in `body.agent` (`answerText`, `speakableSummary`, references, facts,
    tool activity, task, changed entities with their verification, pending approvals, generated assets, warnings,
    errors, usage, routes, trace id). Evidence views of what was read (stored facts, derived observations with their
    rules, voice-check findings, audit attribution) are appended as the site agent's own blocks. Run `agent:<key>` holds
-   the trace; the ledger reservation is settled from token usage.
+   the trace; the ledger reservation is settled from token usage, each call priced at its own model (vision included).
+5. **Always closed.** Whatever fails after a run opens, it ends `failed` with a plain answer and its spend booked. A turn
+   the platform killed (Vercel's 300 s limit) is closed by the next turn in the workspace, its reservation booked at the
+   reserved amount; the writing-recovery cron leaves `agent:`/`task:`/`voice:` rows alone (a task waiting for an
+   approval, or a live call, is not a stalled writer).
 
 ## Agents and tools
 
@@ -76,8 +87,9 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
 
 ## Voice Mode (GPT-Live)
 
-- The browser sends its WebRTC offer to `POST agent/voice/sessions`; the server checks the flag, the member (edit), the
-  concurrency cap (2 live sessions) and the budget (reserving the session cap), then creates the session with
+- The browser sends its WebRTC offer to `POST agent/voice/sessions`; the server checks both flags (voice delegates to the
+  agent runtime), the member (edit), the concurrency cap (2 live sessions) and the budget (reserving the session cap,
+  recorded on the session row in the same transaction), then creates the session with
   `POST https://api.openai.com/v1/live/sessions` using the project key: `gpt-live-1`, a short Live prompt (template
   headings, delegation rules, language line), client delegation, an explicit data-channel allowlist, `store: false`, and
   the conversation so far as history. Only the SDP answer and ids return.
@@ -85,9 +97,12 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
   back with `session.thinking.append`, the verified result with `session.commentary.append`. Barge-in is GPT-Live's
   (full duplex); "Stop talking" drops local audio and appends a yield instruction; a new spoken request supersedes a
   running one before its next change; "cancel that" cancels in the backend.
-- The voice session lives outside React (navigation and panel re-framing keep it), speaking state comes from the remote
-  audio level and transcript deltas, transcripts are stored as text on the voice session row (no audio), and a session a
-  tab never ended is reaped on the member's next start with its cost held as unknown.
+- The voice session lives outside React (navigation and panel re-framing keep it; switching workspace or leaving the
+  signed-in app ends it), speaking state comes from the remote audio level and transcript deltas, transcripts are
+  stored as text on the voice session row as the call goes (batches of 50; no audio), a request takes exactly the words
+  said since the previous one, and a brief connection drop that recovers returns to live by itself.
+- Billing: a call is billed on the server's clock (+15 s at creation); what the client reports can't lower it. A session
+  a tab never ended is closed on the next start in the workspace and billed at the 30-minute cap (an upper bound).
 
 ## Images
 
@@ -95,8 +110,12 @@ Vision: the backend vision model with the image as a data URL (`store: false`); 
 Generation/editing: the Responses image tool (`gpt-image-2.5-sunburst` default and for edits, `gpt-image-2.5-flare` for
 fast variants) or the gateway Images API; the product's pipeline (reserve → provider → private staging → audited
 `add_asset` → settle → re-read). Edits and variants are new assets with lineage (operation, parent, sources, model,
-route, prompt summary, run, trace, conversation); the original is re-read to prove it is unchanged. A failure saves
-nothing, claims nothing and holds uncertain spend as unknown. Scheduling a post with an image carries the image, its alt
+route, prompt summary, run, trace, conversation, billing basis); the original is re-read to prove it is unchanged. An
+image is booked at the provider's reported cost (the gateway) or the configured per-image price (the OpenAI image
+tool reports tokens, not money), so it uses a media credit and never stays "unknown"; the same image asked twice in
+one turn is made once. A failure saves nothing and claims nothing; a provider whose outcome is unknown (a timeout) is
+held as unknown. The panel scales a photo down in the browser to at most 3 MiB before upload (Vercel Functions take
+request bodies up to 4.5 MB; base64 adds a third). Scheduling a post with an image carries the image, its alt
 text and the person's rights confirmation in the digest-bound proposal.
 
 ## HTTP (`/api/workspaces/{id}/agent/…`)
@@ -111,18 +130,20 @@ Flags: `RAFII_AGENT_V2_ENABLED`, `RAFII_SPECIALISTS_ENABLED`, `RAFII_VOICE_ENABL
 `RAFII_PROACTIVE_V2_ENABLED`. Models: `RAFII_AGENT_PRIMARY_MODEL` (gpt-6-sol), `_FAST_MODEL` (gpt-6-luna),
 `_VISION_MODEL` (gpt-6-sol), `_IMAGE_MODEL_QUALITY` (gpt-image-2.5-sunburst), `_IMAGE_MODEL_FAST` (gpt-image-2.5-flare),
 `RAFII_LIVE_MODEL` (gpt-live-1); provider `openai` (`OPENAI_API_KEY`, needed for voice) or `gateway`. Prices per model
-in `config.py` (override `RAFII_AGENT_MODEL_PRICES`); a model without a price is never called. `vercel.json` allows the
+in `config.py` (override `RAFII_AGENT_MODEL_PRICES`); a model without a price is never called. Per-image prices:
+`RAFII_AGENT_IMAGE_PRICES` (USD per image, `image_fast` / `image_quality`). `vercel.json` allows the
 microphone for this origin only. Dependency: `openai-agents==0.22.3`, `openai==3.19.2`.
 
 ## Verification
 
 - `PYTHONPATH=src:tests python -m unittest tests.test_agent_runtime` — deterministic (Agents SDK `ScriptedModel`).
 - `PYTHONPATH=src:tests python scripts/agent_runtime_pg.py tests/phase2/postgres_agent_runtime.py --port 55621` —
-  43 scenarios on a disposable PostgreSQL with the real services, including the spec's vertical slice.
+  51 scenarios on a disposable PostgreSQL with the real services, including the spec's vertical slice.
 - `node web/tests/agent-runtime-browser.cjs [--browser=webkit --shots=off]` against the dev harness with
   `RAFII_AGENT_HARNESS=1` (local only; refused on Vercel) — Voice Mode in Chromium and WebKit.
 - `RAFII_LIVE_CHECKS=1 OPENAI_API_KEY=… python scripts/agent_runtime_live.py --reasoning --vision --images --live-session`
-  — opt-in, budget-capped live checks.
+  — opt-in live checks with a hard cap: the reasoning check refuses its next model call at `--budget-usd` (default
+  $0.50, at most $2; a reached cap is a FAIL); one vision call, two 1024×1024 images, one Live session closed at once.
 - `python scripts/agent_runtime_matrix.py --unit` — regenerates the matrix from the evidence.
 
 ## Files

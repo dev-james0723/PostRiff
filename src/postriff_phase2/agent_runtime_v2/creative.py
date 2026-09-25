@@ -77,7 +77,7 @@ def _status_error(status, body):
     if status == 429:
         return CreativeError("The image provider is busy. No automatic retry was made.", 429, code="provider_busy")
     if status in (400, 403, 422):
-        detail = f" ({clean(message, 160)})" if message else ""
+        detail = f" ({contracts.trim(message, 160)})" if message else ""
         return CreativeError("The provider refused this request" + detail + ". Nothing was saved.", 502, code="provider_refused")
     if status >= 500:
         return CreativeError("The provider's outcome is unknown; usage is held until it is reconciled.", uncertain=True, code="provider_error")
@@ -111,7 +111,7 @@ class ImageStudio:
     def estimate(self, quality: str) -> int:
         return self.cfg.image_estimates["image_quality" if quality == "quality" else "image_fast"]
 
-    def run(self, *, prompt: str, quality: str, size: str, sources: list[tuple[bytes, str]] | None, operation: str) -> dict:
+    def run(self, *, prompt: str, quality: str, size: str, sources: list[tuple[bytes, str]] | None, operation: str, timeout: float = TIMEOUT_SECONDS) -> dict:
         route = self.route(quality, reason=f"{operation} ({'quality' if quality == 'quality' else 'fast iteration'})")
         if not route.available:
             raise CreativeError(route.blocker or "No image route is configured.", 503, code="route_unavailable")
@@ -122,7 +122,8 @@ class ImageStudio:
             tool = {"type": "image_generation", "model": route.model, "action": "edit" if sources else "generate", "size": size, "output_format": "png", "quality": "high" if quality == "quality" else "medium"}
             content = [{"type": "input_text", "text": prompt}] + [{"type": "input_image", "image_url": _data_url(raw, mime)} for raw, mime in (sources or [])]
             response = self.transport("POST", "https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {key}"},
-                                      body={"model": host, "input": [{"role": "user", "content": content}], "tools": [tool], "tool_choice": {"type": "image_generation"}, "store": False})
+                                      body={"model": host, "input": [{"role": "user", "content": content}], "tools": [tool], "tool_choice": {"type": "image_generation"}, "store": False},
+                                      timeout=timeout)
             status, body = response.get("status"), response.get("body") or {}
             if status != 200:
                 raise _status_error(status, body)
@@ -132,13 +133,13 @@ class ImageStudio:
             raw = _image_bytes(call["result"])
             usage = body.get("usage") or {}
             return {"bytes": raw, "model": route.model, "provider": "openai", "route": route.trace(), "providerRef": {"responseId": body.get("id"), "callId": call.get("id")},
-                    "revisedPrompt": clean(call.get("revised_prompt") or "", 400) or None, "usage": {"inputTokens": usage.get("input_tokens"), "outputTokens": usage.get("output_tokens")},
+                    "revisedPrompt": contracts.trim(call.get("revised_prompt"), 400) or None, "usage": {"inputTokens": usage.get("input_tokens"), "outputTokens": usage.get("output_tokens")},
                     "latencyMs": round((time.monotonic() - started) * 1000)}
         endpoint = "https://ai-gateway.vercel.sh/v1/images/edits" if sources else "https://ai-gateway.vercel.sh/v1/images/generations"
         body = {"model": route.model, "prompt": prompt, "n": 1, "size": size}
         if sources:
             body["images"] = [{"image_url": _data_url(raw, mime)} for raw, mime in sources]
-        response = self.transport("POST", endpoint, headers={"Authorization": f"Bearer {key}"}, body=body)
+        response = self.transport("POST", endpoint, headers={"Authorization": f"Bearer {key}"}, body=body, timeout=timeout)
         status, payload = response.get("status"), response.get("body") or {}
         if status != 200:
             raise _status_error(status, payload)
@@ -176,7 +177,7 @@ class VisionAnalyzer:
         self.cfg = cfg
         self.transport = transport or https_json
 
-    def analyze(self, raw: bytes, mime: str, *, question: str, brand_rules: str | None, width=None, height=None) -> dict:
+    def analyze(self, raw: bytes, mime: str, *, question: str, brand_rules: str | None, width=None, height=None, timeout: float = TIMEOUT_SECONDS) -> dict:
         route = self.cfg.route("vision", reason="image understanding")
         if not route.available:
             raise CreativeError(route.blocker or "No vision route is configured.", 503, code="route_unavailable")
@@ -189,7 +190,7 @@ class VisionAnalyzer:
             response = self.transport("POST", "https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {key}"}, body={
                 "model": route.model, "instructions": VISION_SYSTEM, "store": False,
                 "input": [{"role": "user", "content": [{"type": "input_text", "text": user_text}, {"type": "input_image", "image_url": _data_url(raw, mime)}]}],
-                "text": {"format": {"type": "json_schema", "name": "vision_findings", "schema": VISION_SCHEMA, "strict": True}}})
+                "text": {"format": {"type": "json_schema", "name": "vision_findings", "schema": VISION_SCHEMA, "strict": True}}}, timeout=timeout)
             status, body = response.get("status"), response.get("body") or {}
             if status != 200:
                 raise _status_error(status, body)
@@ -200,7 +201,7 @@ class VisionAnalyzer:
             response = self.transport("POST", "https://ai-gateway.vercel.sh/v1/chat/completions", headers={"Authorization": f"Bearer {key}"}, body={
                 "model": route.model, "reasoning_effort": "none", "response_format": {"type": "json_schema", "json_schema": {"name": "vision_findings", "schema": VISION_SCHEMA, "strict": True}},
                 "messages": [{"role": "system", "content": VISION_SYSTEM},
-                             {"role": "user", "content": [{"type": "text", "text": user_text}, {"type": "image_url", "image_url": {"url": _data_url(raw, mime)}}]}]})
+                             {"role": "user", "content": [{"type": "text", "text": user_text}, {"type": "image_url", "image_url": {"url": _data_url(raw, mime)}}]}]}, timeout=timeout)
             status, body = response.get("status"), response.get("body") or {}
             if status != 200:
                 raise _status_error(status, body)
@@ -212,8 +213,8 @@ class VisionAnalyzer:
             raise CreativeError("The vision model's answer was unreadable; no findings were kept.", 502, code="vision_unreadable") from error
         if not isinstance(findings, dict):
             raise CreativeError("The vision model's answer was unreadable; no findings were kept.", 502, code="vision_unreadable")
-        cleaned = {key: ([clean(str(v), 300) for v in findings.get(key) or [] if isinstance(v, (str, int, float))][:20] if isinstance(VISION_SCHEMA["properties"][key].get("items"), dict)
-                         else clean(str(findings.get(key) or ""), 800)) for key in VISION_SCHEMA["properties"]}
+        cleaned = {key: ([contracts.trim(v, 300) for v in findings.get(key) or [] if isinstance(v, (str, int, float))][:20] if isinstance(VISION_SCHEMA["properties"][key].get("items"), dict)
+                         else contracts.trim(findings.get(key), 800)) for key in VISION_SCHEMA["properties"]}
         return {"findings": cleaned, "model": route.model, "route": route.trace(), "latencyMs": round((time.monotonic() - started) * 1000),
                 "usage": {"inputTokens": usage.get("input_tokens") or usage.get("prompt_tokens"), "outputTokens": usage.get("output_tokens") or usage.get("completion_tokens")}}
 
@@ -298,8 +299,12 @@ def image_analyze(ctx: RafiiRunContext, args: dict) -> dict:
             rules = "\n".join((brand.get("files") or {}).values()) or None
     raw, mime = _bytes(ctx, asset)
     analyzer = ctx.vision or VisionAnalyzer(ctx.config)
-    result = analyzer.analyze(raw, mime, question=args["question"], brand_rules=rules, width=asset.get("width"), height=asset.get("height"))
+    result = analyzer.analyze(raw, mime, question=args["question"], brand_rules=rules, width=asset.get("width"), height=asset.get("height"),
+                              timeout=ctx.provider_timeout(TIMEOUT_SECONDS))
     ctx.ledger.model_requests += 1
+    usage = result.get("usage") or {}
+    ctx.ledger.spans.append({"span": "generation", "agent": "vision", "workload": "vision", "model": result["model"], "inputTokens": usage.get("inputTokens") or 0,
+                             "outputTokens": usage.get("outputTokens") or 0, "latencyMs": result.get("latencyMs")})
     ctx.ledger.reference("asset", asset["id"], "the image")
     ctx.ledger.facts.append({"text": f"Vision model observation of image {asset['id'][:8]}", "kind": "derived", "rule": "vision model (model judgement, not a stored fact)"})
     if args.get("compareWithBrand") and rules is None:
@@ -339,27 +344,34 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
         reservation = ctx.service.ledger.reserve(cur, ctx.workspace_id, principal, "image_generation", studio.estimate(quality), key, charge_batch=True,
                                                  provider=route.provider or "", model=route.model or "", run_id=ctx.run_id,
                                                  meta={"via": "rafii_agent", "operation": operation, "traceId": ctx.trace_id})
+        if reservation.get("duplicate"):
+            # The same image request again in this turn (a retried or parallel call): the first call owns the
+            # reservation; a second provider call would be unbilled, so none is made.
+            raise AlphaError("That image was already requested in this turn, so I didn't make it twice.", 409, code="duplicate_image")
     parent_hash = parent.get("hash") if parent else None
     inputs = ([parent] if parent else []) + sources
     staged, result = None, None
     try:
         ctx.check_cancelled()
         source_bytes = [_bytes(ctx, asset) for asset in inputs]
-        result = studio.run(prompt=prompt, quality=quality, size=size, sources=source_bytes, operation=operation)
+        result = studio.run(prompt=prompt, quality=quality, size=size, sources=source_bytes, operation=operation, timeout=ctx.provider_timeout(TIMEOUT_SECONDS))
         ctx.ledger.model_requests += 1
         staged = ctx.service.assets.stage_upload(ctx.workspace_id, {"data": base64.b64encode(result["bytes"]).decode()})
+        # The provider's reported cost when it gives one (the gateway); otherwise the configured per-image price — the same
+        # rule as model tokens, which are priced from config — so a saved image is never left "unknown" with no reconciler.
+        reported = (result.get("usage") or {}).get("costUsd")
+        known = type(reported) in (int, float) and reported >= 0
+        billing = {"costUsdMicro": int(round(reported * 1_000_000)) if known else studio.estimate(quality), "basis": "provider-reported" if known else "configured per-image price"}
         lineage = {"operation": operation if operation != "generate" else "generated", "parentAssetId": (parent or {}).get("id"),
                    "sourceAssetIds": [a["id"] for a in inputs], "model": result["model"], "route": result["route"], "promptSummary": prompt[:200],
                    "revisedPrompt": result.get("revisedPrompt"), "providerRef": result.get("providerRef"), "runId": ctx.run_id, "traceId": ctx.trace_id,
-                   "conversationId": ctx.conversation_id, "createdAt": ctx.now(), "createdBy": "rafii_agent"}
-        record = {**staged, "alt": clean(args.get("alt") or prompt, 300), "lineage": lineage, "origin": "rafii_agent"}
+                   "conversationId": ctx.conversation_id, "createdAt": ctx.now(), "createdBy": "rafii_agent", "billing": billing}
+        record = {**staged, "alt": contracts.trim(args.get("alt") or prompt, 300), "lineage": lineage, "origin": "rafii_agent"}
         asset_id = record["id"]
         repo = ctx.service.repository
 
         def settle_after(cur, _state, _principal):
-            cost = (result.get("usage") or {}).get("costUsd")
-            known = type(cost) in (int, float) and cost >= 0
-            ctx.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed" if known else "unknown", int(cost * 1_000_000) if known else None)
+            ctx.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed", billing["costUsdMicro"])
 
         for attempt in range(2):
             revision = repo.get(ctx.workspace_id, ctx.token)["revision"]
@@ -379,9 +391,15 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
                 ctx.service.assets.remove(ctx.workspace_id, staged)
             except Exception:  # noqa: BLE001 — cleanup must not hide the original failure
                 pass
-        uncertain = (isinstance(error, CreativeError) and error.uncertain) or result is not None
         with ctx.workspace() as (cur, _row, _principal, _member, _state):
-            ctx.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "unknown" if uncertain else "failed")
+            if result is not None:
+                # The provider made (and billed) the image even though it wasn't saved: book that cost, don't hold it unknown.
+                reported = (result.get("usage") or {}).get("costUsd")
+                micro = int(round(reported * 1_000_000)) if type(reported) in (int, float) and reported >= 0 else studio.estimate(quality)
+                ctx.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed", micro)
+            else:
+                # No image came back: a provider whose outcome is unknown (a timeout) is held until reconciled; a refusal is released.
+                ctx.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "unknown" if isinstance(error, CreativeError) and error.uncertain else "failed")
         raise
     # Source of truth: the asset exists with the staged hash, and the original (for an edit) is unchanged.
     after = ctx.snapshot()["state"]

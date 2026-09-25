@@ -119,7 +119,8 @@ class VoiceSessions:
         sdp = payload.get("sdp")
         if not isinstance(sdp, str) or not sdp.startswith("v=0") or len(sdp.encode()) > MAX_SDP_BYTES:
             raise AlphaError("Send the browser's WebRTC offer.", 400, code="sdp_invalid")
-        if not self.cfg.enabled("RAFII_VOICE_ENABLED"):
+        if not (self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED")):
+            # Voice delegates every request to the agent runtime, so it needs both flags.
             raise AlphaError("Voice Mode is not enabled on this deployment. You can keep typing.", 403, code="voice_disabled")
         route = self.cfg.route("voice_front_end", reason="voice session")
         if not route.available:
@@ -154,6 +155,9 @@ class VoiceSessions:
             voice_session_id = cur.fetchone()[0]
             reservation = self.service.ledger.reserve(cur, workspace_id, principal, "tool", estimate, f"voice:{voice_session_id}", charge_batch=False, provider="openai",
                                                       model=route.model, run_id=voice_session_id, meta={"via": "rafii_voice", "unit": "session", "capMinutes": self._cap_minutes()})
+            artifact = self._artifact(cur, workspace_id, voice_session_id)
+            artifact["voice"]["reservationId"] = reservation["reservationId"]
+            self._save(cur, workspace_id, voice_session_id, artifact)
         session = {"model": route.model, "instructions": live_prompt(locale), "audio": {"output": {"voice": voice}}, "delegation": {"type": "client"},
                    "client": {"data_channel": {"allowed_client_events": list(ALLOWED_CLIENT_EVENTS), "allowed_server_events": list(ALLOWED_SERVER_EVENTS)}},
                    "store": False}
@@ -180,18 +184,22 @@ class VoiceSessions:
                 "model": route.model, "locale": locale, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
 
     def _reap(self, cur, workspace_id, principal):
-        """A tab closed mid-call never ends its session: this member's sessions past the cap are closed and their
-        reservation is held as unknown (never settled as free) until reconciled against the provider's usage."""
-        cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND actor=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
-                    "AND created_at<=now()-make_interval(mins=>%s) FOR UPDATE", (workspace_id, principal, self._cap_minutes() + 5))
+        """A tab closed mid-call never ends its session. Any member's session past the cap has ended at Live (sessions
+        expire at the cap), so it is closed and billed at the cap — an upper bound, never free and never held forever."""
+        _ = principal
+        cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key LIKE 'voice:%%' AND status='running' "
+                    "AND created_at<=now()-make_interval(mins=>%s) FOR UPDATE SKIP LOCKED", (workspace_id, self._cap_minutes() + 5))
         for run_id, artifact in cur.fetchall():
             artifact = artifact or {}
             voice = artifact.setdefault("voice", {})
+            seconds = self._cap_minutes() * 60 + 15
+            cost = int(math.ceil(seconds * self.cfg.live_usd_micro_per_minute / 60))
             if voice.get("reservationId"):
-                self.service.ledger.settle(cur, workspace_id, voice["reservationId"], "unknown")
-            voice.update({"state": "ended", "reason": "not_ended_by_client", "endedAt": self._now(), "billingBasis": "unknown until reconciled"})
+                self.service.ledger.settle(cur, workspace_id, voice["reservationId"], "completed", cost)
+            voice.update({"state": "ended", "reason": "not_ended_by_client", "endedAt": self._now(), "usageSeconds": seconds, "costUsdMicro": cost,
+                          "billingBasis": "the session cap (upper bound): the client never ended it"})
             self._save(cur, workspace_id, run_id, artifact, status="completed")
-            self.service.ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed", usage={"provenance": "voice", "seconds": None}))
+            self.service.ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed", usage={"provenance": "voice", "seconds": seconds}))
 
     def _now(self) -> float:
         return self.runtime.clock()
@@ -253,13 +261,19 @@ class VoiceSessions:
             if voice.get("state") in ("ended", "failed"):
                 return {"voiceSessionId": voice_session_id, "state": voice["state"], "note": "Already ended."}
             started = voice.get("connectedAt") or voice.get("startedAt") or self._now()
-            wall = max(0.0, self._now() - started) + 15  # Live bills 15 s at creation (credited against the session).
-            billed = None if seconds is None else min(seconds, wall)
+            wall = min(max(0.0, self._now() - started), self._cap_minutes() * 60) + 15  # Live bills 15 s at creation (credited against the session).
+            if state == "ended":
+                # A session that went live is billed on the server's clock (an upper bound of Live's own count); what the
+                # client reports can't lower it.
+                billed = wall
+            else:
+                # It never went live: 0 when Live refused it, unknown when the outcome is unknown.
+                billed = None if seconds is None else min(seconds, wall)
             cost = None if billed is None else int(math.ceil(billed * self.cfg.live_usd_micro_per_minute / 60))
             if reservation and reservation.get("reservationId"):
                 self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
             voice.update({"state": state, "endedAt": self._now(), "reason": reason, "usageSeconds": billed, "costUsdMicro": cost,
-                          "billingBasis": "client-reported seconds, capped by the server clock" if cost is not None else "unknown until reconciled"})
+                          "clientReportedSeconds": seconds, "billingBasis": ("server clock" if state == "ended" else "Live refused the session") if cost is not None else "unknown until reconciled"})
             self._save(cur, workspace_id, voice_session_id, artifact, status="completed" if state == "ended" else "failed")
             kind = "run.completed" if state == "ended" else "run.failed"
             self.service.ideas._insert_event(cur, workspace_id, voice_session_id, safe_event(kind, **({"usage": {"provenance": "voice", "seconds": billed}} if kind == "run.completed" else {"message": f"Voice session ended: {reason}."})))

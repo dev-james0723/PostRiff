@@ -212,6 +212,10 @@ with connection() as db:
     db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'viewer','active')", (wid, THREE))
 approve_budgets(connection, wid)
 approve_budgets(connection, other)
+with connection() as db:
+    # Generated images now settle as completed and use a media credit each (the trial plan has one): room for this suite's images.
+    service.ledger.ensure_entitlement(db.cursor(), wid, None)
+    db.execute("UPDATE public.pr_entitlements SET media_credits_remaining=100 WHERE workspace_id=%s", (wid,))
 
 
 def command(fn, token=OWNER, workspace=None):
@@ -336,6 +340,8 @@ def _():
     assert image_part["type"] == "input_image" and image_part["image_url"].startswith("data:image/")
     assert not any("live" in c["url"] for c in PROVIDER.calls), "no image goes to the Live front-end"
     assert body["toolActivity"][0]["tool"] == "image_analyze" and body["toolActivity"][0]["status"] == "verified"
+    generations = one("SELECT artifact->'trace'->'generations' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
+    assert any(g.get("agent") == "vision" and g.get("model") == "gpt-6-sol" and g.get("inputTokens") == 900 for g in generations), generations
     return {"actual": body["answerText"], "visionModel": vision_calls[-1]["body"]["model"]}
 
 
@@ -451,13 +457,15 @@ def _():
 
 
 @scenario("VS07", "End Voice Mode; continue the same task by text with everything intact (V-A09)", "(text) What's left for this launch?",
-          "voice session settled from reported seconds (capped by the server clock); the text turn sees the same conversation, task and references")
+          "voice session settled on the server's clock (the client's 90 s is kept for reference); the text turn sees the same conversation, task and references")
 def _():
+    connected = float(one("SELECT artifact->'voice'->>'connectedAt' FROM public.pr_agent_runs WHERE id::text=%s", STATE["voice"])[0])
     clock[0] += 95
     ended = voice.end(wid, OWNER, STATE["voice"], {"usageSeconds": 90, "reason": "user_ended"})
-    assert ended["state"] == "ended" and ended["usageSeconds"] == 90
+    seconds = min(clock[0] - connected, 30 * 60) + 15
+    assert ended["state"] == "ended" and abs(ended["usageSeconds"] - seconds) < 0.01, (ended, seconds)
     settled = one("SELECT kind,actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='settle' AND run_id::text=%s", wid, STATE["voice"])
-    assert settled and settled[1] == 75_000, settled  # 90 s × $0.05/min
+    assert settled and settled[1] == -(-seconds * CFG.live_usd_micro_per_minute // 60), settled  # $0.05/min, per second
     SCRIPTS.set(rafii_manager=[[function_call("campaign_items", {"campaignId": CAMPAIGN}, call_id="m1")],
                                [reply("The draft is in the campaign and its post waits for approval on Thursday at 18:00; that's the only open item.")]])
     result = turn("What's left for this launch?", conversationId=STATE["conversation"], modality="text")
@@ -746,18 +754,25 @@ def _():
     return {"actual": result["result"]["answerText"]}
 
 
-@scenario("R06", "Refining a request while it runs supersedes the earlier one (V-A05)", "(voice) Actually make it LinkedIn instead",
-          "the earlier running request is cancelled before its next change and handed to the Manager as superseded")
+@scenario("R06", "Refining a request while it runs supersedes the earlier spoken one — never a typed turn (V-A05)", "(voice) Actually make it LinkedIn instead",
+          "the earlier running spoken request is cancelled before its next change and handed to the Manager as superseded; a typed turn still running is left alone")
 def _():
     conversation = fresh_conversation()
     with connection() as db:
         run = str(db.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) "
                              "VALUES(%s,%s,%s,'running','rafii-agent','standard',%s,%s,%s) RETURNING id", (conversation, wid, ONE, "a" * 64, "b" * 64, "agent:" + uuid.uuid4().hex)).fetchone()[0])
         db.execute("INSERT INTO public.pr_messages(conversation_id,workspace_id,seq,role,body,run_id) VALUES(%s,%s,1,'user',%s::jsonb,%s)",
-                   (conversation, wid, json.dumps({"text": "Write an Instagram post about scales"}), run))
+                   (conversation, wid, json.dumps({"text": "Write an Instagram post about scales", "agent": {"modality": "voice"}}), run))
+        typed = str(db.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) "
+                               "VALUES(%s,%s,%s,'running','rafii-agent','standard',%s,%s,%s) RETURNING id", (conversation, wid, ONE, "a" * 64, "b" * 64, "agent:" + uuid.uuid4().hex)).fetchone()[0])
+        db.execute("INSERT INTO public.pr_messages(conversation_id,workspace_id,seq,role,body,run_id) VALUES(%s,%s,2,'user',%s::jsonb,%s)",
+                   (conversation, wid, json.dumps({"text": "Summarise last week's posts", "agent": {"modality": "text"}}), typed))
     SCRIPTS.set(rafii_manager=[[reply("Switching to LinkedIn.")]])
     turn("Actually make it LinkedIn instead", conversationId=conversation, modality="voice")
     assert one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", run)[0] == "cancelled"
+    assert one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", typed)[0] == "running", "a typed turn is not a voice refinement"
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET status='cancelled' WHERE id=%s", (typed,))
     context_text = json.dumps(SCRIPTS.models["rafii_manager"].first_call.input, ensure_ascii=False)
     assert "Write an Instagram post about scales" in context_text and "supersededRequests" in context_text
     return {"actual": "superseded"}
@@ -784,7 +799,7 @@ def _():
     task = one("SELECT artifact FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%'", conversation)[0]
     assert task["pendingRun"]["proposalIds"] == ids
     assert "one-token" not in json.dumps(task), "the stored run never holds the session token"
-    assert result["result"]["composedBy"] == "deterministic" and "waiting for your decision" in result["result"]["answerText"]
+    assert result["result"]["composedBy"] == "deterministic" and "waits for your decision: pause automation 1" in result["result"]["answerText"], result["result"]["answerText"]
     return {"actual": result["result"]["answerText"], "stored": list(task["pendingRun"])}
 
 
@@ -807,7 +822,7 @@ def _():
 def _():
     off = live.VoiceSessions(AgentRuntimeService(service, config.RuntimeConfig.from_environment({"OPENAI_API_KEY": "sk-x"}), clock=lambda: clock[0]), transport=LIVE)
     assert denied(lambda: off.start(wid, OWNER, {"sdp": "v=0\r\n"}), 403).code == "voice_disabled"
-    nokey = live.VoiceSessions(AgentRuntimeService(service, config.RuntimeConfig.from_environment({"RAFII_VOICE_ENABLED": "1", "AI_GATEWAY_API_KEY": "gw"}), clock=lambda: clock[0]))
+    nokey = live.VoiceSessions(AgentRuntimeService(service, config.RuntimeConfig.from_environment({"RAFII_VOICE_ENABLED": "1", "RAFII_AGENT_V2_ENABLED": "1", "AI_GATEWAY_API_KEY": "gw"}), clock=lambda: clock[0]))
     error = denied(lambda: nokey.start(wid, OWNER, {"sdp": "v=0\r\n"}), 503)
     assert "OPENAI_API_KEY" in str(error)
     denied(lambda: voice.start(wid, VIEWER, {"sdp": "v=0\r\n"}), 403)
@@ -831,8 +846,8 @@ def _():
     assert history["role"] == "developer" and "Rafii:" in history["content"][0]["text"], "voice continues the text conversation"
     voice.end(wid, OWNER, started["voiceSessionId"], {"reason": "connection_lost"})
     settled = one("SELECT cost_state FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='settle' AND run_id::text=%s", wid, started["voiceSessionId"])
-    assert settled and settled[0] == "estimated_unknown", settled
-    return {"actual": "transcript stored as text; unknown usage held as estimated_unknown"}
+    assert settled and settled[0] == "actual", settled
+    return {"actual": "transcript stored as text; usage billed on the server clock"}
 
 
 # ===========================================================================================================================
@@ -1104,18 +1119,189 @@ def _():
     return {"actual": {"status": code, "turn": body["runId"], "voice": started["voiceSessionId"]}}
 
 
-@scenario("R13", "A voice session the tab never ended is reaped: closed, its reservation held as unknown (never free)", "(tab closed mid-call)",
-          "on the member's next start, their session past the cap is ended with reason not_ended_by_client and its cost stays estimated_unknown")
+@scenario("R13", "A voice session the tab never ended is reaped: closed and billed at the session cap (never free, never held forever)", "(tab closed mid-call)",
+          "on the next start in the workspace, a session past the cap is ended with reason not_ended_by_client and settled at the cap")
 def _():
     stale = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
     with connection() as db:
         db.execute("UPDATE public.pr_agent_runs SET created_at=now()-interval '2 hours' WHERE id=%s", (stale["voiceSessionId"],))
     fresh = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
     status, artifact = one("SELECT status,artifact FROM public.pr_agent_runs WHERE id::text=%s", stale["voiceSessionId"])
-    settled = one("SELECT cost_state FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='settle' AND run_id::text=%s", wid, stale["voiceSessionId"])
+    settled = one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='settle' AND run_id::text=%s", wid, stale["voiceSessionId"])
     voice.end(wid, OWNER, fresh["voiceSessionId"], {"usageSeconds": 2, "reason": "user_ended"})
-    assert status == "completed" and artifact["voice"]["reason"] == "not_ended_by_client" and settled and settled[0] == "estimated_unknown", (status, artifact["voice"], settled)
-    return {"actual": {"status": status, "reason": artifact["voice"]["reason"], "cost": settled[0]}}
+    cap = -(-(30 * 60 + 15) * CFG.live_usd_micro_per_minute // 60)
+    assert status == "completed" and artifact["voice"]["reason"] == "not_ended_by_client" and settled and settled[0] == "actual" and settled[1] == cap, (status, artifact["voice"], settled)
+    return {"actual": {"status": status, "reason": artifact["voice"]["reason"], "cost": settled[0], "usdMicro": settled[1]}}
+
+
+# --- release hardening: the final review's findings, each proven on the real services ---------------------------------------------
+def running_run(conversation, key_prefix="agent:", actor=ONE, text=None, modality=None, stale=False):
+    with connection() as db:
+        run = str(db.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) "
+                             "VALUES(%s,%s,%s,'running','rafii-agent','standard',%s,%s,%s) RETURNING id", (conversation, wid, actor, "a" * 64, "b" * 64, key_prefix + uuid.uuid4().hex)).fetchone()[0])
+        if text:
+            seq = db.execute("SELECT coalesce(max(seq),0)+1 FROM public.pr_messages WHERE conversation_id=%s", (conversation,)).fetchone()[0]
+            db.execute("INSERT INTO public.pr_messages(conversation_id,workspace_id,seq,role,body,run_id) VALUES(%s,%s,%s,'user',%s::jsonb,%s)",
+                       (conversation, wid, seq, json.dumps({"text": text, **({"agent": {"modality": modality}} if modality else {})}), run))
+        if stale:
+            db.execute("UPDATE public.pr_agent_runs SET updated_at=to_timestamp(%s) WHERE id=%s", (clock[0] - 3600, run))
+    return run
+
+
+@scenario("R08b", "After a paused run, the person's “yes” binds to the proposal it named; the app applies it; the paused Manager resumes (ADR-H1)", "yes",
+          "the paused answer names the proposal; the yes binds (no endless restating); applied through the site path; the stored run is consumed; the Manager finishes")
+def _():
+    conversation = fresh_conversation("resume after approval")
+    pending = schedule_proposal(conversation, "Friday 09:00")
+    SCRIPTS.set(rafii_manager=[[function_call("proposal_apply", {"proposalId": pending["proposalId"]}, call_id="m1")],
+                               [reply("Done. The post now waits for its own approval before it can publish.")]])
+    paused = turn("Please take care of the Friday post", conversationId=conversation)
+    spoken = paused["result"]["speakableSummary"]
+    assert "Friday" in spoken and "Say yes" in spoken, spoken
+    result = turn("yes", conversationId=conversation, modality="voice")
+    SCRIPTS.complete()
+    task = one("SELECT artifact FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%' ORDER BY created_at DESC LIMIT 1", conversation)[0]
+    assert "pendingRun" not in task, "the paused run was consumed"
+    assert result["result"]["composedBy"] == "manager" and "waits for its own approval" in result["result"]["answerText"], (result["result"]["composedBy"], result["result"]["answerText"])
+    status = [p["status"] for (b,) in rows("SELECT body FROM public.pr_messages WHERE conversation_id::text=%s AND role='assistant'", conversation)
+              for p in (b.get("siteAgent") or {}).get("proposals") or [] if p["id"] == pending["proposalId"]]
+    assert status == ["applied"], status
+    return {"actual": result["result"]["answerText"], "pausedSpoken": spoken}
+
+
+@scenario("R14", "A “yes” the application refuses leaves the waiting step waiting; the owner can still apply it", "(viewer) yes → (owner) yes",
+          "the viewer's yes is refused (role); the step stays needs_user, not failed; the owner's yes applies it and the step closes, verified")
+def _():
+    conversation = fresh_conversation("refused approval")
+    draft = fresh_draft(conversation)
+    SCRIPTS.set(rafii_manager=[[function_call("task_plan", {"title": "Sunday post", "steps": [{"label": "Schedule Sunday 16:45"}]}, call_id="m0")],
+                               [function_call("schedule_propose", {"draftId": draft, "when": "Sunday 16:45", "assetId": STATE["asset"], "alt": "Warm overhead piano keyboard",
+                                                                   "stepId": "s1"}, call_id="m1")],
+                               [reply("Prepared for Sunday at 16:45. Say yes to apply it.")]])
+    turn("Plan and schedule it Sunday 16:45", conversationId=conversation)
+    SCRIPTS.complete()
+    refused = turn("yes", token=VIEWER, conversationId=conversation, modality="voice")
+    steps = one("SELECT artifact->'task'->'steps' FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%'", conversation)[0]
+    assert "didn't apply" in refused["result"]["answerText"] and steps[0]["state"] == "needs_user", (refused["result"]["answerText"], steps)
+    turn("yes", conversationId=conversation, modality="voice")
+    steps = one("SELECT artifact->'task'->'steps' FROM public.pr_agent_runs WHERE conversation_id::text=%s AND idempotency_key LIKE 'task:%%'", conversation)[0]
+    assert steps[0]["state"] == "done" and steps[0]["verified"] is True, steps
+    return {"actual": refused["result"]["answerText"], "afterOwner": steps[0]["state"]}
+
+
+@scenario("R15", "Cancelling needs edit and reaches only your own requests", "(viewer / other editor) cancel that",
+          "a viewer's “cancel that” stops nothing; another editor's stops nothing of mine; cancelling my run by id as someone else is 404; I can cancel it")
+def _():
+    with connection() as db:
+        db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'editor','active') ON CONFLICT DO NOTHING", (wid, TWO))
+    conversation = fresh_conversation("cancel ownership")
+    mine = running_run(conversation, text="Draft three posts about scales", modality="text")
+    turn("cancel that", token=VIEWER, conversationId=conversation)
+    turn("cancel that", token=OTHER, conversationId=conversation)
+    denied(lambda: runtime.cancel(wid, OTHER, mine), 404)
+    denied(lambda: runtime.cancel(wid, VIEWER, mine), 403)
+    still = one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", mine)[0]
+    stopped = runtime.cancel(wid, OWNER, mine)
+    with connection() as db:
+        db.execute("DELETE FROM public.pr_memberships WHERE workspace_id=%s AND user_id=%s", (wid, TWO))
+    assert still == "running" and stopped["status"] == "cancelled", (still, stopped)
+    return {"actual": {"afterOthers": still, "afterMine": stopped["status"]}}
+
+
+@scenario("R16", "Voice is billed on the server's clock: a client reporting 0 seconds doesn't make a call free", "(end voice, usageSeconds 0)",
+          "the session's reservation is on its row from the start; it settles at the server's elapsed time (+15 s) and keeps the client figure only for reference")
+def _():
+    started = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n"})
+    artifact = one("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s", started["voiceSessionId"])[0]
+    assert artifact["voice"].get("reservationId"), "the reservation is recorded on the session row"
+    clock[0] += 120
+    ended = voice.end(wid, OWNER, started["voiceSessionId"], {"usageSeconds": 0, "reason": "user_ended"})
+    settled = one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND kind='settle' AND run_id::text=%s", wid, started["voiceSessionId"])
+    voice_row = one("SELECT artifact->'voice' FROM public.pr_agent_runs WHERE id::text=%s", started["voiceSessionId"])[0]
+    expected = -(-135 * CFG.live_usd_micro_per_minute // 60)
+    assert ended["usageSeconds"] == 135 and settled == ("actual", expected), (ended, settled)
+    assert voice_row["clientReportedSeconds"] == 0 and voice_row["billingBasis"] == "server clock", voice_row
+    return {"actual": {"billedSeconds": ended["usageSeconds"], "usdMicro": settled[1]}}
+
+
+@scenario("R17", "The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation",
+          "(cron) recover stalled runs → (next turn) reap", "an old writing run is recovered; task, voice and agent rows are not; the next turn fails the dead agent turn with a message and settles its reservation")
+def _():
+    conversation = fresh_conversation("stalled rows")
+    writer = running_run(conversation, key_prefix="ideas:", stale=True)
+    task = running_run(conversation, key_prefix="task:", stale=True)
+    dead = running_run(conversation, key_prefix="agent:", text="An old request", modality="text", stale=True)
+    session = voice.start(wid, OWNER, {"sdp": "v=0\r\no=- offer\r\n", "conversationId": conversation})
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET updated_at=to_timestamp(%s) WHERE id=%s", (clock[0] - 3600, session["voiceSessionId"]))
+        cur = db.cursor()
+        reservation = service.ledger.reserve(cur, wid, ONE, "text_model", 50_000, "agent:" + dead, charge_batch=False, provider="openai", model="gpt-6-sol", run_id=dead, meta={"via": "test"})
+    service.ideas.recover_stalled()
+    statuses = {name: one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", run)[0] for name, run in
+                (("writer", writer), ("task", task), ("agent", dead), ("voice", session["voiceSessionId"]))}
+    assert statuses == {"writer": "failed", "task": "running", "agent": "running", "voice": "running"}, statuses
+    SCRIPTS.set(rafii_manager=[[reply("Here you go.")]])
+    turn("What is on this week?", conversationId=conversation)
+    after = one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", dead)[0]
+    note = one("SELECT body->>'text' FROM public.pr_messages WHERE run_id::text=%s AND role='assistant'", dead)[0]
+    settled = one("SELECT cost_state,actual_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND kind='settle'", wid, reservation["reservationId"])
+    voice.end(wid, OWNER, session["voiceSessionId"], {"usageSeconds": 1, "reason": "user_ended"})
+    with connection() as db:
+        db.execute("UPDATE public.pr_agent_runs SET status='completed' WHERE id=%s", (task,))
+    assert after == "failed" and "stopped before it finished" in note and settled == ("actual", 50_000), (after, note, settled)
+    return {"actual": {"cron": statuses, "reaped": after, "settled": settled[0]}}
+
+
+@scenario("R18", "Whatever fails after a turn opens, the run ends closed with a truthful answer (never stuck “running”)", "(an internal error while finishing)",
+          "run failed; a plain answer says it stopped; the error is logged without content")
+def _():
+    original = runtime_service.evidence_blocks
+    runtime_service.evidence_blocks = lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+    try:
+        SCRIPTS.set(rafii_manager=[[reply("All good.")]])
+        result = turn("Anything to watch today?", conversationId=fresh_conversation("abort"))
+    finally:
+        runtime_service.evidence_blocks = original
+    status = one("SELECT status FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
+    assert status == "failed" and "went wrong" in result["result"]["answerText"] and result["result"]["errors"][0]["code"] == "internal_error", (status, result["result"])
+    return {"actual": result["result"]["answerText"]}
+
+
+@scenario("MM16", "Images on the OpenAI route are booked at the configured price; the same image asked twice in a turn is made once",
+          "Make a square poster (twice in one turn)", "one provider call; the second is refused as a duplicate; the ledger books the configured per-image price (not unknown)")
+def _():
+    calls = len([c for c in PROVIDER.calls if c["url"].endswith("/responses") and (c["body"].get("tools") or [{}])[0].get("type") == "image_generation"])
+    args = {"prompt": "A square poster for the practice journal, warm light", "alt": "Poster for the practice journal"}
+    SCRIPTS.set(rafii_manager=[[function_call("ask_creative", {"input": "Make the poster."}, call_id="m1")], [reply("The poster is saved in your library.")]],
+                creative=[[function_call("image_generate", args, call_id="g1")], [function_call("image_generate", args, call_id="g2")], [assistant_message("Saved one poster.")]])
+    result = turn("Make a square poster", conversationId=STATE["conversation"])
+    SCRIPTS.complete()
+    made = len([c for c in PROVIDER.calls if c["url"].endswith("/responses") and (c["body"].get("tools") or [{}])[0].get("type") == "image_generation"]) - calls
+    codes = [a.get("code") for a in result["result"]["toolActivity"] if a["tool"] == "image_generate"]
+    asset = result["result"]["generatedAssets"][0]["assetId"]
+    lineage = next(a for a in service.get(wid, OWNER)["state"]["phase2"]["assets"] if a["id"] == asset)["lineage"]
+    settled = rows("SELECT s.cost_state,s.actual_usd_micro FROM public.pr_usage_ledger s JOIN public.pr_usage_ledger r ON r.id=s.reservation_id "
+                   "WHERE r.workspace_id=%s AND r.run_id::text=%s AND r.dimension='image_generation' AND s.kind='settle'", wid, result["runId"])
+    assert made == 1 and "duplicate_image" in codes, (made, codes)
+    assert settled == [("actual", CFG.image_estimates["image_quality"])] and lineage["billing"]["basis"] == "configured per-image price", (settled, lineage.get("billing"))
+    return {"actual": {"providerCalls": made, "ledger": settled[0][0], "basis": lineage["billing"]["basis"]}}
+
+
+@scenario("R19", "What a spoken “yes” would apply is said in the application's words; model text is trimmed, never turned into an error",
+          "Schedule it Thursday 11:00 (a long follow-up from the model)", "speakable = the stored proposal's summary + how to answer; a 300-character follow-up is cut, not refused")
+def _():
+    conversation = fresh_conversation("spoken proposal")
+    draft = fresh_draft(conversation)
+    SCRIPTS.set(rafii_manager=[[function_call("schedule_propose", {"draftId": draft, "when": "Thursday 11:00", "assetId": STATE["asset"], "alt": "Warm overhead piano keyboard"}, call_id="m1")],
+                               [assistant_message(json.dumps({"answer": "It's ready for Thursday at 11:00 once you say so.", "speakable": "All set!", "language": "en",
+                                                              "follow_ups": ["x" * 300]}))]])
+    result = turn("Schedule it Thursday 11:00", conversationId=conversation, modality="voice")
+    SCRIPTS.complete()
+    body = result["result"]
+    assert body["composedBy"] == "manager" and body["speakableSummary"].startswith("I've prepared this for your approval: prepare the exact Instagram post"), body["speakableSummary"]
+    assert "Thursday" in body["speakableSummary"] and "11:00" in body["speakableSummary"] and "Say yes" in body["speakableSummary"], body["speakableSummary"]
+    assert "All set" not in body["speakableSummary"] and len(body["followUps"][0]) == 120, body["followUps"]
+    return {"actual": body["speakableSummary"]}
 
 
 # --- write evidence ------------------------------------------------------------------------------------------------------------

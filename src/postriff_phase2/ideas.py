@@ -1131,9 +1131,11 @@ class IdeasService:
         """Bounded cron recovery: hold uncertain spend, never repeat provider I/O."""
         recovered = 0
         with self.repository.connection_factory() as db, db.cursor() as cur:
-            cur.execute("SELECT w.id::text FROM public.pr_workspaces w WHERE EXISTS (SELECT 1 FROM public.pr_agent_runs r WHERE r.workspace_id=w.id AND r.status='running' AND r.updated_at<to_timestamp(%s)) ORDER BY w.id FOR UPDATE SKIP LOCKED LIMIT %s", (self.clock()-600, max_runs))
+            # The Rafii Agent Runtime's rows (agent:/task:/voice:) are not writing runs: a task waiting for an approval or a live
+            # voice call is not stalled, and the runtime closes its own dead turns and sessions with their reservations.
+            cur.execute("SELECT w.id::text FROM public.pr_workspaces w WHERE EXISTS (SELECT 1 FROM public.pr_agent_runs r WHERE r.workspace_id=w.id AND r.status='running' AND r.updated_at<to_timestamp(%s) AND r.idempotency_key NOT LIKE 'agent:%%' AND r.idempotency_key NOT LIKE 'task:%%' AND r.idempotency_key NOT LIKE 'voice:%%') ORDER BY w.id FOR UPDATE SKIP LOCKED LIMIT %s", (self.clock()-600, max_runs))
             for (wid,) in cur.fetchall():
-                cur.execute("SELECT id::text,conversation_id::text,usage FROM public.pr_agent_runs WHERE workspace_id=%s AND status='running' AND updated_at<to_timestamp(%s) ORDER BY created_at LIMIT %s", (wid, self.clock()-600, max_runs-recovered))
+                cur.execute("SELECT id::text,conversation_id::text,usage FROM public.pr_agent_runs WHERE workspace_id=%s AND status='running' AND updated_at<to_timestamp(%s) AND idempotency_key NOT LIKE 'agent:%%' AND idempotency_key NOT LIKE 'task:%%' AND idempotency_key NOT LIKE 'voice:%%' ORDER BY created_at LIMIT %s", (wid, self.clock()-600, max_runs-recovered))
                 for run_id, cid, usage in cur.fetchall():
                     self._lock_run_events(cur, wid, run_id)
                     reservation = (usage or {}).get('reservationId')

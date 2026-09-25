@@ -165,6 +165,11 @@ def sdk_tools(names, *, scope_name: str | None = None) -> list:
                     args = json.loads(raw) if raw else {}
                 except ValueError:
                     args = None
+                left = ctx.remaining() if hasattr(ctx, "remaining") else None
+                if left is not None and left < 8:
+                    # Too little of the turn is left to finish a tool (its thread couldn't be stopped at the deadline).
+                    ctx.ledger.error("turn_time", f"There wasn't time left in this turn for another step ({tool.name}); it was not started.")
+                    return model_output({"ok": False, "code": "turn_time", "message": "No time left in this turn; say what is still to do instead of calling more tools."})
                 # Tools do blocking database and provider I/O; keep the event loop free for concurrent tool calls.
                 result = await asyncio.to_thread(execute, ctx, tool, args, scope=scope, agent=scope_name)
                 return model_output(result)

@@ -81,7 +81,12 @@ def bind(cur, workspace_id: str, conversation_id: str, now: float) -> dict:
         return {"none": "no_open_proposal"}
     answers = _answers(cur, workspace_id, conversation_id, limit=1)
     latest = answers[0] if answers else None
-    presented_now = [item for item in open_items if latest and item["messageId"] == latest[0] and now - item["presentedAt"] <= BIND_WINDOW_SECONDS]
+    # An answer can present again a proposal stored on an earlier one (Rafii restating it, or a paused run asking for it):
+    # the answer records which, and when, on the application's clock.
+    presents = (latest[3].get("presents") if latest else None) or {}
+    again = set(presents.get("proposalIds") or []) if isinstance(presents.get("at"), (int, float)) and now - presents["at"] <= BIND_WINDOW_SECONDS else set()
+    presented_now = [item for item in open_items if latest and ((item["messageId"] == latest[0] and now - item["presentedAt"] <= BIND_WINDOW_SECONDS)
+                                                                or item["proposalId"] in again)]
     if len(open_items) == 1 and len(presented_now) == 1:
         return {"bind": presented_now[0]}
     # Listed in the order Rafii proposed them, so "the first one" is the first proposal the person heard or saw.

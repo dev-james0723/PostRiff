@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from postriff_alpha.domain import AlphaError, initial_state  # noqa: E402
 from postriff_phase2.permissions import Membership  # noqa: E402
-from postriff_phase2.agent_runtime_v2 import (answer_policy, approvals, config, contracts, context as rt_context, domain_tools, live,  # noqa: E402
+from postriff_phase2.agent_runtime_v2 import (answer_policy, approvals, config, contracts, context as rt_context, creative, domain_tools, live,  # noqa: E402
                                               manager, specialists, task_state, tool_adapter)
 
 try:
@@ -329,6 +329,23 @@ class AnswerPolicyTest(unittest.TestCase):
         self.assertIsNone(answer_policy.check("我把它保存为草稿而没有发布。", waiting))
         self.assertIsNone(answer_policy.check("我已經幫你將個 post 準備好，等你確認。", waiting))
 
+    def test_effect_verbs_and_passive_claims_after_a_proposal_attempt(self):
+        ledger = rt_context.EffectLedger()
+        for text in ("I've paused your weekly automation.", "I applied the change.", "I’ve turned off the Monday automation.", "我已經暫停咗個自動化。"):
+            self.assertEqual(answer_policy.check(text, ledger), "claims_unverified_change", text)
+        attempted = rt_context.EffectLedger()
+        attempted.tool_activity.append({"tool": "schedule_propose", "effect": contracts.PREPARE_EXTERNAL, "status": "refused", "code": "needs_account"})
+        for text in ("Your post has been scheduled for Friday.", "Your post is scheduled for Friday.", "The automation is paused now."):
+            self.assertEqual(answer_policy.check(text, attempted), "claims_pending_proposal_applied", text)
+        self.assertIsNone(answer_policy.check("Your post is scheduled for Friday.", ledger), "a read of the calendar is not a claim")
+
+    def test_a_proposal_is_said_as_its_action_with_the_day_in_words(self):
+        proposal = {"summary": ["confirm the draft review: you've read this exact text", "prepare the exact Instagram post for @studio at 2026-09-24 18:00 (Asia/Hong_Kong)",
+                                "attach the image “Poster” (you confirm you hold the rights to use it)"]}
+        spoken = answer_policy.spoken_proposal(proposal)
+        self.assertEqual(spoken, "prepare the exact Instagram post for @studio at Thursday 24 September at 18:00 (the panel lists what else you're confirming)")
+        self.assertEqual(answer_policy.spoken_proposal({"summary": ["pause automation 1"]}), "pause automation 1")
+
     def test_unknown_ids_and_secrets(self):
         ledger = rt_context.EffectLedger()
         self.assertEqual(answer_policy.check("See draft 3f2b1c4d-0000-4000-8000-000000000000.", ledger), "unknown_id")
@@ -351,6 +368,29 @@ class AnswerPolicyTest(unittest.TestCase):
         self.assertIn("Write the copy: not started", answer)
         self.assertIn("Say yes to apply it", spoken)
         self.assertIsNone(answer_policy.check(answer, ledger) if False else None)
+
+
+class ProviderOutputTest(unittest.TestCase):
+    def test_model_and_provider_output_is_trimmed_not_refused(self):
+        self.assertEqual(contracts.trim("x" * 500, 120), "x" * 120)
+        self.assertEqual(contracts.trim(None, 10), "")
+        self.assertEqual(contracts.trim(" a\x00b ", 10), "ab")
+
+        def transport(method, url, headers=None, body=None, timeout=None):
+            findings = {"description": "d" * 2000, "visibleText": ["v" * 900], "composition": [], "issues": [], "aspect": "1:1", "cta": "", "brandFit": [], "confidence": "low"}
+            return {"status": 200, "body": {"output_text": json.dumps(findings), "usage": {"input_tokens": 10, "output_tokens": 5}}}
+
+        cfg = config.RuntimeConfig.from_environment({"OPENAI_API_KEY": "sk-test-key-value-000000000000"})
+        result = creative.VisionAnalyzer(cfg, transport=transport).analyze(b"\x89PNG\r\n\x1a\n", "image/png", question="What is here?", brand_rules=None)
+        self.assertEqual(len(result["findings"]["description"]), 800)
+        self.assertEqual(len(result["findings"]["visibleText"][0]), 300)
+
+    def test_image_prices_are_configurable_and_used_when_the_provider_reports_none(self):
+        cfg = config.RuntimeConfig.from_environment({"OPENAI_API_KEY": "sk-test-key-value-000000000000", "RAFII_AGENT_IMAGE_PRICES": json.dumps({"image_quality": 0.25})})
+        self.assertEqual(creative.ImageStudio(cfg).estimate("quality"), 250_000)
+        self.assertEqual(creative.ImageStudio(cfg).estimate("fast"), config.DEFAULT_IMAGE_ESTIMATE_USD_MICRO["image_fast"])
+        with self.assertRaises(ValueError):
+            config.RuntimeConfig.from_environment({"RAFII_AGENT_IMAGE_PRICES": "[1, 2]"})
 
 
 # --- the tool gate (§12, WP02) ------------------------------------------------------------------------------------------------------
