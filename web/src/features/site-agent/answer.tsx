@@ -324,7 +324,8 @@ function ProposalCard({ proposal, actions }: { proposal: SiteAgentProposalView; 
         window.dispatchEvent(new CustomEvent(AUTOMATION_CHANGED, { detail: { taskId: result.proposal.taskId } }));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The change could not be applied. Nothing was changed.');
+      // No reply: the change may have been applied before the connection dropped; the refresh below shows its real state.
+      setError(err instanceof ApiError ? err.message : 'No reply arrived, so the change may already have been applied. Check it here before trying again.');
       await refresh();
     } finally {
       setBusy(null);

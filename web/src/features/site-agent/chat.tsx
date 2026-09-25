@@ -135,7 +135,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
       } catch (error) {
         if (workspaceRef.current !== w) return;
         setOptimistic(null);
-        setFailure({ text: message, message: error instanceof ApiError ? error.message : 'Rafii could not answer just now. Nothing was changed.' });
+        // No reply means the request may still have run (a link, a saved draft); only the server's own error says what happened.
+        setFailure({ text: message, message: error instanceof ApiError ? error.message : "Rafii's answer didn't arrive. If you asked for a change, check before asking again: it may already have been made." });
         const conversation = panelStore.get().conversations[w];
         if (conversation) void client.invalidateQueries({ queryKey: keys.messages(w, conversation) });
       } finally {
