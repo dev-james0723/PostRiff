@@ -6,7 +6,8 @@
 
 Without --confirm-live it prints the cost estimate and exits 0 without any network call. With it, it aborts
 before the first call when the estimate exceeds --max-usd, and stops mid-run before any call that would take
-recorded spend past the cap (unknown-cost calls count at their estimate). The key comes from
+recorded spend past the cap (unknown-cost calls count at their estimate). An auth, budget or bad-request error also
+stops the run; the report is still written with everything already judged (`stopped.reason`). The key comes from
 AI_GATEWAY_API_KEY and is never printed. Prices are USD per 1M tokens (input, output); a model without a table
 price must be given one with --price, so no estimate is ever invented.
 
@@ -21,7 +22,7 @@ import sys
 
 from . import golden, questions
 from .judgments import JudgmentService, MemoryJudgmentCache, subject_hash
-from .router import FALLBACK_SYSTEM, TASKS, AIModelRouter, chat_from_runtime
+from .router import FALLBACK_SYSTEM, TASKS, AIModelRouter, RouterError, chat_from_runtime
 from .usage import MemoryUsageSink
 
 ALIASES = {
@@ -106,15 +107,19 @@ def run(rows, qs, models, *, jev_factory, chat, max_usd, costs):
         judgments = {}
         for row in rows:
             if _spent(sink, per_call) + per_call[model] > max_usd:
-                stopped = {"model": model, "row": row.id, "spent_usd": round(_spent(sink, per_call), 6)}
+                stopped = {"model": model, "row": row.id, "reason": "cap", "spent_usd": round(_spent(sink, per_call), 6)}
                 break
-            judgments[row.id] = service.judge(qs, state_for(row), subject=subject_hash("golden", row.id, row.text),
-                                              scope=SCOPE, model=model)
+            try:
+                judgments[row.id] = service.judge(qs, state_for(row), subject=subject_hash("golden", row.id, row.text),
+                                                  scope=SCOPE, model=model)
+            except RouterError as error:   # auth / budget / bad request: stop, but keep what was already paid for
+                stopped = {"model": model, "row": row.id, "reason": error.code, "spent_usd": round(_spent(sink, per_call), 6)}
+                break
         results[model] = golden.evaluate(rows, judgments, qs)
         if stopped:
             break
     known = [e.cost_usd for e in sink.events if e.cost_usd is not None]
-    return {"estimate": costs, "results": results, "stopped_at_cap": stopped,
+    return {"estimate": costs, "results": results, "stopped": stopped,
             "spend": {"known_usd": round(sum(known), 6), "unknown_calls": len(sink.events) - len(known),
                       "attempts": len(sink.events)}}
 

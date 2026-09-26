@@ -99,10 +99,18 @@ class FakeJev:
         return J.RawEvaluation("typesafe-ai/jev", answers, 1, 1, 0.00001, "gateway", "g", "typesafe-ai", 5)
 
 
-def service(outcome, env=ON):
+def profile(groups, *, accepted=True, model="typesafe-ai/jev", thresholds=(0.95, 0.97, 0.99), dims=None):
+    """A SYNTHETIC calibration profile shaped like golden.calibration_profile output."""
+    dims = list(QS.dimensions) if dims is None else dims
+    entry = {"thresholds": list(thresholds), "n": 50, "kappa_cv": 0.7, "ece_cv": 0.05, "accepted": accepted, "reasons": []}
+    return {"version": 1, "question_set": QS.key, "digest": QS.digest, "model": model,
+            "languages": {g: {d: dict(entry) for d in dims} for g in groups}}
+
+
+def service(outcome, env=ON, profile=None):
     jev = FakeJev(outcome)
     router = R.AIModelRouter(jev=jev, sleep=lambda s: None)
-    return P.PostDoctorService(JudgmentService(router.evaluator(P.TASK)), env=env), jev
+    return P.PostDoctorService(JudgmentService(router.evaluator(P.TASK)), env=env, profile=profile), jev
 
 
 class Service(unittest.TestCase):
@@ -114,12 +122,12 @@ class Service(unittest.TestCase):
         self.assertFalse(P.enabled({P.FLAG: "true"}))
 
     def test_check_end_to_end_and_private_cache(self):
-        svc, jev = service(None)
+        svc, jev = service(None, profile=profile(["en"], thresholds=(0.35, 0.55, 0.75)))
         creator = {"niche": "piano", "secret": {"nested": 1}, "flag": True}
         result = svc.check(workspace_id="ws1", draft_text="I practised three hours today.", platform="X", lang="en",
-                           creator=creator, recent_texts=["I practised three hours today!"], posts_with_metrics=3,
-                           calibrated=True)
+                           creator=creator, recent_texts=["I practised three hours today!"], posts_with_metrics=3)
         self.assertEqual(len(result.dimensions), 9)
+        self.assertTrue(all(d.calibrated for d in result.dimensions))
         self.assertEqual(result.confidence, "medium")
         self.assertGreater(result.computed["similarity_recent"], 0.8)
         self.assertIsNone(result.computed["fit_winners"])
@@ -130,23 +138,47 @@ class Service(unittest.TestCase):
         self.assertTrue(again.judgment.cached)
         self.assertEqual(len(jev.states), 1)
 
+    def test_without_profile_confidence_stays_low(self):
+        svc, _ = service(None)
+        result = svc.check(workspace_id="ws1", draft_text="draft", platform="X", lang="en", posts_with_metrics=50)
+        self.assertEqual((result.confidence, result.confidence_reasons), ("low", ("uncalibrated_language",)))
+        self.assertFalse(any(d.calibrated for d in result.dimensions))
+
     def test_timeout_keeps_scoring_available_with_abstention(self):
-        svc, _ = service(J.JevTimeout("slow"))
-        result = svc.check(workspace_id="ws1", draft_text="draft", platform="X", lang="en", calibrated=True,
-                           posts_with_metrics=50)
-        self.assertTrue(all(d.level is None for d in result.dimensions))
+        svc, _ = service(J.JevTimeout("slow"), profile=profile(["en"]))
+        result = svc.check(workspace_id="ws1", draft_text="draft", platform="X", lang="en", posts_with_metrics=50)
+        self.assertTrue(all(d.level is None and not d.calibrated for d in result.dimensions))
         self.assertEqual(result.risks, ())
         self.assertEqual(result.confidence, "low")
-        self.assertEqual(result.confidence_reasons, ("judge_timeout", "many_abstained"))
+        self.assertEqual(result.confidence_reasons, ("judge_timeout", "uncalibrated_language", "many_abstained"))
         self.assertIsNotNone(result.computed["length_fit"])
 
-    def test_per_language_thresholds_are_not_borrowed(self):
-        svc, _ = service(None)
-        svc.thresholds = {"en": [0.95, 0.97, 0.99]}
-        zh = svc.check(workspace_id="ws1", draft_text="今日練琴", platform="X", lang="zh-HK", calibrated=True)
-        en = svc.check(workspace_id="ws1", draft_text="today", platform="X", lang="en", calibrated=True)
-        self.assertEqual(zh.dimensions[2].level, 3)
-        self.assertEqual(en.dimensions[2].level, 0)
+    def test_language_groups_share_a_fit_but_languages_never_borrow(self):
+        svc, _ = service(None, profile=profile(["zh-Hant"]))
+        hk = svc.check(workspace_id="ws1", draft_text="今日練琴", platform="X", lang="zh-HK")
+        tw = svc.check(workspace_id="ws1", draft_text="今天練琴", platform="X", lang="zh-TW")
+        en = svc.check(workspace_id="ws1", draft_text="today", platform="X", lang="en")
+        self.assertEqual((hk.dimensions[2].level, hk.dimensions[2].calibrated), (0, True))   # zh-Hant fit applies to zh-HK
+        self.assertEqual(tw.dimensions[2].level, 0)
+        self.assertEqual((en.dimensions[2].level, en.dimensions[2].calibrated, en.confidence), (3, False, "low"))
+
+    def test_only_accepted_dimensions_and_the_profiled_model(self):
+        partial = profile(["en"], dims=["hook"])
+        svc, _ = service(None, profile=partial)
+        result = svc.check(workspace_id="ws1", draft_text="x", platform="X", lang="en", posts_with_metrics=50)
+        self.assertEqual([d.id for d in result.dimensions if d.calibrated], ["hook"])
+        self.assertEqual(result.confidence, "low")
+        self.assertIn("partly_calibrated", result.confidence_reasons)
+        rejected, _ = service(None, profile=profile(["en"], accepted=False))
+        self.assertFalse(any(d.calibrated for d in rejected.check(workspace_id="ws1", draft_text="y", platform="X", lang="en").dimensions))
+        other, _ = service(None, profile=profile(["en"], model="google/gemini-2.5-flash-lite"))
+        self.assertFalse(any(d.calibrated for d in other.check(workspace_id="ws1", draft_text="z", platform="X", lang="en").dimensions))
+
+    def test_profile_for_another_rubric_is_refused(self):
+        stale = profile(["en"])
+        stale["digest"] = "0" * 64
+        with self.assertRaises(ValueError):
+            service(None, profile=stale)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,8 @@ Assumptions (reversible, documented in CONTRACTS):
 - `fit_winners` stays None in Phase 0 even above the post threshold; the winners comparison ships with Creator
   Genome (Phase 1) and needs ≥ 10 measured posts.
 - Any `zh*` language uses the `zh-HK` copy when present; anything else falls back to `en`.
+- Calibration comes only from a golden-set profile: accepted per dimension and per language group (lang.py),
+  applied only to primary judgments by the profiled model. "calibrated" confidence needs all nine dimensions.
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ from dataclasses import dataclass
 from .. import text_measure
 from . import calibration, questions
 from .judgments import subject_hash
+from .lang import lang_group
 
 FLAG = "POSTRIFF_POST_DOCTOR"
 TASK = "postdoctor.judge"
@@ -49,6 +52,7 @@ class DimensionResult:
     score: float | None
     fixes: tuple               # localized hints for the weakest answered questions (max 2)
     answered_weight: float     # fraction of the dimension's total weight that was answered, 0..1
+    calibrated: bool = False   # level used thresholds accepted for this language on the golden set
 
 
 @dataclass(frozen=True)
@@ -77,7 +81,11 @@ def level_names(qs, lang="en"):
 
 
 def levels_from_judgment(qs, judgment, *, thresholds=None, lang="en"):
-    thresholds = list(thresholds if thresholds is not None else qs.levels["thresholds"])
+    """`thresholds`: None (question-set defaults), one ascending list for every dimension, or {dimension: list}
+    where missing dimensions use the defaults. A dimension given its own list is reported `calibrated`."""
+    default = list(qs.levels["thresholds"])
+    per_dim = thresholds if isinstance(thresholds, dict) else {}
+    shared = list(thresholds) if isinstance(thresholds, (list, tuple)) else None
     min_weight = float(qs.levels.get("min_answered_weight", 0.5))
     results = []
     for dim_id, dim in qs.dimensions.items():
@@ -96,11 +104,13 @@ def levels_from_judgment(qs, judgment, *, thresholds=None, lang="en"):
                 lost.append((w * (1 - p), item))
         fraction = answered / total if total else 0.0
         score = weighted / answered if answered else None
-        level = calibration.to_level(score, thresholds) if score is not None and fraction >= min_weight else None
+        own = per_dim.get(dim_id)
+        cuts = list(own) if own is not None else (shared or default)
+        level = calibration.to_level(score, cuts) if score is not None and fraction >= min_weight else None
         lost.sort(key=lambda pair: -pair[0])
         fixes = tuple(h for h in (_lang_key(item.get("fix"), lang) for _, item in lost[:MAX_FIXES]) if h)
         results.append(DimensionResult(dim_id, level, None if level is None else round(score, 4), fixes,
-                                       round(fraction, 4)))
+                                       round(fraction, 4), own is not None and level is not None))
     return tuple(results)
 
 
@@ -186,17 +196,20 @@ def _creator_state(creator):
 
 
 class PostDoctorService:
-    def __init__(self, judgments, *, question_set=None, model=DEFAULT_MODEL, thresholds=None, env=None):
+    def __init__(self, judgments, *, question_set=None, model=DEFAULT_MODEL, profile=None, env=None):
         """`judgments`: JudgmentService wired to router.evaluator("postdoctor.judge").
-        `thresholds`: optional {lang: [t1, t2, t3]} fitted on the golden set; default is the question set's."""
+        `profile`: a calibration profile from golden.calibration_profile / golden.load_profile. Without one every
+        level uses the question-set defaults and confidence stays low."""
         self.judgments = judgments
         self.qs = question_set or questions.get("postdoctor")
         self.model = model
-        self.thresholds = dict(thresholds or {})
+        if profile is not None and (profile.get("question_set") != self.qs.key or profile.get("digest") != self.qs.digest):
+            raise ValueError("calibration profile does not match the question set; recalibrate")
+        self.profile = profile
         self.env = env
 
     def check(self, *, workspace_id, draft_text, platform, lang, creator=None, recent_texts=(),
-              posts_with_metrics=0, calibrated=False):
+              posts_with_metrics=0):
         if not enabled(self.env):
             raise PostDoctorDisabled("Post Doctor is not enabled")
         if not isinstance(draft_text, str) or not draft_text.strip():
@@ -206,13 +219,27 @@ class PostDoctorService:
         subject = subject_hash("postdoctor", platform, lang, draft_text, questions.canonical(creator))
         judgment = self.judgments.judge(self.qs, state, subject=subject, scope=f"personal:{workspace_id}",
                                         model=self.model, workspace_id=workspace_id)
-        thresholds = self.thresholds.get(lang) if calibrated else None   # never borrow another language's fit
-        dims = levels_from_judgment(self.qs, judgment, thresholds=thresholds, lang=lang)
+        accepted = self.accepted(lang, judgment)
+        dims = levels_from_judgment(self.qs, judgment, thresholds=accepted, lang=lang)
+        calibrated = len(accepted) == len(self.qs.dimensions)
         computed = {
             "similarity_recent": similarity_recent(draft_text, recent_texts),
             "fit_winners": None,
             "length_fit": length_fit(platform, draft_text),
         }
         level, reasons = confidence(self.qs, judgment, calibrated=calibrated, posts_with_metrics=posts_with_metrics)
+        if accepted and not calibrated:
+            reasons = reasons + ("partly_calibrated",)
         return PostDoctorResult(self.qs.key, dims, risks_from_judgment(self.qs, judgment), computed, level,
                                 reasons, judgment)
+
+    def accepted(self, lang, judgment):
+        """{dimension: thresholds} accepted for this language group. Fits were made on primary (Jev) answers, so a
+        fallback model's judgment gets none; nor does any language without its own accepted fit."""
+        if self.profile is None or not judgment.calibrated or getattr(judgment, "status", "ok") != "ok":
+            return {}
+        if judgment.model != self.profile.get("model"):
+            return {}
+        dims = (self.profile.get("languages") or {}).get(lang_group(lang)) or {}
+        return {d: e["thresholds"] for d, e in dims.items() if e.get("accepted") and d in self.qs.dimensions}
+

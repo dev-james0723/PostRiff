@@ -113,6 +113,51 @@ class Evaluate(unittest.TestCase):
         # (risk answers at 0.05 stay usable), so they are reported as abstained, never scored as "no".
         self.assertEqual((hook["scored"], hook["abstained"]), (60, 20))
         self.assertEqual(report["question_abstain_rate"], round(20 * 24 / (80 * 28), 4))
+        latency = G.calibration_profile(report, model="m")["latency"]
+        self.assertEqual((latency["target_p95_ms"], latency["met"]), (1500, True))
+
+    def test_calibrated_ece_and_profile_acceptance(self):
+        report = G.evaluate(self.rows, self.judgments, QS)
+        fit = report["dimensions"]["hook"]["by_lang"]["en"]["fit"]
+        self.assertAlmostEqual(fit["ece_cv"], 0.0)          # scores separate "strong" perfectly on held-out folds
+        self.assertEqual(report["digest"], QS.digest)
+        profile = G.calibration_profile(report, model="typesafe-ai/jev")
+        self.assertEqual(set(profile["languages"]), {"zh-Hant", "en"})
+        en_hook = profile["languages"]["en"]["hook"]
+        # English fixtures are the even rows (levels 0 and 2, none abstain): 40 rows, kappa 1.0, ECE 0.0.
+        self.assertEqual((en_hook["n"], en_hook["accepted"], en_hook["reasons"]), (40, True, []))
+        strict = G.calibration_profile(report, model="typesafe-ai/jev", acceptance={"min_rows": 41})
+        self.assertEqual(strict["languages"]["en"]["hook"]["reasons"], ["too_few"])
+
+    def test_profile_rejects_poor_agreement(self):
+        # SYNTHETIC: inverted judgments (label 0 judged very strong, label 2 judged weak) disagree systematically.
+        inverted = {0: 3, 1: 1, 2: 0, 3: 0}
+        flat = {r.id: judgment_for(inverted[r.labels["hook"]]) for r in self.rows}
+        profile = G.calibration_profile(G.evaluate(self.rows, flat, QS), model="m")
+        reasons = profile["languages"]["en"]["hook"]["reasons"]
+        self.assertFalse(profile["languages"]["en"]["hook"]["accepted"])
+        self.assertIn("kappa_below_target", reasons)
+
+    def test_profile_cli_and_loader_checks_digest(self):
+        report = {"results": {"typesafe-ai/jev": G.evaluate(self.rows, self.judgments, QS)}}
+        with tempfile.TemporaryDirectory() as tmp:
+            src, dst = Path(tmp) / "r.json", Path(tmp) / "p.json"
+            src.write_text(json.dumps(report), encoding="utf-8")
+            out = io.StringIO()
+            self.assertEqual(G.main(["profile", str(src), "--model", "typesafe-ai/jev", "--out", str(dst)], out=out), 0)
+            self.assertIn("en: ", out.getvalue())
+            self.assertEqual(G.load_profile(dst, QS)["model"], "typesafe-ai/jev")
+            self.assertEqual(G.main(["profile", str(src), "--model", "nope", "--out", str(dst)], out=io.StringIO()), 2)
+            stale = json.loads(dst.read_text(encoding="utf-8"))
+            stale["digest"] = "0" * 64
+            dst.write_text(json.dumps(stale), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                G.load_profile(dst, QS)
+            stale["digest"] = QS.digest
+            stale["languages"]["en"]["hook"]["thresholds"] = [0.9, 0.1, 0.5]
+            dst.write_text(json.dumps(stale), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                G.load_profile(dst, QS)
 
     def test_missing_and_too_few(self):
         report = G.evaluate(self.rows[:6], {self.rows[0].id: self.judgments[self.rows[0].id]}, QS)
@@ -176,9 +221,24 @@ class Compare(unittest.TestCase):
         report = C.run(rows, qs, models, jev_factory=self.factories[0], chat=self.factories[1], max_usd=0.05,
                        costs=costs)
         self.assertLessEqual(report["spend"]["known_usd"], 0.05)
-        self.assertEqual(report["stopped_at_cap"]["model"], "anthropic/claude-haiku-4.5")
+        self.assertEqual((report["stopped"]["model"], report["stopped"]["reason"]), ("anthropic/claude-haiku-4.5", "cap"))
         self.assertEqual(self.calls.count("jev"), 10)
         self.assertIn("anthropic/claude-haiku-4.5", report["results"])
+
+    def test_hard_error_keeps_paid_results(self):
+        rows = G.load(self.labels)
+        class Revoked:
+            calls = 0
+            def evaluate(self, state, questions, *, timeout_s):
+                Revoked.calls += 1
+                if Revoked.calls > 3:
+                    raise J.JevAuthError("revoked")
+                return FakeJev([]).evaluate(state, questions, timeout_s=timeout_s)
+        costs = C.estimate(rows, QS, ["typesafe-ai/jev"], {"typesafe-ai/jev": (1, 5)})
+        report = C.run(rows, QS, ["typesafe-ai/jev"], jev_factory=Revoked, chat=None, max_usd=20, costs=costs)
+        self.assertEqual(report["stopped"]["reason"], "auth")
+        self.assertEqual(report["results"]["typesafe-ai/jev"]["judged"], 3)
+        self.assertAlmostEqual(report["spend"]["known_usd"], 0.012)
 
     def test_live_run_writes_report(self):
         out, target = io.StringIO(), tempfile.mktemp(suffix=".json")
@@ -189,7 +249,7 @@ class Compare(unittest.TestCase):
         with open(target, encoding="utf-8") as handle:
             report = json.load(handle)
         self.assertEqual(set(report["results"]), {"typesafe-ai/jev", "anthropic/claude-haiku-4.5"})
-        self.assertIsNone(report["stopped_at_cap"])
+        self.assertIsNone(report["stopped"])
         self.assertAlmostEqual(report["spend"]["known_usd"], 0.07)
 
 

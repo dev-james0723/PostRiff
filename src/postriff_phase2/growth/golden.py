@@ -12,20 +12,25 @@ deterministic k-fold cross-validation.
 
 Assumptions (reversible, documented in CONTRACTS):
 - Language groups: zh-HK / zh-TW / zh-MO / zh-Hant* -> "zh-Hant"; en* -> "en"; any other tag is its own group.
-- ECE for "level >= strong" uses the dimension score (weighted mean of answer probabilities) as the forecast
-  and label >= strong as the outcome.
+- ECE for "level >= strong": `ece_strong_raw` uses the dimension score as the forecast; the acceptance metric
+  `ece_cv` is the *calibrated* ECE: an isotonic map score -> P(label >= strong) fitted on the training folds and
+  applied to the held-out fold, pooled over folds.
+- A language's dimension is accepted (plan targets) when it has >= ACCEPTANCE["min_rows"] scored rows, cross-validated
+  kappa >= 0.6 and calibrated ECE <= 0.08. `calibration_profile` records only accepted fits as usable.
 - Folds are assigned by sha256(id) so they do not depend on file order.
 """
 from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import math
 import re
 import sys
 from dataclasses import dataclass
 
 from . import calibration
+from .lang import lang_group  # noqa: F401 - re-exported for callers of golden.lang_group
 from .post_doctor import levels_from_judgment
 
 DIMENSIONS = ("hook", "audience", "novelty", "specificity", "shareability", "conversation", "clarity", "emotion",
@@ -37,9 +42,11 @@ KINDS = ("post", "draft")
 LEVELS = 4
 STRONG = 2                       # 0-based index of "strong"
 TARGET_ROWS = 200
+ACCEPTANCE = {"kappa": 0.6, "ece": 0.08, "min_rows": 30}   # plan v3 Phase 0 targets; min_rows is our floor
+LATENCY_TARGET_MS = 1500                                    # plan v3: Post Doctor p95 <= 1.5 s
+PROFILE_VERSION = 1
 _LANG = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
 _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-_HANT = ("zh-hk", "zh-tw", "zh-mo")
 
 
 @dataclass(frozen=True)
@@ -53,15 +60,6 @@ class Row:
     labels: dict                 # dimension -> 0..3 or None
     better_than: str | None
     notes: str
-
-
-def lang_group(lang):
-    tag = (lang or "").strip().lower()
-    if tag in _HANT or tag.startswith("zh-hant"):
-        return "zh-Hant"
-    if tag == "en" or tag.startswith("en-"):
-        return "en"
-    return lang or "unknown"
 
 
 def _read(path):
@@ -158,10 +156,11 @@ def _percentile(values, q):
 
 
 def _cv(pairs, folds):
-    """Cross-validated kappa and full-data thresholds for [(row_id, score, label)]."""
+    """Cross-validated kappa, calibrated ECE and full-data thresholds for [(row_id, score, label)]."""
+    empty = {"n": len(pairs), "thresholds": None, "kappa_fit": None, "kappa_cv": None, "ece_cv": None}
     if len(pairs) < folds * 2 or len({label for _, _, label in pairs}) < 2:
-        return {"n": len(pairs), "thresholds": None, "kappa_fit": None, "kappa_cv": None, "reason": "too_few"}
-    predicted, gold = [], []
+        return {**empty, "reason": "too_few"}
+    predicted, gold, forecasts, outcomes = [], [], [], []
     for k in range(folds):
         train = [(s, l) for rid, s, l in pairs if _fold(rid, folds) != k]
         test = [(s, l) for rid, s, l in pairs if _fold(rid, folds) == k]
@@ -170,9 +169,12 @@ def _cv(pairs, folds):
         fit = calibration.fit_thresholds([s for s, _ in train], [l for _, l in train], LEVELS)
         predicted += [calibration.to_level(s, fit["thresholds"]) for s, _ in test]
         gold += [l for _, l in test]
+        iso = calibration.isotonic_fit([s for s, _ in train], [int(l >= STRONG) for _, l in train])
+        forecasts += [calibration.isotonic_apply(iso, s) for s, _ in test]
+        outcomes += [int(l >= STRONG) for _, l in test]
     full = calibration.fit_thresholds([s for _, s, _ in pairs], [l for _, _, l in pairs], LEVELS)
-    return {"n": len(pairs), "thresholds": full["thresholds"], "kappa_fit": full["kappa"],
-            "kappa_cv": _kappa(predicted, gold), "reason": None}
+    return {"n": len(pairs), "thresholds": full["thresholds"], "kappa_fit": full["kappa"], "kappa_cv": _kappa(predicted, gold),
+            "ece_cv": calibration.expected_calibration_error(forecasts, outcomes) if forecasts else None, "reason": None}
 
 
 def evaluate(rows, judgments_by_id, qs, *, folds=5):
@@ -203,7 +205,7 @@ def evaluate(rows, judgments_by_id, qs, *, folds=5):
             "abstained": len(scored) - len(usable),
             "missing_judgment": len(labelled) - len(scored),
             "kappa": _kappa([d.level for _, d in usable], [r.labels[dim] for r, _ in usable]),
-            "ece_strong": calibration.expected_calibration_error(
+            "ece_strong_raw": calibration.expected_calibration_error(
                 [d.score for _, d in usable], [int(r.labels[dim] >= STRONG) for r, _ in usable]) if usable else None,
             "by_lang": by_lang,
         }
@@ -214,6 +216,7 @@ def evaluate(rows, judgments_by_id, qs, *, folds=5):
     known = [j.cost_usd for j in fresh if j.cost_usd is not None]
     return {
         "question_set": qs.key,
+        "digest": qs.digest,
         "rows": len(rows),
         "judged": len(judged),
         "dimensions": per_dim,
@@ -224,10 +227,71 @@ def evaluate(rows, judgments_by_id, qs, *, folds=5):
     }
 
 
+def calibration_profile(result, *, model, acceptance=None):
+    """Post Doctor calibration profile from one model's `evaluate` result.
+
+    Per language group and dimension it records the fitted thresholds and the evidence, and marks the fit
+    `accepted` only when it meets the targets. Post Doctor applies accepted thresholds only, only in their own
+    language, and only while the question-set digest still matches."""
+    acceptance = {**ACCEPTANCE, **(acceptance or {})}
+    languages = {}
+    for dim, info in result["dimensions"].items():
+        for group, entry in info["by_lang"].items():
+            fit = entry["fit"]
+            reasons = []
+            if fit["reason"] or fit["n"] < acceptance["min_rows"]:
+                reasons.append("too_few")
+            if fit["kappa_cv"] is None or fit["kappa_cv"] < acceptance["kappa"]:
+                reasons.append("kappa_below_target")
+            if fit["ece_cv"] is None or fit["ece_cv"] > acceptance["ece"]:
+                reasons.append("ece_above_target")
+            languages.setdefault(group, {})[dim] = {
+                "thresholds": fit["thresholds"], "n": fit["n"], "kappa_cv": fit["kappa_cv"], "ece_cv": fit["ece_cv"],
+                "accepted": not reasons, "reasons": reasons}
+    return {"version": PROFILE_VERSION, "question_set": result["question_set"], "digest": result["digest"], "model": model,
+            "acceptance": acceptance, "latency": _latency(result.get("latency_ms")), "languages": languages}
+
+
+def _latency(measured):
+    p95 = (measured or {}).get("p95")
+    return {**(measured or {}), "target_p95_ms": LATENCY_TARGET_MS, "met": None if p95 is None else p95 <= LATENCY_TARGET_MS}
+
+
+def load_profile(path, qs):
+    """A profile file for this question set, or ValueError. A digest mismatch means the rubric changed: recalibrate."""
+    with open(path, encoding="utf-8") as handle:
+        profile = json.load(handle)
+    if not isinstance(profile, dict) or profile.get("version") != PROFILE_VERSION:
+        raise ValueError("unsupported calibration profile")
+    if profile.get("question_set") != qs.key or profile.get("digest") != qs.digest:
+        raise ValueError("calibration profile was fitted on a different question set; recalibrate")
+    for dims in (profile.get("languages") or {}).values():
+        for entry in dims.values():
+            ts = entry.get("thresholds")
+            if entry.get("accepted") and (not isinstance(ts, list) or len(ts) != LEVELS - 1 or ts != sorted(ts)):
+                raise ValueError("calibration profile has malformed thresholds")
+    return profile
+
+
 def main(argv=None, out=sys.stdout):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if len(argv) == 6 and argv[0] == "profile" and argv[2] == "--model" and argv[4] == "--out":
+        with open(argv[1], encoding="utf-8") as handle:
+            report = json.load(handle)
+        result = (report.get("results") or {}).get(argv[3])
+        if result is None:
+            print(f"no results for model {argv[3]!r} in {argv[1]}", file=out)
+            return 2
+        profile = calibration_profile(result, model=argv[3])
+        with open(argv[5], "w", encoding="utf-8") as handle:
+            json.dump(profile, handle, ensure_ascii=False, indent=2)
+        for group, dims in sorted(profile["languages"].items()):
+            accepted = sorted(d for d, e in dims.items() if e["accepted"])
+            print(f"{group}: {len(accepted)}/{len(dims)} dimensions meet the targets", file=out)
+        return 0
     if len(argv) != 2 or argv[0] != "validate":
-        print("usage: python -m postriff_phase2.growth.golden validate FILE", file=out)
+        print("usage: python -m postriff_phase2.growth.golden validate FILE\n"
+              "       python -m postriff_phase2.growth.golden profile REPORT.json --model MODEL --out PROFILE.json", file=out)
         return 2
     rows, problems, warnings = parse(argv[1])
     for line, message in problems:
