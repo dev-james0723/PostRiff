@@ -302,7 +302,7 @@ def create(state: dict, actor: str, now: float, text: str, zone: str, *, destina
     payload = {
         "name": clean(name, 120), "goal": goal, "audience": audience, "facts": {}, "schedule": schedule,
         "destinations": [{key: d[key] for key in ("platform", "language", "channelId") if d.get(key)} for d in destinations],
-        "contentType": content, "route": route, "reasoning": reasoning if reasoning in campaigns.REASONING else "quick",
+        "contentType": content, "route": route, "reasoning": campaigns.automation_reasoning(reasoning),
         "maxCostUsdMicro": 0, "sourceIds": source_ids, "include": None, "voiceMode": "personalized" if personalized else "neutral",
     }
     saved = campaigns.apply_action(state, "raffi_recurrence_save", payload, actor, now)

@@ -80,7 +80,9 @@ class AgentRuntime:
     def cancel_run(self, run): raise NotImplementedError
     def stream_safe_events(self, events, cursor): return [e for e in events if e["seq"] > cursor]
     def list_supported_models(self): raise NotImplementedError
-    def list_supported_reasoning(self): raise NotImplementedError
+    # A runtime whose override takes `model` lists reasoning per model (ideas.per_model_reasoning); one without keeps
+    # a single list for every model it offers.
+    def list_supported_reasoning(self, model=None): raise NotImplementedError
     def supported_platforms(self): return ()  # platforms this runtime can draft for; () = unknown, no filtering
     def owns(self, model_id): return any(m["id"] == model_id and m.get("qualified") for m in self.list_supported_models())
     def describe(self): return None           # CLI/device runtimes describe the agent they drive

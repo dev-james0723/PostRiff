@@ -18,12 +18,15 @@ import time
 from postriff_alpha.domain import AlphaError
 
 from .. import skill_compiler
+from ..model_runtime import ATTEMPTS, THINKING_TIMEOUT_SECONDS
 from . import creative, engagement, fact_pack, flags, humanizer, overlays, research_broker, source_intake, weekly_operator
 
 log = logging.getLogger("postriff.coworker")
 VISUAL_FIRST = ("Instagram", "TikTok", "Pinterest", "YouTube", "Xiaohongshu")
 DEFAULT_WRITER_SLOTS_PER_CALL = 8
-WRITER_RUN_SECONDS = 95   # one writer run: two attempts of 45 s plus saving
+# One writer run: two attempts at a thinking model's 90 s plus saving (every production model thinks; weekly slots
+# always run at Auto, so no longer level applies here).
+WRITER_RUN_SECONDS = max(95, ATTEMPTS * THINKING_TIMEOUT_SECONDS + 15)
 UNKNOWN_RUN_USD_MICRO = 50_000   # a weekly writing run with no recorded cost and no reservation counts as $0.05
 
 

@@ -22,7 +22,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state
-from . import campaigns, locales, memory, research, source_policy, suggestions, voice_analysis, voice_sources
+from . import campaigns, locales, memory, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
@@ -169,6 +169,8 @@ class PostgresWorkspaceRepository:
         audit_event = (lambda state: ("memory.egress_decided", "cloud", {"cloud": memory.egress(state).get("cloud") is True})) if action == memory.EGRESS_ACTION else None
         if action == research.CONSENT_ACTION:
             audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
+        if action == writer_defaults.ACTION:
+            audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
         after = None
         if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
@@ -187,6 +189,9 @@ class HostedPhase2Commands:
         "logout", "revoke_device", "link_identity", "unlink_identity", "delete_account",
         "media_upload", "media_delete", "channel_add", "channel_verify", "art_generate",
     }
+    # () -> the mounted managed paid cloud writer or None; HostedWorkspaceService sets it (writer_defaults validates
+    # against it). A worker or test that builds these commands alone has none, so it can only clear the default.
+    writers = None
 
     def __init__(self, clock=time.time):
         self.clock = clock
@@ -215,6 +220,8 @@ class HostedPhase2Commands:
         if locales.apply_language_action(state, action, payload, principal, self.clock()):
             return state
         if research.apply_research_action(state, action, payload, principal, self.clock()):
+            return state
+        if writer_defaults.apply_action(state, action, payload, principal, self.clock(), self.writers):
             return state
         if voice_analysis.apply_action(state, action, payload, principal, self.clock()):
             self.engine.invalidate(state)
@@ -373,6 +380,9 @@ class HostedWorkspaceService:
         from .site_agent.service import SiteAgentService
         # The site-wide Rafii panel: the same conversations, runs, events and approval paths as Home (site agent spec §4.2).
         self.site_agent = SiteAgentService(self)
+        # The workspace default writer is validated against the managed writer mounted now (a live lookup: runtimes can
+        # change after construction).
+        self.commands.writers = lambda: rt if (rt := self.ideas.default_runtime()) and getattr(rt, 'cost_class', None) == 'paid' and getattr(rt, 'provider_class', None) == 'cloud' else None
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):

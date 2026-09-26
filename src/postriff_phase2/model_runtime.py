@@ -64,6 +64,146 @@ ATTEMPTS = 2
 RATE_LIMIT_BACKOFF_SECONDS = 1.5
 RESPONSE_CAP = 1_048_576
 
+# Reasoning levels (the model picker). "auto" is the catalogue's drafting baseline (gateway_catalog.drafting_reasoning)
+# with the self-check pass; "thorough" adds the critique-and-revise pass (the legacy "deep"). An explicit effort is sent
+# as it is, only when the model lists it, and is never trimmed: each has its own cap, attempts and per-call timeout, at
+# about 50 tokens a second (THINKING_OUTPUT_TOKENS over THINKING_TIMEOUT_SECONDS). A request carries the legacy pass in
+# `reasoning` (quick/standard/deep, what pr_agent_runs stores) and the level in `level` (ideas.py translates both).
+AUTO = "auto"
+THOROUGH = "thorough"
+LEVEL_IDS = ("auto", "none", "minimal", "low", "medium", "high", "xhigh", "max", "thorough")
+LEVELS = {
+    "none": {"cap": 2_400, "attempts": ATTEMPTS, "timeout": 45, "reasoningTokens": 0},
+    "minimal": {"cap": 4_500, "attempts": ATTEMPTS, "timeout": 90, "reasoningTokens": 800},
+    "low": {"cap": 4_500, "attempts": ATTEMPTS, "timeout": 90, "reasoningTokens": 800},
+    "medium": {"cap": 8_000, "attempts": 1, "timeout": 160, "reasoningTokens": 2_000},
+    "high": {"cap": 12_000, "attempts": 1, "timeout": 240, "reasoningTokens": 5_000},
+}
+# Listed by some models but not offered until their throughput is measured: one draft would outlast the request.
+NOT_OFFERED = ("xhigh", "max")
+NOT_OFFERED_DETAIL = "Not offered yet: too slow for one draft"
+LEVEL_LABELS = {"auto": "Auto", "none": "Off", "minimal": "Minimal", "low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high",
+                "max": "Max", "thorough": "Thorough (draft, then revise)"}
+TOKENS_PER_SECOND = 50
+# A turn's own time budget (seconds, monotonic) inside the 300 s function limit: request reading and research run
+# first, so each call gets what is left minus a margin for saving, and a call that could not finish is never sent.
+REQUEST_SECONDS = 280
+DEADLINE_MARGIN_SECONDS = 5
+MIN_CALL_SECONDS = 20
+TIME_LEFT_MESSAGE = "There isn't enough time left in this request for this reasoning level. Try again, or choose a lower level."
+# The catalogue prices each level on a large but ordinary request: 48 kB of prompt (skills, memory, sources), one destination.
+REFERENCE_PROMPT_BYTES = 48_000
+
+# Shown first in the picker (POSTRIFF_FEATURED_MODEL_IDS overrides; ids the deployment does not offer are ignored).
+FEATURED_MODELS = ("openai/gpt-6-sol", "anthropic/claude-sonnet-5", "google/gemini-3.8-flash", "bytedance/seed-2.1-turbo", "minimax/minimax-m3")
+FAMILIES = {"openai": "GPT", "anthropic": "Claude", "google": "Gemini", "bytedance": "Seed", "minimax": "MiniMax", "meta": "Muse",
+            "deepseek": "DeepSeek", "alibaba": "Qwen"}
+COST_TIER_LABELS = {1: "Lower cost", 2: "Medium cost", 3: "Higher cost"}
+
+
+def cost_tier(output_usd_per_mtok):
+    """1-3 by output price per million tokens (≤ $4, ≤ $15, above); None when the model has no price."""
+    if output_usd_per_mtok is None:
+        return None
+    return 1 if output_usd_per_mtok <= 4 else 2 if output_usd_per_mtok <= 15 else 3
+
+
+def level_of(request):
+    """The reasoning level a request carries: its `level`, else the one its legacy pass stands for (deep → thorough)."""
+    level = request.get("level")
+    if level in LEVEL_IDS:
+        return level
+    return THOROUGH if request.get("reasoning") == "deep" else AUTO
+
+
+def legacy_level(value):
+    """quick/standard → auto and deep → thorough; any other id unchanged."""
+    return {"quick": AUTO, "standard": AUTO, "deep": THOROUGH}.get(value, value)
+
+
+def _clamp(model, cap):
+    """Every cap stays inside the catalogue's output limit for the model."""
+    from . import gateway_catalog
+    limit = gateway_catalog.max_tokens(model)
+    return min(cap, limit) if limit else cap
+
+
+def level_cap(runtime, model, level, prompt_bytes):
+    """max_tokens per call for one request at one level. Auto and Thorough keep today's headroom, trimmed so the
+    reservation fits the active budget policy's per-request limit (never below the visible draft cap, so nothing that
+    ran before is refused because of the headroom); an explicit level keeps its own cap, never trimmed."""
+    import math
+    level = legacy_level(level)
+    if level in LEVELS:
+        return _clamp(model, LEVELS[level]["cap"])
+    cap = output_cap(model)
+    if cap <= MAX_OUTPUT_TOKENS:
+        return _clamp(model, cap)
+    from .billing import USD, active_budget_policy
+    try:
+        policy = active_budget_policy()
+    except Exception:  # noqa: BLE001 - an unknown policy refuses paid work elsewhere; keep the full headroom here
+        policy = None
+    if not policy:
+        return _clamp(model, cap)
+    inp, out = runtime._price(model)
+    calls = ATTEMPTS + (1 if level == THOROUGH else 0)
+    critique = 2 * MAX_OUTPUT_TOKENS if level == THOROUGH else 0
+    room_usd = policy["requestMax"] / USD - ((prompt_bytes + 256) * calls + critique) * inp / 1_000_000
+    fits = math.floor(room_usd * 1_000_000 / (out * calls)) if out > 0 else cap
+    return _clamp(model, output_cap(model, limit=fits))
+
+
+def level_quote(runtime, model, level, prompt_bytes, destinations):
+    """{"ceilingUsd", "typicalUsd", "cap", "calls"} for one request at one level, from its serialised prompt size
+    (bytes; the ceiling adds 256 of framing and counts a token per byte) and its destination count. Shared by the
+    reservation, the displayed estimate and the catalogue. Raises 503 for an unpriced model; see ESTIMATE_BASIS."""
+    import math
+    level = legacy_level(level)
+    if level in NOT_OFFERED or level not in LEVEL_IDS:
+        raise AlphaError("Choose a reasoning level this writer supports.", 400)
+    cap = level_cap(runtime, model, level, prompt_bytes)
+    if level in LEVELS:
+        calls, critique, passes, reasoning_tokens = LEVELS[level]["attempts"], 0, 1, LEVELS[level]["reasoningTokens"]
+    else:
+        passes = 2 if level == THOROUGH else 1
+        # The revise pass re-reads the first draft, which `max_tokens` bounds on every call; twice that allows for
+        # re-serialising it. (Counting the 1 MB transport cap as tokens made deep unaffordable.)
+        calls, critique = ATTEMPTS + passes - 1, 2 * MAX_OUTPUT_TOKENS if passes == 2 else 0
+        reasoning_tokens = TYPICAL_REASONING_TOKENS if thinking(model) else 0
+    visible = min(MAX_OUTPUT_TOKENS, 400 * max(1, destinations))
+    ceiling = runtime._cost(model, (prompt_bytes + 256) * calls + critique, cap * calls)
+    typical = runtime._cost(model, math.ceil(prompt_bytes / 3) * passes, (visible + reasoning_tokens) * passes)
+    return {"ceilingUsd": ceiling, "typicalUsd": typical, "cap": cap, "calls": calls}
+
+
+def check_level_ceiling(runtime, model, request, extra_bytes=0):
+    """Refuse (402 reasoning_level_over_limit) an explicit level (Off…High, Thorough) whose reservation ceiling for this
+    request is over the active policy's per-request limit: explicit levels are never trimmed. Auto keeps trimming and
+    is never refused here. `extra_bytes` allows for research pages a turn may still add to the prompt."""
+    import math
+    if not isinstance(runtime, ServerModelRuntime):
+        return
+    level = level_of(request)
+    if level == AUTO:
+        return
+    from .billing import USD, active_budget_policy
+    from .credit_meter import millicredits
+    policy = active_budget_policy()
+    if not policy:
+        return
+    ceiling = level_quote(runtime, model, level, runtime._prompt_bytes(request) + max(0, int(extra_bytes)), runtime._destination_count(request))["ceilingUsd"]
+    limit = policy["requestMax"] / USD
+    if ceiling <= limit:
+        return
+    listed = runtime.offered_levels(model)
+    lowest = level == THOROUGH or bool(listed) and level == listed[0]
+    hint = "Choose Auto or fewer sources." if lowest else "Choose a lower level."
+    used = millicredits(math.ceil(ceiling * 1_000_000)) / 1000
+    allowed = millicredits(math.ceil(limit * 1_000_000)) / 1000
+    raise AlphaError(f"{LEVEL_LABELS[level]} reasoning could use up to {used:.1f} credits on this request, over the {allowed:.0f}-credit limit for one request. {hint}",
+                     402, code="reasoning_level_over_limit")
+
 
 def thinking(model):
     """True for models whose reasoning tokens share the output cap (the gateway catalogue's reasoning_options)."""
@@ -72,8 +212,9 @@ def thinking(model):
 
 
 def output_cap(model, limit=None):
-    """max_tokens for one call: the visible draft's cap, plus reasoning headroom for thinking models. `limit` trims
-    the headroom (never below the visible cap) when the full headroom would not fit the per-request budget."""
+    """max_tokens for one call at the Auto baseline: the visible draft's cap, plus reasoning headroom for thinking
+    models. `limit` trims the headroom (never below the visible cap) when the full headroom would not fit the
+    per-request budget. Explicit levels have their own caps (LEVELS, level_cap)."""
     cap = THINKING_OUTPUT_TOKENS if thinking(model) else MAX_OUTPUT_TOKENS
     return cap if limit is None else max(MAX_OUTPUT_TOKENS, min(cap, int(limit)))
 
@@ -164,7 +305,7 @@ class ServerModelRuntime(AgentRuntime):
     provider_class = "cloud"
     asynchronous = False
 
-    def __init__(self, api_key, model=DEFAULT_MODEL, endpoint=DEFAULT_ENDPOINT, transport=None, prices=None, clock=time.time, models=None, allowed_providers=None):
+    def __init__(self, api_key, model=DEFAULT_MODEL, endpoint=DEFAULT_ENDPOINT, transport=None, prices=None, clock=time.time, models=None, allowed_providers=None, featured=None):
         if not api_key or not isinstance(api_key, str):
             raise AlphaError("A model gateway key is required.", 503)
         self.api_key, self.model, self.endpoint = api_key, model, endpoint
@@ -178,16 +319,90 @@ class ServerModelRuntime(AgentRuntime):
         self.models = list(models or [model])
         if self.model not in self.models:
             self.models.insert(0, self.model)
+        self.featured = [str(m) for m in (FEATURED_MODELS if featured is None else featured)]
 
     # --- catalogue -----------------------------------------------------------------------
-    def list_supported_models(self):
-        return [{"id": m, "label": f"{m.split('/')[-1]} · Rafii managed", "qualified": True, "costClass": "paid", "provider": self.provider,
-                 "detail": "Runs on Rafii's servers. Only sources you allowed for the cloud are sent; usage counts toward your plan."} for m in self.models]
+    def featured_models(self):
+        """The featured ids this deployment offers, in featured order."""
+        return [m for m in dict.fromkeys(self.featured) if m in self.models]
 
-    def list_supported_reasoning(self):
-        return [{"id": "quick", "available": True, "detail": "One pass, shortest answer."},
-                {"id": "standard", "available": True, "detail": "One pass with a self-check for invented facts."},
-                {"id": "deep", "available": True, "detail": "Two passes: draft, then a critique-and-revise pass."}]
+    def priced(self, model):
+        """Whether this exact model has a valid price (an unpriced one is listed but refused with 503 at use)."""
+        try:
+            self._price(model)
+        except AlphaError:
+            return False
+        return True
+
+    def list_supported_models(self):
+        featured = self.featured_models()
+        rows = []
+        for m in self.models:
+            maker = m.split("/", 1)[0]
+            priced = self.priced(m)
+            tier = cost_tier(self.prices[m][1]) if priced else None
+            rows.append({"id": m, "label": f"{m.split('/')[-1]} · Rafii managed", "qualified": True, "costClass": "paid", "provider": self.provider,
+                         "detail": "Runs on Rafii's servers. Only sources you allowed for the cloud are sent; usage counts toward your plan.",
+                         "displayName": m.split("/")[-1], "maker": maker, "family": FAMILIES.get(maker, maker), "featured": m in featured,
+                         "featuredRank": featured.index(m) if m in featured else None, "default": m == self.model, "priced": priced,
+                         "costTier": tier, "costTierLabel": COST_TIER_LABELS.get(tier)})
+        return rows
+
+    def offered_levels(self, model):
+        """Explicit efforts this model lists and Rafii offers (lowest first); xhigh/max are listed but not offered yet."""
+        from . import gateway_catalog
+        listed = gateway_catalog.levels(model)
+        return [level for level in gateway_catalog.EFFORTS if level in listed and level in LEVELS]
+
+    def list_supported_reasoning(self, model=None):
+        """Without a model, the legacy pass modes (what older clients and the top-level catalogue show). With one, that
+        model's levels: Auto, each effort the catalogue lists, then Thorough, priced on the reference request."""
+        if model is None:
+            return [{"id": "quick", "available": True, "detail": "One pass, shortest answer."},
+                    {"id": "standard", "available": True, "detail": "One pass with a self-check for invented facts."},
+                    {"id": "deep", "available": True, "detail": "Two passes: draft, then a critique-and-revise pass."}]
+        return self._reasoning_items(model)
+
+    def _reasoning_items(self, model):
+        import math
+        from . import gateway_catalog
+        from .billing import USD, active_budget_policy
+        from .credit_meter import millicredits
+        try:
+            policy, policy_off = active_budget_policy(), False
+        except AlphaError:
+            policy, policy_off = None, True   # the public catalogue never raises; paid work is refused at use
+        priced = self.priced(model)
+        baseline = (gateway_catalog.drafting_reasoning(model) or {}).get("effort")
+        listed = gateway_catalog.levels(model)
+        levels = [AUTO] + [level for level in gateway_catalog.EFFORTS if level in listed] + [THOROUGH]
+        items = []
+        for level in levels:
+            kind = "auto" if level == AUTO else "pass" if level == THOROUGH else "effort"
+            sends = level if kind == "effort" else baseline
+            if level == AUTO:
+                detail = f"Rafii's pick for this model: {baseline} reasoning, one pass with a self-check." if baseline else "Rafii's pick for this model: its own reasoning, one pass with a self-check."
+            elif level == THOROUGH:
+                detail = "Two passes: draft, then a critique-and-revise pass."
+            elif level == "none":
+                detail = "Thinking off: one quick pass with a self-check."
+            else:
+                detail = f"Sends reasoning effort “{level}”, one pass with a self-check."
+            item = {"id": level, "label": LEVEL_LABELS[level], "available": True, "detail": detail, "kind": kind, "sends": sends,
+                    "typicalMilliCredits": None, "ceilingMilliCredits": None}
+            if level in NOT_OFFERED:
+                item.update(available=False, detail=NOT_OFFERED_DETAIL)
+            elif policy_off and level != AUTO:
+                item.update(available=False, detail="Paid AI requests are off on this deployment")
+            elif priced:
+                quote = level_quote(self, model, level, REFERENCE_PROMPT_BYTES, 1)
+                item["typicalMilliCredits"] = millicredits(math.ceil(quote["typicalUsd"] * 1_000_000))
+                item["ceilingMilliCredits"] = millicredits(math.ceil(quote["ceilingUsd"] * 1_000_000))
+                # Advisory: the turn itself refuses an explicit level over the limit (check_level_ceiling); Auto trims.
+                if level != AUTO and policy and quote["ceilingUsd"] > policy["requestMax"] / USD:
+                    item.update(available=False, detail="Over the per-request limit")
+            items.append(item)
+        return items
 
     def supported_platforms(self):
         return PLATFORMS
@@ -212,53 +427,34 @@ class ServerModelRuntime(AgentRuntime):
             raise AlphaError("Configure verified input/output prices for this exact model before writing.", 503)
         return price
 
+    def _prompt_bytes(self, request):
+        """The serialised prompt this request sends (the pass's instruction included); never the request's deadline."""
+        return len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode())
+
+    @staticmethod
+    def _destination_count(request):
+        return len(request.get('destinations') or DEFAULT_REQUEST_DESTINATIONS)
+
     def price_quote(self, request, model=None):
-        """Conservative reservation ceiling: byte upper bound plus maximum output per attempt."""
+        """Conservative reservation ceiling: byte upper bound plus maximum output per attempt, at the request's level."""
         model = model or self.model
-        prompt_tokens = len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode()) + 256
-        calls = ATTEMPTS + (1 if request.get('reasoning') == 'deep' else 0)
-        # The revise pass re-reads the first draft, which `max_tokens` bounds on every call; twice that
-        # allows for re-serialising it. (Counting the 1 MB transport cap as tokens made deep unaffordable.)
-        critique = 2 * MAX_OUTPUT_TOKENS if request.get('reasoning') == 'deep' else 0
-        return self._cost(model, prompt_tokens * calls + critique, self.output_tokens(request, model) * calls)
+        return level_quote(self, model, level_of(request), self._prompt_bytes(request), self._destination_count(request))["ceilingUsd"]
 
     def output_tokens(self, request, model=None):
-        """This request's max_tokens per call. A thinking model gets the full headroom unless that would put the
-        reservation over the active budget policy's per-request limit; then only what fits (never below the visible
-        draft cap, so nothing that ran before is refused because of the headroom)."""
-        import math
+        """This request's max_tokens per call (level_cap). At Auto or Thorough a thinking model gets the full headroom
+        unless that would put the reservation over the active budget policy's per-request limit; then only what fits.
+        An explicit level keeps its own cap."""
         model = model or self.model
-        cap = output_cap(model)
-        if cap <= MAX_OUTPUT_TOKENS:
-            return cap
-        from .billing import USD, active_budget_policy
-        try:
-            policy = active_budget_policy()
-        except Exception:  # noqa: BLE001 - an unknown policy refuses paid work elsewhere; keep the full headroom here
-            policy = None
-        if not policy:
-            return cap
-        inp, out = self._price(model)
-        prompt_tokens = len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode()) + 256
-        calls = ATTEMPTS + (1 if request.get('reasoning') == 'deep' else 0)
-        critique = 2 * MAX_OUTPUT_TOKENS if request.get('reasoning') == 'deep' else 0
-        room_usd = policy["requestMax"] / USD - (prompt_tokens * calls + critique) * inp / 1_000_000
-        fits = math.floor(room_usd * 1_000_000 / (out * calls)) if out > 0 else cap
-        return output_cap(model, limit=fits)
+        return level_cap(self, model, level_of(request), self._prompt_bytes(request))
 
-    ESTIMATE_BASIS = ("one attempt (two with the deep revise pass), about 3 bytes of request per input token, "
-                      "400 output tokens per destination and, for models that think first, 800 reasoning tokens a call; "
-                      "a formula, not measured on real samples")
+    ESTIMATE_BASIS = ("one attempt (two with the Thorough revise pass), about 3 bytes of request per input token, "
+                      "400 output tokens per destination and, for models that think first, reasoning tokens a call by level "
+                      "(Auto, Minimal and Low 800, Medium 2,000, High 5,000, Off none); a formula, not measured on real samples")
 
     def typical_quote(self, request, model=None):
         """A usual cost for display, clearly below the reservation ceiling; see ESTIMATE_BASIS."""
-        import math
         model = model or self.model
-        calls = 2 if request.get('reasoning') == 'deep' else 1
-        prompt_tokens = math.ceil(len(json.dumps(self._messages(request, request.get('reasoning', 'standard')), ensure_ascii=False).encode()) / 3)
-        destinations = len(request.get('destinations') or DEFAULT_REQUEST_DESTINATIONS)
-        completion_tokens = min(MAX_OUTPUT_TOKENS, 400 * destinations) + (TYPICAL_REASONING_TOKENS if thinking(model) else 0)
-        return self._cost(model, prompt_tokens * calls, completion_tokens * calls)
+        return level_quote(self, model, level_of(request), self._prompt_bytes(request), self._destination_count(request))["typicalUsd"]
 
     def _cost(self, model, prompt_tokens, completion_tokens):
         inp, out = self._price(model)
@@ -322,25 +518,35 @@ class ServerModelRuntime(AgentRuntime):
         """AI Gateway provider slugs this model may execute on; the model maker when not configured."""
         return list(self.allowed_providers.get(model) or ([model.split("/", 1)[0]] if "/" in model else []))
 
-    def _call(self, messages, model, progress=None, max_tokens=None):
+    def _call(self, messages, model, progress=None, max_tokens=None, effort=AUTO, timeout=None):
+        """One drafting call. `effort` AUTO sends the catalogue's drafting baseline (voice analysis and every caller but
+        _start_turn keep it); an explicit level ("none"…"high") is sent as it is, only when the model lists it, and a
+        level it does not list is refused before anything is sent. `timeout` (seconds) overrides the level's own."""
         # Public catalogue 2026-09-20: Sonnet 5 does not accept temperature.
         # Leave sampling at each provider's default rather than sending an unsupported field.
         from . import gateway_catalog
-        body = {"model": model, "messages": messages, "max_tokens": max_tokens or output_cap(model)}
+        explicit = effort not in (AUTO, None)
+        if explicit and (effort not in LEVELS or effort not in gateway_catalog.levels(model)):
+            dispatched = bool(progress and progress.get("dispatched"))
+            raise ProviderFailure("Choose a reasoning level this writer supports.", 400, dispatched=dispatched, cost_usd=None if dispatched else 0.0)
+        body = {"model": model, "messages": messages, "max_tokens": max_tokens or (_clamp(model, LEVELS[effort]["cap"]) if explicit else output_cap(model))}
         if gateway_catalog.supports(model, "response_format"):
             body["response_format"] = {"type": "json_object"}   # models without it follow the system prompt's JSON contract
-        reasoning = gateway_catalog.drafting_reasoning(model)
+        # The gateway's unified reasoning object; only a level the model lists ("none" turns thinking off, no headroom).
+        reasoning = {"effort": effort} if explicit else gateway_catalog.drafting_reasoning(model)
         if reasoning:
-            body["reasoning"] = reasoning   # the gateway's unified reasoning object; only a level the model lists
+            body["reasoning"] = reasoning
         allowed = self.allowed_for(model)
         if allowed:
             # `only` limits routing and fallbacks to these providers; no model fallback (`models`) is sent.
             body["providerOptions"] = {"gateway": {"only": allowed}}
+        if timeout is None:
+            timeout = LEVELS[effort]["timeout"] if explicit else THINKING_TIMEOUT_SECONDS if thinking(model) else TIMEOUT_SECONDS
         if progress is not None:
             progress["dispatched"] = True
         try:
             # A thinking model may take longer than the default 45 s; a transport without a timeout parameter keeps its own.
-            extra = {"timeout": THINKING_TIMEOUT_SECONDS} if thinking(model) and _takes_timeout(self.transport) else {}
+            extra = {"timeout": timeout} if timeout != TIMEOUT_SECONDS and _takes_timeout(self.transport) else {}
             response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body, **extra)
         except AlphaError as error:
             raise _Unknown(str(error), error.status) from error
@@ -375,11 +581,13 @@ class ServerModelRuntime(AgentRuntime):
             raise
         except AlphaError as error:
             # Free only when no provider request had been sent; otherwise the outcome is unknown.
+            usage = progress["usage"]() if callable(progress.get("usage")) else None
             if progress["dispatched"]:
-                raise ProviderFailure(str(error), error.status, dispatched=True, cost_usd=None, code=error.code) from error
-            raise ProviderFailure(str(error), error.status, dispatched=False, cost_usd=0.0, code=error.code) from error
+                raise ProviderFailure(str(error), error.status, dispatched=True, cost_usd=None, code=error.code, usage=usage) from error
+            raise ProviderFailure(str(error), error.status, dispatched=False, cost_usd=0.0, code=error.code, usage=usage) from error
 
     def _start_turn(self, request, emit, progress):
+        from . import gateway_catalog
         context = request["context"]
         if context.get("providerClass") != "cloud":
             raise AlphaError("Cloud drafting needs sources projected for cloud egress. Grant per-source cloud consent, then draft again.", 403)
@@ -391,11 +599,27 @@ class ServerModelRuntime(AgentRuntime):
         model = request.get("model") or self.model
         if model not in self.models:
             raise AlphaError("That writer isn't available. Choose another.", 400)
+        level = level_of(request)
+        # Re-checked at run time: the catalogue refreshes in memory, so a level offered at quote time may be gone now.
+        if level not in (AUTO, THOROUGH) and level not in self.offered_levels(model):
+            raise AlphaError("Choose a reasoning level this writer supports.", 400)
         if len(json.dumps(self._user_payload(request), ensure_ascii=False).encode()) > MAX_CONTEXT_BYTES:
             raise AlphaError("Reduce the selected sources: the drafting context is over the 60 kB limit.", 413)
 
-        emit(safe_event("run.started", model=model, reasoning=reasoning, contextDigest=digest(context), estimatedCostUsd=self.price_quote(request, model)))
+        explicit = level in LEVELS
+        effort = level if explicit else AUTO
+        passes = 2 if level == THOROUGH else 1
+        # What this run asked for and sent, recorded on run.started and in the run's usage (a string `reasoning` keeps
+        # the legacy pass, which is what pr_agent_runs stores).
+        detail = {"requested": level, "sent": level if explicit else (gateway_catalog.drafting_reasoning(model) or {}).get("effort"),
+                  "passes": passes, "reviseFailed": False, "catalog": gateway_catalog.version()}
+        emit(safe_event("run.started", model=model, reasoning=reasoning, reasoningDetail=dict(detail), contextDigest=digest(context), estimatedCostUsd=self.price_quote(request, model)))
         cap = self.output_tokens(request, model)   # the same max_tokens the reservation ceiling above assumed
+        attempts = LEVELS[level]["attempts"] if explicit else ATTEMPTS
+        level_timeout = LEVELS[level]["timeout"] if explicit else THINKING_TIMEOUT_SECONDS if thinking(model) else TIMEOUT_SECONDS
+        # The least time a call needs to be worth sending: a medium/high answer at about 50 tokens a second, else 20 s.
+        level_min = cap / TOKENS_PER_SECOND if level in ("medium", "high") else MIN_CALL_SECONDS
+        deadline = request.get("deadline")
         for source in context["sources"]:
             emit(safe_event("source.added", sourceId=source["id"], policy=source["policy"], candidateOnly=source["candidateOnly"], facts=len(source["facts"])))
         for item in context["excluded"]:
@@ -407,6 +631,9 @@ class ServerModelRuntime(AgentRuntime):
         requests_made, prompt_tokens, completion_tokens, reported_cost = 0, 0, 0, None
         usage_complete = True
         accumulated_cost = 0.0
+        reasoning_tokens, reasoning_known = 0, True
+        variants, last_error, served_by = None, None, None
+
         def cost_of(usage):
             import math
             if type(usage.get('gatewayCost')) is float:
@@ -417,17 +644,62 @@ class ServerModelRuntime(AgentRuntime):
             if all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('prompt_tokens', 'completion_tokens')):
                 return self._cost(model, usage['prompt_tokens'], usage['completion_tokens'])
             return None
-        variants, last_error, served_by = None, None, None
+
+        def count(usage):
+            """Tokens and cost of one answered (HTTP 200) call, added before its answer is parsed."""
+            nonlocal requests_made, usage_complete, accumulated_cost, prompt_tokens, completion_tokens, reported_cost, reasoning_tokens, reasoning_known, served_by
+            requests_made += 1
+            call_cost = cost_of(usage)
+            usage_complete = usage_complete and call_cost is not None
+            accumulated_cost += call_cost or 0
+            prompt_tokens += int(usage.get("prompt_tokens") or 0)
+            completion_tokens += int(usage.get("completion_tokens") or 0)
+            details = usage.get("completion_tokens_details")
+            spent = details.get("reasoning_tokens") if isinstance(details, dict) else None
+            if type(spent) is int and spent >= 0:
+                reasoning_tokens += spent
+            else:
+                reasoning_known = False
+            if type(usage.get("gatewayCost")) is float or isinstance(usage.get("cost"), (int, float)):
+                reported_cost = (reported_cost or 0) + (usage["gatewayCost"] if type(usage.get("gatewayCost")) is float else float(usage["cost"]))
+            served_by = usage.get("executionProvider") or served_by
+
+        def known_cost():
+            return round(accumulated_cost, 6) if usage_complete else None
+
+        def block():
+            return {**detail, "tokens": reasoning_tokens if reasoning_known else None}
+
+        progress["usage"] = lambda: {"reasoning": block()}
+
+        def failure(message, status=502, dispatched=True, cost_usd=None, code=None):
+            return ProviderFailure(message, status, dispatched=dispatched, cost_usd=cost_usd, code=code, usage={"reasoning": block()})
+
+        def budget():
+            """(timeout, max_tokens) for the next call, or None when the request's deadline leaves too little time to
+            send it. Without a deadline (tests, other callers) every call keeps the level's own."""
+            if deadline is None:
+                return None, cap
+            timeout = min(level_timeout, deadline - time.monotonic() - DEADLINE_MARGIN_SECONDS)
+            if timeout < level_min:
+                return None
+            # A shortened call gets only the tokens it can produce in its time; never above the reserved cap.
+            return timeout, cap if timeout >= level_timeout else max(1, min(cap, int(TOKENS_PER_SECOND * timeout)))
 
         def stop_if_cancelled():
             # The run sink reports False once the run is no longer running (cancelled or failed elsewhere).
             if requests_made and emit(safe_event("progress.updated", stage="drafting", percent=20 + requests_made)) is False:
-                raise ProviderFailure("Cancelled; no further model request was sent.", 409, dispatched=True, cost_usd=round(accumulated_cost, 6) if usage_complete else None)
+                raise failure("Cancelled; no further model request was sent.", 409, cost_usd=known_cost())
 
-        for attempt in range(ATTEMPTS):
+        for attempt in range(attempts):
             stop_if_cancelled()
+            allowance = budget()
+            if allowance is None:
+                sent = progress["dispatched"]
+                raise failure(TIME_LEFT_MESSAGE, 503, dispatched=sent, cost_usd=known_cost() if sent else 0.0, code="reasoning_time_exhausted")
+            timeout, call_cap = allowance
             try:
-                content, usage = self._call(self._messages(request, reasoning), model, progress, max_tokens=cap)
+                content, usage = self._call(self._messages(request, reasoning), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout)
             except _RateLimited as error:
                 requests_made += 1  # refused before any work: known to cost nothing
                 last_error = str(error)
@@ -437,25 +709,18 @@ class ServerModelRuntime(AgentRuntime):
             except _Retry as error:
                 requests_made += 1
                 usage_complete = False
+                reasoning_known = False   # answered (HTTP 200) without usable usage
                 last_error = str(error)
                 emit(safe_event("warning.created", message=last_error))
                 continue
             except _Rejected as error:
-                raise ProviderFailure(str(error), 502, dispatched=True, cost_usd=round(accumulated_cost, 6) if usage_complete else None) from error
+                raise failure(str(error), 502, cost_usd=known_cost()) from error
             except _Unknown as error:
-                raise ProviderFailure(str(error), error.status, dispatched=True, cost_usd=None) from error
-            requests_made += 1
-            call_cost = cost_of(usage)
-            usage_complete = usage_complete and call_cost is not None
-            accumulated_cost += call_cost or 0
-            prompt_tokens += int(usage.get("prompt_tokens") or 0)
-            completion_tokens += int(usage.get("completion_tokens") or 0)
-            if type(usage.get("gatewayCost")) is float or isinstance(usage.get("cost"), (int, float)):
-                reported_cost = (reported_cost or 0) + (usage["gatewayCost"] if type(usage.get("gatewayCost")) is float else float(usage["cost"]))
-            served_by = usage.get("executionProvider") or served_by
+                raise failure(str(error), error.status, cost_usd=None) from error
+            count(usage)
             allowed = self.allowed_for(model)
             if usage.get("executionProvider") and allowed and usage["executionProvider"] not in allowed:
-                raise ProviderFailure("The gateway reported a provider outside the approved set; this draft was not used.", 502, dispatched=True, cost_usd=round(accumulated_cost, 6) if usage_complete else None)
+                raise failure("The gateway reported a provider outside the approved set; this draft was not used.", 502, cost_usd=known_cost())
             if usage.get("finishReason") == "length":
                 last_error = "The model reached its output limit before finishing."
                 emit(safe_event("warning.created", message=last_error))
@@ -467,27 +732,46 @@ class ServerModelRuntime(AgentRuntime):
                 last_error = str(error)
                 emit(safe_event("warning.created", message=last_error))
         if variants is None:
-            raise ProviderFailure(last_error or "The model did not return usable drafts.", 502, dispatched=requests_made > 0, cost_usd=round(accumulated_cost, 6) if usage_complete else None)
+            raise failure(last_error or "The model did not return usable drafts.", 502, dispatched=requests_made > 0, cost_usd=known_cost())
         emit(safe_event("progress.updated", stage="drafting", percent=70))
 
-        if reasoning == "deep":
+        if passes == 2:
             stop_if_cancelled()
-            try:
-                revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress, max_tokens=cap)
-                requests_made += 1
-                call_cost = cost_of(revised_usage)
-                usage_complete = usage_complete and call_cost is not None
-                accumulated_cost += call_cost or 0
-                prompt_tokens += int(revised_usage.get("prompt_tokens") or 0)
-                completion_tokens += int(revised_usage.get("completion_tokens") or 0)
-                if isinstance(revised_usage.get("cost"), (int, float)):
-                    reported_cost = (reported_cost or 0) + float(revised_usage["cost"])
-                variants = self._parse(revised_content, destinations, context)
-            except (_RateLimited, _Rejected):
-                emit(safe_event("warning.created", message="The revise pass did not complete; the first draft is kept."))
-            except (_Retry, AlphaError):
-                usage_complete = False
-                emit(safe_event("warning.created", message="The revise pass did not complete; the first draft is kept."))
+            revise_failed = "The revise pass did not complete; the first draft is kept."
+            allowance = budget()
+            if allowance is None:
+                # The first draft is already paid for: keep it rather than refusing the run.
+                detail.update(passes=1, reviseFailed=True)
+                emit(safe_event("warning.created", message="There wasn't enough time left for the revise pass; the first draft is kept."))
+            else:
+                timeout, call_cap = allowance
+                revised_content = revised_usage = None
+                try:
+                    revised_content, revised_usage = self._call(self._messages(request, reasoning, critique={"variants": variants}), model, progress, max_tokens=call_cap, effort=effort, timeout=timeout)
+                except (_RateLimited, _Rejected):
+                    pass   # refused before any work: nothing was billed
+                except _Retry:
+                    requests_made += 1
+                    usage_complete = False   # answered, but its cost cannot be read
+                    reasoning_known = False
+                except AlphaError:
+                    usage_complete = False   # the outcome of this call (and whether it was billed) is unknown
+                revised = False
+                if revised_usage is not None:
+                    # Counted as soon as the call returns, like the first pass: a costed revise answer that does not
+                    # parse keeps its known cost instead of making the whole run's cost unknown.
+                    count(revised_usage)
+                    allowed = self.allowed_for(model)
+                    if revised_usage.get("executionProvider") and allowed and revised_usage["executionProvider"] not in allowed:
+                        raise failure("The gateway reported a provider outside the approved set; this draft was not used.", 502, cost_usd=known_cost())
+                    if revised_usage.get("finishReason") != "length":
+                        try:
+                            variants, revised = self._parse(revised_content, destinations, context), True
+                        except _Retry:
+                            pass
+                if not revised:
+                    detail.update(passes=1, reviseFailed=True)
+                    emit(safe_event("warning.created", message=revise_failed))
 
         for index, variant in enumerate(variants):
             for start in range(0, len(variant["text"]), 400):
@@ -495,10 +779,10 @@ class ServerModelRuntime(AgentRuntime):
             emit(safe_event("message.completed", destination=index))
         artifact = {"variants": [{**v, "candidateOnly": context["candidateOnly"]} for v in variants]}
         emit(safe_event("artifact.created", artifactHash=digest(artifact), variants=len(variants)))
-        cost = round(accumulated_cost, 6) if usage_complete else None
+        cost = known_cost()
         usage_out = {"provenance": "unknown" if not usage_complete else "provider_reported" if reported_cost is not None else "estimated_from_tokens", "modelRequests": requests_made,
                      "promptTokens": prompt_tokens, "completionTokens": completion_tokens, "costUsd": cost, "model": model, "provider": self.provider,
-                     "executionProvider": served_by, "allowedProviders": self.allowed_for(model)}
+                     "executionProvider": served_by, "allowedProviders": self.allowed_for(model), "reasoning": block()}
         if usage_out["provenance"] == "estimated_from_tokens":
             usage_out["priceBasis"] = self.price_basis(model)
         emit(safe_event("run.completed", usage=usage_out))
@@ -596,10 +880,12 @@ class _Unknown(AlphaError):
 class ProviderFailure(AlphaError):
     """A failed cloud draft that records whether a provider request went out and its known cost.
 
-    `cost_usd` is the known total for the run, or None when it is unknown (never reported as 0).
+    `cost_usd` is the known total for the run, or None when it is unknown (never reported as 0). `usage` is what the
+    run recorded before it failed (its reasoning block so far), merged into the run's usage by RunSink.fail.
     """
 
-    def __init__(self, message, status=502, *, dispatched, cost_usd=None, code=None):
+    def __init__(self, message, status=502, *, dispatched, cost_usd=None, code=None, usage=None):
         super().__init__(message, status, code=code)
         self.dispatched = dispatched
         self.cost_usd = cost_usd
+        self.usage = usage

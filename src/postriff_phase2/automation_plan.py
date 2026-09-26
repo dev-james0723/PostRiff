@@ -252,7 +252,7 @@ def build(state: dict, actor: str, now: float, text: str, zone: str, reading: di
                 "platformNotes": reading.get("platformNotes") or {}}
     audience = clean((state.get("brandHub") or {}).get("audience") or "", 800) or automation_chat.DEFAULT_AUDIENCE
     payload = {"name": name, "goal": goal, "audience": audience, "facts": {}, "schedule": schedule, "destinations": chosen,
-               "contentType": content_type, "route": route, "reasoning": reasoning if reasoning in campaigns.REASONING else "quick",
+               "contentType": content_type, "route": route, "reasoning": campaigns.automation_reasoning(reasoning),
                "maxCostUsdMicro": 0, "sourceIds": source_ids, "include": None, "voiceMode": "personalized" if personalized else "neutral",
                "workflow": workflow, "intent": clean(text, 600)}
     if task_id:
