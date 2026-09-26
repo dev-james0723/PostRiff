@@ -16,6 +16,7 @@ from .content_types import apply_content_action, content_preflight, ensure_conte
 from .outcomes import normalize_result, unknown
 from . import learning_signals as signals, locales, source_policy, channel_folders
 from .text_measure import measure
+from . import publish_options
 
 TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("processing", "submitting", "provider_accepted", "published", "uncertain")
@@ -394,7 +395,11 @@ class Phase2Store(Store):
             media = [{key: a[key] for key in ("id", "hash", "sourceHash", "mime", "bytes", "width", "height", "duration")} | {"alt": clean(p["alt"], 1000), "rightsConfirmed": True}]
         if c["platform"] == "Instagram" and not media:
             raise AlphaError("Instagram requires a decoded image. Upload one and confirm its rights.")
+        # TikTok, YouTube and Pinterest need per-post choices; they are frozen into the manifest (and its key).
+        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
         timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
+        if c["platform"] == "YouTube":
+            self._youtube_day_open(data, timing["timestamp"])
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
         manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
@@ -402,6 +407,8 @@ class Phase2Store(Store):
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
+        if options is not None:
+            manifest["publishOptions"] = options
         root_key = digest(manifest)
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
         # key all duplicate reviews for this retry to the same preceding job, never a random nonce.
@@ -411,6 +418,20 @@ class Phase2Store(Store):
             manifest.update({"retryRoot": root_key, "retryOf": ended[-1]["id"]})
         manifest["idempotencyKey"] = digest(manifest)
         return manifest
+
+    YOUTUBE_DAILY_UPLOADS = 100  # videos.insert calls per day for Rafii's Google Cloud project (default quota)
+
+    def _youtube_day_open(self, data, timestamp):
+        """Refuse gracefully when this workspace already plans a full day of uploads. The quota resets at midnight
+        Pacific time and is shared by every workspace, so the publisher also holds a job when YouTube reports it used up."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        pacific = ZoneInfo("America/Los_Angeles")
+        day = datetime.fromtimestamp(timestamp, pacific).date()
+        booked = sum(1 for j in data["jobs"] if j["manifest"].get("platform") == "YouTube" and j["state"] not in ("failed", "canceled")
+                     and datetime.fromtimestamp(j["manifest"]["timing"]["timestamp"], pacific).date() == day)
+        if booked >= self.YOUTUBE_DAILY_UPLOADS:
+            raise AlphaError(f"YouTube lets Rafii upload {self.YOUTUBE_DAILY_UPLOADS} videos a day, and this workspace already plans that many for {day.isoformat()} (Pacific time). Choose another day.", 409)
 
     def source_digest(self, s, variant):
         # Policy and use-approval are part of the digest: changing either invalidates approvals.

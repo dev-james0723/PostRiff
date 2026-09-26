@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler
 from postriff_alpha.domain import AlphaError
 
-GRAPH_VERSION = "v24.0"  # current Graph API version read in the 2026-09-15 audit; re-verify at review time
+from .provider_base import GRAPH_VERSION  # noqa: E402  (re-exported; shared with the Wave 3 Meta adapter)
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -213,10 +213,12 @@ class InstagramProvider(OAuthProvider):
 
 from .atproto_oauth import BlueskyProvider  # noqa: E402
 from .social_connectors import DiscordProvider, MastodonProvider, TelegramConnector, XProvider  # noqa: E402
+from .wave3_connectors import FacebookPagesProvider, PinterestProvider, TikTokProvider, YouTubeProvider  # noqa: E402
 
 ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider,
             "bluesky": BlueskyProvider, "mastodon": MastodonProvider, "telegram": TelegramConnector,
-            "discord": DiscordProvider, "x": XProvider}
+            "discord": DiscordProvider, "x": XProvider,
+            "facebook": FacebookPagesProvider, "youtube": YouTubeProvider, "tiktok": TikTokProvider, "pinterest": PinterestProvider}
 
 
 def adapter_class_for_platform(platform):

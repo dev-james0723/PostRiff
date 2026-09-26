@@ -356,6 +356,15 @@ class Cursor:
         elif s.startswith("INSERT INTO public.pr_encrypted_credentials"):
             workspace, connection, provider, account, access, refresh, key_id, scopes, expires, refresh_supported = params
             db.credentials[connection] = {"workspace": workspace, "provider": provider, "account": account, "access": access, "key_id": key_id, "scopes": scopes, "expires": expires, "revoked": False}
+        elif s.startswith("SELECT provider FROM public.pr_encrypted_credentials"):
+            found = db.credentials.get(params[1])
+            self.result = (found["provider"],) if found and not found["revoked"] and found.get("workspace", "workspace") == params[0] else None
+        elif s.startswith("SELECT provider,access_ciphertext,refresh_ciphertext,key_id"):
+            found = db.credentials.get(params[1])
+            self.result = None if not found else (found["provider"], found["access"], found.get("refresh"), found["key_id"], found.get("expires"),
+                                                  bool(found.get("refresh")), found["revoked"], found["scopes"], found["account"], db.clock() - 3600)
+        elif s.startswith("UPDATE public.pr_encrypted_credentials SET scopes=%s"):
+            db.credentials[params[2]]["scopes"] = params[0]
         elif s.startswith("SELECT provider_account_id FROM public.pr_encrypted_credentials"):
             found = db.credentials.get(params[1])
             self.result = (found["account"],) if found and found.get("workspace", "workspace") == params[0] else None
@@ -484,7 +493,8 @@ class ServiceFlows(unittest.TestCase):
     def test_destination_choice_is_compare_and_swap_on_the_stored_grant(self):
         guild = {"id": "555555", "owner_id": "1", "roles": [{"id": "555555", "permissions": str(DiscordProvider.VIEW_CHANNEL | DiscordProvider.SEND_MESSAGES)}]}
         channels = [{"id": "7777777", "name": "general", "type": 0}]
-        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire(discord_listing(guild, channels, []) * 2))
+        # Each request first live-checks the grant through token_for_worker (the bot is still in the server), then lists.
+        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire(([ok(guild)] + discord_listing(guild, channels, [])) * 2))
         service = self.service({"discord": discord})
         ciphertext, key_id = service.vault.encrypt(json.dumps({"v": 1, "guild": "555555", "channel": None, "user": "4242424"}))
         self.repo.db.credentials["conn"] = {"workspace": "workspace", "provider": "discord", "account": "555555", "access": ciphertext, "key_id": key_id, "scopes": ["bot"], "expires": None, "revoked": False}

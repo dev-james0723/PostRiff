@@ -17,9 +17,12 @@ from .atproto_oauth import tid
 from .capabilities import HOSTED_PUBLISHERS
 from .provider_candidates import LinkedInCandidate, little_plain
 from .providers import GRAPH_VERSION, http_transport
+from .outcomes import valid_receipt_url
 from .social_connectors import multipart
+from .wave3_connectors import provider_host
 
 WAVE1 = ("Bluesky", "Mastodon", "Telegram", "Discord", "X")
+WAVE3 = ("Facebook", "YouTube", "TikTok", "Pinterest")
 _URL = re.compile(r"https?://[^\s<>\"]+")
 
 
@@ -27,8 +30,9 @@ def _provider_reason(body):
     """The provider's own short error text: first plain message field, control characters removed, at most 300 characters."""
     if not isinstance(body, dict):
         return ""
-    candidates = [body.get(key) for key in ("detail", "message", "description", "error_description", "error", "title")]
-    errors = body.get("errors")
+    nested = body.get("error") if isinstance(body.get("error"), dict) else {}  # Graph, Google and TikTok nest their errors
+    candidates = [body.get(key) for key in ("detail", "message", "description", "error_description", "error", "title")] + [nested.get("message")]
+    errors = body.get("errors") if isinstance(body.get("errors"), list) else nested.get("errors")
     if isinstance(errors, list):
         candidates += [e.get("message") for e in errors if isinstance(e, dict)]
     text = next((c for c in candidates if isinstance(c, str) and c.strip()), "")
@@ -93,7 +97,7 @@ class HostedSocial:
                 return self._submit_threads(manifest, token)
             if manifest["platform"] == "Instagram":
                 return self._submit_instagram(manifest, token)
-            if manifest["platform"] in WAVE1:
+            if manifest["platform"] in WAVE1 + WAVE3:
                 return getattr(self, "_submit_" + manifest["platform"].lower())(manifest, provider, token)
         except AlphaError as error:
             return _uncertain(f"Submission could not be completed conclusively: {error}")
@@ -388,6 +392,295 @@ class HostedSocial:
             return {"state": "scheduled", "confirmed": "Provider rate limited the request before acceptance"}
         return None
 
+    # --- Wave 3 publishers (Facebook Pages, YouTube, TikTok, Pinterest) -----------------------------------------
+    def _facebook_rejection(self, response):
+        body = response.get("body") if isinstance(response.get("body"), dict) else {}
+        error = body.get("error") if isinstance(body.get("error"), dict) else {}
+        code, reason = error.get("code"), _provider_reason(body)
+        if code in (102, 190) or code in (10, 200, 283, 299) or (isinstance(code, int) and 200 <= code <= 299):
+            return {"state": "held", "confirmed": "Facebook rejected the Page permission or session; reconnect and review again" + (f" ({reason})" if reason else "")}
+        if code in (4, 17, 32, 613):
+            return {"state": "scheduled", "confirmed": "Facebook rate limited the request before acceptance"}
+        if code == 368:
+            return {"state": "held", "confirmed": "Facebook has temporarily blocked posting from this Page" + (f" ({reason})" if reason else "")}
+        return self._classify_status(response.get("status"), body, "Facebook")
+
+    def _submit_facebook(self, manifest, provider, token):
+        refusal = self._unsupported_media(manifest)
+        if refusal:
+            return refusal
+        session = provider.session(token)
+        page = session.get("page")
+        if not isinstance(page, dict):
+            return {"state": "held", "confirmed": "Choose the Facebook Page for this account first. Nothing was posted."}
+        text = manifest["payload"]["text"]
+        # Rafii's worker runs at the approved time, so the post is published now, never scheduled on Facebook.
+        if manifest.get("media"):
+            response = provider.graph("POST", f"/{page['id']}/photos", page["token"], form={"url": self._image_url(manifest), "caption": text})
+        else:
+            response = provider.graph("POST", f"/{page['id']}/feed", page["token"], form={"message": text})
+        body = response.get("body") if isinstance(response.get("body"), dict) else {}
+        # A photo answers with its own id and, once on the Page, the Page post's id: the post id is the one to read back.
+        post_id = str(body.get("post_id") or body.get("id") or "")
+        if response.get("status") == 200 and re.fullmatch(r"\d{5,25}_\d{5,30}|\d{5,30}", post_id):
+            return {"state": "provider_accepted", "reference": post_id, "confirmed": "Facebook created the Page post; read-back pending"}
+        return self._facebook_rejection(response) or _uncertain("No conclusive Facebook create response; do not resubmit")
+
+    def _youtube_rejection(self, response):
+        body = response.get("body") if isinstance(response.get("body"), dict) else {}
+        error = body.get("error") if isinstance(body.get("error"), dict) else {}
+        reasons = {e.get("reason") for e in error.get("errors") or [] if isinstance(e, dict)}
+        if reasons & {"quotaExceeded", "dailyLimitExceeded"}:
+            return {"state": "held", "confirmed": "YouTube's daily upload quota for Rafii is used up (it resets at midnight Pacific time). Approve the upload again after that; nothing was uploaded."}
+        if "uploadLimitExceeded" in reasons:
+            return {"state": "held", "confirmed": "YouTube says this channel has reached its upload limit for now. Approve the upload again later; nothing was uploaded."}
+        if reasons & {"rateLimitExceeded", "userRateLimitExceeded"}:
+            return {"state": "scheduled", "confirmed": "YouTube rate limited the request before acceptance"}
+        return self._classify_status(response.get("status"), body, "YouTube")
+
+    def _video(self, manifest):
+        media = manifest.get("media") or []
+        if len(media) != 1 or not str(media[0].get("mime") or "").startswith("video/"):
+            return None, {"state": "failed", "confirmed": f"{manifest['platform']} needs exactly one video, and Rafii can't upload videos yet. Nothing was posted."}
+        if self.assets is None:
+            raise AlphaError("Media uploads aren't available yet.", 503, code="media_storage_not_configured")
+        return (self.assets.storage.get(manifest["workspaceId"], "media", media[0].get("objectName") or media[0]["id"]), media[0]), None
+
+    def _submit_youtube(self, manifest, provider, token):
+        options = manifest.get("publishOptions") or {}
+        if not options.get("title") or options.get("privacyStatus") not in ("private", "unlisted", "public"):
+            return {"state": "failed", "confirmed": "This upload has no YouTube title or visibility. Review it again; nothing was uploaded."}
+        video, refusal = self._video(manifest)
+        if refusal:
+            return refusal
+        raw, media = video
+        mime = str(media.get("mime"))
+        opened = provider.api(token, "POST", provider.UPLOAD + "?" + urlencode({"uploadType": "resumable", "part": "snippet,status"}),
+                              headers={"X-Upload-Content-Type": mime, "X-Upload-Content-Length": str(len(raw))},
+                              body={"snippet": {"title": options["title"], "description": manifest["payload"]["text"], "categoryId": "22"},
+                                    "status": {"privacyStatus": options["privacyStatus"], "selfDeclaredMadeForKids": options.get("madeForKids") is True}})
+        location = opened.get("headers", {}).get("location")
+        if opened.get("status") != 200 or not isinstance(location, str):
+            return self._youtube_rejection(opened) or {"state": "failed", "confirmed": "YouTube did not open an upload, so nothing was uploaded."}
+        try:
+            provider_host(location, ("www.googleapis.com",))
+        except AlphaError:
+            return {"state": "failed", "confirmed": "YouTube returned an upload address outside YouTube's own hosts, so Rafii sent nothing. Nothing was uploaded."}
+        try:
+            sent = provider.api(token, "PUT", location, headers={"Content-Type": mime}, data=raw)
+        except AlphaError:
+            return _uncertain("The video upload to YouTube did not finish conclusively; Rafii will look for it on the channel; do not resubmit")
+        body = sent.get("body") if isinstance(sent.get("body"), dict) else {}
+        video_id = str(body.get("id") or "")
+        if sent.get("status") in (200, 201) and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+            note = "" if options["privacyStatus"] == "private" else ". Until Google audits Rafii, YouTube keeps uploads private"
+            return {"state": "provider_accepted", "reference": video_id, "confirmed": "YouTube received the video; processing and read-back pending" + note}
+        return self._youtube_rejection(sent) or _uncertain("No conclusive YouTube upload response; Rafii will look for it on the channel; do not resubmit")
+
+    def _tiktok_rejection(self, status, error):
+        code, message = error.get("code"), error.get("message") if isinstance(error.get("message"), str) else ""
+        reason = f" ({message[:200]})" if message else ""
+        if code in ("access_token_invalid", "scope_not_authorized", "scope_permission_missed") or status == 401:
+            return {"state": "held", "confirmed": "TikTok rejected the permission or session; reconnect and review again" + reason}
+        if code == "rate_limit_exceeded" or status == 429:
+            return {"state": "scheduled", "confirmed": "TikTok rate limited the request before acceptance"}
+        if code in ("spam_risk_too_many_posts", "spam_risk_too_many_pending_share", "spam_risk_user_banned_from_posting", "reached_active_user_cap"):
+            return {"state": "held", "confirmed": "TikTok won't take more posts from this account right now" + reason}
+        if code == "unaudited_client_can_only_post_to_private_accounts":
+            return {"state": "failed", "confirmed": "Until TikTok audits Rafii, it can post only to private TikTok accounts. Make the account private or wait for the audit; nothing was posted."}
+        if code == "privacy_level_option_mismatch":
+            return {"state": "held", "confirmed": "TikTok no longer offers the chosen privacy setting for this account. Review the post again; nothing was posted."}
+        if isinstance(status, int) and 400 <= status < 500:
+            return {"state": "failed", "confirmed": "TikTok rejected the post; nothing was published" + (f": {message[:300]}" if message else ".")}
+        return None
+
+    def _submit_tiktok(self, manifest, provider, token):
+        options = manifest.get("publishOptions") or {}
+        if options.get("privacyLevel") is None or options.get("consent") is not True:
+            return {"state": "failed", "confirmed": "This post has no TikTok privacy choice or consent. Review it again; nothing was posted."}
+        video, refusal = self._video(manifest)
+        if refusal:
+            return refusal
+        raw, media = video
+        # Guidelines: read the creator's current settings again right before posting.
+        info = provider.creator_info(token)
+        if not info.get("ok"):
+            return self._tiktok_rejection(info.get("status"), {"code": info.get("code"), "message": info.get("message")}) or \
+                _uncertain("TikTok did not confirm this account's posting settings; nothing was posted")
+        if options["privacyLevel"] not in info["privacyLevelOptions"]:
+            return {"state": "held", "confirmed": "TikTok no longer offers the chosen privacy setting for this account. Review the post again; nothing was posted."}
+        limit = info.get("maxVideoPostDurationSec")
+        if isinstance(limit, int) and float(media.get("duration") or 0) > limit:
+            return {"state": "failed", "confirmed": f"This video is longer than TikTok allows this account ({limit} seconds). Nothing was posted."}
+        commercial = options.get("commercial") or {}
+        chunk, count = provider.chunks(len(raw))
+        opened = provider.api(token, "POST", "/v2/post/publish/video/init/", body={
+            "post_info": {"title": manifest["payload"]["text"], "privacy_level": options["privacyLevel"],
+                          # A setting the creator turned off stays off whatever the post allowed.
+                          "disable_comment": options.get("allowComment") is not True or info["commentDisabled"],
+                          "disable_duet": options.get("allowDuet") is not True or info["duetDisabled"],
+                          "disable_stitch": options.get("allowStitch") is not True or info["stitchDisabled"],
+                          "brand_content_toggle": commercial.get("brandedContent") is True, "brand_organic_toggle": commercial.get("yourBrand") is True},
+            "source_info": {"source": "FILE_UPLOAD", "video_size": len(raw), "chunk_size": chunk, "total_chunk_count": count}})
+        body = opened.get("body") if isinstance(opened.get("body"), dict) else {}
+        error = body.get("error") if isinstance(body.get("error"), dict) else {}
+        data = body.get("data") if isinstance(body.get("data"), dict) else {}
+        publish_id, upload_url = data.get("publish_id"), data.get("upload_url")
+        if opened.get("status") != 200 or error.get("code") not in (None, "ok") or not isinstance(publish_id, str) or not isinstance(upload_url, str):
+            return self._tiktok_rejection(opened.get("status"), error) or {"state": "failed", "confirmed": "TikTok did not start the upload, so nothing was posted."}
+        try:
+            provider_host(upload_url, provider.UPLOAD_HOSTS)
+        except AlphaError:
+            return {"state": "failed", "confirmed": "TikTok returned an upload address outside TikTok's own hosts, so Rafii sent nothing. Nothing was posted."}
+        for index in range(count):
+            start = index * chunk
+            end = len(raw) if index == count - 1 else start + chunk
+            try:
+                sent = provider.transport("PUT", upload_url, headers={"Content-Type": str(media.get("mime")), "Content-Range": f"bytes {start}-{end - 1}/{len(raw)}"}, data=raw[start:end])
+            except AlphaError:
+                sent = {"status": None}
+            if sent.get("status") not in (200, 201, 206):
+                return {**_uncertain("The video upload to TikTok was interrupted; reconcile by publish id; do not resubmit"), "reference": publish_id}
+        private = " Until TikTok audits Rafii, the post is private: only you can see it." if options["privacyLevel"] != "SELF_ONLY" else ""
+        return {"state": "provider_accepted", "reference": publish_id, "confirmed": "TikTok received the video and is processing it; it may take a few minutes." + private}
+
+    def _submit_pinterest(self, manifest, provider, token):
+        options = manifest.get("publishOptions") or {}
+        media = manifest.get("media") or []
+        if not options.get("boardId") or len(media) != 1 or not str(media[0].get("mime") or "").startswith("image/"):
+            return {"state": "failed", "confirmed": "A Pin needs one image and a board. Review it again; nothing was posted."}
+        # The board must be one of this person's own boards (the composer offers only those; it may have gone since).
+        if options["boardId"] not in {board["id"] for board in provider.destinations(token)}:
+            return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
+        pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": self._image_url(manifest)}}
+        if options.get("title"):
+            pin["title"] = options["title"]
+        if options.get("link"):
+            pin["link"] = options["link"]
+        if media[0].get("alt"):
+            pin["alt_text"] = str(media[0]["alt"])[:500]
+        response = provider.api(token, "POST", "/v5/pins", content=True, body=pin)
+        body = response.get("body") if isinstance(response.get("body"), dict) else {}
+        pin_id = str(body.get("id") or "")
+        if response.get("status") in (200, 201) and re.fullmatch(r"\d{5,30}", pin_id):
+            return {"state": "provider_accepted", "reference": pin_id, "confirmed": "Pinterest created the Pin" + (" in its sandbox (Trial access)" if provider.sandbox else "") + "; read-back pending"}
+        reason = _provider_reason(body)
+        if response.get("status") == 404:
+            return {"state": "failed", "confirmed": "Pinterest can't find that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
+        if response.get("status") == 403:
+            return {"state": "failed", "confirmed": "Pinterest won't let this account pin to that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
+        return self._classify_status(response.get("status"), body, "Pinterest") or _uncertain("No conclusive Pinterest create response; do not resubmit")
+
+    def _reconcile_wave3(self, manifest, provider, token, reference, job=None):
+        platform, text = manifest["platform"], manifest["payload"]["text"]
+        options = manifest.get("publishOptions") or {}
+        if platform == "Facebook":
+            session = provider.session(token)
+            page = session.get("page") if isinstance(session.get("page"), dict) else None
+            if not reference or not page:
+                return _uncertain("No Facebook reference or Page was recorded; check the Page; do not resubmit")
+            if "_" not in reference:
+                # A bare photo id: a photo carries its caption as `name` and links to its Page post through page_story_id.
+                response = provider.graph("GET", f"/{reference}", page["token"], {"fields": "id,name,page_story_id,from"})
+                body = response.get("body") if isinstance(response.get("body"), dict) else {}
+                if response.get("status") == 200 and str((body.get("from") or {}).get("id")) == page["id"] and body.get("name") == text:
+                    story = str(body.get("page_story_id") or "")
+                    return {"state": "verified", "reference": story if re.fullmatch(r"\d{5,25}_\d{5,30}", story) else reference,
+                            "confirmed": "Facebook read-back matched the approved photo caption and Page", "verification": "provider_lookup"}
+                return _uncertain("Facebook read-back did not match the exact approved photo")
+            response = provider.graph("GET", f"/{reference}", page["token"], {"fields": "id,message,is_published,permalink_url,from"})
+            body = response.get("body") if isinstance(response.get("body"), dict) else {}
+            if response.get("status") != 200 or str((body.get("from") or {}).get("id")) != page["id"] or body.get("message") != text:
+                return _uncertain("Facebook read-back did not match the exact approved post")
+            if body.get("is_published") is False:
+                return _uncertain("Facebook holds the post but shows it as unpublished; check the Page; do not resubmit")
+            result = {"state": "verified", "reference": reference, "confirmed": "Facebook read-back matched the approved text and Page", "verification": "provider_lookup"}
+            permalink = body.get("permalink_url")
+            if valid_receipt_url(permalink, "Facebook"):
+                result["url"] = permalink
+            return result
+        if platform == "YouTube":
+            if not reference:
+                return self._find_youtube_upload(manifest, provider, token, options, job or {})
+            response = provider.api(token, "GET", f"{provider.API}/videos?" + urlencode({"part": "status,snippet", "id": reference}))
+            items = response.get("body", {}).get("items") if isinstance(response.get("body"), dict) else None
+            item = items[0] if isinstance(items, list) and items and isinstance(items[0], dict) else {}
+            snippet, status = item.get("snippet") or {}, item.get("status") or {}
+            if response.get("status") != 200 or snippet.get("channelId") != manifest["providerAccountId"] or snippet.get("title") != options.get("title"):
+                return _uncertain("YouTube read-back did not match the exact approved upload")
+            upload = status.get("uploadStatus")
+            if upload == "processed":
+                kept_private = options.get("privacyStatus") != "private" and status.get("privacyStatus") == "private"
+                return {"state": "verified", "reference": reference, "url": f"https://youtu.be/{reference}", "verification": "provider_lookup",
+                        "confirmed": "YouTube read-back matched the approved upload" + (" (YouTube kept it private: Rafii's Google project is not audited yet)" if kept_private else "")}
+            if upload == "uploaded":
+                return {"state": "provider_accepted", "reference": reference, "confirmed": "YouTube is still processing the video"}
+            if upload in ("failed", "rejected", "deleted"):
+                why = status.get("failureReason") or status.get("rejectionReason")
+                return {"state": "failed", "reference": reference, "verification": "provider_lookup",
+                        "confirmed": f"YouTube reports the upload {upload}" + (f" ({why})" if isinstance(why, str) and why else "") + "."}
+            return _uncertain(f"YouTube reports the upload as {upload or 'unknown'}; check the channel")
+        if platform == "TikTok":
+            if not reference:
+                return _uncertain("No TikTok publish id was recorded; check the account; do not resubmit")
+            response = provider.api(token, "POST", "/v2/post/publish/status/fetch/", body={"publish_id": reference})
+            data = response.get("body", {}).get("data") if isinstance(response.get("body"), dict) else None
+            state = data.get("status") if isinstance(data, dict) else None
+            if response.get("status") == 200 and state == "PUBLISH_COMPLETE":
+                return {"state": "verified", "reference": reference, "verification": "provider_lookup",
+                        "confirmed": "TikTok reports the post complete" + (" (private until TikTok audits Rafii)" if options.get("privacyLevel") != "SELF_ONLY" else "")}
+            if response.get("status") == 200 and state in ("PROCESSING_UPLOAD", "PROCESSING_DOWNLOAD", "SEND_TO_USER_INBOX"):
+                return {"state": "provider_accepted", "reference": reference, "confirmed": "TikTok is still processing the video"}
+            if response.get("status") == 200 and state == "FAILED":
+                reason = data.get("fail_reason")
+                return {"state": "failed", "reference": reference, "verification": "provider_lookup",
+                        "confirmed": "TikTok reports the post failed" + (f" ({reason})" if isinstance(reason, str) and reason else "") + "."}
+            return _uncertain("TikTok did not report this post's status; check the account")
+        if platform == "Pinterest":
+            if not reference:
+                return _uncertain("No Pin id was recorded; check the board; do not resubmit")
+            response = provider.api(token, "GET", f"/v5/pins/{quote(reference)}", content=True)
+            body = response.get("body") if isinstance(response.get("body"), dict) else {}
+            if response.get("status") == 200 and str(body.get("board_id")) == options.get("boardId") and body.get("description") == text:
+                result = {"state": "verified", "reference": reference, "confirmed": "Pinterest read-back matched the approved Pin and board", "verification": "provider_lookup"}
+                if not provider.sandbox:
+                    result["url"] = f"https://www.pinterest.com/pin/{reference}/"
+                return result
+            return _uncertain("Pinterest read-back did not match the exact approved Pin")
+        return _uncertain("No reconciliation path for this platform")
+
+    def _find_youtube_upload(self, manifest, provider, token, options, job):
+        """An upload that ended without an answer may still exist. Adopt it only when exactly one of the channel's latest
+        uploads matches the approved title and description AND arrived after this job's own submit attempt began, so an
+        older upload with the same words is never taken for this one."""
+        started = [a.get("startedAt") for a in job.get("attempts") or [] if isinstance(a, dict) and isinstance(a.get("startedAt"), (int, float))]
+        if not started:
+            return _uncertain("No submit time was recorded, so Rafii can't tell this upload from an older one; check the channel; do not resubmit")
+        since = max(started) - 60  # a minute for clock differences between Rafii and YouTube
+        channel = provider.api(token, "GET", f"{provider.API}/channels?" + urlencode({"part": "contentDetails", "mine": "true"}))
+        items = channel.get("body", {}).get("items") if isinstance(channel.get("body"), dict) else None
+        playlist = (((items[0] if isinstance(items, list) and items else {}).get("contentDetails") or {}).get("relatedPlaylists") or {}).get("uploads")
+        if channel.get("status") != 200 or not isinstance(playlist, str):
+            return _uncertain("YouTube did not list this channel's uploads; check the channel; do not resubmit")
+        listed = provider.api(token, "GET", f"{provider.API}/playlistItems?" + urlencode({"part": "snippet", "playlistId": playlist, "maxResults": "10"}))
+        matches = []
+        for item in (listed.get("body", {}).get("items") or []) if isinstance(listed.get("body"), dict) else []:
+            snippet = item.get("snippet") if isinstance(item, dict) else None
+            if not isinstance(snippet, dict) or snippet.get("title") != options.get("title") or snippet.get("description") != manifest["payload"]["text"]:
+                continue
+            try:
+                added = datetime.fromisoformat(str(snippet.get("publishedAt")).replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                continue
+            video_id = str((snippet.get("resourceId") or {}).get("videoId") or "")
+            if added >= since and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+                matches.append(video_id)
+        if len(matches) == 1:
+            return {"state": "provider_accepted", "reference": matches[0], "confirmed": "Found this job's upload among the channel's latest videos; read-back pending"}
+        if matches:
+            return _uncertain("More than one new upload matches this video; check the channel; do not resubmit")
+        return _uncertain("No upload made since this job's attempt matches it; check the channel; do not resubmit")
+
     def _submit_linkedin(self, manifest, token):
         descriptor = self.linkedin.prepare(manifest, manifest["providerAccountId"])
         response = self.transport("POST", descriptor["url"], headers={**descriptor["headers"], "Authorization": "Bearer " + token}, body=descriptor["body"])
@@ -493,6 +786,8 @@ class HostedSocial:
         try:
             if manifest["platform"] in WAVE1:
                 return self._reconcile_wave1(manifest, provider, token, reference, job)
+            if manifest["platform"] in WAVE3:
+                return self._reconcile_wave3(manifest, provider, token, reference, job)
             if manifest["platform"] == "LinkedIn":
                 if not reference or "r_member_social" not in grant["scopes"]:
                     return _uncertain("LinkedIn read scope unavailable; verify the exact post manually")

@@ -1,6 +1,8 @@
 """Shared base for hosted channel adapters. `providers.py` re-exports these names and owns `http_transport`."""
 from postriff_alpha.domain import AlphaError
 
+GRAPH_VERSION = "v24.0"  # current Graph API version read in the 2026-09-15 audit; re-verify at review time
+
 
 def default_transport():
     from .providers import http_transport  # resolved at call time: tests patch providers.build_opener
@@ -36,8 +38,10 @@ class OAuthProvider:
     requires_issuer = False
     # Grants that never expire (bot-held access, Mastodon tokens): no expiry date is invented for them.
     non_expiring = False
-    # True when a connection needs a destination chosen after connecting (a Discord channel).
+    # True when posting needs a destination: chosen once per connection (a Discord channel, a Facebook Page) or for
+    # each post (a Pinterest board); `destination_label` names it on screen.
     has_destinations = False
+    destination_scope, destination_label = "connection", "Channel"
     # True when revoking acts on something other workspaces may share (Rafii's bot in a server or channel).
     shared_remote = False
     # Renew this many seconds before expiry, so a publish never starts on a token about to lapse (0 = at expiry).

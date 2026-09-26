@@ -23,7 +23,13 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           "Bluesky": {"version": "hosted-2026-09-25", "characters": 300, "operation": "post"},
           "Mastodon": {"version": "hosted-2026-09-25", "characters": 500, "operation": "status"},
           "Telegram": {"version": "hosted-2026-09-25", "characters": 4096, "operation": "channel_post"},
-          "Discord": {"version": "hosted-2026-09-25", "characters": 2000, "operation": "channel_message"}}
+          "Discord": {"version": "hosted-2026-09-25", "characters": 2000, "operation": "channel_message"},
+          # Wave 3 hosted connectors (2026-09-25): a Facebook Page post allows 63,206 characters; YouTube descriptions
+          # 5,000 bytes (publish_options checks bytes); TikTok captions 2,200; Pinterest descriptions 800.
+          "Facebook": {"version": "hosted-2026-09-25", "characters": 63206, "operation": "page_post"},
+          "YouTube": {"version": "hosted-2026-09-25", "characters": 5000, "operation": "video_upload"},
+          "TikTok": {"version": "hosted-2026-09-25", "characters": 2200, "operation": "video_post"},
+          "Pinterest": {"version": "hosted-2026-09-25", "characters": 800, "operation": "image_pin"}}
 SCENARIOS = ("success", "denied", "expired", "accepted", "delayed", "failed", "rate_limited", "timeout", "duplicate", "uncertain", "malformed", "capability_loss")
 
 def digest(value):

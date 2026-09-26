@@ -51,6 +51,8 @@ export interface Asset {
   width?: number;
   height?: number;
   bytes?: number;
+  /** Seconds, for video; 0 for images. */
+  duration?: number;
   deleted: boolean;
   storagePath?: string;
 }
@@ -1012,14 +1014,17 @@ export interface ProviderView {
   connectKind?: 'oauth' | 'bot_code';
   /** One value to ask before connecting: a Bluesky handle or a Mastodon server. */
   startInput?: { name: string; label: string; placeholder?: string } | null;
-  /** A destination (a Discord channel) is chosen after connecting. */
+  /** Posting needs a destination: once per connection (a Discord channel, a Facebook Page) or per post (a Pinterest board). */
   hasDestinations?: boolean;
+  destinationScope?: 'connection' | 'post';
+  /** What the destination is called on screen: Channel, Page, Board. */
+  destinationLabel?: string;
 }
 
 export interface ChannelDestination {
   id: string;
   name: string;
-  kind: 'text' | 'announcement';
+  kind: 'text' | 'announcement' | 'page' | 'board';
   selected: boolean;
 }
 

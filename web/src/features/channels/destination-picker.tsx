@@ -19,7 +19,7 @@ import { CONTROL_44, SHEET_ELEVATED } from './rafii-materials';
  * Where a server-level connection posts (a Discord channel). The list and the choice are the API's own:
  * channels the bot can see, and a compare-and-swap save on the stored grant.
  */
-export function DestinationPicker({ channelId, platform, disabled }: { channelId: string; platform: string; disabled?: boolean }) {
+export function DestinationPicker({ channelId, platform, label = 'Channel', disabled }: { channelId: string; platform: string; label?: string; disabled?: boolean }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const isMobile = useIsMobile();
@@ -57,18 +57,22 @@ export function DestinationPicker({ channelId, platform, disabled }: { channelId
     <>
       <Button variant='quiet' className={CONTROL_44} disabled={disabled} onClick={() => void load()}>
         <Icons.send className='size-4' aria-hidden />
-        Posting channel
+        {label === 'Channel' ? 'Posting channel' : `Posting ${label}`}
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side={isMobile ? 'bottom' : 'right'} className={cn(SHEET_ELEVATED, 'data-[side=bottom]:max-h-[80dvh] data-[side=right]:sm:max-w-md')}>
           <SheetHeader className='gap-1.5 px-5 pt-5 pr-14 pb-4'>
             <SheetTitle className='text-xl font-medium tracking-tight'>Where Rafii posts</SheetTitle>
-            <SheetDescription>Rafii&apos;s bot posts on {platform} only in the channel you choose.</SheetDescription>
+            <SheetDescription>
+              Rafii posts on {platform} only in the {label === 'Channel' ? 'channel' : label} you choose.
+            </SheetDescription>
           </SheetHeader>
           <div className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-5 pb-[max(1rem,env(safe-area-inset-bottom))]'>
             {error && <StateMessage kind='error' layout='inline' title="Couldn't load channels" description={error} />}
             {!items && !error && <StateMessage kind='loading' layout='inline' title='Loading channels…' />}
-            {items?.length === 0 && <StateMessage kind='empty' layout='inline' title='No text channels the bot can see.' />}
+            {items?.length === 0 && (
+              <StateMessage kind='empty' layout='inline' title={label === 'Page' ? 'No Pages you can post to.' : 'No text channels the bot can post in.'} />
+            )}
             {items?.map((item) => (
               <Button
                 key={item.id}

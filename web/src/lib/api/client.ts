@@ -50,6 +50,7 @@ import type {
   WorkspaceListItem
 } from './types';
 import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentMessageBody, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
+import type { TikTokCreatorInfo } from '@/lib/channels/tiktok-rules';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -200,7 +201,9 @@ export function createApi(getToken: TokenSource) {
         ...(iss ? { iss } : {})
       }),
     channelDestinations: (w: string, id: string) =>
-      get<{ connectionId: string; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
+      get<{ connectionId: string; scope?: 'connection' | 'post'; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
+    /** TikTok's current creator settings, read fresh each time the composer shows them. */
+    creatorInfo: (w: string, id: string) => get<TikTokCreatorInfo>(`${ws(w)}/channels/${encodeURIComponent(id)}/creator-info`),
     chooseChannelDestination: (w: string, id: string, destinationId: string) =>
       send<{ connectionId: string; destinationId: string }>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/destination`, { destinationId }),
     ownedPosts: (w: string, id: string, cursor?: string) =>
