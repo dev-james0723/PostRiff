@@ -9,19 +9,26 @@
  * - While another dialog is open (an automation's builder, a confirmation) the page behind it, and so the docked
  *   column, is inert under that dialog's backdrop. ⌘J then opens the conversation as a sheet above the dialog; it
  *   closes with that dialog, and the column is back as it was.
+ * - Every frame carries Rafii's style (how Rafii talks, in text and voice): a pill that opens the style sheet above the
+ *   panel. `panelActions.setStyle` is registered once in the always-present shell, `openStyle` by the open frame.
  */
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { siteConfig } from '@/config/site';
 import { useWide } from '@/features/queue/use-wide';
+import { StyleButton } from '@/features/rafii-voice/style-sheet';
 import { VoiceIndicator } from '@/features/rafii-voice/voice-indicator';
+import { registerPanelActions } from '@/lib/agent-runtime/panel-actions';
+import { useRegisterStyleAction } from '@/lib/agent-runtime/use-agent-style';
 import { SiteAgentChat } from './chat';
 import { panelStore, usePanel } from './store';
 
 const DOCK_QUERY = '(min-width: 1024px)';
 export const LAUNCHER_ID = 'rafii-launcher';
 export const PANEL_ID = 'rafii-panel';
+/** The style sheet opens above the panel (outside its element); Escape in it closes just the sheet. */
+const STYLE_SHEET = '[data-rafii-style-sheet]';
 
 function subscribeDock(onChange: () => void) {
   const query = window.matchMedia(DOCK_QUERY);
@@ -71,7 +78,7 @@ function useEscapeClosesOnlyRafii(active: boolean, close: () => void) {
   useEffect(() => {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || document.getElementById(PANEL_ID)?.contains(document.activeElement)) return;
+      if (event.key !== 'Escape' || document.getElementById(PANEL_ID)?.contains(document.activeElement) || document.activeElement?.closest(STYLE_SHEET)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       close();
@@ -84,6 +91,8 @@ function useEscapeClosesOnlyRafii(active: boolean, close: () => void) {
 /** Keyboard shortcut and restore; mounted once in the app shell. */
 export function SiteAgentHotkeys() {
   const docked = useDocked();
+  // A spoken or typed style change applies even while the panel is closed and a call carries on.
+  useRegisterStyleAction();
   useEffect(() => {
     panelStore.restore(docked);
   }, [docked]);
@@ -105,6 +114,26 @@ export function SiteAgentHotkeys() {
   }, []);
   // Voice Mode stays on across pages; while the panel is closed its state stays visible here.
   return <VoiceIndicator />;
+}
+
+/**
+ * The conversation inside a frame, under a slim row with Rafii's style. The style sheet opens from here, inside the
+ * frame's own dialog on tablets and phones, so it stacks above the panel instead of closing it. `/style` without a
+ * preset (`panelActions.openStyle`) opens the same sheet.
+ */
+function PanelBody(props: ComponentProps<typeof SiteAgentChat>) {
+  const [styleOpen, setStyleOpen] = useState(false);
+  useEffect(() => registerPanelActions({ openStyle: () => setStyleOpen(true) }), []);
+  return (
+    <div className='flex min-h-0 flex-1 flex-col'>
+      <div className='flex shrink-0 justify-end px-4 pt-2.5'>
+        <StyleButton open={styleOpen} onOpenChange={setStyleOpen} />
+      </div>
+      <div className='min-h-0 flex-1'>
+        <SiteAgentChat {...props} />
+      </div>
+    </div>
+  );
 }
 
 /** The docked column; renders nothing below 1024px, while closed, or while the conversation is shown above a dialog. */
@@ -134,7 +163,7 @@ export function SiteAgentDock() {
       aria-label={siteConfig.name}
       className='rafii-panel sticky top-0 z-20 flex h-svh w-[22rem] shrink-0 flex-col border-l border-[color-mix(in_oklch,var(--foreground)_8%,transparent)] xl:w-[25rem]'
     >
-      <SiteAgentChat onClose={close} />
+      <PanelBody onClose={close} />
     </aside>
   );
 }
@@ -166,7 +195,7 @@ export function SiteAgentAbove() {
         className='rafii-elevated gap-0 p-0 shadow-none data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-md'
       >
         <SheetTitle className='sr-only'>{siteConfig.name}</SheetTitle>
-        <SiteAgentChat onClose={closeAbove} />
+        <PanelBody onClose={closeAbove} />
       </SheetContent>
     </Sheet>
   );
@@ -195,9 +224,7 @@ export function SiteAgentOverlay() {
           className='rafii-elevated [--drawer-content-max-height:calc(100dvh-3rem)] [--drawer-height:calc(100dvh-3rem)] data-[swipe-direction=down]:rounded-t-[var(--rafii-radius-mobile-dialog)] data-[swipe-direction=down]:border-t-0'
         >
           <DrawerTitle className='sr-only'>{siteConfig.name}</DrawerTitle>
-          <div className='flex min-h-0 flex-1 flex-col'>
-            <SiteAgentChat onClose={close} onNavigate={close} autoFocus={false} />
-          </div>
+          <PanelBody onClose={close} onNavigate={close} autoFocus={false} />
         </DrawerContent>
       </Drawer>
     );
@@ -212,7 +239,7 @@ export function SiteAgentOverlay() {
         className='rafii-elevated gap-0 p-0 shadow-none data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-md'
       >
         <SheetTitle className='sr-only'>{siteConfig.name}</SheetTitle>
-        <SiteAgentChat onClose={close} onNavigate={close} />
+        <PanelBody onClose={close} onNavigate={close} />
       </SheetContent>
     </Sheet>
   );
