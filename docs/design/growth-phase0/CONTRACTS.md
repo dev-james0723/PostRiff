@@ -179,3 +179,15 @@ Targets (plan v3): weighted kappa ≥ 0.6 per language, calibrated ECE ≤ 0.08,
 - **Comparison money.** `--max-usd` must be finite and > 0 and prices finite; unknown-cost attempts are charged at the *requested* model's estimate (per-model ledgers), reported as `spend.counted_usd`; the Jev model is pinned (`POSTRIFF_JEV_MODEL` cannot change it); estimates add `TYPICAL_REASONING_TOKENS` output per call for thinking models.
 - **Backfill.** `backfill_verified_jobs(..., batch_size=200)` walks all workspaces by keyset pagination (`--batch-size`), one transaction per batch.
 
+
+### Outcome validation replaces hand labels as the Phase 0 ground truth (decided by James, 2026-09-26)
+
+James chose to validate Post Doctor against how public posts actually perform instead of labelling ~200 posts himself. `growth/outcomes.py` evaluates judgments against **within-creator relative engagement**: outcome = log1p(likes + reposts + quotes + replies) − that creator's median, so audience size, niche and posting habits cancel out; each creator's top and bottom thirds are the "top" and "bottom" classes. Rules and pass criteria were fixed **before any data was collected** (`outcomes.PREREGISTERED`), per language group (Traditional Chinese and English separately):
+
+- at least 15 creators, each with at least 20 eligible posts;
+- Spearman ρ between Post Doctor's overall score (mean of the dimension scores it could compute) and the within-creator outcome ≥ 0.10, with the lower bound of its 95% interval above 0 (2,000 bootstrap resamples over creators, fixed seed);
+- AUC separating each creator's top third from their bottom third ≥ 0.56.
+
+The report also gives per-dimension ρ and ρ on text-only posts (media is recorded as `has_media`), for diagnosis only. What it does not show: which dimension caused a post's performance; dimension levels stay uncalibrated (confidence stays low) until hand labels or Rafii's own measured posts exist. It shows association, never causation.
+
+Data: `scripts/growth_collect_bluesky.py` reads Bluesky's public, open AppView (no login, no writes, rate limited) on James's Mac and writes outside the public repository (default `~/Documents/rafii-outcomes/`). Selection, fixed in advance: original posts only (no reposts or replies), 7–365 days old, ≥ 80 characters (English) or ≥ 30 (Cantonese: at least one Cantonese particle, no simplified-only characters), creators with ≥ 20 such posts, their 60 most recent; creators are stored as a hash of their DID. Meta (Threads/Instagram) and X data are not collected: their terms forbid automated collection outside official APIs; Threads can be added through the official Threads API once Meta's review grants keyword search / profile discovery. `compare --outcomes FILE` runs the same capped, dry-run-by-default comparison and writes the pre-registered report (`groups.<lang>.passes` / `reasons`).

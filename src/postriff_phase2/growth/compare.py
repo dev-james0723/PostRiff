@@ -21,7 +21,7 @@ import math
 import os
 import sys
 
-from . import golden, questions
+from . import golden, outcomes, questions
 from .judgments import JudgmentService, MemoryJudgmentCache, subject_hash
 from .router import FALLBACK_SYSTEM, TASKS, AIModelRouter, RouterError, chat_from_runtime
 from .usage import MemoryUsageSink
@@ -98,7 +98,7 @@ def _spent(sinks, per_call):
     return sum(e.cost_usd if e.cost_usd is not None else per_call[model] for model, sink in sinks.items() for e in sink.events)
 
 
-def run(rows, qs, models, *, jev_factory, chat, max_usd, costs):
+def run(rows, qs, models, *, jev_factory, chat, max_usd, costs, evaluator=None):
     """Judge every row with every model until the cap; returns the report dict."""
     sinks = {}
     per_call = {m: costs["models"][m]["per_call_usd"] for m in models}
@@ -122,7 +122,7 @@ def run(rows, qs, models, *, jev_factory, chat, max_usd, costs):
             except RouterError as error:   # auth / budget / bad request: stop, but keep what was already paid for
                 stopped = {"model": model, "row": row.id, "reason": error.code, "spent_usd": round(_spent(sinks, per_call), 6)}
                 break
-        results[model] = golden.evaluate(rows, judgments, qs)
+        results[model] = (evaluator or golden.evaluate)(rows, judgments, qs)
         if stopped:
             break
     events = [e for sink in sinks.values() for e in sink.events]
@@ -142,7 +142,9 @@ def _live_factories(api_key):
 def main(argv=None, *, env=None, out=sys.stdout, factories=None):
     env = os.environ if env is None else env
     parser = argparse.ArgumentParser(prog="python -m postriff_phase2.growth.compare")
-    parser.add_argument("--labels", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--labels", help="hand-labelled golden CSV (growth.golden)")
+    source.add_argument("--outcomes", help="public posts with engagement (growth.outcomes); pre-registered evaluation")
     parser.add_argument("--models", required=True)
     parser.add_argument("--max-usd", type=float, required=True)
     parser.add_argument("--price", action="append", default=[])
@@ -153,7 +155,16 @@ def main(argv=None, *, env=None, out=sys.stdout, factories=None):
     try:
         if not math.isfinite(args.max_usd) or args.max_usd <= 0:
             raise CompareError("--max-usd must be a finite amount above 0")
-        rows = golden.load(args.labels)
+        if args.outcomes:
+            posts, problems = outcomes.parse(args.outcomes)
+            if problems:
+                raise CompareError(f"{len(problems)} problem rows in {args.outcomes}; run growth.outcomes summarize")
+            rows = outcomes.eligible(posts)
+            if not rows:
+                raise CompareError("no creator has enough eligible posts; run growth.outcomes summarize")
+        else:
+            rows = golden.load(args.labels)
+        evaluator = outcomes.evaluate if args.outcomes else None
         qs = questions.get(args.question_set)
         models = resolve([m.strip() for m in args.models.split(",") if m.strip()])
         from postriff_phase2.model_runtime import DEFAULT_PRICES
@@ -177,7 +188,7 @@ def main(argv=None, *, env=None, out=sys.stdout, factories=None):
         print("error: AI_GATEWAY_API_KEY is not set", file=out)
         return 2
     jev_factory, chat = factories if factories is not None else _live_factories(api_key)
-    report = run(rows, qs, models, jev_factory=jev_factory, chat=chat, max_usd=args.max_usd, costs=costs)
+    report = run(rows, qs, models, jev_factory=jev_factory, chat=chat, max_usd=args.max_usd, costs=costs, evaluator=evaluator)
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump(report, handle, ensure_ascii=False, indent=2)
     print(f"wrote {args.out}; spent {report['spend']['known_usd']} USD known, "
