@@ -17,6 +17,46 @@ INSIGHT_METRICS = {"threads": ("views", "likes", "replies", "reposts", "quotes",
 MIN_COMPARABLE = 3
 
 
+def insights_endpoint(provider, provider_post_id):
+    base = "https://graph.threads.net" if provider == "threads" else "https://graph.instagram.com"
+    return f"{base}/{GRAPH_VERSION}/{quote(provider_post_id)}/insights"
+
+
+def fetch_post_insights(transport, access_token, provider, provider_post_id):
+    """One insights GET, no database. {"status", "found": {metric: value}, "endpoint"}; transport errors propagate."""
+    metrics = INSIGHT_METRICS[provider]
+    endpoint = insights_endpoint(provider, provider_post_id)
+    response = transport("GET", endpoint + "?" + urlencode({"metric": ",".join(metrics), "access_token": access_token}))
+    found = {}
+    if response.get("status") == 200:
+        for item in (response.get("body") or {}).get("data", []) or []:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            values = item.get("values") or []
+            total = item.get("total_value", {}).get("value") if isinstance(item.get("total_value"), dict) else None
+            value = total if total is not None else (values[0].get("value") if values and isinstance(values[0], dict) else None)
+            if name in metrics and type(value) in (int, float) and value >= 0:
+                found[name] = value
+    return {"status": response.get("status"), "found": found, "endpoint": endpoint}
+
+
+def record_observations(cur, workspace_id, connection_id, provider, provider_post_id, job_id, found, endpoint, now, read_offset=None, period_start=None):
+    """One row per native metric: available with its value, else unavailable (never zero). `read_offset` and
+    `period_start` are written only when given, so callers on databases without migration 032 are unaffected."""
+    recorded = []
+    extra_cols = ",read_offset,period_start" if read_offset is not None else ""
+    extra_vals = ",%s,to_timestamp(%s)" if read_offset is not None else ""
+    for metric in INSIGHT_METRICS[provider]:
+        available = metric in found
+        params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
+        if read_offset is not None:
+            params += [read_offset, period_start]
+        cur.execute(f"INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint{extra_cols}) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'count',%s,to_timestamp(%s),%s{extra_vals})", params)
+        recorded.append({"metric": metric, "availability": "available" if available else "unavailable"})
+    return recorded
+
+
 def ingest_post_insights(cur, transport, oauth, workspace_id, connection_id, provider, provider_post_id, job_id, now):
     """Server-only: read native insights for a post PostRiff created; record availability per metric."""
     metrics = INSIGHT_METRICS.get(provider)
@@ -24,24 +64,9 @@ def ingest_post_insights(cur, transport, oauth, workspace_id, connection_id, pro
         cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint) VALUES(%s,%s,%s,%s,%s,'all',%s,NULL,'count','not_supported',to_timestamp(%s),'')", (workspace_id, connection_id, provider, provider_post_id, job_id, DEFINITION_VERSION, now))
         return {"provider": provider, "availability": "not_supported"}
     grant = oauth.token_for_worker(workspace_id, connection_id)
-    base = "https://graph.threads.net" if provider == "threads" else "https://graph.instagram.com"
-    endpoint = f"{base}/{GRAPH_VERSION}/{quote(provider_post_id)}/insights"
-    response = transport("GET", endpoint + "?" + urlencode({"metric": ",".join(metrics), "access_token": grant["accessToken"]}))
-    found = {}
-    if response.get("status") == 200:
-        for item in response.get("body", {}).get("data", []) or []:
-            name = item.get("name")
-            values = item.get("values") or []
-            total = item.get("total_value", {}).get("value") if isinstance(item.get("total_value"), dict) else None
-            value = total if total is not None else (values[0].get("value") if values and isinstance(values[0], dict) else None)
-            if name in metrics and type(value) in (int, float) and value >= 0:
-                found[name] = value
-    recorded = []
-    for metric in metrics:
-        available = metric in found
-        cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'count',%s,to_timestamp(%s),%s)", (workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else ("unavailable" if response.get("status") == 200 else "unavailable"), now, endpoint.split("?")[0]))
-        recorded.append({"metric": metric, "availability": "available" if available else "unavailable"})
-    return {"provider": provider, "status": response.get("status"), "recorded": recorded}
+    fetched = fetch_post_insights(transport, grant["accessToken"], provider, provider_post_id)
+    recorded = record_observations(cur, workspace_id, connection_id, provider, provider_post_id, job_id, fetched["found"], fetched["endpoint"], now)
+    return {"provider": provider, "status": fetched["status"], "recorded": recorded}
 
 
 def rate(numerator, denominator):

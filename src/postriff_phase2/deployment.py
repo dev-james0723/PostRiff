@@ -59,4 +59,10 @@ def isolated_environment(values):
         raise ValueError('Preview Rafii notifications, web push, research and listening must remain disabled.')
     for name in egress:
         result[name] = ''
+    # Growth Phase 0 reaches Meta (metric reads, history import) and the paid AI Gateway (Post Doctor).
+    growth = ('POSTRIFF_METRIC_READS', 'POSTRIFF_HISTORY_IMPORT', 'POSTRIFF_POST_DOCTOR')
+    if any(str(result.get(name, '')).strip().lower() in ('1', 'true', 'yes', 'on') for name in growth):
+        raise ValueError('Preview growth metric reads, history import and Post Doctor must remain disabled.')
+    for name in growth:
+        result[name] = ''
     return result

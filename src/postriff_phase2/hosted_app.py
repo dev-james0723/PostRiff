@@ -180,7 +180,13 @@ def runtime_from_environment(environ=None):
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(service.audience.on_post_verified, service.time_savings))
+    on_verified = service.audience.on_post_verified
+    # Growth Phase 0: scheduled metric readings (t0/1h/24h/7d); off unless POSTRIFF_METRIC_READS=1.
+    from .growth import metric_schedule
+    if metric_schedule.enabled(values):
+        service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport)
+        on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -458,6 +464,9 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                metric_reads = getattr(service, 'metric_reads', None)
+                if metric_reads is not None:   # right after the worker, so t0 rows read before campaign/coworker steps
+                    result['metricReads'] = metric_reads.tick()
                 ideas = getattr(service, 'ideas', None)
                 if ideas is not None:
                     site_agent = getattr(service, 'site_agent', None)
