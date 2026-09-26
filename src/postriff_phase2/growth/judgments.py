@@ -15,6 +15,11 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from .questions import QuestionSet
+from .router import RouterError
+
+# Transient router outcomes that degrade to an explicit abstention instead of failing the caller.
+# auth / budget / bad_request stay errors: they are configuration or input problems, not availability.
+DEGRADABLE = ("timeout", "rate_limited", "upstream", "unavailable", "malformed")
 
 PROB_TOLERANCE = 0.02
 _SCOPE = re.compile(r"^(shared|personal:[A-Za-z0-9_-]{1,64})$")
@@ -45,6 +50,8 @@ class Judgment:
     latency_ms: int
     cache_key: str
     cached: bool = False
+    status: str = "ok"     # "ok", or the router error code when no model answered ("timeout", "upstream", ...)
+    attempts: tuple = ()   # UsageEvents of the call that produced this judgment (empty when cached)
 
     def probability(self, name):
         """P(true) for a boolean answer that is valid and not abstained, else None."""
@@ -169,13 +176,29 @@ class JudgmentService:
         hit = self.cache.get(key)
         if hit is not None:
             return replace(hit, cached=True)
-        evaluation = self.evaluate(question_set, state, workspace_id=workspace_id, subject=subject)
+        try:
+            evaluation = self.evaluate(question_set, state, workspace_id=workspace_id, subject=subject)
+        except RouterError as error:
+            if error.code not in DEGRADABLE:
+                raise
+            return unanswered(question_set, key, error.code, error.attempts)
         answers, invalid = validate_answers(question_set, evaluation.answers)
         judgment = Judgment(
             question_set=question_set.key, digest=question_set.digest, model=evaluation.model, route=evaluation.route,
             calibrated=bool(evaluation.calibrated) and evaluation.route == "primary", answers=answers, invalid=invalid,
             cost_usd=evaluation.cost_usd, cost_source=evaluation.cost_source, generation_id=evaluation.generation_id,
-            latency_ms=evaluation.latency_ms, cache_key=key)
+            latency_ms=evaluation.latency_ms, cache_key=key, attempts=tuple(getattr(evaluation, "attempts", ()) or ()))
         if not invalid:  # never cache a partly invalid judgment; the next request can succeed
             self.cache.put(key, judgment)
         return judgment
+
+
+def unanswered(question_set, key, status, attempts=()):
+    """A judgment in which every question abstained because no model answered; never cached."""
+    known = [e.cost_usd for e in attempts if e.cost_usd is not None]
+    return Judgment(
+        question_set=question_set.key, digest=question_set.digest, model="none", route="none", calibrated=False,
+        answers={}, invalid=(), cost_usd=sum(known) if known else None,
+        cost_source="gateway" if attempts and len(known) == len(attempts) else "unknown",
+        generation_id=None, latency_ms=sum(e.latency_ms for e in attempts), cache_key=key, status=status,
+        attempts=tuple(attempts))

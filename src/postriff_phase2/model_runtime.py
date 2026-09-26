@@ -322,7 +322,7 @@ class ServerModelRuntime(AgentRuntime):
         """AI Gateway provider slugs this model may execute on; the model maker when not configured."""
         return list(self.allowed_providers.get(model) or ([model.split("/", 1)[0]] if "/" in model else []))
 
-    def _call(self, messages, model, progress=None, max_tokens=None):
+    def _call(self, messages, model, progress=None, max_tokens=None, timeout=None):
         # Public catalogue 2026-09-20: Sonnet 5 does not accept temperature.
         # Leave sampling at each provider's default rather than sending an unsupported field.
         from . import gateway_catalog
@@ -341,6 +341,8 @@ class ServerModelRuntime(AgentRuntime):
         try:
             # A thinking model may take longer than the default 45 s; a transport without a timeout parameter keeps its own.
             extra = {"timeout": THINKING_TIMEOUT_SECONDS} if thinking(model) and _takes_timeout(self.transport) else {}
+            if timeout is not None and _takes_timeout(self.transport):
+                extra = {"timeout": timeout}   # caller-owned deadline (growth router); None keeps the defaults above
             response = self.transport("POST", self.endpoint, headers={"Authorization": f"Bearer {self.api_key}"}, body=body, **extra)
         except AlphaError as error:
             raise _Unknown(str(error), error.status) from error
