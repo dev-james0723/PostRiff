@@ -3159,9 +3159,9 @@
   },
   {
    "id": "postriff-security-and-approval",
-   "version": "1.2.0",
+   "version": "1.3.0",
    "kind": "policy",
-   "sha256": "sha256:92dce6b6ce423b90f51b1813e94460d93db3b00d386b2ef9fbbbe65283243516",
+   "sha256": "sha256:6138ff7998ee37bcd9a2405fa5402d28c07f54daeca333226c509e142853a367",
    "description": "Use when reviewing campaign permissions, freezing an exact approval manifest, checking route freshness, cancelling pending jobs, or handling identity and credential incidents.",
    "intents": [
     "*"
