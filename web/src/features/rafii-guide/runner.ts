@@ -273,8 +273,15 @@ export async function runGuide(guide: Guide, io: RunnerIO): Promise<void> {
       if (step.action === 'click') {
         await sleep(CLICK_PAUSE_MS, signal);
         if (signal.aborted) return;
-        el = current(el, step.target);
-        if (!el) return stopWith(io, index, total, LOST);
+        const now = current(el, step.target);
+        if (!now) return stopWith(io, index, total, LOST);
+        if (now !== el) {
+          // The page drew it again elsewhere (loading finished): follow it before pressing.
+          el = now;
+          io.light(el);
+          await io.glide(el);
+          if (signal.aborted) return;
+        }
         if (isGuideSafe(el) && !isDisabled(el)) {
           await io.press();
           if (signal.aborted) return;

@@ -19,7 +19,7 @@ import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { siteConfig } from '@/config/site';
 import { useModelChoice } from '@/features/agent/use-model';
-import { SlashCommandMenu } from '@/features/rafii-commands/command-menu';
+import { SlashCommandMenu, type SlashPick } from '@/features/rafii-commands/command-menu';
 import { autoActionsOf, createAutoLedger, type AutoAction } from '@/features/rafii-guide/auto-actions';
 import { AgentExtras } from '@/features/rafii-voice/agent-extras';
 import { AttachImage } from '@/features/rafii-voice/attach-image';
@@ -29,7 +29,7 @@ import { ApiError } from '@/lib/api/client';
 import { keys, useMe, useMessages, useModels } from '@/lib/api/hooks';
 import type { Message } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
-import { parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
+import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-actions';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { AgentResult, AgentTurnResponse } from '@/lib/agent-runtime/types';
@@ -63,13 +63,8 @@ function newKey() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** What was typed around the `/word` being completed ("tips /wri|" → "tips"): it becomes the command's argument. */
-function textAroundSlash(text: string, caret: number): string {
-  const upto = text.slice(0, caret);
-  const match = /(^|\s)[/／]\S*$/.exec(upto);
-  const start = match ? match.index + match[1].length : caret;
-  return `${text.slice(0, start)} ${text.slice(caret)}`.replace(/\s+/g, ' ').trim();
-}
+/** Esc on the `/` menu: the menu keeps itself closed until the word changes; nothing else to do here. */
+const noop = () => {};
 
 /** A panel command runs in the browser and never reaches the server; it answers with a line for the panel, or none. */
 async function runClientCommand(command: SlashCommand, args: string): Promise<string | null> {
@@ -119,8 +114,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const [notes, setNotes] = useState<{ id: number; text: string }[]>([]);
   const noteId = useRef(0);
   const [caret, setCaret] = useState(0);
-  // The command menu stays closed for the text it was dismissed on (Escape), until the text changes.
-  const [menuClosedFor, setMenuClosedFor] = useState<string | null>(null);
+  const [styleOpen, setStyleOpen] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -178,6 +172,27 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
     [onNavigate, router]
   );
 
+  /** A panel command runs here and never reaches Rafii; its sentence becomes a line in the panel. */
+  const runCommand = useCallback(async (command: SlashCommand, args: string) => {
+    setFailure(null);
+    const line = await runClientCommand(command, args);
+    if (line) {
+      noteId.current += 1;
+      const id = noteId.current;
+      setNotes((prev) => [...prev.slice(-3), { id, text: line }]);
+    } else if (command.name === 'help') {
+      // `/help` answers with the menu itself: a bare `/` lists every command.
+      setText('/');
+      setCaret(1);
+      requestAnimationFrame(() => {
+        const el = input.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(1, 1);
+      });
+    }
+  }, []);
+
   const send = useCallback(
     async (raw: string) => {
       const message = raw.trim();
@@ -186,16 +201,11 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
       const slash = parseSlash(message);
       if (slash?.command.kind === 'client') {
         setText('');
-        setFailure(null);
-        const line = await runClientCommand(slash.command, slash.args);
-        if (line) {
-          noteId.current += 1;
-          const id = noteId.current;
-          setNotes((prev) => [...prev.slice(-3), { id, text: line }]);
-        }
+        await runCommand(slash.command, slash.args);
         return;
       }
-      const command = slash?.command.kind === 'agent' ? { name: slash.command.name, args: slash.args } : undefined;
+      // An agent command goes as typed, with its name and words beside it (the site agent gets the text only).
+      const command = slash?.command.kind === 'agent' ? commandPayload(slash) : undefined;
       setFailure(null);
       setNotes([]);
       setOptimistic(message);
@@ -267,7 +277,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         panelStore.setBusy(w, false);
       }
     },
-    [agent.api, agentOn, api, choice.model, client, images, pathname, runAuto, timeZone, workspaceId]
+    [agent.api, agentOn, api, choice.model, client, images, pathname, runAuto, runCommand, timeZone, workspaceId]
   );
 
   // Voice Mode reads the page when a spoken request is delegated (the call outlives this component's render).
@@ -309,29 +319,17 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
     input.current?.focus();
   }, [workspaceId]);
 
-  // `/new` and a spoken "new conversation" do what the + button does.
-  useEffect(() => registerPanelActions({ newConversation: startOver }), [startOver]);
+  // `/new` does what the + button does; `/style` (and a spoken style request) opens the header's style sheet.
+  useEffect(() => registerPanelActions({ newConversation: startOver, openStyle: () => setStyleOpen(true) }), [startOver]);
 
-  /** A command picked from the `/` menu: panel commands with nothing more to ask run now; the rest wait to be sent. */
+  /** A command picked from the `/` menu: the text becomes what the pick says; a panel command with its words runs now. */
   const pickCommand = useCallback(
-    (command: SlashCommand, args: string) => {
-      setMenuClosedFor(null);
-      const rest = textAroundSlash(text, caret) || args.trim();
-      if (command.kind === 'client' && (!command.argsHint || rest)) {
-        void send(`/${command.name}${rest ? ` ${rest}` : ''}`);
-        return;
-      }
-      const value = `/${command.name} ${rest}`.trimEnd() + (rest ? '' : ' ');
-      setText(value);
-      setCaret(value.length);
-      requestAnimationFrame(() => {
-        const el = input.current;
-        if (!el) return;
-        el.focus();
-        el.setSelectionRange(value.length, value.length);
-      });
+    (command: SlashCommand, args: string, pick: SlashPick) => {
+      setText(pick.value);
+      setCaret(pick.caret);
+      if (pick.action === 'run') void runCommand(command, args);
     },
-    [caret, send, text]
+    [runCommand]
   );
 
   const empty = !conversationId || (!thread.isLoading && messages.length === 0);
@@ -348,7 +346,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
           </span>
         </div>
         {/* How Rafii talks; below about 360px of panel width the pill keeps only its icon. */}
-        <StyleButton className='shrink-0 @max-[22.5rem]:px-2 @max-[22.5rem]:[&>.truncate]:hidden' />
+        <StyleButton open={styleOpen} onOpenChange={setStyleOpen} className='shrink-0 @max-[22.5rem]:px-2 @max-[22.5rem]:[&>.truncate]:hidden' />
         <Button type='button' variant='quiet' size='icon-sm' aria-label='Start a new conversation' title='New conversation' onClick={startOver} disabled={busy}>
           <Icons.add className='size-4' />
         </Button>
@@ -428,9 +426,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
       </div>
 
       <form onSubmit={onSubmit} className='relative shrink-0 px-3 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
-        {menuClosedFor !== text && (
-          <SlashCommandMenu value={text} caret={caret} anchorRef={composer} onPick={pickCommand} onDismiss={() => setMenuClosedFor(text)} />
-        )}
+        <SlashCommandMenu value={text} caret={caret} anchorRef={composer} onPick={pickCommand} onDismiss={noop} />
         <div ref={composer} className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           {agentOn && <AttachImage conversationId={conversationId} onAttached={(image) => setImages((prev) => [...prev, image].slice(-4))} disabled={busy} />}
           <textarea

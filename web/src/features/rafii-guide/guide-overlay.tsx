@@ -122,11 +122,12 @@ export function GuideOverlay() {
     if (guideStore.get().run && expected && pathname !== expected) guideStore.stop();
   }, [pathname]);
 
-  // Escape stops the guide (and only the guide: the docked panel stays open).
+  // Escape stops the guide, and only the guide. Inside Rafii's panel it stays the panel's (closing the `/` menu, say).
   useEffect(() => {
     if (!run) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.isComposing) return;
+      if (event.target instanceof Element && event.target.closest(`#${PANEL_ID}`)) return;
       event.preventDefault();
       guideStore.stop();
     };
@@ -335,6 +336,7 @@ export function GuideOverlay() {
         {showRing && rect && (
           <motion.div
             key='ring'
+            data-guide-ring=''
             aria-hidden
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -374,6 +376,7 @@ export function GuideOverlay() {
         {showCursor && (
           <motion.div
             key='cursor'
+            data-guide-cursor=''
             aria-hidden
             className='absolute top-0 left-0'
             style={{ x: cursorX, y: cursorY }}
