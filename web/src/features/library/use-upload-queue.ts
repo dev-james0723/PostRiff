@@ -7,12 +7,17 @@ import { keys, useAct } from '@/lib/api/hooks';
 import type { Snapshot } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useFlash } from '@/hooks/use-flash';
+import { fitForUpload, SAFE_SEND_BYTES, UnreadableImage } from '@/lib/image/fit-for-upload';
 
 /**
  * Uploads images one request at a time. `p2_media_upload` takes a single base64 image per call
- * (`hosted_app.py` routes it to `hosted.upload_media`), and the 12 MB body limit leaves room for one 8 MB
- * image only, so files are never combined. Each call waits for the previous one and sends the revision that
- * call returned, so a batch does not collide with itself.
+ * (`hosted_app.py` routes it to `hosted.upload_media`), so files are never combined. Each call waits for the
+ * previous one and sends the revision that call returned, so a batch does not collide with itself.
+ *
+ * The app's own body limit allows an 8 MB image (`use-library.ts` `MAX_UPLOAD_BYTES`), but Vercel Functions cap
+ * request bodies at 4.5 MB and base64 adds about a third — so anything over roughly 3.3 MB never reaches the
+ * app. Files above `SAFE_SEND_BYTES` are scaled down and re-encoded in the browser first (`fitForUpload`); the
+ * server still re-decodes, validates and re-saves every image regardless.
  *
  * Progress is per file and real: waiting → reading → sending → uploaded or failed. `fetch` does not report
  * how many bytes went out, so there is no percentage.
@@ -34,7 +39,7 @@ export interface UploadProgress {
   done: number;
 }
 
-function toBase64(file: File): Promise<string> {
+function toBase64(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.addEventListener('load', () => resolve(String(reader.result).split(',')[1] ?? ''), { once: true });
@@ -101,9 +106,15 @@ export function useUploadQueue() {
         update(next.key, { status: 'reading' });
         let data: string | null = null;
         try {
-          data = await toBase64(next.file);
-        } catch {
-          update(next.key, { status: 'failed', message: 'This file could not be read from your device.' });
+          const fitted = await fitForUpload(next.file, SAFE_SEND_BYTES);
+          if (fitted) {
+            data = await toBase64(fitted);
+          } else {
+            update(next.key, { status: 'failed', message: 'This image is too large to send, even scaled down. Try a smaller one.' });
+          }
+        } catch (error) {
+          const message = error instanceof UnreadableImage ? error.message : 'This file could not be read from your device.';
+          update(next.key, { status: 'failed', message });
         }
         if (data !== null) {
           update(next.key, { status: 'sending' });

@@ -10,12 +10,11 @@ import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
 import { voiceSession } from '@/lib/agent-runtime/voice-session';
+import { fitForUpload, SAFE_SEND_BYTES, UnreadableImage } from '@/lib/image/fit-for-upload';
 
-// Vercel Functions take request bodies up to 4.5 MB and base64 adds a third, so an image is sent at 3 MiB or less: a
-// larger photo is scaled down (long edge 2048 px, then smaller) and re-encoded here, before it leaves the browser.
+// A larger photo is scaled down (long edge 2048 px, then smaller) and re-encoded before it leaves the browser,
+// so the base64 body stays under Vercel's 4.5 MB request-body cap. See fit-for-upload.ts.
 const MAX_PICK_BYTES = 30 * 1024 * 1024;
-const MAX_SEND_BYTES = 3 * 1024 * 1024;
-const EDGES = [2048, 1600, 1200];
 
 function toBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -24,38 +23,6 @@ function toBase64(blob: Blob): Promise<string> {
     reader.addEventListener('error', () => reject(reader.error ?? new Error('The image could not be read.')));
     reader.readAsDataURL(blob);
   });
-}
-
-class UnreadableImage extends Error {}
-
-async function fitForUpload(file: File): Promise<Blob | null> {
-  if (file.size <= MAX_SEND_BYTES) return file;
-  let bitmap: ImageBitmap;
-  try {
-    // Decoded upright (camera photos carry their rotation in EXIF).
-    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
-  } catch {
-    throw new UnreadableImage('This image could not be read here. Try a PNG or JPEG exported from your photos app.');
-  }
-  try {
-    for (const edge of EDGES) {
-      const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      const context = canvas.getContext('2d');
-      if (!context) throw new UnreadableImage('This browser couldn’t scale the image down. Try a smaller one.');
-      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      // The original format first (a PNG keeps its transparency), then JPEG.
-      for (const [type, quality] of [[file.type, 0.9], ['image/jpeg', 0.85]] as const) {
-        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
-        if (blob && blob.size <= MAX_SEND_BYTES) return blob;
-      }
-    }
-    return null;
-  } finally {
-    bitmap.close();
-  }
 }
 
 export function AttachImage({ conversationId, onAttached, disabled }: { conversationId: string | null; onAttached: (image: { assetId: string; index: number | null }) => void; disabled?: boolean }) {
@@ -89,7 +56,7 @@ export function AttachImage({ conversationId, onAttached, disabled }: { conversa
     try {
       let fitted: Blob | null;
       try {
-        fitted = await fitForUpload(file);
+        fitted = await fitForUpload(file, SAFE_SEND_BYTES);
       } catch (error) {
         return fail(error instanceof UnreadableImage ? error.message : 'This image could not be prepared for sending.');
       }
