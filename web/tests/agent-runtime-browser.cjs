@@ -107,6 +107,9 @@ async function seed() {
     expectedRevision: snapshot.revision, action: 'raffi_campaign_create',
     payload: { goal: 'Autumn launch of the practice journal', audience: 'Adult piano learners returning to the instrument', facts: { product: 'Practice journal' } }
   });
+  // A person's first call opens the style picker before it starts (live agent Contract 1, voice-mode.tsx `talk`). This
+  // scene is about the call itself, so the style is chosen up front; rafii-live-agent-browser.cjs covers the picker.
+  await call('PATCH', '/api/me', { agentStyle: { preset: 'friendly', chosen: true } });
   const status = await call('GET', `/api/workspaces/${workspaceId}/agent/status`);
   return { workspaceId, status };
 }
