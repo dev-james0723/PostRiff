@@ -228,4 +228,27 @@ with connection() as db:
 assert mine == 7 and theirs == 0 and denied == [True, True, True], (mine, theirs, denied)
 checks.append("members read only their own workspace's readings; the browser role cannot write readings or owned posts, or read the usage ledger")
 
+from postriff_phase2 import insights
+with connection() as db, db.cursor() as cur:
+    endpoint = insights.insights_endpoint("threads", "p8")
+    insights.record_observations(cur, wid, CONN, "threads", "p8", "job-p8", {"views": 50, "likes": 2}, endpoint, now - 3600, read_offset="t0")
+    insights.record_observations(cur, wid, CONN, "threads", "p8", "job-p8", {"likes": 9}, endpoint, now, read_offset="1h")
+    posts = {p["providerPostId"]: p for p in insights.summary(cur, wid, [], now)["posts"]}
+    db.commit()
+p8 = posts["p8"]["metrics"]
+assert (p8["views"]["value"], p8["views"]["readOffset"]) == (50.0, "t0"), p8["views"]
+assert (p8["likes"]["value"], p8["likes"]["readOffset"]) == (9.0, "1h"), p8["likes"]
+assert p8["shares"]["availability"] == "unavailable" and p8["shares"]["value"] is None
+checks.append("analytics keep the latest available value per metric (a later reading missing it never hides it) and say which offset each value was read at")
+
+from postriff_phase2.operational_signals import snapshot
+before = snapshot(connection)["counts"]
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, "threads", "late", None, now - 1200, "backfill", (("backfill", 0),))
+    db.commit()
+after = snapshot(connection)
+assert after["counts"]["metricReadsOverdue"] == before["metricReadsOverdue"] + 1 and after["status"] == "attention", after
+assert {"metricReadsDead24h", "historyImportsFailed24h"} <= set(after["counts"]), after["counts"]
+checks.append("the cron operations snapshot counts readings overdue by 10 minutes (ids-free aggregate)")
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

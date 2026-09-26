@@ -78,7 +78,11 @@ def rate(numerator, denominator):
 
 
 def latest_observations(cur, workspace_id):
-    cur.execute("SELECT DISTINCT ON (provider,provider_post_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id FROM public.pr_metric_observations WHERE workspace_id=%s ORDER BY provider,provider_post_id,metric,observed_at DESC", (workspace_id,))
+    """Per post and metric: the latest available reading, else the latest reading. Scheduled reads (growth Phase 0)
+    take several readings per post; a later reading that lacks a metric must not hide a real earlier value.
+    The last column is the reading's offset (t0/1h/24h/7d/backfill, or None); read through to_jsonb so databases
+    without migration 032 simply return None."""
+    cur.execute("SELECT DISTINCT ON (provider,provider_post_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,to_jsonb(o)->>'read_offset' FROM public.pr_metric_observations o WHERE workspace_id=%s ORDER BY provider,provider_post_id,metric,(availability='available') DESC,observed_at DESC", (workspace_id,))
     return cur.fetchall()
 
 
@@ -86,9 +90,10 @@ def summary(cur, workspace_id, jobs, now):
     """Per-post rows with native metrics; families only group, never sum across providers."""
     rows = latest_observations(cur, workspace_id)
     posts = {}
-    for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id in rows:
+    for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset in rows:
         post = posts.setdefault((provider, post_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
-        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric}
+        # readOffset says how long after publishing this value was read; +1h and +7d values are not like-for-like.
+        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed)}
     job_index = {j.get("providerReference"): j for j in jobs if j.get("providerReference")}
     items = []
     for post in posts.values():

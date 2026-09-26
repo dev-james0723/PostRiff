@@ -232,7 +232,13 @@ class MetricScheduler:
                     counts["deferred"] = len(rows) - index
                     break
                 outcome = self.read(row, grants)
-                if not self.complete(row, outcome):
+                try:
+                    recorded = self.complete(row, outcome)
+                except Exception as error:  # noqa: BLE001 - the row stays claimed and is re-read after its lease lapses
+                    _note("metric_reads.complete_failed", error)
+                    counts["error"] = counts.get("error", 0) + 1
+                    continue
+                if not recorded:
                     continue
                 state = outcome["state"]
                 if state == "transient":

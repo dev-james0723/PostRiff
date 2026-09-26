@@ -135,6 +135,43 @@ with connection() as db:
 assert failed == ("failed", "http_401"), failed
 checks.append("a 401 fails the run instead of retrying")
 
+def fresh_run(attempts):
+    with connection() as db:
+        db.execute("UPDATE public.pr_history_imports SET status='done' WHERE status IN ('pending','running')")
+        return db.execute("INSERT INTO public.pr_history_imports(workspace_id,connection_id,provider,attempts) VALUES(%s,%s,'threads',%s) RETURNING id::text",
+                          (wid, CONN, attempts)).fetchone()[0]
+
+
+def run_state(run_id):
+    with connection() as db:
+        return db.execute("SELECT status, attempts, failure_class, pages FROM public.pr_history_imports WHERE id::text=%s", (run_id,)).fetchone()
+
+
+more = {"status": 200, "body": {"data": [{"id": "h5", "timestamp": iso(now - 7200), "text": "y"}],
+                                "paging": {"cursors": {"after": "N1"}, "next": "https://graph.threads.net/n"}}}
+run_id = fresh_run(H.MAX_ATTEMPTS - 1)                 # four earlier failures; this claim is the fifth attempt
+transport.replies = [more, {"status": 503, "body": {}}]
+assert importer.tick().get("retry") == 1
+assert run_state(run_id)[:3] == ("running", 0, "http_503"), run_state(run_id)
+checks.append("progress resets a run's attempts: a transient error right after a stored page retries instead of failing the run")
+
+run_id = fresh_run(2)
+late = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-b", monotonic=iter([0.0, 100.0, 100.0]).__next__)
+assert late.tick(max_seconds=20).get("deferred") == 1
+assert run_state(run_id)[:2] == ("running", 2), run_state(run_id)
+checks.append("a run handed back at the step's deadline keeps its attempt count")
+
+with connection() as db:
+    db.execute("UPDATE public.pr_history_imports SET lease_until=now() - interval '1 second' WHERE id::text=%s", (run_id,))
+broken = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id="hi-c")
+def explode(*args):
+    raise psycopg.errors.CheckViolation("synthetic")
+broken._store_page = explode
+transport.replies = [more]
+result = broken.tick()
+assert result["status"] == "ok" and result.get("retry") == 1 and run_state(run_id)[:3] == ("running", 3, "store"), (result, run_state(run_id))
+checks.append("a database error while storing a page retries that run from the same cursor without failing the cron step")
+
 with connection() as db, db.cursor() as cur:
     M.schedule(cur, wid, CONN, "threads", "h9", None, now, "history_import", (("backfill", 0),))
     cur.execute("INSERT INTO public.pr_owned_posts(workspace_id,connection_id,provider,provider_post_id,source) VALUES(%s,%s,'threads','h9','history_import')", (wid, CONN))
@@ -143,7 +180,7 @@ with connection() as db, db.cursor() as cur:
 with connection() as db:
     left = db.execute("SELECT (SELECT count(*) FROM public.pr_owned_posts), (SELECT count(*) FROM public.pr_metric_observations WHERE job_id IS NULL), "
                       "(SELECT status FROM public.pr_metric_reads WHERE provider_post_id='h9')").fetchone()
-assert removed == 4 and left == (0, 0, "cancelled"), (removed, left)
+assert removed == 5 and left == (0, 0, "cancelled"), (removed, left)   # h1-h3, h5 and h9
 checks.append("disconnect purges imported posts and their observations and cancels pending readings")
 
 jobs = [

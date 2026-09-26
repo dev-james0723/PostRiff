@@ -187,12 +187,15 @@ class HistoryImporter:
             found = cur.fetchone()
             return bool(found) and not found[0] and metric_schedule.analytics_direct(cur, run["workspaceId"], run["connectionId"])
 
-    def _finish(self, run, status, failure=None, backoff_seconds=None):
+    def _finish(self, run, status, failure=None, backoff_seconds=None, refund=False):
+        """Close the run, or (with backoff_seconds) hand it back keeping its cursor. `refund` returns the attempt the
+        claim took when the run was handed back without trying (deadline), so deferral never fails a run."""
         with self.connection_factory() as db, db.cursor() as cur:
             if backoff_seconds is not None:   # keep the run and its cursor; claimable again once the lease lapses
                 cur.execute("""UPDATE public.pr_history_imports SET lease_until=now() + make_interval(secs => %s), lease_owner=NULL, failure_class=%s,
-                                      updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='running'""",
-                            (backoff_seconds, failure, run["id"], self.worker_id))
+                                      attempts=CASE WHEN %s THEN greatest(0, attempts-1) ELSE attempts END, updated_at=now()
+                               WHERE id::text=%s AND lease_owner=%s AND status='running'""",
+                            (backoff_seconds, failure, refund, run["id"], self.worker_id))
             else:
                 cur.execute("""UPDATE public.pr_history_imports SET status=%s, failure_class=%s, lease_owner=NULL, lease_until=NULL, updated_at=now()
                                WHERE id::text=%s AND lease_owner=%s AND status='running'""", (status, failure, run["id"], self.worker_id))
@@ -262,8 +265,14 @@ class HistoryImporter:
             pages += 1
             oldest = min((p["publishedAt"] for p in page["posts"] if p["publishedAt"] is not None), default=None)
             done = page["next"] is None or pages >= MAX_PAGES or (oldest is not None and oldest < cutoff)
-            if self._store_page(run, page, cutoff, done) is None:
+            try:
+                stored = self._store_page(run, page, cutoff, done)
+            except Exception as error:  # noqa: BLE001 - the page's transaction rolled back; retry from the same cursor
+                metric_schedule._note("history_import.store_failed", error)
+                return self._retry(run, "store")
+            if stored is None:
                 return "lost_lease"
+            run["attempts"] = 0          # the stored page reset the run's attempts; keep the in-memory copy in step
             if done:
                 return "done"
             cursor = page["next"]
@@ -285,7 +294,7 @@ class HistoryImporter:
             counts["claimed"] = len(runs)
             for run in runs:
                 if self.monotonic() >= deadline:
-                    self._finish(run, "running", None, backoff_seconds=0)
+                    self._finish(run, "running", None, backoff_seconds=0, refund=True)
                     counts["deferred"] = counts.get("deferred", 0) + 1
                     continue
                 outcome = self.run_one(run, deadline)

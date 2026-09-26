@@ -56,6 +56,20 @@ class Read(unittest.TestCase):
             with self.subTest(reply=reply, token_error=token_error):
                 self.assertEqual(self.scheduler(reply, token_error).read(self.ROW, {})["state"], expected)
 
+    def test_a_failing_completion_does_not_stop_the_step(self):
+        s = self.scheduler({"status": 200, "body": {}})
+        rows = [dict(self.ROW, id=str(i), attempts=1, maxAttempts=5) for i in range(3)]
+        s.claim = lambda limit: rows
+        done = []
+        def complete(row, outcome):
+            if row["id"] == "0":
+                raise RuntimeError("database hiccup")
+            done.append(row["id"])
+            return True
+        s.complete = complete
+        result = s.tick()
+        self.assertEqual((result["status"], result["error"], result["done"], done), ("ok", 1, 2, ["1", "2"]))
+
     def test_grant_reused_within_a_tick(self):
         s = self.scheduler({"status": 200, "body": {}})
         calls = []

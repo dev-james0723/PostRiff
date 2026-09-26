@@ -43,9 +43,20 @@ def snapshot(connection_factory, now=None):
             delivery_backlog, delivery_dead = cur.fetchone()
         cur.execute("SELECT count(*) FROM public.pr_data_requests WHERE kind='deletion' AND status='requested'")
         deletions = cur.fetchone()[0]
+        # Growth Phase 0 queues (migration 032): readings overdue by 10 min, dead readings and failed imports in 24 h.
+        reads_overdue = reads_dead = imports_failed = 0
+        cur.execute("SELECT to_regclass('public.pr_metric_reads') IS NOT NULL AND to_regclass('public.pr_history_imports') IS NOT NULL")
+        if cur.fetchone()[0]:
+            cur.execute("""SELECT count(*) FILTER (WHERE status IN ('pending','claimed') AND due_at < to_timestamp(%s)),
+                                  count(*) FILTER (WHERE status='dead' AND updated_at > to_timestamp(%s))
+                           FROM public.pr_metric_reads""", (now-600, now-86400))
+            reads_overdue, reads_dead = cur.fetchone()
+            cur.execute("SELECT count(*) FROM public.pr_history_imports WHERE status='failed' AND updated_at > to_timestamp(%s)", (now-86400,))
+            imports_failed = cur.fetchone()[0]
     counts = dict(publicationUncertain=stuck, queueDelayed=delayed, publicationFailed=failed, publicationHeld=held,
                   modelStuck=model_stuck, researchStuck=research_stuck, costUnsettled=unsettled,
                   budgetStops=budgets, budgetWarnings=budget_warnings, billingRejected24h=billing, notificationsUnsent=notifications, deletionPending=deletions,
-                  notificationBacklog=delivery_backlog, notificationDead24h=delivery_dead)
+                  notificationBacklog=delivery_backlog, notificationDead24h=delivery_dead,
+                  metricReadsOverdue=reads_overdue, metricReadsDead24h=reads_dead, historyImportsFailed24h=imports_failed)
     return {'status':'attention' if any(counts.values()) else 'ok', 'observedAt':now, 'counts':counts,
             'notificationDelivery':'rafii_v2' if v2 else 'not_configured'}
