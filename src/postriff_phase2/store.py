@@ -14,7 +14,7 @@ from .contracts import PLANS, LIMITS, SCENARIOS, FixtureImages, FixtureSocial, d
 from .media import decode_upload
 from .content_types import apply_content_action, content_preflight, ensure_content_state, projection as content_projection
 from .outcomes import normalize_result, unknown
-from . import learning_signals as signals, locales, source_policy, channel_folders
+from . import asset_kinds, learning_signals as signals, locales, source_policy, channel_folders
 
 TERMINAL = ("verified", "failed", "canceled")
 IN_FLIGHT = ("processing", "submitting", "provider_accepted", "published", "uncertain")
@@ -385,7 +385,9 @@ class Phase2Store(Store):
         media = []
         if p.get("assetId"):
             a = find(data["assets"], p["assetId"])
-            if a["deleted"] or a["processing"] != "decoded" or not p.get("rightsConfirmed") or not clean(p.get("alt", ""), 1000):
+            if asset_kinds.kind_of(a) == "video":
+                raise AlphaError("Video posts can't be scheduled from Rafii yet.")
+            if not asset_kinds.is_postable_image(a) or not p.get("rightsConfirmed") or not clean(p.get("alt", ""), 1000):
                 raise AlphaError("Decoded media, alt text and rights confirmation are required.")
             if c["platform"] == "Instagram" and not 0.8 <= a["width"]/a["height"] <= 1.91:
                 raise AlphaError("Instagram images must have an aspect ratio between 4:5 and 1.91:1.")

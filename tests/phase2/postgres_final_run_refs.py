@@ -53,3 +53,14 @@ service.mutate(wid, 'one', latest['revision'], 'variant_edit', {'variantId': dra
 edited = next(v for v in service.get(wid, 'one')['state']['variants'] if v['id'] == draft_variant['id'])
 assert edited['proposedUpdate'] is None and edited['runRefs'] == [second] and edited['text'] == 'My reviewed words.', edited
 print('PASS: a refreshed draft keeps the refreshing run in runRefs through the edit that accepts it')
+
+# Chat-context S22: a rework by reference (a post chip in the rework role) refreshes exactly that draft and records the run.
+cid = service.ideas.create_conversation(wid, 'one', 'rework by reference')['conversationId']
+rework = service.ideas.turn(wid, 'one', cid, {'text': 'Shorten this.', 'references': [{'kind': 'post', 'id': draft_variant['id'], 'role': 'rework'}], 'destinations': destinations, 'idempotencyKey': 'refs-3'})
+assert rework['status'] == 'completed', rework
+latest = service.get(wid, 'one')
+service.ideas.apply(wid, 'one', latest['revision'], rework['runId'], rework['artifactHash'])
+slot = [v for v in service.get(wid, 'one')['state']['variants'] if v['platform'] == 'LinkedIn']
+reworked = next(v for v in slot if v['id'] == draft_variant['id'])
+assert len(slot) == 1 and reworked['proposedUpdate']['runId'] == rework['runId'] and reworked['runRefs'][-1] == rework['runId'], reworked
+print('PASS: a rework by reference proposes an update to the referenced draft and records the run in runRefs')

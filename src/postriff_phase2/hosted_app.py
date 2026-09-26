@@ -157,6 +157,17 @@ def billing_from_environment(values):
     return provider, Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", base_url or "https://postriff.invalid")
 
 
+def chat_media_from_environment(values):
+    """Chat attachments (chat-context SPEC §14.2): the three flags (all off by default), the photo/frame reader on the
+    vision route, and the video policy (its caps can only go down from Phase 1's 100 MB and 180 s)."""
+    from .agent_runtime_v2.config import RuntimeConfig
+    from .media_notes import MediaReader
+    from .video_uploads import VideoPolicy, _flag
+    flags = {"attachments": _flag(values.get("RAFII_CHAT_ATTACHMENTS_ENABLED")), "notes": _flag(values.get("RAFII_MEDIA_NOTES_ENABLED")),
+             "video": _flag(values.get("RAFII_VIDEO_UPLOADS_ENABLED"))}
+    return {"flags": flags, "reader": MediaReader(RuntimeConfig.from_environment(values), enabled=flags["notes"]), "videoPolicy": VideoPolicy.from_environment(values)}
+
+
 def runtime_from_environment(environ=None):
     from .deployment import isolated_environment
     values = isolated_environment(os.environ if environ is None else environ)
@@ -165,7 +176,7 @@ def runtime_from_environment(environ=None):
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
     secret = values.get("POSTRIFF_SUPABASE_SECRET_KEY")
     verify = supabase_verifier(project_url, publishable, database)
-    storage = PrivateAssetService(SupabaseStorage(project_url, secret))
+    storage = PrivateAssetService(SupabaseStorage(project_url, secret, video_bucket=values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video"))
     identity = SupabaseIdentityAdmin(project_url, publishable, secret)
     from .oauth import CredentialVault
     from .providers import registry_from_environment, http_transport
@@ -175,7 +186,7 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1")
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values))
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
@@ -282,6 +293,8 @@ class HostedApplication:
             return self._json(start_response, 201, ideas.credit_requests.issue(workspace_id, token, self._body(environ)))
         if resource == "credit-estimates" and len(parts) == 5 and method == "POST":
             return self._json(start_response, 200, ideas.credit_requests.estimate(workspace_id, token, self._body(environ)))
+        if resource == "media-notes" and len(parts) == 5 and method == "POST":
+            return self._json(start_response, 200, service.read_media_notes(workspace_id, token, self._body(environ)))
         if resource == "quick-start" and len(parts) == 5 and method == "POST":
             body = self._body(environ)
             return self._json(start_response, 201, ideas.quick_start(workspace_id, token, body.get("expectedRevision"), body))
@@ -360,6 +373,16 @@ class HostedApplication:
                 return self._json(start_response, 200, agent.help_document(workspace_id, token, parts[5]))
         if resource == "insights" and len(parts) == 5 and method == "GET":
             return self._json(start_response, 200, agent.insights(workspace_id, token))
+        if resource == "search" and len(parts) == 5 and method == "GET":
+            # The picker's typed queries (chat-context SPEC §5.9): q ≤ 120 characters, optional categories, limit.
+            from urllib.parse import parse_qs
+            query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+            categories = [c for c in (query.get("categories", [""])[0] or "").split(",") if c]
+            try:
+                limit = int(query.get("limit", ["8"])[0])
+            except ValueError:
+                raise AlphaError("Invalid tool input.", 400, code="tool_input") from None
+            return self._json(start_response, 200, agent.search(workspace_id, token, query.get("q", [""])[0], categories or None, limit))
         raise AlphaError("This hosted route is unavailable.", 404)
 
     def __call__(self, environ, start_response):
@@ -471,6 +494,13 @@ class HostedApplication:
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()
+                uploads = getattr(service, "video_uploads", None)
+                if uploads is not None and uploads.storage is not None:
+                    # Unfinished video uploads (expiry + 24 h): delete the object, then the row (SPEC §7.3).
+                    try:
+                        result["videoSweep"] = uploads.sweep(service.repository.connection_factory)
+                    except Exception:
+                        result["videoSweep"] = {"status": "unavailable"}
                 from .coworker import runtime as coworker_runtime
                 result["coworker"] = coworker_runtime.cron(service)
                 learning = getattr(service, "learning", None)
@@ -630,6 +660,19 @@ class HostedApplication:
             if len(parts) == 4 and parts[:3] == ["api", "auth", "sessions"] and method == "DELETE":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_session(token, parts[3]))
+            if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[4] == "videos":
+                # Chat-context SPEC §5.7: the bytes go browser → storage on a signed URL; these only begin, commit and abort.
+                uploads = service.video_uploads
+                if len(parts) == 5 and method == "POST":
+                    return self._json(start_response, 201, uploads.begin(parts[2], token, self._body(environ)))
+                if len(parts) == 7 and parts[6] == "commit" and method == "POST":
+                    return self._json(start_response, 200, uploads.commit(parts[2], token, parts[5], self._body(environ)))
+                if len(parts) == 6 and method == "DELETE":
+                    self._body(environ)
+                    return self._json(start_response, 200, uploads.abort(parts[2], token, parts[5]))
+                raise AlphaError("This hosted route is unavailable.", 404)
+            if len(parts) == 6 and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[5] == "url" and method == "GET":
+                return self._json(start_response, 200, service.video_uploads.url(parts[2], token, parts[4]))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and method == "GET":
                 raw, mime = service.media(parts[2], token, parts[4])
                 start_response("200 OK", [("Content-Type", mime), ("Content-Length", str(len(raw))), ("Cache-Control", "private, no-store"), ("X-Content-Type-Options", "nosniff")])

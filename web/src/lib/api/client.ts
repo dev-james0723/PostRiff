@@ -22,8 +22,6 @@ import type {
   Me,
   Member,
   Membership,
-  MemoryEgress,
-  MemoryFile,
   MemoryProposals,
   Message,
   ModelCatalog,
@@ -34,9 +32,18 @@ import type {
   PrivacyNotice,
   ProfileChanges,
   ProviderView,
-  ResearchEgress,
   Run,
   CreditEstimate,
+  MediaNotesBody,
+  MediaNotesCreditBody,
+  MediaNotesResult,
+  MemoryFiles,
+  PickerCategory,
+  PickerSearchResult,
+  VideoCommitBody,
+  VideoCommitResult,
+  VideoUploadBegin,
+  VideoUploadTicket,
   SecurityEvent,
   SessionInfo,
   Snapshot,
@@ -166,7 +173,7 @@ export function createApi(getToken: TokenSource) {
       blob(`${ws(w)}/channels/${encodeURIComponent(channelId)}/picture?v=${encodeURIComponent(digest)}`),
     exportDrafts: (w: string) => blob(`${ws(w)}/export`),
     exportProfile: (w: string) => blob(`${ws(w)}/profile-export`),
-    memory: (w: string) => get<{ files: MemoryFile[]; egress?: MemoryEgress; research?: ResearchEgress; learning?: LearningSummary }>(`${ws(w)}/memory`),
+    memory: (w: string) => get<MemoryFiles>(`${ws(w)}/memory`),
     /* learned preferences: proposals an owner decides, items an owner can pause or retire */
     memoryProposals: (w: string) => get<MemoryProposals>(`${ws(w)}/memory/proposals`),
     decideProposal: (w: string, id: string, body: { decision: 'remember' | 'edit' | 'dismiss' | 'post_only'; statement?: string; expectedRevision: number }) =>
@@ -239,15 +246,30 @@ export function createApi(getToken: TokenSource) {
         `${ws(w)}/ideas/runs/${encodeURIComponent(runId)}/apply`,
         { expectedRevision, artifactHash }
       ),
-    creditEstimate: (w: string, body: Record<string, unknown>) =>
+    creditEstimate: (w: string, body: Record<string, unknown> | MediaNotesCreditBody) =>
       send<CreditEstimate>('POST', `${ws(w)}/ideas/credit-estimates`, body),
-    creditQuote: (w: string, body: Record<string, unknown>) =>
+    creditQuote: (w: string, body: Record<string, unknown> | MediaNotesCreditBody) =>
       send<{ quoteId: string; maxMilliCredits: number; expiresAt: number; kind: "spending_limit" }>("POST", `${ws(w)}/ideas/credit-quotes`, body),
     quickStart: (w: string, expectedRevision: number, body: Record<string, unknown>) =>
       send<Run & { sourceId: string | null; sourcePolicy: string | null; revision: number }>('POST', `${ws(w)}/ideas/quick-start`, {
         expectedRevision,
         ...body
       }, DRAFT_TIMEOUT_MS),
+
+    /* chat attachments (chat-context SPEC §5.6–5.9); the video bytes go to storage via `upload.ts`, never here */
+    mediaNotes: (w: string, body: MediaNotesBody) => send<MediaNotesResult>('POST', `${ws(w)}/ideas/media-notes`, body),
+    beginVideoUpload: (w: string, body: VideoUploadBegin) => send<VideoUploadTicket>('POST', `${ws(w)}/media/videos`, body),
+    commitVideoUpload: (w: string, assetId: string, body: VideoCommitBody) =>
+      send<VideoCommitResult & Partial<Snapshot>>('POST', `${ws(w)}/media/videos/${encodeURIComponent(assetId)}/commit`, body),
+    abortVideoUpload: (w: string, assetId: string) =>
+      send<{ assetId: string; status: 'aborted' }>('DELETE', `${ws(w)}/media/videos/${encodeURIComponent(assetId)}`),
+    /** A short-lived signed playback URL for a video (videos only). */
+    mediaUrl: (w: string, assetId: string) =>
+      get<{ url: string; expiresAt: number; mime: string }>(`${ws(w)}/media/${encodeURIComponent(assetId)}/url`),
+    siteAgentSearch: (w: string, q: string, categories: readonly PickerCategory[] = [], limit = 8) =>
+      get<PickerSearchResult>(
+        `${ws(w)}/site-agent/search?${new URLSearchParams({ q, ...(categories.length ? { categories: categories.join(',') } : {}), limit: String(limit) })}`
+      ),
 
     /* Rafii side panel (site agent) */
     siteAgentTurn: (w: string, body: Record<string, unknown>) => send<SiteAgentTurnResult>('POST', `${ws(w)}/site-agent/turns`, body),

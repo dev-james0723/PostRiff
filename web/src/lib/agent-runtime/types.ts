@@ -88,7 +88,8 @@ export interface AgentTurnRequest {
   conversationId?: string | null;
   modality: Modality;
   pageContext?: SiteAgentPageContext;
-  attachments?: { assetId: string }[];
+  /** A role-less attachment means `reference` on the server (chat-context SPEC §9); the panel always sends it. */
+  attachments?: { assetId: string; role?: 'post' | 'reference' }[];
   timeZone?: string;
   locale?: string;
   model?: string;

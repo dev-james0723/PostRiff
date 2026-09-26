@@ -6,7 +6,7 @@ import { ExpandedPreviewDialog } from '@/components/application/post-preview/exp
 import { previewFromDraft } from '@/components/application/post-preview/draft-preview';
 import { PreviewDeck, type DeckItem } from '@/components/application/post-preview/preview-deck';
 import { PreviewDock, type DockItem } from '@/components/application/post-preview/preview-dock';
-import type { PreviewPost } from '@/components/application/post-preview/types';
+import type { PreviewMedia, PreviewPost } from '@/components/application/post-preview/types';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,8 @@ import type { Destination } from '@/lib/api/types';
 import { languageLabel } from '@/lib/locales';
 import { cn } from '@/lib/utils';
 import type { GeneratedItem, useHomeGeneration } from './use-home-generation';
+import { useRunPreviewMedia } from '@/components/application/post-preview/use-preview-post';
+import { reportFrom, UsedThisTime } from '@/features/agent/used-this-time';
 
 /** Sample copy for the idle deck; always labelled as a sample, never presented as a draft. */
 const SAMPLE_TEXT = 'One thought, shaped for every place you post.';
@@ -36,8 +38,8 @@ function dockName(target: PreviewTarget, all: PreviewTarget[]) {
   return shared && target.account ? target.account : target.platform;
 }
 
-function toPost(target: PreviewTarget, text: string, publishAt: Date, timeZone: string, fallbackAccount: string): PreviewPost {
-  return previewFromDraft({ platform: target.platform, text, account: target.account ?? fallbackAccount, channelId: target.channelId, publishAt, timeZone });
+function toPost(target: PreviewTarget, text: string, publishAt: Date, timeZone: string, fallbackAccount: string, media?: PreviewMedia[]): PreviewPost {
+  return previewFromDraft({ platform: target.platform, text, account: target.account ?? fallbackAccount, channelId: target.channelId, publishAt, timeZone, media });
 }
 
 function Caption({ target, sample }: { target: PreviewTarget; sample?: boolean }) {
@@ -110,9 +112,13 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
   const { items, running, completed, applied, saving, saved, failure, error, busy } = generation;
   const ready = items.filter((item) => item.status === 'ready');
   const targets: PreviewTarget[] = items.map((item) => item.destination);
+  // What the chips on the message did, from the server's report only (never the client's chips), and the post media
+  // the run recorded, drawn in every preview (chat-context SPEC §4.8, §5.10).
+  const report = reportFrom(generation.run?.usage);
+  const media = useRunPreviewMedia(generation.run?.artifact?.media);
   const deck = useMemo<DeckItem[]>(
-    () => ready.map((item) => ({ key: item.key, post: toPost(item.destination, item.edited ?? item.text, openedAt, timeZone, speaker), caption: <Caption target={item.destination} /> })),
-    [ready, openedAt, timeZone, speaker]
+    () => ready.map((item) => ({ key: item.key, post: toPost(item.destination, item.edited ?? item.text, openedAt, timeZone, speaker, media), caption: <Caption target={item.destination} /> })),
+    [ready, openedAt, timeZone, speaker, media]
   );
   const dock = useMemo<DockItem[]>(
     () => items.map((item) => ({ key: item.key, channel: channelByPlatform(item.destination.platform)?.slug ?? item.destination.platform.toLowerCase(), name: dockName(item.destination, targets), status: item.status === 'ready' ? undefined : item.status === 'failed' || item.status === 'cancelled' ? 'error' : 'pending', label: `${item.destination.platform}${item.destination.account ? ` · ${item.destination.account}` : ''}, ${STATUS_COPY[item.status]}` })),
@@ -150,6 +156,7 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
       <p role='status' aria-live='polite' className='text-muted-foreground text-sm'>
         {status}
       </p>
+      <UsedThisTime report={report} pending={running || busy} />
       {notStarted ? (
         <StateMessage kind='error' title='Couldn’t start the drafts' description={error} action={<Button variant='glass' size='control' onClick={onDraftAgain}>Try again</Button>} />
       ) : (

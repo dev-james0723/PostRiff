@@ -34,6 +34,8 @@ ACTION_CLASSES = {
     "research_egress": "owner",
     # The workspace default writer (Auto) decides which AI provider receives everyone's cloud-allowed sources.
     "writer_defaults": "owner",
+    # Whether workspace photos and video frames may be shown to a model (chat-context SPEC §8.1).
+    "media_egress": "owner",
     # Accepting or undoing a learned preference changes how every member's drafts read (design decision D);
     # approving the voice profile itself changes them just as much, so it is an owner decision too.
     "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner", "you_restore_voice": "owner",

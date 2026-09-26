@@ -1,0 +1,20 @@
+{
+  "schema": "rafii.chip-labels.v1",
+  "note": "Shared label vectors for turn_references.label_for and web/src/features/agent/attachments/chips.ts (SPEC §6.9).",
+  "vectors": [
+    {"name": "post first non-empty line", "kind": "post", "record": {"text": "\n  \nSpring concert   is  here\nsecond line", "platform": "LinkedIn"}, "expect": "Spring concert is here"},
+    {"name": "post clipped to 24 code points", "kind": "post", "record": {"text": "abcdefghijklmnopqrstuvwxyz0123", "platform": "X"}, "expect": "abcdefghijklmnopqrstuvwx"},
+    {"name": "post CJK", "kind": "post", "record": {"text": "春季演奏會：五月三日晚上八時於香港大會堂音樂廳舉行，歡迎各位", "platform": "Instagram"}, "expect": "春季演奏會：五月三日晚上八時於香港大會堂音樂廳舉"},
+    {"name": "post astral emoji counts as one code point", "kind": "post", "record": {"text": "🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹", "platform": "Threads"}, "expect": "🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹🎹"},
+    {"name": "post trailing ZWJ stripped at the cut", "kind": "post", "record": {"text": "abcdefghijklmnopqrstuvw👩‍👩", "platform": "X"}, "expect": "abcdefghijklmnopqrstuvw👩"},
+    {"name": "post trailing variation selector stripped", "kind": "post", "record": {"text": "Hello ❤️", "platform": "X"}, "expect": "Hello ❤"},
+    {"name": "post empty falls back to platform", "kind": "post", "record": {"text": "  \n ", "platform": "LinkedIn"}, "expect": "LinkedIn draft"},
+    {"name": "template name clipped to 40", "kind": "template", "record": {"name": "Concert announcement for the whole spring season 2027"}, "expect": "Concert announcement for the whole sprin"},
+    {"name": "source title", "kind": "source", "record": {"title": "Programme notes"}, "expect": "Programme notes"},
+    {"name": "folder name", "kind": "folder", "record": {"name": "  Clients   HK "}, "expect": "Clients HK"},
+    {"name": "account", "kind": "account", "record": {"platform": "Instagram", "account": "@dfestival.hk"}, "expect": "Instagram · @dfestival.hk"},
+    {"name": "account clipped to 40", "kind": "account", "record": {"platform": "LinkedIn", "account": "Hong Kong Fantasia International Music Management"}, "expect": "LinkedIn · Hong Kong Fantasia Internatio"},
+    {"name": "photo slot", "kind": "image", "record": {}, "slot": "B", "expect": "Photo B"},
+    {"name": "video slot", "kind": "video", "record": {}, "slot": "A", "expect": "Video A"}
+  ]
+}

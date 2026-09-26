@@ -73,6 +73,8 @@ _DEFINITIONS = (
       "only": {"type": "string", "maxLength": 20}}, ()),
     ("record.attribution", "read", "Who acted on one post, draft or automation, from its stored records.",
      {"type": {"type": "string", "maxLength": 40}, "id": {"type": "string", "pattern": _ID}}, ("type", "id")),
+    ("workspace.search", "read", "Find posts, templates, accounts, folders, sources and Library photos or videos to add to a message.",
+     {"query": {"type": "string", "maxLength": 120}, "categories": {"type": "array"}, "limit": {"type": "number"}}, ()),
     ("campaign.membership", "read", "The campaigns a draft or post belongs to: linked by a person, or made by the campaign's automation.",
      {"type": {"type": "string", "maxLength": 40}, "id": {"type": "string", "pattern": _ID}}, ("type", "id")),
 )
@@ -173,7 +175,7 @@ LABELS = {
     "calendar.range": "Read the calendar", "campaign.list": "Listed your campaigns", "campaign.get": "Read the campaign", "reviews.list": "Checked reviews and returns",
     "publishing.summary": "Checked publishing results", "attention.summary": "Checked what needs attention", "entity.status": "Read the selected item",
     "voice.check": "Compared the text with your voice", "member.activity": "Read who did what", "record.attribution": "Read who acted on this",
-    "campaign.membership": "Checked which campaigns it belongs to",
+    "campaign.membership": "Checked which campaigns it belongs to", "workspace.search": "Searched items to add to a message",
 }
 
 # --- redaction ---------------------------------------------------------------------------------------------------------
@@ -575,5 +577,6 @@ EXECUTORS.update({
     "campaign.list": reads.campaign_list, "campaign.get": reads.campaign_get, "reviews.list": reads.reviews_list, "publishing.summary": reads.publishing_summary,
     "attention.summary": reads.attention_summary, "entity.status": reads.entity_status, "voice.check": reads.voice_check, "member.activity": reads.member_activity,
     "record.attribution": reads.record_attribution, "campaign.membership": reads.campaign_membership,
+    "workspace.search": reads.picker_search,
 })
 assert set(EXECUTORS) == set(CATALOG)

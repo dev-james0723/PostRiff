@@ -50,6 +50,7 @@ import { DraftsPanel, useDraftCount } from '@/features/pipeline/drafts-panel';
 import { StatusChip } from './status-chip';
 import { useElementWidth, useWide } from './use-wide';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
+import { isPostableImage } from '@/lib/media/asset-kinds';
 
 /** How often the snapshot refreshes while a job is with the provider or about to be picked up. */
 const LIVE_REFRESH_MS = 15_000;
@@ -487,7 +488,7 @@ function Queue() {
   useEffect(() => {
     if (!params.asset || !snapshot.data || !access.hasWorkspace) return;
     const assetId = params.asset;
-    if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && !asset.deleted)) {
+    if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && isPostableImage(asset))) {
       setScheduling((previous) => ({ open: true, variantId: null, assetId, key: previous.key + 1 }));
     } else {
       toast.error(canSchedule ? 'This image is gone.' : 'Only approvers can prepare posts.');

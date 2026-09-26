@@ -9,8 +9,8 @@ import { LoadingButton } from '@/components/ui/loading-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Panel, StatusChip } from '@/features/workspace/rafii-parts';
 import { ApiError } from '@/lib/api/client';
-import { useAct, useInvalidate, useMembers, useMemory, useSnapshot } from '@/lib/api/hooks';
-import type { MemoryEgress, ResearchEgress } from '@/lib/api/types';
+import { useAct, useInvalidate, useMembers, useMemory, useModels, useSnapshot } from '@/lib/api/hooks';
+import type { MediaConsent, MemoryEgress, ResearchEgress } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { memoryFileLabel } from './memory-files';
 import { formatDate } from '@/lib/time';
@@ -256,12 +256,89 @@ function ResearchRow({ research, isOwner }: { research: ResearchEgress | undefin
 }
 
 /**
+ * The owner's confirmation for photo and video reading (chat-context SPEC §8.1, §13). Names the processors from the
+ * server, says it applies to everyone and that notes are kept; turning it off deletes the notes. Also opened from a
+ * chip (S26), so it is exported.
+ */
+export function MediaConsentConfirm({ open, allow, pending, media, creditMode = false, onConfirm, onClose }: { open: boolean; allow: boolean; pending: boolean; media: MediaConsent | undefined; creditMode?: boolean; onConfirm: () => void; onClose: () => void }) {
+  const vision = media?.current.vision?.label ?? 'the photo reader';
+  const image = media?.current.image?.label ?? 'the image editor';
+  return (
+    <ConfirmChoice
+      open={open}
+      pending={pending}
+      title={allow ? 'Allow Rafii to look at photos and videos?' : 'Turn off photo reading?'}
+      description={
+        allow
+          ? `This applies to everyone in this workspace. Photos and video frames marked Reference are sent to ${vision} to describe them, and Rafii's notes are shared with the writer you choose. Photos you ask Rafii to edit are sent to ${image}. Notes are kept with each photo until you turn this off.${creditMode ? ' Each read uses credits.' : ''}`
+          : 'Rafii stops looking at photos and videos and deletes the notes it kept.'
+      }
+      confirmLabel={allow ? 'Allow' : 'Turn off'}
+      cancelLabel='Cancel'
+      onConfirm={onConfirm}
+      onClose={onClose}
+    />
+  );
+}
+
+function MediaRow({ media, isOwner }: { media: MediaConsent | undefined; isOwner: boolean }) {
+  const snapshot = useSnapshot();
+  const act = useAct();
+  const invalidate = useInvalidate();
+  const saveError = useSaveError();
+  const decidedLine = useDecidedLine(media?.decidedAt ?? null, media?.decidedBy ?? null, isOwner);
+  const choice = useConfirmedChoice();
+
+  if (!media) {
+    return <AccessRow title='Photos and videos' status='warning' badge='Unavailable' description='Couldn’t load this setting.' />;
+  }
+  // A new reader needs the owner's OK again; until then nothing is sent, so the row reads Off.
+  const allowed = media.cloud && !media.reconfirm;
+
+  // Sent only from the dialog's confirm button, after the owner has read what is sent and to whom.
+  function decide(cloud: boolean) {
+    act.mutate(
+      { revision: snapshot.data?.revision ?? 0, action: 'media_egress', payload: { cloud, confirmed: true } },
+      {
+        onSuccess: () => {
+          choice.close();
+          invalidate('memory');
+        },
+        onError: (err) => {
+          choice.close();
+          saveError(err, 'The photo reading choice could not be saved.');
+        }
+      }
+    );
+  }
+
+  const pendingNew = media.cloud && media.reconfirm ? 'The workspace owner needs to allow the new photo reader.' : null;
+  const note = [pendingNew, isOwner ? null : 'Only an owner can change this.', decidedLine].filter(Boolean).join(' ') || null;
+  return (
+    <>
+      <AccessRow
+        title='Photos and videos'
+        status={allowed ? 'success' : 'neutral'}
+        badge={allowed ? 'Allowed' : 'Off'}
+        description='Let Rafii look at photos and videos you attach, to write about what’s in them.'
+        note={note}
+        control={<Switch checked={allowed} disabled={!isOwner || act.isPending || !snapshot.data} onCheckedChange={choice.ask} ariaLabel='Let Rafii look at photos and videos you attach' label='Allow' />}
+      />
+      {isOwner && <MediaConsentConfirm open={choice.open} allow={choice.requested} pending={act.isPending} media={media} onConfirm={() => decide(choice.requested)} onClose={choice.close} />}
+    </>
+  );
+}
+
+/**
  * Who reads the memory files besides routes on the person's own machine: the cloud model and web research,
  * each an owner decision with its real state and consequence. A setting the API leaves out reads Unavailable, never Off.
  */
 export function AccessCard({ className }: { className?: string }) {
   const memory = useMemory();
+  const models = useModels();
   const isOwner = checkAccess(useWorkspaceAccess(), { permission: 'owner' });
+  // Photo reading shows only where it can work (SPEC §5.11: route configured, priced and the flag on).
+  const mediaAvailable = Boolean(models.data?.attachments?.notes.available);
 
   return (
     <Panel
@@ -277,6 +354,7 @@ export function AccessCard({ className }: { className?: string }) {
         <>
           <CloudRow egress={memory.data.egress} isOwner={isOwner} />
           <ResearchRow research={memory.data.research} isOwner={isOwner} />
+          {mediaAvailable && <MediaRow media={memory.data.media} isOwner={isOwner} />}
         </>
       ) : memory.isLoading ? (
         <div className='flex flex-col gap-2' role='status' aria-label='Loading access settings'>

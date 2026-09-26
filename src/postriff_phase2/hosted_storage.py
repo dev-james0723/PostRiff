@@ -1,7 +1,10 @@
-"""Private Supabase Storage boundary for decoded Phase 2 media.
+"""Private Supabase Storage boundary for decoded Phase 2 media and verified chat videos.
 
 The service key is held by this server-side adapter and is never returned in a
-descriptor, state snapshot, object URL, or error. Browser uploads are absent.
+descriptor, state snapshot, object URL, or error. Every request goes to the
+configured project host through an opener that never follows a redirect, because
+CPython's redirect handler would forward the key (chat-context SPEC §7.4). The only
+browser upload is a video PUT to a signed, single-object URL minted here.
 """
 import base64
 import json
@@ -9,7 +12,7 @@ import re
 import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from postriff_alpha.domain import AlphaError
 from .media import decode_upload
@@ -17,40 +20,70 @@ from .media import decode_upload
 
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.jpg")
+VIDEO_OBJECT = re.compile(r"[0-9a-f]{32}\.(mp4|mov)")
+MAX_BODY = 8 * 1024 * 1024
+LIST_PAGE = 100
+LIST_PAGES = 200
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    """A 30x surfaces as an HTTPError with its own status; nothing is re-sent anywhere."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def storage_opener(context=None):
+    return build_opener(_NoRedirect(), HTTPSHandler(context=context or ssl.create_default_context()))
 
 
 class SupabaseStorage:
-    def __init__(self, project_url, secret_key, *, bucket="postriff-private", send=None):
+    def __init__(self, project_url, secret_key, *, bucket="postriff-private", video_bucket="postriff-video", send=None, opener=None):
         parsed = urlparse(project_url)
         if parsed.scheme != "https" or not parsed.hostname or not parsed.hostname.endswith(".supabase.co") or parsed.path not in ("", "/"):
             raise ValueError("An exact Supabase project URL is required.")
         if not isinstance(secret_key, str) or len(secret_key) < 20:
             raise ValueError("A server-only Supabase secret key is required.")
-        if not re.fullmatch(r"[a-z0-9-]{3,63}", bucket):
+        if not re.fullmatch(r"[a-z0-9-]{3,63}", bucket) or not re.fullmatch(r"[a-z0-9-]{3,63}", video_bucket):
             raise ValueError("Use a valid private bucket name.")
         self.project_url = project_url.rstrip("/")
+        self.host = parsed.hostname
         self.secret_key = secret_key
         self.bucket = bucket
+        self.video_bucket = video_bucket
+        self.opener = opener or storage_opener()
         self.send = send or self._send
 
+    def _open(self, method, url, headers, body):
+        if urlparse(url).scheme != "https" or urlparse(url).hostname != self.host:
+            raise AlphaError("Private storage is temporarily unavailable.", 503)
+        return self.opener.open(Request(url, data=body, headers=headers, method=method), timeout=20)
+
     def _send(self, method, url, headers, body):
-        request = Request(url, data=body, headers=headers, method=method)
         try:
-            with urlopen(request, timeout=20, context=ssl.create_default_context()) as response:
-                data = response.read(9 * 1024 * 1024)
-                if len(data) > 8 * 1024 * 1024:
+            with self._open(method, url, headers, body) as response:
+                data = response.read(MAX_BODY + 1)
+                if len(data) > MAX_BODY:
                     raise AlphaError("Storage response exceeded the safe size limit.", 502)
                 return response.status, dict(response.headers), data
         except HTTPError as error:
             error.read(65536)
+            if 300 <= error.code < 400:
+                raise AlphaError("Private storage answered from an unexpected location.", 502) from None
             return error.code, dict(error.headers), b""
         except (URLError, TimeoutError, OSError) as error:
             raise AlphaError("Private storage is temporarily unavailable.", 503) from error
 
+    def _bucket(self, category):
+        return self.video_bucket if category == "video" else self.bucket
+
     def _path(self, workspace_id, category, object_name):
-        if not UUID.fullmatch(str(workspace_id)) or category not in ("media", "artwork") or not OBJECT.fullmatch(object_name):
+        pattern = VIDEO_OBJECT if category == "video" else OBJECT if category in ("media", "artwork") else None
+        if not UUID.fullmatch(str(workspace_id)) or pattern is None or not isinstance(object_name, str) or not pattern.fullmatch(object_name):
             raise AlphaError("Invalid private object location.")
         return f"{workspace_id}/{category}/{object_name}"
+
+    def _object_url(self, category, path):
+        return f"{self.project_url}/storage/v1/object/{quote(self._bucket(category))}/{quote(path, safe='/')}"
 
     def _headers(self, content_type=None):
         headers = {"Authorization": "Bearer " + self.secret_key, "apikey": self.secret_key}
@@ -59,6 +92,8 @@ class SupabaseStorage:
         return headers
 
     def put_immutable(self, workspace_id, category, object_name, raw, content_type="image/jpeg"):
+        if category == "video":
+            raise AlphaError("Invalid private object location.")   # videos arrive only through a signed upload
         path = self._path(workspace_id, category, object_name)
         if not isinstance(raw, bytes) or not 1 <= len(raw) <= 8 * 1024 * 1024:
             raise AlphaError("Decoded media is missing or too large.")
@@ -73,8 +108,10 @@ class SupabaseStorage:
         return path
 
     def get(self, workspace_id, category, object_name):
+        if category == "video":
+            raise AlphaError("Invalid private object location.")   # video bytes never pass through a function
         path = self._path(workspace_id, category, object_name)
-        url = f"{self.project_url}/storage/v1/object/{quote(self.bucket)}/{quote(path, safe='/')}"
+        url = self._object_url(category, path)
         status, _, body = self.send("GET", url, self._headers(), None)
         if status == 404:
             raise AlphaError("This private media object is unavailable.", 404)
@@ -84,7 +121,7 @@ class SupabaseStorage:
 
     def delete(self, workspace_id, category, object_name):
         path = self._path(workspace_id, category, object_name)
-        url = f"{self.project_url}/storage/v1/object/{quote(self.bucket)}/{quote(path, safe='/')}"
+        url = self._object_url(category, path)
         status, _, _ = self.send("DELETE", url, self._headers(), None)
         if status not in (200, 204, 404):
             raise AlphaError("Private storage could not delete this object.", 502)
@@ -93,15 +130,115 @@ class SupabaseStorage:
         if type(expires_in) is not int or not 60 <= expires_in <= 600:
             raise AlphaError("Use a short-lived media delivery window.")
         path = self._path(workspace_id, category, object_name)
-        url = f"{self.project_url}/storage/v1/object/sign/{quote(self.bucket)}/{quote(path, safe='/')}"
+        url = f"{self.project_url}/storage/v1/object/sign/{quote(self._bucket(category))}/{quote(path, safe='/')}"
         status, _, body = self.send("POST", url, self._headers("application/json"), json.dumps({"expiresIn": expires_in}).encode())
         try:
             signed = json.loads(body).get("signedURL") if status == 200 else None
         except (ValueError, TypeError):
             signed = None
-        if not isinstance(signed, str) or not signed.startswith("/storage/v1/object/sign/"):
+        if not isinstance(signed, str) or not signed.startswith(f"/storage/v1/object/sign/{quote(self._bucket(category))}/"):
             raise AlphaError("Private storage did not create a safe delivery URL.", 502)
         return self.project_url + signed
+
+    # --- chat videos (SPEC §7.3, §7.4) ------------------------------------------------------------------
+
+    def signed_upload_url(self, workspace_id, category, object_name):
+        """A single-object upload URL for the browser's PUT. No `x-upsert`: an existing object can't be replaced."""
+        path = self._path(workspace_id, category, object_name)
+        bucket = self._bucket(category)
+        url = f"{self.project_url}/storage/v1/object/upload/sign/{quote(bucket)}/{quote(path, safe='/')}"
+        status, _, body = self.send("POST", url, self._headers("application/json"), b"{}")
+        try:
+            signed = json.loads(body).get("url") if status == 200 else None
+        except (ValueError, TypeError, AttributeError):
+            signed = None
+        expected = f"/object/upload/sign/{quote(bucket)}/{quote(path, safe='/')}?"
+        if isinstance(signed, str) and signed.startswith("/storage/v1" + expected):
+            signed = signed[len("/storage/v1"):]
+        if not isinstance(signed, str) or not signed.startswith(expected) or "token=" not in signed or "#" in signed:
+            raise AlphaError("Private storage did not create a safe upload URL.", 502)
+        return f"{self.project_url}/storage/v1{signed}"
+
+    def object_info(self, workspace_id, category, object_name):
+        path = self._path(workspace_id, category, object_name)
+        status, headers, _ = self.send("HEAD", self._object_url(category, path), self._headers(), None)
+        if status == 404 or status == 400:
+            raise AlphaError("This private media object is unavailable.", 404)
+        if status != 200:
+            raise AlphaError("Private storage could not read this object.", 502)
+        found = {k.lower(): v for k, v in (headers or {}).items()}
+        try:
+            size = int(found.get("content-length"))
+        except (TypeError, ValueError):
+            size = None
+        return {"bytes": size, "mime": (found.get("content-type") or "").split(";")[0].strip().lower() or None, "etag": found.get("etag")}
+
+    def read_range(self, workspace_id, category, object_name, start, length):
+        """At most `length` bytes from `start`, read with the no-redirect opener and closed early even when storage
+        ignores Range and answers 200 (then `ranged` is False)."""
+        if type(start) is not int or type(length) is not int or start < 0 or not 1 <= length <= MAX_BODY:
+            raise AlphaError("Invalid private object range.")
+        path = self._path(workspace_id, category, object_name)
+        headers = {**self._headers(), "Range": f"bytes={start}-{start + length - 1}"}
+        try:
+            response = self._open("GET", self._object_url(category, path), headers, None)
+        except HTTPError as error:
+            error.close()
+            if error.code == 404 or error.code == 400:
+                raise AlphaError("This private media object is unavailable.", 404) from None
+            if error.code == 416:
+                return {"data": b"", "ranged": True}
+            raise AlphaError("Private storage could not read this object.", 502) from None
+        except (URLError, TimeoutError, OSError) as error:
+            raise AlphaError("Private storage is temporarily unavailable.", 503) from error
+        try:
+            ranged = response.status == 206
+            if response.status not in (200, 206):
+                raise AlphaError("Private storage could not read this object.", 502)
+            data = response.read(length) if ranged or start == 0 else b""
+            return {"data": data[:length], "ranged": ranged}
+        finally:
+            response.close()
+
+    def bucket_info(self, bucket=None):
+        name = bucket or self.video_bucket
+        status, _, body = self.send("GET", f"{self.project_url}/storage/v1/bucket/{quote(name)}", self._headers(), None)
+        if status in (400, 404):
+            return None
+        if status != 200:
+            raise AlphaError("Private storage is temporarily unavailable.", 503)
+        try:
+            found = json.loads(body)
+        except (ValueError, TypeError):
+            raise AlphaError("Private storage is temporarily unavailable.", 503) from None
+        if not isinstance(found, dict):
+            raise AlphaError("Private storage is temporarily unavailable.", 503)
+        return {"id": found.get("id") or found.get("name"), "public": found.get("public") is True,
+                "fileSizeLimit": found.get("file_size_limit"), "allowedMimeTypes": list(found.get("allowed_mime_types") or [])}
+
+    def list_prefix(self, prefix, bucket=None):
+        """Every object name under `{workspace}/{category}/` (paginated, bounded)."""
+        parts = str(prefix).strip("/").split("/")
+        if not UUID.fullmatch(parts[0]) or len(parts) > 2 or (len(parts) == 2 and parts[1] not in ("media", "artwork", "video")):
+            raise AlphaError("Invalid private object location.")
+        folder = "/".join(parts)
+        name = bucket or (self.video_bucket if parts[-1] == "video" else self.bucket)
+        found = []
+        for page in range(LIST_PAGES):
+            body = json.dumps({"prefix": folder, "limit": LIST_PAGE, "offset": page * LIST_PAGE, "sortBy": {"column": "name", "order": "asc"}}).encode()
+            status, _, raw = self.send("POST", f"{self.project_url}/storage/v1/object/list/{quote(name)}", self._headers("application/json"), body)
+            if status != 200:
+                raise AlphaError("Private storage is temporarily unavailable.", 503)
+            try:
+                items = json.loads(raw)
+            except (ValueError, TypeError):
+                raise AlphaError("Private storage is temporarily unavailable.", 503) from None
+            if not isinstance(items, list):
+                raise AlphaError("Private storage is temporarily unavailable.", 503)
+            found += [f"{folder}/{item['name']}" for item in items if isinstance(item, dict) and isinstance(item.get("name"), str) and "/" not in item["name"]]
+            if len(items) < LIST_PAGE:
+                return found
+        raise AlphaError("Private storage listing is too large.", 503)
 
 
 class PrivateAssetService:
@@ -120,6 +257,14 @@ class PrivateAssetService:
         return asset
 
     def remove(self, workspace_id, asset):
+        """Kind-aware: a video removes its video object, then its poster and frames (media category). 404 is success."""
+        from .asset_kinds import kind_of
         object_name = asset.get("objectName")
-        if object_name:
+        if kind_of(asset) == "video":
+            if object_name:
+                self.storage.delete(workspace_id, "video", object_name)
+            images = [asset.get("poster")] + list(asset.get("frames") or [])
+            for name in dict.fromkeys(i.get("objectName") for i in images if isinstance(i, dict) and i.get("objectName")):
+                self.storage.delete(workspace_id, "media", name)
+        elif object_name:
             self.storage.delete(workspace_id, "media", object_name)

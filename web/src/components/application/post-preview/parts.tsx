@@ -267,7 +267,7 @@ export function MediaFill({
       </div>
     );
   }
-  if (media.kind === 'video') return <VideoFill url={media.url} alt={media.alt} className={box} style={boxStyle} />;
+  if (media.kind === 'video') return <VideoFill url={media.url} poster={media.poster} alt={media.alt} className={box} style={boxStyle} />;
   return (
     <div ref={ref} className={box} style={boxStyle}>
       <Image
@@ -291,7 +291,7 @@ export function MediaFill({
 }
 
 /** A muted, looping video: click plays or pauses it, as does the play control under the phone. */
-function VideoFill({ url, alt, className, style }: { url: string; alt: string; className: string; style: CSSProperties }) {
+function VideoFill({ url, poster, alt, className, style }: { url: string; poster?: string; alt: string; className: string; style: CSSProperties }) {
   const playback = usePlayback();
   const active = useContext(SlideContext);
   const ref = useRef<HTMLVideoElement>(null);
@@ -309,7 +309,7 @@ function VideoFill({ url, alt, className, style }: { url: string; alt: string; c
 
   return (
     <div className={className} style={style}>
-      <video ref={ref} src={`${url}#t=0.1`} aria-label={alt || 'Video'} muted loop playsInline preload='metadata' className='absolute inset-0 size-full object-cover' />
+      <video ref={ref} src={`${url}#t=0.1`} poster={poster} aria-label={alt || 'Video'} muted loop playsInline preload='metadata' className='absolute inset-0 size-full object-cover' />
       {playback && (
         <button
           type='button'

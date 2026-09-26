@@ -141,9 +141,13 @@ class DevProvider:
 
 
 class DevAssets:
-    """In-memory private media boundary for the synthetic harness."""
+    """In-memory private media boundary for the synthetic harness, with the video bucket's calls (chat-context SPEC §7.3):
+    the browser PUTs video bytes to a Supabase-shaped signed URL, which the browser scene forwards to `PUT /dev/upload/{token}`."""
+    VIDEO_BUCKET = "postriff-video"
+
     def __init__(self):
         self.objects = {}
+        self.uploads = {}   # token → (workspace id, object name)
         self.storage = self
 
     def signed_url(self, wid, kind, name, ttl=300):
@@ -165,7 +169,58 @@ class DevAssets:
         return raw
 
     def remove(self, workspace_id, asset):
-        self.objects.pop((workspace_id, "media", asset.get("objectName")), None)
+        from postriff_phase2.hosted_storage import PrivateAssetService
+        PrivateAssetService.remove(self, workspace_id, asset)   # the real kind-aware removal (video, poster, frames)
+
+    # --- the video bucket, in memory -------------------------------------------------------------------------------------
+    def bucket_info(self, bucket=None):
+        return {"id": bucket or self.VIDEO_BUCKET, "public": False, "fileSizeLimit": 100_000_000, "allowedMimeTypes": ["video/mp4", "video/quicktime"]}
+
+    def signed_upload_url(self, workspace_id, category, object_name):
+        token = uuid.uuid4().hex
+        self.uploads[token] = (workspace_id, object_name)
+        return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{self.VIDEO_BUCKET}/{workspace_id}/video/{object_name}?token={token}"
+
+    def receive_upload(self, token, raw, mime):
+        target = self.uploads.pop(token, None)
+        if target is None or not raw:
+            return False
+        workspace_id, object_name = target
+        if (workspace_id, "video", object_name) in self.objects:
+            return False   # no upsert, like the real signed upload
+        self.objects[(workspace_id, "video", object_name)] = raw
+        self.objects[("mime", workspace_id, object_name)] = mime
+        return True
+
+    def object_info(self, workspace_id, category, object_name):
+        raw = self.get(workspace_id, category, object_name)
+        return {"bytes": len(raw), "mime": self.objects.get(("mime", workspace_id, object_name)) or "video/mp4", "etag": hashlib.sha256(raw).hexdigest()[:16]}
+
+    def read_range(self, workspace_id, category, object_name, start, length):
+        return {"data": self.get(workspace_id, category, object_name)[start:start + length], "ranged": True}
+
+    def delete(self, workspace_id, category, object_name):
+        self.objects.pop((workspace_id, category, object_name), None)
+
+    def list_prefix(self, prefix, bucket=None):
+        workspace_id = prefix.split("/", 1)[0]
+        return [f"{workspace_id}/video/{name}" for (ws, category, name) in list(self.objects) if ws == workspace_id and category == "video"]
+
+
+class DevMediaReader:
+    """Canned photo/frame notes for the harness (provenance fixture, cost 0): no vision provider is ever called."""
+    available = True
+
+    def processor(self):
+        return {"id": "dev-fixture:vision", "label": "Local fixture reader"}
+
+    def estimate(self, kind, frames=1):
+        return {"typicalUsdMicro": 0, "ceilingUsdMicro": 0, "model": "dev-fixture-vision", "provider": "dev-fixture"}
+
+    def read(self, images, kind, timeout=None):
+        what = f"{len(images)} video frame(s)" if kind == "video_frames" else "a photo"
+        return {"text": f"Fixture note for {what}: a warm, well-lit scene with one clear subject. (Local harness; no model looked at it.)",
+                "model": "dev-fixture-vision", "provider": "dev-fixture", "costUsdMicro": 0, "usage": {"inputTokens": 0, "outputTokens": 0}, "latencyMs": 1}
 
 
 class DevImageRuntime:
@@ -225,7 +280,10 @@ def main():
     # The web app labels a dev identity `dev-<first 8 of the uuid>@postriff.invalid`; the same address
     # here lets invitations addressed to it show up on the profile. Nothing is ever sent (NullTransport).
     dev_assets = DevAssets()
-    service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid")
+    # Chat attachments (chat-context SPEC §14.2): the three flags are on here, with the canned reader and the in-memory bucket.
+    from postriff_phase2.video_uploads import VideoPolicy
+    chat_media = {"flags": {"attachments": True, "notes": True, "video": True}, "reader": DevMediaReader(), "videoPolicy": VideoPolicy(enabled=True)}
+    service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media)
     if args.credit_fixture:
         from launch_credit_fixture import configure
         configure(service, connection)
@@ -246,6 +304,13 @@ def main():
 
     def application(environ, start_response):
         path = environ.get("PATH_INFO", "/")
+        if path.startswith("/dev/upload/") and environ["REQUEST_METHOD"] == "PUT":
+            # The browser scene forwards the signed-URL PUT here (the real client only PUTs to Supabase URLs).
+            length = int(environ.get("CONTENT_LENGTH") or 0)
+            accepted = dev_assets.receive_upload(path.rsplit("/", 1)[-1], environ["wsgi.input"].read(length), environ.get("CONTENT_TYPE") or "video/mp4")
+            status = "200 OK" if accepted else "400 Bad Request"
+            start_response(status, [("Content-Type", "application/json"), ("Content-Length", "2")])
+            return [b"{}"]
         if path == "/dev/consent":
             q = {k: v[0] for k, v in parse_qs(environ.get("QUERY_STRING", "")).items()}
             if environ["REQUEST_METHOD"] == "POST":

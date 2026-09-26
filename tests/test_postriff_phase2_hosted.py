@@ -93,9 +93,11 @@ class FakeWorker:
 
 def invoke(app, method, path, body=None, headers=None):
     raw = json.dumps(body).encode() if body is not None else b""
+    path, _, query = path.partition("?")   # as a WSGI server passes them
     environ = {
         "REQUEST_METHOD": method,
         "PATH_INFO": path,
+        "QUERY_STRING": query,
         "CONTENT_TYPE": "application/json",
         "CONTENT_LENGTH": str(len(raw)),
         "wsgi.input": io.BytesIO(raw),

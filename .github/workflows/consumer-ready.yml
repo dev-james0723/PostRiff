@@ -57,6 +57,8 @@ jobs:
           python scripts/consumer_ready_check.py ci-lint npm --prefix web run lint
           python scripts/consumer_ready_web.py --prepare npm ci
           python scripts/consumer_ready_check.py ci-build python scripts/consumer_ready_web.py npm run build
+      - name: Product copy audit
+        run: python scripts/consumer_ready_check.py ci-copy node web/scripts/copy-audit.mjs --check
       - name: Actual isolated Python function archive
         run: |
           npm install --prefix .codex/consumer-ready/vercel --no-save vercel@59.23.2 ignore@7.0.5

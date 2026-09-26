@@ -49,6 +49,11 @@ import type { SiteAgentBody } from '@/lib/site-agent/types';
 import { ActivityStrip } from './activity-strip';
 import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
 import { useChannelLanguages } from './use-channel-languages';
+import { useLiveRegion } from './attachments/attachment-bar';
+import type { PickerItem } from './attachments/picker-items';
+import { useComposerAttachments } from './attachments/use-composer-attachments';
+import { reportFrom, UsedThisTime } from './used-this-time';
+import { useAuth } from '@/lib/auth/session';
 import { PlanCard } from './plan-card';
 import { localTimeToDate } from './plan';
 import { modelName, ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
@@ -170,6 +175,43 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const choice = useModelChoice(models.data, state?.writerDefaults?.model);
   const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
+  const { user } = useAuth();
+  const live = useLiveRegion();
+  const fixtureWriter = choice.option?.provider === 'fixture';
+  const attachmentsOn = Boolean(models.data?.attachments?.enabled) && canEdit;
+  // An account or folder picked in the `@` list selects its "Draft for" chips (never deselects one already on).
+  const pickDestination = (item: PickerItem) => {
+    const phase2 = snapshot.data?.state.phase2;
+    const ids = item.kind === 'folder' ? (phase2?.channelFolders?.find((folder) => folder.id === item.id)?.accountIds ?? []) : [item.id];
+    for (const id of ids) {
+      const channel = phase2?.channels.find((entry) => entry.id === id && !entry.revoked);
+      if (!channel || !(DRAFT_PLATFORMS as readonly string[]).includes(channel.platform)) continue;
+      if (!languages.selection.some((selected) => selected.channelId === id)) languages.toggle({ platform: channel.platform as DraftPlatform, channelId: id });
+    }
+  };
+  const attachments = useComposerAttachments({
+    surface: 'conversation',
+    workspaceId,
+    conversationId,
+    owner: user?.id,
+    fixtureWriter,
+    creditMode,
+    catalog: models.data?.attachments,
+    snapshot: snapshot.data,
+    imageGeneration: imageRequested,
+    text,
+    onDestination: pickDestination,
+    announce: live.announce
+  });
+  // Session recovery (SPEC §11.5): the typed text and settled chips survive a reload of this conversation.
+  const persistTurn = attachments.persist;
+  useEffect(() => {
+    if (attachmentsOn) persistTurn(text);
+  }, [attachmentsOn, persistTurn, text, attachments.chips]);
+  const recoveredTurn = attachments.recovered;
+  useEffect(() => {
+    if (recoveredTurn?.text) setText((current) => current || recoveredTurn.text);
+  }, [recoveredTurn]);
   const maximum = parseCreditLimit(creditLimit);
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
   const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
@@ -187,9 +229,11 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const timeZone = useTimeZone();
   /** The follow-up body the server receives (and a credit estimate describes), minus key and image. */
   // `requestFields` leaves out the model on Auto (the server resolves the workspace default) and the Auto level.
-  const turnPayload = (body: string) => ({ text: body, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone });
+  // Chat attachments (chat-context SPEC §11.2): the same chip fields go to the estimate, the quote and the turn; quick
+  // replies (`chips: false`) and image turns carry none.
+  const turnPayload = (body: string, chips = true) => ({ text: body, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone, ...(chips && attachmentsOn ? attachments.fields : {}) });
   const estimateRequest = creditRequestFor(turnPayload(text.trim()));
-  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !imageRequested, { operation: 'turn', conversationId, request: estimateRequest }, choice.auto ? choice.model : undefined);
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !imageRequested, { operation: 'turn', conversationId, request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
   const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
   const imageCapability = models.data?.imageGeneration;
@@ -251,7 +295,11 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     if (creditInvalid || (creditMode && imageRequested) || !gate.enter()) return;
     setBusy(true);
     try {
-      const request = { ...turnPayload(body), imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined, idempotencyKey: crypto.randomUUID() };
+      const withChips = override === undefined;
+      // A reference still being read gets at most 20 s; one that isn't ready is reported `not_read_yet`, never dropped.
+      if (withChips && attachmentsOn) await attachments.settleReads();
+      const sent = withChips && attachmentsOn ? attachments.sentKeys : [];
+      const request = { ...turnPayload(body, withChips), imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined, idempotencyKey: crypto.randomUUID() };
       const result = await submitConversationTurn({ api, workspaceId, conversationId, request, maxMilliCredits: creditMode ? maximum : null, isCurrent: gate.alive });
       if (!result || !gate.alive()) return;
       if (result.status === 'memory') {
@@ -265,6 +313,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
         client.setQueryData(['agent-run', workspaceId, result.runId], result);
       }
       clear();
+      // Only the chips that went out are cleared; any added meanwhile stay (SPEC §4.7).
+      if (sent.length) attachments.clearSent(sent);
       setImageRequested(false);
       setVariantIndex(0);
       await client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) });
@@ -391,6 +441,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                     <MessageContent className='items-stretch gap-3'>
                       {isCurrent && run && <ActivityStrip run={run} plan={plan} intent={body.intent} destinations={body.destinations} skills={body.skills} memory={body.memory} />}
                       {body.text && <p className='text-sm leading-relaxed'>{body.text}</p>}
+                      <UsedThisTime report={reportFrom({ references: (message.body as { references?: unknown }).references })} pending={isCurrent && running} />
                       {body.memoryProposal && <ProposalCard proposal={body.memoryProposal} />}
                       {body.automation && (
                         <ChatAutomationCard
@@ -520,6 +571,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               }}
               hint={imageRequested ? 'Uses 1 media credit' : '⌘↵ to send'}
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
+              attachments={attachmentsOn ? attachments : undefined}
+              attachmentBar={{ liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner' }}
             />
           ) : (
             <StateMessage kind='permission' title='Viewing only.' description='Ask an owner for edit access.' />

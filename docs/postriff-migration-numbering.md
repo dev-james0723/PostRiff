@@ -11,7 +11,9 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 023 | `023_time_savings` | Time Back (PR #9) | **Taken, against the reservation.** The owner's decision retired 023, but PR #9 merged `023_time_savings.sql` into `consumer-saas` (`b5b7964`, 2026-09-25 17:30 UTC). Renumbering a migration on the shared branch is riskier than keeping it: once any database applies it, the runner refuses a changed ledger. So 023 now means Time Back, unless the owner decides otherwise. ai-routing's old `023_companion_relay` still moves to 029. The release executor confirms whether production has 023. |
 | 024–025 | `024_notification_core`, `025_coworker_evidence_growth` | Rafii Adaptive Social Coworker (`ecb3ff3`) | Local only. Do not renumber them unless a real dependency requires it. |
 | 026–029 | ai-routing's four migrations, renumbered from 020–023 | ai-routing | Reserved. The files still carry 020–023 on `ai-routing` and must be renamed before that branch lands (checklist below). |
-| 030 and up | — | next new migration | Free. |
+| 030 | `030_agent_style` | Rafii live agent (not yet on any remote branch) | Reserved. The live-agent work carries it; it lands with that work. |
+| 031 | `031_chat_media` | Chat attachments (chat-context SPEC §10) | Taken. Applied in production with a one-off, sha256-pinned run (see `docs/design/chat-context/VERIFICATION.md`). |
+| 032 and up | — | next new migration | Free. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 

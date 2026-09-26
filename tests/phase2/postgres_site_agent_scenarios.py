@@ -295,13 +295,13 @@ command(seed_outcomes)
 
 
 # --- helpers ---------------------------------------------------------------------------------------------------------
-def ask(message, route="/app", entity=None, token=OWNER, conversation=None, workspace=None, visible=None, model="deterministic-preview"):
+def ask(message, route="/app", entity=None, token=OWNER, conversation=None, workspace=None, visible=None, model="deterministic-preview", extra=None):
     page = {"route": route}
     if entity:
         page["selectedEntity"] = entity
     if visible:
         page["visibleState"] = visible
-    body = {"message": message, "idempotencyKey": uuid.uuid4().hex, "model": model, "timeZone": HK, "pageContext": page}
+    body = {"message": message, "idempotencyKey": uuid.uuid4().hex, "model": model, "timeZone": HK, "pageContext": page, **(extra or {})}
     if conversation:
         body["conversationId"] = conversation
     started = time.monotonic()
@@ -889,6 +889,75 @@ record("X06c", "compound", "Shorten this draft, add it to the launch campaign an
        and (variant(X6["id"]).get("proposedUpdate") or {}).get("runId") == comp.get("runId") and variant(X6["id"])["text"] == X6["text"] and X6["id"] in campaign_items()
        and not any(x["manifest"]["variantId"] == X6["id"] for x in state()["phase2"]["reviews"]),
        state_checked="first answer pending; X6.proposedUpdate from this run, X6 text unchanged, X6 in campaign.items, one proposal stored, no review for X6")
+
+# === Chat-context S28: chips on the Rafii panel (RAFII_AGENT_V2_ENABLED is off here: the site agent's own path) =========
+class ChipCloud(AgentRuntime):
+    """A synchronous cloud writer that records what it was sent (stands in for the gateway)."""
+    provider, provider_class, cost_class, asynchronous, model = "chip-cloud", "cloud", "subscription", False, "chip-cloud:model"
+
+    def __init__(self):
+        self.requests = []
+
+    def list_supported_models(self):
+        return [{"id": self.model, "label": "Chip cloud", "qualified": True, "costClass": "subscription", "route": "chip-cloud", "detail": "scenario writer"}]
+
+    def list_supported_reasoning(self):
+        return [{"id": "quick", "available": True, "detail": "scenario writer"}]
+
+    def supported_platforms(self):
+        return ("LinkedIn", "Instagram", "Threads")
+
+    def start_conversation(self, workspace_id, actor):
+        return {}
+
+    def start_turn(self, request, emit):
+        self.requests.append(json.loads(json.dumps(request, default=str)))
+        emit({"type": "run.started", "model": self.model, "reasoning": "quick", "contextDigest": "d"})
+        usage = {"provenance": "fake", "modelRequests": 1, "costUsd": 0}
+        emit({"type": "run.completed", "usage": usage})
+        return {"artifact": {"variants": [{"platform": d["platform"], "language": d["language"], **identity_fields(d), "text": "A cloud rewrite.", "sourceIds": [], "unknowns": [],
+                                           "warnings": [], "candidateOnly": False} for d in request["destinations"]]}, "usage": usage}
+
+
+chip_cloud = ChipCloud()
+ideas.runtimes = [*ideas.runtimes, chip_cloud]
+r = ask("How do I connect Instagram?", "/app", extra={"references": [{"kind": "post", "id": A["id"], "label": "My LinkedIn draft"}]})
+message = r.get("message") or {}
+report = message.get("references") or {}
+record("K01", "chips", "How do I connect Instagram? (a post chip on a question)", r,
+       "an answer, not a draft: one warning that attachments are used when Rafii writes, and the chip listed unused (never dropped silently)",
+       not r.get("delegated") and any(b.get("code") == "not_a_drafting_turn" for b in (message.get("siteAgent") or {}).get("blocks", []))
+       and [(u["kind"], u["id"], u["reason"]) for u in report.get("unused", [])] == [("post", A["id"], "not_a_drafting_turn")] and report.get("used") == []
+       and "My LinkedIn draft" not in json.dumps(report),
+       state_checked="message.references.unused, a not_a_drafting_turn warning block, no client label")
+
+# A fresh draft (C is in the launch campaign by now, so "this draft" there reads as a campaign question).
+k2_run = ideas.quick_start(wid, OWNER, revision(), {"text": "Warm up with long tones before scales.\nFive minutes is enough.", "confirmUse": True, "ownContent": True,
+                                                    "destinations": [{"platform": "LinkedIn", "language": "en", "channelId": LI}], "model": "deterministic-preview", "timeZone": HK, "voiceMode": "neutral"})
+ideas.apply(wid, OWNER, revision(), k2_run["runId"], k2_run["artifactHash"], separate=True)
+K2 = next(v for v in state()["variants"] if (v.get("provenance") or {}).get("runId") == k2_run["runId"])
+before = len(chip_cloud.requests)
+r = ask("Shorten this draft", "/app/queue", {"type": "draft", "id": K2["id"]}, model=chip_cloud.model, extra={"references": [{"kind": "post", "id": K2["id"]}]})
+sent = chip_cloud.requests[-1] if len(chip_cloud.requests) > before else {}
+with psycopg.connect(DSN) as db:
+    usage = db.execute("SELECT usage FROM public.pr_agent_runs WHERE id::text=%s", (r.get("runId"),)).fetchone()[0] if r.get("runId") else {}
+unused = {(u["kind"], u["id"], u["reason"]) for u in (usage or {}).get("references", {}).get("unused", [])}
+record("K02", "chips", "Shorten this draft (a LinkedIn draft selected, the same post also chipped, on a cloud writer; its source isn't shared with cloud writers)", r,
+       "delegated to the writer with the chip; the chipped post is a duplicate of the focused one; the draft's text never reaches the cloud writer because its source isn't shared",
+       bool(r.get("delegated")) and r["kind"] == "transform" and ("post", K2["id"], "duplicate") in unused and ("post", K2["id"], "post_source_excluded") in unused
+       and K2["text"] not in json.dumps(sent) and not sent.get("material"),
+       state_checked="run usage.references: duplicate + post_source_excluded for K2; the cloud request has no material")
+
+found = agent.search(wid, OWNER, "Warm up", ["posts"], 8)
+try:
+    agent.search(wid, OWNER, "x" * 121, None, 8)
+    too_long = None
+except AlphaError as error:
+    too_long = error.status
+record("K03", "chips", "Picker search for “Warm up” (posts only), and a 121-character query", found,
+       "the post found through workspace.search with the read gate; nothing outside posts; an over-long query is refused (400)",
+       any(i["id"] == K2["id"] for i in found["categories"].get("posts", [])) and set(found["categories"]) <= {"posts"} and found["verified"] and too_long == 400,
+       state_checked="GET /site-agent/search data (SPEC §5.9)")
 
 # === §13 inspectability: every link any answer above offered opens a real page and, when it names one, a real item ========
 final = state()

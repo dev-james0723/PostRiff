@@ -34,7 +34,7 @@ import { STATUS } from '@/lib/status-labels';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetCard, badgeClass, saysStorageNotConfigured } from './asset-card';
 import { AssetDetail } from './asset-detail';
-import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibrarySort } from './use-library';
+import { ACCEPTED_TYPES, MAX_PICK_BYTES, useLibrary, type LibraryAsset, type LibraryFilter, type LibrarySort } from './use-library';
 import { useUploadQueue, type UploadItem, type UploadProgress, type UploadStatus } from './use-upload-queue';
 
 const infoContent = {
@@ -50,7 +50,7 @@ const infoContent = {
     },
     {
       title: 'What’s accepted',
-      description: 'JPEG or PNG, up to 8 MB, 320–4096 px per side. Images are re-saved as JPEG with metadata removed. No video yet.'
+      description: 'JPEG or PNG photos, 320–4096 px per side. Large photos are resized before upload and saved as JPEG with metadata removed. Add videos from a chat with the Add button.'
     },
     {
       title: 'Used',
@@ -78,9 +78,9 @@ const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 tex
 
 function rejectionMessage({ file, errors }: FileRejection) {
   const code = errors[0]?.code;
-  if (code === 'file-too-large') return `${file.name} is over 8 MB`;
+  if (code === 'file-too-large') return `${file.name} is over 30 MB`;
   if (code === 'file-too-small') return `${file.name} is empty`;
-  if (code === 'file-invalid-type') return `${file.name} isn’t a JPEG or PNG`;
+  if (code === 'file-invalid-type') return `${file.name} isn’t a photo`;
   return `Couldn’t add ${file.name}`;
 }
 
@@ -185,7 +185,7 @@ export function LibraryView() {
 
   const { getRootProps, getInputProps, isDragActive, isDragReject, open: openPicker } = useDropzone({
     accept: ACCEPTED_TYPES,
-    maxSize: MAX_UPLOAD_BYTES,
+    maxSize: MAX_PICK_BYTES,
     minSize: 1,
     multiple: true,
     noClick: true,

@@ -92,3 +92,18 @@ test('when resends are exhausted the person is told the request may still be run
  for(let i=0;i<5;i++){await Promise.resolve();t.mock.timers.tick(5000);await new Promise(r=>setImmediate(r));}
  await outcome;
 });
+
+test('references and attachments reach the quote and the turn byte-identically (chat-context SPEC §3 S4)',async()=>{
+ const {api,calls}=fixture();
+ const request={...base.request,references:[{kind:'post',id:'8c1f',label:'春季演奏會',role:'inspire'},{kind:'source',id:'c9d1',label:'Programme notes'}],attachments:[{assetId:'9ab1c2d3e4f5061728394a5b6c7d8e9f',role:'reference',slot:'A'}]};
+ const before=JSON.stringify(request);
+ await load()({...base,request,api,maxMilliCredits:12000});
+ const quoted=calls.find(c=>c[0]==='quote')[2].request;const sent=calls.find(c=>c[0]==='turn')[3];
+ assert.equal(JSON.stringify(quoted.references),JSON.stringify(request.references));
+ assert.equal(JSON.stringify(sent.references),JSON.stringify(request.references));
+ assert.equal(JSON.stringify(quoted.attachments),JSON.stringify(request.attachments));
+ assert.equal(JSON.stringify(sent.attachments),JSON.stringify(request.attachments));
+ const strip=(b)=>JSON.stringify(Object.fromEntries(Object.entries(b).filter(([k])=>!['creditQuoteId','expectedRevision','idempotencyKey'].includes(k))));
+ assert.equal(strip(sent),strip(quoted),'the quote binds exactly the body that is submitted');
+ assert.equal(JSON.stringify(request),before,'the caller\'s request is not mutated');
+});

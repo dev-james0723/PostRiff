@@ -23,6 +23,7 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 
 from postriff_alpha.domain import AlphaError, clean
 
+from .. import asset_kinds, media_consent
 from . import config as runtime_config, contracts
 from .context import RafiiRunContext
 from .tool_adapter import register
@@ -180,7 +181,9 @@ class VisionAnalyzer:
         self.cfg = cfg
         self.transport = transport or https_json
 
-    def analyze(self, raw: bytes, mime: str, *, question: str, brand_rules: str | None, width=None, height=None, timeout: float = TIMEOUT_SECONDS) -> dict:
+    def analyze(self, raw: bytes, mime: str, *, question: str, brand_rules: str | None, width=None, height=None, timeout: float = TIMEOUT_SECONDS,
+                more: list[tuple[bytes, str]] | tuple = ()) -> dict:
+        """`more`: further images of the same subject (a video's frames after its poster), sent in the same request."""
         route = self.cfg.route("vision", reason="image understanding")
         if not route.available:
             raise CreativeError(route.blocker or "No vision route is configured.", 503, code="route_unavailable")
@@ -192,7 +195,8 @@ class VisionAnalyzer:
         if route.provider == "openai":
             response = self.transport("POST", "https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {key}"}, body={
                 "model": route.model, "instructions": VISION_SYSTEM, "store": False,
-                "input": [{"role": "user", "content": [{"type": "input_text", "text": user_text}, {"type": "input_image", "image_url": _data_url(raw, mime)}]}],
+                "input": [{"role": "user", "content": [{"type": "input_text", "text": user_text}, {"type": "input_image", "image_url": _data_url(raw, mime)},
+                                                       *({"type": "input_image", "image_url": _data_url(b, m)} for b, m in more)]}],
                 "text": {"format": {"type": "json_schema", "name": "vision_findings", "schema": VISION_SCHEMA, "strict": True}}}, timeout=timeout)
             status, body = response.get("status"), response.get("body") or {}
             if status != 200:
@@ -204,7 +208,8 @@ class VisionAnalyzer:
             response = self.transport("POST", "https://ai-gateway.vercel.sh/v1/chat/completions", headers={"Authorization": f"Bearer {key}"}, body={
                 "model": route.model, "reasoning_effort": "none", "response_format": {"type": "json_schema", "json_schema": {"name": "vision_findings", "schema": VISION_SCHEMA, "strict": True}},
                 "messages": [{"role": "system", "content": VISION_SYSTEM},
-                             {"role": "user", "content": [{"type": "text", "text": user_text}, {"type": "image_url", "image_url": {"url": _data_url(raw, mime)}}]}]}, timeout=timeout)
+                             {"role": "user", "content": [{"type": "text", "text": user_text}, {"type": "image_url", "image_url": {"url": _data_url(raw, mime)}},
+                                                          *({"type": "image_url", "image_url": {"url": _data_url(b, m)}} for b, m in more)]}]}, timeout=timeout)
             status, body = response.get("status"), response.get("body") or {}
             if status != 200:
                 raise _status_error(status, body)
@@ -224,8 +229,9 @@ class VisionAnalyzer:
 
 # --- conversation images ("the second image") --------------------------------------------------------------------------
 def conversation_images(cur, state: dict, workspace_id: str, conversation_id: str) -> list[dict]:
-    """Images of this conversation in order: attached ones (pr_attachments) and ones Rafii made here (asset lineage)."""
-    assets = {a.get("id"): a for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted")}
+    """Images of this conversation in order: attached ones (pr_attachments) and ones Rafii made here (asset lineage). Each
+    names its kind; an upload that isn't ready yet (chat-context SPEC §7.6) isn't listed."""
+    assets = {a.get("id"): a for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and asset_kinds.is_ready(a)}
     cur.execute("SELECT ref,extract(epoch from created_at) FROM public.pr_attachments WHERE conversation_id::text=%s AND workspace_id=%s AND kind='asset' ORDER BY created_at, id",
                 (conversation_id, workspace_id))
     items = []
@@ -234,11 +240,11 @@ def conversation_images(cur, state: dict, workspace_id: str, conversation_id: st
         if asset and not any(i["assetId"] == asset["id"] for i in items):
             # The time the runtime recorded (same clock as generated images' lineage), else the row's own time.
             when = (ref or {}).get("addedAt") if isinstance((ref or {}).get("addedAt"), (int, float)) else float(at)
-            items.append({"assetId": asset["id"], "origin": "attached", "at": float(when), "alt": asset.get("alt"), "width": asset.get("width"), "height": asset.get("height")})
+            items.append({"assetId": asset["id"], "kind": asset_kinds.kind_of(asset), "origin": "attached", "at": float(when), "alt": asset.get("alt"), "width": asset.get("width"), "height": asset.get("height")})
     for asset in assets.values():
         lineage = asset.get("lineage") or {}
         if lineage.get("conversationId") == conversation_id and not any(i["assetId"] == asset["id"] for i in items):
-            items.append({"assetId": asset["id"], "origin": lineage.get("operation") or "generated", "at": float(lineage.get("createdAt") or 0), "alt": asset.get("alt"),
+            items.append({"assetId": asset["id"], "kind": asset_kinds.kind_of(asset), "origin": lineage.get("operation") or "generated", "at": float(lineage.get("createdAt") or 0), "alt": asset.get("alt"),
                           "width": asset.get("width"), "height": asset.get("height"), "parentAssetId": lineage.get("parentAssetId"), "model": lineage.get("model")})
     items.sort(key=lambda item: item["at"])
     for index, item in enumerate(items, 1):
@@ -271,8 +277,28 @@ def _missing():
 
 
 def _bytes(ctx: RafiiRunContext, asset: dict) -> tuple[bytes, str]:
+    """The image a model sees: the photo, or a video's poster (served as image/jpeg, never the video's own mime)."""
     raw, mime = ctx.service.media(ctx.workspace_id, ctx.token, asset["id"])
     return raw, mime or "image/jpeg"
+
+
+def _frames(ctx: RafiiRunContext, asset: dict) -> list[tuple[bytes, str]]:
+    """A video's stored frames (up to 4), read the same way notes read them; a photo has none."""
+    if asset_kinds.kind_of(asset) != "video" or not callable(getattr(ctx.service, "_note_images", None)):
+        return []
+    return list(ctx.service._note_images(ctx.workspace_id, ctx.token, asset))[:4]
+
+
+def _consent_blocked(ctx: RafiiRunContext, state: dict, purpose: str, route) -> dict | None:
+    """Chat-context SPEC §9: a photo, frame or poster leaves only with the owner's consent for that exact processor.
+    Blocked → a typed result and a ledger warning; the caller makes no provider call and reserves nothing."""
+    processor = media_consent.processor(getattr(route, "provider", None), getattr(route, "model", None))
+    try:
+        media_consent.require(state, purpose, processor)
+    except AlphaError:
+        ctx.ledger.warn("consent_required", media_consent.CONSENT_MESSAGE)
+        return {"ok": False, "verified": True, "code": "consent_required", "error": media_consent.CONSENT_MESSAGE}
+    return None
 
 
 @register(contracts.ToolSpec("image_list", contracts.READ, "read", "The images in this conversation in order (attached and made by Rafii), numbered from 1, "
@@ -296,6 +322,9 @@ def image_analyze(ctx: RafiiRunContext, args: dict) -> dict:
     from . import memory_layers
     with ctx.workspace() as (cur, _row, _principal, _member, state):
         asset = _resolve_asset(ctx, cur, state, args)
+        blocked = _consent_blocked(ctx, state, "vision", ctx.config.route("vision", reason="image understanding"))
+        if blocked:
+            return {**blocked, "assetId": asset["id"]}
         rules = None
         if args.get("compareWithBrand") and memory_layers.cloud_allowed(state):
             brand = memory_layers.read(state, layers=["brand"])["layers"]["brand"]
@@ -304,9 +333,11 @@ def image_analyze(ctx: RafiiRunContext, args: dict) -> dict:
     if left is not None and left < MIN_VISION_SECONDS:
         raise AlphaError("There isn't enough time left in this turn to look at the image; ask again and I'll start with it.", 409, code="turn_time")
     raw, mime = _bytes(ctx, asset)
+    frames = _frames(ctx, asset)
     analyzer = ctx.vision or VisionAnalyzer(ctx.config)
+    extra = {"more": frames} if frames else {}
     result = analyzer.analyze(raw, mime, question=args["question"], brand_rules=rules, width=asset.get("width"), height=asset.get("height"),
-                              timeout=ctx.provider_timeout(TIMEOUT_SECONDS))
+                              timeout=ctx.provider_timeout(TIMEOUT_SECONDS), **extra)
     ctx.ledger.model_requests += 1
     usage = result.get("usage") or {}
     ctx.ledger.spans.append({"span": "generation", "agent": "vision", "workload": "vision", "model": result["model"], "inputTokens": usage.get("inputTokens") or 0,
@@ -350,6 +381,10 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
             if ref is None:
                 raise AlphaError("A reference image is not in this workspace.", 404, code="not_found")
             sources.append(ref)
+        if parent is not None or sources:
+            blocked = _consent_blocked(ctx, state, "image", route)
+            if blocked:
+                return blocked
         reservation = ctx.service.ledger.reserve(cur, ctx.workspace_id, principal, "image_generation", studio.estimate(quality), key, charge_batch=True,
                                                  provider=route.provider or "", model=route.model or "", run_id=ctx.run_id,
                                                  meta={"via": "rafii_agent", "operation": operation, "traceId": ctx.trace_id})
@@ -437,6 +472,9 @@ def _step(ctx, args, fn):
     except AlphaError as error:
         _step_failed(ctx, args, str(error))
         raise
+    if result.get("code") == "consent_required":
+        _step_failed(ctx, args, result["error"])
+        return result
     _step_done(ctx, args, verified=result["verified"], outputs=[{"type": "asset", "id": result["asset"]["assetId"]}] if result.get("asset") else [])
     return result
 

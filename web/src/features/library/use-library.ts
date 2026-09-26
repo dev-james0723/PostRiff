@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useSnapshot } from '@/lib/api/hooks';
 import { IN_FLIGHT } from '@/lib/jobs';
 import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
+import { isLibraryAsset } from '@/lib/media/asset-kinds';
 
 /**
  * Everything the Library reads, derived from the workspace snapshot: the live images in a stated order,
@@ -14,7 +15,9 @@ export type LibraryAsset = Asset;
 
 /** The server's limits (`media.py` `_source` and `_decode_pillow`). The client checks type and size only. */
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-export const ACCEPTED_TYPES = { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] };
+/** Photos are fitted in the browser first (`fitForUpload`: HEIC and others become JPEG), so a pick may be larger. */
+export const MAX_PICK_BYTES = 30 * 1024 * 1024;
+export const ACCEPTED_TYPES = { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/heic': ['.heic'], 'image/heif': ['.heif'], 'image/webp': ['.webp'] };
 
 export interface AssetUse {
   kind: 'review' | 'job';
@@ -103,7 +106,8 @@ export function useLibrary({ filter, sort, query }: { filter: LibraryFilter; sor
   const phase2 = snapshot.data?.state.phase2;
 
   const derived = useMemo(() => {
-    const live = (phase2?.assets ?? []).filter((asset) => !asset.deleted);
+    // Photos and videos; a video's poster and frames live inside its record, never as separate tiles.
+    const live = (phase2?.assets ?? []).filter(isLibraryAsset);
     const usage = buildUsage(phase2?.reviews ?? [], phase2?.jobs ?? []);
     const hasTimestamps = live.some((asset) => typeof asset.createdAt === 'number');
     const used = live.filter((asset) => usage.has(asset.id)).length;

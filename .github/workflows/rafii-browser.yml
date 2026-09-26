@@ -75,6 +75,8 @@ jobs:
         run: node web/tests/rafii-automations.cjs --no-run
       - name: Home scenes (drafting with the fixture writer, Content Library, Queue → Drafts)
         run: node web/tests/rafii-workflow.cjs --only=workflow,library,drafts
+      - name: Chat attachments (＋ menu, Library, photo and MP4 uploads, @ list with IME, Used this time, phone sheet)
+        run: node web/tests/rafii-attachments.cjs
       - name: Theme bars (header and phone tab bar match light and dark under any stored theme)
         run: node web/tests/rafii-theme-bars.cjs
       - name: UI simplification (first-run empty states own one action; shared connection status words)
@@ -96,6 +98,7 @@ jobs:
           path: |
             docs/design/rafii-v9/evidence/automations/
             docs/design/rafii-v9/evidence/workflow/
+            docs/design/rafii-v9/evidence/attachments/
             docs/design/rafii-v9/evidence/theme-bars/
             docs/design/site-agent/evidence/ci-browser-chromium/
             docs/design/site-agent/evidence/ci-browser-webkit/
