@@ -28,7 +28,8 @@ export interface TikTokChoice {
   consent: boolean;
 }
 
-export interface TikTokOptions {
+// A type alias (not an interface) so it is assignable to PublishOptionsValue's Record<string, unknown>.
+export type TikTokOptions = {
   privacyLevel: TikTokPrivacy;
   allowComment: boolean;
   allowDuet: boolean;
@@ -36,7 +37,7 @@ export interface TikTokOptions {
   commercial: { enabled: boolean; yourBrand: boolean; brandedContent: boolean };
   consent: true;
   consentText: string;
-}
+};
 
 export const PRIVACY_LABELS: Record<TikTokPrivacy, string> = {
   PUBLIC_TO_EVERYONE: 'Everyone',
