@@ -308,7 +308,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {staleDrafts} draft{staleDrafts === 1 ? ' uses' : 's use'} an older voice and can’t be scheduled.
             </p>
           )}
-          <div className='flex flex-col gap-1.5'>
+          <div className='flex flex-col gap-1.5' data-tour='schedule-draft'>
             <Label htmlFor='schedule-draft'>Draft</Label>
             <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); }}>
               <SelectTrigger id='schedule-draft' className='h-12 w-full text-base'>
@@ -347,7 +347,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             )}
           </div>
 
-          <div className='flex flex-col gap-1.5'>
+          <div className='flex flex-col gap-1.5' data-tour='schedule-account'>
             <Label htmlFor='schedule-channel'>Account</Label>
             <Select value={channelId} onValueChange={(value) => setChannelId(String(value))}>
               <SelectTrigger id='schedule-channel' disabled={!variant || Boolean(variant.channelId)} className='h-12 w-full text-base'>
@@ -385,7 +385,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           </div>
 
           <div className='grid gap-4 sm:grid-cols-2'>
-            <div className='flex flex-col gap-1.5'>
+            <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
               <Label htmlFor='schedule-time'>Publish at</Label>
               <Input
                 id='schedule-time'
@@ -454,7 +454,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             Cancel
           </Button>
           {/* The server refuses `p2_review` without the approve permission; the sentence above says who can. */}
-          <Button variant='action' size='control' disabled={!ready || !canPrepare || act.isPending} onClick={() => void submit()}>
+          <Button variant='action' size='control' data-tour='schedule-prepare' disabled={!ready || !canPrepare || act.isPending} onClick={() => void submit()}>
             {act.isPending ? 'Preparing…' : 'Prepare review'}
           </Button>
         </DialogFooter>

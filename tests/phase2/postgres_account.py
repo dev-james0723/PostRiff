@@ -11,9 +11,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import psycopg
 from postriff_alpha.domain import AlphaError
+from postriff_phase2.agent_runtime_v2 import style
 from postriff_phase2.hosted import HostedWorkspaceService
 
 DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DEFAULT_STYLE = style.normalize({})  # Rafii's style: its own script is postgres_agent_style.py
 ONE = "00000000-0000-0000-0000-000000000001"
 SIX = "00000000-0000-0000-0000-000000000006"
 START = time.time()
@@ -168,11 +170,11 @@ assert kinds_six[:2] == ["invitation.accepted", "invitation.declined"], kinds_si
 checks.append("invitations to my email are listed with workspace and inviter, only I can accept or decline them, and both outcomes reach the account history")
 
 # 9. Preferences follow the person: saved on the profile row, read back on /me, cleared to "device".
-assert service.me("one")["preferences"] == {"timeZone": "", "locale": "", "alertNewDevice": False}
+assert service.me("one")["preferences"] == {"timeZone": "", "locale": "", "alertNewDevice": False, "agentStyle": DEFAULT_STYLE}
 saved = service.update_profile("one", {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant"})
-assert saved == {"displayName": "James Au", "preferences": {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": False}}
+assert saved == {"displayName": "James Au", "preferences": {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": False, "agentStyle": DEFAULT_STYLE}}
 assert service.me("one")["preferences"]["timeZone"] == "Asia/Hong_Kong"
-assert service.update_profile("one", {"alertNewDevice": True})["preferences"] == {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": True}
+assert service.update_profile("one", {"alertNewDevice": True})["preferences"] == {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": True, "agentStyle": DEFAULT_STYLE}
 denied(lambda: service.update_profile("one", {"timeZone": "Mars/Phobos"}), 400)
 assert service.update_profile("one", {"timeZone": ""})["preferences"]["timeZone"] == ""
 assert service.me("six")["preferences"]["locale"] == ""  # another person's row is untouched

@@ -1,5 +1,19 @@
 /** The Rafii side panel's contract with `/api/workspaces/{id}/site-agent/*` (site agent spec §6.1, §11.3, §13). */
+import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { ChatAutomation, SafeEvent } from '@/lib/api/types';
+
+/**
+ * One label on the person's screen (docs/design/rafii-live-agent/CONTRACTS.md, Contract 3): what is shown, never what
+ * was typed into it. The server treats every item as untrusted data.
+ */
+export interface PageOutlineItem {
+  role: 'heading' | 'button' | 'tab' | 'status' | 'link' | 'region' | 'dialog';
+  /** At most 80 characters. */
+  text: string;
+  /** The element's `data-tour` id, when it has one (guides point at these). */
+  target?: string;
+  state?: 'selected' | 'disabled' | 'expanded' | 'checked';
+}
 
 export interface SiteAgentPageContext {
   route: string;
@@ -7,7 +21,12 @@ export interface SiteAgentPageContext {
   visibleState?: Record<string, string | number | boolean | string[]>;
   uiCapabilities?: string[];
   clientBuild?: string;
+  /** What the screen shows, an open dialog or sheet first: at most 40 items and about 3,000 characters. */
+  outline?: PageOutlineItem[];
 }
+
+/** Panel control Rafii can ask for (Contract 2); the voice call carries them out, text mode applies `style` only. */
+export type VoiceCommandName = 'end_call' | 'mute' | 'stop_speaking' | 'style';
 
 export interface SiteAgentCitation {
   id: string;
@@ -72,7 +91,11 @@ export interface SiteAgentPlanView {
 export type SiteAgentBlock =
   | { type: 'text'; text: string }
   | { type: 'citation_list'; citations: SiteAgentCitation[] }
+  /** `auto`: the person asked to be taken there, so the panel opens it once (latest answer only). */
   | { type: 'navigation_card'; label: string; href: string; routeId: string; reason?: string | null; auto?: boolean }
+  /** A step-by-step walkthrough from the guide manifest; `auto` when the person asked to be shown or taught. */
+  | { type: 'guide_card'; guideId: string; routeId: string; href: string; title: string; summary: string; auto?: boolean }
+  | { type: 'voice_command'; command: VoiceCommandName; style?: AgentStylePatch | null }
   | {
       type: 'diagnostic_card';
       title: string;
@@ -89,6 +112,10 @@ export type SiteAgentBlock =
   | { type: 'handoff_card'; traceId: string; summary: string[]; href: string }
   | { type: 'error'; message: string; code: string }
   | { type: 'result_list'; title: string; items: { kind: string; title: string; excerpt?: string | null; meta?: string | null; href?: string | null }[]; empty?: string | null };
+
+export type NavigationCardBlock = Extract<SiteAgentBlock, { type: 'navigation_card' }>;
+export type GuideCardBlock = Extract<SiteAgentBlock, { type: 'guide_card' }>;
+export type VoiceCommandBlock = Extract<SiteAgentBlock, { type: 'voice_command' }>;
 
 export interface SiteAgentContextSummary {
   route?: string | null;

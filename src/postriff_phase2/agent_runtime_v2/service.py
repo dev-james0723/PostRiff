@@ -28,8 +28,8 @@ from .. import asset_kinds, attachment_rows, intent as writing_intent, media_con
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import require
-from . import answer_policy, approvals, config as runtime_config, contracts, creative, domain_tools, followups, task_state
-from .context import RafiiRunContext
+from . import answer_policy, approvals, commands, config as runtime_config, contracts, creative, domain_tools, followups, style as agent_style, task_state
+from .context import RafiiRunContext, screen_outline
 
 KEY_PREFIX = "agent:"
 VOICE_PREFIX = "voice:"
@@ -131,6 +131,10 @@ class AgentRuntimeService:
             return self._decide_turn(workspace_id, token, conversation_id, text, modality, run_key, trace_id, decision, zone, attachments)
         if decision["mode"] == "cancel":
             return self._cancel_turn(workspace_id, token, conversation_id, text, modality, run_key, trace_id)
+        # A slash command (Contract 7) that needs no reasoning is answered directly; every other one reaches the Manager.
+        direct = commands.direct(self, workspace_id, token, conversation_id, text, modality, run_key, trace_id, page, zone, commands.parse(payload.get("command")))
+        if direct is not None:
+            return direct
         return self._manager_turn(workspace_id, token, conversation_id, text, modality, run_key, trace_id, page, zone, payload, attachments, now)
 
     # --- front door --------------------------------------------------------------------------------------------------
@@ -447,11 +451,13 @@ class AgentRuntimeService:
             history = self._history(cur, workspace_id, conversation_id)
             from .live import recent_transcript
             spoken = recent_transcript(cur, workspace_id, conversation_id)
+            style = agent_style.load(cur, principal)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, page=page, zone=zone, locale=payload.get("locale") if isinstance(payload.get("locale"), str) else None,
                               writer_model=payload.get("model") if isinstance(payload.get("model"), str) and payload.get("model") else None, attachments=attachments,
                               conversation_assets=images, focus=focus, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
-                              vision=self.vision, request_text=text, page_raw=payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None)
+                              vision=self.vision, request_text=text, page_raw=payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None,
+                              style=style, command=commands.parse(payload.get("command")))
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         holder["ctx"] = ctx
@@ -466,7 +472,8 @@ class AgentRuntimeService:
         reply, note, fallback_reason, interruptions, state_json = None, None, None, [], None
         started = time.monotonic()
         try:
-            result = asyncio.run(asyncio.wait_for(Runner.run(manager, items, context=ctx, max_turns=14, run_config=run_config), timeout=TURN_BUDGET_SECONDS))
+            # `drive` closes the run's provider clients inside this event loop before it ends.
+            result = asyncio.run(manager_mod.drive(ctx, Runner.run(manager, items, context=ctx, max_turns=14, run_config=run_config), TURN_BUDGET_SECONDS))
             interruptions = list(result.interruptions or [])
             if interruptions:
                 # The paused run is kept server-side with identifiers only — never the session token (§13, SDK HITL).
@@ -587,6 +594,9 @@ class AgentRuntimeService:
             app_state["recentVoiceTranscript"] = list(spoken)
         if last is not None:
             app_state["lastTask"] = last.view()
+        screen = screen_outline(ctx.page)   # Contract 3: visible labels only, re-validated; untrusted data
+        if screen:
+            app_state["screen"] = screen
         for asset_id in app_state["attachedThisTurn"]:
             ctx.ledger.known_ids.add(asset_id.lower())
         for item in images:
@@ -600,7 +610,8 @@ class AgentRuntimeService:
         items = [{"role": h["role"], "content": ("[spoken] " if h.get("modality") == "voice" else "") + h["text"]} for h in history]
         # JSON-escape markup so no title (a draft's first line, a campaign goal) can close the block or open a new one.
         context_json = json.dumps(app_state, ensure_ascii=False, default=str).replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
-        items.append({"role": "user", "content": f"<context kind=\"APP_STATE\">\n{context_json}\n</context>\n<request kind=\"USER_INSTRUCTION\" modality=\"{ctx.modality}\">\n{text}\n</request>"})
+        command = ("\n" + commands.block(ctx.command)) if ctx.command else ""   # Contract 7: a fixed instruction, its input fenced as data
+        items.append({"role": "user", "content": f"<context kind=\"APP_STATE\">\n{context_json}\n</context>\n<request kind=\"USER_INSTRUCTION\" modality=\"{ctx.modality}\">\n{text}\n</request>{command}"})
         return items
 
     # --- runs, messages, finalisation ---------------------------------------------------------------------------------------
@@ -758,7 +769,7 @@ class AgentRuntimeService:
             from ..site_agent.compose_reads import result_list
             blocks.append(result_list("Steps", [{"kind": s.state, "title": s.label, "excerpt": s.reason, "meta": s.state.replace("_", " "), "href": None} for s in ctx.task.steps]))
         blocks.extend(evidence_blocks(ledger, ctx.request_text, result.get("language")))
-        blocks.extend(ledger.navigation[:2])
+        blocks.extend(ledger.client_blocks())   # navigation cards, a guide card, voice commands (Contract 2)
         if ledger.citations:
             blocks.append(site_contracts.citations(ledger.citations[:4]))
         for warning in ledger.warnings[:3]:
@@ -993,9 +1004,10 @@ class AgentRuntimeService:
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
             plan = task_state.load(cur, workspace_id, task_id)
+            style = agent_style.load(cur, principal)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, zone=zone, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
-                              vision=self.vision, request_text="(approved)",
+                              vision=self.vision, request_text="(approved)", style=style,
                               writer_model=pending.get("writerModel") if isinstance(pending.get("writerModel"), str) and pending.get("writerModel") else None)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
@@ -1020,7 +1032,7 @@ class AgentRuntimeService:
                 return await Runner.run(manager, state, context=ctx, max_turns=8, run_config=RunConfig(workflow_name="rafii.turn.resume", trace_id=trace_id,
                                                                                                       group_id=conversation_id, trace_include_sensitive_data=False))
             try:
-                result = asyncio.run(asyncio.wait_for(resume(), timeout=TURN_BUDGET_SECONDS))
+                result = asyncio.run(manager_mod.drive(ctx, resume(), TURN_BUDGET_SECONDS))
                 reply = result.final_output if not result.interruptions else None
             except Exception as error:  # noqa: BLE001 — the approval stands; only the Manager's wording is lost
                 fallback_reason = getattr(error, "code", None) or type(error).__name__

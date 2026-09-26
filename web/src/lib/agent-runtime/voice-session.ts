@@ -7,6 +7,15 @@
  * says what that endpoint returned (its `speakableSummary`). Approvals are decided on the server; a spoken "yes" is just
  * another delegated request the backend binds (or refuses to bind) to one proposal.
  *
+ * Panel commands are the exception, because they must feel instant (Contract 4): "take me to Channels", "show me how to
+ * connect Instagram", "slower", "mute", "bye". A delegated request that is only one of these (`panel-commands.ts`) is
+ * carried out here through the registered panel actions and confirmed in one sentence, without an agent turn. When the
+ * panel can't do it on this screen, Rafii says so and the agent takes the request as before.
+ *
+ * "Stop talking" is real: GPT-Live has no response cancel, so the rest of the stopped reply (audio and words) is dropped
+ * until the person speaks again or a new result is being said. A goodbye ends the call once Rafii's reply has gone
+ * quiet. The transcript and hang-up rules are pure functions in `voice-transcript.ts`.
+ *
  * State shown to the person is the session's real state: transcript deltas, the remote audio level, delegation results,
  * `session.closed` and the connection state — never timers.
  */
@@ -15,21 +24,16 @@ import { ApiError } from '@/lib/api/client';
 import type { SiteAgentPageContext } from '@/lib/site-agent/types';
 import type { AgentApi } from './client';
 import { createTransport, VoiceTransportError, type LiveEvent, type LiveTransport } from './live-transport';
+import { panelActions } from './panel-actions';
+import { confirmation, isFarewell, matchPanelCommand, styleInstructions, voiceCommandsIn, type PanelCommand, type VoiceCommand } from './panel-commands';
+import type { AgentStylePatch } from './style';
 import type { AgentResult, AgentTurnResponse } from './types';
+import { applyTranscript, hangUpDue, lastUserLine, takeRequest, UTTERANCE_GAP_MS, type HangUp, type TranscriptEvent, type TranscriptLine } from './voice-transcript';
+
+export type { TranscriptLine } from './voice-transcript';
 
 export type VoiceState = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'ending' | 'ended' | 'error';
 export type Speaker = 'user' | 'rafii' | null;
-
-export interface TranscriptLine {
-  id: string;
-  /** Increases with every new line; a delegation takes the words after the last one it used (the list itself is capped). */
-  seq: number;
-  role: 'user' | 'assistant';
-  text: string;
-  final: boolean;
-  startMs: number;
-  endMs: number;
-}
 
 export interface Delegation {
   id: string;
@@ -40,13 +44,18 @@ export interface Delegation {
   error?: string;
   startedAt: number;
   finishedAt?: number;
+  /** Carried out in the browser as a panel command, without an agent turn. */
+  local?: boolean;
 }
 
 export interface VoiceSnapshot {
   state: VoiceState;
   error: { code: string; message: string } | null;
   micMuted: boolean;
+  /** True after "Stop talking" until the person speaks again or a new result is being said. */
   outputMuted: boolean;
+  /** A goodbye was heard: the call ends once Rafii's reply has gone quiet. */
+  endingAfterReply: boolean;
   speaker: Speaker;
   level: number;
   transcript: TranscriptLine[];
@@ -64,7 +73,10 @@ export interface VoiceHost {
   api: AgentApi;
   workspaceId: string;
   conversationId: string | null;
-  locale: string;
+  /** The call's language; left out, the server uses the person's saved style. */
+  locale?: string;
+  /** GPT-Live voice id; left out, the server uses the person's saved style. */
+  voice?: string;
   timeZone?: string;
   model?: string;
   pageContext: () => SiteAgentPageContext;
@@ -73,19 +85,18 @@ export interface VoiceHost {
 }
 
 const IDLE: VoiceSnapshot = {
-  state: 'idle', error: null, micMuted: false, outputMuted: false, speaker: null, level: 0, transcript: [], delegations: [], conversationId: null,
-  workspaceId: null, voiceSessionId: null, pendingImages: [], usageSeconds: null, transport: null, locale: 'auto'
+  state: 'idle', error: null, micMuted: false, outputMuted: false, endingAfterReply: false, speaker: null, level: 0, transcript: [], delegations: [],
+  conversationId: null, workspaceId: null, voiceSessionId: null, pendingImages: [], usageSeconds: null, transport: null, locale: 'auto'
 };
-const UTTERANCE_GAP_MS = 1200;
 const SETTLE_MS = 650;
 const SETTLE_MAX_MS = 3000;
-const MAX_LINES = 60;
 // Live accepts at most 500 tokens per append: about 1800 characters of English, but Chinese, Japanese or Korean text is
 // close to a token per character.
 const MAX_COMMENTARY_CHARS = 1800;
 const MAX_COMMENTARY_CJK_CHARS = 450;
 const TRANSCRIPT_BATCH = 50; // the server takes at most 50 lines per request
 const SPEAKING_HOLD_MS = 700; // "Rafii is speaking" holds through short pauses instead of flickering
+const SPOKEN = /[\p{L}\p{N}]/u; // a delta with words in it (not just spaces or punctuation)
 
 let snapshot: VoiceSnapshot = IDLE;
 const listeners = new Set<() => void>();
@@ -95,12 +106,17 @@ let unsubscribe: (() => void)[] = [];
 let levelTimer: ReturnType<typeof setInterval> | null = null;
 let lastInputAt = 0;
 let lastLoudAt = 0;
+let lastOutputAt = 0;
 let nextSeq = 0;
 let lastDelegatedSeq = 0;
 let unsent: TranscriptLine[] = [];
 let flushing: Promise<void> | null = null;
 let lastFlushFailure = 0;
 let closedEarly = false;
+/** Set after a goodbye; the level timer ends the call when `hangUpDue` says so. */
+let hangUp: HangUp | null = null;
+/** The open user line (id and length) last checked for a goodbye, so each version of it is checked once. */
+let farewellChecked = '';
 
 function set(patch: Partial<VoiceSnapshot>) {
   snapshot = { ...snapshot, ...patch };
@@ -124,22 +140,30 @@ function newTraceId() {
   return 'trace_' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function appendTranscript(role: 'user' | 'assistant', delta: string, startMs: number, endMs: number) {
-  const lines = [...snapshot.transcript];
-  const last = lines.at(-1);
-  if (last && last.role === role && !last.final && startMs - last.endMs < UTTERANCE_GAP_MS) {
-    lines[lines.length - 1] = { ...last, text: last.text + delta, endMs };
-  } else {
-    if (last && !last.final) {
-      lines[lines.length - 1] = { ...last, final: true };
-      unsent.push(lines[lines.length - 1]);
-    }
-    lines.push({ id: newKey(), seq: ++nextSeq, role, text: delta.trimStart(), final: false, startMs, endMs });
+function newLine() {
+  return { id: newKey(), seq: ++nextSeq };
+}
+
+/** Apply one transcript event to the snapshot; false when Rafii's words were dropped (a stopped reply still streaming). */
+function applyLine(event: TranscriptEvent, patch: Partial<VoiceSnapshot> = {}): boolean {
+  const step = applyTranscript({ lines: snapshot.transcript, stopped: snapshot.outputMuted }, event, newLine);
+  if (step.dropped) return false;
+  if (step.resumed) transport?.setOutputMuted(false);
+  set({ ...patch, transcript: step.state.lines, outputMuted: step.state.stopped });
+  for (const line of step.closed) {
+    unsent.push(line);
+    // Rafii has started answering the person's last words: if they were a goodbye, the call ends after this reply.
+    if (line.role === 'user' && event.type === 'delta' && event.role === 'assistant' && isFarewell(line.text)) armHangUp();
   }
-  set({ transcript: lines.slice(-MAX_LINES), speaker: role === 'user' ? 'user' : 'rafii' });
+  return true;
+}
+
+function appendTranscript(role: 'user' | 'assistant', delta: string, startMs: number, endMs: number): boolean {
+  const heard = applyLine({ type: 'delta', role, delta, startMs, endMs }, { speaker: role === 'user' ? 'user' : 'rafii' });
   // Stored as it goes (text only), so a long call or a closed tab keeps what was said and the backend sees it (with a
   // pause after a failed upload, so a failing endpoint isn't hit on every word).
-  if (unsent.length >= 20 && Date.now() - lastFlushFailure > 5000) void flushTranscript();
+  if (heard && unsent.length >= 20 && Date.now() - lastFlushFailure > 5000) void flushTranscript();
+  return heard;
 }
 
 function commentaryLimit(content: string) {
@@ -155,27 +179,146 @@ function think(content: string, delegationId: string | null = null) {
   send({ type: 'session.thinking.append', delegation_id: delegationId, content: content.slice(0, commentaryLimit(content)) });
 }
 
-/** A result GPT-Live says aloud, paraphrased. */
+/** A result GPT-Live says aloud, paraphrased. A reply the person stopped stays stopped until this. */
 function say(content: string, delegationId: string | null) {
+  if (snapshot.outputMuted) applyLine({ type: 'resume' });
   send({ type: 'session.commentary.append', delegation_id: delegationId, content: content.slice(0, commentaryLimit(content)) });
 }
 
-function userTextSinceLastDelegation(): string {
-  const lines = [...snapshot.transcript];
-  const fresh = lines.filter((line) => line.seq > lastDelegatedSeq && line.role === 'user' && line.text.trim());
-  lastDelegatedSeq = lines.at(-1)?.seq ?? lastDelegatedSeq;
-  const last = lines.at(-1);
-  if (last && !last.final) {
-    // Words said after this point start a new line, so they belong to the next request instead of this one.
-    lines[lines.length - 1] = { ...last, final: true };
-    unsent.push(lines[lines.length - 1]);
-    set({ transcript: lines });
+/** The call ends once Rafii's reply to the goodbye has gone quiet (at most 10 s from now). */
+function armHangUp() {
+  if (snapshot.state !== 'live' && snapshot.state !== 'reconnecting') return;
+  hangUp ??= { at: Date.now(), replied: false, lastSoundAt: 0 };
+  if (!snapshot.endingAfterReply) set({ endingAfterReply: true });
+}
+
+function cancelHangUp() {
+  hangUp = null;
+  if (snapshot.endingAfterReply) set({ endingAfterReply: false });
+}
+
+/** Every level tick: a settled goodbye arms the hang-up (even if Rafii never answers it); a due hang-up ends the call. */
+function watchFarewell(now: number) {
+  if (snapshot.state !== 'live') return;
+  if (hangUp) {
+    if (hangUpDue(hangUp, now)) {
+      hangUp = null;
+      void voiceSession.end();
+    }
+    return;
   }
-  return fresh.map((line) => line.text.trim()).join(' ').trim();
+  const line = lastUserLine(snapshot.transcript);
+  if (!line || line.final || now - lastInputAt < SETTLE_MS) return;
+  const key = `${line.id}:${line.text.length}`;
+  if (key === farewellChecked) return;
+  farewellChecked = key;
+  if (isFarewell(line.text)) armHangUp();
+}
+
+function userTextSinceLastDelegation(): string {
+  const taken = takeRequest(snapshot.transcript, lastDelegatedSeq);
+  lastDelegatedSeq = taken.lastSeq;
+  if (taken.closed.length) {
+    // Words said after this point start a new line, so they belong to the next request instead of this one.
+    set({ transcript: taken.lines });
+    unsent.push(...taken.closed);
+  }
+  return taken.request;
 }
 
 function updateDelegation(id: string, patch: Partial<Delegation>) {
   set({ delegations: snapshot.delegations.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
+}
+
+/** GPT-Live is told how to talk from now on: fixed sentences picked by enum value, never the person's words. */
+function applyLiveStyle(patch: AgentStylePatch) {
+  const lines = styleInstructions(patch);
+  if (lines.length) send({ type: 'session.instructions.append', delegation_id: null, content: lines.join(' ') });
+  if (patch.language) set({ locale: patch.language });
+}
+
+/** Carry out a panel command here; true only when its handler exists and finished (a guide: said it started). */
+async function carryOut(command: PanelCommand): Promise<boolean> {
+  const actions = panelActions();
+  try {
+    switch (command.kind) {
+      case 'end_call':
+        armHangUp();
+        return true;
+      case 'mute':
+        voiceSession.setMicMuted(true);
+        return true;
+      case 'stop_speaking':
+        voiceSession.stopSpeaking();
+        return true;
+      case 'style': {
+        const save = actions.setStyle;
+        if (!save) return false;
+        await save(command.patch);
+        applyLiveStyle(command.patch);
+        return true;
+      }
+      case 'open_style': {
+        const open = actions.openStyle;
+        if (!open) return false;
+        open();
+        return true;
+      }
+      case 'navigate': {
+        const navigate = actions.navigate;
+        if (!navigate) return false;
+        navigate(command.href);
+        return true;
+      }
+      case 'guide': {
+        const start = actions.startGuide;
+        return start ? (await start(command.guideId)) === true : false;
+      }
+    }
+  } catch {
+    return false;
+  }
+}
+
+/** The local fast lane: true when the request was handled here (no agent turn), false to send it to the agent. */
+async function runPanelCommand(id: string, request: string, command: PanelCommand): Promise<boolean> {
+  updateDelegation(id, { request, status: 'running' });
+  if (!(await carryOut(command))) {
+    // Nothing is claimed: the panel couldn't do it on this screen, so the agent takes the request as before.
+    say('I can’t do that from this screen, so I’m checking another way.', id);
+    return false;
+  }
+  updateDelegation(id, { status: 'done', local: true, finishedAt: Date.now() });
+  const spoken = confirmation(command);
+  if (spoken) say(spoken, id);
+  // "Stop talking" is confirmed by silence; GPT-Live still learns the request is done.
+  else think('Done: the user asked Rafii to stop talking. Stay quiet until the user speaks again.', id);
+  return true;
+}
+
+/** `voice_command` blocks from the agent's answer (Contract 2); true when the answer must not be said aloud. */
+async function runVoiceCommands(commands: VoiceCommand[]): Promise<boolean> {
+  let quiet = false;
+  for (const item of commands) {
+    if (item.command === 'style') {
+      try {
+        await panelActions().setStyle?.(item.style);
+      } catch {
+        /* the agent already saved it; this only refreshes the panel's copy */
+      }
+      applyLiveStyle(item.style);
+    } else if (item.command === 'mute') {
+      voiceSession.setMicMuted(true);
+    } else if (item.command === 'stop_speaking') {
+      voiceSession.stopSpeaking();
+      quiet = true;
+    } else if (quiet) {
+      void voiceSession.end(); // quiet and goodbye: nothing more will be said
+    } else {
+      armHangUp();
+    }
+  }
+  return quiet;
 }
 
 async function onDelegation(id: string) {
@@ -201,6 +344,9 @@ async function onDelegation(id: string) {
     say('I didn’t catch a request there. Could you say it again?', id);
     return;
   }
+  // Panel commands never wait for a model turn.
+  const command = matchPanelCommand(request);
+  if (command && (await runPanelCommand(id, request, command))) return;
   updateDelegation(id, { request, status: 'running' });
   think(`Working on: ${request}. No result yet — don't state one.`, id);
   const images = snapshot.pendingImages;
@@ -209,10 +355,13 @@ async function onDelegation(id: string) {
   const sentIn = snapshot.conversationId;
   const progress = startProgress(id, sentIn);
   await flushTranscript(); // the backend reads what was just said (recentVoiceTranscript)
+  const page = current.pageContext();
+  // This session carries out `voice_command` blocks, so the agent may answer with them.
+  const pageContext: SiteAgentPageContext = { ...page, uiCapabilities: [...new Set([...(page.uiCapabilities ?? []), 'voice'])] };
   try {
     const response = await current.api.turn(current.workspaceId, {
       // One key per delegation: a repeated event or a retried request is the same turn on the server.
-      message: request, idempotencyKey: `voice:${snapshot.voiceSessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: sentIn, modality: 'voice', pageContext: current.pageContext(),
+      message: request, idempotencyKey: `voice:${snapshot.voiceSessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: sentIn, modality: 'voice', pageContext,
       attachments: images.map((image) => ({ assetId: image.assetId })), timeZone: current.timeZone, locale: snapshot.locale, model: current.model,
       traceId: newTraceId(), delegationId: id, voiceSessionId: snapshot.voiceSessionId ?? undefined
     });
@@ -228,7 +377,10 @@ async function onDelegation(id: string) {
     if (snapshot.error && snapshot.error.code !== 'connection_lost') set({ error: null }); // the service is answering again
     // Only what the server returned is said; with no spoken summary, nothing is claimed beyond "it's in the panel".
     const spoken = result?.speakableSummary?.trim() || (result?.errors?.length ? 'That didn’t fully work. The details are in the panel.' : 'I’ve put the answer in the panel.');
-    say(spoken, id);
+    // Commands in the answer run only while this call is still the one that asked.
+    const quiet = host === current && transport ? await runVoiceCommands(voiceCommandsIn(response)) : false;
+    if (quiet) think(`The user asked for quiet, so this result is not said aloud: ${spoken}`, id);
+    else say(spoken, id);
   } catch (error) {
     progress.stop();
     const message = error instanceof Error ? error.message : 'The request failed.';
@@ -274,12 +426,22 @@ function onLiveEvent(event: LiveEvent) {
     case 'session.started':
       set({ state: 'live', error: null });
       break;
-    case 'session.input_transcript.delta':
+    case 'session.input_transcript.delta': {
+      const delta = String(event.delta ?? '');
       lastInputAt = Date.now();
-      appendTranscript('user', String(event.delta ?? ''), Number(event.start_ms ?? 0), Number(event.end_ms ?? 0));
+      // Speaking again after a goodbye keeps the call on.
+      if (hangUp && SPOKEN.test(delta)) cancelHangUp();
+      appendTranscript('user', delta, Number(event.start_ms ?? 0), Number(event.end_ms ?? 0));
       break;
+    }
     case 'session.output_transcript.delta':
-      appendTranscript('assistant', String(event.delta ?? ''), Number(event.start_ms ?? 0), Number(event.end_ms ?? 0));
+      if (appendTranscript('assistant', String(event.delta ?? ''), Number(event.start_ms ?? 0), Number(event.end_ms ?? 0))) {
+        lastOutputAt = Date.now();
+        if (hangUp) {
+          hangUp.replied = true;
+          hangUp.lastSoundAt = lastOutputAt;
+        }
+      }
       break;
     case 'session.delegation.created': {
       const delegation = event.delegation as { id?: string } | undefined;
@@ -348,6 +510,7 @@ async function finish(reason: string, usageSeconds: number | null) {
   const sessionId = snapshot.voiceSessionId;
   if (levelTimer) clearInterval(levelTimer);
   levelTimer = null;
+  hangUp = null;
   await flushTranscript(true);
   for (const off of unsubscribe.splice(0)) off();
   transport?.close();
@@ -361,7 +524,7 @@ async function finish(reason: string, usageSeconds: number | null) {
   }
   const unexpected = closedEarly && reason !== 'close_requested';
   set({
-    state: unexpected ? 'error' : 'ended', speaker: null, level: 0, voiceSessionId: null, transport: null,
+    state: unexpected ? 'error' : 'ended', speaker: null, level: 0, voiceSessionId: null, transport: null, outputMuted: false, endingAfterReply: false,
     error: unexpected ? { code: reason, message: reason === 'expired' ? 'The voice session reached its time limit.' : 'Voice Mode stopped. You can keep typing, or start it again.' } : null
   });
   closedEarly = false;
@@ -377,9 +540,13 @@ export const voiceSession = {
     host = next;
     lastDelegatedSeq = nextSeq;
     unsent = [];
+    hangUp = null;
+    farewellChecked = '';
+    lastOutputAt = 0;
+    lastLoudAt = 0;
     if (levelTimer) clearInterval(levelTimer);
     levelTimer = null;
-    set({ ...IDLE, state: 'connecting', workspaceId: next.workspaceId, conversationId: next.conversationId, locale: next.locale });
+    set({ ...IDLE, state: 'connecting', workspaceId: next.workspaceId, conversationId: next.conversationId, locale: next.locale ?? 'auto' });
     const live = createTransport();
     transport = live;
     unsubscribe = [
@@ -396,13 +563,14 @@ export const voiceSession = {
     try {
       await live.connect(async (sdp) => {
         if (transport !== live) throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
-        const started = await next.api.voiceStart(next.workspaceId, { sdp, conversationId: next.conversationId, locale: next.locale });
+        const started = await next.api.voiceStart(next.workspaceId, { sdp, conversationId: next.conversationId, locale: next.locale, voice: next.voice });
         if (transport !== live) {
           // Ended while the session was being created: end that session too, so it is neither left open nor billed to the cap.
           void next.api.voiceEnd(next.workspaceId, started.voiceSessionId, { reason: 'user_ended', usageSeconds: 0 }).catch(() => undefined);
           throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
         }
-        set({ voiceSessionId: started.voiceSessionId, conversationId: started.conversationId });
+        // The server settles the call's language (the person's style when none was picked); requests use the same one.
+        set({ voiceSessionId: started.voiceSessionId, conversationId: started.conversationId, locale: started.locale || snapshot.locale });
         if (started.conversationId !== next.conversationId) next.onConversation(started.conversationId);
         return started.sdp;
       });
@@ -415,9 +583,13 @@ export const voiceSession = {
       levelTimer = setInterval(() => {
         const level = transport?.outputLevel() ?? 0;
         const now = Date.now();
-        if (level > 0.04) lastLoudAt = now;
+        if (level > 0.04) {
+          lastLoudAt = now;
+          if (hangUp) hangUp.lastSoundAt = now;
+        }
         const speaker: Speaker = now - lastLoudAt < SPEAKING_HOLD_MS ? 'rafii' : now - lastInputAt < 900 ? 'user' : null;
         if (Math.abs(level - snapshot.level) > 0.02 || speaker !== snapshot.speaker) set({ level, speaker });
+        watchFarewell(now);
       }, 120);
     } catch (error) {
       const abandoned = transport !== live;
@@ -433,6 +605,7 @@ export const voiceSession = {
   },
 
   async end() {
+    hangUp = null;
     if (!transport || snapshot.state === 'ending') {
       if (snapshot.state !== 'idle') set({ state: 'ended' });
       return;
@@ -470,8 +643,9 @@ export const voiceSession = {
     }
     if (snapshot.voiceSessionId) void previous.api.voiceEnd(previous.workspaceId, snapshot.voiceSessionId, { reason: 'connection_lost', usageSeconds: snapshot.usageSeconds }).catch(() => undefined);
     set({ state: 'idle', voiceSessionId: null });
-    // A new Live session in the same conversation: the server gives it the conversation so far; approvals live on the server.
-    await voiceSession.start({ ...previous, conversationId: snapshot.conversationId });
+    // A new Live session in the same conversation (and language): the server gives it the conversation so far;
+    // approvals live on the server.
+    await voiceSession.start({ ...previous, conversationId: snapshot.conversationId, locale: snapshot.locale });
   },
 
   setMicMuted(muted: boolean) {
@@ -479,15 +653,18 @@ export const voiceSession = {
     set({ micMuted: muted });
   },
 
-  /** Stop Rafii talking right now: drop the audio locally, then tell GPT-Live to yield and listen. */
+  /**
+   * Stop Rafii talking for good: GPT-Live can't cancel a reply, so its audio stays muted and the rest of its words are
+   * dropped until the person speaks again or a new result is being said. The cut-off line is marked stopped.
+   */
   stopSpeaking() {
-    transport?.setOutputMuted(true);
+    if (!transport) return;
+    const now = Date.now();
+    const inFlight = snapshot.speaker === 'rafii' || now - lastLoudAt < SPEAKING_HOLD_MS || now - lastOutputAt < UTTERANCE_GAP_MS;
+    transport.setOutputMuted(true);
     send({ type: 'session.instructions.append', delegation_id: null, content: 'Stop speaking now and listen to the user.' });
-    set({ speaker: null, level: 0, outputMuted: true });
-    setTimeout(() => {
-      transport?.setOutputMuted(false);
-      set({ outputMuted: false });
-    }, 400);
+    lastLoudAt = 0;
+    applyLine({ type: 'stop', inFlight }, { speaker: null, level: 0 });
   },
 
   /** The person moved to another page with the call on: GPT-Live hears about it quietly. */

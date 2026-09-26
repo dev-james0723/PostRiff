@@ -81,7 +81,7 @@ export function ConfirmChoice({ open, pending, title, description, confirmLabel,
           <AlertDialogCancel variant='glass' size='control' disabled={pending}>
             {cancelLabel}
           </AlertDialogCancel>
-          <LoadingButton variant='action' size='control' loading={pending} loadingLabel='Saving…' onClick={onConfirm}>
+          <LoadingButton variant='action' size='control' data-tour='memory-access-confirm' loading={pending} loadingLabel='Saving…' onClick={onConfirm}>
             {confirmLabel}
           </LoadingButton>
         </AlertDialogFooter>

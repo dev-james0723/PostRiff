@@ -385,8 +385,21 @@ def _forward_chips(ctx: RafiiRunContext, request: dict) -> dict:
     return request
 
 
-def _writing_run(ctx: RafiiRunContext, request: dict, *, separate: bool) -> tuple[str, dict]:
-    """Run the writing pipeline in this conversation and save its candidates, as the panel's Save does."""
+def _skills_used(ctx: RafiiRunContext, events: dict, result: dict) -> list[dict]:
+    """The product writing skills the run bound (its usage record), named on the result and as a stored fact."""
+    from .live_tools import bound_skills
+    usage = events.get("usage") if isinstance(events.get("usage"), dict) else {}
+    skills = bound_skills(usage.get("skillBindings") or result.get("skills") or [])
+    if skills:
+        line = "Written with Rafii's " + ", ".join(s["title"] for s in skills)
+        if not any(f.get("text") == line for f in ctx.ledger.facts):
+            ctx.ledger.facts.append({"text": line, "kind": "stored", "rule": "writing pipeline skills"})
+    return skills
+
+
+def _writing_run(ctx: RafiiRunContext, request: dict, *, separate: bool) -> tuple[str, dict, list[dict]]:
+    """Run the writing pipeline in this conversation and save its candidates, as the panel's Save does. Returns the run,
+    the re-read state and the product skills the run bound."""
     ideas = ctx.service.ideas
     ctx.check_cancelled()
     request = _forward_chips(ctx, request)
@@ -412,7 +425,7 @@ def _writing_run(ctx: RafiiRunContext, request: dict, *, separate: bool) -> tupl
         except AlphaError as error:
             if error.status != 409 or attempt:
                 raise
-    return run_id, ctx.snapshot()["state"]
+    return run_id, ctx.snapshot()["state"], _skills_used(ctx, events if isinstance(events, dict) else {}, result)
 
 
 def _draft_view(ctx, state, variant, *, proposed=False):
@@ -454,7 +467,7 @@ def draft_create(ctx: RafiiRunContext, args: dict) -> dict:
     # the material is data, never parsed for channels, days or instructions (ideas.turn "reworking").
     request = {"text": "", "intentText": args["brief"], "idea": args["brief"], "material": material, "destinations": destinations, "idempotencyKey": key,
                "timeZone": ctx.zone, **({"materialRef": material_ref} if material_ref else {})}
-    run_id, state = _writing_run(ctx, request, separate=True)
+    run_id, state, skills = _writing_run(ctx, request, separate=True)
     saved = [v for v in state.get("variants", []) if isinstance(v, dict) and (v.get("provenance") or {}).get("runId") == run_id]
     verified = bool(saved) and all(v.get("platform") in platforms for v in saved)
     views = [_draft_view(ctx, state, v) for v in saved]
@@ -462,7 +475,7 @@ def draft_create(ctx: RafiiRunContext, args: dict) -> dict:
         ctx.ledger.reference("draft", view["draftId"], f"{view['platform']} draft")
         ctx.ledger.changed.append({"type": "draft", "id": view["draftId"], "change": "created", "expected": "saved draft", "actual": "saved draft", "verified": True})
     _step_done(ctx, args, verified=verified, outputs=[{"type": "draft", "id": v["draftId"]} for v in views])
-    return {"ok": verified, "verified": verified, "runId": run_id, "drafts": views,
+    return {"ok": verified, "verified": verified, "runId": run_id, "drafts": views, "skills": skills,
             **({} if verified else {"error": "The writer ran, but no saved draft was found when I re-read the workspace."})}
 
 
@@ -486,7 +499,7 @@ def draft_rewrite(ctx: RafiiRunContext, args: dict) -> dict:
     key = "agent-rewrite:" + hashlib.sha256(f"{ctx.trace_id}|{args['draftId']}|{args['instruction']}|{platform}".encode()).hexdigest()[:40]
     request = {"text": "", "intentText": args["instruction"], "idea": args["instruction"], "material": before_text, "idempotencyKey": key, "timeZone": ctx.zone,
                "materialRef": {"type": "draft", "id": args["draftId"], "title": f"{variant.get('platform')} draft"}, "destinations": [destination]}
-    run_id, state = _writing_run(ctx, request, separate=False)
+    run_id, state, skills = _writing_run(ctx, request, separate=False)
     updated = next((v for v in state.get("variants", []) if v.get("id") == args["draftId"]), None)
     derived = [v for v in state.get("variants", []) if (v.get("provenance") or {}).get("runId") == run_id and v.get("id") != args["draftId"]]
     if updated is not None and (updated.get("proposedUpdate") or {}).get("runId") == run_id:
@@ -503,6 +516,7 @@ def draft_rewrite(ctx: RafiiRunContext, args: dict) -> dict:
         result = {"ok": True, "verified": True, "runId": run_id, "drafts": views, "outcome": "new_draft"}
     else:
         result = {"ok": False, "verified": False, "runId": run_id, "error": "The rewrite ran, but I couldn't find its result on the draft when I re-read the workspace."}
+    result["skills"] = skills
     ctx.ledger.reference("draft", args["draftId"], f"{variant.get('platform')} draft")
     _step_done(ctx, args, verified=result["verified"], outputs=[{"type": "draft", "id": args["draftId"]}])
     return result
@@ -577,7 +591,7 @@ EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools",)
 def ensure_registered() -> None:
     """Import side effects in one place (the registry is filled at import), then optional extensions if installed."""
     import importlib
-    from . import creative, specialists  # noqa: F401 — both register tools at import (image_*, web_research)
+    from . import creative, live_tools, specialists  # noqa: F401 — they register tools at import (image_*, weather_now, skills_list, web_research)
     from .tool_adapter import register_site_tools
     register_site_tools()
     for name in EXTENSION_MODULES:

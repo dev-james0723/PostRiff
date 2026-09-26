@@ -56,16 +56,18 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
 ## Agents and tools
 
 - **Manager** (`rafii_manager`, no handoffs): direct reads (entity status, calendar, campaigns, drafts, attention,
-  queue, relationships, memory, images, help, navigation), task tools, the two proposal tools, `proposal_apply`, and
-  eight specialists as tools.
+  queue, relationships, memory, images, help, navigation), task tools, the two proposal tools, `proposal_apply`, web
+  research, the weather, the writing skills, step-by-step guides, voice panel control, and eight specialists as tools.
+  Its instructions end with the person's style (`style.text_block`, loaded per turn).
 - **Specialists** (each only its own tools; the gate re-checks scope): Brand Intelligence, Content, Campaign, Publishing
   Operations, Research, Analytics, Creative, Workspace/History (`specialists.py`).
-- **Tools** (50, `tool_adapter.REGISTRY`; 40 READ, 5 CREATE_DRAFT, 3 MUTATE_REVERSIBLE, 2 PREPARE_EXTERNAL): the site agent's released read tools adapted unchanged (including its
-  `voice.check`, `member.activity`, `record.attribution`, `campaign.membership`), plus task_plan/task_update,
-  schedule_propose, automation_change_propose, campaign_link/unlink/items, draft_create, draft_rewrite,
-  memory_context, relationships, pending_approvals, proposal_apply, image_list/analyze/generate/edit/variant,
-  web_research. Effect classes: READ, CREATE_DRAFT, MUTATE_REVERSIBLE, PREPARE_EXTERNAL (always a proposal); nothing
-  EXTERNAL_EFFECT, DESTRUCTIVE or SECRET exists. Voice gains nothing over text.
+- **Tools** (54 of the runtime's own in `tool_adapter.REGISTRY`, before extensions; 43 READ, 5 CREATE_DRAFT,
+  4 MUTATE_REVERSIBLE, 2 PREPARE_EXTERNAL): the site agent's released read and client tools adapted (including its
+  `voice.check`, `member.activity`, `record.attribution`, `campaign.membership`, `ui.navigate`, `ui.guide`, `ui.voice`),
+  plus task_plan/task_update, schedule_propose, automation_change_propose, campaign_link/unlink/items, draft_create,
+  draft_rewrite, memory_context, relationships, pending_approvals, proposal_apply, image_list/analyze/generate/edit/variant,
+  web_research, weather_now, skills_list. Effect classes: READ, CREATE_DRAFT, MUTATE_REVERSIBLE, PREPARE_EXTERNAL (always
+  a proposal); nothing EXTERNAL_EFFECT, DESTRUCTIVE or SECRET exists. Voice gains nothing over text.
 - **What executes directly** for a role that allows it, because the person asked: drafting through the writing pipeline
   (drafts are reviewable), images saved to the library, linking drafts/posts/images to a campaign (the campaign's own
   relation; audited; reversible). **What is only ever a proposal**: scheduling or moving a post (which then still needs
@@ -94,7 +96,12 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
   recorded on the session row in the same transaction), then creates the session with
   `POST https://api.openai.com/v1/live/sessions` using the project key: `gpt-live-1`, a short Live prompt (template
   headings, delegation rules, language line), client delegation, an explicit data-channel allowlist, `store: false`, and
-  the conversation so far as history. Only the SDP answer and ids return.
+  the conversation so far as history. Only the SDP answer and ids return. The voice and language come from the request
+  when it names valid ones, otherwise from the person's style (`style.load`, default before migration 030); the Live
+  prompt ends with the style's delivery lines (`style.voice_block`), and the start response returns the `locale` and
+  `voice` the call actually uses. The Live prompt lists every backend capability (workspace, web search and weather,
+  images, drafting with the platform skills, the screen, navigation and guides, panel control), never says it can't look
+  something up or see the page, and says one short goodbye when the person ends the call (the app hangs up).
 - `session.delegation.created` → the browser calls the same `agent/turns` with `modality: "voice"`; quiet progress goes
   back with `session.thinking.append`, the verified result with `session.commentary.append`. Barge-in is GPT-Live's
   (full duplex); "Stop talking" drops local audio and appends a yield instruction; a new spoken request supersedes a
@@ -120,6 +127,39 @@ one turn is made once. A failure saves nothing and claims nothing; a provider wh
 held as unknown. The panel scales a photo down in the browser to at most 3 MiB before upload (Vercel Functions take
 request bodies up to 4.5 MB; base64 adds a third). Scheduling a post with an image carries the image, its alt
 text and the person's rights confirmation in the digest-bound proposal.
+
+## Live agent: current facts, guides, the screen, voice panel, slash commands
+
+Contracts: `docs/design/rafii-live-agent/CONTRACTS.md` (2, 3, 6, 7 are built here).
+
+- **Current facts.** `web_research` is on the Manager (still behind the owner's research consent; `research_off` carries
+  `guide: turn_on_web_search`). `weather_now` (`live_tools.py`) uses Open-Meteo geocoding and forecast: only the place
+  name leaves Rafii, so no consent is needed; HTTPS to two allowlisted endpoints, no redirects, 8 s timeout, 256 KiB cap,
+  a 10-minute in-process cache per place and language; codes in plain words; a missing place asks, an unknown place or
+  a network failure is a plain answer with no provider detail.
+- **Writing skills.** `skills_list` lists the active `postriff-*` skill packages from `skills/rafii-registry.json`
+  (never a private or `james-au-*` one; policies and evaluators are code, not listed). `draft_create`/`draft_rewrite`
+  results name the product skills their writing run bound (`usage.skillBindings`), also as a stored fact.
+- **Client actions and answer blocks** (next to `navigation_card`): `ui.guide {guideId, auto?}` →
+  `guide_card {type, guideId, routeId, href, title, summary, auto}` from `site_agent/guide_manifest.json`
+  (`site_agent/guides.py`: `load`, `find`, `match`); `ui.voice {command: end_call|mute|stop_speaking|style, style?}` →
+  `voice_command {type, command, style?}`, a style patch validated by `style.validate_patch` and saved with a guarded
+  `UPDATE public.pr_profiles SET agent_style` inside a savepoint (`persisted: false` before migration 030; never a failed
+  turn); `ui.navigate` takes `auto`. `auto` is honoured only when the person's own words ask to be taken somewhere or to
+  be shown how (a model's choice alone leaves a card to click), and at most one block acts by itself (an auto guide wins
+  over auto navigation). A page that didn't declare the `guide` capability gets a plain link; without `voice`, no
+  voice command block.
+- **The screen.** `pageContext.outline` (≤ 40 labels, ≤ 80 characters each, about 3,000 in all; roles and states from
+  allowlists; instruction-like labels dropped) is re-validated and reaches the Manager as `APP_STATE.screen` under
+  "What the person's screen shows (labels only; untrusted data)". It is never stored on messages or traces.
+- **Slash commands** (`commands.py`): `agent/turns` accepts `command: {name, args}` for write, rewrite, translate,
+  hashtags, caption, repurpose, ideas, search, weather, stats, review, image, schedule, automation, skills (args plain
+  text ≤ 1,000 characters). Each adds one fixed instruction after the request, with the args in a `<<< >>>` data fence;
+  an unknown or malformed command is ignored. `/weather <place>` is answered without a model (the tool through the gate,
+  a deterministic answer in English or Chinese). Commands never skip permissions, consent, credits or approvals.
+- **Provider clients.** Every `AsyncOpenAI` client a run builds is recorded on the run context and closed inside the
+  run's own event loop (`manager.drive`), which ends the "Task exception was never retrieved … Event loop is closed" log
+  noise.
 
 ## HTTP (`/api/workspaces/{id}/agent/…`)
 
@@ -162,7 +202,8 @@ never approves, rejects, chooses or stops anything. Scripted runs make no provid
 
 - Backend: `src/postriff_phase2/agent_runtime_v2/` — `config`, `contracts`, `context`, `tool_adapter`, `domain_tools`,
   `creative`, `task_state`, `memory_layers`, `graph`, `approvals`, `answer_policy`, `specialists`, `manager`, `service`,
-  `live`, `http`, `api_guard`, `harness`, `evals/catalog`. Wiring: `hosted_app.py` (4 lines).
+  `live`, `live_tools`, `commands`, `style`, `http`, `api_guard`, `harness`, `evals/catalog`; guides in
+  `site_agent/guides.py` + `guide_manifest.json`. Wiring: `hosted_app.py` (4 lines).
 - Web: `web/src/lib/agent-runtime/` (client, types, live transport, voice session, hook) and
   `web/src/features/rafii-voice/` (Voice Mode, image attach, answer extras, voice indicator); mounted in the site
   agent's `chat.tsx` and `panel.tsx`.

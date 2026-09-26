@@ -23,6 +23,7 @@ from .content_types import ensure_content_state, projection as content_projectio
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state
 from . import campaigns, locales, media_consent, memory, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
@@ -43,6 +44,10 @@ PROFILE_NAME_MAX = 80
 # server itself can resolve, so a stored zone never breaks scheduling later.
 LOCALE_TAG = re.compile(r"^[a-z]{2,3}(?:-[A-Za-z]{2,4})?(?:-[A-Z]{2})?$")
 ZONE_NAME = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+\-]+){0,2}$")
+# How Rafii talks to the person (migration 030, agent_runtime_v2/style.py). This code can run before 030 is applied:
+# reading then falls back to the default style, and saving asks the person to try again later.
+AGENT_STYLE_COLUMN = "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid='public.pr_profiles'::regclass AND attname='agent_style' AND attnum>0 AND NOT attisdropped)"
+AGENT_STYLE_NOT_READY = "Rafii's style can't be saved yet. Try again after the update finishes."
 
 
 def known_zone(name):
@@ -752,6 +757,9 @@ class HostedWorkspaceService:
                 fresh = self._touch_session(cur, principal, session_id, client_label)
                 cur.execute("SELECT coalesce(p.display_name,''),extract(epoch from e.enforced_at),coalesce(p.time_zone,''),coalesce(p.locale,''),coalesce(p.alert_new_device,false) FROM public.pr_profiles p LEFT JOIN public.pr_mfa_enforcement e ON e.user_id=p.user_id WHERE p.user_id=%s AND p.deleted_at IS NULL", (principal,))
                 row = cur.fetchone()
+                # A savepoint-guarded read of its own: before migration 030 the default style applies, and the session
+                # recorded above still commits.
+                style = agent_style.load(cur, principal)
         if fresh:
             self._alert_new_device(principal, session_id, client_label)
         display_name, enforced_at, time_zone, locale, alert_new_device = row if row else ("", None, "", "", False)
@@ -761,8 +769,8 @@ class HostedWorkspaceService:
             "sessionId": session_id,
             # `available` is false for identities without assurance levels (the dev harness).
             "mfa": {"available": aal is not None, "enforced": enforced_at is not None, "enforcedAt": float(enforced_at) if enforced_at else None, "aal": aal(token, principal) if aal else None},
-            # Empty strings mean "follow the device"; the browser fills them in.
-            "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device)},
+            # Empty strings mean "follow the device"; the browser fills them in. `agentStyle` is always complete.
+            "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device), "agentStyle": style},
         }
 
     def update_profile(self, token, changes):
@@ -789,17 +797,38 @@ class HostedWorkspaceService:
             if type(changes["alertNewDevice"]) is not bool:
                 raise AlphaError("The new-device alert is either on or off.")
             columns["alert_new_device"] = changes["alertNewDevice"]
-        if not columns:
+        # How Rafii talks: a partial change (or a preset) merged into the saved style below.
+        style_change = agent_style.validate_patch(changes["agentStyle"]) if "agentStyle" in changes else None
+        if not columns and style_change is None:
             raise AlphaError("Nothing to update.")
         principal = self.verify_session(token)
-        names = list(columns)  # fixed identifiers from the mapping above, never client strings
+        style = None
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute(f"INSERT INTO public.pr_profiles(user_id,{','.join(names)}) VALUES(%s,{','.join('%s' for _ in names)}) ON CONFLICT (user_id) DO UPDATE SET {','.join(f'{n}=excluded.{n}' for n in names)} WHERE public.pr_profiles.deleted_at IS NULL RETURNING display_name,coalesce(time_zone,''),coalesce(locale,''),coalesce(alert_new_device,false)", (principal, *columns.values()))
+                if style_change is not None:
+                    style = agent_style.merge(self._saved_agent_style(cur, principal), style_change)
+                    columns["agent_style"] = json.dumps(style)
+                names = list(columns)  # fixed identifiers from the mapping above, never client strings
+                values = ",".join("%s::jsonb" if name == "agent_style" else "%s" for name in names)
+                cur.execute(f"INSERT INTO public.pr_profiles(user_id,{','.join(names)}) VALUES(%s,{values}) ON CONFLICT (user_id) DO UPDATE SET {','.join(f'{n}=excluded.{n}' for n in names)} WHERE public.pr_profiles.deleted_at IS NULL RETURNING display_name,coalesce(time_zone,''),coalesce(locale,''),coalesce(alert_new_device,false)", (principal, *columns.values()))
                 row = cur.fetchone()
+                if row and style is None:
+                    style = agent_style.load(cur, principal)
         if not row:
             raise AlphaError("Workspace unavailable.", 403)
-        return {"displayName": row[0], "preferences": {"timeZone": row[1], "locale": row[2], "alertNewDevice": bool(row[3])}}
+        return {"displayName": row[0], "preferences": {"timeZone": row[1], "locale": row[2], "alertNewDevice": bool(row[3]), "agentStyle": style}}
+
+    @staticmethod
+    def _saved_agent_style(cur, principal):
+        """The saved style, locked until this change commits so two quick changes can't undo each other. Before
+        migration 030 there is nowhere to save it yet: 503, and nothing else in the request is written either."""
+        cur.execute(AGENT_STYLE_COLUMN)
+        ready = cur.fetchone()
+        if not (ready and ready[0]):
+            raise AlphaError(AGENT_STYLE_NOT_READY, 503)
+        cur.execute("SELECT agent_style FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL FOR UPDATE", (principal,))
+        row = cur.fetchone()
+        return row[0] if row else {}
 
     def my_channels(self, token):
         """Every connected channel in every workspace the user belongs to, with whether they may

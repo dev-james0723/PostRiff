@@ -9,6 +9,8 @@
  * - While another dialog is open (an automation's builder, a confirmation) the page behind it, and so the docked
  *   column, is inert under that dialog's backdrop. ⌘J then opens the conversation as a sheet above the dialog; it
  *   closes with that dialog, and the column is back as it was.
+ * - Rafii's style (how Rafii talks, in text and voice) has a pill in the conversation's header (chat.tsx), which also
+ *   registers `openStyle`; `panelActions.setStyle` is registered once in the always-present shell.
  */
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
@@ -16,12 +18,15 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { siteConfig } from '@/config/site';
 import { useWide } from '@/features/queue/use-wide';
 import { VoiceIndicator } from '@/features/rafii-voice/voice-indicator';
+import { useRegisterStyleAction } from '@/lib/agent-runtime/use-agent-style';
 import { SiteAgentChat } from './chat';
 import { panelStore, usePanel } from './store';
 
 const DOCK_QUERY = '(min-width: 1024px)';
 export const LAUNCHER_ID = 'rafii-launcher';
 export const PANEL_ID = 'rafii-panel';
+/** The style sheet opens above the panel (outside its element); Escape in it closes just the sheet. */
+const STYLE_SHEET = '[data-rafii-style-sheet]';
 
 function subscribeDock(onChange: () => void) {
   const query = window.matchMedia(DOCK_QUERY);
@@ -71,7 +76,7 @@ function useEscapeClosesOnlyRafii(active: boolean, close: () => void) {
   useEffect(() => {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || document.getElementById(PANEL_ID)?.contains(document.activeElement)) return;
+      if (event.key !== 'Escape' || document.getElementById(PANEL_ID)?.contains(document.activeElement) || document.activeElement?.closest(STYLE_SHEET)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       close();
@@ -84,6 +89,8 @@ function useEscapeClosesOnlyRafii(active: boolean, close: () => void) {
 /** Keyboard shortcut and restore; mounted once in the app shell. */
 export function SiteAgentHotkeys() {
   const docked = useDocked();
+  // A spoken or typed style change applies even while the panel is closed and a call carries on.
+  useRegisterStyleAction();
   useEffect(() => {
     panelStore.restore(docked);
   }, [docked]);

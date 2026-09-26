@@ -4,6 +4,7 @@
  * and kept in one place so every page reads the same shapes.
  */
 import type { WorkspacePlan, WorkspaceRole } from '@/types';
+import type { AgentStyle, AgentStylePatch } from '@/lib/agent-runtime/style';
 
 export type AuthMode = 'supabase' | 'dev';
 
@@ -1610,7 +1611,13 @@ export interface Me {
     aal: 'aal1' | 'aal2' | null;
   };
   /** Person-level preferences; empty strings mean "follow this device". */
-  preferences: { timeZone: string; locale: string; alertNewDevice: boolean };
+  preferences: {
+    timeZone: string;
+    locale: string;
+    alertNewDevice: boolean;
+    /** How Rafii talks to this person, in text and voice. Read it through `useAgentStyle`, which normalises it. */
+    agentStyle: AgentStyle;
+  };
 }
 
 /** Body of `PATCH /api/me`; only the keys present change. */
@@ -1619,6 +1626,8 @@ export interface ProfileChanges {
   timeZone?: string;
   locale?: string;
   alertNewDevice?: boolean;
+  /** Merged into the saved style on the server: a preset, single fields, and `chosen`. */
+  agentStyle?: AgentStylePatch;
 }
 
 /** One connected channel in one of the user's workspaces (`GET /api/me/channels`). Read-only. */

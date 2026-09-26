@@ -10,8 +10,9 @@ import { useSidebar } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { navGroups } from '@/config/nav-config';
 import { cn } from '@/lib/utils';
+import { placeCard, queryFirst as query, rectOf, sameRect as same } from './geometry';
 import { tourStore, useTourStore, type Rect } from './store';
-import { stepBody, TOURS, visibleSteps, type Placement, type TourStep } from './tours';
+import { stepBody, TOURS, visibleSteps, type TourStep } from './tours';
 import { useTourContext } from './use-tour-context';
 
 /**
@@ -29,9 +30,7 @@ import { useTourContext } from './use-tour-context';
  * behind it is `inert`: focus stays in the card, Tab cycles inside it, Esc ends the tour.
  */
 
-const PAD = 8;
 const CARD_W = 336;
-const GAP = 14;
 const MARGIN = 12;
 /** How long to wait for a step's target once the page's data has settled. */
 const FIND_MS = 2500;
@@ -42,28 +41,6 @@ const MOBILE = 640;
 const POLL_MS = 80;
 
 type Phase = 'hop' | 'waiting' | 'shown';
-
-function query(selectors: string[]): HTMLElement | null {
-  for (const selector of selectors) {
-    try {
-      const el = document.querySelector<HTMLElement>(selector);
-      if (el) return el;
-    } catch {
-      /* an unsupported selector (older browsers and :has) just falls through */
-    }
-  }
-  return null;
-}
-
-function rectOf(el: HTMLElement, pad = PAD): Rect {
-  const r = el.getBoundingClientRect();
-  return { x: r.left - pad, y: r.top - pad, w: r.width + pad * 2, h: r.height + pad * 2 };
-}
-
-function same(a: Rect | null, b: Rect | null) {
-  if (!a || !b) return a === b;
-  return Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5;
-}
 
 /** The sidebar section a route belongs to ("Workspace" for /app/workspace/brand). */
 function groupOf(route: string): string | null {
@@ -81,24 +58,6 @@ function sidebarLink(route: string) {
 function groupTrigger(label: string, expanded: boolean) {
   const buttons = document.querySelectorAll<HTMLElement>(`[data-slot="sidebar"] button[aria-expanded="${expanded}"]`);
   return [...buttons].find((button) => button.textContent?.trim().toLowerCase() === label.toLowerCase()) ?? null;
-}
-
-const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
-
-function placeCard(rect: Rect, card: { w: number; h: number }, prefer: Placement | undefined, vw: number, vh: number) {
-  const clampX = (x: number) => clamp(x, MARGIN, vw - card.w - MARGIN);
-  const clampY = (y: number) => clamp(y, MARGIN, vh - card.h - MARGIN);
-  const below = rect.y + rect.h + GAP;
-  const above = rect.y - GAP - card.h;
-  const order: Placement[] = prefer ? [prefer, 'bottom', 'top', 'right', 'left'] : ['bottom', 'top', 'right', 'left'];
-  for (const side of order) {
-    if (side === 'bottom' && below + card.h <= vh - MARGIN) return { x: clampX(rect.x + rect.w / 2 - card.w / 2), y: below };
-    if (side === 'top' && above >= MARGIN) return { x: clampX(rect.x + rect.w / 2 - card.w / 2), y: above };
-    if (side === 'right' && rect.x + rect.w + GAP + card.w <= vw - MARGIN) return { x: rect.x + rect.w + GAP, y: clampY(rect.y) };
-    if (side === 'left' && rect.x - GAP - card.w >= MARGIN) return { x: rect.x - GAP - card.w, y: clampY(rect.y) };
-  }
-  // Nothing fits beside a target this large: sit inside the viewport, over its lower edge.
-  return { x: clampX(rect.x + rect.w / 2 - card.w / 2), y: clampY(below) };
 }
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';

@@ -4,6 +4,10 @@ The browser sends a small page-context envelope with each turn. Nothing in it is
 route manifest, a selected entity is only an id the server re-reads inside the workspace, and `visibleState` is a few
 short display values. The DOM, form values and page text are never accepted. An unknown route makes the context
 stale; the answer then says so instead of reasoning about a page the server does not know.
+
+`outline` (Rafii live agent, Contract 3) is the labels of what is visible on the screen: headings, buttons, tabs,
+statuses, links, regions and dialogs, never input values or private areas. It is untrusted data: every label is
+re-capped here, and one that reads like an instruction is dropped.
 """
 from __future__ import annotations
 
@@ -16,12 +20,26 @@ VERSION = 1
 MAX_MESSAGE = 4000
 ENTITY_TYPES = ("conversation", "source", "automation", "automation_run", "job", "review", "draft", "connection", "asset",
                 "memory_proposal", "help_document")
-UI_CAPABILITIES = ("navigate", "show_help", "highlight", "focus_composer")
+UI_CAPABILITIES = ("navigate", "show_help", "highlight", "focus_composer", "guide", "voice")
 BLOCK_TYPES = ("text", "citation_list", "navigation_card", "diagnostic_card", "proposal_diff", "question_form", "tool_activity",
-               "warning", "handoff_card", "error", "operate_result", "result_list")
+               "warning", "handoff_card", "error", "operate_result", "result_list", "guide_card", "voice_command")
+VOICE_COMMANDS = ("end_call", "mute", "stop_speaking", "style")
 MAX_VISIBLE_KEYS = 12
 _KEY = re.compile(r"^[a-zA-Z][a-zA-Z0-9]{0,31}$")
 _BUILD = re.compile(r"^[A-Za-z0-9._-]{1,40}$")
+
+# --- the page outline (Contract 3) ---------------------------------------------------------------------------------------
+OUTLINE_ROLES = ("heading", "button", "tab", "status", "link", "region", "dialog")
+OUTLINE_STATES = ("selected", "disabled", "expanded", "checked")
+MAX_OUTLINE_ITEMS = 40
+MAX_OUTLINE_TEXT = 80
+MAX_OUTLINE_CHARS = 3000
+_TARGET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_INVISIBLE = re.compile(r"[­​-‏‪-‮⁠-⁤﻿]")   # zero-width and direction marks hide words from the check
+# A label is a few words naming something on the screen. One that addresses a model, or carries markup or code, is dropped.
+_INSTRUCTION_LIKE = re.compile(r"\bignore\b|\bsystem\b|\byou\s+are\b|\binstructions?\b|\bdisregard\b|\bjailbreak\b|\bprompt\s+injection\b"
+                               r"|指示|忽略|無視|无视|系統提示|系统提示|```|<\s*/?\s*[a-z]", re.I)
 
 
 def _visible_value(value):
@@ -37,10 +55,37 @@ def _visible_value(value):
     return None
 
 
+def outline(raw) -> list[dict]:
+    """The visible screen labels, re-validated (Contract 3): at most 40 items and about 3,000 characters, roles and
+    states from the allowlists, each label cut to 80 characters, a `target` only when it is a plain data-tour id, and
+    any label that looks like an instruction (or markup, or code) dropped. Idempotent: re-running it changes nothing."""
+    if not isinstance(raw, list):
+        return []
+    out, total = [], 0
+    for item in raw[:MAX_OUTLINE_ITEMS]:
+        if not isinstance(item, dict) or item.get("role") not in OUTLINE_ROLES or not isinstance(item.get("text"), str):
+            continue
+        label = " ".join(_CONTROL.sub(" ", _INVISIBLE.sub("", item["text"])).split())[:MAX_OUTLINE_TEXT].strip()
+        if not label or _INSTRUCTION_LIKE.search(label):
+            continue
+        entry = {"role": item["role"], "text": label}
+        target = item.get("target")
+        if isinstance(target, str) and _TARGET.match(target):
+            entry["target"] = target
+        if item.get("state") in OUTLINE_STATES:
+            entry["state"] = item["state"]
+        size = sum(len(value) for value in entry.values())
+        if total + size > MAX_OUTLINE_CHARS:
+            break
+        total += size
+        out.append(entry)
+    return out
+
+
 def page_context(raw) -> dict:
     """The page context, normalised. `issues` names what was dropped; `stale` means the route is unknown."""
     out = {"route": None, "routeId": None, "routeFamily": None, "params": {}, "title": None, "selectedEntity": None,
-           "visibleState": {}, "uiCapabilities": [], "clientBuild": None, "stale": False, "issues": []}
+           "visibleState": {}, "uiCapabilities": [], "clientBuild": None, "outline": [], "stale": False, "issues": []}
     if not isinstance(raw, dict):
         out.update(stale=True, issues=["missing"])
         return out
@@ -77,6 +122,11 @@ def page_context(raw) -> dict:
     build = raw.get("clientBuild")
     if isinstance(build, str) and _BUILD.match(build):
         out["clientBuild"] = build
+    screen = raw.get("outline")
+    if screen is not None:
+        out["outline"] = outline(screen)
+        if not isinstance(screen, list) or len(out["outline"]) < len(screen):
+            out["issues"].append("outline_dropped")
     out["issues"] = sorted(set(out["issues"]))
     return out
 
@@ -109,6 +159,18 @@ def citations(items: list[dict]) -> dict:
 
 def navigation(label: str, href: str, route_id: str, *, reason: str | None = None, auto: bool = False) -> dict:
     return {"type": "navigation_card", "label": label, "href": href, "routeId": route_id, "reason": reason, "auto": auto}
+
+
+def guide_card(guide_id: str, route_id: str, href: str, title: str, summary: str, *, auto: bool = False) -> dict:
+    """A step-by-step guide the panel can run on the screen (Contract 2); `auto` when the person asked to be shown."""
+    return {"type": "guide_card", "guideId": guide_id, "routeId": route_id, "href": href, "title": title, "summary": summary, "auto": bool(auto)}
+
+
+def voice_command(command: str, style: dict | None = None) -> dict:
+    """A panel control the voice session executes (Contract 2): end_call, mute, stop_speaking, or style with its patch."""
+    if command not in VOICE_COMMANDS:
+        raise ValueError(f"unknown voice command {command!r}")
+    return {"type": "voice_command", "command": command, **({"style": dict(style)} if command == "style" and style else {})}
 
 
 def diagnostic(title: str, status: str, *, evidence=(), cause: str | None = None, steps=(), verified: bool = True, links=()) -> dict:

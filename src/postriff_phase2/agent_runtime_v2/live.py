@@ -51,8 +51,8 @@ LANGUAGE_LINES = {
 }
 
 LIVE_PROMPT = """You are Rafii, a calm, friendly voice coworker inside the Rafii social-content workspace.
-Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful. Keep answers short: one to three sentences.
-If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
+Speak warmly and naturally. Be clear and direct, not overly cheerful. Keep answers short: one to three sentences, unless the delivery
+the user chose (below) says otherwise. If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
 {language}
 
 Backchannel policy: Use moderate backchannels. Acknowledge naturally without competing with the main response.
@@ -61,11 +61,17 @@ Interruption policy: Stop speaking when the user interrupts. Listen to what they
 
 Delegation policy:
 Backend tools:
-- Rafii workspace: reads pages, drafts, campaigns, calendar, reviews, publishing results, Brand Brain and voice profile; prepares drafts,
-  images and campaign links; prepares scheduling and automation changes as proposals the user approves; looks at images the user attached.
+- Rafii workspace: drafts, campaigns, calendar, queue, reviews, publishing results, Brand Brain and voice profile; prepares drafts, images
+  and campaign links; prepares scheduling and automation changes as proposals the user approves; looks at images the user attached.
+- Web search for current information: news, trends, prices, events and the weather, with sources and dates.
+- Images: creates and edits images (each uses a media credit).
+- Drafting with Rafii's platform writing skills; the backend says which skill it used.
+- The user's screen: which page is open and what it shows.
+- Navigation and step-by-step guides: opens pages and shows each step on screen.
+- Panel control: ends the call, mutes, stops speaking, changes how you talk.
 
 Delegate to the backend when:
-- The request needs workspace information, an action, an image, or careful reasoning.
+- The request needs workspace information, current facts, an action, an image, the screen, a page or a guide, or careful reasoning.
 - The user answers yes or no to something the backend asked or proposed (the backend decides which proposal a "yes" applies to).
 - The user asks to cancel or change work already requested.
 - A correction changes the work already requested.
@@ -74,14 +80,31 @@ Do not delegate to the backend when:
 - You can answer from the conversation or a still-current backend result.
 - You need a brief clarification to understand the request.
 
+Never say you can't look something up or can't see the page; delegate instead.
+For "show me how", delegate; the app shows the steps on screen while you talk.
+When the user says goodbye or wants to end the call, say one short goodbye; the app hangs up.
 Delegate before giving an answer that depends on backend work. Do not guess the result while waiting; say briefly that you're checking,
 and keep talking with the user if they speak. Never say that something was done, saved, scheduled or applied unless the backend's result
 said so. Scheduling and automation changes are proposals until the user approves them; publishing always needs a separate approval.
-You cannot see images; the backend can. Never read out ids, links or secrets."""
+You can't see images yourself; the backend can. Never read out ids, links or secrets."""
 
 
-def live_prompt(locale: str | None) -> str:
-    return LIVE_PROMPT.format(language=LANGUAGE_LINES.get(locale or "auto", LANGUAGE_LINES["auto"]))
+def locale_and_voice(payload: dict, style) -> tuple[str, str]:
+    """(locale, voice) for a session: an explicit valid value in the request wins, otherwise the person's style decides."""
+    from . import style as agent_style
+    locale = payload.get("locale") if payload.get("locale") in LANGUAGE_LINES else agent_style.locale(style)
+    voice = payload.get("voice") if payload.get("voice") in VOICES else agent_style.voice_id(style)
+    return locale, voice
+
+
+def live_prompt(locale: str | None, style=None) -> str:
+    """The Live session's instructions: the template with its language line, then the delivery the person chose (fixed
+    sentences picked by their style's enum values) when a style is given."""
+    prompt = LIVE_PROMPT.format(language=LANGUAGE_LINES.get(locale or "auto", LANGUAGE_LINES["auto"]))
+    if style is None:
+        return prompt
+    from . import style as agent_style
+    return prompt + "\n\n" + agent_style.voice_block(style)
 
 
 def live_transport(method, url, headers=None, body=None, timeout=20):
@@ -125,13 +148,15 @@ class VoiceSessions:
         route = self.cfg.route("voice_front_end", reason="voice session")
         if not route.available:
             raise AlphaError(route.blocker, 503, code="voice_unavailable")
-        locale = payload.get("locale") if payload.get("locale") in LANGUAGE_LINES else "auto"
-        voice = payload.get("voice") if payload.get("voice") in VOICES else "marin"
         repo, ideas = self.service.repository, self.service.ideas
+        from . import style as agent_style
         with repo.transaction(token, workspace_id) as (cur, row, principal):
             member = ideas._member(row)
             # Voice runs a paid model: the same rule as model phrasing — viewers get grounded text answers, no model spend.
             require(member, "edit")
+            # How this person wants Rafii to sound (Contract 1): an explicit valid voice or locale in the request wins.
+            style = agent_style.load(cur, principal)
+            locale, voice = locale_and_voice(payload, style)
             conversation_id = payload.get("conversationId")
             if conversation_id:
                 if not isinstance(conversation_id, str):
@@ -158,7 +183,7 @@ class VoiceSessions:
             artifact = self._artifact(cur, workspace_id, voice_session_id)
             artifact["voice"]["reservationId"] = reservation["reservationId"]
             self._save(cur, workspace_id, voice_session_id, artifact)
-        session = {"model": route.model, "instructions": live_prompt(locale), "audio": {"output": {"voice": voice}}, "delegation": {"type": "client"},
+        session = {"model": route.model, "instructions": live_prompt(locale, style), "audio": {"output": {"voice": voice}}, "delegation": {"type": "client"},
                    "client": {"data_channel": {"allowed_client_events": list(ALLOWED_CLIENT_EVENTS), "allowed_server_events": list(ALLOWED_SERVER_EVENTS)}},
                    "store": False}
         if history:
@@ -180,8 +205,9 @@ class VoiceSessions:
             artifact["voice"].update({"state": "live", "liveSessionId": live_id, "reservationId": reservation["reservationId"], "connectedAt": self._now()})
             self._save(cur, workspace_id, voice_session_id, artifact)
             ideas._insert_event(cur, workspace_id, voice_session_id, safe_event("run.started", agent="voice", model=route.model, modality="voice", locale=locale))
+        # `locale` and `voice` are what this call actually uses (the request's, else the person's style); the voice session adopts them.
         return {"voiceSessionId": voice_session_id, "liveSessionId": live_id, "conversationId": conversation_id, "sdp": answer, "dataChannel": DATA_CHANNEL,
-                "model": route.model, "locale": locale, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
+                "model": route.model, "locale": locale, "voice": voice, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
 
     def _reap(self, cur, workspace_id, principal):
         """A tab closed mid-call (or a sign-out, which can't end it without a session) never ends its session. Any member's

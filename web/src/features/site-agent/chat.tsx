@@ -5,6 +5,10 @@
  * page, sent with the page's context. Answers render from their typed blocks; writing requests show the draft run,
  * automation or preference the writing pipeline made. States are the real ones: "working" only while a request is
  * in flight, each activity row only for a step the server reported, "applied" only after the server confirmed it.
+ *
+ * An answer can also ask the panel to act (docs/design/rafii-live-agent/CONTRACTS.md, Contract 2): open the page the
+ * person asked for, start a guided walkthrough, or change how Rafii talks. `/` commands (Contract 7) either run here
+ * (`client`) or travel with the message (`agent`).
  */
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -16,13 +20,19 @@ import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { siteConfig } from '@/config/site';
 import { useModelChoice } from '@/features/agent/use-model';
+import { SlashCommandMenu, type SlashPick } from '@/features/rafii-commands/command-menu';
+import { autoActionsOf, createAutoLedger, type AutoAction } from '@/features/rafii-guide/auto-actions';
 import { AgentExtras } from '@/features/rafii-voice/agent-extras';
 import { AttachImage } from '@/features/rafii-voice/attach-image';
+import { StyleButton } from '@/features/rafii-voice/style-sheet';
 import { VoiceMode } from '@/features/rafii-voice/voice-mode';
 import { ApiError } from '@/lib/api/client';
 import { keys, useMe, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import type { Message } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
+import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-actions';
+import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { AgentResult, AgentTurnResponse } from '@/lib/agent-runtime/types';
 import { useAgent } from '@/lib/agent-runtime/use-agent';
 import { voiceSession } from '@/lib/agent-runtime/voice-session';
@@ -31,19 +41,40 @@ import { useMotionPreference } from '@/lib/rafii/motion';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
 import { activityRows, isSiteAgentBody, suggestionsFor } from '@/lib/site-agent/panel-logic';
 import { matchRoute, safeHref, type RouteManifest } from '@/lib/site-agent/routes';
-import type { SiteAgentMessageBody, SiteAgentPageContext, SiteAgentTurnResult } from '@/lib/site-agent/types';
+import type { SiteAgentBlock, SiteAgentMessageBody, SiteAgentPageContext, SiteAgentTurnResult } from '@/lib/site-agent/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { SiteAgentAnswer } from './answer';
 import { DelegatedMessage } from './delegated';
 import { RafiiAvatar } from './rafii-avatar';
 import { panelStore, usePanel } from './store';
+import { currentPageContext } from './use-page-context';
 
 const MANIFEST = manifestJson as RouteManifest;
 const ENTITY_WORDS: Record<string, string> = { job: 'post', review: 'post', draft: 'draft', automation: 'automation', conversation: 'conversation', connection: 'account', source: 'source', help_document: 'article' };
 
+/**
+ * What answers asked the panel to do, run once each: only for a turn response in this session (text or voice), never
+ * for history read back from the server, and never for an answer older than one that already ran. Module-level, so a
+ * panel that re-mounts (dock ↔ sheet) keeps the record and a voice answer arriving with the panel closed still runs.
+ */
+const AUTO = createAutoLedger();
+
 function newKey() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+/** Esc on the `/` menu: the menu keeps itself closed until the word changes; nothing else to do here. */
+const noop = () => {};
+
+/** A panel command runs in the browser and never reaches the server; it answers with a line for the panel, or none. */
+async function runClientCommand(command: SlashCommand, args: string): Promise<string | null> {
+  if (!command.execute) return 'That command isn’t available here.';
+  try {
+    return (await command.execute(args)) ?? null;
+  } catch (error) {
+    return error instanceof Error && error.message ? `That didn’t work: ${error.message}` : 'That didn’t work here.';
+  }
 }
 
 export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClose: () => void; onNavigate?: () => void; autoFocus?: boolean }) {
@@ -83,10 +114,20 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const [text, setText] = useState('');
   const [optimistic, setOptimistic] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ text: string; message: string } | null>(null);
+  // Lines from `/` commands that ran in the panel; they are local and clear when a message goes to Rafii.
+  const [notes, setNotes] = useState<{ id: number; text: string }[]>([]);
+  const noteId = useRef(0);
+  const [caret, setCaret] = useState(0);
+  const [styleOpen, setStyleOpen] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
+  const composer = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef(workspaceId);
   workspaceRef.current = workspaceId;
+
+  useEffect(() => {
+    setNotes([]);
+  }, [workspaceId]);
 
   // A conversation that no longer exists here (another workspace's id, or removed) starts a new one.
   useEffect(() => {
@@ -102,7 +143,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end', behavior: reduced ? 'auto' : 'smooth' });
-  }, [messages.length, optimistic, busy, reduced, live]);
+  }, [messages.length, optimistic, busy, reduced, live, notes.length]);
 
   const route = matchRoute(MANIFEST, pathname)?.route ?? null;
   const entity = page?.selectedEntity ?? (route?.id === 'conversation' ? { type: 'conversation', id: pathname.split('/').pop() ?? '' } : null);
@@ -110,20 +151,77 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const suggestions = suggestionsFor(route?.family ?? null, canEdit);
   const lastAssistant = messages.findLast((m) => m.role === 'assistant')?.messageId;
 
+  /** Carry out what an answer asked for: its guide, or its link (re-checked against the route manifest), or a style. */
+  const runAuto = useCallback(
+    (actions: AutoAction[]) => {
+      for (const action of actions) {
+        if (action.kind === 'guide') {
+          const start = panelActions().startGuide;
+          if (!start) continue;
+          void Promise.resolve(start(action.guideId)).then((started) => {
+            if (started) onNavigate?.();
+          });
+        } else if (action.kind === 'navigate') {
+          const href = safeHref(MANIFEST, action.href);
+          if (!href) continue;
+          const navigate = panelActions().navigate;
+          if (navigate) navigate(href);
+          else router.push(href);
+          onNavigate?.();
+        } else {
+          void Promise.resolve(panelActions().setStyle?.(action.style as AgentStylePatch)).catch(() => undefined);
+        }
+      }
+    },
+    [onNavigate, router]
+  );
+
+  /** A panel command runs here and never reaches Rafii; its sentence becomes a line in the panel. */
+  const runCommand = useCallback(async (command: SlashCommand, args: string) => {
+    setFailure(null);
+    const line = await runClientCommand(command, args);
+    if (line) {
+      noteId.current += 1;
+      const id = noteId.current;
+      setNotes((prev) => [...prev.slice(-3), { id, text: line }]);
+    } else if (command.name === 'help') {
+      // `/help` answers with the menu itself: a bare `/` lists every command.
+      setText('/');
+      setCaret(1);
+      requestAnimationFrame(() => {
+        const el = input.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(1, 1);
+      });
+    }
+  }, []);
+
   const send = useCallback(
     async (raw: string) => {
       const message = raw.trim();
       const w = workspaceId;
       if (!message || !w || panelStore.get().busy[w]) return;
+      const slash = parseSlash(message);
+      if (slash?.command.kind === 'client') {
+        setText('');
+        await runCommand(slash.command, slash.args);
+        return;
+      }
+      // An agent command goes as typed, with its name and words beside it (the site agent gets the text only).
+      const command = slash?.command.kind === 'agent' ? commandPayload(slash) : undefined;
       setFailure(null);
+      setNotes([]);
       setOptimistic(message);
       setText('');
       panelStore.setBusy(w, true);
+      const ticket = AUTO.begin();
       const current = panelStore.get();
       try {
-        const context = current.page;
-        const pageContext = { route: pathname, selectedEntity: context?.selectedEntity ?? null, visibleState: context?.visibleState ?? {}, uiCapabilities: ['navigate', 'show_help'] };
+        const pageContext = currentPageContext(pathname);
         let result: SiteAgentTurnResult;
+        let blocks: readonly SiteAgentBlock[] | undefined;
+        let answerId: string | null;
         if (agentOn) {
           // The Agent Runtime answers (same conversation; it falls back to the site agent by itself when it must).
           const response = await agent.api.turn(w, {
@@ -135,12 +233,16 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             // The role is explicit: a panel image is something Rafii looks at, never media for a post (SPEC §9).
             attachments: images.map((image) => ({ assetId: image.assetId, role: 'reference' as const })),
             timeZone,
-            model: choice.model
+            model: choice.model,
+            ...(command ? { command } : {})
           });
           setImages([]);
           voiceSession.typedExchange(message, response.result);
           result = response.siteAgent ?? { conversationId: response.conversationId, runId: response.runId, status: response.status, messageId: response.messageId };
+          blocks = response.result?.blocks ?? response.siteAgent?.message?.siteAgent?.blocks;
+          answerId = response.messageId ?? response.siteAgent?.messageId ?? null;
         } else {
+          // The site agent has no commands: a typed `/command` goes as plain text.
           result = await api.siteAgentTurn(w, {
             message,
             idempotencyKey: newKey(),
@@ -149,6 +251,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             timeZone,
             pageContext
           });
+          blocks = result.message?.siteAgent?.blocks;
+          answerId = result.messageId ?? null;
         }
         if (workspaceRef.current !== w) return;
         panelStore.setConversation(w, result.conversationId);
@@ -156,20 +260,17 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         await client.invalidateQueries({ queryKey: keys.messages(w, result.conversationId) });
         void client.invalidateQueries({ queryKey: keys.conversations(w) });
         setOptimistic(null);
-        let final = result;
         if (result.needsCompose && result.runId) {
-          final = await api.siteAgentCompose(w, result.runId);
+          const final = await api.siteAgentCompose(w, result.runId);
           panelStore.setLive(result.runId, { events: final.events ?? [], composing: false });
           if (workspaceRef.current !== w) return;
           await client.invalidateQueries({ queryKey: keys.messages(w, result.conversationId) });
+          blocks = final.message?.siteAgent?.blocks ?? blocks;
+          answerId = final.messageId ?? answerId;
         }
         if (result.delegated) void client.invalidateQueries({ queryKey: keys.snapshot(w) });
-        // "Take me to …": follow the answer's own link, re-checked against the route manifest.
-        const auto = final.message?.siteAgent?.blocks.find((b) => b.type === 'navigation_card' && b.auto);
-        if (auto && auto.type === 'navigation_card' && safeHref(MANIFEST, auto.href)) {
-          router.push(auto.href);
-          onNavigate?.();
-        }
+        // "Take me to …" or "show me how": the answer's own link or guide, once, and only for the newest request.
+        if (AUTO.claim(answerId ?? result.runId ?? `turn:${ticket}`, ticket)) runAuto(autoActionsOf(blocks, 'text'));
       } catch (error) {
         if (workspaceRef.current !== w) return;
         setOptimistic(null);
@@ -181,22 +282,24 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         panelStore.setBusy(w, false);
       }
     },
-    [agent.api, agentOn, api, choice.model, client, images, onNavigate, pathname, router, timeZone, workspaceId]
+    [agent.api, agentOn, api, choice.model, client, images, pathname, runAuto, runCommand, timeZone, workspaceId]
   );
 
   // Voice Mode reads the page when a spoken request is delegated (the call outlives this component's render).
-  const voicePageContext = useCallback((): SiteAgentPageContext => {
-    const registered = panelStore.get().page;
-    return { route: window.location.pathname, selectedEntity: registered?.selectedEntity ?? null, visibleState: registered?.visibleState ?? {}, uiCapabilities: ['navigate', 'show_help'] };
-  }, []);
+  const voicePageContext = useCallback((): SiteAgentPageContext => currentPageContext(window.location.pathname, { voice: true }), []);
   const onVoiceConversation = useCallback((id: string) => {
     if (workspaceId) panelStore.setConversation(workspaceId, id);
   }, [workspaceId]);
   const onVoiceAnswer = useCallback((response: AgentTurnResponse) => {
+    // A spoken "show me how" or "take me to" runs here too; the call itself carries out its voice commands.
+    const ticket = AUTO.begin();
+    if (AUTO.claim(response.messageId ?? response.runId ?? response.traceId ?? `voice:${ticket}`, ticket)) {
+      runAuto(autoActionsOf(response.result?.blocks ?? response.siteAgent?.message?.siteAgent?.blocks, 'voice'));
+    }
     if (!workspaceId || !response.conversationId) return;
     void client.invalidateQueries({ queryKey: keys.messages(workspaceId, response.conversationId) });
     void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
-  }, [client, workspaceId]);
+  }, [client, runAuto, workspaceId]);
 
   const composingRun = messages.find((m) => m.role === 'assistant' && m.runId && live[m.runId]?.composing)?.runId ?? null;
 
@@ -208,6 +311,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // The command menu handles its own keys (Enter picks a command) and marks them handled.
+    if (event.defaultPrevented || event.nativeEvent.defaultPrevented) return;
     // Safari commits a composition with compositionend, then an Enter keydown (keyCode 229, isComposing false).
     if (event.key === 'Enter' && !event.shiftKey && !ime.current.composing(event)) {
       event.preventDefault();
@@ -215,12 +320,25 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
     }
   }
 
-  function startOver() {
+  const startOver = useCallback(() => {
     if (!workspaceId) return;
     panelStore.setConversation(workspaceId, null);
     setFailure(null);
     input.current?.focus();
-  }
+  }, [workspaceId]);
+
+  // `/new` does what the + button does; `/style` (and a spoken style request) opens the header's style sheet.
+  useEffect(() => registerPanelActions({ newConversation: startOver, openStyle: () => setStyleOpen(true) }), [startOver]);
+
+  /** A command picked from the `/` menu: the text becomes what the pick says; a panel command with its words runs now. */
+  const pickCommand = useCallback(
+    (command: SlashCommand, args: string, pick: SlashPick) => {
+      setText(pick.value);
+      setCaret(pick.caret);
+      if (pick.action === 'run') void runCommand(command, args);
+    },
+    [runCommand]
+  );
 
   const empty = !conversationId || (!thread.isLoading && messages.length === 0);
   const name = me.data && 'displayName' in me.data ? String((me.data as { displayName?: string | null }).displayName ?? '').split(' ')[0] : '';
@@ -235,6 +353,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             Looking at: {contextLabel}
           </span>
         </div>
+        {/* How Rafii talks; below about 360px of panel width the pill keeps only its icon. */}
+        <StyleButton open={styleOpen} onOpenChange={setStyleOpen} className='shrink-0 @max-[22.5rem]:px-2 @max-[22.5rem]:[&>.truncate]:hidden' />
         <Button type='button' variant='quiet' size='icon-sm' aria-label='Start a new conversation' title='New conversation' onClick={startOver} disabled={busy}>
           <Icons.add className='size-4' />
         </Button>
@@ -300,16 +420,31 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             )}
           </ol>
         )}
+        {notes.length > 0 && (
+          <ul className='flex flex-col gap-1.5 pt-3' aria-label='Panel commands'>
+            {notes.map((note) => (
+              <li key={note.id} role='status' className='text-muted-foreground flex items-start justify-center gap-1.5 text-center text-xs'>
+                <Icons.slash className='mt-0.5 size-3 shrink-0' aria-hidden />
+                <span className='break-words'>{note.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         <div ref={end} />
       </div>
 
-      <form onSubmit={onSubmit} className='shrink-0 px-3 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
-        <div className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
+      <form onSubmit={onSubmit} className='relative shrink-0 px-3 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        <SlashCommandMenu value={text} caret={caret} anchorRef={composer} onPick={pickCommand} onDismiss={noop} />
+        <div ref={composer} className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           {agentOn && <AttachImage conversationId={conversationId} onAttached={(image) => setImages((prev) => [...prev, image].slice(-4))} disabled={busy} />}
           <textarea
             ref={input}
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              setText(event.target.value);
+              setCaret(event.target.selectionStart ?? event.target.value.length);
+            }}
+            onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
             onKeyDown={onKeyDown}
             onCompositionStart={() => ime.current.onCompositionStart()}
             onCompositionEnd={() => ime.current.onCompositionEnd()}
