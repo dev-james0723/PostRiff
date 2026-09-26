@@ -201,7 +201,28 @@ _SITE_NAMES = {
     "entity.status": "entity_status",
     # Registered by the site agent's gap work (voice fit, member activity); adapted when present.
     "voice.check": "voice_check", "member.activity": "member_activity", "record.attribution": "record_attribution", "campaign.membership": "campaign_membership",
+    # Rafii live agent (Contract 2): client actions the panel and the voice session carry out.
+    "ui.guide": "ui_guide", "ui.voice": "ui_voice",
 }
+# An `auto` card acts without a click, so it needs the person's own words to ask for it; a model's choice alone only
+# leaves a card to click (Contract 2: auto navigation only when the person asked to go/open/be taken somewhere, an
+# auto guide only when they asked to be shown or taught). English, Cantonese and Mandarin; code-switching included.
+_WANTS_TO_GO = re.compile(r"\bopen(?:s|ing)?\b|\btake\s+me\b|\bbring\s+me\b|\bgo\s+(?:back\s+)?to\b|\bnavigate\b|\bswitch\s+to\b|\bjump\s+to\b|\bhead\s+to\b"
+                          r"|\bshow\s+me\s+(?:the\s+|my\s+)?[a-z& ]{2,30}\s+(?:page|screen|tab)\b"
+                          r"|帶我去|带我去|打開|打开|開啟|开启|跳去|跳到|轉去|转去|切換到|切换到|去(?:返)?[^，。？！,.?!\s]{0,8}(?:頁|页|版)|開(?:返)?(?:個)?[^，。？！,.?!\s]{0,6}(?:頁|页)", re.I)
+_WANTS_TO_BE_SHOWN = re.compile(r"\bhow\s+(?:do|does|can|could|should|would|to)\b|\bshow\s+me\b|\bteach\s+me\b|\bwalk\s+me\b|\bguide\s+me\b|\bwalk\s*through\b"
+                                r"|\bstep[\s-]+by[\s-]+step\b|\btutorial\b|\bhelp\s+me\s+(?:to\s+)?(?:set\s+up|connect|create|schedule|upload|add|turn\s+on|choose|write|approve)\b"
+                                r"|點樣|点样|點做|点做|點整|点整|點用|点用|點設定|教我|教下我|教吓我|示範|示范|怎麼|怎么|怎樣|怎样|如何|帶我做|带我做|一步一步|手把手", re.I)
+
+
+def wants_to_go(text: str) -> bool:
+    return bool(_WANTS_TO_GO.search(text or ""))
+
+
+def wants_to_be_shown(text: str) -> bool:
+    return bool(_WANTS_TO_BE_SHOWN.search(text or ""))
+
+
 _ID_TYPES = {"draftId": "draft", "variantId": "draft", "campaignId": "campaign", "jobId": "job", "reviewId": "review", "automationId": "automation",
              "taskId": "automation", "assetId": "asset", "connectionId": "connection", "documentId": "help_document"}
 _TITLE_KEYS = ("name", "goal", "title", "label", "platform")
@@ -260,12 +281,50 @@ def _site_executor(tool_id: str):
         harvest(ctx, data)
         if tool_id == "ui.navigate" and result.get("ok") and isinstance(data, dict) and data.get("canOpen"):
             from ..site_agent import contracts as site_contracts
-            ctx.ledger.navigation.append(site_contracts.navigation(f"Open {data['title']}", data["href"], data["routeId"]))
+            auto = args.get("auto") is True and wants_to_go(ctx.request_text)
+            ctx.ledger.navigation.append(site_contracts.navigation(f"Open {data['title']}", data["href"], data["routeId"], auto=auto))
+            data = {**data, "opensNow": auto}
+        if tool_id == "ui.guide" and result.get("ok") and isinstance(data, dict):
+            data = _guide_card(ctx, args, data)
+        if tool_id == "ui.voice" and result.get("ok") and isinstance(data, dict):
+            data = _voice_command(ctx, data)
         if tool_id == "help.search" and result.get("ok") and isinstance(data, dict):
             _citations(ctx, data.get("passages") or [])
         return {"ok": result["ok"], "verified": result["verified"], "observedAt": result.get("observedAt"), "source": "application",
                 "warnings": result.get("warnings") or [], "data": data}
     return run
+
+
+def _capable(ctx: RafiiRunContext, capability: str) -> bool:
+    """The page declared it can carry out this client action (`uiCapabilities`, re-validated by the page contract)."""
+    return capability in ((ctx.page or {}).get("uiCapabilities") or [])
+
+
+def _guide_card(ctx: RafiiRunContext, args: dict, data: dict) -> dict:
+    """A guide card when the panel can run guides; otherwise a plain link to the guide's page (Contract 2)."""
+    from ..site_agent import contracts as site_contracts
+    if not data.get("canOpen"):
+        return {**data, "shownAs": "nothing"}
+    if _capable(ctx, "guide"):
+        auto = args.get("auto") is True and wants_to_be_shown(ctx.request_text)
+        ctx.ledger.guides.append(site_contracts.guide_card(data["guideId"], data["routeId"], data["href"], data["title"], data["summary"], auto=auto))
+        return {**data, "shownAs": "guide", "startsNow": auto}
+    ctx.ledger.navigation.append(site_contracts.navigation(f"Open {data['page']}", data["href"], data["routeId"], reason=data["title"]))
+    return {**data, "shownAs": "link", "startsNow": False}
+
+
+def _voice_command(ctx: RafiiRunContext, data: dict) -> dict:
+    """The panel control for the voice session (Contract 2). A saved style change is a verified change of this person's
+    own preference; the panel applies it either way when it can."""
+    from ..site_agent import contracts as site_contracts
+    command = data.get("command")
+    if command == "style" and data.get("persisted"):
+        ctx.ledger.changed.append({"type": "preference", "id": "agent_style", "change": "for how Rafii talks to you saved", "expected": "saved style",
+                                   "actual": "saved style", "verified": True})
+    if not _capable(ctx, "voice"):
+        return {**data, "shownAs": "nothing", "note": "This panel can't carry out voice controls; say it in words instead."}
+    ctx.ledger.voice_commands.append(site_contracts.voice_command(command, data.get("style") if command == "style" else None))
+    return {**data, "shownAs": "panel"}
 
 
 def _citations(ctx: RafiiRunContext, passages: list[dict]) -> None:
@@ -275,17 +334,48 @@ def _citations(ctx: RafiiRunContext, passages: list[dict]) -> None:
         ctx.ledger.citations.extend(site_compose.citation_objects(fresh, site_contracts.iso(ctx.now()), used={p["ref"] for p in fresh if p.get("ref")}))
 
 
+def _client_tool_overrides() -> dict:
+    """Precise descriptions (and, for ui.voice, its effect and style schema) for the client actions the Manager uses."""
+    from ..site_agent import guides
+    from . import style as agent_style
+    style_schema = {"type": "object", "additionalProperties": False,
+                    "properties": {**{key: {"type": "string", "enum": list(values)} for key, values in agent_style.FIELDS.items()},
+                                   "preset": {"type": "string", "enum": list(agent_style.PRESETS)}}}
+    fields = "; ".join(f"{key} ({', '.join(values)})" for key, values in agent_style.FIELDS.items())
+    return {
+        "ui.navigate": {"description": "Put a link to one allowlisted Rafii page in the answer (routeId from the route manifest; params and query only where "
+                                       "that page allows them). Set auto: true ONLY when the person explicitly asked to open, go to or be taken to a page: the panel "
+                                       "then opens it at once. Returns whether this member may open it (canOpen, reason)."},
+        "ui.guide": {"description": "Start a step-by-step guide on the person's screen: the panel opens the guide's page and a pointer walks through each "
+                                    "step, stopping where the person must act themselves (a platform's sign-in). Prefer it to a plain link for 'how do I', "
+                                    "'show me', 'teach me', '點樣', '教我'. Set auto: true when the person asked to be shown or taught; otherwise the answer "
+                                    "carries a card to start it. shownAs says what the person gets (guide, or a plain link when this panel can't run guides). "
+                                    "Guides: " + "; ".join(f"{g['id']} ({g['title']})" for g in guides.entries()) + "."},
+        "ui.voice": {"effect": contracts.MUTATE_REVERSIBLE, "schema": {"style": style_schema},
+                     "description": "Control the voice panel: end_call (after the person says goodbye or asks to hang up), mute (their microphone), "
+                                    "stop_speaking, or style with a `style` change of " + fields + ", or preset (" + ", ".join(agent_style.PRESETS) + "). "
+                                    "A style change is saved for this person (persisted: false means it applies to this panel only). The panel carries the "
+                                    "command out after your answer: say what will happen, never that it already happened."},
+    }
+
+
 def register_site_tools() -> None:
     """Adapt every released site-agent read and client tool. The proposal tool is replaced by the typed proposal
     tools in domain_tools (they store proposals the same way the panel does)."""
     from ..site_agent import tools as site_tools
+    overrides = _client_tool_overrides()
     for tool_id, definition in site_tools.CATALOG.items():
         name = _SITE_NAMES.get(tool_id)
         if name is None or name in REGISTRY or definition["effect"] not in ("read", "client_action"):
             continue
-        spec = contracts.ToolSpec(name=name, effect=contracts.READ, permission=site_tools.REQUIREMENT.get(tool_id, "read"),
-                                  description=f"{definition['purpose']} (Rafii site tool {tool_id} v{definition['version']}; read only.)")
-        REGISTRY[name] = Tool(spec, _json_schema(definition["input"]), _site_executor(tool_id), site_tools.LABELS.get(tool_id, tool_id))
+        extra = overrides.get(tool_id, {})
+        description = extra.get("description") or definition["purpose"]
+        effect = extra.get("effect", contracts.READ)
+        spec = contracts.ToolSpec(name=name, effect=effect, permission=site_tools.REQUIREMENT.get(tool_id, "read"),
+                                  description=f"{description} (Rafii site tool {tool_id} v{definition['version']}" + ("; read only.)" if effect == contracts.READ else ".)"))
+        schema = _json_schema(definition["input"])
+        schema["properties"].update(extra.get("schema") or {})
+        REGISTRY[name] = Tool(spec, schema, _site_executor(tool_id), site_tools.LABELS.get(tool_id, tool_id))
 
 
 def catalogue() -> list[dict]:

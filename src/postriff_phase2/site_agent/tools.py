@@ -19,7 +19,7 @@ from postriff_alpha.domain import AlphaError
 from .. import automation_edit, automation_explain, automation_plan, capabilities, memory, research
 from ..channels import assisted_matrix, customer_view, unsupported_matrix
 from ..contracts import digest
-from . import contracts, knowledge, routes
+from . import contracts, guides, knowledge, routes
 
 EFFECTS = ("read", "client_action", "workspace_mutation")
 FORBIDDEN_EFFECTS = ("external_representation", "destructive", "paid_generation", "secret")
@@ -47,8 +47,12 @@ _DEFINITIONS = (
     ("entitlements.summary", "read", "Plan, allowances left and whether publishing is included.", {}, ()),
     ("models.summary", "read", "Which writers are available here and why others are not.", {}, ()),
     ("ui.navigate", "client_action", "Open an allowlisted Rafii page.",
-     {"routeId": {"type": "string", "pattern": _ID}, "params": {"type": "object"}, "query": {"type": "object"}}, ("routeId",)),
+     {"routeId": {"type": "string", "pattern": _ID}, "params": {"type": "object"}, "query": {"type": "object"}, "auto": {"type": "boolean"}}, ("routeId",)),
     ("ui.show_help", "client_action", "Open a help article.", {"documentId": {"type": "string", "pattern": _ID}, "anchor": {"type": "string", "maxLength": 80}}, ("documentId",)),
+    ("ui.guide", "client_action", "Start an allowlisted step-by-step guide: the panel opens the guide's page and a pointer shows each step on the screen.",
+     {"guideId": {"type": "string", "enum": guides.ids()}, "auto": {"type": "boolean"}}, ("guideId",)),
+    ("ui.voice", "client_action", "Control the voice panel: end the call, mute the microphone, stop speaking, or change how Rafii talks (saved for this person).",
+     {"command": {"type": "string", "enum": list(contracts.VOICE_COMMANDS)}, "style": {"type": "object"}}, ("command",)),
     ("automation.patch_propose", "workspace_mutation", "Propose a change to an automation; nothing changes until a person applies it.",
      {"automationId": {"type": "string", "pattern": _ID}, "changes": {"type": "array"}}, ("automationId", "changes")),
     ("brand.summary", "read", "The Brand Brain as stored: identity, audience, voice, boundaries and learned preferences.", {}, ()),
@@ -112,13 +116,16 @@ def validate(tool_id: str, args) -> dict:
         spec = schema["properties"][key]
         kind = spec["type"]
         if kind == "string":
-            if not isinstance(value, str) or len(value) > spec.get("maxLength", 120) or ("pattern" in spec and not re.match(spec["pattern"], value)):
+            if (not isinstance(value, str) or len(value) > spec.get("maxLength", 120) or ("pattern" in spec and not re.match(spec["pattern"], value))
+                    or ("enum" in spec and value not in spec["enum"])):
                 raise AlphaError("Invalid tool input.", 400, code="tool_input")
         elif kind == "object" and not isinstance(value, dict):
             raise AlphaError("Invalid tool input.", 400, code="tool_input")
         elif kind == "array" and not isinstance(value, list):
             raise AlphaError("Invalid tool input.", 400, code="tool_input")
         elif kind == "number" and (isinstance(value, bool) or not isinstance(value, (int, float)) or abs(value) > 10**11):
+            raise AlphaError("Invalid tool input.", 400, code="tool_input")
+        elif kind == "boolean" and not isinstance(value, bool):
             raise AlphaError("Invalid tool input.", 400, code="tool_input")
     return tool
 
@@ -169,6 +176,7 @@ LABELS = {
     "memory.summary": "Read what Rafii remembers", "privacy.egress_state": "Checked what may leave Rafii",
     "entitlements.summary": "Checked your plan and allowances", "models.summary": "Checked the available writers",
     "ui.navigate": "Prepared a link", "ui.show_help": "Prepared a help link", "automation.patch_propose": "Prepared a proposed change",
+    "ui.guide": "Prepared a step-by-step guide", "ui.voice": "Prepared a voice panel control",
     "brand.summary": "Read your Brand Brain", "voice.profile": "Read your voice profile", "content.search": "Searched your workspace",
     "calendar.range": "Read the calendar", "campaign.list": "Listed your campaigns", "campaign.get": "Read the campaign", "reviews.list": "Checked reviews and returns",
     "publishing.summary": "Checked publishing results", "attention.summary": "Checked what needs attention", "entity.status": "Read the selected item",
@@ -535,7 +543,9 @@ def models_summary(ctx):
     return contracts.result({"models": models, "selected": ctx.model_id}, now=ctx.now)
 
 
-def ui_navigate(ctx, routeId, params=None, query=None):
+def ui_navigate(ctx, routeId, params=None, query=None, auto=False):
+    # `auto` (open the page at once) is the client's instruction; the caller that builds the card decides it (Contract 2).
+    _ = auto
     route = routes.by_id(routeId)
     if route is None:
         raise AlphaError("Unknown page.", 400, code="tool_input")
@@ -544,6 +554,62 @@ def ui_navigate(ctx, routeId, params=None, query=None):
         raise AlphaError("That link is not allowed.", 400, code="tool_input")
     allowed, reason = _can_open(ctx, route)
     return contracts.result({"href": href, "routeId": routeId, "title": route["title"], "canOpen": allowed, "reason": reason}, now=ctx.now, source="client")
+
+
+def ui_guide(ctx, guideId, auto=False):
+    """A step-by-step guide from the guide manifest, and whether this member may open its page."""
+    _ = auto
+    guide = guides.find(guideId)
+    if guide is None:
+        raise AlphaError("Unknown guide.", 400, code="tool_input")
+    route = routes.by_id(guide["routeId"])
+    href = routes.href(guide["routeId"]) if route is not None else None
+    if route is None or href is None:
+        raise AlphaError("That guide's page is not available.", 400, code="tool_input")
+    allowed, reason = _can_open(ctx, route)
+    return contracts.result({"guideId": guide["id"], "routeId": route["id"], "href": href, "title": guide["title"], "summary": guide["summary"],
+                             "page": route["title"], "canOpen": allowed, "reason": reason}, now=ctx.now, source="client")
+
+
+def _save_style(ctx, change):
+    """(persisted, saved style). Merges a validated change into this person's own style (public.pr_profiles.agent_style,
+    migration 026) with a guarded UPDATE: their row only, never a deleted profile. It runs inside a savepoint, so a
+    database without the column (or any failure) leaves the turn's transaction usable and nothing is claimed as saved."""
+    import json
+    from ..agent_runtime_v2 import style as agent_style
+    if ctx.cur is None or not ctx.principal:
+        return False, None
+    mark = "agent_style_write"
+    try:
+        ctx.cur.execute(f"SAVEPOINT {mark}")
+        ctx.cur.execute("SELECT agent_style FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL FOR UPDATE", (ctx.principal,))
+        row = ctx.cur.fetchone()
+        merged = agent_style.merge(row[0] if row else {}, change)
+        saved = False
+        if row is not None:
+            ctx.cur.execute("UPDATE public.pr_profiles SET agent_style=%s::jsonb WHERE user_id=%s AND deleted_at IS NULL", (json.dumps(merged), ctx.principal))
+            saved = ctx.cur.rowcount == 1
+        ctx.cur.execute(f"RELEASE SAVEPOINT {mark}")
+        return saved, (merged if saved else None)
+    except Exception:  # noqa: BLE001 — migration 026 not applied (or any failure): the panel still gets the change, unsaved
+        ctx.cur.execute(f"ROLLBACK TO SAVEPOINT {mark}")
+        return False, None
+
+
+def ui_voice(ctx, command, style=None):
+    """A voice panel control. A `style` change is validated (fixed enum values only) and saved for this person."""
+    if command != "style":
+        if style is not None:
+            raise AlphaError("Only a style change carries style settings.", 400, code="tool_input")
+        return contracts.result({"command": command}, now=ctx.now, source="client")
+    from ..agent_runtime_v2 import style as agent_style
+    try:
+        change = agent_style.validate_patch(style)
+    except AlphaError as error:
+        raise AlphaError(str(error), 400, code="tool_input") from error
+    persisted, saved = _save_style(ctx, change)
+    return contracts.result({"command": "style", "style": change, "persisted": persisted, "saved": saved}, now=ctx.now, source="client", verified=persisted,
+                            warnings=[] if persisted else ["The new style wasn't saved for next time; it applies in this panel only."])
 
 
 def ui_show_help(ctx, documentId, anchor=None):
@@ -567,6 +633,7 @@ EXECUTORS = {
     "automation.list": automation_list, "automation.get": automation_get, "automation.explain": automation_explain_tool,
     "memory.summary": memory_summary, "privacy.egress_state": privacy_egress_state, "entitlements.summary": entitlements_summary,
     "models.summary": models_summary, "ui.navigate": ui_navigate, "ui.show_help": ui_show_help, "automation.patch_propose": automation_patch_propose,
+    "ui.guide": ui_guide, "ui.voice": ui_voice,
 }
 from . import reads  # noqa: E402 — reads builds on the helpers above
 
