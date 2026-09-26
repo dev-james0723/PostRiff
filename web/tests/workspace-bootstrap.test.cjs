@@ -36,3 +36,20 @@ test('preview bootstrap uses its deployment and fails closed without a valid dep
  for(const host of [undefined,'','https://preview.vercel.app','user:pass@example.com','preview.vercel.app/path','preview.vercel.app?x=1','preview.vercel.app/#x']) assert.equal(bootstrapOrigin({...base,VERCEL_URL:host}),null);
  assert.equal(bootstrapOrigin({...base,VERCEL_ENV:'production',VERCEL_URL:'preview-123.vercel.app'}),'https://fixed-staging.example.com');
 });
+
+test('protected preview forwards existing deployment access only to fixed API reads without serializing it',async()=>{
+ const calls=[];
+ const access={cookie:'_vercel_jwt=fixture-cookie',bypass:'fixture-bypass'};
+ const result=await fetchWorkspaceBootstrap('https://preview.vercel.app','test-token','supabase',undefined,async(url,options)=>{
+  calls.push([url,options]);
+  return Response.json(url.endsWith('/me')?me:{workspaces});
+ },access);
+ assert.equal(result.me.userId,'user-a');
+ for(const [url,options] of calls){
+  assert.ok(url.startsWith('https://preview.vercel.app/api/'));
+  assert.equal(options.headers.Cookie,access.cookie);
+  assert.equal(options.headers['x-vercel-protection-bypass'],access.bypass);
+  assert.equal(options.redirect,'error');
+ }
+ for(const secret of ['test-token','fixture-cookie','fixture-bypass']) assert.equal(JSON.stringify(result).includes(secret),false);
+});

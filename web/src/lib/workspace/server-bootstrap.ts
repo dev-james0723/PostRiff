@@ -1,5 +1,5 @@
 import 'server-only';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
 import { bootstrapOrigin, fetchWorkspaceBootstrap } from './bootstrap';
 
@@ -27,6 +27,12 @@ export async function loadWorkspaceBootstrap() {
       if (!response.ok || (await response.json()).authMode !== 'dev') return null;
       mode = 'dev';token = `dev:${principal}`;
     }
-    return await fetchWorkspaceBootstrap(origin, token, mode, jar.get('postriff_workspace')?.value);
+    // Forward only existing deployment access to the pinned Preview origin.
+    // Never persist it or expose it in the serialized bootstrap result.
+    const access = process.env.VERCEL_ENV === 'preview' ? {
+      cookie: jar.get('_vercel_jwt') ? `_vercel_jwt=${jar.get('_vercel_jwt')!.value}` : undefined,
+      bypass: (await headers()).get('x-vercel-protection-bypass') ?? undefined
+    } : undefined;
+    return await fetchWorkspaceBootstrap(origin, token, mode, jar.get('postriff_workspace')?.value, fetch, access);
   } catch { return null; }
 }

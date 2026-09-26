@@ -24,10 +24,12 @@ export function bootstrapOrigin(values: Record<string, string | undefined>): str
   } catch { return null; }
 }
 
-export async function fetchWorkspaceBootstrap(origin: string, token: string, mode: AuthMode, selected: string | undefined, send: typeof fetch = fetch): Promise<WorkspaceBootstrap | null> {
+export interface DeploymentAccess { cookie?: string; bypass?: string; }
+
+export async function fetchWorkspaceBootstrap(origin: string, token: string, mode: AuthMode, selected: string | undefined, send: typeof fetch = fetch, access?: DeploymentAccess): Promise<WorkspaceBootstrap | null> {
   // Fixed endpoints only; no request host, redirect, shared cache, mutation or token serialization.
   async function get<T>(path: string): Promise<T> {
-    const response = await send(origin + path, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(2500) });
+    const response = await send(origin + path, { headers: { Authorization: `Bearer ${token}`, ...(access?.cookie ? { Cookie: access.cookie } : {}), ...(access?.bypass ? { 'x-vercel-protection-bypass': access.bypass } : {}) }, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(2500) });
     if (!response.ok) throw new Error('Workspace bootstrap unavailable');
     return response.json() as Promise<T>;
   }
