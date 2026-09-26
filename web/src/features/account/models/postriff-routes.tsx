@@ -6,7 +6,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/motion/radio';
 import { StateMessage, Surface } from '@/components/rafii';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CostBadge } from '@/components/ui/model-selector';
 import type { AgentInfo, MemoryEgress, ModelOption } from '@/lib/api/types';
+import { AUTO_MODEL } from '@/features/agent/use-model';
 import { KIND_LABEL, costCopy, routeKind, routeReasoning } from './catalog';
 import { OPTION_CLASS } from './cli-route-card';
 import { ReasoningChips } from './reasoning-chips';
@@ -43,6 +45,7 @@ function RowDescription({
     <span className='mt-1 flex flex-col gap-1.5 text-xs'>
       {/* The server's reason an option is unavailable is technical; the badge already says "Not available". */}
       {option.qualified && option.detail && <span className='hidden sm:inline'>{option.detail}</span>}
+      {option.qualified && option.priced === false && <span>No price is configured for this model.</span>}
       <Line term='Cost'>{costCopy(option.costClass).line}</Line>
       {managedLive && (
         <>
@@ -76,16 +79,19 @@ export interface PostriffRoutesProps {
   listed: boolean;
   options: ModelOption[];
   agents: AgentInfo[];
+  /** The person's selection: AUTO_MODEL or a catalogue id. */
   current: string;
   onChoose: (id: string) => void;
   consent: MemoryConsent;
+  /** The writer Auto resolves to now, for the Auto radio; null hides it (no writer to follow). */
+  autoName?: string | null;
 }
 
-export function PostriffRoutes({ loading, listed, options, agents, current, onChoose, consent }: PostriffRoutesProps) {
+export function PostriffRoutes({ loading, listed, options, agents, current, onChoose, consent, autoName }: PostriffRoutesProps) {
   // Available writers first; the sort is stable, so catalog order holds within each group.
-  const rows = options.filter((option) => routeKind(option, agents) !== 'cli').toSorted((a, b) => Number(b.qualified) - Number(a.qualified));
+  const rows = options.filter((option) => routeKind(option, agents) !== 'cli').toSorted((a, b) => Number(b.qualified && b.priced !== false) - Number(a.qualified && a.priced !== false));
   const liveManagedListed = rows.some((option) => option.qualified && routeKind(option, agents) === 'managed');
-  const selectedHere = rows.some((option) => option.id === current);
+  const selectedHere = (Boolean(autoName) && current === AUTO_MODEL) || rows.some((option) => option.id === current);
 
   return (
     <section data-tour='models-managed' className='flex flex-col gap-3' aria-labelledby='models-postriff-heading'>
@@ -107,20 +113,31 @@ export function PostriffRoutes({ loading, listed, options, agents, current, onCh
         ) : (
           <div className='flex flex-col gap-3'>
             <RadioGroup value={selectedHere ? current : ''} onValueChange={onChoose} aria-labelledby='models-postriff-heading' className='flex flex-col gap-2'>
+              {autoName && (
+                <RadioGroupItem
+                  id='model-auto'
+                  value={AUTO_MODEL}
+                  label={<span className='break-words'>Auto (workspace default: {autoName})</span>}
+                  description={<span className='mt-1 block text-xs'>Follows the writer an owner sets for this workspace, else Rafii’s default.</span>}
+                  className={OPTION_CLASS}
+                />
+              )}
               {rows.map((option) => {
                 const kind = routeKind(option, agents);
+                const offered = option.qualified && option.priced !== false;
                 return (
                   <RadioGroupItem
                     key={option.id}
                     id={`model-${option.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
                     value={option.id}
-                    disabled={!option.qualified}
+                    disabled={!offered}
                     label={
                       <span className='flex flex-wrap items-center gap-2'>
                         <span className='break-words'>{option.label}</span>
+                        <CostBadge model={option} />
                         <Badge variant='secondary'>{KIND_LABEL[kind]}</Badge>
-                        <AnimatedBadge status={option.qualified ? 'success' : 'neutral'} size='sm' contentKey={String(option.qualified)}>
-                          {option.qualified ? 'Available' : 'Not available'}
+                        <AnimatedBadge status={offered ? 'success' : 'neutral'} size='sm' contentKey={String(offered)}>
+                          {offered ? 'Available' : 'Not available'}
                         </AnimatedBadge>
                       </span>
                     }

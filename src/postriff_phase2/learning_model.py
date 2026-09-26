@@ -181,6 +181,10 @@ class GatewayCall:
         # reason gets its lowest level and headroom, since its reasoning shares max_tokens.
         reasoning = (gateway_catalog.drafting_reasoning if self.drafting else gateway_catalog.structured_reasoning)(self.model)
         reasons = bool(reasoning) and reasoning.get("effort") != "none"
+        if self.drafting:
+            # A reply reasons like drafting, and so does a model that reasons without an effort scale (budget-only,
+            # such as minimax-m3): its reasoning shares max_tokens and it takes no sampling, whatever is sent.
+            reasons = gateway_catalog.thinking(self.model)
         body = {"model": self.model, "max_tokens": 4000 if reasons else 1200,
                 "messages": [{"role": "system", "content": system + "\n\nJSON schema:\n" + json.dumps(schema, separators=(",", ":"))}, {"role": "user", "content": user}],
                 "providerOptions": {"gateway": {"only": list(self.allowed_providers)}}}

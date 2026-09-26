@@ -23,7 +23,7 @@ function listNames(names: string[], last: 'and' | 'or') {
 }
 
 /** When an owner decision last changed and, for owners, whether they made it (a workspace can have several owners). */
-function useDecidedLine(decidedAt: number | null, decidedBy: string | null, isOwner: boolean) {
+export function useDecidedLine(decidedAt: number | null, decidedBy: string | null, isOwner: boolean) {
   const members = useMembers();
   if (!decidedAt) return null;
   const when = formatDate(decidedAt);
@@ -33,7 +33,7 @@ function useDecidedLine(decidedAt: number | null, decidedBy: string | null, isOw
 }
 
 /** Mutation errors say what the server said; a stale revision offers a reload of everything this page reads. */
-function useSaveError() {
+export function useSaveError() {
   const invalidate = useInvalidate();
   return (err: unknown, fallback: string) => {
     const message = err instanceof ApiError ? err.message : fallback;
@@ -64,7 +64,7 @@ function useConfirmedChoice() {
   };
 }
 
-function ConfirmChoice({ open, pending, title, description, confirmLabel, cancelLabel, onConfirm, onClose }: { open: boolean; pending: boolean; title: string; description: string; confirmLabel: string; cancelLabel: string; onConfirm: () => void; onClose: () => void }) {
+export function ConfirmChoice({ open, pending, title, description, confirmLabel, cancelLabel, onConfirm, onClose }: { open: boolean; pending: boolean; title: string; description: string; confirmLabel: string; cancelLabel: string; onConfirm: () => void; onClose: () => void }) {
   return (
     <AlertDialog
       open={open}

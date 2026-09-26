@@ -137,7 +137,8 @@ class CreditBook:
         quote=self.quote(cur,workspace_id,actor,quote_id)
         if quote['revision']!=revision or quote['digest']!=request_digest:
             raise AlphaError('The draft request changed. Review its credit limit again.',409)
-        return {'quoteId':str(quote_id),'requestDigest':request_digest}
+        # The approved model travels with the authority: a turn under Auto writes with the model the limit was set for.
+        return {'quoteId':str(quote_id),'requestDigest':request_digest,'model':quote['model']}
 
     def prepare(self, cur, workspace_id, actor, estimate, model, provider, authority):
         policy=self.policy(cur,workspace_id)

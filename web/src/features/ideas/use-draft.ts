@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { DRAFT_PLATFORMS, type DraftPlatform } from '@/features/agent/composer';
-import { shortLabel, useModelChoice } from '@/features/agent/use-model';
+import { useModelChoice } from '@/features/agent/use-model';
 import { keys, useModels, useSnapshot } from '@/lib/api/hooks';
 import type { Run } from '@/lib/api/types';
 import { useTimeZone } from '@/lib/preferences';
@@ -23,7 +23,7 @@ export function useDraftHandoff() {
   const { api, workspaceId } = useWorkspaceApi();
   const snapshot = useSnapshot();
   const models = useModels();
-  const choice = useModelChoice(models.data);
+  const choice = useModelChoice(models.data, snapshot.data?.state.writerDefaults?.model);
   const timeZone = useTimeZone();
   const onError = useActError();
   const [busy, setBusy] = useState(false);
@@ -33,9 +33,11 @@ export function useDraftHandoff() {
     return DRAFT_PLATFORMS.filter((p) => connected.includes(p)) as DraftPlatform[];
   }, [snapshot.data]);
 
-  // The model list failing to load leaves the choice to the server's default route.
+  // The model list failing to load leaves the choice to the server's default route. Ideas never sends a reasoning level,
+  // and on Auto no model either (only a pinned writer is named), so the server resolves the workspace default.
   const modelReady = models.isSuccess;
-  const modelLabel = models.isLoading ? '…' : models.isError ? 'Model list unavailable' : shortLabel(choice.option, choice.model);
+  const pinned = modelReady && choice.requestFields.model ? { model: choice.requestFields.model } : {};
+  const modelLabel = models.isLoading ? '…' : models.isError ? 'Model list unavailable' : choice.label;
   const destinationLabel = platforms.length > 0 ? platforms.join(', ') : 'LinkedIn (no channel connected)';
 
   async function handoff(result: Run) {
@@ -65,7 +67,7 @@ export function useDraftHandoff() {
         ...body,
         confirmUse: true,
         ...(platforms.length > 0 ? { destinations: destinations(language) } : {}),
-        ...(modelReady ? { model: choice.model } : {}),
+        ...pinned,
         timeZone
       });
       await handoff(result);
@@ -92,7 +94,7 @@ export function useDraftHandoff() {
         sourceIds: [source.id],
         destinations: platforms.length > 0 ? destinations(language) : [{ platform: 'LinkedIn', language }],
         language,
-        ...(modelReady ? { model: choice.model } : {}),
+        ...pinned,
         timeZone
       });
       await handoff(result);

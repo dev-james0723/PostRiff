@@ -16,7 +16,7 @@ export function ReasoningChips({ levels }: { levels: ReasoningLevel[] }) {
       <span className='text-muted-foreground text-xs'>Reasoning</span>
       {levels.map((level) => (
         <Badge key={level.id} variant='secondary' title={level.detail || undefined} className={cn(!level.available && 'text-muted-foreground border-dashed')}>
-          {LEVEL_NAME[level.id] ?? level.id}
+          {level.label || LEVEL_NAME[level.id] || level.id}
           {level.available ? '' : ' · not available'}
         </Badge>
       ))}

@@ -26,7 +26,7 @@ import { AttachImage } from '@/features/rafii-voice/attach-image';
 import { StyleButton } from '@/features/rafii-voice/style-sheet';
 import { VoiceMode } from '@/features/rafii-voice/voice-mode';
 import { ApiError } from '@/lib/api/client';
-import { keys, useMe, useMessages, useModels } from '@/lib/api/hooks';
+import { keys, useMe, useMessages, useModels, useSnapshot } from '@/lib/api/hooks';
 import type { Message } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
@@ -84,7 +84,10 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const models = useModels();
-  const choice = useModelChoice(models.data);
+  // The panel always names a concrete writer (`choice.model`), on Auto the one the workspace default resolves to:
+  // the site agent phrases its answers with it (the snapshot is the app shell's, already loaded).
+  const snapshot = useSnapshot();
+  const choice = useModelChoice(models.data, snapshot.data?.state.writerDefaults?.model);
   const me = useMe();
   const timeZone = useTimeZone();
   const { reduced } = useMotionPreference();

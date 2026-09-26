@@ -7,9 +7,9 @@ import { Icons } from '@/components/icons';
 import { InfoTip, StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMemory, useModels, useRescanModels } from '@/lib/api/hooks';
+import { useMemory, useModels, useRescanModels, useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
-import { useModelChoice } from '@/features/agent/use-model';
+import { modelName, useModelChoice } from '@/features/agent/use-model';
 import { routeKind } from './models/catalog';
 import { CheckAgainButton, CheckedLine } from './models/check-again';
 import { CliEmpty } from './models/cli-empty';
@@ -17,6 +17,7 @@ import { CliRouteCard } from './models/cli-route-card';
 import { PostriffRoutes } from './models/postriff-routes';
 import { BillingCard, ConsentCard } from './models/side-cards';
 import { useNowSeconds } from './models/use-saved-choice';
+import { WorkspaceDefaultCard } from './models/workspace-default';
 import { WritingNow } from './models/writing-now';
 
 const PAGE_TITLE = 'Models';
@@ -29,7 +30,7 @@ const infoContent = {
     },
     {
       title: 'Your pick',
-      description: 'Used for all drafts in this browser. If it becomes unavailable, drafting waits until you choose another writer; nothing is switched for you.'
+      description: 'Your pick is saved in this browser. Auto follows the workspace default. If a writer you picked becomes unavailable, drafting waits until you choose another; nothing is switched for you.'
     },
     {
       title: 'Your own CLI',
@@ -59,7 +60,8 @@ function ModelsBody() {
   const owner = checkAccess(access, { permission: 'owner' });
   const models = useModels();
   const memory = useMemory();
-  const choice = useModelChoice(models.data);
+  const snapshot = useSnapshot();
+  const choice = useModelChoice(models.data, snapshot.data?.state.writerDefaults?.model);
   const rescan = useRescanModels();
   const [picked, setPicked] = useState(false);
   const now = useNowSeconds();
@@ -117,18 +119,22 @@ function ModelsBody() {
             agents={agents}
             model={choice.model}
             option={choice.option}
-            saved={models.data ? choice.saved : null}
+            saved={models.data && !choice.auto ? choice.saved : null}
             picked={picked}
+            auto={choice.auto ? { source: choice.autoSource ?? 'deployment', note: choice.autoNote } : null}
           />
+
+          {models.data && <WorkspaceDefaultCard catalog={models.data} agents={agents} isOwner={owner} />}
 
           <PostriffRoutes
             loading={loading}
             listed={Boolean(models.data)}
             options={options}
             agents={agents}
-            current={choice.model}
+            current={choice.selection}
             onChoose={onChoose}
             consent={{ loading: memory.isLoading, egress: memory.data?.egress }}
+            autoName={choice.autoWriter.option ? modelName(choice.autoWriter.option, choice.autoWriter.model) : null}
           />
 
           <section data-tour='models-cli' className='flex flex-col gap-3' aria-labelledby='models-cli-heading'>
@@ -153,7 +159,7 @@ function ModelsBody() {
             ) : agents.length === 0 ? (
               <CliEmpty hosted={hosted} />
             ) : (
-              agents.map((agent) => <CliRouteCard key={agent.id} agent={agent} options={options} current={choice.model} onChoose={onChoose} checking={checking} now={now} />)
+              agents.map((agent) => <CliRouteCard key={agent.id} agent={agent} options={options} current={choice.selection} onChoose={onChoose} checking={checking} now={now} />)
             )}
             {unlisted.length > 0 && (
               <p className='text-muted-foreground px-1 text-xs'>

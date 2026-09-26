@@ -78,7 +78,7 @@ export function HomeControls(props: Props) {
       </Button>
       <ContentLibraryDialog open={panel === 'content'} onOpenChange={close} value={libraryValue} onApply={props.onContent} platformsForFit={props.languages.selectedPlatforms} />
       <LanguageDialog open={panel === 'language'} onOpenChange={close} selection={props.languages.selection} languages={props.languages} accountLabel={props.accountLabel} />
-      <ModelDialog open={panel === 'model'} onOpenChange={close} catalog={props.catalog} value={{ model: props.choice.model, reasoning: props.choice.reasoningFor(props.choice.model) ?? props.choice.reasoning }} reasoningFor={props.choice.reasoningFor} onApply={(value) => { props.choice.choose(value.model); props.choice.setReasoningFor(value.model, value.reasoning); }} />
+      <ModelDialog open={panel === 'model'} onOpenChange={close} catalog={props.catalog} value={props.choice.dialogValue} reasoningFor={props.choice.reasoningFor} onApply={props.choice.applyDialog} auto={props.choice.autoWriter} credits={Boolean(props.credit)} />
       <RafiiDialog open={panel === 'voice'} onOpenChange={close}>
         <RafiiDialogContent size='md'>
           <RafiiDialogHeader title='Writing voice' closeLabel='Close writing voice' />

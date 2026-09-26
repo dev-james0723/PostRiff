@@ -39,11 +39,11 @@ import type { VoiceMode } from './home/voice-dialog';
 import { ImageGenerationCard } from './image-generation-card';
 import { StartVoiceInterview } from './onboarding-chat';
 import { RaffiPlanner } from './raffi-planner';
-import { REASONING_LABELS } from './reasoning-map';
+import { AUTO_LEVEL } from './reasoning-map';
 import { SettingButtons } from './setting-buttons';
 import { selectionKey, useChannelLanguages, type ChannelTarget } from './use-channel-languages';
 import { useDestinations } from './use-destinations';
-import { useModelChoice } from './use-model';
+import { modelName, useModelChoice } from './use-model';
 import { effectiveVoiceMode, eligibleVoiceSources } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
@@ -203,16 +203,18 @@ function HomeWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-sync only when the set of targets changes
   }, [targetsKey]);
 
-  const choice = useModelChoice(models.data);
+  // Auto follows the owner's workspace default; `choice.model` is always the concrete writer, `requestFields` what is sent.
+  const choice = useModelChoice(models.data, state?.writerDefaults?.model);
   const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
   const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
   const maximum = parseCreditLimit(creditLimit);
   const estimateRequest = useMemo(
-    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds, timeZone, sourceIds: included })),
-    [text, own, languages.destinations, choice.model, choice.reasoning, voiceMode, voiceSourceIds, timeZone, included]
+    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds, timeZone, sourceIds: included })),
+    [text, own, languages.destinations, choice.requestFields, voiceMode, voiceSourceIds, timeZone, included]
   );
-  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest });
+  // On Auto the body names no model, so a changed workspace default must still ask for a fresh estimate.
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
   const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || imageRequested || (ceiling !== null && maximum < ceiling));
   const voiceAvailable = voiceSourceIds.length > 0;
@@ -242,12 +244,14 @@ function HomeWorkspace() {
     const tags = Array.from(new Set(languages.selection.flatMap((item) => languages.languagesOf(item))));
     return tags.length === 0 ? 'Choose' : tags.length === 1 ? languageLabel(tags[0]) : `Per destination · ${tags.length} languages`;
   }, [languages]);
+  // The level is named only when it is a choice (not Auto, and the writer offers more than one level).
+  const showLevel = Boolean(choice.level && choice.level.id !== AUTO_LEVEL && choice.levels.filter((item) => item.available).length > 1);
   // Before the model list arrives no model is chosen yet (the server would use its default writer); say so instead of a blank.
   const modelSummary = !models.data
     ? models.isError
       ? 'Model list unavailable'
       : 'Loading models…'
-    : `${choice.label}${choice.reasoningMapping.applied ? ` · ${REASONING_LABELS[choice.reasoningMapping.preference]}` : ''}`;
+    : `${choice.label}${showLevel && choice.level ? ` · ${choice.level.label}` : ''}`;
   const destinationCount = languages.destinations.length;
   const accountsSelected = targets.filter((t) => t.channelId).length;
   const channelsLabel = destinations.selected.length > 0 ? destinations.summary : accounts.length === 0 ? 'Platforms only' : 'Channels';
@@ -305,7 +309,7 @@ function HomeWorkspace() {
       const current = template ? await selectContentType(template, latest.revision) : latest.revision;
       if (!submission.alive()) return;
       const result = await generation.start({ text: body, ownContent: own, destinations: languages.destinations,
-        model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds,
+        ...choice.requestFields, voiceMode, voiceSourceIds,
         imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
         timeZone, sourceIds: included, maxMilliCredits: creditMode ? maximum : null }, current);
       if (!submission.alive() || !result) return;
@@ -337,8 +341,7 @@ function HomeWorkspace() {
       const result = await api.turn(workspaceId, target.id, {
         text: reply,
         destinations: languages.destinations,
-        model: choice.model,
-        reasoning: choice.reasoning,
+        ...choice.requestFields,
         voiceMode,
         voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
         timeZone
@@ -469,11 +472,11 @@ function HomeWorkspace() {
               settings={
                 <SettingButtons
                   language={{ value: languageSummary, onClick: () => setDialog('language'), expanded: dialog === 'language', controls: ids.language, disabled: languages.selection.length === 0 }}
-                  model={{ value: modelSummary, title: choice.reasoningMapping.applied ? `${REASONING_LABELS[choice.reasoningMapping.preference]} reasoning` : undefined, onClick: () => setDialog('model'), expanded: dialog === 'model', controls: ids.model, disabled: !models.data }}
+                  model={{ value: modelSummary, title: choice.level ? `${choice.level.label} reasoning` : undefined, onClick: () => setDialog('model'), expanded: dialog === 'model', controls: ids.model, disabled: !models.data }}
                   voice={{ value: voiceMode === 'personalized' ? 'Writing like you' : 'Neutral', onClick: () => setDialog('voice'), expanded: dialog === 'voice', controls: ids.voice }}
                 />
               }
-              notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} /></div> : undefined}
+              notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} autoModel={choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} /></div> : undefined}
               generate={{ label: generation.run ? 'Generate again' : 'Generate drafts', count: destinationCount, disabled: !canGenerate, onClick: () => void start(), help: helpText }}
               consent={
                 <div className='mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pt-3'>
@@ -628,8 +631,8 @@ function HomeWorkspace() {
       {opened.current.has('channels') && <ChannelBloomDialog open={dialog === 'channels'} onOpenChange={(open) => setDialog(open ? 'channels' : null)} accounts={accounts} folders={folders} selected={destinations.selected} context={destinations.context} onCommit={(result) => { destinations.commit({ accountIds: result.accountIds, context: result.context, platformOnly: [] }); setDialog(null); }} />}
       <PlatformOnlyDialog open={dialog === 'platforms'} onOpenChange={(open) => setDialog(open ? 'platforms' : null)} value={destinations.platformOnly.filter(isDraftable)} onApply={(platforms) => destinations.setPlatformOnly(platforms)} />
       {opened.current.has('language') && <LanguageDialog open={dialog === 'language'} onOpenChange={(open) => setDialog(open ? 'language' : null)} selection={languages.selection} languages={languages} accountLabel={(item) => (item.channelId ? `${item.platform} · ${accounts.find((a) => a.id === item.channelId)?.account ?? 'account'}` : item.platform)} id={ids.language} />}
-      {opened.current.has('model') && <ModelDialog open={dialog === 'model'} onOpenChange={(open) => setDialog(open ? 'model' : null)} catalog={models.data} value={{ model: choice.model, reasoning: choice.reasoningMapping.preference }} onApply={(next) => { choice.choose(next.model); choice.setReasoningFor(next.model, next.reasoning); }} reasoningFor={choice.reasoningFor} id={ids.model} />}
-      {opened.current.has('voice') && <VoiceDialog open={dialog === 'voice'} onOpenChange={(open) => setDialog(open ? 'voice' : null)} value={voiceMode} onApply={setVoiceChoice} available={voiceAvailable} sampleCount={voiceSourceIds.length} voiceRevision={voiceRevision} modelLabel={choice.label} />}
+      {opened.current.has('model') && <ModelDialog open={dialog === 'model'} onOpenChange={(open) => setDialog(open ? 'model' : null)} catalog={models.data} value={choice.dialogValue} onApply={choice.applyDialog} reasoningFor={choice.reasoningFor} auto={choice.autoWriter} credits={Boolean(usage.data?.credits)} id={ids.model} />}
+      {opened.current.has('voice') && <VoiceDialog open={dialog === 'voice'} onOpenChange={(open) => setDialog(open ? 'voice' : null)} value={voiceMode} onApply={setVoiceChoice} available={voiceAvailable} sampleCount={voiceSourceIds.length} voiceRevision={voiceRevision} modelLabel={choice.auto ? modelName(choice.option, choice.model) : choice.label} />}
     </PageContainer>
   );
 }

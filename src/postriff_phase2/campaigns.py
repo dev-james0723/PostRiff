@@ -31,6 +31,17 @@ from .contracts import digest
 DAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 REASONING = ("quick", "standard", "deep")
+
+
+def automation_reasoning(level):
+    """The pass an automation stores for a level the chat or a plan was given: stored values stay quick/standard/deep
+    (they are part of the authorised definition). Absent or Auto, and any effort level, is the self-check pass
+    (standard); Thorough is deep; the legacy passes are kept as they are. Nothing is silently turned into quick."""
+    if level in REASONING:
+        return level
+    return "deep" if level == "thorough" else "standard"
+
+
 MAX_DESTINATIONS = 10
 MAX_COST_USD_MICRO = 10_000_000
 # The definition an activation authorizes. Legacy (authority 1) tasks keep their original digest.

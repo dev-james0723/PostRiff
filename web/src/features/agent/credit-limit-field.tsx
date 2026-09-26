@@ -11,14 +11,20 @@ export interface CreditLimitFieldProps {
   estimate?: CreditEstimate | null;
   estimating?: boolean;
   estimateError?: string | null;
+  /** On Auto, the writer the browser resolved; when the server priced another one, the field says which. */
+  autoModel?: string | null;
+  /** A writer's name for that line; the raw id otherwise. */
+  modelLabel?: (id: string) => string;
 }
 
 const credits = (milli: number) => (milli / 1000).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const asInput = (milli: number) => (milli / 1000).toFixed(1).replace(/\.0$/, '');
 
 /** A spending limit next to the server's estimate. Shared by Home and follow-up turns. */
-export function CreditLimitField({ value, onChange, availableMilliCredits, disabled, estimate, estimating, estimateError }: CreditLimitFieldProps) {
+export function CreditLimitField({ value, onChange, availableMilliCredits, disabled, estimate, estimating, estimateError, autoModel, modelLabel }: CreditLimitFieldProps) {
   const ceiling = estimate?.ceilingMilliCredits ?? null;
+  // Auto sends no model: the server prices the workspace default it resolves, which can differ from this browser's view.
+  const pricedOther = Boolean(estimate && autoModel && estimate.model && estimate.model !== autoModel);
   const typed = Number(value);
   const belowCeiling = ceiling !== null && value.trim() !== '' && Number.isFinite(typed) && typed * 1000 < ceiling;
   return (
@@ -36,6 +42,7 @@ export function CreditLimitField({ value, onChange, availableMilliCredits, disab
               Use {credits(estimate.ceilingMilliCredits)}
             </button>
           </p>
+          {pricedOther && <p role='status'>Estimated for {modelLabel ? modelLabel(estimate.model) : estimate.model}, the writer Auto uses for this workspace.</p>}
           {belowCeiling && <p role='status'>Set at least {credits(estimate.ceilingMilliCredits)} for this request.</p>}
           <details>
             <summary className='rafii-focus text-muted-foreground cursor-pointer'>How this is estimated</summary>

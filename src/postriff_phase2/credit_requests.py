@@ -23,6 +23,7 @@ class CreditRequests:
             raise AlphaError('Images need a separate credit approval; use the existing media plan.',409)
         runtime=self.ideas._select_runtime(payload.get('model'))
         if runtime.cost_class!='paid': raise AlphaError('This writer does not use cloud credits.',409)
+        # The model an Auto request writes with depends on workspace state: estimate and issue take it from estimate_request.
         return runtime, payload.get('model') or runtime.model
 
     def _ceiling(self, runtime, model, request):
@@ -46,7 +47,8 @@ class CreditRequests:
         ceiling=self._ceiling(runtime,model,request)
         usual=min(ceiling,millicredits(math.ceil(runtime.typical_quote(request,model)*1_000_000)))
         return {'estimateMilliCredits':usual,'ceilingMilliCredits':ceiling,'availableMilliCredits':available,'basis':runtime.ESTIMATE_BASIS,
-                'model':model,'provider':runtime.provider,'policy':policy,'reasoning':request.get('reasoning')}
+                'model':model,'provider':runtime.provider,'policy':policy,'reasoning':request.get('reasoning'),
+                **({'warnings':[request['writerNote']]} if request.get('writerNote') else {})}
 
     def issue(self, workspace_id, token, body):
         if is_api_token(token): raise AlphaError('Sign in to approve a credit limit.',403)
@@ -61,8 +63,9 @@ class CreditRequests:
             if body.get('expectedRevision')!=row[0]: raise AlphaError('Workspace changed. Review this request again.',409)
             if operation=='turn': self.ideas._conversation(cur,workspace_id,conversation)
             elif conversation is not None: raise AlphaError('A new draft cannot name another conversation.',400)
-            # The limit must cover the most this exact request can cost, so approval never ends in a later 402.
-            _,_,request=self.ideas.estimate_request(self.ideas._state(row),payload,operation,actor)
+            # The limit must cover the most this exact request can cost, so approval never ends in a later 402. The writer
+            # is the one the turn will use: Auto resolves against this workspace's default, as the turn does.
+            runtime,model,request=self.ideas.estimate_request(self.ideas._state(row),payload,operation,actor)
             ceiling=self._ceiling(runtime,model,request)
             if maximum<ceiling: raise AlphaError(f'This task can use up to {ceiling/1000:.1f} credits. Set the limit to at least {ceiling/1000:.1f}.',402)
             return book.issue(cur,workspace_id,actor,row[0],binding,model,runtime.provider,maximum)

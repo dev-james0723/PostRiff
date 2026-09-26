@@ -18,12 +18,17 @@ import time
 from postriff_alpha.domain import AlphaError
 
 from .. import skill_compiler
+from ..model_runtime import REQUEST_SECONDS
 from . import creative, engagement, fact_pack, flags, humanizer, overlays, research_broker, source_intake, weekly_operator
 
 log = logging.getLogger("postriff.coworker")
 VISUAL_FIRST = ("Instagram", "TikTok", "Pinterest", "YouTube", "Xiaohongshu")
 DEFAULT_WRITER_SLOTS_PER_CALL = 8
-WRITER_RUN_SECONDS = 95   # one writer run: two attempts of 45 s plus saving
+# The least time worth starting a weekly writer run. The run itself is bounded by the caller's deadline (_draft_slot
+# hands it to the turn, whose calls are trimmed or not sent when they could not finish), so a thinking model's two
+# 90 s attempts never overrun it; a bound of two full attempts (195 s) would stop the cron (about 110 s) drafting.
+WRITER_RUN_SECONDS = 95
+WRITER_SAVE_SECONDS = 15   # applying and recording a finished run, after its last model call
 UNKNOWN_RUN_USD_MICRO = 50_000   # a weekly writing run with no recorded cost and no reservation counts as $0.05
 
 
@@ -237,7 +242,7 @@ class CoworkerService:
                 outcome = {"status": "needs_input", "reason": "This week's writing budget is used up. Raise the recipe's weekly limit or skip the remaining posts."
                            if limit > 0 else "The weekly drafting limit is $0, so Rafii planned this post but didn't draft it. Raise the limit, or write it yourself."}
             else:
-                outcome = self._draft_slot(ideas, workspace_id, token, repository, recipe, week, slot, key, state)
+                outcome = self._draft_slot(ideas, workspace_id, token, repository, recipe, week, slot, key, state, deadline)
             self._record_slot(repository, workspace_id, token, week_id, slot["id"], outcome)
             if outcome["status"] == "drafted":
                 drafted_ids.append(slot["id"])
@@ -255,16 +260,18 @@ class CoworkerService:
                         (UNKNOWN_RUN_USD_MICRO, workspace_id, f"weekly:{week_id}:%"))
             return int(float(cur.fetchone()[0]))
 
-    def _draft_slot(self, ideas, workspace_id, token, repository, recipe, week, slot, key, state):
+    def _draft_slot(self, ideas, workspace_id, token, repository, recipe, week, slot, key, state, deadline=None):
         """One post through the writing pipeline. The slot brief is `material` (data, never instructions), so the
-        pipeline treats this as a drafting request: it never becomes an automation, a schedule or a memory."""
+        pipeline treats this as a drafting request: it never becomes an automation, a schedule or a memory. With a
+        `deadline` (monotonic), the turn's own time budget ends WRITER_SAVE_SECONDS before it."""
+        started = {} if deadline is None else {"_started": deadline - WRITER_SAVE_SECONDS - REQUEST_SECONDS}
         try:
             with skill_compiler.workflow_context("rafii-weekly-operator"):
                 ideas.turn(workspace_id, token, week["conversationId"], {
                     "text": "Write one post for this week's plan from the material.", "material": weekly_operator.slot_brief(recipe, slot, state),
                     "idempotencyKey": key, "model": recipe.get("model"), "reasoning": "quick", "sourceIds": slot["sourceIds"],
                     "destinations": [{"platform": slot["platform"], "language": slot["language"], "channelId": slot["channelId"]}], "research": False,
-                    "voiceMode": recipe.get("voiceMode", "neutral"), "timeZone": recipe["timeZone"]})
+                    "voiceMode": recipe.get("voiceMode", "neutral"), "timeZone": recipe["timeZone"]}, **started)
             with self.hosted.connection_factory() as db, db.cursor() as cur:
                 cur.execute("SELECT id::text,status,artifact_hash FROM pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
                 run = cur.fetchone()

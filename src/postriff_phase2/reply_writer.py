@@ -89,7 +89,8 @@ def reply_language(platform, state, comment):
 
 def writer_for(ideas, model=None):
     """The managed cloud writer and the model to use: the person's chosen one when that writer owns it, else its
-    default. Refuses (409) where no managed writer is mounted: replies are never written from templates."""
+    default. Refuses (409) where no managed writer is mounted: replies are never written from templates. No model (or
+    "auto") follows the workspace default, which write() resolves against the workspace state it reads."""
     runtime = ideas.default_runtime() if hasattr(ideas, "default_runtime") else None
     if runtime is None or getattr(runtime, "cost_class", None) != "paid" or getattr(runtime, "provider_class", None) != "cloud" or not getattr(runtime, "api_key", None):
         raise AlphaError("Rafii's AI writer isn't available here, so no reply was suggested. Write the reply yourself.", 409, code="reply_writer_unavailable")
@@ -112,6 +113,11 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
         if not thread:
             raise AlphaError("Thread unavailable.", 404)
         state = ideas._state(row)
+        note = None
+        if model in (None, "", "auto"):
+            # Auto: the workspace default writer, read in this transaction (the deployment default when none is set).
+            from . import writer_defaults
+            chosen, _source, note = writer_defaults.resolve(state, runtime)
         platform = platform_of(thread[2])
         language = reply_language(platform, state, thread[0])
         destinations = [{"platform": platform, "language": language}]
@@ -166,4 +172,4 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
                   "route": route, "language": language, "memory": {"shared": bool(files), "files": [f["name"] for f in files]},
                   "facts": len(facts), "factSourceIds": fact_sources, "costUsdMicro": actual}
     return {"text": _fit(text), "needs": needs, "language": answer.get("language") if isinstance(answer.get("language"), str) else None,
-            "provenance": provenance, "costUsdMicro": actual}
+            "provenance": provenance, "costUsdMicro": actual, **({"warnings": [note]} if note else {})}

@@ -101,7 +101,9 @@ RETIRED_WRITING_ACTIONS = frozenset({"generate", "preview_update"})
 def ideas_runtime_from_environment(values):
     """Mount the paid model route only with a gateway key (AI_GATEWAY_API_KEY); never by default.
     POSTRIFF_MODEL_ID picks the default model; POSTRIFF_MODEL_IDS (comma list) the selectable set;
-    POSTRIFF_MODEL_PRICES a JSON object {model: [inputUsdPerMTok, outputUsdPerMTok]} for estimates."""
+    POSTRIFF_MODEL_PRICES a JSON object {model: [inputUsdPerMTok, outputUsdPerMTok]} for estimates;
+    POSTRIFF_FEATURED_MODEL_IDS (comma list, optional) the models the picker shows first (model_runtime.FEATURED_MODELS
+    otherwise; ids outside the selectable set are ignored)."""
     key = values.get("AI_GATEWAY_API_KEY")
     if not key:
         return None
@@ -116,7 +118,8 @@ def ideas_runtime_from_environment(values):
             raise ValueError("POSTRIFF_MODEL_PRICES must be a JSON object of model → [input, output] USD per million tokens.") from error
     endpoint = values.get("AI_GATEWAY_ENDPOINT") or None
     allowed = provider_map(values) or None
-    return ServerModelRuntime(key, model=model, models=models, prices=prices, allowed_providers=allowed, **({"endpoint": endpoint} if endpoint else {}))
+    featured = [m.strip() for m in (values.get("POSTRIFF_FEATURED_MODEL_IDS") or "").split(",") if m.strip()] or None
+    return ServerModelRuntime(key, model=model, models=models, prices=prices, allowed_providers=allowed, featured=featured, **({"endpoint": endpoint} if endpoint else {}))
 
 
 # Real charges need the merchant's own legal facts on record. None is ever inferred, and a "[to be confirmed]"
@@ -429,7 +432,8 @@ class HostedApplication:
                     model_catalog = None
                 if model_catalog is None:
                     runtime = FixtureAgentRuntime()
-                    return self._json(start_response, 200, {"models": runtime.list_supported_models(), "reasoning": runtime.list_supported_reasoning(), "agents": []})
+                    return self._json(start_response, 200, {"models": runtime.list_supported_models(), "reasoning": runtime.list_supported_reasoning(), "agents": [],
+                                                            "defaultModel": None, "featured": []})
                 return self._json(start_response, 200, model_catalog())
             if path == "/api/tools" and method == "GET":
                 return self._json(start_response, 200, {"tools": tools.catalog(), "isolation": tools.isolation_status()})

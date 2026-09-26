@@ -5,6 +5,7 @@
  * - hosted.py: workspace.created, member.updated / removed / left, ownership.transferred,
  *   invitation.created / revoked / accepted / declined, billing.checkout_started / portal_opened,
  *   data.exported / diagnostics, memory.egress_decided, research.egress_decided
+ * - postgres_repository.py (action `writer_defaults`): writer.default_decided
  * - oauth.py: oauth.started / rejected / denied, channel.connected / verified / disconnected
  * - audience.py: reply.approved
  * billing.py and learning_service.py write no audit rows (webhooks and preference decisions keep
@@ -316,6 +317,12 @@ export function describeAuditEvent(event: AuditEvent, lookup: AuditLookup): Audi
         detail: null,
         tone: 'neutral'
       };
+    case 'writer.default_decided':
+      return {
+        headline: typeof meta.model === 'string' && meta.model ? `Set the workspace default writer to ${meta.model}` : 'Set the workspace default writer to Rafii’s default',
+        detail: 'Everyone whose writer is Auto now drafts with it.',
+        tone: 'neutral'
+      };
     case 'oauth.started': {
       const channel = channelName(event, lookup);
       const capability = text(meta.capability);
@@ -412,7 +419,7 @@ export function subjectLabel(event: AuditEvent): string | null {
   if (event.kind.startsWith('data.')) return 'Request id';
   if (event.kind === 'billing.checkout_started') return 'Plan terms';
   if (event.kind === 'reply.approved') return 'Reply id';
-  if (event.kind === 'memory.egress_decided' || event.kind === 'research.egress_decided') return 'Setting';
+  if (event.kind === 'memory.egress_decided' || event.kind === 'research.egress_decided' || event.kind === 'writer.default_decided') return 'Setting';
   return 'Subject';
 }
 
@@ -429,6 +436,7 @@ const META_LABELS: Record<string, string> = {
   bytes: 'Size',
   cloud: 'Cloud model may read memory',
   web: 'Web research on',
+  model: 'Writer',
   can_publish: 'Can approve posts',
   can_reply: 'Can reply to comments',
   can_moderate: 'Can moderate',
@@ -496,6 +504,7 @@ export function linkFor(kind: string): AuditLink | null {
   if (kind.startsWith('memory.') || kind.startsWith('research.')) return navLink('/app/workspace/memory', 'Memory');
   if (kind.startsWith('billing.')) return navLink('/app/account/billing', 'Billing');
   if (kind.startsWith('reply.')) return navLink('/app/inbox', 'Inbox');
+  if (kind.startsWith('writer.')) return navLink('/app/account/models', 'Models');
   return null;
 }
 
