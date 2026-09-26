@@ -45,7 +45,8 @@ def refusal(argv, env):
 
 def _put(storage, url, body, mime):
     try:
-        with storage._open("PUT", url, {"Content-Type": mime}, body) as response:
+        # The oversize probe sends the full Free-plan cap; a consumer uplink can take over 20 seconds.
+        with storage._open("PUT", url, {"Content-Type": mime}, body, timeout=120) as response:
             return response.status
     except HTTPError as error:
         error.close()
@@ -136,4 +137,3 @@ def main(args=None, env=None):
 
 if __name__ == "__main__":
     sys.exit(main())
-

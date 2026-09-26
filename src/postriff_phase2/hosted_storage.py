@@ -11,7 +11,7 @@ import json
 import re
 import ssl
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from postriff_alpha.domain import AlphaError
@@ -53,10 +53,10 @@ class SupabaseStorage:
         self.opener = opener or storage_opener()
         self.send = send or self._send
 
-    def _open(self, method, url, headers, body):
+    def _open(self, method, url, headers, body, *, timeout=20):
         if urlparse(url).scheme != "https" or urlparse(url).hostname != self.host:
             raise AlphaError("Private storage is temporarily unavailable.", 503)
-        return self.opener.open(Request(url, data=body, headers=headers, method=method), timeout=20)
+        return self.opener.open(Request(url, data=body, headers=headers, method=method), timeout=timeout)
 
     def _send(self, method, url, headers, body):
         try:
@@ -134,11 +134,19 @@ class SupabaseStorage:
         status, _, body = self.send("POST", url, self._headers("application/json"), json.dumps({"expiresIn": expires_in}).encode())
         try:
             signed = json.loads(body).get("signedURL") if status == 200 else None
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, AttributeError):
             signed = None
-        if not isinstance(signed, str) or not signed.startswith(f"/storage/v1/object/sign/{quote(self._bucket(category))}/"):
+        # Storage returns a path relative to /storage/v1; older fixtures include that prefix.
+        if isinstance(signed, str) and signed.startswith("/storage/v1/object/sign/"):
+            signed = signed[len("/storage/v1"):]
+        expected = f"/object/sign/{quote(self._bucket(category))}/{quote(path, safe='/')}?"
+        try:
+            tokens = parse_qs(urlparse(signed).query).get("token", []) if isinstance(signed, str) else []
+        except ValueError:
+            tokens = []
+        if not isinstance(signed, str) or not signed.startswith(expected) or "#" in signed or len(tokens) != 1 or not tokens[0]:
             raise AlphaError("Private storage did not create a safe delivery URL.", 502)
-        return self.project_url + signed
+        return self.project_url + "/storage/v1" + signed
 
     # --- chat videos (SPEC §7.3, §7.4) ------------------------------------------------------------------
 
