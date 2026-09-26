@@ -399,6 +399,10 @@ export function GuideOverlay() {
             key='card'
             ref={cardRef}
             aria-label={`${siteConfig.name} is showing you how`}
+            // A modal sheet opened by a guide step hides everything outside it from assistive tech, except `[aria-live]`
+            // elements (floating-ui markOthers). "off" is the default politeness, so this only keeps the card's Next and
+            // Stop reachable by screen readers while the sheet is open; announcements stay on the sr-only line above.
+            aria-live='off'
             className='pointer-events-auto absolute top-0 left-0'
             style={{ width: cardW }}
             initial={{ opacity: 0, x: pos.x, y: pos.y + 6 }}
