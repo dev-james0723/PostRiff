@@ -64,6 +64,8 @@ export interface ReasoningLevel {
   id: string;
   available: boolean;
   detail: string;
+  /** The catalogue's name for the level (managed writers), when it sends one. */
+  label?: string;
 }
 
 /**

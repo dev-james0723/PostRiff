@@ -41,6 +41,7 @@ const KIND_LABELS: Record<string, string> = {
   'reply.approved': 'Reply approved',
   'memory.egress_decided': 'Memory processing choice saved',
   'research.egress_decided': 'Web research choice saved',
+  'writer.default_decided': 'Workspace default writer saved',
   'session.revoked': 'Signed out a device',
   'session.revoked_others': 'Signed out other devices'
 };
@@ -108,6 +109,8 @@ function subjectOf(event: AuditEvent, { channels, providers }: Lookups) {
       return typeof meta.cloud === 'boolean' ? (meta.cloud ? 'Cloud processing allowed' : 'Kept on this device') : null;
     case 'research.egress_decided':
       return typeof meta.web === 'boolean' ? (meta.web ? 'Web research allowed' : 'Web research off') : null;
+    case 'writer.default_decided':
+      return typeof meta.model === 'string' && meta.model ? meta.model : 'Rafii’s default';
     default:
       return null;
   }

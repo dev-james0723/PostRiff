@@ -8,6 +8,11 @@
  * inventing anything: the segment labels come from the ladder, the value that is sent is always one
  * of the route's own option ids, and a route with one option or none gets "Not applied by this
  * provider" while the stored preference survives for other models.
+ *
+ * Levels (the second half of this file) are the model picker's vocabulary since the per-model catalogue: a
+ * managed writer lists Auto, the gateway efforts it supports and Thorough, each with a label and what it
+ * sends; the person's choice is stored verbatim per model id (or per Auto) and falls back to Auto when the
+ * writer does not offer it. This file stays import-free: the unit tests transpile it on its own.
  */
 
 export const REASONING_LADDER = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -121,4 +126,151 @@ export function mapReasoning(preference: string | null | undefined, options: rea
   const nearest = selected.level !== level ? ` (nearest to ${REASONING_LABELS[level]})` : '';
   const summary = stored ? `Effective for ${modelLabel}: ${selected.id}${nearest}` : `Provider default for ${modelLabel}: ${selected.id}`;
   return { applied: true, segments, selected, preference: level, stored, effective: selected.id, summary };
+}
+
+/* ---------- Levels: Auto, the gateway efforts a writer supports, Thorough ---------- */
+
+/** Rafii decides (the self-checked standard pass on a managed writer). Never sent: requests omit `reasoning`. */
+export const AUTO_LEVEL = 'auto';
+/** Draft, then a critique-and-revise pass. The only level Auto offers besides itself. */
+export const THOROUGH_LEVEL = 'thorough';
+
+/** Names for levels the catalogue sends without a label (the fixture and CLI routes, older servers). */
+export const LEVEL_LABELS: Record<string, string> = {
+  auto: 'Auto',
+  none: 'Off',
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+  thorough: 'Thorough (draft, then revise)',
+  quick: 'Quick',
+  standard: 'Standard',
+  deep: 'Deep'
+};
+
+/** Lit bars out of four. Auto has none: the dialog says "Auto" in words instead. */
+export const LEVEL_BARS: Record<string, number> = { none: 0, minimal: 0.5, low: 1, medium: 2, high: 3, xhigh: 3.5, max: 4, thorough: 4, quick: 1, standard: 2, deep: 4 };
+
+/** A reasoning item as the catalogue sends it (`ReasoningItem` in lib/api/types.ts, kept structural here). */
+export interface LevelSource {
+  id: string;
+  available: boolean;
+  detail?: string;
+  label?: string;
+  kind?: string;
+  sends?: string | null;
+  typicalMilliCredits?: number | null;
+  ceilingMilliCredits?: number | null;
+}
+
+export interface Level {
+  id: string;
+  label: string;
+  available: boolean;
+  detail: string;
+  /** `route` for an option without a kind (fixture, CLI, older servers). */
+  kind: 'auto' | 'effort' | 'pass' | 'route';
+  /** What the accessible name says the level sends ("High: sends high"): the catalogue's `sends`, else the id. */
+  sends: string;
+  /** Null for Auto. */
+  bars: number | null;
+  typicalMilliCredits: number | null;
+  ceilingMilliCredits: number | null;
+}
+
+function validItems(items: readonly LevelSource[] | null | undefined): LevelSource[] {
+  return (Array.isArray(items) ? items : []).filter((item): item is LevelSource => Boolean(item) && typeof item.id === 'string' && item.id !== '' && typeof item.available === 'boolean');
+}
+
+const milli = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
+function toLevel(item: LevelSource): Level {
+  const kind = item.kind === 'auto' || item.kind === 'effort' || item.kind === 'pass' ? item.kind : 'route';
+  return {
+    id: item.id,
+    label: item.label || LEVEL_LABELS[item.id] || item.id,
+    available: item.available,
+    detail: item.detail ?? '',
+    kind,
+    sends: item.sends || item.id,
+    bars: item.id === AUTO_LEVEL ? null : (LEVEL_BARS[item.id] ?? null),
+    typicalMilliCredits: milli(item.typicalMilliCredits),
+    ceilingMilliCredits: milli(item.ceilingMilliCredits)
+  };
+}
+
+/** A managed writer's list has an Auto level; the fixture's and the CLI routes' lists have none. */
+export function hasAutoLevel(items: readonly LevelSource[] | null | undefined): boolean {
+  return validItems(items).some((item) => item.kind === 'auto');
+}
+
+/**
+ * The levels to offer, in catalogue order. `autoOnly` (the writer is Auto, so the model can change under the person)
+ * keeps only Auto and Thorough, which every managed writer lists.
+ */
+export function levelsFor(items: readonly LevelSource[] | null | undefined, autoOnly = false): Level[] {
+  const clean = validItems(items);
+  return (autoOnly ? clean.filter((item) => item.id === AUTO_LEVEL || item.id === THOROUGH_LEVEL) : clean).map(toLevel);
+}
+
+/**
+ * The level a run uses. A stored level counts only when offered and available. Otherwise a managed writer uses Auto
+ * and any other route its first available option (today's rule: the fixture sends `quick`, a CLI `low`).
+ */
+export function chooseLevel(levels: readonly Level[], stored: string | null | undefined, managed: boolean): Level | null {
+  const wanted = stored ? levels.find((level) => level.id === stored && level.available) : undefined;
+  if (wanted) return wanted;
+  const auto = managed ? levels.find((level) => level.id === AUTO_LEVEL && level.available) : undefined;
+  return auto ?? levels.find((level) => level.available) ?? null;
+}
+
+/** Old (v1) ladder values on a managed writer stood for pass modes: only the old High meant the revise pass. */
+const MANAGED_FROM_V1: Record<ReasoningLevel, string> = { low: AUTO_LEVEL, medium: AUTO_LEVEL, high: THOROUGH_LEVEL, xhigh: AUTO_LEVEL, max: AUTO_LEVEL };
+
+/**
+ * One-time move of the v1 preferences (`postriff-agent-reasoning`, ladder levels per model id) to the v2 vocabulary.
+ * Managed ids ("maker/model") map to Auto or Thorough, CLI ids keep their effort, anything else (the fixture) is
+ * dropped. The v1 key itself is never rewritten, so a tab still running the old bundle keeps working.
+ */
+export function migrateReasoningPreferences(v1: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v1 || typeof v1 !== 'object' || Array.isArray(v1)) return out;
+  for (const [modelId, value] of Object.entries(v1 as Record<string, unknown>)) {
+    const level = normaliseLevel(value);
+    if (!level) continue;
+    if (modelId.startsWith('claude-code:') || modelId.startsWith('codex:')) out[modelId] = level;
+    else if (modelId.includes('/')) out[modelId] = MANAGED_FROM_V1[level];
+  }
+  return out;
+}
+
+/** v2 preferences as stored: level ids verbatim per model id (or per Auto); anything else is ignored. */
+export function readReasoningPreferences(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim()) out[key] = value.trim();
+  }
+  return out;
+}
+
+const creditText = (value: number) => (value / 1000).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/**
+ * The cost line under the reasoning control. Credits only where the workspace pays in credits (the catalogue's
+ * reference request, never provider dollars); elsewhere how the level's ceiling compares with Auto's, or nothing.
+ */
+export function levelHint(level: Level | null, auto: Level | null | undefined, creditsBilling: boolean): string | null {
+  if (!level) return null;
+  if (creditsBilling) {
+    if (level.typicalMilliCredits === null || level.ceilingMilliCredits === null) return null;
+    return `about ${creditText(level.typicalMilliCredits)} credits · up to ${creditText(level.ceilingMilliCredits)} for a large request`;
+  }
+  if (level.id === AUTO_LEVEL || !auto?.ceilingMilliCredits || level.ceilingMilliCredits === null) return null;
+  const ratio = level.ceilingMilliCredits / auto.ceilingMilliCredits;
+  const rounded = ratio >= 2 ? Math.round(ratio) : Math.round(ratio * 10) / 10;
+  return rounded === 1 ? 'about the same as Auto' : `about ${rounded}× Auto`;
 }

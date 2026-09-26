@@ -51,7 +51,7 @@ import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from 
 import { useChannelLanguages } from './use-channel-languages';
 import { PlanCard } from './plan-card';
 import { localTimeToDate } from './plan';
-import { ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
+import { modelName, ROUTE_LABELS, shortLabel, useModelChoice } from './use-model';
 import { useRun } from './use-run';
 import { VariantCard, destinationLabel } from './variant-card';
 import { workflowKey } from '@/lib/time-back/active-time';
@@ -168,7 +168,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
 
   const state = snapshot.data?.state;
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
-  const choice = useModelChoice(models.data);
+  const choice = useModelChoice(models.data, state?.writerDefaults?.model);
   const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
   const maximum = parseCreditLimit(creditLimit);
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
@@ -181,11 +181,15 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   });
   const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
   const runModelLabel = run ? shortLabel(runOption, run.model) : models.data ? choice.label : models.isError ? 'Model list unavailable' : 'Loading models…';
+  // The composer's picker offers Auto first, named by the writer it resolves to now.
+  const { autoWriter } = choice;
+  const autoModel = useMemo(() => ({ label: autoWriter.option ? `Auto · ${modelName(autoWriter.option, autoWriter.model)}` : 'Auto', option: autoWriter.option }), [autoWriter]);
   const timeZone = useTimeZone();
   /** The follow-up body the server receives (and a credit estimate describes), minus key and image. */
-  const turnPayload = (body: string) => ({ text: body, destinations: languages.destinations, model: choice.model, reasoning: choice.reasoning, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone });
+  // `requestFields` leaves out the model on Auto (the server resolves the workspace default) and the Auto level.
+  const turnPayload = (body: string) => ({ text: body, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone });
   const estimateRequest = creditRequestFor(turnPayload(text.trim()));
-  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !imageRequested, { operation: 'turn', conversationId, request: estimateRequest });
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !imageRequested, { operation: 'turn', conversationId, request: estimateRequest }, choice.auto ? choice.model : undefined);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
   const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
   const imageCapability = models.data?.imageGeneration;
@@ -482,7 +486,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
 
           {learning?.workspaceId === workspaceId && learning.conversationId === conversationId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
 
-          {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} />}
+          {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} autoModel={choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} />}
           {messages.at(-1)?.body.intent === 'onboarding' ? (
             <OnboardingAnswer key={messages.at(-1)!.messageId} message={messages.at(-1)!} conversationId={conversationId} canEdit={canEdit} />
           ) : canEdit ? (
@@ -499,6 +503,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               languages={languages}
               models={choice.options}
               model={choice.model}
+              modelSelection={choice.selection}
+              autoModel={autoModel}
               onModel={choice.choose}
               reasoning={choice.reasoning}
               reasoningOptions={choice.reasoningOptions}

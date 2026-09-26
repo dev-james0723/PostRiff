@@ -47,10 +47,15 @@ interface ComposerProps {
   languages: ChannelLanguages<DraftPlatform>;
   /** Every model the deployment can write with, and which one this composer sends. */
   models: ModelOption[];
+  /** The concrete model a turn uses (on Auto, the one Auto resolves to): sending needs it to be qualified. */
   model: string;
+  /** What the person chose, AUTO_MODEL or an id; the picker shows it. Defaults to `model`. */
+  modelSelection?: string;
+  /** Offers Auto in the picker: its label and the option it resolves to. */
+  autoModel?: { label: string; option: ModelOption | undefined };
   onModel: (id: string) => void;
   reasoning?: string;
-  reasoningOptions?: { id: string; detail: string }[];
+  reasoningOptions?: { id: string; detail: string; label?: string }[];
   onReasoning?: (id: string) => void;
   voiceMode?: 'neutral' | 'personalized';
   onVoiceMode?: (mode: 'neutral' | 'personalized') => void;
@@ -72,11 +77,11 @@ interface ComposerProps {
  * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel },
+  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel },
   ref
 ) {
   // An unavailable model is never swapped for another paid one: the person chooses again.
-  const canSend = !submitDisabled && models.some((m) => m.id === model && m.qualified) && !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use) && (!imageGeneration?.enabled || imageGeneration.available);
+  const canSend = !submitDisabled && models.some((m) => m.id === model && m.qualified && m.priced !== false) && !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use) && (!imageGeneration?.enabled || imageGeneration.available);
   const parsed = useMemo(() => locales.parseMessageLanguages(value), [value]);
   // One chip per selected account (two accounts on one platform stay two chips); a platform with no
   // selected account keeps its single platform chip.
@@ -153,7 +158,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
       {/* Tools on one line (same height, same material), the single primary action on the right. */}
       <div className='flex items-center gap-2 px-3 pb-3'>
         <div className='scrollbar-hide relative flex min-w-0 flex-1 items-center gap-2 overflow-x-auto'>
-          <ModelPicker compact options={models} model={model} onChoose={onModel} disabled={disabled || busy} reasoning={reasoning} reasoningOptions={reasoningOptions} onReasoning={onReasoning} />
+          <ModelPicker compact options={models} model={model} value={modelSelection} auto={autoModel} onChoose={onModel} disabled={disabled || busy} reasoning={reasoning} reasoningOptions={reasoningOptions} onReasoning={onReasoning} />
           {onVoiceMode && (
             <button
               type='button'

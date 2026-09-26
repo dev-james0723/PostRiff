@@ -209,7 +209,8 @@ export interface AutomationBuilderProps {
 export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, onSaved }: AutomationBuilderProps) {
   const snapshot = useSnapshot();
   const models = useModels();
-  const modelChoice = useModelChoice(models.data);
+  // Only its concrete `model` is read: a new automation pins the writer Home would use (on Auto, the workspace default).
+  const modelChoice = useModelChoice(models.data, snapshot.data?.state.writerDefaults?.model);
   const viewerZone = useTimeZone();
   const state = snapshot.data?.state;
 
