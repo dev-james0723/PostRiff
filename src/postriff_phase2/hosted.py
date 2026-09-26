@@ -22,7 +22,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state
-from . import campaigns, locales, media_consent, memory, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
@@ -174,6 +174,8 @@ class PostgresWorkspaceRepository:
         audit_event = (lambda state: ("memory.egress_decided", "cloud", {"cloud": memory.egress(state).get("cloud") is True})) if action == memory.EGRESS_ACTION else None
         if action == research.CONSENT_ACTION:
             audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
+        if action == productivity_connectors.CONSENT_ACTION:
+            audit_event = lambda state: ("connector.egress_decided", "cloud", {"cloud": productivity_connectors.egress_decision(state).get("cloud") is True})
         if action == writer_defaults.ACTION:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
         after = None
@@ -238,6 +240,8 @@ class HostedPhase2Commands:
         if locales.apply_language_action(state, action, payload, principal, self.clock()):
             return state
         if research.apply_research_action(state, action, payload, principal, self.clock()):
+            return state
+        if productivity_connectors.apply_connector_egress(state, action, payload, principal, self.clock()):
             return state
         if writer_defaults.apply_action(state, action, payload, principal, self.clock(), self.writers):
             return state
@@ -344,7 +348,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -367,7 +371,13 @@ class HostedWorkspaceService:
         from .billing import Billing, Ledger
         from .privacy import DataRequests
         from .audience import AudienceService
-        self.oauth = OAuthService(self.repository, self.commands, vault or CredentialVault(None), providers or {}, public_base_url, clock)
+        credential_vault = vault or CredentialVault(None)
+        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock)
+        self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
+            self.repository, credential_vault, productivity_providers or {}, public_base_url,
+            flags=productivity_flags or {}, clock=clock,
+        )
+        self.ideas.productivity_connectors = self.productivity_connectors
         # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
         self.publishing_live = False
         self.ideas.service_ref = self

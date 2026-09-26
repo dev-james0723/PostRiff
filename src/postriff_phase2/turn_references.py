@@ -27,7 +27,7 @@ BUDGET_BYTES = 58_000
 DERIVED_DEPTH = 5
 
 KINDS = ("post", "account", "folder", "template", "source", "skill", "connector_item")
-RESERVED_KINDS = ("skill", "connector_item")
+RESERVED_KINDS = ()
 POST_ROLES = ("rework", "inspire")
 MEDIA_ROLES = ("post", "reference")
 SLOTS = ("A", "B", "C", "D")
@@ -44,6 +44,11 @@ REASONS = {
     "not_in_workspace": "It isn't in this workspace.",
     "duplicate": "It was added twice, so it was used once.",
     "not_available_yet": "Rafii can't use this kind of item yet.",
+    "skill_unavailable": "This skill isn't available right now.",
+    "connector_unavailable": "This connected item isn't available to you anymore.",
+    "connector_disabled": "This connector is turned off right now.",
+    "connector_consent_required": "The workspace owner hasn't allowed connected text to reach a cloud writer.",
+    "connector_fetch_failed": "The connected item couldn't be read securely. Reconnect it or choose it again.",
     "image_generation_turn": "Attachments aren't used when generating an image.",
     "no_room": "There wasn't room for it in this draft.",
     "free_writer": "The free preview writer doesn't use this. Choose another writer to use it.",
@@ -121,7 +126,7 @@ def label_for(kind, record, slot=None):
         return _clip(f"{record.get('platform') or 'Account'} · {account}" if account else record.get("platform") or "Account", 40)
     if kind in ("image", "video"):
         return f"{'Video' if kind == 'video' else 'Photo'} {slot or 'A'}"
-    fallback = {"template": "Template", "source": "Source", "folder": "Folder", "campaign": "Campaign"}.get(kind, "Item")
+    fallback = {"template": "Template", "source": "Source", "folder": "Folder", "campaign": "Campaign", "skill": "Skill", "connector_item": "Connected item"}.get(kind, "Item")
     return _clip(record.get("title") if kind == "source" else record.get("name"), 40) or fallback
 
 
@@ -234,9 +239,7 @@ def early(state, refs, text, payload, *, platforms=()):
             unused.append(_unused(ref["kind"], ref["id"], label, "duplicate"))
             continue
         seen.add(key)
-        if ref["kind"] in RESERVED_KINDS:
-            unused.append(_unused(ref["kind"], ref["id"], label, "not_available_yet"))
-        elif ref["kind"] == "post":
+        if ref["kind"] == "post":
             if len(posts) >= MAX_POSTS:
                 unused.append(_unused("post", ref["id"], label, "too_many_posts"))
             else:
@@ -307,6 +310,10 @@ def _record(state, ref):
         return _find(_phase2(state).get("channels"), item_id)
     if kind == "folder":
         return _find(_phase2(state).get("channelFolders"), item_id)
+    if kind == "skill":
+        return _find(state.get("turnSkills"), item_id)
+    if kind == "connector_item":
+        return _find(state.get("turnConnectorItems"), item_id)
     return None
 
 
@@ -420,7 +427,7 @@ def _template_choice(state, template_id, actor):
 
 
 def resolve(state, refs, *, actor, provider_class, route_kind, text="", payload_material=None, material_ref=None,
-            notes=None, run_sources=None, source_ids=(), platforms=()):
+            notes=None, run_sources=None, source_ids=(), platforms=(), skills=(), connector_items=None):
     """Everything chips add to one writer request, plus the "Used this time" report (SPEC §6).
 
     route_kind "fixture" is the free preview writer; `notes` maps assetId → {status, processor, text, hash} for the
@@ -433,6 +440,38 @@ def resolve(state, refs, *, actor, provider_class, route_kind, text="", payload_
     reminders = list(ahead["report"]["reminders"])
     skip = {(u["kind"], u["id"]) for u in unused}
     handled = {(u["kind"], u["id"]) for u in used}
+
+    # Skills are validated from Registry.defaults()/SkillLibrary by the server caller. They
+    # alter this turn's binder only and are never written into workspace preferences.
+    skill_by_id = {item.get("id"): item for item in skills or () if isinstance(item, dict) and item.get("id")}
+    skill_ids = []
+    for ref in refs.get("references", []):
+        if ref["kind"] != "skill" or ("skill", ref["id"]) in handled:
+            continue
+        handled.add(("skill", ref["id"]))
+        item = skill_by_id.get(ref["id"])
+        if item is None:
+            unused.append(_unused("skill", ref["id"], UNKNOWN_LABEL, "skill_unavailable"))
+            continue
+        label = label_for("skill", item)
+        skill_ids.append(ref["id"])
+        used.append({"kind": "skill", "id": ref["id"], "label": label, "as": "skill"})
+
+    # Connector records are produced only by the authenticated server-side provider fetch.
+    # Their source ids enter project_context below, so source policy/egress/candidate fencing
+    # stays exactly the same as every other document source.
+    connector_items = connector_items if isinstance(connector_items, dict) else {}
+    connector_source_ids = []
+    for ref in refs.get("references", []):
+        if ref["kind"] != "connector_item" or ("connector_item", ref["id"]) in handled:
+            continue
+        handled.add(("connector_item", ref["id"]))
+        item = connector_items.get(ref["id"])
+        if not isinstance(item, dict) or item.get("reason"):
+            reason = (item or {}).get("reason") or "connector_unavailable"
+            unused.append(_unused("connector_item", ref["id"], (item or {}).get("label") or UNKNOWN_LABEL, reason))
+            continue
+        connector_source_ids.append(item["source"]["id"])
 
     # Explicit sources first, so a picked source is never the one cut at 20 (SPEC §6.5).
     chip_sources = []
@@ -452,7 +491,7 @@ def resolve(state, refs, *, actor, provider_class, route_kind, text="", payload_
 
     # Posts: lookup, block, provenance for this route, then their share of the 6,000-character material budget.
     material, material_items, owners, derived = [], [], {}, []
-    ordered = list(chip_sources)
+    ordered = list(chip_sources) + connector_source_ids
     handed_in = payload_material if isinstance(payload_material, str) and payload_material.strip() else None
     if ahead["materialRef"] and ahead["materialRef"]["type"] == "draft":
         variant = _variant(state, ahead["materialRef"]["id"])
@@ -536,6 +575,15 @@ def resolve(state, refs, *, actor, provider_class, route_kind, text="", payload_
             unused.append(_unused("source", source_id, label_for("source", source), excluded[source_id]))
         else:
             used.append({"kind": "source", "id": source_id, "label": label_for("source", source), "as": "source"})
+    connector_by_source = {item["source"]["id"]: (ref_id, item) for ref_id, item in connector_items.items()
+                           if isinstance(item, dict) and isinstance(item.get("source"), dict)}
+    for source_id in connector_source_ids:
+        ref_id, item = connector_by_source[source_id]
+        if source_id in excluded:
+            reason = "connector_consent_required" if excluded[source_id] == "egress_consent_required" else excluded[source_id]
+            unused.append(_unused("connector_item", ref_id, item["label"], reason))
+        else:
+            used.append({"kind": "connector_item", "id": ref_id, "label": item["label"], "as": "source"})
     chip_source_ids = [i for i in chip_sources if i not in excluded] + [i for i in ordered if i in owners]
 
     # Template: the first usable one counts; the report never claims overrides it doesn't apply (SPEC §6.4).
@@ -593,7 +641,8 @@ def resolve(state, refs, *, actor, provider_class, route_kind, text="", payload_
         "material": material, "materialItems": material_items, "materialRef": ahead["materialRef"],
         "reworkOf": rework_ref or (ahead["materialRef"]["id"] if ahead["materialRef"] and ahead["materialRef"]["type"] == "draft" and handed_in is not None else None),
         "sourceIds": final, "chipSourceIds": chip_source_ids, "sourceOwners": owners, "derivedSourceIds": list(dict.fromkeys(derived)),
-        "contentType": content_type, "media": media, "referenceNotes": reference_notes, "noteItems": note_items,
+        "contentType": content_type, "skillIds": skill_ids, "connectorSourceIds": connector_source_ids,
+        "media": media, "referenceNotes": reference_notes, "noteItems": note_items,
         "destinations": ahead["destinations"],
         "report": {"used": used, "unused": unused, "reminders": reminders},
     }

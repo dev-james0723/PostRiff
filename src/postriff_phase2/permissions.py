@@ -32,6 +32,8 @@ ACTION_CLASSES = {
     # Whether memory files may reach a cloud model is a workspace privacy decision.
     "memory_egress": "owner",
     "research_egress": "owner",
+    # Connected Notion/Gmail text may reach a cloud writer only after the owner opts in.
+    "connector_egress": "owner",
     # The workspace default writer (Auto) decides which AI provider receives everyone's cloud-allowed sources.
     "writer_defaults": "owner",
     # Whether workspace photos and video frames may be shown to a model (chat-context SPEC §8.1).

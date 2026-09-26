@@ -104,6 +104,11 @@ def _delete(service, workspace_id, principal):
             revoked = False
         if not revoked and provider not in revocation_pending:
             revocation_pending.append(provider)
+    connector_service = getattr(service, 'productivity_connectors', None)
+    if connector_service is not None:
+        for provider in connector_service.revoke_workspace(workspace_id):
+            if provider not in revocation_pending:
+                revocation_pending.append(provider)
     with service.connection_factory() as db, db.cursor() as cur:
         cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
         current = cur.fetchone()

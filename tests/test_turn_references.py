@@ -155,7 +155,8 @@ class ReasonTests(unittest.TestCase):
 
     def test_exact_codes(self):
         self.assertEqual(set(tr.REASONS), {
-            "not_in_workspace", "duplicate", "not_available_yet", "image_generation_turn", "no_room", "free_writer", "post_rejected",
+            "not_in_workspace", "duplicate", "not_available_yet", "skill_unavailable", "connector_unavailable", "connector_disabled",
+            "connector_consent_required", "connector_fetch_failed", "image_generation_turn", "no_room", "free_writer", "post_rejected",
             "post_blocked", "post_source_excluded", "too_many_posts", "too_many_sources", "account_disconnected", "platform_unsupported",
             "folder_empty", "template_unavailable", "only_one_template", "source_unavailable", "voice_sample", "no_approved_facts",
             "media_not_ready", "consent_required", "reader_unavailable", "not_read_yet", "read_failed", "no_frames", "not_a_drafting_turn"})
@@ -218,8 +219,8 @@ class EarlyTests(unittest.TestCase):
         reasons = [(u["kind"], u["id"], u["reason"]) for u in ahead["report"]["unused"]]
         self.assertIn(("post", "v-plain", "duplicate"), reasons)
         self.assertIn(("post", "v-child", "too_many_posts"), reasons)
-        self.assertIn(("skill", "sk", "not_available_yet"), reasons)
-        self.assertIn(("connector_item", "drive:1", "not_available_yet"), reasons)
+        self.assertNotIn(("skill", "sk", "not_available_yet"), reasons)
+        self.assertNotIn(("connector_item", "drive:1", "not_available_yet"), reasons)
 
     def test_destinations(self):
         ahead = tr.early(state(), refs({"kind": "account", "id": "ch-ig"}, {"kind": "folder", "id": "fo-hk"}, {"kind": "account", "id": "ch-old"},
@@ -348,6 +349,20 @@ class ResolveTests(unittest.TestCase):
                 self.assertEqual(unused(result, "source", source_id)["reason"], reason)
         self.assertEqual(unused(result, "source", "s-nofacts")["message"], "None of its facts are approved yet.")
         self.assertEqual(result["chipSourceIds"], ["s-cloud"])
+
+    def test_connector_source_obeys_cloud_consent(self):
+        reference_id = "ci_" + "a" * 32
+        item = {"label": "Chosen brief", "source": source("connector:" + reference_id, cloud=False, policy="rewrite_approval", title="Chosen brief")}
+        denied_state = state()
+        denied_state["sources"].append(item["source"])
+        denied = run(denied_state, refs({"kind": "connector_item", "id": reference_id}), connector_items={reference_id: item})
+        self.assertEqual(unused(denied, "connector_item", reference_id)["reason"], "connector_consent_required")
+        item["source"]["egressConsent"] = ["local", "cloud"]
+        allowed_state = state()
+        allowed_state["sources"].append(item["source"])
+        allowed = run(allowed_state, refs({"kind": "connector_item", "id": reference_id}), connector_items={reference_id: item})
+        self.assertEqual(used(allowed, "connector_item", reference_id)["as"], "source")
+        self.assertTrue(allowed["connectorSourceIds"])
 
     def test_templates(self):
         result = run(state(), refs(*({"kind": "template", "id": i} for i in ("t-other", "t-archived", "t-gone-type", "t-mine", "t-shared", "t-none"))))

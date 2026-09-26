@@ -282,6 +282,7 @@ class IdeasService:
                       "photo": {"typicalMilliCredits": photo["typicalMilliCredits"], "ceilingMilliCredits": photo["ceilingMilliCredits"]} if photo else None,
                       "video": {"typicalMilliCredits": clip["typicalMilliCredits"], "ceilingMilliCredits": clip["ceilingMilliCredits"]} if clip else None,
                       "consentAction": "media_egress"},
+            "skills": self.skills.eligible(),
         }
 
     def media_consent_current(self):
@@ -1176,6 +1177,16 @@ class IdeasService:
                 can_research = self.researcher is not None and payload.get("research") is not False and not reworking and research.allowed(current)
                 self.estimate_request(current, payload, "turn", principal, research_bytes=RESEARCH_ALLOWANCE_BYTES if can_research else 0)
         research_ids, researched = self._research(workspace_id, token, payload, text, parsed, key, conversation_id, reworking=reworking)
+        # A connector chip is an opaque, short-lived receipt. Re-fetch its remote item now,
+        # after the request fingerprint is fixed and before the writer transaction projects it.
+        connector_ids = [ref["id"] for ref in refs.get("references", []) if ref.get("kind") == "connector_item"]
+        connector_items = {}
+        connector_service = getattr(self, "productivity_connectors", None)
+        if connector_ids and connector_service is not None:
+            connector_items = connector_service.turn_refetch(
+                workspace_id, token, connector_ids, fingerprint,
+                provider_class=getattr(runtime, "provider_class", "local"),
+            )
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
@@ -1190,7 +1201,8 @@ class IdeasService:
                 # writer the person did not see.
                 raise AlphaError("The workspace default writer changed while this draft was being prepared. Send it again.", 409, code="writer_default_changed")
             projected = self._project(state, payload, runtime, model_id, reasoning, destinations, text, parsed, research_ids, level=level, refs=refs,
-                                      notes=self._reference_notes(cur, workspace_id, state, refs), run_sources=lambda ids: self._run_sources(cur, workspace_id, ids), actor=principal)
+                                      notes=self._reference_notes(cur, workspace_id, state, refs), run_sources=lambda ids: self._run_sources(cur, workspace_id, ids), actor=principal,
+                                      connector_items=connector_items)
             destinations, source_ids, context = projected["destinations"], projected["sourceIds"], projected["context"]
             shared, voice_context, request, bound, reminders = projected["shared"], projected["voiceContext"], projected["request"], projected["bound"], projected["reminders"]
             # Authoritative: the prompt is final here (research included), so an explicit level over the limit is refused
@@ -1352,7 +1364,7 @@ class IdeasService:
         revision = next((r for r in state.get("speaker", {}).get("revisions", []) if r.get("revision") == active), None)
         return (revision or {}).get("profile", {}).get("tone", "warm")
 
-    def _project(self, state, payload, runtime, model_id, reasoning, destinations, text, parsed, research_ids=(), level=None, *, refs=None, notes=None, run_sources=None, actor=None):
+    def _project(self, state, payload, runtime, model_id, reasoning, destinations, text, parsed, research_ids=(), level=None, *, refs=None, notes=None, run_sources=None, actor=None, connector_items=None):
         """Everything a writer route will receive for one drafting turn, computed from `state` alone.
 
         Chips on the message (`references`/`attachments`) and handed-in material go through turn_references
@@ -1365,6 +1377,17 @@ class IdeasService:
         # A cloud route only receives sources whose egress the person consented to; local routes see local consent.
         provider_class = getattr(runtime, "provider_class", "local")
         refs = turn_references.parse(payload) if refs is None else refs
+        eligible_skills = self.skills.eligible()
+        # Connector fetches are authenticated and re-fetched before this projection. Their
+        # document sources are injected only for this request; persisted copies are created by
+        # the connector service and remain subject to ordinary source-policy approval.
+        connector_items = connector_items if isinstance(connector_items, dict) else {}
+        connector_sources = [item["source"] for item in connector_items.values()
+                             if isinstance(item, dict) and isinstance(item.get("source"), dict)]
+        if connector_sources:
+            state = copy.deepcopy(state)
+            known = {source.get("id") for source in state.get("sources") or [] if isinstance(source, dict)}
+            state.setdefault("sources", []).extend(source for source in connector_sources if source.get("id") not in known)
         handed_in = (isinstance(payload.get("material"), str) and bool(payload["material"].strip())) or isinstance(payload.get("materialRef"), dict)
         # The thought typed for this turn is the idea; quick-start passes it as intentText. Only a turn
         # without any text falls back to the workspace's saved brief.
@@ -1378,7 +1401,7 @@ class IdeasService:
                 state, refs, actor=actor, provider_class=provider_class, route_kind="fixture" if isinstance(runtime, FixtureAgentRuntime) else provider_class,
                 text=raw_idea, payload_material=material_text, material_ref=payload.get("materialRef") if isinstance(payload.get("materialRef"), dict) else None,
                 notes=notes, run_sources=run_sources, source_ids=list(dict.fromkeys(list(source_ids) + list(research_ids))),
-                platforms=tuple(runtime.supported_platforms() or ()))
+                platforms=tuple(runtime.supported_platforms() or ()), skills=eligible_skills, connector_items=connector_items)
             source_ids = resolved["sourceIds"]
         else:
             source_ids = list(dict.fromkeys(list(source_ids) + list(research_ids)))
@@ -1453,12 +1476,13 @@ class IdeasService:
         # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
         bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
                                  content_type_id if content_type_id != "unclassified" else None,
-                                 max_chars=budget_for(runtime.cost_class))
+                                 max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
         request["skills"] = bound
         projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
         if resolved:
             used_types = selection if resolved["contentType"] and selection.get("contentTypeId") != "unclassified" else None
             projected.update({"references": report, "media": resolved["media"], "materialRef": resolved["materialRef"], "reworkOf": resolved["reworkOf"],
+                              "connectorSourceIds": resolved.get("connectorSourceIds") or [],
                               # Only sources the writer actually received: apply re-checks every id it copies onto a draft.
                               "derivedSourceIds": [i for i in resolved["derivedSourceIds"] if any(src["id"] == i for src in context["sources"])],
                               "contentType": {**used_types, "contentSkillRouteIds": resolved["contentType"].get("contentSkillRouteIds", [])} if used_types else None})

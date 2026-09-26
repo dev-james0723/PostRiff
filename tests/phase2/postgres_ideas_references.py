@@ -309,8 +309,8 @@ kinds = sorted((u["kind"], u["as"]) for u in report["used"])
 check("every kind: a completed run", run["status"] == "completed", run["status"])
 check("every kind: post, template, source, account, folder and both media roles used", kinds == sorted([("post", "inspire"), ("template", "template"), ("source", "source"), ("account", "destination"),
                                                                                                      ("folder", "destination"), ("image", "post_media"), ("image", "notes")]), kinds)
-check("every kind: a reserved kind and unknown ids are reported, never fatal",
-      {(u["kind"], u["reason"]) for u in report["unused"]} == {("skill", "not_available_yet"), ("post", "not_in_workspace"), ("image", "not_in_workspace")}, report["unused"])
+check("every kind: an unavailable explicit skill and unknown ids are reported, never fatal",
+      {(u["kind"], u["reason"]) for u in report["unused"]} == {("skill", "skill_unavailable"), ("post", "not_in_workspace"), ("image", "not_in_workspace")}, report["unused"])
 check("every kind: no client label anywhere in the report", "Client label is dropped" not in json.dumps(report))
 check("every kind: the account chip is the destination", [d.get("channelId") for d in cloud.requests[-1]["destinations"]] == ["ch-li"], cloud.requests[-1]["destinations"])
 body = user_messages(cid2)[-1]

@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import postriff_migrate  # noqa: E402
 
 CHAT_MEDIA = ROOT / "migrations" / "postriff" / "031_chat_media.sql"
+PRODUCTIVITY_CONNECTORS = ROOT / "migrations" / "postriff" / "032_productivity_connectors.sql"
 
 
 class MigrationNumberTests(unittest.TestCase):
@@ -56,6 +57,24 @@ class ChatMediaMigrationTests(unittest.TestCase):
         self.assertEqual(loaded, sorted(loaded))
         self.assertIn("031", loaded)
         self.assertIn("'pr_media_uploads','pr_media_notes'", harness)
+
+
+class ProductivityConnectorMigrationTests(unittest.TestCase):
+    def test_service_only_opaque_ids_and_cleanup_relations(self):
+        sql = PRODUCTIVITY_CONNECTORS.read_text()
+        lower = sql.lower()
+        self.assertRegex(sql, r"\^pc_\[0-9a-f\]\{32\}\$")
+        self.assertRegex(sql, r"\^ci_\[0-9a-f\]\{32\}\$")
+        self.assertIn("force row level security", lower)
+        self.assertIn("create policy service_only", lower)
+        self.assertIn("foreign key(workspace_id,connection_id)", lower)
+        self.assertNotRegex(lower, r"grant [^;]* to (authenticated|anon)")
+
+    def test_rls_harness_loads_connector_migration_and_denies_browser_tables(self):
+        harness = (ROOT / "tests" / "phase2" / "rls.sql").read_text()
+        self.assertIn("032_productivity_connectors.sql", harness)
+        for table in ("pr_connector_oauth_transactions", "pr_connector_credentials", "pr_connector_selections", "pr_connector_fetches"):
+            self.assertIn(table, harness)
 
 
 if __name__ == "__main__":

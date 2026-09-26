@@ -11,6 +11,7 @@ import ssl
 import time
 import uuid
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from postriff_alpha.domain import AlphaError
@@ -180,13 +181,14 @@ def runtime_from_environment(environ=None):
     identity = SupabaseIdentityAdmin(project_url, publishable, secret)
     from .oauth import CredentialVault
     from .providers import registry_from_environment, http_transport
+    from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
     # Adapters mount only with client credentials; live execution only when a provider is
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values))
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values))
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
@@ -465,17 +467,28 @@ class HostedApplication:
                 # Public provider callback: redirect state/code to the signed-in app; never exchange here.
                 from urllib.parse import parse_qs
                 from .oauth import OAuthService
+                from .productivity_connectors import PROVIDERS as PRODUCTIVITY_PROVIDERS, ProductivityConnectorService
                 query = {k: v[0] for k, v in parse_qs(environ.get("QUERY_STRING", "")).items()}
                 from .providers import ADAPTERS
-                if oauth_parts[2] not in ADAPTERS:
+                provider_id = oauth_parts[2]
+                if provider_id not in ADAPTERS and provider_id not in PRODUCTIVITY_PROVIDERS:
                     raise AlphaError('Unknown OAuth provider.', 404)
                 # Never send a code to a Host/X-Forwarded-Host supplied by the request.
-                configured_base = getattr(getattr(self.service, 'oauth', None), 'public_base_url', None)
+                configured_service = getattr(self.service, 'productivity_connectors', None) if provider_id in PRODUCTIVITY_PROVIDERS else getattr(self.service, 'oauth', None)
+                configured_base = getattr(configured_service, 'public_base_url', None)
                 if configured_base is None:
                     configured_base = os.environ.get('POSTRIFF_PUBLIC_BASE_URL', '')
-                callback_config = OAuthService(None, None, None, {}, configured_base)
-                callback_config.callback_uri(oauth_parts[2])  # fixed HTTPS origin validation; no provider call
-                location = OAuthService.callback_redirect(callback_config.public_base_url, oauth_parts[2], query)
+                if provider_id in PRODUCTIVITY_PROVIDERS:
+                    callback_config = configured_service or ProductivityConnectorService(None, None, {}, configured_base, flags={})
+                    # Validate the fixed origin without requiring a configured adapter on a cold callback.
+                    origin = urlparse(callback_config.public_base_url)
+                    if origin.scheme != 'https' or not origin.hostname or origin.username or origin.password or origin.path or origin.query or origin.fragment:
+                        raise AlphaError("A fixed public HTTPS app origin, without a path or query, is required for OAuth.", 503)
+                    location = ProductivityConnectorService.callback_redirect(callback_config.public_base_url, provider_id, query)
+                else:
+                    callback_config = OAuthService(None, None, None, {}, configured_base)
+                    callback_config.callback_uri(provider_id)  # fixed HTTPS origin validation; no provider call
+                    location = OAuthService.callback_redirect(callback_config.public_base_url, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
             if path == "/api/cron/worker" and method == "GET":
@@ -581,6 +594,25 @@ class HostedApplication:
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "ideas":
                 return self._ideas(environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connectors":
+                connectors = service.productivity_connectors
+                if len(parts) == 4 and method == "GET":
+                    return self._json(start_response, 200, connectors.catalog(parts[2], token))
+                if len(parts) == 7 and parts[5:] == ["oauth", "start"] and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 201, connectors.start(parts[2], token, parts[4]))
+                if len(parts) == 7 and parts[5:] == ["oauth", "complete"] and method == "POST":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, connectors.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error")))
+                if len(parts) == 6 and parts[5] == "search" and method == "POST":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, connectors.picker_search(parts[2], token, parts[4], body.get("query"), body.get("limit", 12)))
+                if len(parts) == 6 and parts[5] == "refresh" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, connectors.refresh(parts[2], token, parts[4]))
+                if len(parts) == 5 and method == "DELETE":
+                    self._body(environ)
+                    return self._json(start_response, 200, connectors.disconnect(parts[2], token, parts[4]))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "site-agent":
                 return self._site_agent(environ, start_response, service, token, method, parts)
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "agent":
