@@ -32,6 +32,8 @@ ACTION_CLASSES = {
     # Whether memory files may reach a cloud model is a workspace privacy decision.
     "memory_egress": "owner",
     "research_egress": "owner",
+    # The workspace default writer (Auto) decides which AI provider receives everyone's cloud-allowed sources.
+    "writer_defaults": "owner",
     # Accepting or undoing a learned preference changes how every member's drafts read (design decision D);
     # approving the voice profile itself changes them just as much, so it is an owner decision too.
     "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner", "you_restore_voice": "owner",

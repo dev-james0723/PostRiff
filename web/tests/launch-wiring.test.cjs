@@ -23,6 +23,13 @@ test('an unavailable saved model never silently changes provider or billing', ()
  assert.equal(resolve(models, 'missing/model'), 'missing/model');
  assert.equal(resolve(models, 'codex:test'), 'codex:test');
 });
+test('Auto follows a priced workspace default; an explicit pick is never replaced by it', () => {
+ const resolve = policy();
+ const offered = [...models, {id:'cloud/other', qualified:true, route:'managed', costClass:'paid', priced:true}, {id:'cloud/unpriced', qualified:true, route:'managed', costClass:'paid', priced:false}];
+ assert.equal(resolve(offered, 'auto', {workspace:'cloud/other', deployment:'cloud/model'}), 'cloud/other');
+ assert.equal(resolve(offered, null, {workspace:'cloud/unpriced', deployment:'cloud/model'}), 'cloud/model', 'an unpriced workspace default is not used');
+ assert.equal(resolve(offered, 'codex:test', {workspace:'cloud/other', deployment:'cloud/model'}), 'codex:test');
+});
 test('Home mounts account folders and preserves destination IDs', () => {
  const home = read('features/agent/home-view.tsx'); assert.ok(/useDestinations/.test(home), "Home uses account destination hook"); assert.ok(/ChannelBloomDialog/.test(home), "Home mounts existing folder dialog"); assert.ok(/setTargets/.test(home), "Home sends account-level targets");
 });

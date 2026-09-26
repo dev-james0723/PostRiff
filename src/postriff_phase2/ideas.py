@@ -7,7 +7,9 @@ AgentRuntime against a policy projection only; artifacts are candidates until an
 import copy
 import base64
 import hashlib
+import inspect
 import json
+import time
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, clean, uid
 from postriff_alpha.generation import MATERIAL_LABEL
@@ -16,10 +18,10 @@ from .permissions import require
 from .source_policy import project_context, stamp
 from .agent_runtime import SAFE_EVENTS, FixtureAgentRuntime, safe_event
 from .cli_runtime import ClaudeCliRuntime
-from .model_runtime import ProviderFailure
+from .model_runtime import REQUEST_SECONDS, ProviderFailure, check_level_ceiling
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import content_types, intent, locales, memory, research, voice_sources
+from . import content_types, intent, locales, memory, research, voice_sources, writer_defaults
 
 VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
 
@@ -53,6 +55,53 @@ def usd_micro(cost_usd):
 
 
 IDEMPOTENCY_IGNORED = frozenset({"creditQuoteId", "expectedRevision", "idempotencyKey"})
+AUTO = "auto"
+LEVEL_REFUSAL = "Choose a reasoning level this writer supports."
+# Web research can add at most this much prompt after the level check a turn makes before it (research.py limits).
+RESEARCH_ALLOWANCE_BYTES = research.MAX_PAGES * research.MAX_FACTS * (research.MAX_FACT_CHARS * 3 + 100)
+
+
+def _warnings(note):
+    """A message body's `warnings` for a turn that runs no writer (automation, memory): the Auto fallback note."""
+    return {"warnings": [note]} if note else {}
+
+
+def requested_level(payload):
+    """The reasoning level a request asked for: its `reasoning` when given, else Auto. Legacy quick/standard/deep stay
+    accepted everywhere they were."""
+    value = (payload or {}).get("reasoning")
+    return value if isinstance(value, str) and value else AUTO
+
+
+def per_model_reasoning(runtime):
+    """Whether this runtime lists reasoning per model (its list_supported_reasoning takes a `model` parameter)."""
+    method = getattr(runtime, "list_supported_reasoning", None)
+    try:
+        return method is not None and "model" in inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def translate_reasoning(runtime, model_id, level):
+    """(reasoning, level) the chosen writer receives for a requested level; `reasoning` is also what pr_agent_runs
+    stores. The managed writer gets its legacy pass (quick; deep for Thorough; standard otherwise, the self-check) plus
+    the level itself; the fixture and other per-writer lists only know the passes; a local CLI gets its own effort.
+    An explicit level the writer does not offer is refused (400) before anything is stored or sent."""
+    if isinstance(runtime, ClaudeCliRuntime):
+        return runtime.effort({AUTO: "low", "thorough": "high"}.get(level, level)), None
+    if per_model_reasoning(runtime):
+        mode = "quick" if level == "quick" else "deep" if level in ("deep", "thorough") else "standard"
+        normal = {"quick": AUTO, "standard": AUTO, "deep": "thorough"}.get(level, level)
+        if normal not in (AUTO, "thorough"):
+            offered = runtime.offered_levels(model_id) if hasattr(runtime, "offered_levels") else [
+                item["id"] for item in runtime.list_supported_reasoning(model=model_id) if item.get("kind") == "effort"]
+            if normal not in offered:
+                raise AlphaError(LEVEL_REFUSAL, 400)
+        return mode, normal
+    mode = {AUTO: "quick", "thorough": "deep"}.get(level, level)
+    if mode not in ("quick", "standard", "deep"):
+        raise AlphaError(LEVEL_REFUSAL, 400)
+    return mode, None
 
 
 def request_fingerprint(operation, payload, conversation_id=None):
@@ -108,14 +157,17 @@ class RunSink:
                 self.service.ledger.settle(cur, self.workspace_id, self.outcome["reservationId"], "failed" if usage.get("costUsd") is not None else "unknown", usd_micro(usage["costUsd"]) if usage.get("costUsd") is not None else None)
                 self.service._settle_message(cur, self.workspace_id, self.conversation_id, self.run_id, {"text": str(error), "runId": self.run_id, "failed": True, "intent": self.outcome["parsed"]["intent"], "destinations": self.outcome["destinations"], "plan": None, "model": self.outcome["model"]})
                 return True
-            self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.completed", usage={k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "cliCostUsd", "billing") if k in usage}))
+            self.service._insert_event(cur, self.workspace_id, self.run_id, safe_event("run.completed", usage={k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "cliCostUsd", "billing", "reasoning") if k in usage}))
             return True
 
-    def fail(self, message, known_cost_usd=None):
+    def fail(self, message, known_cost_usd=None, usage=None):
         """`known_cost_usd` is the provider cost proven for this failed run (0.0 when nothing was sent);
-        None leaves a paid run's cost unknown until it is reconciled."""
+        None leaves a paid run's cost unknown until it is reconciled. `usage` (what the runtime recorded before it
+        failed, such as its reasoning block) is merged into the run's usage on every branch."""
         with self._open() as db, db.cursor() as cur:
             self.service._lock_run_events(cur, self.workspace_id, self.run_id)
+            if usage:
+                cur.execute("UPDATE public.pr_agent_runs SET usage=usage || %s::jsonb WHERE id::text=%s AND workspace_id=%s", (json.dumps(usage), self.run_id, self.workspace_id))
             if not self._running(cur, lock=True):
                 # Cancelled or finished elsewhere: a cost proven afterwards still settles the hold once.
                 if known_cost_usd is not None:
@@ -170,7 +222,10 @@ class IdeasService:
         """Every model a client may name in a turn, with the agent (CLI) behind each route."""
         models, agents = [], []
         for runtime in self.runtimes:
-            models.extend({**model, "voiceAnalysisAvailable": callable(getattr(runtime, 'analyze_voice', None)), "provider": runtime.provider, "egress": getattr(runtime, "provider_class", "local"), "voiceRoute": self._voice_route(runtime, model["id"]), "voiceRouteClass": voice_sources.route_class(self._voice_route(runtime, model["id"])), "reasoning": runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
+            # A runtime that lists reasoning per model (the managed writer) gets asked per model; the others keep one list.
+            per_model = per_model_reasoning(runtime)
+            models.extend({**model, "voiceAnalysisAvailable": callable(getattr(runtime, 'analyze_voice', None)), "provider": runtime.provider, "egress": getattr(runtime, "provider_class", "local"), "voiceRoute": self._voice_route(runtime, model["id"]), "voiceRouteClass": voice_sources.route_class(self._voice_route(runtime, model["id"])),
+                           "reasoning": runtime.list_supported_reasoning(model=model["id"]) if per_model else runtime.list_supported_reasoning()} for model in runtime.list_supported_models())
             info = runtime.describe()
             if info:
                 agents.append(info)
@@ -179,9 +234,14 @@ class IdeasService:
             # it only confuses the choice.
             models = [m for m in models if m.get("id") != "server-openai"]
         image_available = self.image_runtime is not None and self.assets is not None
+        managed = self._managed_writer()
+        listed = {m["id"] for m in models}
         return {
             "models": models,
             "reasoning": self.default_runtime().list_supported_reasoning(),
+            # What "Auto" falls back to on this deployment (a workspace default, when set, lives in workspace state).
+            "defaultModel": getattr(managed, "model", None),
+            "featured": [m for m in managed.featured_models() if m in listed] if managed is not None and hasattr(managed, "featured_models") else [],
             "agents": agents,
             "imageGeneration": {
                 "available": image_available,
@@ -228,8 +288,26 @@ class IdeasService:
         never answered with template text."""
         return next((r for r in self.runtimes if getattr(r, "cost_class", None) == "paid" and getattr(r, "provider_class", None) == "cloud"), self.runtime)
 
+    def _managed_writer(self):
+        """The mounted managed paid cloud writer, or None."""
+        runtime = self.default_runtime()
+        return runtime if getattr(runtime, "cost_class", None) == "paid" and getattr(runtime, "provider_class", None) == "cloud" else None
+
+    def resolve_writer(self, state, requested_model):
+        """(runtime, model id, note|None) for the writer a request named. No model, "" or "auto" is Auto: the managed
+        writer with the workspace default (writer_defaults.resolve, which says in `note` when a stored default is no
+        longer offered), else the local default. An explicit id is today's choice, never substituted. `state` may be a
+        callable, read only when Auto needs it. The resolved model is never written back into the caller's payload."""
+        if requested_model in (None, "", AUTO):
+            runtime = self.default_runtime()
+            if runtime is self._managed_writer():
+                model_id, _source, note = writer_defaults.resolve(state() if callable(state) else state, runtime)
+                return runtime, model_id, note
+            return runtime, runtime.model, None
+        return self._select_runtime(requested_model), requested_model, None
+
     def _select_runtime(self, model_id):
-        if not model_id:
+        if not model_id or model_id == AUTO:
             return self.default_runtime()
         for runtime in self.runtimes:
             if runtime.owns(model_id):
@@ -301,7 +379,7 @@ class IdeasService:
             parsed = {**parsed, "intent": "automation"}
         return parsed, understood
 
-    def _automation_turn(self, workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, revision=None, understood=None):
+    def _automation_turn(self, workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, revision=None, understood=None, writer_note=None):
         """A request to keep preparing drafts on a schedule: no run, no model, no charge. It becomes an automation with
         the Automations builder's checks (automation_chat); an owner's request is turned on when nothing is left for the
         owner to decide. The reply carries it as a card. Drafts only: nothing here schedules or publishes a post."""
@@ -322,7 +400,7 @@ class IdeasService:
         def command(state, actor):
             outcome["view"] = automation_chat.create(
                 state, actor, now, text, zone, destinations=destinations, route=model_id, voice_route=voice_route,
-                reasoning=payload.get("reasoning", "quick"), paid=runtime.cost_class == "paid",
+                reasoning=requested_level(payload), paid=runtime.cost_class == "paid",
                 voice=payload.get("voiceMode") == "personalized", source_ids=source_ids, owner=member.allows("owner"), understood=understood)
             return state
 
@@ -338,9 +416,9 @@ class IdeasService:
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             require(self._member(row), "edit")
             self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": "automation"})
-            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None})
+            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None, **_warnings(writer_note)})
         return {"runId": None, "conversationId": conversation_id, "status": "automation", "artifactHash": None, "artifact": None,
-                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": payload.get("reasoning", "quick"),
+                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": requested_level(payload),
                 "events": [], "cursor": 0, "automation": view, "reply": reply, "messageId": message["messageId"], "revision": current}
 
     def _conversation_automation(self, workspace_id, token, conversation_id):
@@ -369,7 +447,7 @@ class IdeasService:
             return bool(names) and workflow_parse.refers_to_automation(text, names, False)
         return False
 
-    def _orchestration_turn(self, workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload):
+    def _orchestration_turn(self, workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload, writer_note=None):
         """Route a chat message that answers Rafii's question, changes or asks about an automation, or asks for a staged
         automation (publishing, stages, research, a one-time post). None leaves it to the drafting or drafts-automation path."""
         from . import automation_edit, automation_plan, workflow_parse
@@ -384,14 +462,14 @@ class IdeasService:
             if pending.get("question") == "policy":
                 policy = automation_plan.answer_policy(text)
                 if policy:
-                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "policy": policy}, reading)
+                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "policy": policy}, reading, writer_note)
             elif pending.get("question") == "review_time":
                 try:
                     spec = automation_plan.answer_review_time(text, task["schedule"])
                 except AlphaError:
                     spec = None
                 if spec:
-                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "generate": spec}, reading)
+                    return self._orchestrate(workspace_id, token, conversation_id, text, "answer", runtime, model_id, payload, {"pending": pending, "generate": spec}, reading, writer_note)
         action = (reading or {}).get("action")
         if len({d.get("localTime") for d in parsed.get("destinations") or [] if d.get("localTime")}) > 1 and not intent._RECUR.search(text):
             # Different times for different channels in one message: the per-channel scheduling plan handles it.
@@ -410,19 +488,19 @@ class IdeasService:
                 action = "automation"
         if action == "explain" and has_automations:
             explain = (reading or {}).get("explain") or workflow_parse.read_explain(text)
-            return self._orchestrate(workspace_id, token, conversation_id, text, "explain", runtime, model_id, payload, {"explain": explain, "taskId": context.get("taskId")}, reading)
+            return self._orchestrate(workspace_id, token, conversation_id, text, "explain", runtime, model_id, payload, {"explain": explain, "taskId": context.get("taskId")}, reading, writer_note)
         if action == "edit" and has_automations:
             edit = (reading or {}).get("edit") or workflow_parse.read_edit(text, now, zone)
             if edit.get("changes"):
-                return self._orchestrate(workspace_id, token, conversation_id, text, "edit", runtime, model_id, payload, {"edit": edit, "taskId": context.get("taskId")}, reading)
+                return self._orchestrate(workspace_id, token, conversation_id, text, "edit", runtime, model_id, payload, {"edit": edit, "taskId": context.get("taskId")}, reading, writer_note)
         if action == "automation":
             automation = (reading or {}).get("automation") if (reading or {}).get("action") == "automation" else None
             automation = automation or workflow_parse.read_automation(text, now, zone)
             if automation.get("schedule") and automation_plan.needs_workflow(automation, text):
-                return self._orchestrate(workspace_id, token, conversation_id, text, "create", runtime, model_id, payload, {"automation": automation, "destinations": destinations}, reading)
+                return self._orchestrate(workspace_id, token, conversation_id, text, "create", runtime, model_id, payload, {"automation": automation, "destinations": destinations}, reading, writer_note)
         return None
 
-    def _orchestrate(self, workspace_id, token, conversation_id, text, kind, runtime, model_id, payload, detail, reading):
+    def _orchestrate(self, workspace_id, token, conversation_id, text, kind, runtime, model_id, payload, detail, reading, writer_note=None):
         """Create, answer, edit or explain an automation in one workspace command, then record both turns."""
         from . import automation_edit, automation_explain, automation_plan, campaigns, workflow_parse
         zone = intent.safe_zone(payload.get("timeZone"))
@@ -444,7 +522,7 @@ class IdeasService:
             if kind == "create":
                 automation = detail["automation"]
                 built, question, notes = automation_plan.build(state, actor, now, text, zone, automation, destinations=detail["destinations"], route=model_id,
-                                                               reasoning=payload.get("reasoning", "quick"), voice=payload.get("voiceMode") == "personalized",
+                                                               reasoning=requested_level(payload), voice=payload.get("voiceMode") == "personalized",
                                                                voice_route=voice_route, source_ids=source_ids)
                 saved = campaigns.apply_action(state, "raffi_recurrence_save", built, actor, now)
                 explicit = built["workflow"].get("policy") == "auto" and workflow_parse.explicit_auto(text)
@@ -502,12 +580,12 @@ class IdeasService:
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
             require(self._member(row), "edit" if kind != "explain" else "read")
             self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": source_ids, "intent": "automation"})
-            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": [], "plan": None, "model": model_id, "runId": None, "understanding": tier, **body_extra})
+            message = self._append_message(cur, workspace_id, conversation_id, "assistant", {"text": reply, "intent": "automation", "automation": view, "destinations": [], "plan": None, "model": model_id, "runId": None, "understanding": tier, **body_extra, **_warnings(writer_note)})
         return {"runId": None, "conversationId": conversation_id, "status": "automation", "artifactHash": None, "artifact": None,
-                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": payload.get("reasoning", "quick"),
+                "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0}, "model": model_id, "reasoning": requested_level(payload),
                 "events": [], "cursor": 0, "automation": view, "reply": reply, "messageId": message["messageId"], "revision": current, **body_extra}
 
-    def _memory_turn(self, workspace_id, token, conversation_id, text, parsed, destinations, model_id):
+    def _memory_turn(self, workspace_id, token, conversation_id, text, parsed, destinations, model_id, writer_note=None):
         """A standing instruction about how to write: no run, no model, no charge. The instruction becomes a
         proposal the owner decides (preference-learning design §5.5); the reply carries it as a card."""
         from .learning_chat import instruction_to_proposal
@@ -534,7 +612,7 @@ class IdeasService:
                 view, reply = None, refusal
             else:
                 view, reply = None, "That is already how Rafii writes for you, or a matching suggestion is waiting on the Memory page."
-            body = {"text": reply, "intent": "memory", "memoryProposal": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None}
+            body = {"text": reply, "intent": "memory", "memoryProposal": view, "destinations": destinations, "plan": None, "model": model_id, "runId": None, **_warnings(writer_note)}
             message = self._append_message(cur, workspace_id, conversation_id, "assistant", body)
         return {"runId": None, "conversationId": conversation_id, "status": "memory", "artifactHash": None, "artifact": None, "usage": {"provenance": "none", "modelRequests": 0, "costUsd": 0},
                 "model": model_id, "reasoning": "quick", "events": [], "cursor": 0, "memoryProposal": view, "messageId": message["messageId"]}
@@ -928,9 +1006,16 @@ class IdeasService:
             self._fail_image_run(workspace_id, token, conversation_id, run_id, reservation["reservationId"], str(error), usage=usage, uncertain=uncertain)
             raise
 
-    def turn(self, workspace_id, token, conversation_id, payload, *, _credit_authority=None, _request_fingerprint=None, _run_meta=None):
+    def _state_reader(self, workspace_id, token, seen=None):
+        """The workspace state a turn resolves Auto against: the state it already read, else a fresh read on demand."""
+        return seen if seen is not None else (lambda: self.repository.get(workspace_id, token)["state"])
+
+    def turn(self, workspace_id, token, conversation_id, payload, *, _credit_authority=None, _request_fingerprint=None, _run_meta=None, _started=None):
+        # The request's own clock: every writer call must be able to finish inside it (model_runtime.REQUEST_SECONDS).
+        started = _started if _started is not None else time.monotonic()
         client_key = clean(payload.get("idempotencyKey", ""), 100)
         fingerprint = _request_fingerprint or request_fingerprint("turn", payload, conversation_id)
+        seen = None
         if client_key and _credit_authority is None:
             # A resend is answered from its original run before any new approval or charge is checked.
             with self.repository.transaction(token, workspace_id) as (cur, row, _):
@@ -939,18 +1024,22 @@ class IdeasService:
                 prior = self._keyed_run(cur, workspace_id, client_key, fingerprint)
                 if prior:
                     return self._events_for(cur, workspace_id, prior, 0)
+                seen = self._state(row)
         credit_authority = _credit_authority or self.credit_requests.authorize(workspace_id, token, payload.get("expectedRevision"), payload, "turn", conversation_id)
         text = clean(payload.get("text", ""), MAX_TEXT)
-        reasoning = payload.get("reasoning", "quick")
         key = client_key or uid()
-        runtime = self._select_runtime(payload.get("model"))
-        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
+        # Auto (no model, or "auto") is resolved here, never written back into the payload: the idempotency and credit
+        # fingerprints stay on what the caller sent.
+        runtime, model_id, writer_note = self.resolve_writer(self._state_reader(workspace_id, token, seen), payload.get("model"))
+        auto = payload.get("model") in (None, "", AUTO)
+        quoted = (credit_authority or {}).get("model") if isinstance(credit_authority, dict) else None
+        quoted_writer = auto and bool(quoted) and quoted != model_id and runtime.owns(quoted) and (not hasattr(runtime, "priced") or runtime.priced(quoted))
+        if quoted_writer:
+            # The credit limit was approved for this writer; the run uses it (prepare() still re-checks the match).
+            model_id, writer_note = quoted, None
         if self._wants_image(payload):
             return self._image_turn(workspace_id, token, conversation_id, {**payload, "idempotencyKey": key}, text, model_id, fingerprint)
-        if isinstance(runtime, ClaudeCliRuntime):
-            reasoning = runtime.effort(reasoning)
-        elif reasoning not in ("quick", "standard", "deep"):
-            raise AlphaError("Choose a reasoning level supported by this writer.", 400)
+        reasoning, level = translate_reasoning(runtime, model_id, requested_level(payload))
         # Step ① of the agent pipeline: channels and times named in the message become the
         # destinations and a candidate plan. Parsed text never gains any authority of its own.
         zone = intent.safe_zone(payload.get("timeZone"))
@@ -980,20 +1069,26 @@ class IdeasService:
         plan = intent.build_plan(parsed, destinations)
         if text and not recurring and not reworking:
             # Staged automations, answers to Rafii's questions, edits and "why?" questions (orchestration §7).
-            routed = self._orchestration_turn(workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload)
+            routed = self._orchestration_turn(workspace_id, token, conversation_id, text, parsed, reading, destinations, runtime, model_id, payload, writer_note=writer_note)
             if routed is not None:
                 return routed
         if parsed["intent"] == "automation" and text and not recurring:
-            return self._automation_turn(workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, understood=understood)
+            return self._automation_turn(workspace_id, token, conversation_id, text, destinations, runtime, model_id, payload, understood=understood, writer_note=writer_note)
         if parsed["intent"] == "memory" and text:
-            return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id)
+            return self._memory_turn(workspace_id, token, conversation_id, text, parsed, destinations, model_id, writer_note=writer_note)
         # A completed or in-flight writing run must not repeat research on HTTP replay.
-        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), 'edit')
             self._conversation(cur, workspace_id, conversation_id)
             prior = self._keyed_run(cur, workspace_id, key, fingerprint)
             if prior:
                 return self._events_for(cur, workspace_id, prior, 0)
+            if level not in (None, AUTO) and not recurring:
+                # An explicit level over the per-request limit is refused before paid web research runs, allowing for
+                # the pages research could still add; the check after projection below is the authoritative one.
+                current = self._state(row)
+                can_research = self.researcher is not None and payload.get("research") is not False and not reworking and research.allowed(current)
+                self.estimate_request(current, payload, "turn", principal, research_bytes=RESEARCH_ALLOWANCE_BYTES if can_research else 0)
         research_ids, researched = self._research(workspace_id, token, payload, text, parsed, key, conversation_id)
         dispatch = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -1004,9 +1099,19 @@ class IdeasService:
             existing = self._keyed_run(cur, workspace_id, key, fingerprint)
             if existing:
                 return self._events_for(cur, workspace_id, existing, 0)
-            projected = self._project(state, payload, runtime, model_id, reasoning, destinations, text, parsed, research_ids)
+            if auto and not quoted_writer and self.resolve_writer(state, payload.get("model"))[1] != model_id:
+                # An owner changed the workspace default while this request was being prepared: nothing is spent on a
+                # writer the person did not see.
+                raise AlphaError("The workspace default writer changed while this draft was being prepared. Send it again.", 409, code="writer_default_changed")
+            projected = self._project(state, payload, runtime, model_id, reasoning, destinations, text, parsed, research_ids, level=level)
             destinations, source_ids, context = projected["destinations"], projected["sourceIds"], projected["context"]
             shared, voice_context, request, bound, reminders = projected["shared"], projected["voiceContext"], projected["request"], projected["bound"], projected["reminders"]
+            # Authoritative: the prompt is final here (research included), so an explicit level over the limit is refused
+            # before the run exists or anything is reserved.
+            check_level_ceiling(runtime, model_id, request)
+            if not runtime.asynchronous:
+                # Monotonic seconds; never part of a digest, fingerprint or the priced prompt (model_runtime._messages).
+                request["deadline"] = started + REQUEST_SECONDS
             # Writing material handed in with a request (an existing draft to rework, a campaign brief): the writer reads it
             # (_project), but it is never parsed for channels, times or instructions, and it is not stored as a source.
             material_ref = payload.get("materialRef") if isinstance(payload.get("materialRef"), dict) else None
@@ -1052,7 +1157,7 @@ class IdeasService:
             # Context notes (unsupported channels, assumed times, the proposed plan) follow run.started
             # so the stream keeps its shape: run.started first, run.completed last.
             context_events = [safe_event("warning.created", message=f"{platform} is not available for drafting yet, so it was left out.") for platform in parsed["unsupported"]]
-            context_events += [safe_event("warning.created", message=note) for note in parsed["warnings"] + bound["warnings"] + self._memory_notes(shared) + reminders]
+            context_events += [safe_event("warning.created", message=note) for note in ([writer_note] if writer_note else []) + parsed["warnings"] + bound["warnings"] + self._memory_notes(shared) + reminders]
             if researched:
                 if not researched.get("off"):
                     context_events.append(safe_event("progress.updated", stage="researched", percent=8, pages=len(researched["pages"]), query=researched["query"]))
@@ -1061,7 +1166,7 @@ class IdeasService:
                 context_events.append(safe_event("action.proposed", action="schedule_plan", destinations=len(plan["destinations"]), timeZone=plan["timeZone"]))
 
             if runtime.asynchronous or paid:
-                emit(safe_event("run.started", model=model_id, reasoning="quick", contextDigest=digest(context)))
+                emit(safe_event("run.started", model=model_id, reasoning=reasoning, contextDigest=digest(context)))
                 for pending in context_events:
                     emit(pending)
                 emit(safe_event("progress.updated", stage="queued", percent=5))
@@ -1102,14 +1207,14 @@ class IdeasService:
                 except ProviderFailure as error:
                     if not error.dispatched:
                         # Refused before any provider request: nothing was spent, the hold is released.
-                        sink.fail(str(error), known_cost_usd=0.0)
+                        sink.fail(str(error), known_cost_usd=0.0, usage=error.usage)
                         raise AlphaError(str(error), error.status, code=error.code)
                     if error.cost_usd is not None:
-                        sink.fail("The writer did not finish. This failed attempt was not charged.", known_cost_usd=error.cost_usd)
+                        sink.fail("The writer did not finish. This failed attempt was not charged.", known_cost_usd=error.cost_usd, usage=error.usage)
                         if error.status == 409:
                             raise AlphaError(str(error), 409, code=error.code)
                         raise AlphaError("The writer did not finish. This failed attempt was not charged; you can try again.", 502)
-                    sink.fail("The writer did not finish. Usage may be pending; this run will not retry automatically.")
+                    sink.fail("The writer did not finish. Usage may be pending; this run will not retry automatically.", usage=error.usage)
                     raise AlphaError("The writer did not finish. Check this run before starting another request.", 502)
                 except Exception:
                     sink.fail("The writer did not finish. Usage may be pending; this run will not retry automatically.")
@@ -1133,7 +1238,7 @@ class IdeasService:
         revision = next((r for r in state.get("speaker", {}).get("revisions", []) if r.get("revision") == active), None)
         return (revision or {}).get("profile", {}).get("tone", "warm")
 
-    def _project(self, state, payload, runtime, model_id, reasoning, destinations, text, parsed, research_ids=()):
+    def _project(self, state, payload, runtime, model_id, reasoning, destinations, text, parsed, research_ids=(), level=None):
         """Everything a writer route will receive for one drafting turn, computed from `state` alone."""
         # Account identity is verified against this workspace's connections (v9 §4).
         destinations = intent.bind_accounts(destinations, state)
@@ -1194,6 +1299,8 @@ class IdeasService:
             voice_context = {"mode": "neutral", "route": None, "bindings": [], "digest": None}
             style_directives = {}
         request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
+        if level is not None:
+            request["level"] = level   # the managed writer's reasoning level (translate_reasoning); `reasoning` keeps the pass
         # Step ③: skills are bound by destination, format, intent and content type, and recorded
         # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
         bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
@@ -1202,11 +1309,13 @@ class IdeasService:
         request["skills"] = bound
         return {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
 
-    def estimate_request(self, state, payload, operation, actor):
-        """The writer request a quick-start or turn would send now, for a credit estimate (no side effects)."""
-        runtime = self._select_runtime(payload.get("model"))
-        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
-        reasoning = payload.get("reasoning", "quick")
+    def estimate_request(self, state, payload, operation, actor, research_bytes=0):
+        """The writer request a quick-start or turn would send now, for a credit estimate (no side effects): the same
+        writer (Auto resolved against `state`), pass and level the turn would use. An explicit level whose ceiling is
+        over the per-request limit is refused here, so a credit limit is never issued for it; `research_bytes` allows
+        for web research a turn may still add. A stale workspace default's note travels in request["writerNote"]."""
+        runtime, model_id, note = self.resolve_writer(state, payload.get("model"))
+        reasoning, level = translate_reasoning(runtime, model_id, requested_level(payload))
         zone = intent.safe_zone(payload.get("timeZone"))
         state = copy.deepcopy(state)
         stamp(state)
@@ -1222,13 +1331,17 @@ class IdeasService:
             source = self._quick_start_source(state, actor, payload, text, url, payload.get("ownContent") is True)
             ids = list(dict.fromkeys([source["id"]] + checked_context_ids(state, payload.get("sourceIds", []))))
             turn_payload = {**payload, "sourceIds": ids, "intentText": text}
-            projected = self._project(state, turn_payload, runtime, model_id, reasoning, destinations, "", parsed)
+            projected = self._project(state, turn_payload, runtime, model_id, reasoning, destinations, "", parsed, level=level)
         else:
             text = clean(payload.get("text", ""), MAX_TEXT)
             parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
             destinations = intent.resolve_destinations(parsed, payload.get("destinations"), payload.get("language"), DEFAULT_DESTINATIONS, settings=lambda: state)
-            projected = self._project(state, payload, runtime, model_id, reasoning, destinations, text, parsed)
-        return runtime, model_id, projected["request"]
+            projected = self._project(state, payload, runtime, model_id, reasoning, destinations, text, parsed, level=level)
+        request = projected["request"]
+        check_level_ceiling(runtime, model_id, request, extra_bytes=research_bytes)
+        if note:
+            request["writerNote"] = note
+        return runtime, model_id, request
 
     def _keyed_run(self, cur, workspace_id, key, fingerprint):
         cur.execute("SELECT id::text,usage FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
@@ -1380,6 +1493,7 @@ class IdeasService:
     # --- source-first activation --------------------------------------------------
     def quick_start(self, workspace_id, token, revision, payload):
         """Thought/text/URL → one useful preview without connecting a channel."""
+        started = time.monotonic()
         key = clean(payload.get("idempotencyKey", ""), 100)
         fingerprint = request_fingerprint("quick-start", payload)
         if key:
@@ -1394,11 +1508,9 @@ class IdeasService:
         if payload.get("confirmUse") is not True:
             raise AlphaError("Confirm that you want Rafii to use this content for a draft.")
         own = payload.get("ownContent") is True
-        runtime = self._select_runtime(payload.get("model"))  # refuse an unknown model before any source is stored
-        if isinstance(runtime, ClaudeCliRuntime):
-            runtime.effort(payload.get("reasoning", "quick"))
-        elif payload.get("reasoning", "quick") not in ("quick", "standard", "deep"):
-            raise AlphaError("Choose a reasoning level supported by this writer.", 400)
+        # Refuse an unknown model or a reasoning level the writer does not offer before any source is stored.
+        runtime, model_id, writer_note = self.resolve_writer(self._state_reader(workspace_id, token), payload.get("model"))
+        _, level = translate_reasoning(runtime, model_id, requested_level(payload))
         zone = intent.safe_zone(payload.get("timeZone"))
         parsed = intent.parse_request(text, self.clock(), zone, runtime.supported_platforms() or None)
         parsed, reading = self._understand(workspace_id, token, text, zone, runtime, parsed)
@@ -1406,16 +1518,15 @@ class IdeasService:
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, payload.get("destinations"), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
-        model_id = payload["model"] if isinstance(payload.get("model"), str) and payload.get("model") else runtime.model
         if text and self._may_orchestrate(workspace_id, token, text, parsed, reading):
             # Home is the primary place to create, change or ask about automations (orchestration §7).
             conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))
-            routed = self._orchestration_turn(workspace_id, token, conversation["conversationId"], text, parsed, reading, destinations, runtime, model_id, {**payload, "timeZone": zone})
+            routed = self._orchestration_turn(workspace_id, token, conversation["conversationId"], text, parsed, reading, destinations, runtime, model_id, {**payload, "timeZone": zone}, writer_note=writer_note)
             if routed is not None:
                 return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **routed}
             if parsed["intent"] == "automation":
                 run = self._automation_turn(workspace_id, token, conversation["conversationId"], text, destinations, runtime, model_id,
-                                            {**payload, "timeZone": zone}, understood=understood)
+                                            {**payload, "timeZone": zone}, understood=understood, writer_note=writer_note)
                 return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **run}
             # Not an automation after all: drop the empty conversation; the draft gets its own below.
             with self.repository.transaction(token, workspace_id) as (cur, _, _):
@@ -1424,8 +1535,14 @@ class IdeasService:
         if parsed["intent"] == "automation" and text:
             conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))
             run = self._automation_turn(workspace_id, token, conversation["conversationId"], text, destinations, runtime,
-                                        model_id, {**payload, "timeZone": zone}, revision=revision, understood=understood)
+                                        model_id, {**payload, "timeZone": zone}, revision=revision, understood=understood, writer_note=writer_note)
             return {"conversationId": conversation["conversationId"], "sourceId": None, "sourcePolicy": None, **run}
+
+        if level not in (None, AUTO):
+            # An explicit level whose ceiling is over the per-request limit is refused before the source is stored.
+            with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                require(self._member(row), "edit")
+                self.estimate_request(self._state(row), payload, "quick-start", principal)
 
         chosen = {}
 
@@ -1441,7 +1558,7 @@ class IdeasService:
         saved = self.repository.command(workspace_id, token, revision, command)
         source = next(item for item in saved["state"]["sources"] if item["id"] == chosen["id"])
         conversation = self.create_conversation(workspace_id, token, clean(text[:60] or url, 60))
-        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": list(dict.fromkeys([source["id"]] + checked_context_ids(saved["state"], payload.get("sourceIds", [])))), "destinations": destinations, "reasoning": payload.get("reasoning", "quick"), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration"), "research": payload.get("research"), "idempotencyKey": key}, _credit_authority=credit_authority, _request_fingerprint=fingerprint, _run_meta={"quickStart": {"sourceId": source["id"]}})
+        run = self.turn(workspace_id, token, conversation["conversationId"], {"text": "", "sourceIds": list(dict.fromkeys([source["id"]] + checked_context_ids(saved["state"], payload.get("sourceIds", [])))), "destinations": destinations, **({"reasoning": payload["reasoning"]} if "reasoning" in payload else {}), "timeZone": zone, "language": language, "intentText": text, "model": payload.get("model"), "voiceMode": payload.get("voiceMode", "neutral"), "voiceSourceIds": payload.get("voiceSourceIds"), "imageGeneration": payload.get("imageGeneration"), "research": payload.get("research"), "idempotencyKey": key}, _credit_authority=credit_authority, _request_fingerprint=fingerprint, _run_meta={"quickStart": {"sourceId": source["id"]}}, _started=started)
         return {"conversationId": conversation["conversationId"], "sourceId": source["id"], "sourcePolicy": source.get("sourcePolicy"), "revision": saved["revision"], **run}
 
     def _quick_start_source(self, state, actor, payload, text, url, own):

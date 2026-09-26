@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ModelDialog } from '@/features/agent/model-dialog';
 import { ModelPicker } from '@/features/agent/model-picker';
 import { SettingButtons } from '@/features/agent/setting-buttons';
-import { useModelChoice } from '@/features/agent/use-model';
+import { modelName, useModelChoice } from '@/features/agent/use-model';
 import { useModels } from '@/lib/api/hooks';
 import { AuthProvider } from '@/lib/auth/session';
 import { WorkspaceProvider } from '@/lib/workspace/provider';
@@ -41,12 +41,10 @@ function Inner() {
         open={open}
         onOpenChange={setOpen}
         catalog={models.data}
-        value={{ model: choice.model, reasoning: choice.reasoningFor(choice.model) ?? choice.reasoning }}
+        value={choice.dialogValue}
         reasoningFor={choice.reasoningFor}
-        onApply={({ model, reasoning }) => {
-          choice.choose(model);
-          choice.setReasoningFor(model, reasoning);
-        }}
+        onApply={choice.applyDialog}
+        auto={choice.autoWriter}
       />
       <section className='rafii-quiet flex flex-col gap-1 rounded-[var(--rafii-radius-card)] p-4 text-sm'>
         <h2 className='mb-1 font-medium'>Committed choice</h2>
@@ -54,17 +52,32 @@ function Inner() {
           Model: <output aria-label='Selected model' className='font-mono text-xs'>{choice.model}</output>
         </p>
         <p>
-          Sent as reasoning: <output aria-label='Selected effort' className='font-mono text-xs'>{choice.reasoning}</output>
+          Selection: <output aria-label='Selected writer' className='font-mono text-xs'>{choice.selection}</output>
         </p>
         <p>
-          Preference: <output aria-label='Reasoning preference' className='font-mono text-xs'>{choice.reasoningFor(choice.model) ?? '(provider default)'}</output>
+          Reasoning level: <output aria-label='Selected effort' className='font-mono text-xs'>{choice.reasoning}</output>
         </p>
-        <p className='text-muted-foreground text-xs'>{choice.reasoningMapping.summary}</p>
+        <p>
+          Preference: <output aria-label='Reasoning preference' className='font-mono text-xs'>{choice.reasoningFor(choice.selection) ?? '(Auto)'}</output>
+        </p>
+        <p>
+          Request fields: <output aria-label='Request fields' className='font-mono text-xs'>{JSON.stringify(choice.requestFields)}</output>
+        </p>
+        {choice.autoNote && <p className='text-muted-foreground text-xs'>{choice.autoNote}</p>}
       </section>
       <section className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-card)] p-4 text-sm'>
         <h2 className='font-medium'>Restyled compact selector (existing composer control)</h2>
         <div>
-          <ModelPicker options={choice.options} model={choice.model} onChoose={choice.choose} reasoning={choice.reasoning} reasoningOptions={choice.reasoningOptions} onReasoning={choice.chooseReasoning} />
+          <ModelPicker
+            options={choice.options}
+            model={choice.model}
+            value={choice.selection}
+            auto={{ label: choice.autoWriter.option ? `Auto · ${modelName(choice.autoWriter.option, choice.autoWriter.model)}` : 'Auto', option: choice.autoWriter.option }}
+            onChoose={choice.choose}
+            reasoning={choice.reasoning}
+            reasoningOptions={choice.reasoningOptions}
+            onReasoning={choice.chooseReasoning}
+          />
         </div>
       </section>
     </main>

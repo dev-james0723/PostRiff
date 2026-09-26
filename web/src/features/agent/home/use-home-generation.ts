@@ -32,8 +32,10 @@ export interface GenerationRequest {
   text: string;
   ownContent: boolean;
   destinations: Destination[];
-  model: string;
-  reasoning: string;
+  /** Absent on Auto (managed writers): the server resolves the workspace default. */
+  model?: string;
+  /** Absent for the Auto level; otherwise a level id the writer lists. */
+  reasoning?: string;
   voiceMode: 'neutral' | 'personalized';
   voiceSourceIds: string[];
   imageGeneration?: { enabled: true; count: number };
@@ -63,8 +65,9 @@ export function quickStartPayload(request: Omit<GenerationRequest, 'maxMilliCred
     ownContent: request.ownContent,
     confirmUse: true,
     destinations: request.destinations,
-    model: request.model,
-    reasoning: request.reasoning,
+    // Omitted rather than sent empty, so the estimate, the quote and the quick start bind the same body.
+    ...(request.model ? { model: request.model } : {}),
+    ...(request.reasoning ? { reasoning: request.reasoning } : {}),
     voiceMode: request.voiceMode,
     voiceSourceIds: request.voiceMode === 'personalized' ? request.voiceSourceIds : [],
     imageGeneration: request.imageGeneration,

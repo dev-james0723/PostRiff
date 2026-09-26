@@ -131,6 +131,30 @@ async function gotoHome(page) {
 }
 
 const settingButton = (page, kicker) => page.locator('button[aria-haspopup="dialog"]').filter({ hasText: kicker });
+
+// Stage a writer in the open model dialog (never commits): writers outside the featured list sit behind "More models".
+async function stageWriter(dialog, name) {
+  const row = dialog.getByRole('radio', { name, exact: typeof name === 'string' }).first();
+  if (!(await row.isVisible().catch(() => false))) {
+    const more = dialog.getByRole('button', { name: /More models/ });
+    if ((await more.count()) && (await more.getAttribute('aria-expanded')) !== 'true') {
+      await more.click();
+      await dialog.page().waitForTimeout(300);
+    }
+  }
+  await row.click();
+}
+
+// Choose a writer through the Model setting: open the dialog, stage it, "Use this model".
+async function applyWriter(page, name) {
+  await settingButton(page, 'Model').click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor();
+  await page.waitForTimeout(300);
+  await stageWriter(dialog, name);
+  await dialog.getByRole('button', { name: /Use this model/ }).click();
+  await dialog.waitFor({ state: 'hidden' });
+}
 /** Running animations that move or resize something (opacity/colour fades are allowed under reduced motion). */
 const spatialAnimations = (page) =>
   page.evaluate(() =>
@@ -221,12 +245,14 @@ async function workflow(browser) {
     mark('languages applied');
     check('language summary shows per-destination languages', /Per destination|2 languages/.test(await settingButton(page, 'Language').innerText()), await settingButton(page, 'Language').innerText());
 
-    // Model dialog: browse providers (never commits), reasoning segments, keep the fixture model.
+    // Model dialog: Auto first, browse providers (never commits), reasoning levels, keep the fixture model.
     await settingButton(page, 'Model').click();
     const modelDialog = page.getByRole('dialog');
     await modelDialog.waitFor();
     await page.waitForTimeout(600);
     mark('model dialog open');
+    const autoRow = modelDialog.getByRole('radio', { name: 'Auto', exact: true });
+    check('Auto is offered and chosen while nothing is stored', (await autoRow.count()) === 1 && (await autoRow.getAttribute('aria-checked')) === 'true', await autoRow.count());
     // The CLI switch appears only where the API host reports a CLI (CI's harness runs with POSTRIFF_LOCAL_CLI=0).
     const cliMode = modelDialog.getByRole('radio', { name: 'CLI', exact: true });
     const hasCli = (await cliMode.count()) > 0;
@@ -246,22 +272,34 @@ async function workflow(browser) {
       await modelDialog.getByRole('radio', { name: 'API models', exact: true }).click();
       await page.waitForTimeout(600);
     }
-    await modelDialog.getByRole('radio', { name: /Templates \(no AI model\)/ }).click();
+    await stageWriter(modelDialog, /Templates \(no AI model\)/);
     await page.waitForTimeout(300);
-    const applied = await modelDialog.getByRole('radio', { name: /sends standard/ }).count();
-    const notApplied = await modelDialog.getByRole('radio', { name: /not applied by this provider/ }).count();
-    check('reasoning shows the route’s real options or an honest “not applied”', applied === 1 || notApplied > 0, { applied, notApplied });
-    if (applied) {
-      for (const segment of [/sends standard/, /sends deep/, /sends quick/]) {
-        await modelDialog.getByRole('radio', { name: segment }).click();
-        mark(`reasoning ${segment.source}`);
-        await page.waitForTimeout(500);
-      }
+    // Only the writer's own levels are listed; unavailable ones are disabled and never clicked.
+    const levels = modelDialog.getByRole('radiogroup', { name: 'Reasoning' }).getByRole('radio');
+    const enabledLevels = modelDialog.getByRole('radiogroup', { name: 'Reasoning' }).locator('[role="radio"]:not([disabled])');
+    const enabled = await enabledLevels.count();
+    check('reasoning lists the writer’s own levels with at least one enabled', enabled >= 1, { enabled, listed: await levels.count() });
+    for (let i = enabled - 1; i >= 0; i -= 1) {
+      const name = await enabledLevels.nth(i).getAttribute('aria-label');
+      await enabledLevels.nth(i).click();
+      mark(`reasoning ${name}`);
+      await page.waitForTimeout(500);
     }
     await shot(page, dir, '07-model-dialog');
     await modelDialog.getByRole('button', { name: /Use this model/ }).click();
     await modelDialog.waitFor({ state: 'hidden' });
     check('fixture model still selected after browsing providers', /Templates \(no AI model\)/.test(await settingButton(page, 'Model').innerText()), await settingButton(page, 'Model').innerText());
+
+    // Auto round-trip: choosing Auto again un-pins the writer (stored as the Auto marker, never sent), and the chip
+    // names the writer Auto resolves to; the fixture is then pinned again so drafting below stays on templates.
+    await applyWriter(page, 'Auto');
+    const autoLabel = await settingButton(page, 'Model').innerText();
+    const storedWriter = await page.evaluate(() => localStorage.getItem('postriff-agent-model-v2'));
+    check('Auto round-trips: the chip names the writer Auto resolves to', /Auto · /.test(autoLabel), autoLabel);
+    check('Auto is stored as the Auto marker, not a pinned writer', storedWriter === 'auto', storedWriter);
+    await applyWriter(page, /Templates \(no AI model\)/);
+    const pinnedLabel = await settingButton(page, 'Model').innerText();
+    check('picking Templates again pins it', /Templates \(no AI model\)/.test(pinnedLabel) && !/Auto · /.test(pinnedLabel), pinnedLabel);
 
     // Real generation through the existing quick-start service.
     await page.getByRole('textbox', { name: 'Message' }).fill('Practice notes from this week: the slow, unglamorous hours at the piano are where every good performance is really decided.');

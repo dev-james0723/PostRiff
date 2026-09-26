@@ -321,9 +321,17 @@ export interface LanguageSettings {
   updatedBy?: string;
 }
 
+/** The owner's default writer for everyone on Auto (action `writer_defaults`); model null = the deployment's default. */
+export interface WriterDefaults {
+  model: string | null;
+  decidedBy?: string;
+  decidedAt?: number;
+}
+
 export interface SnapshotState {
   workspace?: { id: string; name?: string; sample?: boolean };
   languageSettings?: LanguageSettings;
+  writerDefaults?: WriterDefaults;
   session?: { completed?: boolean; step?: number };
   contentTypes?: ContentTypesView;
   speaker?: Speaker;
@@ -793,11 +801,44 @@ export interface Message {
   at: number;
 }
 
+/**
+ * One reasoning level a writer offers (`GET /api/ideas/models`). Managed writers list `auto` first (kind `auto`),
+ * their gateway efforts (kind `effort`) and `thorough` (kind `pass`: draft, then revise); the fixture and CLI routes
+ * send only id/available/detail. Credits describe a reference request (48 KB of context, one destination).
+ */
+export interface ReasoningItem {
+  id: string;
+  available: boolean;
+  detail: string;
+  label?: string;
+  kind?: 'auto' | 'effort' | 'pass';
+  /** The gateway effort this level sends. Auto and Thorough send the model's drafting baseline (e.g. "low"), or null
+   *  when the model has no effort scale. */
+  sends?: string | null;
+  typicalMilliCredits?: number | null;
+  ceilingMilliCredits?: number | null;
+}
+
 export interface ModelOption {
   id: string;
   label: string;
   qualified: boolean;
   detail: string;
+  /** Managed writers: the part of the id after the maker ("gpt-6-sol"). */
+  displayName?: string;
+  /** Display text only ("GPT", "Claude"); icons and grouping read `maker`. */
+  family?: string;
+  /** The id prefix ("openai", "bytedance"). */
+  maker?: string;
+  featured?: boolean;
+  featuredRank?: number | null;
+  /** The deployment's default managed writer. */
+  default?: boolean;
+  /** False when the deployment has no price for this managed writer: it cannot be chosen. */
+  priced?: boolean;
+  /** By output price per million tokens: 1 lower, 2 medium, 3 higher; null when unpriced. */
+  costTier?: 1 | 2 | 3 | null;
+  costTierLabel?: string | null;
   /** Which runtime writes with it: undefined/`fixture` = PostRiff, `claude-code` = the local CLI. */
   route?: string;
   costClass?: 'none' | 'subscription' | 'paid' | string;
@@ -807,7 +848,7 @@ export interface ModelOption {
   /** The class grant that also covers voiceRoute (every Rafii AI writer model), if any. */
   voiceRouteClass?: string | null;
   voiceAnalysisAvailable?: boolean;
-  reasoning?: { id: string; available: boolean; detail: string }[];
+  reasoning?: ReasoningItem[];
 }
 
 /** A CLI agent the API host can drive (agent chat design §4.2). Never carries the account's email. */
@@ -838,7 +879,11 @@ export interface AgentInfo {
 
 export interface ModelCatalog {
   models: ModelOption[];
-  reasoning: { id: string; available: boolean; detail: string }[];
+  reasoning: ReasoningItem[];
+  /** The managed writer Auto uses when the workspace has no default of its own; null without a managed writer. */
+  defaultModel?: string | null;
+  /** Featured writer ids in order: the picker lists these first and the rest under "More models". */
+  featured?: string[];
   agents?: AgentInfo[];
   imageGeneration?: {
     available: boolean;

@@ -20,26 +20,38 @@ REFRESH_SECONDS = 24 * 3600
 FETCH_TIMEOUT_SECONDS = 8
 # Used only for a model the catalogue does not list (a newer id than the snapshot).
 FALLBACK_THINKING_PREFIXES = ("openai/gpt-6", "openai/gpt-5", "openai/o", "google/gemini-2.5", "google/gemini-3", "deepseek/", "alibaba/qwen")
+# Every effort id the gateway's unified reasoning object can carry, lowest first.
+EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 _SNAPSHOT = Path(__file__).with_name("gateway_catalog.json")
 _lock = threading.Lock()
-_state = {"models": None, "loadedAt": 0.0, "refreshing": False}
+_state = {"models": None, "loadedAt": 0.0, "refreshing": False, "snapshot": None, "refreshedAt": None}
 
 
 def _load_snapshot():
+    """(models, the date the shipped snapshot was fetched)."""
     try:
-        return json.loads(_SNAPSHOT.read_text()).get("models") or {}
+        data = json.loads(_SNAPSHOT.read_text())
     except (OSError, ValueError):
-        return {}
+        return {}, None
+    fetched = data.get("fetched") if isinstance(data.get("fetched"), str) else None
+    return data.get("models") or {}, fetched
 
 
 def _models():
     if _state["models"] is None:
         with _lock:
             if _state["models"] is None:
-                _state["models"], _state["loadedAt"] = _load_snapshot(), time.time()
+                (_state["models"], _state["snapshot"]), _state["loadedAt"] = _load_snapshot(), time.time()
     _maybe_refresh()
     return _state["models"]
+
+
+def version():
+    """Which catalogue a run was decided with: the shipped snapshot's fetch date, and when a background refresh last
+    replaced it (None while the snapshot is in use). Recorded on each run's reasoning block."""
+    _models()
+    return {"snapshot": _state["snapshot"], "refreshedAt": _state["refreshedAt"]}
 
 
 def _refresh_allowed():
@@ -85,6 +97,7 @@ def _refresh(transport=None):
         models = parse(data)
         if models:   # an empty or broken answer never replaces what we have
             _state["models"] = models
+            _state["refreshedAt"] = time.time()
     except Exception:  # noqa: BLE001 - the snapshot stays; the next day tries again
         pass
     finally:
@@ -96,10 +109,15 @@ def entry(model):
     return _models().get(model) if isinstance(model, str) else None
 
 
-def thinking(model):
+def thinking(model, level=None):
     """True when a drafting call to this model will spend reasoning tokens inside max_tokens, with the reasoning we send
     (drafting_reasoning): a level above "none", or a model that reasons without an effort scale (budget-only). A
-    toggle-only model (thinking off unless asked) needs no headroom."""
+    toggle-only model (thinking off unless asked) needs no headroom. `level` is an explicit effort the person chose:
+    "none" turns thinking off; any other listed level thinks. Without one (Auto, or a pass mode), the baseline decides."""
+    if level == "none":
+        return False
+    if level in EFFORTS and level in levels(model):
+        return True
     known = entry(model)
     if known is None:
         return isinstance(model, str) and model.startswith(FALLBACK_THINKING_PREFIXES)
@@ -117,6 +135,18 @@ def supports(model, parameter):
     if known is None or "params" not in known:
         return True
     return parameter in known["params"]
+
+
+def levels(model):
+    """The effort levels this model lists in the catalogue (in the catalogue's order), or [] when it has no effort
+    scale or does not take the `reasoning` parameter. Only these are ever sent as an explicit level."""
+    return _efforts(model) if supports(model, "reasoning") else []
+
+
+def max_tokens(model):
+    """The catalogue's output limit for this model (every per-level cap is clamped to it); None when unlisted."""
+    value = (entry(model) or {}).get("maxTokens")
+    return value if type(value) is int and value > 0 else None
 
 
 def _efforts(model):
