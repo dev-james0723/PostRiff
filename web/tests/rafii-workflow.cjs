@@ -131,6 +131,30 @@ async function gotoHome(page) {
 }
 
 const settingButton = (page, kicker) => page.locator('button[aria-haspopup="dialog"]').filter({ hasText: kicker });
+
+// Stage a writer in the open model dialog (never commits): writers outside the featured list sit behind "More models".
+async function stageWriter(dialog, name) {
+  const row = dialog.getByRole('radio', { name, exact: typeof name === 'string' }).first();
+  if (!(await row.isVisible().catch(() => false))) {
+    const more = dialog.getByRole('button', { name: /More models/ });
+    if ((await more.count()) && (await more.getAttribute('aria-expanded')) !== 'true') {
+      await more.click();
+      await dialog.page().waitForTimeout(300);
+    }
+  }
+  await row.click();
+}
+
+// Choose a writer through the Model setting: open the dialog, stage it, "Use this model".
+async function applyWriter(page, name) {
+  await settingButton(page, 'Model').click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor();
+  await page.waitForTimeout(300);
+  await stageWriter(dialog, name);
+  await dialog.getByRole('button', { name: /Use this model/ }).click();
+  await dialog.waitFor({ state: 'hidden' });
+}
 /** Running animations that move or resize something (opacity/colour fades are allowed under reduced motion). */
 const spatialAnimations = (page) =>
   page.evaluate(() =>
