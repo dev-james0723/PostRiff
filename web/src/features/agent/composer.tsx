@@ -83,7 +83,7 @@ interface ComposerProps {
 }
 
 /** "More…" in the `@` list opens the ＋ sheet at the view of its best match. */
-const MORE_VIEW: Record<string, PlusView> = { post: 'posts', template: 'templates', source: 'sources', account: 'accounts', folder: 'accounts', image: 'library', video: 'library' };
+const MORE_VIEW: Record<string, PlusView> = { post: 'posts', template: 'templates', source: 'sources', skill: 'skills', connector_item: 'connectors', account: 'accounts', folder: 'accounts', image: 'library', video: 'library' };
 
 /**
  * One composer for Home and every conversation: text, the channels to draft for, each channel's

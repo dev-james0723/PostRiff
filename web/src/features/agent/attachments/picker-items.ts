@@ -10,6 +10,22 @@ import { isLibraryAsset, isReady, kindOf, type AssetLike } from '../../../lib/me
 import { labelFor } from './chips';
 import { rank, type PickerCategory, type PickerItemLike } from './matcher';
 
+export interface SkillLike {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+}
+
+export interface ConnectorItemLike {
+  referenceId: string;
+  connectionId: string;
+  provider: string;
+  title: string;
+  excerpt: string;
+  expiresAt: number;
+}
+
 export const RECENTS = 8;
 
 export const CATEGORY_ORDER: readonly PickerCategory[] = [
@@ -18,16 +34,30 @@ export const CATEGORY_ORDER: readonly PickerCategory[] = [
   'accounts',
   'folders',
   'sources',
+  'skills',
+  'connectors',
   'library'
 ];
 
 export interface PickerItem extends PickerItemLike {
-  kind: 'post' | 'template' | 'account' | 'folder' | 'source' | 'image' | 'video';
+  kind:
+    | 'post'
+    | 'template'
+    | 'account'
+    | 'folder'
+    | 'source'
+    | 'skill'
+    | 'connector_item'
+    | 'image'
+    | 'video';
   /** Accounts only: always "Connected" (disconnected ones are left out). */
   state?: string;
   duration?: number;
   width?: number;
   height?: number;
+  provider?: string;
+  connectionId?: string;
+  expiresAt?: number;
 }
 
 export interface PickerGroup {
@@ -84,7 +114,9 @@ function postActivity(phase2: NonNullable<SnapshotLike['state']>['phase2']): Map
 /** Every item the viewer may add, newest first within each kind (before any query). */
 export function allPickerItems(
   snapshot: SnapshotLike | null | undefined,
-  principal: string | null | undefined
+  principal: string | null | undefined,
+  skills: readonly SkillLike[] = [],
+  connectorItems: readonly ConnectorItemLike[] = []
 ): PickerItem[] {
   const state = snapshot?.state ?? {};
   const phase2 = state.phase2 ?? {};
@@ -200,6 +232,33 @@ export function allPickerItems(
         : { width: Number(asset.width) || undefined, height: Number(asset.height) || undefined })
     });
   });
+
+  skills.forEach((skill, index) => {
+    if (!skill.id || !skill.name) return;
+    items.push({
+      kind: 'skill',
+      id: skill.id,
+      label: skill.name,
+      sublabel: skill.description || skill.version,
+      search: [skill.description, skill.version].filter(Boolean).join('\n'),
+      updatedAt: skills.length - index
+    });
+  });
+
+  connectorItems.forEach((item, index) => {
+    if (!item.referenceId || !item.connectionId || !item.title) return;
+    items.push({
+      kind: 'connector_item',
+      id: item.referenceId,
+      label: item.title,
+      sublabel: [item.provider, item.excerpt].filter(Boolean).join(' · '),
+      search: [item.provider, item.excerpt].filter(Boolean).join('\n'),
+      provider: item.provider,
+      connectionId: item.connectionId,
+      expiresAt: item.expiresAt,
+      updatedAt: connectorItems.length - index
+    });
+  });
   return items;
 }
 
@@ -208,9 +267,11 @@ export function pickerItems(
   snapshot: SnapshotLike | null | undefined,
   principal: string | null | undefined,
   query = '',
-  limit = RECENTS
+  limit = RECENTS,
+  skills: readonly SkillLike[] = [],
+  connectorItems: readonly ConnectorItemLike[] = []
 ): PickerResult {
-  const ranked = rank(query, allPickerItems(snapshot, principal));
+  const ranked = rank(query, allPickerItems(snapshot, principal, skills, connectorItems));
   const groups = CATEGORY_ORDER.map((category) => ({
     category,
     items: ranked.items.filter((item) => KIND_GROUP[item.kind] === category).slice(0, limit)
@@ -224,6 +285,8 @@ const KIND_GROUP: Record<PickerItem['kind'], PickerCategory> = {
   account: 'accounts',
   folder: 'folders',
   source: 'sources',
+  skill: 'skills',
+  connector_item: 'connectors',
   image: 'library',
   video: 'library'
 };

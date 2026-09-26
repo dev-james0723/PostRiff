@@ -82,3 +82,24 @@ The S01–S35 work was built in a cloud packaging of `feat/chat-attachments` at 
 
 - `web/node_modules` was installed with `npm ci --ignore-scripts`; `psycopg` and `cffi` were installed from PyPI. Without `cffi`, `tests/test_rafii_review_fixes.py` panics at baseline too.
 - The repo does not pass `oxfmt --check` at baseline (for example `web/src/features/rafii-commands/menu-logic.ts`), so `format:check` over the whole tree is not a usable gate until that is fixed separately. New files in this branch are formatted.
+
+
+## Explicit skills + productivity connectors (2026-09-26)
+
+Implementation continues the same chat-attachments composer. `skill` and `connector_item` are first-class turn references; social accounts/folders remain destinations. Productivity connectors are explicitly selected, read-only, server-refetched references. No background mailbox/workspace sync is introduced.
+
+| Check | Where | Result |
+|---|---|---|
+| `PYTHONPATH=src:tests python3 -m unittest tests.test_productivity_connectors tests.test_turn_references tests.test_migration_numbers` | local worktree | PASS — 61/61 |
+| Focused web attachment/connector tests including wire-body, picker, IME/state, credit binding and OAuth-return source checks | local worktree | PASS — 54/54 |
+| `npm --prefix web run typecheck` | local worktree | PASS |
+| `npm --prefix web run lint` | local worktree | PASS — 0 warnings / 0 errors |
+| `npm --prefix web run build` | local worktree | PASS — production Next.js build, including `/connectors/connect` and `/app/connectors/connect` |
+| Disposable PostgreSQL: `postgres_ideas_references.py`, `postgres_consumer_deletion.py`, `postgres_consumer_migrations.py` | fresh local PostgreSQL 17, deleted after run | PASS — reference/runtime fence, deletion cleanup, migration ledger/replay/RLS/backup+restore |
+| Migration 032 | disposable PostgreSQL | PASS — fresh install + populated upgrade + replay |
+| Production connector flags | source defaults | SAFE-OFF — `RAFII_NOTION_CONNECTOR_ENABLED` and `RAFII_GMAIL_CONNECTOR_ENABLED` are blank/off by default |
+
+External enablement notes:
+- Gmail uses the minimum body-reading scope required by this design, `https://www.googleapis.com/auth/gmail.readonly`. It remains a Google restricted scope; production enablement must not occur until the project has the required OAuth verification/security-assessment posture and valid production credentials.
+- Notion is implemented behind its independent feature flag and requires a valid public OAuth integration/client configuration before enablement.
+- Tests use fake provider transports/tokens; no real Gmail or Notion user data was read during verification.

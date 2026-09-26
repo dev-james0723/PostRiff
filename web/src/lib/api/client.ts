@@ -40,6 +40,8 @@ import type {
   MemoryFiles,
   PickerCategory,
   PickerSearchResult,
+  ProductivityConnectorCatalog,
+  ProductivityConnectorSearchResult,
   VideoCommitBody,
   VideoCommitResult,
   VideoUploadBegin,
@@ -274,6 +276,50 @@ export function createApi(getToken: TokenSource) {
       get<PickerSearchResult>(
         `${ws(w)}/site-agent/search?${new URLSearchParams({ q, ...(categories.length ? { categories: categories.join(',') } : {}), limit: String(limit) })}`
       ),
+    connectorCatalog: (w: string) => get<ProductivityConnectorCatalog>(`${ws(w)}/connectors`),
+    connectorOauthStart: (w: string, provider: string) =>
+      send<{ transactionId: string; provider: string; authorizeUrl: string; scopes: string[]; expiresAt: number }>(
+        'POST',
+        `${ws(w)}/connectors/${encodeURIComponent(provider)}/oauth/start`
+      ),
+    connectorOauthComplete: (
+      w: string,
+      provider: string,
+      state: string,
+      code?: string,
+      error?: string
+    ) =>
+      send<{
+        connected: boolean;
+        connectionId?: string;
+        provider?: string;
+        account?: string;
+        scopes?: string[];
+        expiresAt?: number | null;
+        reason?: string;
+      }>('POST', `${ws(w)}/connectors/${encodeURIComponent(provider)}/oauth/complete`, {
+        state,
+        code,
+        error
+      }),
+    connectorSearch: (w: string, connectionId: string, query: string, limit = 12) =>
+      send<ProductivityConnectorSearchResult>(
+        'POST',
+        `${ws(w)}/connectors/${encodeURIComponent(connectionId)}/search`,
+        { query, limit }
+      ),
+    connectorRefresh: (w: string, connectionId: string) =>
+      send<{ connectionId: string; provider: string; refreshed: boolean; expiresAt: number | null }>(
+        'POST',
+        `${ws(w)}/connectors/${encodeURIComponent(connectionId)}/refresh`
+      ),
+    connectorDisconnect: (w: string, connectionId: string) =>
+      send<{
+        connectionId: string;
+        provider: string;
+        disconnected: boolean;
+        providerRevocationPending: boolean;
+      }>('DELETE', `${ws(w)}/connectors/${encodeURIComponent(connectionId)}`),
 
     /* Rafii side panel (site agent) */
     siteAgentTurn: (w: string, body: Record<string, unknown>) => send<SiteAgentTurnResult>('POST', `${ws(w)}/site-agent/turns`, body),

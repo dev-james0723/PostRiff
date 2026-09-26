@@ -7,7 +7,14 @@
  * and `postRoleDefault` mirrors REWORK_CUES through tests/fixtures/rework-cues.json.
  */
 
-export type ChipKind = "post" | "template" | "source" | "image" | "video"; // accounts/folders never become chips on the web
+export type ChipKind =
+  | "post"
+  | "template"
+  | "source"
+  | "skill"
+  | "connector_item"
+  | "image"
+  | "video"; // accounts/folders never become chips on the web
 export type PostRole = "rework" | "inspire";
 export type MediaRole = "post" | "reference";
 export type Slot = "A" | "B" | "C" | "D";
@@ -39,7 +46,7 @@ export interface Chip {
 }
 
 export interface Reference {
-  kind: "post" | "template" | "source";
+  kind: "post" | "template" | "source" | "skill" | "connector_item";
   id: string;
   label?: string;
   role?: PostRole;
@@ -193,6 +200,8 @@ export function labelFor(
   const fallback: Record<string, string> = {
     template: "Template",
     source: "Source",
+    skill: "Skill",
+    connector_item: "Connected item",
     folder: "Folder",
     campaign: "Campaign",
   };

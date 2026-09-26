@@ -212,11 +212,13 @@ export function AttachmentBar({
             )}
             snapshot={snapshot}
             owner={owner}
+            catalog={catalog}
             chips={chips}
             creditMode={creditMode}
             onPickDevice={() => deviceInput.current?.click()}
             onPickText={() => textInput.current?.click()}
             onPickItem={(item) => void attachments.addReference(item)}
+            onRememberConnectorItems={attachments.rememberConnectorItems}
             onAddAssets={(assets) => attachments.addLibrary(assets)}
             requestedView={requestedView}
             onRequestedViewHandled={onRequestedViewHandled}

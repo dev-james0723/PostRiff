@@ -6,7 +6,15 @@
  * No `@/` imports (node --test transpiles it).
  */
 
-export type PickerCategory = 'posts' | 'templates' | 'accounts' | 'folders' | 'sources' | 'library';
+export type PickerCategory =
+  | 'posts'
+  | 'templates'
+  | 'accounts'
+  | 'folders'
+  | 'sources'
+  | 'skills'
+  | 'connectors'
+  | 'library';
 
 export const CATEGORY_ALIASES: Record<PickerCategory, readonly string[]> = {
   posts: ['帖子', '帖', '貼文', '贴文', '草稿', '文章', 'post', 'posts', 'draft', 'drafts'],
@@ -14,6 +22,8 @@ export const CATEGORY_ALIASES: Record<PickerCategory, readonly string[]> = {
   accounts: ['帳號', '账号', '帳戶', '账户', '頻道', '频道', 'account', 'accounts', 'channel'],
   folders: ['資料夾', '资料夹', '文件夾', '文件夹', 'folder', 'folders'],
   sources: ['來源', '来源', '素材', '資料', '资料', 'source', 'sources', 'note', 'notes'],
+  skills: ['技能', '技巧', 'skill', 'skills'],
+  connectors: ['連接', '连接', 'connector', 'connectors', 'connected', 'app', 'apps'],
   library: [
     '相',
     '相片',
@@ -49,6 +59,8 @@ const KIND_CATEGORY: Record<string, PickerCategory> = {
   account: 'accounts',
   folder: 'folders',
   source: 'sources',
+  skill: 'skills',
+  connector_item: 'connectors',
   image: 'library',
   video: 'library'
 };

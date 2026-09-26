@@ -14,6 +14,22 @@ import { mergeResults, wantsServer, type PickerCategory } from './matcher';
 import { CATEGORY_ORDER, type PickerItem } from './picker-items';
 
 export const SEARCH_DEBOUNCE_MS = 250;
+export const LEGACY_SERVER_CATEGORIES: readonly PickerCategory[] = [
+  'posts',
+  'templates',
+  'accounts',
+  'folders',
+  'sources',
+  'library'
+];
+
+export function serverCategories(
+  categories?: readonly PickerCategory[]
+): PickerCategory[] {
+  return (categories ?? LEGACY_SERVER_CATEGORIES).filter((category) =>
+    LEGACY_SERVER_CATEGORIES.includes(category)
+  );
+}
 
 /** The server's groups flattened in the list's order, keeping only the categories asked for. */
 export function serverItems(
@@ -33,7 +49,10 @@ export function searchKey(
   enabled: boolean,
   categories?: readonly PickerCategory[]
 ): string {
-  return enabled && wantsServer(query) ? JSON.stringify([query, categories ?? []]) : '';
+  const supported = serverCategories(categories);
+  return enabled && supported.length > 0 && wantsServer(query)
+    ? JSON.stringify([query, supported])
+    : '';
 }
 
 export function usePickerSearch(

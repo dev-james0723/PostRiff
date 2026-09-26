@@ -15,7 +15,15 @@ export const turnStorageKey = (owner: string, workspace: string, conversationId:
 
 const TEXT_MAX = 20000;
 const CHIPS_MAX = 16;
-const KINDS = new Set(['post', 'template', 'source', 'image', 'video']);
+const KINDS = new Set([
+  'post',
+  'template',
+  'source',
+  'skill',
+  'connector_item',
+  'image',
+  'video'
+]);
 const ROLES = new Set(['rework', 'inspire', 'post', 'reference']);
 const SLOTS = new Set(['A', 'B', 'C', 'D']);
 const ID = /^[A-Za-z0-9_.:-]{1,120}$/;

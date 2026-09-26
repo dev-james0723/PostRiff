@@ -131,3 +131,17 @@ test('insertLabel uses 「」 next to CJK and “” otherwise, with no spaces a
   assert.deepEqual([en.value, en.caret], ['Write like “Spring concert” today', 27]);
   assert.equal(C.insertLabel('@x', 0, 2, 'piano_hk').value, '“piano_hk”');
 });
+
+
+test('explicit skill and connector references stay ordered and unchanged on the wire', () => {
+  const input = [
+    chip('skill', 'postriff-humanizer', { label: 'Humanizer' }),
+    chip('connector_item', 'ci_' + 'c'.repeat(32), { label: 'Launch brief' }),
+    chip('source', 's1', { label: 'Programme notes' })
+  ];
+  assert.deepEqual(C.requestFields(input, { imageGeneration: false }).references, [
+    { kind: 'skill', id: 'postriff-humanizer', label: 'Humanizer' },
+    { kind: 'connector_item', id: 'ci_' + 'c'.repeat(32), label: 'Launch brief' },
+    { kind: 'source', id: 's1', label: 'Programme notes' }
+  ]);
+});

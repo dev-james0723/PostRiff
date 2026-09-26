@@ -17,6 +17,8 @@ const KIND_ICON: Record<Chip['kind'], keyof typeof Icons> = {
   post: 'post',
   template: 'page',
   source: 'listDetails',
+  skill: 'sparkles',
+  connector_item: 'link',
   image: 'media',
   video: 'video'
 };
@@ -44,6 +46,8 @@ export function chipWord(chip: Chip, opts: { needsOk?: boolean } = {}): string {
   }
   if (chip.kind === 'post') return chip.role === 'rework' ? 'Rework' : 'For ideas';
   if (chip.kind === 'source' && opts.needsOk) return 'Needs your OK';
+  if (chip.kind === 'skill') return 'Skill';
+  if (chip.kind === 'connector_item') return 'Connected';
   return chip.kind === 'template' ? 'Template' : 'Source';
 }
 

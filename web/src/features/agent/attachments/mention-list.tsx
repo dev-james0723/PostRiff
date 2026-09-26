@@ -27,6 +27,8 @@ export const GROUP_LABELS: Record<PickerCategory, string> = {
   accounts: 'Accounts',
   folders: 'Folders',
   sources: 'Sources',
+  skills: 'Skills',
+  connectors: 'Connected apps',
   library: 'Library'
 };
 
@@ -36,6 +38,8 @@ const ICON: Record<PickerItem['kind'], keyof typeof Icons> = {
   account: 'account',
   folder: 'folder',
   source: 'listDetails',
+  skill: 'sparkles',
+  connector_item: 'link',
   image: 'media',
   video: 'video'
 };

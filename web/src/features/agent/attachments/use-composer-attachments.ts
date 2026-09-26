@@ -52,7 +52,13 @@ import {
 import { insertLabel, postRoleDefault, type Chip, type MediaRole, type PostRole } from './chips';
 import { CLOSED, reduceMention, type MentionState } from './mention';
 import { handleMentionKeyDown, MENTION_ROWS } from './mention-list';
-import { allPickerItems, flatten, pickerItems, type PickerItem } from './picker-items';
+import {
+  allPickerItems,
+  flatten,
+  pickerItems,
+  type ConnectorItemLike,
+  type PickerItem
+} from './picker-items';
 import { usePickerSearch } from './use-picker-search';
 import {
   blockerMessage,
@@ -204,6 +210,7 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
   const readTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [textFile, setTextFile] = useState<TextFileResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [connectorItems, setConnectorItems] = useState<ConnectorItemLike[]>([]);
   const eligible = readEligible(catalog, snapshot, Boolean(options.fixtureWriter));
   const eligibleRef = useRef(eligible);
   eligibleRef.current = eligible;
@@ -744,7 +751,9 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
     if (!saved) return;
     setRecovered(saved);
     const available = new Set(
-      allPickerItems(snapshot, owner).map((item) => `${item.kind}:${item.id}`)
+      allPickerItems(snapshot, owner, catalog?.skills ?? [], connectorItems).map(
+        (item) => `${item.kind}:${item.id}`
+      )
     );
     const { chips, dropped } = fromSaved(saved.chips, available, () => nextKey());
     dispatch({ type: 'restore', chips });
@@ -753,7 +762,7 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
         dropped.length === 1 ? `${dropped[0].label} removed.` : `${dropped.length} items removed.`
       );
     if (chips.some((chip) => chip.upload?.message === UPLOAD_STOPPED)) say(UPLOAD_STOPPED);
-  }, [nextKey, owner, say, snapshot, storageKey, workspaceId]);
+  }, [catalog?.skills, connectorItems, nextKey, owner, say, snapshot, storageKey, workspaceId]);
 
   /** Save the text with the chips (session only); the caller calls this where it saved text before. */
   const persist = useCallback(
@@ -782,8 +791,20 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
   const listId = `mention-${surface}-${conversationId ?? 'home'}`;
   const open = mention.anchor !== null;
   const localItems = useMemo(
-    () => (open ? flatten(pickerItems(snapshot, owner, mention.query)) : []),
-    [open, snapshot, owner, mention.query]
+    () =>
+      open
+        ? flatten(
+            pickerItems(
+              snapshot,
+              owner,
+              mention.query,
+              undefined,
+              catalog?.skills ?? [],
+              connectorItems
+            )
+          )
+        : [],
+    [catalog?.skills, connectorItems, open, snapshot, owner, mention.query]
   );
   // Typed queries also ask the server (debounced); its results win by id, local ones show until it answers.
   const items = usePickerSearch(mention.query, localItems, { enabled: open });
@@ -929,6 +950,13 @@ export function useComposerAttachments(options: ComposerAttachmentsOptions) {
     addFiles,
     addLibrary,
     addReference,
+    connectorItems,
+    rememberConnectorItems: (items: readonly ConnectorItemLike[]) =>
+      setConnectorItems((current) => {
+        const byId = new Map(current.map((item) => [item.referenceId, item]));
+        for (const item of items) byId.set(item.referenceId, item);
+        return [...byId.values()];
+      }),
     setRole,
     remove,
     undo,

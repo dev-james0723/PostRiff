@@ -1027,6 +1027,8 @@ export interface AttachmentsCatalog {
     video: { typicalMilliCredits: number; ceilingMilliCredits: number };
     consentAction: 'media_egress';
   };
+  /** Server-reviewed skills that may be explicitly bound to one drafting turn. */
+  skills?: { id: string; name: string; description: string; version: string }[];
 }
 
 /** Owner consent for photo and frame reading (SPEC §5.12). */
@@ -1100,10 +1102,27 @@ export type MediaNotesResult =
   | { assetId: string; status: 'unavailable'; reason: string; message: string }
   | { assetId: string; status: 'failed'; reason: string; message: string; retryable: boolean };
 
-export type PickerCategory = 'posts' | 'templates' | 'accounts' | 'folders' | 'sources' | 'library';
+export type PickerCategory =
+  | 'posts'
+  | 'templates'
+  | 'accounts'
+  | 'folders'
+  | 'sources'
+  | 'skills'
+  | 'connectors'
+  | 'library';
 
 export interface PickerItem {
-  kind: 'post' | 'template' | 'account' | 'folder' | 'source' | 'image' | 'video';
+  kind:
+    | 'post'
+    | 'template'
+    | 'account'
+    | 'folder'
+    | 'source'
+    | 'skill'
+    | 'connector_item'
+    | 'image'
+    | 'video';
   id: string;
   label: string;
   sublabel?: string;
@@ -1114,12 +1133,51 @@ export interface PickerItem {
   height?: number;
   duration?: number;
   href?: string;
+  provider?: 'notion' | 'gmail' | string;
+  connectionId?: string;
+  expiresAt?: number;
 }
 
 export interface PickerSearchResult {
   query: string;
   categories: Partial<Record<PickerCategory, PickerItem[]>>;
   verified: boolean;
+}
+
+export interface ProductivityConnectorProvider {
+  id: 'notion' | 'gmail' | string;
+  enabled: boolean;
+  configured: boolean;
+  scopes: string[];
+}
+
+export interface ProductivityConnectorConnection {
+  connectionId: string;
+  provider: 'notion' | 'gmail' | string;
+  account: string;
+  scopes: string[];
+  expiresAt: number | null;
+  revoked: boolean;
+}
+
+export interface ProductivityConnectorCatalog {
+  providers: ProductivityConnectorProvider[];
+  connections: ProductivityConnectorConnection[];
+}
+
+export interface ProductivityConnectorSearchItem {
+  referenceId: string;
+  connectionId: string;
+  provider: string;
+  title: string;
+  excerpt: string;
+  expiresAt: number;
+}
+
+export interface ProductivityConnectorSearchResult {
+  connectionId: string;
+  provider: string;
+  items: ProductivityConnectorSearchItem[];
 }
 
 /** One of the Markdown memory files rendered by the API (`GET /memory`). */
