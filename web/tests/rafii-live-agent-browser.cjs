@@ -508,6 +508,15 @@ async function slashSection(browser) {
     check('slash: axe finds no serious or critical issue in the panel with the menu open', issues.length === 0, issues);
     await shot(page, 'slash-desktop-1-menu-all-commands.png');
 
+    await menu.focus();
+    const activeBefore = await menu.getAttribute('aria-activedescendant');
+    await menu.press('ArrowDown');
+    const keyboardMoved = await until(async () => (await menu.getAttribute('aria-activedescendant')) !== activeBefore);
+    check('slash: the scrollable list keeps focus and supports arrow-key navigation', Boolean(keyboardMoved) && (await menu.evaluate((el) => document.activeElement === el)));
+    await menu.press('Escape');
+    const listEscaped = await menu.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true, () => false);
+    check('slash: Escape from the list returns focus to the composer and keeps the panel open', listEscaped && (await input.evaluate((el) => document.activeElement === el)) && (await panel(page).isVisible()));
+    await input.fill('');
     await input.fill('/wea');
     const filtered = await until(async () => {
       const rows = await menuOptions(page);
@@ -655,14 +664,14 @@ async function instrument(page) {
 
 const liveLog = (page) => page.evaluate(() => window.rafiiSceneLog ?? { log: [], statuses: [] });
 
-/** The mute button and status dot next to what `var(--destructive)` resolves to in the same subtree. */
+/** The mute button's paired foreground and red fill, with the red status dot. */
 function muteColours(page) {
   return page.evaluate(() => {
     const box = document.querySelector('#rafii-panel section[data-rafii-voice]');
     const button = box?.querySelector('[data-rafii-voice-mute]');
     const dot = box?.querySelector('[data-rafii-voice-dot]');
     const probe = document.createElement('span');
-    probe.style.color = 'var(--destructive)';
+    probe.style.color = 'var(--destructive-foreground)';
     probe.style.backgroundColor = 'var(--destructive)';
     (box ?? document.body).appendChild(probe);
     const resolved = getComputedStyle(probe);
@@ -674,6 +683,7 @@ function muteColours(page) {
       mute: button?.getAttribute('data-rafii-voice-mute') ?? null,
       label: button?.textContent?.trim() ?? null,
       buttonColor: button ? getComputedStyle(button).color : null,
+      buttonBackground: button ? getComputedStyle(button).backgroundColor : null,
       dot: dot?.getAttribute('data-rafii-voice-dot') ?? null,
       dotColor: dot ? getComputedStyle(dot).backgroundColor : null,
       status: box?.querySelector('[data-rafii-voice-status]')?.textContent?.trim() ?? null
@@ -681,12 +691,12 @@ function muteColours(page) {
   });
 }
 
-/** The Button has `transition-all`: the colour is read until it settles on the destructive one. */
+/** The Button has `transition-all`: read the foreground and fill until both settle. */
 async function waitRed(page) {
   let state = null;
   const ok = await until(async () => {
     state = await muteColours(page);
-    return state.pressed === 'true' && state.buttonColor === state.want.color && state.dotColor === state.want.background;
+    return state.pressed === 'true' && state.buttonColor === state.want.color && state.buttonBackground === state.want.background && state.dotColor === state.want.background;
   }, { timeout: 5000, interval: 100 });
   return { ok: Boolean(ok), state };
 }
@@ -754,8 +764,8 @@ async function voiceSection(browser) {
     const pressed = await box.getByRole('button', { name: 'Unmute', exact: true, pressed: true }).waitFor({ timeout: 10000 }).then(() => true, () => false);
     const red = await waitRed(page);
     check('voice: Mute becomes a pressed “Unmute” (aria-pressed=true, data-rafii-voice-mute=on)', pressed && red.state?.mute === 'on', red.state);
-    check('voice: … the button and the status dot turn the destructive colour (computed colour = var(--destructive))',
-      red.ok && before.buttonColor !== red.state.want.color && before.dot === 'live', { before, after: red.state });
+    check('voice: … the button fill and status dot turn red, with the button’s paired foreground for contrast',
+      red.ok && before.buttonBackground !== red.state.want.background && before.dot === 'live', { before, after: red.state });
     const micOff = await page.evaluate(() => window.rafiiLiveHarness.micEnabled() === false);
     check('voice: … the status says Microphone off and the microphone is off', (red.state?.status ?? '').startsWith('Microphone off') && micOff, { status: red.state?.status, micOff });
     const issues = await axe(page, '#rafii-panel');
