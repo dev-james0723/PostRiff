@@ -209,6 +209,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=4331)
     parser.add_argument("--credit-fixture", action="store_true", help="synthetic credit funding and model, disposable database only")
+    parser.add_argument("--phone-fixture", action="store_true", help="local fake phone identity/calls; no SMS or PSTN egress")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
@@ -229,6 +230,10 @@ def main():
     if args.credit_fixture:
         from launch_credit_fixture import configure
         configure(service, connection)
+    if args.phone_fixture:
+        from postriff_phase2.phone.runtime import attach
+        attach(service,{'RAFII_PHONE_ENABLED':'1','RAFII_PHONE_OUTBOUND_ENABLED':'1','RAFII_PHONE_SCHEDULED_ENABLED':'1',
+                        'RAFII_PHONE_PROACTIVE_ENABLED':'1','RAFII_PHONE_PROVIDER':'fake'})
     social = HostedSocial(service.oauth, providers, dev_assets, transport=transport)
 
     def on_verified(cur, workspace_id, job):

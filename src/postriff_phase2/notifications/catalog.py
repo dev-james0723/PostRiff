@@ -9,7 +9,7 @@ preference proposals are digest or in-app only.
 """
 from __future__ import annotations
 
-CATALOG_VERSION = "2026-09-24.1"
+CATALOG_VERSION = "2026-09-26.1"
 CATEGORIES = ("approvals", "publishing", "weekly", "automation", "channels", "engagement", "opportunities", "analytics", "learning",
               "budget", "billing", "security", "research", "assets", "campaigns")
 # Who receives an event, by the permission class a member must hold (permissions.CLASSES). "actor" = the person the
@@ -18,6 +18,7 @@ AUDIENCES = ("approve", "edit", "manage_connections", "reply", "owner", "actor",
 
 # channel defaults: in_app always on unless listed False; email/push: "immediate" | "digest" | "off".
 EVENTS = {
+    'phone.call_failed': {'category':'automation','severity':'warning','audience':'actor','email':'immediate','push':'immediate','template':'phone_call_failed'},
     "campaign.week_ready": {"category": "weekly", "severity": "action", "audience": "edit", "email": "immediate", "push": "immediate", "template": "weekly_ready"},
     "campaign.drafts_ready": {"category": "campaigns", "severity": "action", "audience": "edit", "email": "digest", "push": "off", "template": "drafts_ready"},
     "campaign.approval_required": {"category": "approvals", "severity": "action", "audience": "approve", "email": "immediate", "push": "immediate", "template": "approval_required"},
@@ -48,7 +49,7 @@ BREAKS_QUIET_HOURS = ("security",)
 # Per person per hour: beyond this an interrupting channel is downgraded to the digest (never dropped).
 RATE_LIMITS = {"push": 6, "email": 12}
 DIGEST_HOUR = 9  # local time of the daily digest; the weekly digest is Monday at this hour
-MAX_ATTEMPTS = {"email": 6, "push": 5, "in_app": 1}
+MAX_ATTEMPTS = {"email": 6, "push": 5, "in_app": 1, "phone": 1}
 PUBLISH_STATE_EVENTS = {"verified": "publish.verified", "failed": "publish.failed", "uncertain": "publish.uncertain", "scheduled": "publish.scheduled"}
 
 

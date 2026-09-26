@@ -442,7 +442,7 @@ def draft_get(ctx, draftId):
             "unknowns": [redact(u, 160) for u in variant.get("unknowns") or []][:6], "warnings": [redact(w, 200) for w in variant.get("warnings") or []][:6],
             "needsReview": bool(variant.get("needsReview")), "blockedByRetraction": bool(variant.get("blockedByRetraction")), "setAside": bool(variant.get("rejected")),
             "hasProposedUpdate": bool(variant.get("proposedUpdate")), "scheduled": [_job_view(ctx, j) for j in jobs][:3],
-            "fromAutomation": bool(variant.get("automation")), "text": text[:1500]}
+            "fromAutomation": bool(variant.get("automation")), "text": text[:1500], "textTruncated": len(text)>1500}
     return contracts.result(data, now=ctx.now)
 
 

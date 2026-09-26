@@ -187,6 +187,8 @@ def runtime_from_environment(environ=None):
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
+    from .phone.runtime import attach as attach_phone
+    attach_phone(service, values)
     return service, worker, {"projectUrl": project_url, "publishableKey": publishable, "provider": "supabase", "flow": "pkce"}
 
 
@@ -407,6 +409,9 @@ class HostedApplication:
                 from . import privacy
                 return self._json(start_response, 200, privacy.notice())
             # Email-provider webhook and one-click unsubscribe authenticate by signature/token, before the origin guard.
+            from .phone import http as phone_http
+            if (routed := phone_http.public(self, environ, start_response, method, path)) is not None:
+                return routed
             from .coworker import http as coworker_http
             if (routed := coworker_http.public(self, environ, start_response, method, path)) is not None:
                 return routed
@@ -473,6 +478,8 @@ class HostedApplication:
                 result["reminders"] = service.run_reminders()
                 from .coworker import runtime as coworker_runtime
                 result["coworker"] = coworker_runtime.cron(service)
+                from .phone.runtime import cron as phone_cron
+                result['phone'] = phone_cron(service)
                 learning = getattr(service, "learning", None)
                 if learning is not None:
                     result["learning"] = learning.sweep()
@@ -557,6 +564,8 @@ class HostedApplication:
                 # The Rafii Agent Runtime (text, voice, images); its routes live in agent_runtime_v2/http.py.
                 from .agent_runtime_v2.http import handle as agent_runtime_handle
                 return agent_runtime_handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'phone':
+                return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":

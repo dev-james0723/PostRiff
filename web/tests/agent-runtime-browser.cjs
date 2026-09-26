@@ -96,6 +96,8 @@ function approveBudget(workspaceId) {
 
 async function seed() {
   const { workspaceId } = await call('POST', '/api/auth/verify', {});
+  // Current browser voice offers a style picker before the first call. This regression fixture starts with a saved choice.
+  await call('PATCH', '/api/me', { agentStyle: { preset: 'friendly', chosen: true } });
   approveBudget(workspaceId);
   const start = await call('POST', `/api/workspaces/${workspaceId}/channels/linkedin/oauth/start`, { capability: 'publish' });
   const state = new URL(start.authorizeUrl).searchParams.get('state');

@@ -61,7 +61,9 @@ class NotificationService:
     def emit(self, cur, **event):
         if not self.enabled():
             return {"eventId": None, "created": False, "deliveries": [], "disabled": True}
-        return store.emit(cur, **event, now=self.clock(), email_available=self.email_available(), push_enabled=self.push_enabled())
+        phone = getattr(self.hosted,'phone',None)
+        return store.emit(cur, **event, now=self.clock(), email_available=self.email_available(), push_enabled=self.push_enabled(),
+                          phone_context_for=phone.notification_context if phone and phone.config.enabled('RAFII_PHONE_ENABLED') and phone.config.enabled('RAFII_PHONE_PROACTIVE_ENABLED') else None)
 
     def scan(self, cur, workspace_id, state, include_database=True, baseline=False):
         """Emit every event the workspace's authoritative state implies (idempotent). With `baseline` (the first scan of

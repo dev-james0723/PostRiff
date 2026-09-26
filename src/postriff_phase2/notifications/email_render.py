@@ -23,7 +23,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-TEMPLATE_VERSION = "rafii-email/1.0.3"
+TEMPLATE_VERSION = "rafii-email/1.0.4"
 LOCALES_PATH = Path(__file__).with_name("email_locales.json")
 FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang HK','PingFang TC','Noto Sans CJK TC','Microsoft JhengHei',sans-serif"
 SERIF = "Georgia,'Times New Roman','Songti TC','Noto Serif CJK TC',serif"
@@ -35,7 +35,7 @@ _SAFE_PATH = re.compile(r"^/app(?:/[A-Za-z0-9._~\-]*)*(?:\?[A-Za-z0-9._~\-=&%]*)
 TEMPLATES = ("weekly_ready", "drafts_ready", "approval_required", "campaign_blocked", "needs_input", "asset_review", "publish_scheduled",
              "publish_verified", "publish_failed", "publish_uncertain", "channel_reconnect", "automation_completed", "automation_failed", "engagement",
              "opportunity", "weekly_performance", "analytics_anomaly", "preference_proposed", "budget_threshold", "payment_failed", "trial_ending",
-             "subscription_active", "security_alert", "digest")
+             "subscription_active", "security_alert", "digest", "phone_call_failed")
 
 
 @lru_cache(maxsize=1)

@@ -33,6 +33,9 @@ def delete_account(service, workspace_id, token, confirmation):
 
 
 def _delete(service, workspace_id, principal):
+    phone = getattr(service, 'phone', None)
+    if phone:
+        phone.stop_for_user(principal)
     with service.connection_factory() as db, db.cursor() as cur:
         cur.execute("SELECT w.state,m.role FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE w.id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR UPDATE OF w", (workspace_id, principal))
         row = cur.fetchone()
@@ -112,6 +115,8 @@ def _delete(service, workspace_id, principal):
         cur.execute('DELETE FROM public.pr_notification_preferences WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_notification_deliveries WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_notification_events WHERE scope_key=%s', (f'user:{principal}',))
+        # Migration 033 has cascading profile FKs: identity, preferences, calls, events, delegation and schedules.
+        # Profile deletion below removes all phone data, including data in other workspaces.
         # Person-keyed growth data (migration 025): events carry a user id without an FK; assignments are keyed by subject.
         cur.execute('DELETE FROM public.pr_product_events WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_experiment_assignments WHERE subject_key IN (%s, %s)', (str(principal), str(workspace_id)))

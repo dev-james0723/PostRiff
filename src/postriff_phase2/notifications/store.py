@@ -7,6 +7,7 @@ dedupe key) is a no-op. No network call ever happens here.
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 
@@ -28,7 +29,7 @@ def _clean_payload(payload):
         if isinstance(value, str):
             if "@" in value and "." in value.split("@")[-1] and " " not in value.strip():
                 continue  # looks like an address: never stored
-            out[key] = value[:MAX_PAYLOAD_TEXT]
+            out[key] = re.sub(r'(?<!\w)\+?\d[\d ()-]{6,}\d(?!\w)', '[redacted phone]', value)[:MAX_PAYLOAD_TEXT]
         elif isinstance(value, bool) or isinstance(value, (int, float)):
             out[key] = value
         elif isinstance(value, list) and key == "metrics":
@@ -74,7 +75,8 @@ def recent_counts(cur, user_id, now):
 
 
 def emit(cur, *, workspace_id, event_type, dedupe_key, entity_type=None, entity_id=None, payload=None, actor=None, user_id=None,
-         grouping_key=None, correlation_id=None, occurred_at=None, expires_at=None, now=None, email_available=True, push_enabled=False, baseline=False):
+         grouping_key=None, correlation_id=None, occurred_at=None, expires_at=None, now=None, email_available=True, push_enabled=False, baseline=False,
+         phone_context_for=None, channel_filter=None):
     """Insert one event and its planned deliveries in the caller's transaction. Returns {eventId, created, deliveries}.
     `user_id` scopes a person-level event (security) that has no workspace. `baseline` records a condition that
     already existed when notifications were first turned on for this scope: the event is kept (so its dedupe key is
@@ -97,13 +99,17 @@ def emit(cur, *, workspace_id, event_type, dedupe_key, entity_type=None, entity_
     event_id = row[0]
     if baseline:
         return {"eventId": event_id, "created": True, "deliveries": [], "baseline": True}
-    event = {"event_type": event_type, "workspace_id": workspace_id, "severity": spec["severity"], "actor": actor or user_id}
+    event = {"event_type": event_type, "workspace_id": workspace_id, "severity": spec["severity"], "actor": actor or user_id,
+             "grouping_key": grouping_key or dedupe_key, "entity_type": entity_type, "entity_id": entity_id}
     recipients = planner.audience(members(cur, workspace_id), event, actor or user_id) if workspace_id else [p for p in [person(cur, user_id)] if p]
     planned = []
     for recipient in recipients:
         rows = planner.plan(event, recipient, preference_rows(cur, recipient["userId"]), now, push_available=push_enabled and push_available(cur, recipient["userId"]),
-                            email_available=email_available, recent=recent_counts(cur, recipient["userId"], now))
+                            email_available=email_available, recent=recent_counts(cur, recipient["userId"], now),
+                            phone_context=phone_context_for(cur,recipient,event) if phone_context_for else None)
         for item in rows:
+            if channel_filter is not None and item['channel'] not in channel_filter:
+                continue
             key = f"ntf_{uuid.uuid5(uuid.NAMESPACE_URL, f'{event_id}:{recipient['userId']}:{item['channel']}').hex}"
             status = item["status"]
             cur.execute("""INSERT INTO public.pr_notification_deliveries(event_id,workspace_id,user_id,channel,mode,status,next_attempt_at,idempotency_key,

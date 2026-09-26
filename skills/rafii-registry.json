@@ -4640,9 +4640,9 @@
   },
   {
    "id": "rafii.policy.notification-planning",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "kind": "policy",
-   "sha256": "sha256:13319593f3d5d809f4658aeff47c30f4e569ad0134e813a00f68e656e56f0159",
+   "sha256": "sha256:6f2f6c277583e2505103efa4715f686e63357d35cc28c0ee13f043642a2b0381",
    "description": "Deterministic notification planning: recipients by permission class, urgency, transactional status, quiet hours, digest, mute, unsubscribe, rate limits and dedupe. A model never decides these.",
    "intents": [
     "*"
@@ -4693,7 +4693,7 @@
      "ref": "postriff_phase2.notifications.catalog:BREAKS_QUIET_HOURS"
     }
    ],
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "rafii.evaluator.claim-evidence",

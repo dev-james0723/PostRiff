@@ -107,6 +107,29 @@ def live_prompt(locale: str | None, style=None) -> str:
     return prompt + "\n\n" + agent_style.voice_block(style)
 
 
+def session_config(model, locale, voice, style=None, history="", *, browser=False):
+    """Shared Live policy for browser and server transports; always client delegation to Rafii."""
+    session = {"model": model, "instructions": live_prompt(locale, style), "audio": {"output": {"voice": voice}},
+               "delegation": {"type": "client"}, "store": False}
+    if browser:
+        session["client"] = {"data_channel": {"allowed_client_events": list(ALLOWED_CLIENT_EVENTS), "allowed_server_events": list(ALLOWED_SERVER_EVENTS)}}
+    if history:
+        session["input"] = [{"type": "message", "role": "developer", "content": [{"type": "input_text", "text": history}]}]
+    return session
+
+
+def delegation_payload(conversation_id, message, key, *, time_zone="UTC"):
+    """Same turn contract as browser voice. Phone has no authenticated browser screen capabilities."""
+    return {"conversationId": conversation_id, "message": message, "modality": "voice", "idempotencyKey": key,
+            "timeZone": time_zone, "uiCapabilities": []}
+
+
+def speakable_result(result):
+    body = (result or {}).get("body") or {}
+    agent = (result or {}).get("result") or body.get("agent") or (result or {}).get("agent") or {}
+    return contracts.speakable(agent.get("speakableSummary") or body.get("text") or "I couldn’t confirm that change. Please check Rafii.", 1200)
+
+
 def live_transport(method, url, headers=None, body=None, timeout=20):
     """Server-to-OpenAI JSON call for Live session creation (the key stays on the server)."""
     import ssl
@@ -183,11 +206,7 @@ class VoiceSessions:
             artifact = self._artifact(cur, workspace_id, voice_session_id)
             artifact["voice"]["reservationId"] = reservation["reservationId"]
             self._save(cur, workspace_id, voice_session_id, artifact)
-        session = {"model": route.model, "instructions": live_prompt(locale, style), "audio": {"output": {"voice": voice}}, "delegation": {"type": "client"},
-                   "client": {"data_channel": {"allowed_client_events": list(ALLOWED_CLIENT_EVENTS), "allowed_server_events": list(ALLOWED_SERVER_EVENTS)}},
-                   "store": False}
-        if history:
-            session["input"] = [{"type": "message", "role": "developer", "content": [{"type": "input_text", "text": history}]}]
+        session = session_config(route.model, locale, voice, style, history, browser=True)
         try:
             response = self.transport("POST", LIVE_ENDPOINT, headers={"Authorization": f"Bearer {self.cfg.credential('openai')}"}, body={"session": session, "transport": {"type": "webrtc", "sdp": sdp}})
         except AlphaError as error:

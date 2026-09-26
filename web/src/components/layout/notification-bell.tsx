@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/compone
 import { BellNotificationList, useServerUnread } from '@/features/coworker/notifications/bell-list';
 import { useAttention } from '@/lib/use-attention';
 import { cn } from '@/lib/utils';
+import { CallRafii, PhoneWorkspaceSync } from '@/features/rafii-phone/call-rafii';
 
 /** What needs attention, in an elevated glass popover (DNA §21.17); opening an item routes to it. */
 export function NotificationBell() {
@@ -19,7 +20,7 @@ export function NotificationBell() {
   const count = (readable ? attention.items.length : 0) + unread;
   const label = `${readable ? `Notifications, ${attention.items.length} need attention` : 'Notifications, status unavailable'}${unread ? `, ${unread} unread` : ''}`;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <><PhoneWorkspaceSync /><Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant='ghost' size='icon' aria-label={label} className='relative' />}>
         <IconBell className='size-5' />
         {count > 0 && (
@@ -43,10 +44,11 @@ export function NotificationBell() {
           </Link>
         ))}
         <BellNotificationList onNavigate={() => setOpen(false)} />
+        <CallRafii />
         <Link href='/app/account/notifications' onClick={() => setOpen(false)} className='rafii-focus text-muted-foreground hover:text-foreground self-start rounded-sm text-xs underline underline-offset-4'>
           Notification settings
         </Link>
       </PopoverContent>
-    </Popover>
+    </Popover></>
   );
 }

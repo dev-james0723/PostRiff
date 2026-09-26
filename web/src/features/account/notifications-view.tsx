@@ -20,6 +20,7 @@ import { useWorkspace } from '@/lib/workspace/provider';
 import { NotificationSettings } from '@/features/coworker/notifications/notification-settings';
 import { useCoworkerFlag } from '@/lib/coworker/hooks';
 import { SettingsSection } from './settings-section';
+import { PhoneSettings } from '@/features/rafii-phone/phone-settings';
 
 const EMAILS = [
   { kind: 'Invitation', when: 'When someone is invited', to: 'The invitee' },
@@ -120,6 +121,7 @@ export function NotificationsView() {
         </p>
 
         <NotificationSettings />
+        <PhoneSettings />
       </div>
     </PageContainer>
   );

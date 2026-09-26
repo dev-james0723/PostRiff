@@ -50,6 +50,7 @@ import type {
 } from './types';
 import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentMessageBody, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
+import type { PhoneCall, PhonePreferences, PhoneSettingsData } from '@/lib/phone/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -319,6 +320,15 @@ export function createApi(getToken: TokenSource) {
     audit: (w: string) => get<{ events: AuditEvent[] }>(`${ws(w)}/audit`),
 
     /* privacy */
+    phoneSettings: (w: string) => get<PhoneSettingsData>(`${ws(w)}/phone`),
+    phonePreferences: (w: string, patch: Partial<PhonePreferences>) => send<{ preferences: PhonePreferences }>('PATCH', `${ws(w)}/phone/preferences`, patch),
+    phoneVerify: (w: string, number: string) => send<{ sent: boolean }>('POST', `${ws(w)}/phone/verification`, { number }),
+    phoneConfirm: (w: string, code: string) => send<{ verified: boolean }>('POST', `${ws(w)}/phone/verification/confirm`, { code }),
+    phoneDelete: (w: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/number`),
+    phoneCall: (w: string, body: { idempotencyKey: string; conversationId?: string | null }) => send<PhoneCall>('POST', `${ws(w)}/phone/calls`, body),
+    phoneEnd: (w: string, id: string) => send<{ ended: boolean; state?: string }>('POST', `${ws(w)}/phone/calls/${encodeURIComponent(id)}/end`),
+    phoneSchedule: (w: string, schedule: { weekdays: string[]; localTime: string; timeZone: string }) => send<{ id: string }>('POST', `${ws(w)}/phone/schedules`, { schedule }),
+    phoneDeleteSchedule: (w: string, id: string) => send<{ deleted: boolean }>('DELETE', `${ws(w)}/phone/schedules/${encodeURIComponent(id)}`),
     dataRequests: (w: string) => get<{ requests: DataRequest[] }>(`${ws(w)}/data-requests`),
     dataRequest: (w: string, body: Record<string, unknown>) =>
       send<Record<string, unknown> & { kind: string; status: string }>('POST', `${ws(w)}/data-requests`, body)

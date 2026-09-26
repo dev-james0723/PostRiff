@@ -1,0 +1,101 @@
+/** Actual settings + local fake API. Never calls a public host or real provider. */
+const { chromium } = require('playwright');
+const { randomUUID } = require('node:crypto');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const base = process.env.RAFII_WEB_URL || 'http://localhost:3293';
+if (!['localhost','127.0.0.1'].includes(new URL(base).hostname)) throw new Error('Local fake harness only');
+const id = randomUUID();
+const tourIds=[...fs.readFileSync(path.resolve(__dirname,'../src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map((match) => match[1]);
+const tours=JSON.stringify({completed:{},dismissed:Object.fromEntries(tourIds.map((name) => [name,1])),nudged:{}});
+const headers = { Authorization:`Bearer dev:${id}`, 'Content-Type':'application/json', 'X-PostRiff-Request':'founder-alpha' };
+async function api(method,path,body) {
+  const response=await fetch(base+path,{method,headers,...(body===undefined ? {} : {body:JSON.stringify(body)})});
+  assert.ok(response.ok,`${method} ${path}: ${response.status} ${await response.clone().text()}`);
+  return response.json();
+}
+(async () => {
+  const workspace=await api('POST','/api/auth/verify',{plan:'studio'});
+  const wid=workspace.workspaceId;
+  assert.ok(wid);
+  const initial=await api('GET',`/api/workspaces/${wid}/phone`);
+  assert.equal(initial.execution,'fake','Refuse verification or dialing unless transport is fake');
+  const pg=process.env.RAFII_HARNESS_PG_PORT || '55754';
+  const code=`import psycopg\nfrom consumer_fixtures import approve_budgets\napprove_budgets(lambda:psycopg.connect('host=127.0.0.1 port=${pg} dbname=postgres'), '${wid}')`;
+  execFileSync(process.env.RAFII_PYTHON || '/tmp/rafii-phone-env/bin/python',['-c',code],{cwd:path.resolve(__dirname,'../..'),env:{...process.env,PYTHONPATH:'src:tests'},stdio:'inherit'});
+  const fixture=(action,...args) => {
+    const result=execFileSync(process.env.RAFII_PYTHON || '/tmp/rafii-phone-env/bin/python',
+      ['tests/phase2/phone_browser_fixture.py',action,pg,id,wid,...args],
+      {cwd:path.resolve(__dirname,'../..'),env:{...process.env,PYTHONPATH:'src:tests'},encoding:'utf8'});
+    return JSON.parse(result.trim().split('\n').at(-1));
+  };
+  const draft=fixture('seed');
+  const browser=await chromium.launch({headless:true});
+  let page;
+  try {
+    const ctx=await browser.newContext({viewport:{width:1280,height:1000}});
+    await ctx.addCookies([{name:'postriff_dev',value:'1',url:base},{name:'postriff_dev_principal',value:id,url:base},{name:'postriff_theme',value:'rafii',url:base}]);
+    await ctx.addInitScript(({principal,tours}) => {localStorage.setItem('postriff-dev-principal',principal);localStorage.setItem('postriff-onboarding',tours);},{principal:id,tours});
+    page=await ctx.newPage();
+    let dialRequests=0;
+    page.on('request',(req) => {if(req.method()==='POST' && /\/phone\/calls$/.test(new URL(req.url()).pathname)) dialRequests++;});
+    await page.goto(base+'/app/account/notifications',{waitUntil:'domcontentloaded',timeout:120000});
+    console.log('Loaded phone settings page');
+    const section=page.locator('#phone-mode');
+    await section.getByText('No phone number saved.',{exact:true}).waitFor({timeout:90000});
+    console.log('Phone settings available');
+    assert.equal(dialRequests,0,'Navigation must not call');
+    await section.getByLabel('Phone number with country code').fill('+12025550123');
+    await section.getByRole('button',{name:'Send verification code',exact:true}).click();
+    await section.getByLabel('Verification code', {exact:true}).fill('123456');
+    await section.getByRole('button',{name:'Verify phone number',exact:true}).click();
+    await section.getByText('Phone ending 0123 · Verified',{exact:true}).waitFor();
+    assert.equal((await section.innerText()).includes('+12025550123'),false,'Only masked phone after verification');
+    await section.getByRole('switch',{name:'Enable Call Rafii',exact:true}).click();
+    const button=section.getByRole('button',{name:'Call Rafii',exact:true});
+    await button.waitFor();
+    await button.click();
+    await section.getByText(/Rafii call: ringing/).waitFor();
+    assert.equal(dialRequests,1,'Exactly one explicit call request');
+    await page.reload({waitUntil:'domcontentloaded'});
+    await section.getByText(/Rafii call: ringing/).waitFor();
+    assert.equal(dialRequests,1,'Reload must not redial');
+    const ringing=await api('GET',`/api/workspaces/${wid}/phone`);
+    await page.goto(base+'/app/queue?view=drafts',{waitUntil:'domcontentloaded'});
+    await page.getByText('First LinkedIn draft',{exact:true}).first().waitFor({timeout:90000});
+    assert.equal(await page.getByText(draft.editedText,{exact:true}).count(),0,'Draft is not edited before delegation');
+    const delegated=fixture('delegate',ringing.calls[0].id,draft.draftId);
+    assert.match(delegated.spoken,/shortened and warmed/);
+    await page.getByText(delegated.editedText,{exact:true}).first().waitFor({timeout:90000});
+    await page.getByText('First LinkedIn draft',{exact:true}).first().waitFor();
+    assert.equal(dialRequests,1,'Opening the actual edited draft never dials');
+    await page.screenshot({path:'/tmp/rafii-phone-edited-draft.png',fullPage:true});
+    await page.goto(base+'/app/account/notifications',{waitUntil:'domcontentloaded'});
+    await section.getByText(/Rafii call: live/).waitFor();
+    await section.getByRole('button',{name:'End call',exact:true}).click();
+    await button.waitFor();
+    await section.getByRole('switch',{name:'Allow scheduled briefings',exact:true}).click();
+    await section.getByRole('button',{name:'Add briefing',exact:true}).click();
+    await section.getByRole('button',{name:'Remove briefing',exact:true}).waitFor();
+    const stored=await api('GET',`/api/workspaces/${wid}/phone`);
+    assert.equal(stored.schedules.length,1);
+    assert.equal(stored.calls.length,1);
+    assert.equal(stored.calls[0].state,'completed');
+    await page.setViewportSize({width:390,height:844});
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Mobile with history and briefing fits viewport');
+    await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+    const violations=await page.evaluate(async () => (await window.axe.run('#phone-mode',{resultTypes:['violations']})).violations.filter((v) => ['serious','critical'].includes(v.impact)).map((v) => ({id:v.id,impact:v.impact,nodes:v.nodes.map((node) => node.target)})));
+    assert.deepEqual(violations,[],'Phone settings have no serious or critical accessibility violations');
+    await section.screenshot({path:'/tmp/rafii-phone-settings-mobile.png'});
+    await section.getByRole('button',{name:'Remove briefing',exact:true}).click();
+    await section.getByRole('button',{name:'Revoke and delete phone number',exact:true}).click();
+    await section.getByText('No phone number saved.',{exact:true}).waitFor();
+    await page.setViewportSize({width:390,height:844});
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Mobile fits viewport');
+    const out=process.env.RAFII_PHONE_BROWSER_EVIDENCE || '/tmp/rafii-phone-browser.png';
+    await page.screenshot({path:out,fullPage:true});
+    console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
+  } finally {if(page) await page.screenshot({path:'/tmp/rafii-phone-browser-final.png',fullPage:true}).catch(() => {});await browser.close();}
+})().catch((error) => {console.error(error); process.exitCode=1;});

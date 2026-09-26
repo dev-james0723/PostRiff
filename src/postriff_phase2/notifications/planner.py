@@ -104,7 +104,7 @@ def audience(members, event, actor=None):
     return [m for m in members if m.get("active", True) and m["membership"].allows(who)]
 
 
-def plan(event, recipient, prefs_rows, now, *, push_available=False, email_available=True, recent=None):
+def plan(event, recipient, prefs_rows, now, *, push_available=False, email_available=True, recent=None, phone_context=None):
     """Planned deliveries for one person: [{channel, mode, status, next_attempt_at, reason}]. Suppressed rows are
     kept (status 'suppressed', with the reason) so the audit shows why nothing was sent."""
     spec = catalog.spec(event["event_type"])
@@ -162,4 +162,11 @@ def plan(event, recipient, prefs_rows, now, *, push_available=False, email_avail
         else:
             when = quiet_end_after(now, prefs) if quiet else now
             out.append({"channel": "push", "mode": "immediate", "status": "pending", "next_attempt_at": when, "reason": "quiet_hours" if when != now else None})
+    if phone_context and not muted:
+        from ..phone.planner import eligibility
+        context = dict(phone_context)
+        phone_prefs = context.pop('prefs')
+        reason = eligibility('proactive',phone_prefs,now=now,event_type=event['event_type'],**context)
+        if reason is None:
+            out.append({'channel':'phone','mode':'immediate','status':'pending','next_attempt_at':now,'reason':None})
     return out
