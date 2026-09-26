@@ -573,7 +573,7 @@ def ui_guide(ctx, guideId, auto=False):
 
 def _save_style(ctx, change):
     """(persisted, saved style). Merges a validated change into this person's own style (public.pr_profiles.agent_style,
-    migration 026) with a guarded UPDATE: their row only, never a deleted profile. It runs inside a savepoint, so a
+    migration 030) with a guarded UPDATE: their row only, never a deleted profile. It runs inside a savepoint, so a
     database without the column (or any failure) leaves the turn's transaction usable and nothing is claimed as saved."""
     import json
     from ..agent_runtime_v2 import style as agent_style
@@ -591,7 +591,7 @@ def _save_style(ctx, change):
             saved = ctx.cur.rowcount == 1
         ctx.cur.execute(f"RELEASE SAVEPOINT {mark}")
         return saved, (merged if saved else None)
-    except Exception:  # noqa: BLE001 — migration 026 not applied (or any failure): the panel still gets the change, unsaved
+    except Exception:  # noqa: BLE001 — migration 030 not applied (or any failure): the panel still gets the change, unsaved
         ctx.cur.execute(f"ROLLBACK TO SAVEPOINT {mark}")
         return False, None
 

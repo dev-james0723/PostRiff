@@ -1325,7 +1325,7 @@ def _():
     return {"actual": {"guide": guide[0]["guideId"], "auto": guide[0]["auto"], "screenItems": len(state["screen"]["items"])}}
 
 
-@scenario("LA02", "Live agent by voice: a style change reaches the panel (saved when migration 026 is applied, never a failed turn without it); goodbye ends the call",
+@scenario("LA02", "Live agent by voice: a style change reaches the panel (saved when migration 030 is applied, never a failed turn without it); goodbye ends the call",
           "Talk a bit slower please · ok bye for now", "voice_command {style, pace slower}; saved and verified with the column, unsaved and unclaimed without it; voice_command {end_call}")
 def _():
     conversation = fresh_conversation("live agent voice")

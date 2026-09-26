@@ -44,7 +44,7 @@ PROFILE_NAME_MAX = 80
 # server itself can resolve, so a stored zone never breaks scheduling later.
 LOCALE_TAG = re.compile(r"^[a-z]{2,3}(?:-[A-Za-z]{2,4})?(?:-[A-Z]{2})?$")
 ZONE_NAME = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+\-]+){0,2}$")
-# How Rafii talks to the person (migration 026, agent_runtime_v2/style.py). This code can run before 026 is applied:
+# How Rafii talks to the person (migration 030, agent_runtime_v2/style.py). This code can run before 030 is applied:
 # reading then falls back to the default style, and saving asks the person to try again later.
 AGENT_STYLE_COLUMN = "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid='public.pr_profiles'::regclass AND attname='agent_style' AND attnum>0 AND NOT attisdropped)"
 AGENT_STYLE_NOT_READY = "Rafii's style can't be saved yet. Try again after the update finishes."
@@ -698,7 +698,7 @@ class HostedWorkspaceService:
                 fresh = self._touch_session(cur, principal, session_id, client_label)
                 cur.execute("SELECT coalesce(p.display_name,''),extract(epoch from e.enforced_at),coalesce(p.time_zone,''),coalesce(p.locale,''),coalesce(p.alert_new_device,false) FROM public.pr_profiles p LEFT JOIN public.pr_mfa_enforcement e ON e.user_id=p.user_id WHERE p.user_id=%s AND p.deleted_at IS NULL", (principal,))
                 row = cur.fetchone()
-                # A savepoint-guarded read of its own: before migration 026 the default style applies, and the session
+                # A savepoint-guarded read of its own: before migration 030 the default style applies, and the session
                 # recorded above still commits.
                 style = agent_style.load(cur, principal)
         if fresh:
@@ -762,7 +762,7 @@ class HostedWorkspaceService:
     @staticmethod
     def _saved_agent_style(cur, principal):
         """The saved style, locked until this change commits so two quick changes can't undo each other. Before
-        migration 026 there is nowhere to save it yet: 503, and nothing else in the request is written either."""
+        migration 030 there is nowhere to save it yet: 503, and nothing else in the request is written either."""
         cur.execute(AGENT_STYLE_COLUMN)
         ready = cur.fetchone()
         if not (ready and ready[0]):

@@ -35,7 +35,7 @@ James asked (2026-09-25, after testing production voice) for:
 - Navigation cards already carry `auto` (`site_agent/contracts.py: navigation(..., auto=False)`); the Manager's `ui_navigate` fills `ctx.ledger.navigation`.
 - The tour engine (`web/src/features/onboarding/*`) spotlights `data-tour` targets and can open a route first.
 - Skills: the writing pipeline already binds `postriff-content-craft` plus the destination's channel skill (e.g. `postriff-channel-instagram`, `postriff-channel-linkedin`), but no tool can list them. `james-au-*` skills are personal and must never be exposed.
-- Person preferences live on `public.pr_profiles` (migration 011). Migrations stop at 025. **026 is reserved for this work**; the chat-attachments branch will use 027.
+- Person preferences live on `public.pr_profiles` (migration 011). Migrations stop at 025, and the ai-routing branch (`rafii/ai-routing-renumber-026-029`) already claims 026–029. **030 is this work's migration**; the chat-attachments branch will use 031.
 
 ## Contract 1 — Agent style (owner: slice D; everyone reads it)
 
@@ -43,14 +43,14 @@ The shared modules are already written; do not change their exported names:
 - Server: `src/postriff_phase2/agent_runtime_v2/style.py` (`normalize`, `validate_patch`, `merge`, `load(cur, principal)`, `text_block`, `voice_block`, `voice_id`, `locale`, `PRESETS`).
 - Web: `web/src/lib/agent-runtime/style.ts` (types, `DEFAULT_STYLE`, `PRESETS`, labels, `normalizeStyle`, `presetOf`).
 
-**Storage.** Migration `026_agent_style.sql`:
+**Storage.** Migration `030_agent_style.sql`:
 
 ```sql
 alter table public.pr_profiles add column if not exists agent_style jsonb not null default '{}'::jsonb
   check (jsonb_typeof(agent_style)='object' and pg_column_size(agent_style) <= 512);
 ```
 
-Add `\ir ../../migrations/postriff/026_agent_style.sql` to `tests/phase2/rls.sql`.
+Add `\ir ../../migrations/postriff/030_agent_style.sql` to `tests/phase2/rls.sql`.
 
 **API.**
 - `GET /api/me` → `preferences.agentStyle` (normalised).
@@ -250,7 +250,7 @@ Each slice works in its own worktree and branch, cut from `feat/rafii-live-agent
 | A — voice panel | `feat/rla-voice` · `James-Au-Studio-rla-voice` | `web/src/features/rafii-voice/voice-mode.tsx`, `voice-indicator.tsx`, `web/src/lib/agent-runtime/voice-session.ts`, `live-transport.ts`, new `panel-commands.ts`, `web/tests/*voice*`/`*panel-commands*` tests |
 | B — backend tools & prompts | `feat/rla-backend` · `James-Au-Studio-rla-backend` | `src/postriff_phase2/agent_runtime_v2/*` except `style.py`, `src/postriff_phase2/site_agent/{tools.py,contracts.py,routes.py,guides.py(new)}`, related `tests/test_*`, `docs/design/site-agent/agent-runtime/README.md` |
 | C — guides, cursor, page outline, answer actions | `feat/rla-guide` · `James-Au-Studio-rla-guide` | new `web/src/features/rafii-guide/*`, `web/src/features/onboarding/*`, `web/src/features/site-agent/{answer.tsx,chat.tsx,use-page-context.ts}`, `web/src/lib/site-agent/types.ts`, `web/src/lib/agent-runtime/types.ts`, `data-tour`/`data-guide-safe` attributes on guide target pages, the app-shell mount, `web/tests/*guide*` tests |
-| D — style settings | `feat/rla-style` · `James-Au-Studio-rla-style` | `migrations/postriff/026_agent_style.sql`, `tests/phase2/rls.sql`, `src/postriff_phase2/hosted.py` (me/profile only), `web/src/lib/api/{client.ts,types.ts}` (me/preferences only), `web/src/lib/agent-runtime/use-agent-style.ts`, `web/src/features/rafii-voice/style-sheet.tsx`, `web/src/features/site-agent/panel.tsx` (style button), the account preferences section, tests |
+| D — style settings | `feat/rla-style` · `James-Au-Studio-rla-style` | `migrations/postriff/030_agent_style.sql`, `tests/phase2/rls.sql`, `src/postriff_phase2/hosted.py` (me/profile only), `web/src/lib/api/{client.ts,types.ts}` (me/preferences only), `web/src/lib/agent-runtime/use-agent-style.ts`, `web/src/features/rafii-voice/style-sheet.tsx`, `web/src/features/site-agent/panel.tsx` (style button), the account preferences section, tests |
 | E — slash commands | `feat/rla-commands` · `James-Au-Studio-rla-commands` | new `web/src/lib/agent-runtime/commands.ts`, new `web/src/features/rafii-commands/*`, `web/tests/*command*` tests |
 
 Stubs exist so that the other slices compile before the owner lands; each owner replaces its stub and keeps the exported names:

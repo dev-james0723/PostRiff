@@ -1,9 +1,9 @@
-"""Rafii's style on the person's profile (migration 026) on disposable PostgreSQL: the default, a change saved and
+"""Rafii's style on the person's profile (migration 030) on disposable PostgreSQL: the default, a change saved and
 read back on /api/me, refused values, another person's row untouched, what the browser role may do with the column,
-the column's own checks, and this code running before 026 is applied (reading falls back to the default, saving
+the column's own checks, and this code running before 030 is applied (reading falls back to the default, saving
 waits, and nothing else breaks).
 
-Run through scripts/postriff_pg_suite.py (rls.sql loads migrations up to 026).
+Run through scripts/postriff_pg_suite.py (rls.sql loads migrations up to 030).
 """
 import json
 import sys
@@ -21,7 +21,7 @@ DSN = "host=127.0.0.1 port=55438 dbname=postgres"
 ONE = "00000000-0000-0000-0000-000000000001"
 SEVEN = "00000000-0000-0000-0000-000000000007"
 DEFAULT = style.normalize({})
-MIGRATION = ROOT / "migrations/postriff/026_agent_style.sql"
+MIGRATION = ROOT / "migrations/postriff/030_agent_style.sql"
 checks = []
 
 
@@ -127,7 +127,7 @@ refused("UPDATE public.pr_profiles SET agent_style=NULL WHERE user_id=%s", (ONE,
 assert stored(ONE) == before
 checks.append("the database refuses a non-object, an oversized value and NULL")
 
-# 7. Before migration 026: /api/me answers with the default, other preferences save, a style change waits (503).
+# 7. Before migration 030: /api/me answers with the default, other preferences save, a style change waits (503).
 with connection() as db:
     db.execute("ALTER TABLE public.pr_profiles DROP COLUMN agent_style")
 early = service.me("one-early")
@@ -147,6 +147,6 @@ applied = service.update_profile("one", {"agentStyle": {"preset": "concise", "ch
 assert applied["preferences"]["agentStyle"] == {**DEFAULT, **style.PRESETS["concise"], "chosen": True}
 with connection() as db:
     assert db.execute("SELECT count(*) FROM pg_constraint WHERE conrelid='public.pr_profiles'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%agent_style%'").fetchone()[0] == 1
-checks.append("before 026 /api/me reads the default and keeps its session, other preferences save, style changes return 503 and write nothing; applying 026 (twice) restores saving")
+checks.append("before 030 /api/me reads the default and keeps its session, other preferences save, style changes return 503 and write nothing; applying 030 (twice) restores saving")
 
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))

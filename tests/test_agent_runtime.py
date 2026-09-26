@@ -771,7 +771,7 @@ class LivePromptTest(unittest.TestCase):
         started, session, _ = self.start_voice({"locale": "en", "voice": "sage"}, stored)
         self.assertEqual((started["locale"], started["voice"], session["audio"]["output"]["voice"]), ("en", "sage", "sage"), "an explicit choice wins")
         started, session, _ = self.start_voice({}, stored, column=False)
-        self.assertEqual((started["locale"], started["voice"]), ("auto", "marin"), "before migration 026: the default style")
+        self.assertEqual((started["locale"], started["voice"]), ("auto", "marin"), "before migration 030: the default style")
         self.assertTrue(session["instructions"].endswith(agent_style.voice_block({})))
         self.assertLess(len(session["instructions"]), 4000)
 
@@ -1014,7 +1014,7 @@ class LiveAgentToolsTest(unittest.TestCase):
         self.assertIsNone(answer_policy.check("I've changed how I talk to you: slower and shorter from now on.", styled.ledger))
         unsaved = live_ctx(request="be more playful", repository=CursorRepository(workspace_state(), column=False))
         out = tool_adapter.execute(unsaved, tool_adapter.REGISTRY["ui_voice"], {"command": "style", "style": {"tone": "playful"}})
-        self.assertEqual((out["ok"], out["data"]["persisted"]), (True, False), "migration 026 missing: never a crash, never claimed as saved")
+        self.assertEqual((out["ok"], out["data"]["persisted"]), (True, False), "migration 030 missing: never a crash, never claimed as saved")
         self.assertEqual(unsaved.ledger.changed, [])
         self.assertEqual(unsaved.ledger.voice_commands[0]["style"], {"tone": "playful"}, "the panel still applies it")
         bad = tool_adapter.execute(live_ctx(), tool_adapter.REGISTRY["ui_voice"], {"command": "style", "style": {"tone": "sarcastic"}})

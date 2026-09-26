@@ -703,7 +703,7 @@ class LiveAgentSiteToolsTest(unittest.TestCase):
     """Rafii live agent, Contract 2: ui.guide and ui.voice are client actions like ui.navigate."""
 
     class Cursor:
-        """Records SQL; `column=False` behaves like a database without migration 026's agent_style column."""
+        """Records SQL; `column=False` behaves like a database without migration 030's agent_style column."""
 
         def __init__(self, column=True, stored=None, row=True):
             self.column, self.stored, self.row = column, stored, row

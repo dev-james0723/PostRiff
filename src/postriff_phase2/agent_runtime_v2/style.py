@@ -1,6 +1,6 @@
 """How Rafii talks to one person: tone, detail, speaking pace, voice, language and initiative.
 
-A person-level setting (not per workspace) stored on public.pr_profiles.agent_style (migration 026) as a small JSON
+A person-level setting (not per workspace) stored on public.pr_profiles.agent_style (migration 030) as a small JSON
 object of enum values. It shapes the Manager's written answer and `speakable`, and GPT-Live's spoken delivery.
 Only enum values are stored and only fixed sentences chosen by them reach a prompt, never the person's own words.
 """
@@ -101,7 +101,7 @@ def merge(current, change) -> dict:
 
 
 def load(cur, principal) -> dict:
-    """The person's style, or the default. Tolerates a database where migration 026 has not been applied yet."""
+    """The person's style, or the default. Tolerates a database where migration 030 has not been applied yet."""
     mark = "agent_style_read"
     try:
         cur.execute(f"SAVEPOINT {mark}")

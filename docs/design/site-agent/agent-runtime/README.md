@@ -97,7 +97,7 @@ unless the `RAFII_*` flags are set; with them off the site agent answers exactly
   `POST https://api.openai.com/v1/live/sessions` using the project key: `gpt-live-1`, a short Live prompt (template
   headings, delegation rules, language line), client delegation, an explicit data-channel allowlist, `store: false`, and
   the conversation so far as history. Only the SDP answer and ids return. The voice and language come from the request
-  when it names valid ones, otherwise from the person's style (`style.load`, default before migration 026); the Live
+  when it names valid ones, otherwise from the person's style (`style.load`, default before migration 030); the Live
   prompt ends with the style's delivery lines (`style.voice_block`), and the start response returns the `locale` and
   `voice` the call actually uses. The Live prompt lists every backend capability (workspace, web search and weather,
   images, drafting with the platform skills, the screen, navigation and guides, panel control), never says it can't look
@@ -144,7 +144,7 @@ Contracts: `docs/design/rafii-live-agent/CONTRACTS.md` (2, 3, 6, 7 are built her
   `guide_card {type, guideId, routeId, href, title, summary, auto}` from `site_agent/guide_manifest.json`
   (`site_agent/guides.py`: `load`, `find`, `match`); `ui.voice {command: end_call|mute|stop_speaking|style, style?}` →
   `voice_command {type, command, style?}`, a style patch validated by `style.validate_patch` and saved with a guarded
-  `UPDATE public.pr_profiles SET agent_style` inside a savepoint (`persisted: false` before migration 026; never a failed
+  `UPDATE public.pr_profiles SET agent_style` inside a savepoint (`persisted: false` before migration 030; never a failed
   turn); `ui.navigate` takes `auto`. `auto` is honoured only when the person's own words ask to be taken somewhere or to
   be shown how (a model's choice alone leaves a card to click), and at most one block acts by itself (an auto guide wins
   over auto navigation). A page that didn't declare the `guide` capability gets a plain link; without `voice`, no

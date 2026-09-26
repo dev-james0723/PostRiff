@@ -345,7 +345,7 @@ class SessionsAndProfile(unittest.TestCase):
 
 
 class UnmigratedCursor(FakeCursor):
-    """A database before migration 026: any statement naming the agent_style column fails (savepoints still work)."""
+    """A database before migration 030: any statement naming the agent_style column fails (savepoints still work)."""
     def execute(self, sql, params=None):
         if "agent_style" in sql and "SAVEPOINT" not in sql:
             self.executed.append((sql, params))
@@ -365,7 +365,7 @@ class AgentStyleOnProfile(unittest.TestCase):
         self.assertEqual(statements[2:], ["SAVEPOINT agent_style_read", "SELECT agent_style FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", "RELEASE SAVEPOINT agent_style_read"])
         self.assertEqual(cursor.executed[3][1], (PRINCIPAL,))
 
-    def test_me_answers_with_the_default_style_before_migration_026(self):
+    def test_me_answers_with_the_default_style_before_migration_030(self):
         cursor = UnmigratedCursor([(None, 1), (("James", None, "Asia/Hong_Kong", "", False), 1)])
         me = service(cursor, verifier()).me("t")
         self.assertEqual(me["preferences"], {"timeZone": "Asia/Hong_Kong", "locale": "", "alertNewDevice": False, "agentStyle": DEFAULT_STYLE})
@@ -426,7 +426,7 @@ class AgentStyleOnProfile(unittest.TestCase):
             service(cursor, verifier()).update_profile("t", {"displayName": "James", "agentStyle": {"tone": "rude"}})
         self.assertEqual(cursor.executed, [])
 
-    def test_saving_waits_for_migration_026_and_writes_nothing_else(self):
+    def test_saving_waits_for_migration_030_and_writes_nothing_else(self):
         for changes in ({"agentStyle": {"preset": "friendly", "chosen": True}}, {"displayName": "James", "agentStyle": {"tone": "direct"}}):
             with self.subTest(changes=changes):
                 cursor = FakeCursor([((False,), 1)])
