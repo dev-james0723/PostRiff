@@ -20,7 +20,7 @@ import re
 
 from postriff_alpha.domain import AlphaError, clean, uid
 
-from .. import automation_edit, intent as writing_intent, request_model
+from .. import automation_edit, intent as writing_intent, request_model, turn_references
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import Membership, require
@@ -106,6 +106,9 @@ class SiteAgentService:
         text = clean(payload.get("message", ""), contracts.MAX_MESSAGE)
         if not text:
             raise AlphaError("Ask Rafii something.", 400)
+        # Chips on the message (chat-context SPEC §5.2), checked for shape before anything else; a drafting turn forwards
+        # them to the writer, any other answer reports them unused.
+        refs = turn_references.parse(payload)
         key = clean(payload.get("idempotencyKey", ""), 100) or uid()
         run_key = KEY_PREFIX + key
         page = contracts.page_context(payload.get("pageContext"))
@@ -179,14 +182,15 @@ class SiteAgentService:
                             delegate = {"conversationId": conversation_id, "kind": reading["operate"], **prepared}
                     else:
                         delegate = {"conversationId": conversation_id, "kind": reading["operate"]}
+            chips_report = turn_references.unused_all(state, refs, "not_a_drafting_turn") if turn_references.present(refs) and (delegate is None or delegate.get("kind") == "answer") else None
             if delegate is None and after_turn is None:
-                return self._guide(cur, workspace_id, principal, member, state, conversation_id, text, page, reading, model_id, zone, now, run_key, names, focus, shown=shown)
+                return self._guide(cur, workspace_id, principal, member, state, conversation_id, text, page, reading, model_id, zone, now, run_key, names, focus, shown=shown, chips_report=chips_report)
         if after_turn == "link":
             # The campaign's own action, as the person; the edit permission is checked again when it runs.
             reading["link"]["result"] = self._run_link(workspace_id, token, reading["link"])
             with self.repository.transaction(token, workspace_id) as (cur, row, principal):
                 return self._guide(cur, workspace_id, principal, self._member(row), self.ideas._state(row), conversation_id, text, page, reading, model_id, zone, now,
-                                   run_key, names, focus, shown=shown)
+                                   run_key, names, focus, shown=shown, chips_report=chips_report)
         if after_turn == "compound":
             from . import compound as flow
             plan = reading["compound"]
@@ -197,7 +201,7 @@ class SiteAgentService:
             plan = flow.advance(self, workspace_id, token, plan, principal=principal, now=now, zone=zone, text=text)
             with self.repository.transaction(token, workspace_id) as (cur, row, principal):
                 return self._guide(cur, workspace_id, principal, self._member(row), self.ideas._state(row), conversation_id, text, page, {**reading, "compound": plan},
-                                   model_id, zone, now, run_key, names, focus, append_user=delegate is None, shown=shown)
+                                   model_id, zone, now, run_key, names, focus, append_user=delegate is None, shown=shown, chips_report=chips_report)
         return self._delegate(workspace_id, token, delegate, text, key, model_id, zone, payload)
 
     _DAY_ITEM = re.compile(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)'?s\s+(post|draft)\b"
@@ -311,8 +315,13 @@ class SiteAgentService:
         return prepared
 
     def _delegate(self, workspace_id, token, delegate, text, key, model_id, zone, payload):
-        """Writing requests go to the writing pipeline itself (IdeasService.turn), in the same conversation."""
+        """Writing requests go to the writing pipeline itself (IdeasService.turn), in the same conversation. Chips go with
+        a drafting request as sent; a post the focus already hands in (`materialRef`) is reported there as a duplicate."""
         request = {"text": text, "idempotencyKey": key, "timeZone": zone}
+        if delegate.get("kind") != "answer":
+            for name in ("references", "attachments"):
+                if name in payload:
+                    request[name] = payload[name]
         said = payload.get("message") if isinstance(payload.get("message"), str) else ""
         if said.strip() and said.strip() != (text or "").strip():
             # The writer gets one step's instruction ("Shorten this draft"); the conversation keeps what the person typed.
@@ -331,7 +340,7 @@ class SiteAgentService:
         return {"conversationId": delegate["conversationId"], "delegated": True, "kind": delegate["kind"],
                 "status": result.get("status"), "runId": result.get("runId"), "result": result}
 
-    def _guide(self, cur, workspace_id, principal, member, state, conversation_id, text, page, reading, model_id, zone, now, run_key, names, focus=None, append_user=True, shown=None):
+    def _guide(self, cur, workspace_id, principal, member, state, conversation_id, text, page, reading, model_id, zone, now, run_key, names, focus=None, append_user=True, shown=None, chips_report=None):
         if reading["intent"] == "forbidden" and reading["forbidden"]["category"] == "role":
             plan = {"procedures": ["policy_block"], "tools": [("route.describe", {"routeId": "roles"})], "navigate": ("roles", {})}
         elif reading["intent"] in ("clarify", "schedule"):
@@ -374,6 +383,10 @@ class SiteAgentService:
             self._emit(cur, workspace_id, run_id, "progress.updated", stage="retrieval", snapshot=data["snapshot"], retrieval=data["retrieval"],
                        passages=len(data["passages"]), sufficient=data["sufficient"])
         answer = composer.compose(reading, page, plan, results, language=reading["language"], trace_id=run_id, retrieved_at=contracts.iso(now), text=text)
+        if chips_report:
+            # Chips never silently vanish (SPEC §6.10): one warning, and every item listed as unused.
+            answer["blocks"].insert(0, contracts.warning(turn_references.REASONS["not_a_drafting_turn"], "not_a_drafting_turn"))
+            answer["references"] = chips_report
         if "entity_not_found" in page.get("issues", []):
             answer["blocks"].insert(0, contracts.warning("The item selected on this page isn't in this workspace, so I answered without it.", "entity_not_found"))
         proposal_list = []
@@ -418,7 +431,8 @@ class SiteAgentService:
             cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps({"pending": pending}, ensure_ascii=False), run_id))
             self._emit(cur, workspace_id, run_id, "progress.updated", stage="composing", tier=model_tier)
             body = {"text": "", "pending": True, "runId": run_id, "siteAgent": {"version": contracts.VERSION, "runId": run_id, "status": "running", "intent": reading["intent"],
-                                                                                "language": reading["language"], "context": summary, "blocks": [], "proposals": []}}
+                                                                                "language": reading["language"], "context": summary, "blocks": [], "proposals": []},
+                    **({"references": answer["references"]} if answer.get("references") else {})}
             self.ideas._append_message(cur, workspace_id, conversation_id, "assistant", body, run_id)
             return self._response(cur, workspace_id, run_id)
         composed_by = "grounded"
@@ -847,6 +861,8 @@ class SiteAgentService:
         artifact = {"version": contracts.VERSION, "blocks": blocks, "citations": answer["citations"], "grounding": answer["grounding"],
                     "proposalRefs": [p["id"] for p in proposal_list], "contextSummary": summary, "next": {"questions": follow_ups}, "trace": trace, "refs": refs}
         artifact_hash = digest(artifact)
+        if answer.get("references"):
+            usage = {**usage, "references": answer["references"]}
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s",
                     (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
         body = {"text": answer["text"], "runId": run_id, "siteAgent": {"version": contracts.VERSION, "runId": run_id, "status": "completed", "intent": reading["intent"],
@@ -857,6 +873,8 @@ class SiteAgentService:
                                                                        "refs": refs}}
         if answer.get("pending"):
             body["siteAgent"]["pending"] = answer["pending"]
+        if answer.get("references"):
+            body["references"] = answer["references"]
         if answer.get("compound"):
             body["siteAgent"]["compound"] = {k: v for k, v in answer["compound"].items() if k not in ("proposals", "delegate")}
         self.ideas._settle_message(cur, workspace_id, conversation_id, run_id, body)
@@ -963,7 +981,8 @@ class SiteAgentService:
             if not answer["sufficient"] and answer["missing"]:
                 blocks.append(contracts.warning("Not covered by Rafii's help or your workspace: " + "; ".join(answer["missing"]), "grounding_insufficient"))
             final = {"blocks": blocks, "text": text, "citations": citations, "refs": grounded.get("refs") or [],
-                     "grounding": {"required": pending["grounding"], "sufficient": answer["sufficient"], "missing": answer["missing"]}}
+                     "grounding": {"required": pending["grounding"], "sufficient": answer["sufficient"], "missing": answer["missing"]},
+                     **({"references": grounded["references"]} if grounded.get("references") else {})}
             trace = {**pending["trace"], "modelFacts": answer["facts"]}
             reading = {"intent": pending["intent"], "language": pending["language"]}
             self._finalize(cur, workspace_id, run["conversationId"], run_id, final, pending["summary"], trace, reading, [], composed_by="model",
@@ -1147,6 +1166,21 @@ class SiteAgentService:
             site = {**body["siteAgent"], "feedback": {"value": value, "reason": reason, "at": contracts.iso(self.clock())}}
             cur.execute("UPDATE public.pr_messages SET body=%s::jsonb WHERE id::text=%s", (json.dumps({**body, "siteAgent": site}, ensure_ascii=False), found[0]))
             return {"messageId": found[0], "feedback": site["feedback"]}
+
+    def search(self, workspace_id, token, query="", categories=None, limit=8):
+        """`GET /site-agent/search` (chat-context SPEC §5.9): the picker's server results, through the `workspace.search`
+        read tool (its input validation and the read gate); API tokens never reach this route (no site-agent scope)."""
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            member = self._member(row)
+            require(member, "read")
+            ctx = tools.Context(state=self.ideas._state(row), membership=member, principal=principal, workspace_id=workspace_id, cur=cur, service=self.service,
+                                now=self.clock(), page={}, model_id=None, zone=None)
+            args = {"query": query or "", "limit": limit, **({"categories": list(categories)} if categories else {})}
+            record, result = tools.run("workspace.search", args, ctx)
+        if not result.get("ok"):
+            status = {"tool_input": 400, "tool_forbidden": 403, "not_found": 404}.get(record.get("code"), 502)
+            raise AlphaError("Search couldn't run.", status, code=record.get("code"))
+        return {**(result.get("data") or {}), "verified": bool(result.get("verified"))}
 
     def help_catalogue(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (_, row, _):

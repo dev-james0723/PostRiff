@@ -93,9 +93,11 @@ class FakeWorker:
 
 def invoke(app, method, path, body=None, headers=None):
     raw = json.dumps(body).encode() if body is not None else b""
+    path, _, query = path.partition("?")   # as a WSGI server passes them
     environ = {
         "REQUEST_METHOD": method,
         "PATH_INFO": path,
+        "QUERY_STRING": query,
         "CONTENT_TYPE": "application/json",
         "CONTENT_LENGTH": str(len(raw)),
         "wsgi.input": io.BytesIO(raw),
@@ -169,7 +171,7 @@ class HostedPhase2Acceptance(unittest.TestCase):
         def send(method, url, headers, body):
             calls.append((method, url, headers, body))
             if "/sign/" in url:
-                return 200, {}, json.dumps({"signedURL": "/storage/v1/object/sign/postriff-private/signed-token"}).encode()
+                return 200, {}, json.dumps({"signedURL": url.removeprefix("https://project.supabase.co") + "?token=fixture"}).encode()
             return 201 if method == "POST" else 204, {}, b""
 
         storage = SupabaseStorage("https://project.supabase.co", "s" * 32, send=send)
@@ -183,6 +185,30 @@ class HostedPhase2Acceptance(unittest.TestCase):
         self.assertTrue(signed.startswith("https://project.supabase.co/storage/v1/object/sign/"))
         with self.assertRaises(AlphaError):
             storage.signed_url(wid, "media", name, 3600)
+
+    def test_signed_delivery_url_accepts_storage_relative_paths_and_rejects_other_targets(self):
+        wid = "00000000-0000-0000-0000-000000000010"
+        name = "a" * 32 + ".mp4"
+        path = f"/object/sign/postriff-video/{wid}/video/{name}?token=fixture"
+
+        def storage_for(value):
+            return SupabaseStorage("https://project.supabase.co", "s" * 32,
+                send=lambda *_: (200, {}, json.dumps({"signedURL": value}).encode()))
+
+        for prefix in ("", "/storage/v1"):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(storage_for(prefix + path).signed_url(wid, "video", name),
+                    "https://project.supabase.co/storage/v1" + path)
+        for value in (
+            "https://other.supabase.co/storage/v1" + path,
+            "//other.supabase.co" + path,
+            path.replace(wid, "00000000-0000-0000-0000-000000000011"),
+            path.replace("postriff-video", "postriff-private"),
+            path + "#fragment", path.replace("?token=fixture", "?other=fixture"),
+            path + "&token=another", "https://[invalid", None,
+        ):
+            with self.subTest(value=value), self.assertRaises(AlphaError):
+                storage_for(value).signed_url(wid, "video", name)
 
     def test_error_codes_preserve_status_and_message(self):
         class FailingService(FakeService):

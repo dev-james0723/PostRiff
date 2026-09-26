@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from postriff_alpha.domain import AlphaError, uid
+from . import asset_kinds
 from .contracts import digest
 
 UPCOMING_DAYS = 14
@@ -34,7 +35,7 @@ def _evidence(state: dict, now: float) -> list[dict]:
     candidates = []
     used_assets = {asset["id"] for job in state.get("phase2", {}).get("jobs", []) for asset in job.get("manifest", {}).get("media", [])}
     for asset in state.get("phase2", {}).get("assets", []):
-        if not asset.get("deleted") and asset.get("id") not in used_assets and asset.get("processing") == "decoded":
+        if asset_kinds.is_postable_image(asset) and asset.get("id") not in used_assets:
             candidates.append({"kind": "unused_asset", "reason": "An uploaded image has not been used in a scheduled post yet.", "evidence": [{"type": "asset", "id": asset["id"], "revision": asset.get("revision", 1)}], "action": "draft"})
     for campaign in state.get("raffi", {}).get("campaignPlanning", {}).get("campaigns", []):
         if campaign.get("status") == "draft" and not campaign.get("items"):

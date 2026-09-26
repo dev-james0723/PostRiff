@@ -19,6 +19,9 @@ import { cn } from '@/lib/utils';
 import { badgeClass, copyHash, dimensionsOf, useAssetImage } from './asset-card';
 import { imageRuleChecks } from './image-rules';
 import type { AssetUse, LibraryAsset } from './use-library';
+import { useQuery } from '@tanstack/react-query';
+import { kindOf } from '@/lib/media/asset-kinds';
+import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 interface AssetDetailProps {
   asset: LibraryAsset | null;
@@ -90,6 +93,24 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
 /** The real image in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
 function LargeImage({ asset }: { asset: LibraryAsset }) {
   const image = useAssetImage(asset.id);
+  const { api, workspaceId } = useWorkspaceApi();
+  const isVideo = kindOf(asset) === 'video';
+  // A short-lived signed playback URL for videos only (chat-context SPEC §5.8); the poster comes from the media route.
+  const playback = useQuery({
+    queryKey: ['media-url', workspaceId, asset.id],
+    queryFn: async () => (await api.mediaUrl(workspaceId, asset.id)).url,
+    enabled: isVideo && Boolean(workspaceId),
+    staleTime: 5 * 60 * 1000
+  });
+  if (isVideo && playback.data) {
+    return (
+      <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
+        {/* The person's own upload: no caption file exists for it, and an empty <track> would claim one. */}
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <video src={playback.data} poster={image.data} controls playsInline preload='metadata' aria-label='Play video' className='h-auto max-h-[40vh] w-auto max-w-full md:max-h-[50vh]' />
+      </div>
+    );
+  }
   const ratio = asset.width && asset.height ? `${asset.width} / ${asset.height}` : '1 / 1';
   return (
     <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>

@@ -393,6 +393,8 @@ class Store:
                 raise AlphaError("This replacement is stale. Create a new preview against your current draft and profile.", 409)
             revision = v["revision"] + 1
             v.update({k: candidate[k] for k in ("text", "openings", "sourceIds", "warnings", "unknowns", "voiceRevision", "briefRevision", "runId")})
+            # Post media and the per-message content type chosen when it was written (chat-context SPEC §5.10).
+            v.update({k: candidate[k] for k in ("media", "contentTypeId", "contentTypeVersion", "formatId") if k in candidate})
             v.update({"revision": revision, "customized": False, "needsReview": False, "blockedByRetraction": False, "proposedUpdate": None, "selectedOpening": 0})
             v.pop("sourceReviewRequired", None)
             v.pop("rejected", None)

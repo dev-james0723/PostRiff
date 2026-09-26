@@ -25,7 +25,10 @@ export const STATUS = {
   expired: 'Expired',
   trial: 'Trial',
   saved: 'Saved',
-  saving: 'Saving…'
+  saving: 'Saving…',
+  uploading: 'Uploading',
+  reading: 'Reading',
+  read: 'Read'
 } as const;
 
 export type StatusKey = keyof typeof STATUS;

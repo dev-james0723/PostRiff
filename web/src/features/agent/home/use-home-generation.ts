@@ -22,7 +22,7 @@ import { createSubmissionGate } from '../submission-gate';
 import { submitQuickStart } from '../credit-turn';
 import { checkEditBase } from './draft-edit-guard';
 import { buildItems, type DestinationStatus } from './generation-items';
-import type { Destination, Run, RunVariant, Snapshot, SnapshotVariant } from '@/lib/api/types';
+import type { Destination, Run, RunVariant, Snapshot, SnapshotVariant, WireAttachment, WireReference } from '@/lib/api/types';
 import { locales } from '@/lib/locales';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useRun } from '../use-run';
@@ -42,6 +42,9 @@ export interface GenerationRequest {
   timeZone: string;
   /** Extra usable workspace sources chosen in the Context Pocket. */
   sourceIds?: string[];
+  /** Chips on this message (chat-context SPEC §5.3): the same fields go to the estimate, the quote and the submit. */
+  references?: WireReference[];
+  attachments?: WireAttachment[];
 }
 
 export type { DestinationStatus } from './generation-items';
@@ -72,7 +75,10 @@ export function quickStartPayload(request: Omit<GenerationRequest, 'maxMilliCred
     voiceSourceIds: request.voiceMode === 'personalized' ? request.voiceSourceIds : [],
     imageGeneration: request.imageGeneration,
     timeZone: request.timeZone,
-    sourceIds: request.sourceIds ?? []
+    sourceIds: request.sourceIds ?? [],
+    // Only when present, so a message without chips sends exactly what it sent before.
+    ...(request.references?.length ? { references: request.references } : {}),
+    ...(request.attachments?.length ? { attachments: request.attachments } : {})
   };
 }
 

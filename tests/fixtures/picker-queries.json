@@ -1,0 +1,29 @@
+{
+  "schema": "rafii.picker-queries.v1",
+  "note": "Shared `@` query vectors for site_agent.reads.picker_query and web/src/features/agent/attachments/matcher.ts (chat-context SPEC §4.3).",
+  "vectors": [
+    {"query": "帖子", "text": "", "category": "posts", "platform": null},
+    {"query": "@帖子", "text": "", "category": "posts", "platform": null},
+    {"query": "贴文 春", "text": "春", "category": "posts", "platform": null},
+    {"query": "post", "text": "", "category": "posts", "platform": null},
+    {"query": "posts launch", "text": "launch", "category": "posts", "platform": null},
+    {"query": "範本", "text": "", "category": "templates", "platform": null},
+    {"query": "模板", "text": "", "category": "templates", "platform": null},
+    {"query": "帳號", "text": "", "category": "accounts", "platform": null},
+    {"query": "资料夹", "text": "", "category": "folders", "platform": null},
+    {"query": "資料", "text": "", "category": "sources", "platform": null},
+    {"query": "notes", "text": "", "category": "sources", "platform": null},
+    {"query": "相片", "text": "", "category": "library", "platform": null},
+    {"query": "视频", "text": "", "category": "library", "platform": null},
+    {"query": "ig", "text": "", "category": "accounts", "platform": "Instagram"},
+    {"query": "＠ＩＧ", "text": "", "category": "accounts", "platform": "Instagram"},
+    {"query": "小紅書", "text": "", "category": "accounts", "platform": "Xiaohongshu"},
+    {"query": "领英", "text": "", "category": "accounts", "platform": "LinkedIn"},
+    {"query": "twitter", "text": "", "category": "accounts", "platform": "X"},
+    {"query": "春", "text": "春", "category": null, "platform": null},
+    {"query": "Spring", "text": "spring", "category": null, "platform": null},
+    {"query": "postcard", "text": "postcard", "category": null, "platform": null},
+    {"query": "相機", "text": "相機", "category": null, "platform": null},
+    {"query": "", "text": "", "category": null, "platform": null}
+  ]
+}

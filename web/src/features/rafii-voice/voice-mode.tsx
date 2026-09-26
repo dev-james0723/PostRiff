@@ -184,10 +184,10 @@ export function VoiceMode({
         <div className='flex flex-wrap items-center gap-1.5'>
           <Button
             type='button'
-            // Muted is the one state worth noticing at a glance: the destructive colour on text, icon, fill and border.
+            // A solid red fill keeps muted visible while its paired foreground keeps the label readable.
             variant={muted ? 'destructive' : 'quiet'}
             size='sm'
-            className={cn('min-h-9 gap-1', muted && 'border-destructive/30 dark:border-destructive/40 rounded-[var(--rafii-radius-control)]')}
+            className={cn('min-h-9 gap-1', muted && 'bg-destructive text-destructive-foreground hover:bg-destructive dark:bg-destructive dark:hover:bg-destructive border-destructive rounded-[var(--rafii-radius-control)]')}
             aria-pressed={muted}
             data-rafii-voice-mute={muted ? 'on' : 'off'}
             onClick={() => voiceSession.setMicMuted(!muted)}

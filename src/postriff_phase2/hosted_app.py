@@ -11,6 +11,7 @@ import ssl
 import time
 import uuid
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from postriff_alpha.domain import AlphaError
@@ -157,6 +158,17 @@ def billing_from_environment(values):
     return provider, Mailer(NullTransport(), "Rafii <no-reply@postriff.invalid>", base_url or "https://postriff.invalid")
 
 
+def chat_media_from_environment(values):
+    """Chat attachments (chat-context SPEC §14.2): the three flags (all off by default), the photo/frame reader on the
+    vision route, and the video policy (its caps can only go down from Phase 1's 100 MB and 180 s)."""
+    from .agent_runtime_v2.config import RuntimeConfig
+    from .media_notes import MediaReader
+    from .video_uploads import VideoPolicy, _flag
+    flags = {"attachments": _flag(values.get("RAFII_CHAT_ATTACHMENTS_ENABLED")), "notes": _flag(values.get("RAFII_MEDIA_NOTES_ENABLED")),
+             "video": _flag(values.get("RAFII_VIDEO_UPLOADS_ENABLED"))}
+    return {"flags": flags, "reader": MediaReader(RuntimeConfig.from_environment(values), enabled=flags["notes"]), "videoPolicy": VideoPolicy.from_environment(values)}
+
+
 def runtime_from_environment(environ=None):
     from .deployment import isolated_environment
     values = isolated_environment(os.environ if environ is None else environ)
@@ -165,17 +177,18 @@ def runtime_from_environment(environ=None):
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
     secret = values.get("POSTRIFF_SUPABASE_SECRET_KEY")
     verify = supabase_verifier(project_url, publishable, database)
-    storage = PrivateAssetService(SupabaseStorage(project_url, secret))
+    storage = PrivateAssetService(SupabaseStorage(project_url, secret, video_bucket=values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video"))
     identity = SupabaseIdentityAdmin(project_url, publishable, secret)
     from .oauth import CredentialVault
     from .providers import registry_from_environment, http_transport
+    from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
     # Adapters mount only with client credentials; live execution only when a provider is
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1")
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values))
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
@@ -284,6 +297,8 @@ class HostedApplication:
             return self._json(start_response, 201, ideas.credit_requests.issue(workspace_id, token, self._body(environ)))
         if resource == "credit-estimates" and len(parts) == 5 and method == "POST":
             return self._json(start_response, 200, ideas.credit_requests.estimate(workspace_id, token, self._body(environ)))
+        if resource == "media-notes" and len(parts) == 5 and method == "POST":
+            return self._json(start_response, 200, service.read_media_notes(workspace_id, token, self._body(environ)))
         if resource == "quick-start" and len(parts) == 5 and method == "POST":
             body = self._body(environ)
             return self._json(start_response, 201, ideas.quick_start(workspace_id, token, body.get("expectedRevision"), body))
@@ -362,6 +377,16 @@ class HostedApplication:
                 return self._json(start_response, 200, agent.help_document(workspace_id, token, parts[5]))
         if resource == "insights" and len(parts) == 5 and method == "GET":
             return self._json(start_response, 200, agent.insights(workspace_id, token))
+        if resource == "search" and len(parts) == 5 and method == "GET":
+            # The picker's typed queries (chat-context SPEC §5.9): q ≤ 120 characters, optional categories, limit.
+            from urllib.parse import parse_qs
+            query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+            categories = [c for c in (query.get("categories", [""])[0] or "").split(",") if c]
+            try:
+                limit = int(query.get("limit", ["8"])[0])
+            except ValueError:
+                raise AlphaError("Invalid tool input.", 400, code="tool_input") from None
+            return self._json(start_response, 200, agent.search(workspace_id, token, query.get("q", [""])[0], categories or None, limit))
         raise AlphaError("This hosted route is unavailable.", 404)
 
     def __call__(self, environ, start_response):
@@ -447,17 +472,28 @@ class HostedApplication:
                 # Public provider callback: redirect state/code to the signed-in app; never exchange here.
                 from urllib.parse import parse_qs
                 from .oauth import OAuthService
+                from .productivity_connectors import PROVIDERS as PRODUCTIVITY_PROVIDERS, ProductivityConnectorService
                 query = {k: v[0] for k, v in parse_qs(environ.get("QUERY_STRING", "")).items()}
                 from .providers import ADAPTERS
-                if oauth_parts[2] not in ADAPTERS:
+                provider_id = oauth_parts[2]
+                if provider_id not in ADAPTERS and provider_id not in PRODUCTIVITY_PROVIDERS:
                     raise AlphaError('Unknown OAuth provider.', 404)
                 # Never send a code to a Host/X-Forwarded-Host supplied by the request.
-                configured_base = getattr(getattr(self.service, 'oauth', None), 'public_base_url', None)
+                configured_service = getattr(self.service, 'productivity_connectors', None) if provider_id in PRODUCTIVITY_PROVIDERS else getattr(self.service, 'oauth', None)
+                configured_base = getattr(configured_service, 'public_base_url', None)
                 if configured_base is None:
                     configured_base = os.environ.get('POSTRIFF_PUBLIC_BASE_URL', '')
-                callback_config = OAuthService(None, None, None, {}, configured_base)
-                callback_config.callback_uri(oauth_parts[2])  # fixed HTTPS origin validation; no provider call
-                location = OAuthService.callback_redirect(callback_config.public_base_url, oauth_parts[2], query)
+                if provider_id in PRODUCTIVITY_PROVIDERS:
+                    callback_config = configured_service or ProductivityConnectorService(None, None, {}, configured_base, flags={})
+                    # Validate the fixed origin without requiring a configured adapter on a cold callback.
+                    origin = urlparse(callback_config.public_base_url)
+                    if origin.scheme != 'https' or not origin.hostname or origin.username or origin.password or origin.path or origin.query or origin.fragment:
+                        raise AlphaError("A fixed public HTTPS app origin, without a path or query, is required for OAuth.", 503)
+                    location = ProductivityConnectorService.callback_redirect(callback_config.public_base_url, provider_id, query)
+                else:
+                    callback_config = OAuthService(None, None, None, {}, configured_base)
+                    callback_config.callback_uri(provider_id)  # fixed HTTPS origin validation; no provider call
+                    location = OAuthService.callback_redirect(callback_config.public_base_url, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
             if path == "/api/cron/worker" and method == "GET":
@@ -476,6 +512,13 @@ class HostedApplication:
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()
+                uploads = getattr(service, "video_uploads", None)
+                if uploads is not None and uploads.storage is not None:
+                    # Unfinished video uploads (expiry + 24 h): delete the object, then the row (SPEC §7.3).
+                    try:
+                        result["videoSweep"] = uploads.sweep(service.repository.connection_factory)
+                    except Exception:
+                        result["videoSweep"] = {"status": "unavailable"}
                 from .coworker import runtime as coworker_runtime
                 result["coworker"] = coworker_runtime.cron(service)
                 from .phone.runtime import cron as phone_cron
@@ -558,6 +601,25 @@ class HostedApplication:
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "ideas":
                 return self._ideas(environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connectors":
+                connectors = service.productivity_connectors
+                if len(parts) == 4 and method == "GET":
+                    return self._json(start_response, 200, connectors.catalog(parts[2], token))
+                if len(parts) == 7 and parts[5:] == ["oauth", "start"] and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 201, connectors.start(parts[2], token, parts[4]))
+                if len(parts) == 7 and parts[5:] == ["oauth", "complete"] and method == "POST":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, connectors.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error")))
+                if len(parts) == 6 and parts[5] == "search" and method == "POST":
+                    body = self._body(environ)
+                    return self._json(start_response, 200, connectors.picker_search(parts[2], token, parts[4], body.get("query"), body.get("limit", 12)))
+                if len(parts) == 6 and parts[5] == "refresh" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, connectors.refresh(parts[2], token, parts[4]))
+                if len(parts) == 5 and method == "DELETE":
+                    self._body(environ)
+                    return self._json(start_response, 200, connectors.disconnect(parts[2], token, parts[4]))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "site-agent":
                 return self._site_agent(environ, start_response, service, token, method, parts)
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "agent":
@@ -639,6 +701,19 @@ class HostedApplication:
             if len(parts) == 4 and parts[:3] == ["api", "auth", "sessions"] and method == "DELETE":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_session(token, parts[3]))
+            if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[4] == "videos":
+                # Chat-context SPEC §5.7: the bytes go browser → storage on a signed URL; these only begin, commit and abort.
+                uploads = service.video_uploads
+                if len(parts) == 5 and method == "POST":
+                    return self._json(start_response, 201, uploads.begin(parts[2], token, self._body(environ)))
+                if len(parts) == 7 and parts[6] == "commit" and method == "POST":
+                    return self._json(start_response, 200, uploads.commit(parts[2], token, parts[5], self._body(environ)))
+                if len(parts) == 6 and method == "DELETE":
+                    self._body(environ)
+                    return self._json(start_response, 200, uploads.abort(parts[2], token, parts[5]))
+                raise AlphaError("This hosted route is unavailable.", 404)
+            if len(parts) == 6 and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[5] == "url" and method == "GET":
+                return self._json(start_response, 200, service.video_uploads.url(parts[2], token, parts[4]))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and method == "GET":
                 raw, mime = service.media(parts[2], token, parts[4])
                 start_response("200 OK", [("Content-Type", mime), ("Content-Length", str(len(raw))), ("Cache-Control", "private, no-store"), ("X-Content-Type-Options", "nosniff")])

@@ -53,6 +53,13 @@ import { parseCreditLimit } from './credit-limit';
 import { creditRequestFor } from './credit-turn';
 import { useCreditEstimate } from './use-credit-estimate';
 import { quickStartPayload } from './home/use-home-generation';
+import { AttachmentBar, useLiveRegion } from './attachments/attachment-bar';
+import { MentionList, mentionOptions, mentionTextareaProps } from './attachments/mention-list';
+import type { PickerItem } from './attachments/picker-items';
+import type { PlusView } from './attachments/plus-sheet';
+import { useComposerAttachments } from './attachments/use-composer-attachments';
+import { toSaved } from './attachments/state';
+import type { TextareaHandlers } from './home/idea-composer';
 import { createSubmissionGate } from './submission-gate';
 import { briefStorageKey, decodeBrief, encodeBrief } from './brief-recovery';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
@@ -153,7 +160,8 @@ function HomeWorkspace() {
   }, [user?.id, workspaceId]);
   function saveBrief() {
     if (!user?.id || !canEdit) return;
-    try { sessionStorage.setItem(briefStorageKey(user.id, workspaceId), encodeBrief(user.id, workspaceId, text)); setSavedBrief(text); }
+    // With chat attachments on, the saved brief keeps its settled chips too (brief recovery v2).
+    try { sessionStorage.setItem(briefStorageKey(user.id, workspaceId), encodeBrief(user.id, workspaceId, text, attachmentsOn ? toSaved(attachments.chips) : [])); setSavedBrief(text); }
     catch { toast.error('The brief could not be saved in this browser. Copy your text before leaving.'); }
   }
   function clearBrief() {
@@ -206,15 +214,93 @@ function HomeWorkspace() {
   // Auto follows the owner's workspace default; `choice.model` is always the concrete writer, `requestFields` what is sent.
   const choice = useModelChoice(models.data, state?.writerDefaults?.model);
   const creditMode = Boolean(usage.data?.credits && choice.option?.costClass === "paid");
+
+  /* ---- chat attachments (chat-context SPEC §11.2): posts, photos and videos are chips; a source goes to the Context
+     Pocket, a template becomes this message's template, accounts and folders become destinations ---- */
+  const live = useLiveRegion();
+  const fixtureWriter = choice.option?.provider === 'fixture';
+  const attachmentsOn = Boolean(models.data?.attachments?.enabled) && canEdit;
+  const [messageTemplate, setMessageTemplate] = useState<{ id: string; name: string } | null>(null);
+  const [moreView, setMoreView] = useState<PlusView | null>(null);
+  const routeItem = (item: PickerItem) => {
+    if (item.kind === 'source') {
+      setIncluded((current) => (current.includes(item.id) ? current : [...current, item.id]));
+      return true;
+    }
+    if (item.kind === 'template') {
+      setMessageTemplate({ id: item.id, name: item.label });
+      return true;
+    }
+    return false;
+  };
+  const pickDestination = (item: PickerItem) => {
+    const ids = item.kind === 'folder' ? (folders.find((folder) => folder.id === item.id)?.accountIds ?? []) : [item.id];
+    destinations.commit({ accountIds: Array.from(new Set([...destinations.selected, ...ids])) });
+  };
+  const attachments = useComposerAttachments({
+    surface: 'home',
+    workspaceId,
+    owner: user?.id,
+    fixtureWriter,
+    creditMode,
+    catalog: models.data?.attachments,
+    snapshot: snapshot.data,
+    imageGeneration: imageRequested,
+    text,
+    onDestination: pickDestination,
+    route: routeItem,
+    announce: live.announce
+  });
+  // The same chip fields (plus this message's template) go to the estimate, the quote and the submit.
+  const chipFields = useMemo(() => {
+    if (!attachmentsOn || imageRequested) return {};
+    const references = [...(attachments.fields.references ?? []), ...(messageTemplate ? [{ kind: 'template' as const, id: messageTemplate.id, label: messageTemplate.name }] : [])];
+    return { ...(references.length ? { references } : {}), ...(attachments.fields.attachments ? { attachments: attachments.fields.attachments } : {}) };
+  }, [attachmentsOn, imageRequested, attachments.fields, messageTemplate]);
+  const mention = attachments.mention;
+  const activeOption = mention.open ? (mentionOptions(mention.listId, mention.query, mention.items)[mention.active]?.id ?? null) : null;
+  const textareaHandlers: TextareaHandlers | undefined = attachmentsOn
+    ? {
+        ref: attachments.textareaRef,
+        onInput: attachments.textareaProps.onInput,
+        onSelect: attachments.textareaProps.onSelect,
+        onCompositionStart: attachments.textareaProps.onCompositionStart,
+        onCompositionEnd: attachments.textareaProps.onCompositionEnd,
+        onKeyDown: attachments.textareaProps.onKeyDown,
+        composing: attachments.ime.composing,
+        aria: mentionTextareaProps(mention.open, mention.listId, activeOption)
+      }
+    : undefined;
+  const barProps = { attachments, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner' };
+  const mentionList = (inline: boolean) =>
+    attachmentsOn ? (
+      <MentionList
+        open={mention.open}
+        listId={mention.listId}
+        query={mention.query}
+        items={mention.items}
+        active={mention.active}
+        anchor={attachments.textareaRef}
+        onActive={mention.setActive}
+        onPick={mention.pick}
+        onKeep={mention.close}
+        onMore={() => {
+          setMoreView('menu');
+          mention.close();
+        }}
+        onClose={mention.close}
+        inline={inline}
+      />
+    ) : null;
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
   const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
   const maximum = parseCreditLimit(creditLimit);
   const estimateRequest = useMemo(
-    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds, timeZone, sourceIds: included })),
-    [text, own, languages.destinations, choice.requestFields, voiceMode, voiceSourceIds, timeZone, included]
+    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds, timeZone, sourceIds: included, ...chipFields })),
+    [text, own, languages.destinations, choice.requestFields, voiceMode, voiceSourceIds, timeZone, included, chipFields]
   );
   // On Auto the body names no model, so a changed workspace default must still ask for a fresh estimate.
-  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined);
+  const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
   const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || imageRequested || (ceiling !== null && maximum < ceiling));
   const voiceAvailable = voiceSourceIds.length > 0;
@@ -289,7 +375,7 @@ function HomeWorkspace() {
     composer.current?.focus();
   }
 
-  const canGenerate = canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running;
+  const canGenerate = canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length);
 
   async function start() {
     const body = text.trim();
@@ -308,10 +394,18 @@ function HomeWorkspace() {
       if (!submission.alive()) return;
       const current = template ? await selectContentType(template, latest.revision) : latest.revision;
       if (!submission.alive()) return;
+      // A reference still being read gets at most 20 s; one that isn't ready is reported `not_read_yet`, never dropped.
+      if (attachmentsOn) await attachments.settleReads();
+      const sent = attachmentsOn && !imageRequested ? attachments.sentKeys : [];
       const result = await generation.start({ text: body, ownContent: own, destinations: languages.destinations,
         ...choice.requestFields, voiceMode, voiceSourceIds,
         imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
-        timeZone, sourceIds: included, maxMilliCredits: creditMode ? maximum : null }, current);
+        timeZone, sourceIds: included, maxMilliCredits: creditMode ? maximum : null, ...chipFields }, current);
+      if (result && result.status !== 'automation') {
+        // Only the chips that went out are cleared, and the template was for this message only.
+        if (sent.length) attachments.clearSent(sent);
+        if (chipFields.references?.some((ref) => ref.kind === 'template')) setMessageTemplate(null);
+      }
       if (!submission.alive() || !result) return;
       if (result.status === 'automation') {
         // Rafii read a request for recurring drafts: it set up an automation instead of drafting once.
@@ -424,6 +518,17 @@ function HomeWorkspace() {
               onExpand={() => setDialog('expand')}
               contextCount={included.length}
               onOpenContext={() => setDialog('context')}
+              textareaHandlers={textareaHandlers}
+              addButton={attachmentsOn ? <AttachmentBar {...barProps} part='plus' requestedView={moreView} onRequestedViewHandled={() => setMoreView(null)} /> : undefined}
+              attachmentsRow={attachmentsOn ? (
+                <div className='mt-2'>
+                  <AttachmentBar {...barProps} part='chips' />
+                  {dialog !== 'expand' && mentionList(false)}
+                  {(attachments.blockerMessage || attachments.readingMessage || attachments.imageGenerationNotice) && (
+                    <p className='text-muted-foreground mt-1 text-xs'>{attachments.blockerMessage ?? attachments.readingMessage ?? attachments.imageGenerationNotice}</p>
+                  )}
+                </div>
+              ) : undefined}
               onTryIdea={() => setText('A behind-the-scenes thought: the quiet, imperfect work is usually where the best ideas begin.')}
               extras={
                 <button
@@ -449,8 +554,8 @@ function HomeWorkspace() {
                     </span>
                   </span>
                 ),
-                label: template ? template.title : (chosenContent?.summary ?? 'Content type'),
-                detail: template ? 'Template' : chosenContent?.planningOnly ? chosenContent.planningOnly.label : (chosenContent?.formatLabel ?? undefined),
+                label: messageTemplate ? messageTemplate.name : template ? template.title : (chosenContent?.summary ?? 'Content type'),
+                detail: messageTemplate ? 'This message only' : template ? 'Template' : chosenContent?.planningOnly ? chosenContent.planningOnly.label : (chosenContent?.formatLabel ?? undefined),
                 ariaLabel: `Choose content type and native format, ${chosenContent?.summary ?? 'not chosen'}`,
                 onOpen: () => setDialog('library'),
                 open: dialog === 'library'
@@ -625,9 +730,11 @@ function HomeWorkspace() {
       </div>
 
       {/* Dialogs: each stages its own choices and applies on its primary action. */}
-      {opened.current.has('expand') && <ExpandedIdeaDialog open={dialog === 'expand'} onOpenChange={(open) => setDialog(open ? 'expand' : null)} value={text} onChange={setText} placeholder={PLACEHOLDER} />}
+      {opened.current.has('expand') && <ExpandedIdeaDialog open={dialog === 'expand'} onOpenChange={(open) => setDialog(open ? 'expand' : null)} value={text} onChange={setText} placeholder={PLACEHOLDER}
+        textareaHandlers={textareaHandlers} chipStrip={attachmentsOn ? <div className='pt-3'><AttachmentBar {...barProps} part='chips' /></div> : undefined} mentionList={dialog === 'expand' ? mentionList(true) : undefined} />}
       <ContextPocket open={dialog === 'context'} onOpenChange={(open) => setDialog(open ? 'context' : null)} sources={sources} included={included} onIncludedChange={setIncluded} revision={revision} />
-      {opened.current.has('library') && <ContentLibraryDialog open={dialog === 'library'} onOpenChange={(open) => setDialog(open ? 'library' : null)} value={library} onApply={(value) => void applyLibrary(value)} platformsForFit={Array.from(new Set(targets.map((t) => t.platform)))} />}
+      {opened.current.has('library') && <ContentLibraryDialog open={dialog === 'library'} onOpenChange={(open) => setDialog(open ? 'library' : null)} value={library} onApply={(value) => void applyLibrary(value)} platformsForFit={Array.from(new Set(targets.map((t) => t.platform)))}
+        messageTemplate={messageTemplate ? { name: messageTemplate.name, onRemove: () => setMessageTemplate(null) } : null} />}
       {opened.current.has('channels') && <ChannelBloomDialog open={dialog === 'channels'} onOpenChange={(open) => setDialog(open ? 'channels' : null)} accounts={accounts} folders={folders} selected={destinations.selected} context={destinations.context} onCommit={(result) => { destinations.commit({ accountIds: result.accountIds, context: result.context, platformOnly: [] }); setDialog(null); }} />}
       <PlatformOnlyDialog open={dialog === 'platforms'} onOpenChange={(open) => setDialog(open ? 'platforms' : null)} value={destinations.platformOnly.filter(isDraftable)} onApply={(platforms) => destinations.setPlatformOnly(platforms)} />
       {opened.current.has('language') && <LanguageDialog open={dialog === 'language'} onOpenChange={(open) => setDialog(open ? 'language' : null)} selection={languages.selection} languages={languages} accountLabel={(item) => (item.channelId ? `${item.platform} · ${accounts.find((a) => a.id === item.channelId)?.account ?? 'account'}` : item.platform)} id={ids.language} />}

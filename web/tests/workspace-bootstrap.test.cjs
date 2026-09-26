@@ -29,3 +29,36 @@ test('bootstrap refuses failed identity, missing memberships, enforced MFA and u
  const result=await fetchWorkspaceBootstrap('https://example.com','token','supabase',undefined,async url=>Response.json(url.endsWith('/me')?{...me,mfa:{enforced:true,aal:'aal2'}}:{workspaces}));
  assert.equal(result.me.userId,'user-a');
 });
+
+test('preview bootstrap uses its deployment and fails closed without a valid deployment host',()=>{
+ const base={VERCEL:'1',VERCEL_ENV:'preview',NEXT_PUBLIC_APP_URL:'https://fixed-staging.example.com',POSTRIFF_DEV_SSR:'1',POSTRIFF_API_ORIGIN:'http://127.0.0.1:4438'};
+ assert.equal(bootstrapOrigin({...base,VERCEL_URL:'preview-123.vercel.app'}),'https://preview-123.vercel.app');
+ for(const host of [undefined,'','https://preview.vercel.app','user:pass@example.com','preview.vercel.app/path','preview.vercel.app?x=1','preview.vercel.app/#x']) assert.equal(bootstrapOrigin({...base,VERCEL_URL:host}),null);
+ assert.equal(bootstrapOrigin({...base,VERCEL_ENV:'production',VERCEL_URL:'preview-123.vercel.app'}),'https://fixed-staging.example.com');
+});
+
+test('protected preview forwards existing deployment access only to fixed API reads without serializing it',async()=>{
+ const calls=[];
+ const access={cookie:'_vercel_jwt=fixture-cookie',bypass:'fixture-bypass'};
+ const result=await fetchWorkspaceBootstrap('https://preview.vercel.app','test-token','supabase',undefined,async(url,options)=>{
+  calls.push([url,options]);
+  return Response.json(url.endsWith('/me')?me:{workspaces});
+ },access);
+ assert.equal(result.me.userId,'user-a');
+ for(const [url,options] of calls){
+  assert.ok(url.startsWith('https://preview.vercel.app/api/'));
+  assert.equal(options.headers.Cookie,access.cookie);
+  assert.equal(options.headers['x-vercel-protection-bypass'],access.bypass);
+  assert.equal(options.redirect,'error');
+ }
+ for(const secret of ['test-token','fixture-cookie','fixture-bypass']) assert.equal(JSON.stringify(result).includes(secret),false);
+});
+
+test('preview uses only pinned request aliases so deployment cookies stay on their own host',()=>{
+ const env={VERCEL:'1',VERCEL_ENV:'preview',VERCEL_URL:'deployment.vercel.app',VERCEL_BRANCH_URL:'branch.vercel.app',POSTRIFF_STAGING_PUBLIC_BASE_URL:'https://approved-staging.vercel.app',NEXT_PUBLIC_APP_URL:'https://stale-staging.example.com'};
+ for(const host of ['deployment.vercel.app','branch.vercel.app','approved-staging.vercel.app']) assert.equal(bootstrapOrigin(env,host),'https://'+host);
+ for(const host of ['attacker.example.com','approved-staging.vercel.app.attacker.com','approved-staging.vercel.app/path','approved-staging.vercel.app, attacker.com']) assert.equal(bootstrapOrigin(env,host),'https://deployment.vercel.app');
+ assert.equal(bootstrapOrigin({...env,VERCEL_URL:undefined},'approved-staging.vercel.app'),null);
+ assert.equal(bootstrapOrigin({...env,POSTRIFF_STAGING_PUBLIC_BASE_URL:'https://user:pass@approved-staging.vercel.app'},'approved-staging.vercel.app'),'https://deployment.vercel.app');
+ assert.equal(bootstrapOrigin({...env,VERCEL_ENV:'production'},'approved-staging.vercel.app'),'https://stale-staging.example.com');
+});

@@ -1,8 +1,9 @@
 'use client';
 
-import { forwardRef, useId, type KeyboardEvent, type ReactNode } from 'react';
+import { forwardRef, useCallback, useId, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject, type SyntheticEvent } from 'react';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { isImeEvent } from '@/lib/ime';
 import { cn } from '@/lib/utils';
 
 export const IDEA_MAX = 20000;
@@ -16,6 +17,21 @@ export interface CreationPodPart {
   onOpen: () => void;
   open?: boolean;
   disabled?: boolean;
+}
+
+/**
+ * Chat attachments' textarea handlers (chat-context SPEC §4.3, §11.2), composed with the composer's own: the attachment
+ * handler runs first and `onKeyDown` returns true when it took the key. Never spread over the composer's ⌘+Enter.
+ */
+export interface TextareaHandlers {
+  ref?: RefObject<HTMLTextAreaElement | null>;
+  onInput?: (event: FormEvent<HTMLTextAreaElement>) => void;
+  onSelect?: (event: SyntheticEvent<HTMLTextAreaElement>) => void;
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  composing?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  aria?: Record<string, string | undefined>;
 }
 
 export interface IdeaComposerProps {
@@ -43,6 +59,10 @@ export interface IdeaComposerProps {
   /** Reminder rows (language notes) rendered under the pod. */
   notes?: ReactNode;
   className?: string;
+  /** Chat attachments: the chip strip under the text, the ＋ button in the Context row, and the textarea handlers. */
+  attachmentsRow?: ReactNode;
+  addButton?: ReactNode;
+  textareaHandlers?: TextareaHandlers;
 }
 
 /**
@@ -51,12 +71,24 @@ export interface IdeaComposerProps {
  * action → assurance. Every control is wired by the caller; this surface owns only the layout.
  */
 export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(function IdeaComposer(
-  { value, onChange, placeholder, disabled, busy, onExpand, contextCount, onOpenContext, onTryIdea, extras, contentType, channels, settings, generate, consent, notes, className },
+  { value, onChange, placeholder, disabled, busy, onExpand, contextCount, onOpenContext, onTryIdea, extras, contentType, channels, settings, generate, consent, notes, className, attachmentsRow, addButton, textareaHandlers },
   ref
 ) {
   const helpId = useId();
+  const handlers = textareaHandlers;
+  const attachmentsRef = handlers?.ref;
+  // The forwarded ref and the attachments' ref point at the same textarea.
+  const setTextarea = useCallback(
+    (element: HTMLTextAreaElement | null) => {
+      if (typeof ref === 'function') ref(element);
+      else if (ref) ref.current = element;
+      if (attachmentsRef && element) attachmentsRef.current = element;
+    },
+    [ref, attachmentsRef]
+  );
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !generate.disabled) {
+    if (handlers?.onKeyDown?.(event)) return;
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !generate.disabled && !isImeEvent(event) && !handlers?.composing?.(event)) {
       event.preventDefault();
       generate.onClick();
     }
@@ -70,10 +102,19 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
         </button>
       </div>
       <textarea
-        ref={ref}
+        ref={setTextarea}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
+        onInput={(event) => handlers?.onInput?.(event)}
+        onSelect={(event) => handlers?.onSelect?.(event)}
+        onCompositionStart={() => handlers?.onCompositionStart?.()}
+        onCompositionEnd={() => handlers?.onCompositionEnd?.()}
+        onFocus={(event: FocusEvent<HTMLTextAreaElement>) => {
+          // The `@` list inserts into whichever field (composer or Expand) was focused last.
+          if (attachmentsRef) attachmentsRef.current = event.currentTarget;
+        }}
+        {...(handlers?.aria ?? {})}
         maxLength={IDEA_MAX}
         disabled={disabled}
         aria-label='Message'
@@ -83,6 +124,7 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
         spellCheck
         className='rafii-serif placeholder:text-muted-foreground/80 mt-3 min-h-[170px] w-full resize-none bg-transparent text-[25px] leading-[1.45] tracking-[-0.02em] outline-none disabled:opacity-60 md:mt-4 md:min-h-[190px] md:text-[26px]'
       />
+      {attachmentsRow}
       <div className='mt-1 mb-4 flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1'>
         <button type='button' onClick={onOpenContext} disabled={disabled} aria-haspopup='dialog' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-3 rounded-md text-sm'>
           <span aria-hidden className='relative block h-6 w-7 [perspective:100px]'>
@@ -93,6 +135,7 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
           Context
           <span className='rafii-quiet text-muted-foreground rounded-md px-1.5 py-0.5 text-[11px] tabular-nums'>{contextCount}</span>
         </button>
+        {addButton}
         <div className='flex flex-wrap items-center gap-2'>
           {extras}
           {value.length === 0 && onTryIdea && (

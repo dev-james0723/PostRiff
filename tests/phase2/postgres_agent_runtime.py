@@ -257,6 +257,23 @@ CFG = config.RuntimeConfig.from_environment(ENV)
 runtime = AgentRuntimeService(service, CFG, model_factory=SCRIPTS.factory, image_studio=creative.ImageStudio(CFG, transport=PROVIDER),
                               vision=creative.VisionAnalyzer(CFG, transport=PROVIDER), live_transport=LIVE, clock=lambda: clock[0])
 voice = live.VoiceSessions(runtime, transport=LIVE)
+
+
+def media_consent_state(on):
+    """Chat-context S32: the owner's photo consent for this runtime's vision and image routes (what `media_egress` records)."""
+    from postriff_phase2 import media_consent
+    studio = creative.ImageStudio(CFG)
+    routes = [CFG.route("vision", reason="consent"), studio.route("quality", reason="consent"), studio.route("fast", reason="consent")]
+    processors = [p for p in (media_consent.processor(r.provider, r.model) for r in routes) if p]
+    unique = [p for i, p in enumerate(processors) if p["id"] not in {q["id"] for q in processors[:i]}]
+
+    def change(s, actor):
+        s["mediaEgress"] = {"cloud": on, "decidedBy": ONE, "decidedAt": clock[0], "processors": unique if on else [], "scope": list(media_consent.SCOPE)}
+        return s
+    command(change)
+
+
+media_consent_state(True)   # VS03 and the MM scenarios look at and edit images: the owner allowed it
 CAMPAIGN_PAGE = {"route": "/app/automations", "selectedEntity": None, "visibleState": {}}
 
 
@@ -343,6 +360,26 @@ def _():
     generations = one("SELECT artifact->'trace'->'generations' FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
     assert any(g.get("agent") == "vision" and g.get("model") == "gpt-6-sol" and g.get("inputTokens") == 900 for g in generations), generations
     return {"actual": body["answerText"], "visionModel": vision_calls[-1]["body"]["model"]}
+
+
+@scenario("MMC1", "With photo reading off, Rafii doesn't look at the image: no vision call, a typed consent_required result and a warning",
+          "(consent off) What do you think of image 1?", "zero calls to the vision route; the tool result says consent_required; the answer carries the owner-consent warning")
+def _():
+    media_consent_state(False)
+    try:
+        before = len([c for c in PROVIDER.calls if c["url"].endswith("/responses") and not c["body"].get("tools")])
+        SCRIPTS.set(rafii_manager=[[function_call("ask_creative", {"input": "Critique image 1."}, call_id="mc1")], [reply("I can't look at it until the owner allows photo reading.")]],
+                    creative=[[function_call("image_analyze", {"index": 1, "question": "Critique"}, call_id="mcv1")], [assistant_message("Consent is off.")]])
+        result = turn("What do you think of image 1?", conversationId=STATE["conversation"])
+        SCRIPTS.complete()
+        after = len([c for c in PROVIDER.calls if c["url"].endswith("/responses") and not c["body"].get("tools")])
+        assert after == before, "a vision call was made with consent off"
+        body = result["result"]
+        run = one("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s", result["runId"])[0]
+        assert "consent_required" in json.dumps(run), "the run records the consent block"
+        return {"actual": body.get("answerText"), "visionCalls": after - before}
+    finally:
+        media_consent_state(True)
 
 
 @scenario("VS04", "Compound request by voice: generate a matching asset, write the copy, link both, schedule Thursday 18:00 (X04)",

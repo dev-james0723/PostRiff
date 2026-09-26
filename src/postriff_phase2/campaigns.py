@@ -23,7 +23,7 @@ import zoneinfo
 from typing import Any
 
 from postriff_alpha.domain import AlphaError, clean, uid
-from . import content_types, lifecycle, locales, source_policy
+from . import asset_kinds, content_types, lifecycle, locales, source_policy
 from . import workflow as workflows
 from .agent_runtime import PLATFORMS
 from .contracts import digest
@@ -786,7 +786,8 @@ def _link_targets(state: dict, payload: dict, known_only: bool = True) -> list[t
     this workspace (a deleted image is refused); unlinking also accepts an id the campaign still holds after it is gone."""
     variants = {v.get("id") for v in state.get("variants", []) if isinstance(v, dict)}
     jobs = {j.get("id") for j in (state.get("phase2") or {}).get("jobs", []) if isinstance(j, dict)}
-    assets = {a.get("id") for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted")}
+    # Images only: a video can't go out with a post from Rafii yet (chat-context SPEC §7.6).
+    assets = {a.get("id") for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted") and asset_kinds.kind_of(a) != "video"}
     targets = []
     for kind, key, known in (("draft", "draftIds", variants), ("post", "jobIds", jobs), ("asset", "assetIds", assets)):
         ids = payload.get(key) if payload.get(key) is not None else []

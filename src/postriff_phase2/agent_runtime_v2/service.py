@@ -24,7 +24,7 @@ import time
 
 from postriff_alpha.domain import AlphaError, clean, uid
 
-from .. import intent as writing_intent
+from .. import asset_kinds, attachment_rows, intent as writing_intent, media_consent, turn_references as chip_refs
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import require
@@ -92,7 +92,10 @@ class AgentRuntimeService:
         from ..site_agent import contracts as site_contracts
         text = clean(payload.get("message", ""), MAX_MESSAGE)
         modality = payload.get("modality") if payload.get("modality") in contracts.MODALITIES else "text"
-        attachments_in = [a for a in (payload.get("attachments") or []) if isinstance(a, dict) and isinstance(a.get("assetId"), str)][:MAX_ATTACHMENTS]
+        # Chat-context SPEC §9: each attachment has a role for this turn; role-less means `reference` (the panel's images).
+        chip_refs.parse({"references": payload.get("references")})   # 400 on shape, before anything is read
+        attachments_in = [{"assetId": a["assetId"], "role": a.get("role") if a.get("role") in ("post", "reference") else "reference"}
+                          for a in (payload.get("attachments") or []) if isinstance(a, dict) and isinstance(a.get("assetId"), str)][:MAX_ATTACHMENTS]
         if not text and not attachments_in:
             raise AlphaError("Ask Rafii something.", 400)
         text = text or "What do you see in this image?"
@@ -183,22 +186,27 @@ class AgentRuntimeService:
         return pending if isinstance(pending, dict) and isinstance(pending.get("candidates"), list) and pending["candidates"] else None
 
     def _attach(self, cur, state, workspace_id, conversation_id, principal, attachments_in, member) -> list[dict]:
-        """Images sent with the turn must be this workspace's assets; each is recorded once on the conversation."""
+        """Media sent with the turn must be this workspace's ready assets; each is recorded once on the conversation (presence
+        only); the role is this turn's and goes on the user message. `readable`: a reference Rafii may look at (consent on)."""
         if not attachments_in:
             return []
         if not member.allows("edit"):
             raise AlphaError("Your role can't attach images.", 403)
         assets = {a.get("id"): a for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted")}
+        vision = self.cfg.route("vision", reason="attachment consent")
+        may_look = media_consent.allowed(state, media_consent.processor(vision.provider, vision.model)) if vision.available else False
         out = []
         for item in attachments_in:
             asset = assets.get(item["assetId"])
-            if asset is None:
+            if asset is None or asset.get("deletionPending"):
+                # Same answer for another workspace's asset and a missing one (MM14).
                 raise AlphaError("That image is not in this workspace.", 404)
-            cur.execute("SELECT 1 FROM public.pr_attachments WHERE conversation_id::text=%s AND workspace_id=%s AND kind='asset' AND ref->>'assetId'=%s", (conversation_id, workspace_id, asset["id"]))
-            if not cur.fetchone():
-                cur.execute("INSERT INTO public.pr_attachments(conversation_id,workspace_id,kind,ref,created_by) VALUES(%s,%s,'asset',%s::jsonb,%s)",
-                            (conversation_id, workspace_id, json.dumps({"assetId": asset["id"], "hash": asset["hash"], "mime": asset.get("mime"), "addedAt": self.clock()}), principal))
-            out.append({"assetId": asset["id"], "hash": asset["hash"], "mime": asset.get("mime"), "width": asset.get("width"), "height": asset.get("height")})
+            if not asset_kinds.is_ready(asset):
+                raise AlphaError("This upload isn't finished.", 409, code="media_not_ready")
+            attachment_rows.record(cur, workspace_id, conversation_id, principal, asset, now=self.clock())
+            role = item.get("role") or "reference"
+            out.append({"assetId": asset["id"], "role": role, "kind": asset_kinds.kind_of(asset), "hash": asset["hash"], "mime": asset.get("mime"),
+                        "width": asset.get("width"), "height": asset.get("height"), "readable": role == "reference" and may_look})
         return out
 
     def _new_conversation(self, workspace_id, token, text) -> str:
@@ -209,8 +217,9 @@ class AgentRuntimeService:
 
     # --- fallback: the verified site agent ------------------------------------------------------------------------------
     def _fallback(self, workspace_id, token, payload, text, modality, trace_id, *, reason=None) -> dict:
+        # Chips go with the question: the site agent drafts with them or reports them unused (chat-context SPEC §6.10).
         site_payload = {"message": text, "idempotencyKey": clean(payload.get("idempotencyKey", ""), 100) or uid(), "timeZone": payload.get("timeZone"),
-                        **{k: payload[k] for k in ("conversationId", "pageContext", "model") if payload.get(k) is not None}}
+                        **{k: payload[k] for k in ("conversationId", "pageContext", "model", "references", "attachments") if payload.get(k) is not None}}
         site = self.service.site_agent
         result = site.turn(workspace_id, token, site_payload)
         if result.get("needsCompose") and result.get("runId") and modality == "voice":
@@ -399,7 +408,9 @@ class AgentRuntimeService:
         superseded = []
         if modality == "voice" or payload.get("supersede"):
             superseded = self._supersede(workspace_id, token, conversation_id)
-        workload, why = runtime_config.choose_reasoning(text, modality=modality, attachments=len(attachments), steps_hint=text.count(",") + text.count(" then ") + text.count(" and "))
+        # Only references Rafii may look at count: an image it can't read never escalates the route (chat-context SPEC §9).
+        workload, why = runtime_config.choose_reasoning(text, modality=modality, attachments=sum(1 for a in attachments if a.get("readable")),
+                                                        steps_hint=text.count(",") + text.count(" then ") + text.count(" and "))
         try:
             run_id, reservation = self._open_run(workspace_id, token, conversation_id, text, modality, run_key, trace_id, attachments, model=AGENT_MODEL, reserve_for=workload,
                                                  delegation_id=payload.get("delegationId"), live_session=payload.get("voiceSessionId"))
@@ -426,6 +437,10 @@ class AgentRuntimeService:
             member = self.service.ideas._member(row)
             state = self.service.ideas._state(row)
             focus, refs_note = self._resolve(cur, state, workspace_id, conversation_id, text, page)
+            chips = chip_refs.parse({"references": payload.get("references")})
+            resolved_chips = chip_refs.resolved_ids(state, {"references": chips["references"], "attachments": []}) + \
+                [{"kind": a.get("kind") or "image", "id": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]
+            focus = self._chip_focus(focus, resolved_chips)
             plan = task_state.active(cur, workspace_id, conversation_id)
             images = creative.conversation_images(cur, state, workspace_id, conversation_id)
             if plan is not None and _sync_task(self, cur, workspace_id, plan, state):
@@ -446,6 +461,9 @@ class AgentRuntimeService:
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         holder["ctx"] = ctx
+        ctx.chip_refs = resolved_chips
+        ctx.chip_fields = {**({"references": payload["references"]} if isinstance(payload.get("references"), list) and payload["references"] else {}),
+                           **({"attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]} if attachments else {})}
         items = self._assemble(ctx, text, history, refs_note, open_items, images, superseded, spoken, last)
         manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
         collector = manager_mod.collector(self.cfg)
@@ -513,6 +531,14 @@ class AgentRuntimeService:
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             return self._run_status(cur, workspace_id, run_id) != "running"
 
+    @staticmethod
+    def _chip_focus(focus, chips):
+        """A single post chip is what "this"/"it" means when nothing on the page or in the conversation already is."""
+        posts = [c for c in chips or [] if c.get("kind") == "post"]
+        if focus is None and len(posts) == 1:
+            return {"type": "draft", "id": posts[0]["id"]}
+        return focus
+
     def _resolve(self, cur, state, workspace_id, conversation_id, text, page):
         """Deterministic references before any model reasoning (spec §3.5): the page item, "that draft", ordinals, "the second image"."""
         from ..site_agent import references
@@ -559,6 +585,9 @@ class AgentRuntimeService:
                      "pendingApprovals": [{"proposalId": i["proposalId"], "type": i["type"], "summary": i["summary"]} for i in open_items][:5],
                      "conversationImages": [{"index": i["index"], "assetId": i["assetId"], "origin": i["origin"]} for i in images][-8:],
                      "attachedThisTurn": [a["assetId"] for a in ctx.attachments]}
+        if ctx.chip_refs:
+            # Ids and roles only: a label is the person's display text and never reaches a model.
+            app_state["chips"] = [{"kind": c["kind"], "id": c["id"], **({"role": c["role"]} if c.get("role") else {})} for c in ctx.chip_refs]
         if superseded:
             app_state["supersededRequests"] = [s["request"] for s in superseded]
         if spoken:
@@ -575,8 +604,12 @@ class AgentRuntimeService:
         entity = (ctx.page or {}).get("selectedEntity") or {}
         if entity.get("id"):
             ctx.ledger.known_ids.add(str(entity["id"]).lower())
+        for chip in ctx.chip_refs:
+            # Known ids only (a model may name them back); a chip is not a read, so no ledger.reference.
+            ctx.ledger.known_ids.add(str(chip["id"]).lower())
         items = [{"role": h["role"], "content": ("[spoken] " if h.get("modality") == "voice" else "") + h["text"]} for h in history]
-        context_json = json.dumps(app_state, ensure_ascii=False, default=str)
+        # JSON-escape markup so no title (a draft's first line, a campaign goal) can close the block or open a new one.
+        context_json = json.dumps(app_state, ensure_ascii=False, default=str).replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
         command = ("\n" + commands.block(ctx.command)) if ctx.command else ""   # Contract 7: a fixed instruction, its input fenced as data
         items.append({"role": "user", "content": f"<context kind=\"APP_STATE\">\n{context_json}\n</context>\n<request kind=\"USER_INSTRUCTION\" modality=\"{ctx.modality}\">\n{text}\n</request>{command}"})
         return items
@@ -602,7 +635,7 @@ class AgentRuntimeService:
                         "VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text",
                         (conversation_id, workspace_id, principal, model, "deep" if reserve_for == "deep_reasoning" else "standard", digest(context), EPOCH, run_key))
             run_id = cur.fetchone()[0]
-            body = {"text": text, "agent": {"modality": modality, "attachments": [a["assetId"] for a in attachments], "traceId": trace_id,
+            body = {"text": text, "agent": {"modality": modality, "attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments], "traceId": trace_id,
                                             **({"delegationId": str(delegation_id)[:120]} if delegation_id else {}), **({"voiceSessionId": str(live_session)[:80]} if live_session else {})},
                     "siteAgent": {"role": "question", "runId": run_id}}
             ideas._append_message(cur, workspace_id, conversation_id, "user", body, run_id)

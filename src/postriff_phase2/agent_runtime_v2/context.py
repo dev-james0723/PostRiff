@@ -96,6 +96,9 @@ class RafiiRunContext:
     attachments: list[dict] = field(default_factory=list)   # [{assetId, hash, mime, width, height, index}]
     conversation_assets: list[dict] = field(default_factory=list)  # every image in this conversation, in order
     focus: dict | None = None                 # the resolved reference ("this draft", "the second one")
+    chip_refs: list = field(default_factory=list)      # chips on this turn, resolved: [{kind, id, role?}] (chat-context SPEC §9)
+    chip_fields: dict = field(default_factory=dict)    # the same chips as sent, for the first writing call
+    chips_forwarded: bool = False
     task: Any = None                          # task_state.TaskPlan
     run_id: str | None = None
     now: Callable[[], float] = time.time

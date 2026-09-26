@@ -19,9 +19,12 @@ function PopoverContent({
   alignOffset = 0,
   side = 'bottom',
   sideOffset = 4,
+  anchor,
   ...props
 }: PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>) {
+  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset' | 'anchor'>) {
+  // `anchor` places the popup at something other than the trigger (the `@` caret, a chip); `initialFocus` and
+  // `finalFocus` are Popup props and pass straight through in `props`.
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
@@ -29,6 +32,7 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        anchor={anchor}
         className='isolate z-50'
       >
         <PopoverPrimitive.Popup

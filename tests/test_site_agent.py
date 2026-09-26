@@ -250,6 +250,14 @@ class ToolTest(unittest.TestCase):
         for forbidden in ("publish", "post.publish", "channel.connect", "channel.disconnect", "billing.buy", "account.delete", "reply.send", "secrets.read"):
             self.assertNotIn(forbidden, tools.CATALOG)
 
+    def test_catalogue_pin(self):
+        # Deliberate pin: chat-context adds the workspace.search read; the live agent adds the ui.guide and
+        # ui.voice client actions. Adding a tool changes tools.RELEASE and the policy epoch.
+        self.assertEqual(len(tools.CATALOG), 35)
+        self.assertEqual(tools.CATALOG["workspace.search"]["effect"], "read")
+        self.assertEqual(sorted(t for t, spec in tools.CATALOG.items() if spec["effect"] != "read"),
+                         ["automation.patch_propose", "ui.guide", "ui.navigate", "ui.show_help", "ui.voice"])
+
     def test_unknown_tools_and_bad_input_fail_closed(self):
         record, result = tools.run("publish.now", {}, ctx())
         self.assertEqual((record["status"], result["ok"]), ("blocked", False))
@@ -833,3 +841,22 @@ class LiveAgentBlocksTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SiteAgentChipShapeTests(unittest.TestCase):
+    """Chat-context S28: chips on a Rafii panel message are checked for shape before any workspace read."""
+
+    def test_malformed_chips_are_refused_before_the_workspace_is_read(self):
+        from types import SimpleNamespace
+        from postriff_phase2.site_agent.service import SiteAgentService
+
+        class Untouchable:
+            def transaction(self, *args, **kwargs):
+                raise AssertionError("the workspace was read")
+
+        agent = SiteAgentService(SimpleNamespace(ideas=SimpleNamespace(), repository=Untouchable(), clock=lambda: 0.0))
+        for bad in ({"references": "post"}, {"references": [{"kind": "post"}]}, {"attachments": [{"assetId": "x", "role": "post"}]},
+                    {"references": [{"kind": "post", "id": "p1", "role": "delete"}]}):
+            with self.subTest(bad=bad), self.assertRaises(AlphaError) as refused:
+                agent.turn("w", "t", {"message": "Shorten this", **bad})
+            self.assertEqual(refused.exception.status, 400)

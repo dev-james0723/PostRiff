@@ -631,3 +631,147 @@ def campaign_membership(ctx, type, id):  # noqa: A002
             found.append({"campaignId": c["id"], "goal": c.get("goal"), "how": "automation", "automation": task.get("name"), "href": routes.href("automations", query={"campaign": c["id"]})})
     return contracts.result({"kind": kind, "id": target, "campaigns": found}, now=ctx.now)
 
+
+
+# --- the `@` picker's server results (chat-context SPEC §4.3, §5.9) -----------------------------------------------------
+PICKER_CATEGORIES = ("posts", "templates", "accounts", "folders", "sources", "library")
+PICKER_LIMIT = 12
+# Typing a group's name in Traditional, Simplified or English switches the list to that group (web matcher.ts twin).
+CATEGORY_ALIASES = {
+    "posts": ("帖子", "帖", "貼文", "贴文", "草稿", "文章", "post", "posts", "draft", "drafts"),
+    "templates": ("範本", "范本", "模板", "template", "templates"),
+    "accounts": ("帳號", "账号", "帳戶", "账户", "頻道", "频道", "account", "accounts", "channel"),
+    "folders": ("資料夾", "资料夹", "文件夾", "文件夹", "folder", "folders"),
+    "sources": ("來源", "来源", "素材", "資料", "资料", "source", "sources", "note", "notes"),
+    "library": ("相", "相片", "照片", "圖片", "图片", "圖", "图", "影片", "視頻", "视频", "photo", "photos", "image", "picture", "video", "videos", "library"),
+}
+PLATFORM_ALIASES = {
+    "Instagram": ("ig", "insta", "instagram"),
+    "LinkedIn": ("li", "linkedin", "領英", "领英"),
+    "X": ("x", "twitter", "推特"),
+    "Threads": ("threads",),
+    "Xiaohongshu": ("小紅書", "小红书", "red", "xhs", "xiaohongshu"),
+}
+
+
+def picker_normalize(value):
+    import unicodedata
+    return unicodedata.normalize("NFKC", value if isinstance(value, str) else "").casefold().strip()
+
+
+def picker_query(query):
+    """(text, forced category or None, platform or None). A leading @/＠ is ignored; a whole-word alias picks a group
+    (or, for accounts, a platform) and the rest of the text filters within it."""
+    text = picker_normalize(query).lstrip("@").strip()
+    for category, aliases in CATEGORY_ALIASES.items():
+        for alias in sorted(aliases, key=len, reverse=True):
+            normalized = picker_normalize(alias)
+            if text == normalized or text.startswith(normalized + " "):
+                return text[len(normalized):].strip(), category, None
+    for platform, aliases in PLATFORM_ALIASES.items():
+        for alias in aliases:
+            normalized = picker_normalize(alias)
+            if text == normalized or text.startswith(normalized + " "):
+                return text[len(normalized):].strip(), "accounts", platform
+    return text, None, None
+
+
+def _rank(needle, *haystacks):
+    """0 = no match; 3 prefix > 2 word start > 1 substring. An empty needle matches everything (recents)."""
+    if not needle:
+        return 1
+    best = 0
+    for raw in haystacks:
+        text = picker_normalize(raw)
+        at = text.find(needle)
+        if at < 0:
+            continue
+        best = max(best, 3 if at == 0 else 2 if not text[at - 1].isalnum() else 1)
+    return best
+
+
+def picker_search(ctx, query="", categories=None, limit=8):
+    """Items a member may add to a message, grouped by category, from this workspace's snapshot only."""
+    from .. import asset_kinds, content_types, turn_references
+    if categories is not None and (not isinstance(categories, list) or any(c not in PICKER_CATEGORIES for c in categories)):
+        raise AlphaError("Invalid tool input.", 400, code="tool_input")
+    if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not 1 <= limit <= PICKER_LIMIT:
+        raise AlphaError("Invalid tool input.", 400, code="tool_input")
+    limit = int(limit)
+    needle, forced, platform = picker_query(query)
+    wanted = [forced] if forced else list(categories or PICKER_CATEGORIES)
+    if forced and categories and forced not in categories:
+        wanted = []
+    state, groups = ctx.state, {}
+    channels = {c.get("id"): c for c in _phase2(ctx).get("channels", []) if isinstance(c, dict)}
+
+    def add(category, rank, recency, item):
+        if rank:
+            groups.setdefault(category, []).append((rank, recency or 0.0, item))
+
+    if "posts" in wanted:
+        seen_at = {}
+        for job in _jobs(ctx):
+            variant_id = (job.get("manifest") or {}).get("variantId")
+            if variant_id:
+                seen_at[variant_id] = max(seen_at.get(variant_id, 0.0), _timestamp(job) or 0.0)
+        for review in _reviews(ctx):
+            variant_id = review.get("variantId") or (review.get("manifest") or {}).get("variantId")
+            if variant_id:
+                seen_at[variant_id] = max(seen_at.get(variant_id, 0.0), _timestamp(review) or 0.0)
+        for index, variant in enumerate(_variants(ctx)):
+            if variant.get("rejected") or not variant.get("id"):
+                continue
+            label = turn_references.label_for("post", variant)
+            account = _account(ctx, variant.get("channelId")) if variant.get("channelId") else None
+            sublabel = " · ".join(p for p in (variant.get("platform"), account, variant.get("language")) if p)
+            updated = seen_at.get(variant["id"]) or float(index)
+            add("posts", _rank(needle, label, variant.get("text") or "", account or ""), updated,
+                {"kind": "post", "id": variant["id"], "label": label, "sublabel": sublabel, "updatedAt": seen_at.get(variant["id"])})
+    if "templates" in wanted:
+        system = state.get("contentSystem") or {}
+        for index, template in enumerate(system.get("templates") or []):
+            if not isinstance(template, dict) or template.get("archived") or not (template.get("ownerUserId") == ctx.principal or template.get("visibility") == "workspace"):
+                continue
+            try:
+                type_label = content_types.definition(state, template.get("contentTypeId"), template.get("contentTypeVersion")).get("label")
+            except (AlphaError, KeyError, TypeError):
+                type_label = None
+            label = turn_references.label_for("template", template)
+            add("templates", _rank(needle, label, type_label or ""), float(index),
+                {"kind": "template", "id": template.get("id"), "label": label, **({"sublabel": type_label} if type_label else {})})
+    if "accounts" in wanted:
+        for index, channel in enumerate(channels.values()):
+            if channel.get("revoked") or (platform and channel.get("platform") != platform):
+                continue
+            label = turn_references.label_for("account", channel)
+            add("accounts", _rank(needle, label, channel.get("account") or "", channel.get("platform") or ""), float(index),
+                {"kind": "account", "id": channel.get("id"), "label": label, "platform": channel.get("platform"), "state": "Connected"})
+    if "folders" in wanted:
+        for index, folder in enumerate(_phase2(ctx).get("channelFolders") or []):
+            if not isinstance(folder, dict):
+                continue
+            members = [a for a in folder.get("accountIds") or [] if a in channels and not channels[a].get("revoked")]
+            label = turn_references.label_for("folder", folder)
+            add("folders", _rank(needle, label), float(index),
+                {"kind": "folder", "id": folder.get("id"), "label": label, "sublabel": f"{len(members)} account{'' if len(members) == 1 else 's'}"})
+    if "sources" in wanted:
+        for index, source in enumerate(state.get("sources") or []):
+            if not isinstance(source, dict) or not source.get("active") or source.get("kind") == "voice_sample" or source.get("sourcePolicy") == "prohibited":
+                continue
+            approved = sum(1 for f in source.get("facts") or [] if isinstance(f, dict) and f.get("approved"))
+            label = turn_references.label_for("source", source)
+            add("sources", _rank(needle, label), float(index),
+                {"kind": "source", "id": source.get("id"), "label": label, "sublabel": f"{approved} approved fact{'' if approved == 1 else 's'}"})
+    if "library" in wanted:
+        for index, asset in enumerate(_phase2(ctx).get("assets") or []):
+            if not asset_kinds.is_library_asset(asset) or not asset_kinds.is_ready(asset):
+                continue
+            kind = asset_kinds.kind_of(asset)
+            label = "Video" if kind == "video" else "Photo"
+            item = {"kind": kind, "id": asset.get("id"), "label": label, "href": f"/api/workspaces/{ctx.workspace_id}/media/{asset.get('id')}"}
+            item.update({"duration": asset.get("duration")} if kind == "video" else {"width": asset.get("width"), "height": asset.get("height")})
+            add("library", _rank(needle, label, "video" if kind == "video" else "photo image"), float(asset.get("createdAt") or index), item)
+    ordered = {category: [item for _, _, item in sorted(groups.get(category, []), key=lambda row: (-row[0], -row[1]))][:limit]
+               for category in wanted if groups.get(category)}
+    return contracts.result({"query": query or "", "categories": ordered}, now=ctx.now)

@@ -28,6 +28,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { approvePlan, defaultPlanAccount, variantForRow, type ApproveStep, type PlanRow } from './plan';
 import { Destination } from './variant-card';
+import { firstPostImageId, isPostableImage } from '@/lib/media/asset-kinds';
 
 interface RowState {
   include: boolean;
@@ -104,7 +105,8 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
   const canApprove = checkAccess(access, { permission: 'approve' });
   const state = snapshot.state;
   const channels = useMemo(() => state.phase2?.channels ?? [], [state.phase2?.channels]);
-  const assets = useMemo(() => (state.phase2?.assets ?? []).filter((a) => !a.deleted), [state.phase2?.assets]);
+  // Only photos that can go out with a post; a video can't be scheduled from Rafii yet (chat-context SPEC §7.6).
+  const assets = useMemo(() => (state.phase2?.assets ?? []).filter(isPostableImage), [state.phase2?.assets]);
   const voiceActive = Boolean(state.speaker?.activeRevision);
   const timeZone = plan.timeZone;
   const variants = run.artifact?.variants ?? [];
@@ -133,9 +135,11 @@ export function PlanCard({ run, plan, snapshot, onApproved }: { run: Run; plan: 
     setRows(
       plan.destinations.map((d) => {
         const ready = defaultPlanAccount(channels, d, READY);
-        return { include: Boolean(ready && d.localTime), localTime: d.localTime ?? '', channelId: ready?.id ?? '', assetId: '', alt: '' };
+        const written = variants.find((v) => v.platform === d.platform && v.language === d.language);
+        return { include: Boolean(ready && d.localTime), localTime: d.localTime ?? '', channelId: ready?.id ?? '', assetId: firstPostImageId(written?.media, assets) ?? '', alt: '' };
       })
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seeded once per plan; later asset changes keep the person's choice
   }, [plan, channels]);
 
   // A failed checklist stays on screen until the reader acts again.

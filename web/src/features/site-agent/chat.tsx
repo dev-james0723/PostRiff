@@ -16,6 +16,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
+import { createImeGuard } from '@/lib/ime';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { siteConfig } from '@/config/site';
@@ -230,7 +231,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             conversationId: current.conversations[w] ?? null,
             modality: 'text',
             pageContext,
-            attachments: images.map((image) => ({ assetId: image.assetId })),
+            // The role is explicit: a panel image is something Rafii looks at, never media for a post (SPEC §9).
+            attachments: images.map((image) => ({ assetId: image.assetId, role: 'reference' as const })),
             timeZone,
             model: choice.model,
             ...(command ? { command } : {})
@@ -302,6 +304,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
 
   const composingRun = messages.find((m) => m.role === 'assistant' && m.runId && live[m.runId]?.composing)?.runId ?? null;
 
+  const ime = useRef(createImeGuard());
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     void send(text);
@@ -310,7 +314,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // The command menu handles its own keys (Enter picks a command) and marks them handled.
     if (event.defaultPrevented || event.nativeEvent.defaultPrevented) return;
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+    // Safari commits a composition with compositionend, then an Enter keydown (keyCode 229, isComposing false).
+    if (event.key === 'Enter' && !event.shiftKey && !ime.current.composing(event)) {
       event.preventDefault();
       void send(text);
     }
@@ -443,6 +448,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             }}
             onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
             onKeyDown={onKeyDown}
+            onCompositionStart={() => ime.current.onCompositionStart()}
+            onCompositionEnd={() => ime.current.onCompositionEnd()}
             rows={1}
             maxLength={4000}
             aria-label={`Ask ${siteConfig.name}`}

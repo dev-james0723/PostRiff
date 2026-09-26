@@ -139,13 +139,16 @@ class FixtureAdapter:
         else:
             context = None
         idea = request["idea"].strip()
-        material = ""
-        if MATERIAL_LABEL in idea:
-            # Handed-in material (a draft to rework, a campaign brief) is data: the topic is the instruction alone, and
-            # the material becomes the body; a request to shorten keeps its first two sentences.
+        material = " ".join(request["material"].split()) if isinstance(request.get("material"), str) and request["material"].strip() else ""
+        if not material and MATERIAL_LABEL in idea:
+            # Legacy callers still append handed-in material to the idea under MATERIAL_LABEL; newer ones send it as
+            # its own `material` field (chat-context SPEC §6.8). Either way it is data, never the instruction.
             idea, _, rest = idea.partition(MATERIAL_LABEL)
             idea = idea.strip()
             material = " ".join(rest.strip().removeprefix("<<<").removesuffix(">>>").split())
+        if material:
+            # Handed-in material (a draft to rework, a campaign brief) becomes the body; a request to shorten keeps its
+            # first two sentences.
             sentences = [part.strip() for part in re.findall(r"[^.!?。！？]+[.!?。！？]?", material) if part.strip()]
             kept = sentences[:2] if re.search(r"\b(?:shorten|shorter|trim|tighten|condense)\b|縮短|精簡", idea, re.I) else sentences[:4]
             lines = [(sentence, {"sourceId": None}) for sentence in kept] or lines

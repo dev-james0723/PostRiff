@@ -35,6 +35,18 @@ class IdeaWithMaterialTest(unittest.TestCase):
         self.assertIn("A long draft.", json.loads(messages[1]["content"].split("\n\n")[0])["idea"])
 
 
+    def test_idea_material_and_notes_fit_the_context_budget(self):
+        # chat-context SPEC §6.8: a full idea, 6,000 characters of material and four full notes still fit MAX_CONTEXT_BYTES.
+        runtime = ServerModelRuntime("secret-key", model="openai/gpt-6-sol")
+        request = {"context": context(), "idea": "i" * ideas.IDEA_LIMIT, "destinations": DESTS,
+                   "material": [{"role": "rework", "label": "Spring concert", "text": "字" * 4000}, {"role": "inspire", "label": "Other", "text": "字" * 2000}],
+                   "referenceNotes": [{"label": f"Photo {slot}", "kind": "photo", "text": "字" * 1200} for slot in "ABCD"]}
+        payload = runtime._user_payload(request)
+        self.assertEqual(sum(len(s["text"]) for s in payload["material"]), 6000)
+        self.assertEqual(len(payload["referenceNotes"]), 4)
+        self.assertLess(len(json.dumps(payload, ensure_ascii=False).encode()), model_runtime.MAX_CONTEXT_BYTES)
+
+
 class SkillByteBudgetTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

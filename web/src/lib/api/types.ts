@@ -54,6 +54,89 @@ export interface Asset {
   bytes?: number;
   deleted: boolean;
   storagePath?: string;
+  /** Chat-context SPEC §5.13. `kind` is always derived from `mime` (`lib/media/asset-kinds.ts`), never trusted. */
+  kind?: 'image' | 'video';
+  category?: 'media' | 'video' | string;
+  duration?: number;
+  durationSource?: 'container' | 'client';
+  poster?: AssetImagePart;
+  frames?: (AssetImagePart & { at: number })[];
+  verified?: { container: boolean; locationChecked: boolean; locationCleared?: boolean };
+}
+
+/** A poster or frame stored inside its video's record (never a separate asset). */
+export interface AssetImagePart {
+  objectName: string;
+  hash: string;
+  width: number;
+  height: number;
+  bytes?: number;
+}
+
+/* --- chat references and attachments (chat-context SPEC §5.2, §5.10) --------------------------------------------- */
+
+export type ReferenceKind = 'post' | 'account' | 'folder' | 'template' | 'source' | 'skill' | 'connector_item';
+export type AttachmentSlot = 'A' | 'B' | 'C' | 'D';
+
+/** One `@` reference as sent. `label` is display-only: part of the digest, never stored or shown to a model. */
+export interface WireReference {
+  kind: ReferenceKind;
+  id: string;
+  label?: string;
+  role?: 'rework' | 'inspire';
+}
+
+export interface WireAttachment {
+  assetId: string;
+  role: 'post' | 'reference';
+  slot?: AttachmentSlot;
+}
+
+/** Keys omitted when empty, so a message without chips is byte-identical to today's. */
+export interface TurnReferenceFields {
+  references?: WireReference[];
+  attachments?: WireAttachment[];
+}
+
+/** The user message as stored: resolved ids only, no labels. */
+export interface UserMessageBody {
+  text: string;
+  sourceIds?: string[];
+  intent?: string;
+  references?: { kind: ReferenceKind; id: string; role?: 'rework' | 'inspire' }[];
+  attachments?: WireAttachment[];
+}
+
+/** One line of "Used this time": labels are server-derived, `message` is rendered verbatim. */
+export interface ReferenceItem {
+  kind: ReferenceKind | 'image' | 'video' | 'attachment';
+  id: string;
+  label: string;
+  role?: 'rework' | 'inspire' | 'post' | 'reference';
+  as?: 'rework' | 'inspire' | 'handed_in' | 'template' | 'source' | 'destination' | 'post_media' | 'notes';
+  reason?: string;
+  message?: string;
+}
+
+export interface ReferenceReport {
+  used: ReferenceItem[];
+  unused: ReferenceItem[];
+  reminders: string[];
+}
+
+/** Post media recorded on a run's artifact and its variants (role `post` only). */
+export interface RunMedia {
+  assetId: string;
+  kind: 'image' | 'video';
+  role: 'post';
+  slot: AttachmentSlot;
+}
+
+export interface RunContentType {
+  contentTypeId: string;
+  contentTypeVersion: string | null;
+  formatId: string | null;
+  contentSkillRouteIds?: string[];
 }
 
 export interface Manifest {
@@ -140,6 +223,8 @@ export interface VariantFeedback {
 }
 
 export interface SnapshotVariant {
+  /** Post media recorded when the draft was written (chat-context SPEC §5.10). */
+  media?: RunMedia[];
   revisions?: VariantRevision[];
   rejected?: boolean;
   feedback?: VariantFeedback[];
@@ -663,6 +748,8 @@ export interface SafeEvent {
   /** `action.proposed`: which proposal (for example `schedule_plan`) and its time zone. */
   action?: string;
   timeZone?: string;
+  /** `warning.created` about one chip (chat-context SPEC §5.10); "Used this time" shows it, the activity strip doesn't. */
+  reference?: { kind: string; id: string; reason: string };
 }
 
 export interface RunVariant {
@@ -676,6 +763,7 @@ export interface RunVariant {
   unknowns: string[];
   warnings?: string[];
   candidateOnly?: boolean;
+  media?: RunMedia[];
 }
 
 export interface GeneratedImage {
@@ -723,6 +811,22 @@ export interface CreditEstimate {
   provider: string;
   policy: string;
   reasoning?: string;
+  /** The workspace revision the estimate was computed on; re-estimate when it changes. */
+  stateRevision?: number;
+  /** `media-notes` only. `cached: true` means nothing to pay and no quote needed. */
+  kind?: 'photo' | 'video_frames';
+  frames?: number;
+  cached?: boolean;
+}
+
+export type CreditOperation = 'turn' | 'quick-start' | 'media-notes';
+
+/** A read quote binds one asset (SPEC §5.5). */
+export interface MediaNotesCreditBody {
+  operation: 'media-notes';
+  request: { assetId: string };
+  expectedRevision?: number;
+  maxMilliCredits?: number;
 }
 
 export interface Run {
@@ -730,7 +834,15 @@ export interface Run {
   conversationId: string;
   status: string;
   artifactHash: string | null;
-  artifact: { variants: RunVariant[]; plan?: SchedulePlan | null; images?: GeneratedImage[]; imageModel?: string; reworkOf?: string } | null;
+  artifact: {
+    variants: RunVariant[];
+    plan?: SchedulePlan | null;
+    images?: GeneratedImage[];
+    imageModel?: string;
+    reworkOf?: string;
+    media?: RunMedia[];
+    contentType?: RunContentType;
+  } | null;
   usage: Record<string, unknown>;
   model: string;
   reasoning: string;
@@ -894,6 +1006,178 @@ export interface ModelCatalog {
     independentOfWritingModel: true;
     detail: string;
   };
+  /** Chat attachments (SPEC §5.11). Every limit the UI shows comes from here. Absent = feature off. */
+  attachments?: AttachmentsCatalog;
+}
+
+export interface MediaProcessor {
+  id: string;
+  label: string;
+}
+
+export interface AttachmentsCatalog {
+  enabled: boolean;
+  limits: { references: number; posts: number; attachments: number; videos: number };
+  photo: { accept: string[]; convertFrom: string[]; maxPickBytes: number; maxSendBytes: number };
+  video: { enabled: boolean; mimes: string[]; maxBytes: number; maxSeconds: number; frames: number };
+  notes: {
+    available: boolean;
+    processor: MediaProcessor | null;
+    photo: { typicalMilliCredits: number; ceilingMilliCredits: number };
+    video: { typicalMilliCredits: number; ceilingMilliCredits: number };
+    consentAction: 'media_egress';
+  };
+  /** Server-reviewed skills that may be explicitly bound to one drafting turn. */
+  skills?: { id: string; name: string; description: string; version: string }[];
+}
+
+/** Owner consent for photo and frame reading (SPEC §5.12). */
+export interface MediaConsent {
+  cloud: boolean;
+  decidedAt: number | null;
+  decidedBy: string | null;
+  processors: MediaProcessor[];
+  current: { vision: MediaProcessor | null; image: MediaProcessor | null };
+  reconfirm: boolean;
+  available: boolean;
+}
+
+export interface MemoryFiles {
+  files: MemoryFile[];
+  egress?: MemoryEgress;
+  research?: ResearchEgress;
+  learning?: LearningSummary;
+  media?: MediaConsent;
+}
+
+/* --- video uploads, media notes, picker search (SPEC §5.6–5.9) ------------------------------------------------- */
+
+export interface VideoUploadBegin {
+  mime: 'video/mp4' | 'video/quicktime';
+  bytes: number;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+}
+
+export interface VideoUploadTicket {
+  upload: { assetId: string; method: 'PUT'; uploadUrl: string; headers: Record<string, string>; expiresAt: number; maxBytes: number };
+}
+
+export interface VideoCommitBody {
+  frames: { at: number; data: string }[];
+  locationCleared: boolean;
+}
+
+export interface VideoCommitResult {
+  revision: number;
+  video: {
+    assetId: string;
+    bytes: number;
+    duration: number | null;
+    durationSource: 'container' | 'client';
+    width: number | null;
+    height: number | null;
+    frames: number;
+    verified: { container: boolean; locationChecked: boolean };
+  };
+}
+
+export interface MediaNotesBody {
+  assetId: string;
+  idempotencyKey: string;
+  creditQuoteId?: string;
+  expectedRevision?: number;
+}
+
+export type MediaNotesResult =
+  | {
+      assetId: string;
+      status: 'ready';
+      cached: boolean;
+      note: { kind: 'photo' | 'video_frames'; frames: number; text: string; model: string; processor: string; at: number };
+      usage?: { milliCredits: number; costState: string };
+    }
+  | { assetId: string; status: 'reading' }
+  | { assetId: string; status: 'unavailable'; reason: string; message: string }
+  | { assetId: string; status: 'failed'; reason: string; message: string; retryable: boolean };
+
+export type PickerCategory =
+  | 'posts'
+  | 'templates'
+  | 'accounts'
+  | 'folders'
+  | 'sources'
+  | 'skills'
+  | 'connectors'
+  | 'library';
+
+export interface PickerItem {
+  kind:
+    | 'post'
+    | 'template'
+    | 'account'
+    | 'folder'
+    | 'source'
+    | 'skill'
+    | 'connector_item'
+    | 'image'
+    | 'video';
+  id: string;
+  label: string;
+  sublabel?: string;
+  updatedAt?: number;
+  platform?: string;
+  state?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  href?: string;
+  provider?: 'notion' | 'gmail' | string;
+  connectionId?: string;
+  expiresAt?: number;
+}
+
+export interface PickerSearchResult {
+  query: string;
+  categories: Partial<Record<PickerCategory, PickerItem[]>>;
+  verified: boolean;
+}
+
+export interface ProductivityConnectorProvider {
+  id: 'notion' | 'gmail' | string;
+  enabled: boolean;
+  configured: boolean;
+  scopes: string[];
+}
+
+export interface ProductivityConnectorConnection {
+  connectionId: string;
+  provider: 'notion' | 'gmail' | string;
+  account: string;
+  scopes: string[];
+  expiresAt: number | null;
+  revoked: boolean;
+}
+
+export interface ProductivityConnectorCatalog {
+  providers: ProductivityConnectorProvider[];
+  connections: ProductivityConnectorConnection[];
+}
+
+export interface ProductivityConnectorSearchItem {
+  referenceId: string;
+  connectionId: string;
+  provider: string;
+  title: string;
+  excerpt: string;
+  expiresAt: number;
+}
+
+export interface ProductivityConnectorSearchResult {
+  connectionId: string;
+  provider: string;
+  items: ProductivityConnectorSearchItem[];
 }
 
 /** One of the Markdown memory files rendered by the API (`GET /memory`). */

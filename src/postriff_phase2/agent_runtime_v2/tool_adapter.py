@@ -201,6 +201,8 @@ _SITE_NAMES = {
     "entity.status": "entity_status",
     # Registered by the site agent's gap work (voice fit, member activity); adapted when present.
     "voice.check": "voice_check", "member.activity": "member_activity", "record.attribution": "record_attribution", "campaign.membership": "campaign_membership",
+    # Chat attachments (chat-context SPEC §5.9): the same search the picker uses.
+    "workspace.search": "workspace_search",
     # Rafii live agent (Contract 2): client actions the panel and the voice session carry out.
     "ui.guide": "ui_guide", "ui.voice": "ui_voice",
 }
@@ -224,7 +226,8 @@ def wants_to_be_shown(text: str) -> bool:
 
 
 _ID_TYPES = {"draftId": "draft", "variantId": "draft", "campaignId": "campaign", "jobId": "job", "reviewId": "review", "automationId": "automation",
-             "taskId": "automation", "assetId": "asset", "connectionId": "connection", "documentId": "help_document"}
+             "taskId": "automation", "assetId": "asset", "connectionId": "connection", "documentId": "help_document",
+             "sourceId": "source", "templateId": "template", "folderId": "folder"}
 _TITLE_KEYS = ("name", "goal", "title", "label", "platform")
 
 

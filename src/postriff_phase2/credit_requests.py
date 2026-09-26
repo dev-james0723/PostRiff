@@ -26,6 +26,41 @@ class CreditRequests:
         # The model an Auto request writes with depends on workspace state: estimate and issue take it from estimate_request.
         return runtime, payload.get('model') or runtime.model
 
+    def _notes(self, cur, workspace_id, state, payload):
+        """What a `media-notes` read of this asset would cost now, checked the way the read checks it (SPEC §8.2)."""
+        from . import asset_kinds, media_consent, media_notes as notes_module, turn_references
+        if not isinstance(payload,dict) or set(payload)!={'assetId'} or not isinstance(payload.get('assetId'),str) or not notes_module.ASSET_ID.match(payload['assetId']):
+            raise AlphaError('Invalid media notes request.',400)
+        notes=getattr(self.ideas,'media_notes',None)
+        if notes is None or not notes.reader.available:
+            raise AlphaError(turn_references.REASONS['reader_unavailable'],409,code='reader_unavailable')
+        asset=next((a for a in (state.get('phase2') or {}).get('assets',[]) if isinstance(a,dict) and a.get('id')==payload['assetId'] and not a.get('deleted') and not a.get('deletionPending')),None)
+        if asset is None or asset_kinds.kind_of(asset) is None: raise AlphaError("This photo or video isn't in this workspace.",404)
+        if not asset_kinds.is_ready(asset): raise AlphaError(turn_references.REASONS['media_not_ready'],409,code='media_not_ready')
+        kind,frames=notes_module.kind_for(asset),notes_module.frame_count(asset)
+        if kind=='video_frames' and not frames: raise AlphaError(turn_references.REASONS['no_frames'],409,code='no_frames')
+        processor=notes.reader.processor()
+        if not media_consent.allowed(state,processor): raise AlphaError(turn_references.REASONS['consent_required'],409,code='consent_required')
+        existing=notes_module._row(cur,workspace_id,asset['id'],str(asset.get('hash') or ''))
+        cached=bool(existing and existing['status']=='ready' and (existing.get('processor') or {}).get('id')==processor['id'])
+        estimate=notes.reader.estimate(kind,frames)
+        if estimate['ceilingUsdMicro'] is None: raise AlphaError(turn_references.REASONS['reader_unavailable'],409,code='reader_unavailable')
+        return {'estimate':estimate,'kind':kind,'frames':frames,'cached':cached}
+
+    def _notes_estimate(self, workspace_id, token, body):
+        book=self._book()
+        with self.ideas.repository.transaction(token,workspace_id) as (cur,row,_actor):
+            require(self.ideas._member(row),'edit')
+            policy=book.policy(cur,workspace_id)
+            if not policy: raise AlphaError('Credit billing is not active for this workspace.',409)
+            available=book.view(cur,workspace_id)['availableMilliCredits']
+            info=self._notes(cur,workspace_id,self.ideas._state(row),body.get('request'))
+        cost=info['estimate']
+        # A cached note costs nothing and needs no quote.
+        typical,ceiling=(0,0) if info['cached'] else (millicredits(cost['typicalUsdMicro']),millicredits(cost['ceilingUsdMicro']))
+        return {'estimateMilliCredits':min(typical,ceiling),'ceilingMilliCredits':ceiling,'availableMilliCredits':available,'basis':'media_notes',
+                'model':cost['model'],'provider':cost['provider'],'policy':policy,'stateRevision':row[0],'kind':info['kind'],'frames':info['frames'],'cached':info['cached']}
+
     def _ceiling(self, runtime, model, request):
         import math
         return millicredits(math.ceil(runtime.price_quote(request, model) * 1_000_000))
@@ -33,6 +68,7 @@ class CreditRequests:
     def estimate(self, workspace_id, token, body):
         """A labelled usual cost and the ceiling that will be held, from the request the writer would receive."""
         if is_api_token(token): raise AlphaError('Sign in to review a credit estimate.',403)
+        if isinstance(body,dict) and body.get('operation')=='media-notes': return self._notes_estimate(workspace_id,token,body)
         book=self._book(); payload=body.get('request'); runtime,model=self._validate(payload)
         operation=body.get('operation','quick-start')
         if operation not in ('quick-start','turn'): raise AlphaError('Choose quick-start or turn.',400)
@@ -47,11 +83,28 @@ class CreditRequests:
         ceiling=self._ceiling(runtime,model,request)
         usual=min(ceiling,millicredits(math.ceil(runtime.typical_quote(request,model)*1_000_000)))
         return {'estimateMilliCredits':usual,'ceilingMilliCredits':ceiling,'availableMilliCredits':available,'basis':runtime.ESTIMATE_BASIS,
-                'model':model,'provider':runtime.provider,'policy':policy,'reasoning':request.get('reasoning'),
+                'model':model,'provider':runtime.provider,'policy':policy,'reasoning':request.get('reasoning'),'stateRevision':row[0],
                 **({'warnings':[request['writerNote']]} if request.get('writerNote') else {})}
+
+    def _notes_issue(self, workspace_id, token, body):
+        book=self._book(); payload=body.get('request')
+        try:
+            maximum=amount(body.get('maxMilliCredits'))
+            binding=request_digest('media-notes',payload,body.get('conversationId'))
+        except (ValueError,TypeError): raise AlphaError('Invalid credit request or limit.',400)
+        with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
+            require(self.ideas._member(row),'edit')
+            if body.get('expectedRevision')!=row[0]: raise AlphaError('Workspace changed. Review this request again.',409)
+            info=self._notes(cur,workspace_id,self.ideas._state(row),payload)
+            if info['cached']: raise AlphaError('Rafii already read this; no credits are needed.',409,code='notes_cached')
+            cost=info['estimate']; ceiling=millicredits(cost['ceilingUsdMicro'])
+            if maximum<ceiling: raise AlphaError(f'This task can use up to {ceiling/1000:.1f} credits. Set the limit to at least {ceiling/1000:.1f}.',402)
+            # The quote names the vision model and provider, so the read's reservation (CreditBook.prepare) matches it.
+            return book.issue(cur,workspace_id,actor,row[0],binding,cost['model'],cost['provider'],maximum)
 
     def issue(self, workspace_id, token, body):
         if is_api_token(token): raise AlphaError('Sign in to approve a credit limit.',403)
+        if isinstance(body,dict) and body.get('operation')=='media-notes': return self._notes_issue(workspace_id,token,body)
         book=self._book(); payload=body.get('request');runtime,model=self._validate(payload)
         operation=body.get('operation','quick-start');conversation=body.get('conversationId')
         try:
@@ -76,6 +129,8 @@ class CreditRequests:
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
             require(self.ideas._member(row),'edit')
             if not book.policy(cur,workspace_id): return None
+            if operation=='media-notes':
+                return self._notes_authority(cur,workspace_id,row,actor,revision,payload,book)
             runtime=self.ideas._select_runtime(payload.get('model'))
             if runtime.cost_class!='paid' and not self.ideas._wants_image(payload): return None
             self._validate(payload)
@@ -85,3 +140,18 @@ class CreditRequests:
             try: binding=request_digest(operation,payload,conversation)
             except (ValueError,TypeError): raise AlphaError('Invalid draft request.',400)
             return book.authorize(cur,workspace_id,actor,current,binding,payload.get('creditQuoteId'))
+
+    def _notes_authority(self, cur, workspace_id, row, actor, revision, payload, book):
+        """The quote a `media-notes` read reserves against, or None when it needs none: a cached note, or a read that will
+        answer `unavailable` before reserving anything (the read itself reports why)."""
+        body={'assetId':payload.get('assetId')}
+        try:
+            info=self._notes(cur,workspace_id,self.ideas._state(row),body)
+        except AlphaError:
+            return None
+        if info['cached']: return None
+        current=row[0] if revision is None else revision
+        if current!=row[0]: raise AlphaError('Workspace changed. Review the credit limit again.',409)
+        try: binding=request_digest('media-notes',body)
+        except (ValueError,TypeError): raise AlphaError('Invalid media notes request.',400)
+        return book.authorize(cur,workspace_id,actor,current,binding,payload.get('creditQuoteId'))

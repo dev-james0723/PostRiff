@@ -6,6 +6,7 @@ never interprets it as an instruction and never emits `action.proposed` on its o
 """
 from postriff_alpha.domain import AlphaError, clean
 from postriff_alpha.generation import FixtureAdapter
+from .fencing import fixture_material
 from .contracts import digest
 from .source_policy import exclusion_message
 from . import locale_lint, locales
@@ -134,9 +135,11 @@ class FixtureAgentRuntime(AgentRuntime):
         emit(safe_event("progress.updated", stage="drafting", percent=25))
         facts = [f for s in context["sources"] for f in s["facts"]]
         style = request.get("styleDirectives") or {}
+        material = fixture_material(request)
         variants = []
         for index, d in enumerate(destinations):
-            result = FixtureAdapter().generate({**d, "facts": facts, "idea": request.get("idea", ""), "tone": request.get("tone", "warm"), "shortOpenings": style.get("shortOpenings", False), "styleDirectives": style})
+            # The free preview writer gets the rework or handed-in text only: never inspiration or reference notes.
+            result = FixtureAdapter().generate({**d, "facts": facts, "idea": request.get("idea", ""), "material": material, "tone": request.get("tone", "warm"), "shortOpenings": style.get("shortOpenings", False), "styleDirectives": style})
             text = result["text"]
             # Deliver text as bounded deltas, then the completed message for this destination.
             for start in range(0, len(text), 400):

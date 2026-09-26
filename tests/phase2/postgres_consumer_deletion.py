@@ -143,3 +143,60 @@ service.identity=identity
 assert reconcile_identity(service)['status']=='completed' and identity.calls[-1]==person
 assert reconcile_identity(service)['status']=='idle'
 print('PASS storage retry, worker fences, unknown cost, subscription, other ownership, identity partial and bounded recovery')
+
+# Chat-context S31: video storage goes with the account. One ready video (object, poster, frames), one pending and one
+# aborted upload, a Library photo whose deletion never finished (`deletionPending`) and a stray object under the prefix:
+# nothing is left, and the receipt says storage was deleted only after all of it.
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from postriff_phase2.hosted_storage import PrivateAssetService  # noqa: E402
+from test_video_uploads import FakeStorage  # noqa: E402
+
+
+class VideoAssets:
+    """The real kind-aware removal over the fake storage (video, poster and frames)."""
+    def __init__(self, storage):
+        self.storage = storage
+
+    def remove(self, workspace_id, asset):
+        PrivateAssetService.remove(self, workspace_id, asset)
+
+
+storage = FakeStorage()
+service.assets = VideoAssets(storage)
+service.identity = identity
+person, space = new_account()
+video_id, pending_id, aborted_id = 'a' * 32, 'b' * 32, 'c' * 32
+for name in (f'{video_id}.mp4', f'{pending_id}.mp4', 'poster.jpg', 'frame-1.jpg', 'gone.jpg', 'stray.mp4'):
+    storage.put(name, b'x')
+with connection() as db:
+    current = db.execute('SELECT state FROM pr_workspaces WHERE id=%s', (space,)).fetchone()[0]
+    current['phase2']['assets'] = [
+        {'id': video_id, 'mime': 'video/mp4', 'objectName': f'{video_id}.mp4', 'processing': 'ready', 'deleted': False,
+         'poster': {'objectName': 'poster.jpg'}, 'frames': [{'objectName': 'frame-1.jpg', 'at': 1.0}]},
+        {'id': 'd' * 32, 'mime': 'image/jpeg', 'objectName': 'gone.jpg', 'deleted': True, 'deletionPending': True},
+    ]
+    db.execute('UPDATE pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(current), space))
+    for upload_id, status in ((pending_id, 'pending'), (aborted_id, 'aborted')):
+        db.execute("INSERT INTO pr_media_uploads(id,workspace_id,created_by,bucket,object_name,mime,declared_bytes,status,token_expires_at) "
+                   "VALUES(%s,%s,%s,'postriff-video',%s,'video/mp4',10,%s,now()+interval '1 hour')", (upload_id, space, person, f'{upload_id}.mp4', status))
+result = service.delete_account(space, person, 'DELETE')
+deleted = {name for _category, name in storage.deleted}
+assert result['deleted'], result
+assert storage.objects == {}, sorted(storage.objects)
+assert {f'{video_id}.mp4', 'poster.jpg', 'frame-1.jpg', 'gone.jpg', f'{pending_id}.mp4', f'{aborted_id}.mp4', 'stray.mp4'} <= deleted, sorted(deleted)
+with connection() as db:
+    assert db.execute('SELECT count(*) FROM pr_media_uploads WHERE workspace_id=%s', (space,)).fetchone()[0] == 0
+    receipt = db.execute("SELECT receipt FROM pr_data_requests WHERE id=%s", (result['receiptId'],)).fetchone()[0]
+assert receipt['storageDeleted'] is True, receipt
+
+# Upload rows with no storage configured: refused before anything is deleted (the account stays whole).
+person, space = new_account()
+service.assets = Assets()
+with connection() as db:
+    db.execute("INSERT INTO pr_media_uploads(id,workspace_id,created_by,bucket,object_name,mime,declared_bytes,status,token_expires_at) "
+               "VALUES(%s,%s,%s,'postriff-video',%s,'video/mp4',10,'pending',now()+interval '1 hour')", ('e' * 32, space, person, 'e' * 32 + '.mp4'))
+denied(lambda: service.delete_account(space, person, 'DELETE'), 503)
+assert service.get(space, person)['state'].get('accountDeletion') is None
+print('PASS video objects, posters, frames, pending/aborted uploads, a deletionPending asset and the prefix are deleted before the workspace; no storage, no deletion')

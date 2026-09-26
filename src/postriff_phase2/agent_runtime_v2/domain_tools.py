@@ -376,6 +376,15 @@ def campaign_items(ctx: RafiiRunContext, args: dict) -> dict:
 
 
 # --- drafting through the writing pipeline (CREATE_DRAFT; D04) ---------------------------------------------------------------
+def _forward_chips(ctx: RafiiRunContext, request: dict) -> dict:
+    """The turn's chips go with the first writing call only (chat-context SPEC §9): later calls in the same turn are the
+    Manager's own follow-ups, which the person didn't attach anything to."""
+    if ctx.chip_fields and not ctx.chips_forwarded:
+        ctx.chips_forwarded = True
+        return {**request, **ctx.chip_fields}
+    return request
+
+
 def _skills_used(ctx: RafiiRunContext, events: dict, result: dict) -> list[dict]:
     """The product writing skills the run bound (its usage record), named on the result and as a stored fact."""
     from .live_tools import bound_skills
@@ -393,6 +402,7 @@ def _writing_run(ctx: RafiiRunContext, request: dict, *, separate: bool) -> tupl
     the re-read state and the product skills the run bound."""
     ideas = ctx.service.ideas
     ctx.check_cancelled()
+    request = _forward_chips(ctx, request)
     if ctx.writer_model:
         request["model"] = ctx.writer_model
     result = ideas.turn(ctx.workspace_id, ctx.token, ctx.conversation_id, request)

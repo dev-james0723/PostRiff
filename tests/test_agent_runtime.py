@@ -1294,3 +1294,24 @@ class HarnessLiveAgentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MediaConsentGateTests(unittest.TestCase):
+    """Chat-context S32: a photo, frame or poster reaches a vision or image model only with the owner's consent for that
+    exact processor; otherwise a typed result and one warning, and the caller calls nothing."""
+
+    def test_blocked_without_consent_and_allowed_for_the_named_processor(self):
+        from types import SimpleNamespace
+        from postriff_phase2 import media_consent
+        from postriff_phase2.agent_runtime_v2 import creative
+        from postriff_phase2.agent_runtime_v2.context import EffectLedger
+        ledger = EffectLedger()
+        ctx = SimpleNamespace(ledger=ledger)
+        route = SimpleNamespace(provider="openai", model="gpt-6-sol")
+        blocked = creative._consent_blocked(ctx, {}, "vision", route)
+        self.assertEqual((blocked["code"], blocked["ok"]), ("consent_required", False))
+        self.assertEqual([w["code"] for w in ledger.warnings], ["consent_required"])
+        state = {"mediaEgress": {"cloud": True, "processors": [media_consent.processor("openai", "gpt-6-sol")]}}
+        self.assertIsNone(creative._consent_blocked(ctx, state, "vision", route))
+        other = SimpleNamespace(provider="gateway", model="google/gemini-3-pro")
+        self.assertEqual(creative._consent_blocked(ctx, state, "image", other)["code"], "consent_required", "another processor needs its own consent")

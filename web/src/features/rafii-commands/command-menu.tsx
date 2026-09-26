@@ -68,9 +68,10 @@ export function SlashCommandMenu({ value, caret, anchorRef, onPick, onDismiss, i
   const listId = useId();
   const input = useAnchorField(anchorRef, value);
   const { composing, focused } = useFieldState(input);
+  const [listFocused, setListFocused] = useState(false);
   const menu = useSlashMenu({ value, caret, isComposing: isComposing || composing, commands });
   // Clicking elsewhere hides the menu; coming back to the input shows it again.
-  const open = menu.open && (input ? focused : true);
+  const open = menu.open && (input ? focused || listFocused : true);
   const rows = menu.commands;
 
   const [active, setActive] = useState(0);
@@ -102,9 +103,10 @@ export function SlashCommandMenu({ value, caret, anchorRef, onPick, onDismiss, i
   function close() {
     menu.dismiss();
     onDismiss();
+    input?.focus({ preventScroll: true });
   }
 
-  // The key listener is attached once per input and reads the latest rows through this ref.
+  // The input and focusable scroller share the same keys and read the latest rows through this ref.
   const latest = useRef<{ open: boolean; count: number; current: number; pick: (index: number) => void; close: () => void } | null>(null);
   useLayoutEffect(() => {
     latest.current = { open, count: rows.length, current, pick, close };
@@ -123,11 +125,16 @@ export function SlashCommandMenu({ value, caret, anchorRef, onPick, onDismiss, i
       event.preventDefault();
       event.stopPropagation();
     };
+    const scroller = list.current;
     input.addEventListener('keydown', onKeyDown);
-    return () => input.removeEventListener('keydown', onKeyDown);
-  }, [input]);
+    scroller?.addEventListener('keydown', onKeyDown);
+    return () => {
+      input.removeEventListener('keydown', onKeyDown);
+      scroller?.removeEventListener('keydown', onKeyDown);
+    };
+  }, [input, open]);
 
-  // The input drives the listbox (focus never leaves it): combobox attributes while the menu is open.
+  // The input normally drives the listbox; the scroller also supports direct keyboard focus.
   useEffect(() => {
     if (!input || !open) return;
     return setAttributes(input, {
@@ -164,7 +171,20 @@ export function SlashCommandMenu({ value, caret, anchorRef, onPick, onDismiss, i
       style={{ position: 'absolute', ...(place ? { left: place.left, top: place.top, width: place.width, transform: 'translateY(-100%)' } : { left: 0, right: 0, bottom: `calc(100% + ${GAP}px)` }) }}
     >
       <Surface material='elevated' radius='control' padding='none' className='overflow-hidden'>
-        <div ref={list} id={listId} role='listbox' aria-label='Commands' className='overflow-y-auto overscroll-contain p-1.5' style={{ position: 'relative', maxHeight: place?.maxHeight ?? MAX_HEIGHT }}>
+        <div
+          ref={list}
+          id={listId}
+          role='listbox'
+          aria-label='Commands'
+          tabIndex={0}
+          aria-activedescendant={rows.length ? `${listId}-option-${current}` : undefined}
+          onFocus={() => setListFocused(true)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setListFocused(false);
+          }}
+          className='rafii-focus overflow-y-auto overscroll-contain p-1.5'
+          style={{ position: 'relative', maxHeight: place?.maxHeight ?? MAX_HEIGHT }}
+        >
           {groupCommands(rows).map((group) => (
             <div key={group.id} role='group' aria-labelledby={`${listId}-${group.id}`}>
               <p id={`${listId}-${group.id}`} className='text-muted-foreground px-2 pt-2 pb-1 text-[11px] font-medium tracking-wide uppercase'>
