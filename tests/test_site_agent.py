@@ -251,12 +251,12 @@ class ToolTest(unittest.TestCase):
             self.assertNotIn(forbidden, tools.CATALOG)
 
     def test_catalogue_pin(self):
-        # Deliberate pin: adding a tool changes tools.RELEASE and the policy epoch (chat-context SPEC §5.9 added
-        # `workspace.search`, a read). Update this list on purpose when the catalogue changes.
-        self.assertEqual(len(tools.CATALOG), 33)
+        # Deliberate pin: chat-context adds the workspace.search read; the live agent adds the ui.guide and
+        # ui.voice client actions. Adding a tool changes tools.RELEASE and the policy epoch.
+        self.assertEqual(len(tools.CATALOG), 35)
         self.assertEqual(tools.CATALOG["workspace.search"]["effect"], "read")
         self.assertEqual(sorted(t for t, spec in tools.CATALOG.items() if spec["effect"] != "read"),
-                         ["automation.patch_propose", "ui.navigate", "ui.show_help"])
+                         ["automation.patch_propose", "ui.guide", "ui.navigate", "ui.show_help", "ui.voice"])
 
     def test_unknown_tools_and_bad_input_fail_closed(self):
         record, result = tools.run("publish.now", {}, ctx())

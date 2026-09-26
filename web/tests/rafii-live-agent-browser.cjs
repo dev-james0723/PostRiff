@@ -13,7 +13,7 @@
  *     [--sections=style,style-phone,slash,slash-phone,voice,voice-phone,weather]
  *
  * style, style-phone, slash and slash-phone run against RAFII_WEB_URL: any build of the web app and any local harness
- * that applied migration 026 (tests/phase2/rls.sql includes it).
+ * that applied migration 030 (tests/phase2/rls.sql includes it).
  *
  * voice, voice-phone and weather run against RAFII_VOICE_WEB_URL (default: RAFII_WEB_URL), which must be:
  * - a development build (`next dev`): the scriptable GPT-Live stand-in (window.RAFII_FAKE_LIVE → window.rafiiLiveHarness)

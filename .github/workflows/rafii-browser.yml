@@ -119,6 +119,13 @@ jobs:
         run: npx --prefix web playwright install --with-deps webkit
       - name: Site agent journey, WebKit (the same checks)
         run: node web/tests/site-agent-browser.cjs --browser=webkit --out=docs/design/site-agent/evidence/ci-browser-webkit
+      - name: Rafii live agent, WebKit (the same style, command, voice and weather checks)
+        env:
+          RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
+          RAFII_VOICE_PG_PORT: '55480'
+        run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
+      - name: Rafii guide, WebKit (safe guide clicks, stop, Escape and phone)
+        run: node web/tests/rafii-guide-browser.cjs --browser=webkit --out=docs/design/rafii-live-agent/evidence/ci-guide-webkit
       - name: Keep the evidence for this commit
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -133,6 +140,8 @@ jobs:
             docs/design/site-agent/evidence/ci-browser-webkit/
             docs/design/rafii-live-agent/evidence/ci-browser-chromium/
             docs/design/rafii-live-agent/evidence/ci-guide-chromium/
+            docs/design/rafii-live-agent/evidence/ci-browser-webkit/
+            docs/design/rafii-live-agent/evidence/ci-guide-webkit/
             harness.log
             web.log
             voice-harness.log
