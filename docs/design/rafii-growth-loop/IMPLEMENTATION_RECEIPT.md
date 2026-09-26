@@ -1,6 +1,6 @@
 # Rafii Growth Loop P0 implementation receipt
 
-Status: implementation and local validation complete; release evidence is recorded separately after deployment.
+Status: implementation, local validation, push and production deployment complete. See RELEASE_RECEIPT.md for the verified deployment and limitations.
 Execution: real local Python/Next.js/PostgreSQL and Chromium/WebKit. Provider measurements and identity in browser/database tests are synthetic local fixtures; no real social post, model generation, payment or production migration was performed.
 
 ## Scope and architecture
