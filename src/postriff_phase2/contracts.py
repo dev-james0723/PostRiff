@@ -15,9 +15,15 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           # Xiaohongshu note body; the title is the draft's first line, at most 20 characters (`title`). Drafting and
           # preview only, no publishing route.
           "Xiaohongshu": {"version": "local-conservative-2026-09-16", "characters": 1000, "operation": "note", "title": 20},
-          # X: one post of 280 weighted characters (text_measure counts CJK and emoji as 2). Drafting and preview only:
-          # PostRiff has no hosted X publisher, so being listed here never makes X publishable.
-          "X": {"version": "local-conservative-2026-09-24", "characters": 280, "operation": "post"}}
+          # X: one post of 280 weighted characters (text_measure counts CJK and emoji as 2). Hosted OAuth connector
+          # (social_connectors.XProvider); it publishes only once the operator declares it reviewed.
+          "X": {"version": "local-conservative-2026-09-24", "characters": 280, "operation": "post"},
+          # Wave 1 hosted connectors (Rafii Hosted Channels Plan, 2026-09-25). Bluesky counts 300 graphemes; Mastodon's
+          # default server limit is 500; Telegram text messages allow 4096 (a photo caption 1024); Discord messages 2000.
+          "Bluesky": {"version": "hosted-2026-09-25", "characters": 300, "operation": "post"},
+          "Mastodon": {"version": "hosted-2026-09-25", "characters": 500, "operation": "status"},
+          "Telegram": {"version": "hosted-2026-09-25", "characters": 4096, "operation": "channel_post"},
+          "Discord": {"version": "hosted-2026-09-25", "characters": 2000, "operation": "channel_message"}}
 SCENARIOS = ("success", "denied", "expired", "accepted", "delayed", "failed", "rate_limited", "timeout", "duplicate", "uncertain", "malformed", "capability_loss")
 
 def digest(value):

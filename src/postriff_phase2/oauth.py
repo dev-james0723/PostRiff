@@ -7,6 +7,7 @@ server-side connector worker; they never reach the browser, the agent, or a log.
 """
 import base64
 import hashlib
+import hmac
 import json
 import secrets
 import time
@@ -19,6 +20,7 @@ from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, u
 
 TRANSACTION_TTL = 600
 PUBLISH_CAPABILITIES = ("publish", "schedule")
+NON_EXPIRING_HORIZON = 86400 * 365 * 5
 
 
 class CredentialVault:
@@ -103,7 +105,8 @@ class OAuthService:
                             'productionReviewed': reviewed, 'executionPaused': paused,
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
-                            'accountRequirement': 'Instagram Creator or Business account. No Facebook Page required.' if pid == 'instagram' else 'LinkedIn member profile.' if pid == 'linkedin' else 'Threads profile.',
+                            'accountRequirement': cls.account_requirement,
+                            'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
                             'capabilities': {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}})
         # Keep explicitly injected/test providers visible without changing their authority.
         for pid, adapter in self.providers.items():
@@ -121,8 +124,10 @@ class OAuthService:
         usable = connected and provider.get('configured') and provider.get('connectReady') and not provider.get('executionPaused')
         scopes = set(channel.get('scopes') or [])
         platform = channel.get('platform')
-        read_scope = 'instagram_business_basic' if platform == 'Instagram' else 'r_member_social' if platform == 'LinkedIn' else None
-        publish_scope = 'instagram_business_content_publish' if platform == 'Instagram' else 'w_member_social' if platform == 'LinkedIn' else None
+        from .providers import adapter_class_for_platform
+        adapter_class = adapter_class_for_platform(platform)
+        read_scope = getattr(adapter_class, 'read_scope', None)
+        publish_scope = getattr(adapter_class, 'publish_scope', None)
         history = 'HISTORICAL_IMPORT_UNAVAILABLE'
         publishing = 'PUBLISHING_PERMISSION_UNAVAILABLE'
         if usable:
@@ -155,7 +160,7 @@ class OAuthService:
         return f"{self.public_base_url}/api/oauth/{provider_id}/callback"
 
     # --- start ----------------------------------------------------------------------
-    def start(self, workspace_id, token, provider_id, capability):
+    def start(self, workspace_id, token, provider_id, capability, inputs=None):
         adapter = self._provider(provider_id)
         if not getattr(adapter, "execution_enabled", True):
             raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
@@ -165,6 +170,9 @@ class OAuthService:
         if not scopes:
             raise AlphaError(f"{adapter.platform} does not offer '{capability}' through its official API for this app.", 409)
         redirect = self.callback_uri(provider_id)
+        # Class attributes, so a mocked adapter keeps the plain redirect path.
+        if getattr(type(adapter), "connect_kind", "oauth") != "oauth" or callable(getattr(type(adapter), "begin", None)):
+            return self._start_prepared(workspace_id, token, provider_id, adapter, capability, list(scopes), redirect, inputs)
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit, throttle
             require(_membership(row), "manage_connections")
@@ -177,17 +185,49 @@ class OAuthService:
             audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability})
             return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": list(scopes), "permissionExplanation": adapter.explain(capability), "authorizeUrl": adapter.authorize_url(redirect, state, challenge, scopes), "expiresAt": self.clock() + TRANSACTION_TTL}
 
+    def _start_prepared(self, workspace_id, token, provider_id, adapter, capability, scopes, redirect, inputs):
+        """Adapters that call out before redirecting (Bluesky PAR, Mastodon app registration) or that connect with a
+        posted code (Telegram). Membership is checked before any outbound request and again when recording."""
+        from .hosted import _membership, audit, throttle
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_membership(row), "manage_connections")
+            throttle(cur, f"oauth-start:{workspace_id}", 20, 600)
+        verifier, challenge = pkce_pair()
+        extra, authorize_url = {}, None
+        if adapter.connect_kind == "bot_code":
+            state = adapter.new_code()
+            context = {"kind": adapter.connect_kind}
+            extra = {**adapter.connect_instructions(), "code": state}
+        else:
+            state = secrets.token_urlsafe(32)
+            spec = adapter.start_input or {}
+            value = (inputs or {}).get(spec.get("name")) if isinstance(inputs, dict) else None
+            if spec and (not isinstance(value, str) or not 1 <= len(value.strip()) <= 253):
+                raise AlphaError(f"Enter your {spec.get('label', 'account')} first.", 400)
+            begun = adapter.begin(redirect, state, verifier, challenge, scopes, value.strip() if isinstance(value, str) else None)
+            context, authorize_url = begun["context"], begun["authorizeUrl"]
+        ciphertext, key_id = self.vault.encrypt(json.dumps({"verifier": verifier, **context}))
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_membership(row), "manage_connections")
+            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, 'identity' if capability == 'posts_read' else capability, redirect, scopes, hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
+            transaction_id = cur.fetchone()[0]
+            audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability})
+        return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": scopes,
+                "permissionExplanation": adapter.explain(capability), "authorizeUrl": authorize_url, "connectKind": adapter.connect_kind,
+                "expiresAt": self.clock() + TRANSACTION_TTL, **extra}
+
     # --- public callback (redirect only) -------------------------------------------
     @staticmethod
     def callback_redirect(web_base_url, provider_id, query):
         """The public callback never exchanges codes; it hands state/code back to the signed-in app."""
-        allowed = {k: clean(v, 512) for k, v in query.items() if k in ("state", "code", "error", "error_description")}
+        allowed = {k: clean(v, 512) for k, v in query.items() if k in ("state", "code", "error", "error_description", "iss")}
         allowed["provider"] = provider_id
         return f"{web_base_url.rstrip('/')}/channels/connect?{urlencode(allowed)}"
 
     # --- complete (authenticated exchange) ----------------------------------------
-    def complete(self, workspace_id, token, provider_id, state, code, error=None):
+    def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
         adapter = self._provider(provider_id)
+        bot_code = getattr(type(adapter), "connect_kind", "oauth") == "bot_code"
         if not getattr(adapter, "execution_enabled", True):
             raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
@@ -208,13 +248,23 @@ class OAuthService:
             if expires_at <= self.clock():
                 cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='expired' WHERE id::text=%s", (transaction_id,))
                 raise AlphaError("This connection request expired. Start again.", 409)
-            if error or not code:
+            if bot_code and not error:
+                # The code is claimed by Rafii's bot seeing it in a channel (telegram_webhook), not by a redirect.
+                context = json.loads(self.vault.decrypt(verifier_ct, key_id))
+                if not isinstance(context.get("chat"), dict):
+                    return {"connected": False, "reason": "waiting", "pending": True}
+            elif error or not code:
                 cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='denied' WHERE id::text=%s", (transaction_id,))
                 audit(cur, workspace_id, principal, "oauth.denied", transaction_id, {"provider": provider_id})
                 return {"connected": False, "reason": "denied"}
             cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchanged' WHERE id::text=%s", (transaction_id,))
             verifier = self.vault.decrypt(verifier_ct, key_id)
-            grant = adapter.exchange(code, verifier, redirect)
+            if bot_code:
+                grant = adapter.grant_from_context(context)
+            elif getattr(type(adapter), "requires_issuer", False) is True:
+                grant = adapter.exchange(code, verifier, redirect, iss=iss)
+            else:
+                grant = adapter.exchange(code, verifier, redirect)
             identity = adapter.identity(grant["accessToken"])
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
             reported = grant.get('scopes')
@@ -237,7 +287,9 @@ class OAuthService:
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
-        channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + 86400 * 30, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
+        # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
+        horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
+        channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
         snapshot = self.repository.get(workspace_id, token)
         saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections")
         self._keep_picture(workspace_id, token, connection_id, identity)
@@ -264,6 +316,93 @@ class OAuthService:
         if not found:
             raise AlphaError("This account has no picture.", 404)
         return found
+
+    def _shared_elsewhere(self, cur, workspace_id, connection_id, provider_id):
+        """True when revoking this connection would also cut off another unrevoked connection, in any workspace,
+        that relies on the same shared remote grant (Rafii's bot in one Discord server or Telegram channel)."""
+        adapter = self.providers.get(provider_id)
+        if adapter is None or not getattr(type(adapter), "shared_remote", False):
+            return False
+        cur.execute("SELECT provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+        own = cur.fetchone()
+        if not own:
+            return False
+        cur.execute("SELECT 1 FROM public.pr_encrypted_credentials WHERE provider=%s AND provider_account_id=%s AND revoked_at IS NULL AND NOT (workspace_id=%s AND connection_id=%s) LIMIT 1",
+                    (provider_id, own[0], workspace_id, connection_id))
+        return cur.fetchone() is not None
+
+    # --- destinations (a Discord channel) ------------------------------------------------
+    def _destination_credential(self, workspace_id, token, connection_id):
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            from .hosted import _membership
+            require(_membership(row), "manage_connections")
+            cur.execute("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
+            stored = cur.fetchone()
+        if not stored:
+            raise AlphaError("Connection unavailable.", 404)
+        adapter = self._provider(stored[0])
+        if not getattr(adapter, "has_destinations", False):
+            raise AlphaError("This account has nothing to choose.", 409)
+        return adapter, stored
+
+    def destinations(self, workspace_id, token, connection_id):
+        adapter, stored = self._destination_credential(workspace_id, token, connection_id)
+        return {"connectionId": connection_id, "destinations": adapter.destinations(self.vault.decrypt(stored[1], stored[2]))}
+
+    def choose_destination(self, workspace_id, token, connection_id, destination_id):
+        if not isinstance(destination_id, str) or not destination_id.isdigit() or not 5 <= len(destination_id) <= 25:
+            raise AlphaError("Choose a channel.", 400)
+        adapter, stored = self._destination_credential(workspace_id, token, connection_id)
+        ciphertext, key_id = self.vault.encrypt(adapter.with_destination(self.vault.decrypt(stored[1], stored[2]), destination_id))
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            from .hosted import _membership, audit
+            require(_membership(row), "manage_connections")
+            # Compare-and-swap on the ciphertext read above: a reconnect or a second choice meanwhile wins.
+            cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, key_id, workspace_id, connection_id, stored[1]))
+            if cur.rowcount != 1:
+                raise AlphaError("This account changed meanwhile. Reload and choose again.", 409)
+            audit(cur, workspace_id, principal, "channel.destination_chosen", connection_id, {"provider": stored[0]})
+        return {"connectionId": connection_id, "destinationId": destination_id}
+
+    # --- Telegram: Rafii's bot sees a connect code in a channel -------------------------
+    def telegram_webhook(self, secret, raw):
+        """Public route, authenticated by the secret token Telegram echoes. Always answers ok to Telegram."""
+        adapter = self.providers.get("telegram")
+        if adapter is None:
+            raise AlphaError("This hosted route is unavailable.", 404)
+        if not isinstance(secret, str) or not hmac.compare_digest(secret.encode(), adapter.webhook_secret.encode()):
+            raise AlphaError("Webhook authorization failed.", 401)
+        try:
+            update = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            return {"ok": True}
+        seen = adapter.observe(update)
+        if not seen or not getattr(adapter, "execution_enabled", True):
+            return {"ok": True}
+        code, chat, message_id = seen
+        claimed = False
+        with self.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT id::text,verifier_ciphertext,key_id,extract(epoch from expires_at)::float8,consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND provider='telegram' FOR UPDATE", (hashlib.sha256(code.encode()).hexdigest(),))
+                found = cur.fetchone()
+                if found and not found[4] and found[3] > self.clock():
+                    context = json.loads(self.vault.decrypt(found[1], found[2]))
+                    # The first channel that shows the code claims it; a copy posted elsewhere later changes nothing.
+                    if not isinstance(context.get("chat"), dict):
+                        context["chat"] = chat
+                        ciphertext, key_id = self.vault.encrypt(json.dumps(context))
+                        cur.execute("UPDATE public.pr_oauth_transactions SET verifier_ciphertext=%s,key_id=%s WHERE id::text=%s", (ciphertext, key_id, found[0]))
+                        claimed = True
+        if claimed:
+            adapter.delete_message(chat["id"], message_id)
+        return {"ok": True}
+
+    # --- Bluesky: public client documents -------------------------------------------------
+    def bluesky_document(self, name):
+        adapter = self.providers.get("bluesky")
+        if adapter is None or name not in ("client-metadata.json", "jwks.json"):
+            raise AlphaError("This hosted route is unavailable.", 404)
+        return adapter.client_metadata() if name == "client-metadata.json" else adapter.jwks()
 
     @staticmethod
     def _capabilities(adapter, requested, granted, missing, now):
@@ -321,7 +460,10 @@ class OAuthService:
                 renew_instagram = (provider == 'instagram' and expires and 0 < expires - now <= 7 * 86400
                                    and issued_at is not None and now - issued_at >= 86400
                                    and refresh_supported and refresh_ct)
-                if expired or renew_instagram:
+                # X and Bluesky tokens are short-lived: renew within the adapter's margin, not after a failed call.
+                margin = getattr(type(self._provider(provider)), "refresh_margin", 0) or 0
+                renew_soon = bool(margin and expires and 0 < expires - now <= margin and refresh_supported and refresh_ct)
+                if expired or renew_instagram or renew_soon:
                     if not (refresh_supported and refresh_ct):
                         raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409)
                     grant = self._provider(provider).refresh(self.vault.decrypt(refresh_ct, key_id))
@@ -517,10 +659,13 @@ class OAuthService:
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
             remote = None
-            try:
-                remote = self._provider(stored[0]).revoke(self.vault.decrypt(stored[1], stored[2]))
-            except AlphaError:
-                remote = False
+            if self._shared_elsewhere(cur, workspace_id, connection_id, stored[0]):
+                remote = False  # another connection still uses Rafii's bot there; removing it would disconnect them too
+            else:
+                try:
+                    remote = self._provider(stored[0]).revoke(self.vault.decrypt(stored[1], stored[2]))
+                except AlphaError:
+                    remote = False
             cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Disconnected by the customer.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             from .social_history import revoke_connection_samples

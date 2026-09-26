@@ -12,6 +12,7 @@ import type {
   AuditEvent,
   Bootstrap,
   Catalog,
+  ChannelDestination,
   ChannelView,
   Conversation,
   DataRequest,
@@ -189,14 +190,19 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
-    oauthStart: (w: string, provider: string, capability = 'identity') =>
-      send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, { capability }),
-    oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string) =>
+    oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, string>) =>
+      send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, input ? { capability, input } : { capability }),
+    oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string, iss?: string) =>
       send<OAuthComplete>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/complete`, {
         state,
         code,
-        error
+        error,
+        ...(iss ? { iss } : {})
       }),
+    channelDestinations: (w: string, id: string) =>
+      get<{ connectionId: string; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
+    chooseChannelDestination: (w: string, id: string, destinationId: string) =>
+      send<{ connectionId: string; destinationId: string }>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/destination`, { destinationId }),
     ownedPosts: (w: string, id: string, cursor?: string) =>
       send<import('./types').OwnedPostPage>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts`, { confirmed: true, cursor: cursor ?? null, limit: 25 }),
     importOwnedPosts: (w: string, id: string, receipt: string, postIds: string[], expectedRevision: number) =>

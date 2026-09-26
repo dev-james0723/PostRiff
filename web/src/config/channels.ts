@@ -27,6 +27,16 @@ export interface Channel {
 }
 
 const hostedPending = 'Publishing is still in review. Export posts until it opens.';
+/** Platforms with no app review: publishing opens once Rafii has tested the connection with real accounts. */
+const hostedTesting = 'Publishing opens after Rafii finishes testing this connection. Export posts until then.';
+const identityOnly = {
+  identity: 'Direct',
+  publish: 'Assisted',
+  schedule: 'Assisted',
+  analytics: 'Unsupported',
+  comments_read: 'Unsupported',
+  reply: 'Unsupported'
+} as const;
 
 const local = (
   slug: string,
@@ -110,6 +120,67 @@ export const channels: Channel[] = [
     notes: [hostedPending, 'Instagram allows 100 published posts per 24 hours per account.']
   },
 
+  {
+    slug: 'bluesky',
+    name: 'Bluesky',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing opens after testing',
+    capabilities: { ...identityOnly },
+    description: 'Text posts with one image on your Bluesky account. Links stay clickable.',
+    formats: ['Text (300 characters)', 'Single image'],
+    region: 'global',
+    notes: [hostedTesting, 'You sign in on your own Bluesky server. Rafii never sees your password.']
+  },
+  {
+    slug: 'mastodon',
+    name: 'Mastodon',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing opens after testing',
+    capabilities: { ...identityOnly },
+    description: 'Posts with one image to your account on any Mastodon server.',
+    formats: ['Text (500 characters on most servers)', 'Single image'],
+    region: 'global',
+    notes: [hostedTesting, 'Enter your server name first, such as mastodon.social.']
+  },
+  {
+    slug: 'telegram',
+    name: 'Telegram',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing opens after testing',
+    capabilities: { ...identityOnly },
+    description: 'Channel posts with text or one photo, sent by Rafii’s bot.',
+    formats: ['Text', 'Photo (1024-character caption)'],
+    region: 'global',
+    notes: [hostedTesting, 'Add Rafii’s bot as a channel admin that can post. It needs no other rights.']
+  },
+  {
+    slug: 'discord',
+    name: 'Discord',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing opens after testing',
+    capabilities: { ...identityOnly },
+    description: 'Announcements with one image in the server channel you choose.',
+    formats: ['Text (2000 characters)', 'Single image'],
+    region: 'global',
+    notes: [hostedTesting, 'Rafii’s bot never pings @everyone or roles.']
+  },
+  {
+    slug: 'x',
+    name: 'X',
+    group: 'hosted',
+    capability: 'assisted',
+    reviewStatus: 'publishing opens after testing',
+    capabilities: { ...identityOnly },
+    description: 'Posts with one image on your X account.',
+    formats: ['Text (280 characters)', 'Single image'],
+    region: 'global',
+    notes: [hostedTesting, 'X charges Rafii for every post and read.']
+  },
+
   /* ---- Desktop companion (signs in on your own machine) ---- */
   local('xiaohongshu', 'Xiaohongshu', 'Notes with images or video for China’s discovery-first community.', ['Image note', 'Video note'], { nameZh: '小紅書', region: 'cn' }),
   local('bilibili', 'Bilibili', 'Video uploads with titles, tags and descriptions tuned for Bilibili’s audience.', ['Video', 'Dynamic'], { nameZh: '哔哩哔哩', region: 'cn' }),
@@ -127,17 +198,12 @@ export const channels: Channel[] = [
   local('kakaotalk-channel', 'KakaoTalk Channel', 'Messages to subscribers of your KakaoTalk channel.', ['Text', 'Image'], { region: 'kr' }),
   local('sharechat', 'ShareChat', 'Regional-language posts for India.', ['Text', 'Image', 'Video'], { region: 'in' }),
   local('moj', 'Moj', 'Short vertical video for India.', ['Video'], { region: 'in' }),
-  local('x', 'X', 'Posts and threads. X bills every API call, so Rafii runs it through the companion instead.', ['Text', 'Image', 'Thread']),
   local('facebook', 'Facebook Pages', 'Page posts with photos and links.', ['Text', 'Image', 'Link']),
   local('youtube', 'YouTube', 'Video uploads with titles, descriptions, tags and scheduling.', ['Video', 'Short']),
   local('tiktok', 'TikTok', 'Short vertical video. TikTok keeps unaudited API posts private, so the companion publishes through your own login.', ['Video', 'Photo']),
   local('pinterest', 'Pinterest', 'Pins with images, titles and destination links.', ['Image pin', 'Video pin']),
   local('reddit', 'Reddit', 'Text and link posts to subreddits you belong to.', ['Text', 'Link', 'Image']),
-  local('bluesky', 'Bluesky', 'Text and image posts on the AT Protocol.', ['Text', 'Image']),
-  local('mastodon', 'Mastodon', 'Posts to any Mastodon instance.', ['Text', 'Image']),
   local('pixelfed', 'Pixelfed', 'Photo posts on the fediverse.', ['Image']),
-  local('telegram', 'Telegram', 'Channel broadcasts with text, images and files.', ['Text', 'Image', 'File']),
-  local('discord', 'Discord', 'Announcements to channels in servers you manage.', ['Text', 'Image', 'Embed']),
   local('whatsapp-channels', 'WhatsApp Channels', 'Broadcast updates to channel followers.', ['Text', 'Image']),
   local('snapchat', 'Snapchat', 'Public profile stories and spotlight.', ['Video', 'Image']),
   local('google-business-profile', 'Google Business Profile', 'Updates, offers and events on your business listing.', ['Update', 'Offer', 'Event'])

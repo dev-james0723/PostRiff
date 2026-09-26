@@ -11,9 +11,9 @@ The same answer feeds the chat confirmation (at creation), the run's items (at g
 from __future__ import annotations
 
 # Platforms with a hosted publisher (hosted_social.HostedSocial) and their provider ids.
-HOSTED_PUBLISHERS = {"LinkedIn": "linkedin", "Threads": "threads", "Instagram": "instagram"}
+HOSTED_PUBLISHERS = {"LinkedIn": "linkedin", "Threads": "threads", "Instagram": "instagram",
+                     "Bluesky": "bluesky", "Mastodon": "mastodon", "Telegram": "telegram", "Discord": "discord", "X": "x"}
 NO_ROUTE = {
-    "X": "Rafii can't publish to X yet, so the X version is prepared as a draft for you to post.",
     "Xiaohongshu": "Xiaohongshu has no publishing connection in Rafii, so the Xiaohongshu version is prepared as a draft for you to post.",
 }
 

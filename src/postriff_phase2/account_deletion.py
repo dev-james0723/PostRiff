@@ -11,6 +11,29 @@ def _other_owned(cur, workspace_id, principal):
         raise AlphaError('Transfer ownership of your other workspaces before deleting this account.', 409)
 
 
+def revoke_remote_grants(service, workspace_id):
+    """Revoke every live grant of a workspace being deleted; returns the providers that could not be revoked.
+
+    Rafii's one bot in a Discord server or Telegram channel may serve other workspaces too, so it stays while any
+    other unrevoked connection uses it. This workspace never held a personal token there, so nothing of this
+    person's remains to revoke."""
+    pending = []
+    with service.connection_factory() as db, db.cursor() as cur:
+        cur.execute('SELECT provider,access_ciphertext,key_id,connection_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND revoked_at IS NULL', (workspace_id,))
+        credentials = cur.fetchall()
+        shared = {row[3] for row in credentials if service.oauth._shared_elsewhere(cur, workspace_id, row[3], row[0])}
+    for provider, ciphertext, key_id, connection_id in credentials:
+        if connection_id in shared:
+            continue
+        try:
+            revoked = service.oauth._provider(provider).revoke(service.oauth.vault.decrypt(ciphertext, key_id))
+        except Exception:
+            revoked = False
+        if not revoked and provider not in pending:
+            pending.append(provider)
+    return pending
+
+
 def delete_account(service, workspace_id, token, confirmation):
     if confirmation != 'DELETE':
         raise AlphaError('Type DELETE to confirm account removal.')
@@ -79,17 +102,7 @@ def _delete(service, workspace_id, principal):
         except Exception as error:
             raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
     # Disconnect grants where supported. Never retain plaintext tokens in receipts or logs.
-    revocation_pending = []
-    with service.connection_factory() as db, db.cursor() as cur:
-        cur.execute('SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND revoked_at IS NULL', (workspace_id,))
-        credentials = cur.fetchall()
-    for provider, ciphertext, key_id in credentials:
-        try:
-            revoked = service.oauth._provider(provider).revoke(service.oauth.vault.decrypt(ciphertext, key_id))
-        except Exception:
-            revoked = False
-        if not revoked and provider not in revocation_pending:
-            revocation_pending.append(provider)
+    revocation_pending = revoke_remote_grants(service, workspace_id)
     with service.connection_factory() as db, db.cursor() as cur:
         cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
         current = cur.fetchone()

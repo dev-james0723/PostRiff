@@ -1010,6 +1010,19 @@ export interface ProviderView {
   productionReviewed: boolean;
   executionPaused?: boolean;
   capabilities: Record<string, boolean>;
+  /** 'oauth' redirects to the platform; 'bot_code' means posting a one-time code where Rafii's bot sees it (Telegram). */
+  connectKind?: 'oauth' | 'bot_code';
+  /** One value to ask before connecting: a Bluesky handle or a Mastodon server. */
+  startInput?: { name: string; label: string; placeholder?: string } | null;
+  /** A destination (a Discord channel) is chosen after connecting. */
+  hasDestinations?: boolean;
+}
+
+export interface ChannelDestination {
+  id: string;
+  name: string;
+  kind: 'text' | 'announcement';
+  selected: boolean;
 }
 
 export interface OwnedPost {
@@ -1046,13 +1059,21 @@ export interface OAuthStart {
   capability: string;
   scopes: string[];
   permissionExplanation: string;
-  authorizeUrl: string;
+  /** Null for a bot-code connection (Telegram), which never leaves Rafii. */
+  authorizeUrl: string | null;
   expiresAt: number;
+  connectKind?: 'oauth' | 'bot_code';
+  /** Bot-code connections: the code to post, the bot to add and the steps. */
+  code?: string;
+  botUsername?: string;
+  instructions?: string[];
 }
 
 export interface OAuthComplete {
   connectionId?: string;
   connected: boolean;
+  /** Bot-code connections before the code has been seen in a channel. */
+  pending?: boolean;
   reason?: string;
   account?: string;
   providerAccountId?: string;

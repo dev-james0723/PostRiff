@@ -1,9 +1,10 @@
 """OAuth provider adapters for the selected launch connectors (connector-audit.md, D12).
 
-LinkedIn member posting, Threads, Instagram professional. Each adapter only builds
-requests and parses responses through an injected transport; nothing is mounted unless
-its client credentials exist in server secrets, and `production_reviewed` is true only
-when the provider's review gate has been passed and the flag is set explicitly.
+LinkedIn member posting, Threads, Instagram professional, plus the Wave 1 hosted channels of the
+Rafii Hosted Channels Plan: Bluesky (atproto_oauth.py), X, Mastodon, Discord and Telegram
+(social_connectors.py). Each adapter only builds requests and parses responses through an injected
+transport; nothing is mounted unless its credentials exist in server secrets, and `production_reviewed`
+is true only when the operator declares the provider's review gate passed.
 """
 import json
 import re
@@ -21,13 +22,19 @@ class _NoRedirect(HTTPRedirectHandler):
         raise AlphaError("Provider redirects are not allowed.", 502)
 
 
-def http_transport(method, url, headers=None, form=None, body=None):
-    """Bounded HTTPS transport: 20 s timeout, no redirects, 256 KB response cap, JSON or form."""
+def http_transport(method, url, headers=None, form=None, body=None, data=None):
+    """Bounded HTTPS transport: 20 s timeout, no redirects, 256 KB response cap; JSON, form or raw bytes.
+
+    `data` is an upload body sent as-is; the caller names its Content-Type in `headers`."""
     if not url.startswith("https://"):
         raise AlphaError("Provider requests must use HTTPS.", 502)
-    data = urlencode(form).encode() if form is not None else (json.dumps(body).encode() if body is not None else None)
+    raw_upload = data
+    data = raw_upload if raw_upload is not None else urlencode(form).encode() if form is not None else (json.dumps(body).encode() if body is not None else None)
     request_headers = {"Accept": "application/json", **(headers or {})}
-    if form is not None:
+    if raw_upload is not None:
+        if not any(key.lower() == "content-type" for key in request_headers):
+            raise AlphaError("An upload needs a content type.", 500)
+    elif form is not None:
         request_headers["Content-Type"] = "application/x-www-form-urlencoded"
     elif body is not None:
         request_headers["Content-Type"] = "application/json"
@@ -50,38 +57,7 @@ def http_transport(method, url, headers=None, form=None, body=None):
     return {"status": status, "headers": {k.lower(): v for k, v in response_headers.items()}, "body": parsed}
 
 
-class OAuthProvider:
-    id = ""
-    platform = ""
-    capability_version = 1
-    native_schedule = False
-    assisted_fallback = True
-    SCOPES = {}
-    EXPLAIN = {}
-
-    def __init__(self, client_id, client_secret, transport=None, production_reviewed=False):
-        if not client_id or not client_secret:
-            raise AlphaError(f"{self.platform} client credentials are required.", 503)
-        self.client_id, self.client_secret = client_id, client_secret
-        self.transport = transport or http_transport
-        self.production_reviewed = bool(production_reviewed)
-        self.execution_enabled = True
-
-    def capability_scopes(self, capability):
-        return list(self.SCOPES.get(capability, []))
-
-    def explain(self, capability):
-        return self.EXPLAIN.get(capability, "Rafii will act on this account only when you approve an exact action.")
-
-    def revoke(self, token):
-        return False
-
-    @staticmethod
-    def _ok(response, *keys):
-        body = response.get("body", {})
-        if response.get("status") != 200 or not isinstance(body, dict) or any(not body.get(k) for k in keys):
-            raise AlphaError("The provider did not complete this authorization step.", 502)
-        return body
+from .provider_base import OAuthProvider, _credential_shape  # noqa: E402,F401  (re-exported)
 
 
 class LinkedInProvider(OAuthProvider):
@@ -92,6 +68,9 @@ class LinkedInProvider(OAuthProvider):
     USERINFO = "https://api.linkedin.com/v2/userinfo"
     # Member posting is self-serve ("Share on LinkedIn"); org/analytics/comments need the Community Management API, not held.
     SCOPES = {"identity": ["openid", "profile"], "publish": ["openid", "profile", "w_member_social"], "schedule": ["openid", "profile", "w_member_social"]}
+    account_requirement = "LinkedIn member profile."
+    read_scope, publish_scope = "r_member_social", "w_member_social"
+    publish_required = frozenset({"w_member_social"})
     EXPLAIN = {"publish": "Rafii will publish posts to your LinkedIn member profile only when you approve each exact post. Organization pages and analytics are not requested."}
 
     history_approved = False
@@ -144,6 +123,8 @@ class ThreadsProvider(OAuthProvider):
     LONG_LIVED = "https://graph.threads.net/access_token"
     REFRESH = "https://graph.threads.net/refresh_access_token"
     ME = f"https://graph.threads.net/{GRAPH_VERSION}/me"
+    account_requirement = "Threads profile."
+    publish_required = frozenset({"threads_basic", "threads_content_publish"})
     SCOPES = {"identity": ["threads_basic"], "publish": ["threads_basic", "threads_content_publish"], "schedule": ["threads_basic", "threads_content_publish"], "analytics": ["threads_basic", "threads_manage_insights"], "comments_read": ["threads_basic", "threads_read_replies"], "reply": ["threads_basic", "threads_manage_replies"]}
     EXPLAIN = {"publish": "Rafii will create Threads posts on this profile only when you approve each exact post.", "analytics": "Allows Rafii to read views, likes, replies, reposts and quotes for posts it created.", "comments_read": "Rafii will read replies to your posts.", "reply": "Rafii will post replies only after you approve the exact text."}
 
@@ -183,6 +164,9 @@ class InstagramProvider(OAuthProvider):
     LONG_LIVED = "https://graph.instagram.com/access_token"
     REFRESH = "https://graph.instagram.com/refresh_access_token"
     ME = f"https://graph.instagram.com/{GRAPH_VERSION}/me"
+    account_requirement = "Instagram Creator or Business account. No Facebook Page required."
+    read_scope, publish_scope = "instagram_business_basic", "instagram_business_content_publish"
+    publish_required = frozenset({"instagram_business_basic", "instagram_business_content_publish"})
     SCOPES = {"identity": ["instagram_business_basic"], "publish": ["instagram_business_basic", "instagram_business_content_publish"], "schedule": ["instagram_business_basic", "instagram_business_content_publish"], "analytics": ["instagram_business_basic", "instagram_business_manage_insights"], "comments_read": ["instagram_business_basic", "instagram_business_manage_comments"], "reply": ["instagram_business_basic", "instagram_business_manage_comments"]}
     EXPLAIN = {"publish": "Rafii will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "Allows Rafii to read reach, views, likes, comments, saves and shares for posts it created.", "comments_read": "Rafii will read comments on your posts.", "reply": "Rafii will reply only after you approve the exact text."}
 
@@ -227,7 +211,16 @@ class InstagramProvider(OAuthProvider):
         return {"accessToken": body["access_token"], "refreshToken": body["access_token"], "expiresIn": body.get("expires_in", 5184000)}
 
 
-ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider}
+from .atproto_oauth import BlueskyProvider  # noqa: E402
+from .social_connectors import DiscordProvider, MastodonProvider, TelegramConnector, XProvider  # noqa: E402
+
+ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider,
+            "bluesky": BlueskyProvider, "mastodon": MastodonProvider, "telegram": TelegramConnector,
+            "discord": DiscordProvider, "x": XProvider}
+
+
+def adapter_class_for_platform(platform):
+    return next((cls for cls in ADAPTERS.values() if cls.platform == platform), None)
 
 
 class ProviderRegistry(dict):
@@ -237,29 +230,19 @@ class ProviderRegistry(dict):
         self.diagnostics = {}
 
 
-def _credential_shape(value):
-    # Shape is not provider authentication. Never include the supplied value in an error.
-    return (isinstance(value, str) and 0 < len(value) <= 8192
-            and not any(character.isspace() for character in value)
-            and not value.startswith('<')
-            and value.lower() not in {'change-me', 'changeme', 'replace-me', 'placeholder', 'todo'})
-
-
 def registry_from_environment(values, transport=None):
     """Only valid-shaped complete pairs mount. Review is an explicit operator declaration."""
     registry = ProviderRegistry()
     for provider_id, cls in ADAPTERS.items():
         prefix = f"POSTRIFF_OAUTH_{provider_id.upper()}_"
-        client_id, secret = values.get(prefix + "CLIENT_ID"), values.get(prefix + "CLIENT_SECRET")
-        presence = {'clientId': client_id is not None, 'clientSecret': secret is not None}
-        missing = [prefix + suffix for suffix, present in (('CLIENT_ID', presence['clientId']), ('CLIENT_SECRET', presence['clientSecret'])) if not present]
-        valid = _credential_shape(client_id) and _credential_shape(secret)
-        state = 'not_configured' if len(missing) == 2 else 'partial_configuration' if missing else 'configured' if valid else 'invalid_configuration'
-        registry.diagnostics[provider_id] = {'configurationState': state, 'credentialPresence': presence, 'missingVariables': missing}
-        if valid:
-            registry[provider_id] = cls(client_id, secret, transport=transport, production_reviewed=str(values.get(prefix + "REVIEWED", "")).lower() == "true")
-            registry[provider_id].execution_enabled = str(values.get(prefix + "DISABLED", "")).lower() != "true"
-            if provider_id == "linkedin":
-                # Allows requesting the restricted scope, never substitutes for a real grant.
-                registry[provider_id].history_approved = str(values.get(prefix + "HISTORY_APPROVED", "")).lower() == "true"
+        adapter, diagnostic = cls.mount(values, transport=transport)
+        registry.diagnostics[provider_id] = diagnostic
+        if adapter is None:
+            continue
+        adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
+        adapter.execution_enabled = str(values.get(prefix + "DISABLED", "")).lower() != "true"
+        if provider_id == "linkedin":
+            # Allows requesting the restricted scope, never substitutes for a real grant.
+            adapter.history_approved = str(values.get(prefix + "HISTORY_APPROVED", "")).lower() == "true"
+        registry[provider_id] = adapter
     return registry

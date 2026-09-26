@@ -291,7 +291,7 @@ class ToolTest(unittest.TestCase):
         self.assertEqual((rows["li"]["canPublish"], rows["li"]["publishCode"]), (True, "ok"))
         self.assertEqual((rows["th"]["canPublish"], rows["th"]["publishCode"]), (False, "disconnected"))
         _, result = tools.run("channels.capabilities", {"platform": "X"}, ctx(service=service))
-        self.assertEqual(result["data"]["unconnected"]["publishCode"], "no_route")
+        self.assertEqual(result["data"]["unconnected"]["publishCode"], "not_configured")  # hosted X route, no X adapter on this server
 
     def test_draft_check(self):
         _, result = tools.run("draft.get", {"draftId": "v3"}, ctx())

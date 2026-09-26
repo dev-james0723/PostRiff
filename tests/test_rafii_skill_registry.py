@@ -135,9 +135,13 @@ class RegistryFailureTest(unittest.TestCase):
 
     def test_version_bump_lets_lock_record_the_new_hash(self):
         path = self.root / "postriff-channel-x" / "SKILL.md"
-        path.write_text(path.read_text().replace("version: 1.0.0", "version: 1.0.1", 1) + "\nA versioned edit.\n")
+        # Bump from whatever the skill is at now, so a real version bump in the library never breaks this test.
+        current = self._entry("postriff-channel-x", self.data)["version"]
+        major, minor, patch = (int(part) for part in current.split("."))
+        bumped = f"{major}.{minor}.{patch + 1}"
+        path.write_text(path.read_text().replace(f"version: {current}", f"version: {bumped}", 1) + "\nA versioned edit.\n")
         data = copy.deepcopy(self.data)
-        self._entry("postriff-channel-x", data)["version"] = "1.0.1"
+        self._entry("postriff-channel-x", data)["version"] = bumped
         (self.root / skill_registry.REGISTRY_FILE).write_text(json.dumps(data))
         result = skill_registry.lock(skill_registry.load(self.root))
         self.assertEqual(result["refused"], [])

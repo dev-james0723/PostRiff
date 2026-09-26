@@ -1,15 +1,20 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { ChannelIcon } from '@/components/channel-icon';
 import { StatefulButton } from '@/components/motion/button';
 import { RadioGroup, RadioGroupItem } from '@/components/motion/radio';
 import { StateMessage } from '@/components/rafii';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/lib/api/client';
+import { keys } from '@/lib/api/hooks';
 import type { OAuthStart, ProviderView } from '@/lib/api/types';
 import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
 import { defaultConnectCapability } from '@/lib/channels/onboarding';
@@ -100,6 +105,11 @@ export function ConnectSheet({
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<OAuthStart | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A Bluesky handle or a Mastodon server, when the platform needs one before connecting.
+  const [inputValue, setInputValue] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [notSeenYet, setNotSeenYet] = useState(false);
+  const client = useQueryClient();
 
   const provider = useMemo(() => providers.find((p) => p.id === providerId), [providers, providerId]);
   const offered = offeredCapabilities(provider);
@@ -114,6 +124,8 @@ export function ConnectSheet({
     setPending(null);
     setError(null);
     setBusy(false);
+    setInputValue('');
+    setNotSeenYet(false);
   }, [open, providers, request]);
 
   function choosePlatform(id: string) {
@@ -121,6 +133,7 @@ export function ConnectSheet({
     setProviderId(id);
     setCapability(defaultCapability(next, capability));
     setError(null);
+    setInputValue('');
   }
 
   async function start() {
@@ -128,7 +141,8 @@ export function ConnectSheet({
     setBusy(true);
     setError(null);
     try {
-      const started = await api.oauthStart(workspaceId, provider.id, capability);
+      const input = provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : undefined;
+      const started = await api.oauthStart(workspaceId, provider.id, capability, input);
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });
       }
@@ -141,6 +155,32 @@ export function ConnectSheet({
     }
   }
 
+  /** Telegram: the code is claimed when Rafii's bot sees it in the channel; this asks whether that happened. */
+  async function checkCode() {
+    if (!pending?.code) return;
+    setChecking(true);
+    setNotSeenYet(false);
+    setError(null);
+    try {
+      const done = await api.oauthComplete(workspaceId, pending.provider, pending.code);
+      if (done.connected) {
+        await client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
+        void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+        toast.success(`Connected ${done.account ?? pending.platform}`);
+        onOpenChange(false);
+      } else if (done.pending) {
+        setNotSeenYet(true);
+      } else {
+        setError(done.reason || 'Start again.');
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const needsInput = Boolean(provider?.startInput) && inputValue.trim().length === 0;
   const title = reconnect ? `Reconnect ${reconnect.account}` : 'Connect account';
   // Reconnect keeps its one real gotcha visible: signing in as someone else adds a new account.
   const description = reconnect
@@ -180,7 +220,39 @@ export function ConnectSheet({
                   <span className='text-muted-foreground text-xs'>None</span>
                 )}
               </div>
-              <p className='text-muted-foreground text-xs leading-relaxed'>You&apos;ll confirm the account when {pending.platform} sends you back.</p>
+              {pending.connectKind === 'bot_code' && pending.code ? (
+                <div className='flex flex-col gap-3'>
+                  <ol className='flex list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed'>
+                    {(pending.instructions ?? []).map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ol>
+                  <div className='flex items-center gap-2'>
+                    <code className='rafii-field min-w-0 flex-1 rounded-md px-2 py-1.5 font-mono text-sm break-all' aria-label='Code to post in your channel'>
+                      {pending.code}
+                    </code>
+                    <Button
+                      variant='glass'
+                      size='control'
+                      onClick={() => void navigator.clipboard.writeText(pending.code ?? '').then(() => toast.success('Code copied'))}
+                    >
+                      <Icons.copy className='size-4' aria-hidden />
+                      Copy
+                    </Button>
+                  </div>
+                  {notSeenYet && (
+                    <StateMessage
+                      kind='partial'
+                      layout='inline'
+                      title={`${pending.botUsername ?? 'Rafii’s bot'} hasn’t seen the code yet.`}
+                      description='Check that the bot is an admin that can post, then post the code again.'
+                      className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3'
+                    />
+                  )}
+                </div>
+              ) : (
+                <p className='text-muted-foreground text-xs leading-relaxed'>You&apos;ll confirm the account when {pending.platform} sends you back.</p>
+              )}
             </div>
           ) : providers.length === 0 ? (
             <StateMessage
@@ -229,6 +301,24 @@ export function ConnectSheet({
                 </div>
               )}
 
+              {provider?.startInput && provider.connectReady !== false && (
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='connect-start-input' className='text-sm font-medium'>
+                    {provider.startInput.label}
+                  </Label>
+                  <Input
+                    id='connect-start-input'
+                    value={inputValue}
+                    onChange={(event) => setInputValue(event.target.value)}
+                    placeholder={provider.startInput.placeholder ?? undefined}
+                    autoComplete='off'
+                    autoCapitalize='none'
+                    spellCheck={false}
+                    maxLength={253}
+                  />
+                </div>
+              )}
+
               <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
                   What Rafii may do
@@ -264,10 +354,22 @@ export function ConnectSheet({
               <Button variant='glass' size='control' onClick={() => setPending(null)}>
                 Back
               </Button>
-              <a href={pending.authorizeUrl} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'gap-2')}>
-                Continue to {pending.platform}
-                <Icons.externalLink className='size-4' aria-hidden />
-              </a>
+              {pending.connectKind === 'bot_code' ? (
+                <StatefulButton
+                  variant='primary'
+                  className={cn(STATEFUL_ACTION, CONTROL_48)}
+                  state={checking ? 'loading' : 'idle'}
+                  loadingText='Checking…'
+                  onClick={() => void checkCode()}
+                >
+                  Check connection
+                </StatefulButton>
+              ) : pending.authorizeUrl ? (
+                <a href={pending.authorizeUrl} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'gap-2')}>
+                  Continue to {pending.platform}
+                  <Icons.externalLink className='size-4' aria-hidden />
+                </a>
+              ) : null}
             </>
           ) : (
             <>
@@ -279,7 +381,7 @@ export function ConnectSheet({
                 className={cn(STATEFUL_ACTION, CONTROL_48)}
                 state={busy ? 'loading' : 'idle'}
                 loadingText='Preparing…'
-                disabled={!provider || provider.connectReady === false || provider.executionPaused || offered.length === 0}
+                disabled={!provider || provider.connectReady === false || provider.executionPaused || offered.length === 0 || needsInput}
                 onClick={() => void start()}
               >
                 Continue
