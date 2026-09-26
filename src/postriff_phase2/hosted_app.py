@@ -186,6 +186,9 @@ def runtime_from_environment(environ=None):
     if metric_schedule.enabled(values):
         service.metric_reads = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport)
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
+        from .growth import history_import
+        if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
+            service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport)
     worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
@@ -464,6 +467,9 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                history = getattr(service, 'history_import', None)
+                if history is not None:   # before readings, so posts it finds are read in the same minute
+                    result['historyImport'] = history.tick()
                 metric_reads = getattr(service, 'metric_reads', None)
                 if metric_reads is not None:   # right after the worker, so t0 rows read before campaign/coworker steps
                     result['metricReads'] = metric_reads.tick()
@@ -621,6 +627,13 @@ class HostedApplication:
                 if len(parts) == 7 and parts[5:] == ['posts', 'import'] and method == 'POST':
                     saved = oauth.history.retain(parts[2], token, parts[4], self._body(environ))
                     return self._json(start_response, 200, service._present(saved))
+                if len(parts) == 6 and parts[5] == "history-import" and method in ("GET", "POST"):
+                    history = getattr(service, "history_import", None)
+                    if history is None:
+                        raise AlphaError("History import is not enabled.", 404, code="feature_disabled")
+                    if method == "GET":
+                        return self._json(start_response, 200, history.status(parts[2], token, parts[4]))
+                    return self._json(start_response, 202, history.request(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))

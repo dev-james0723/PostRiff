@@ -531,6 +531,8 @@ class OAuthService:
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
                 audit(cur, workspace_id, principal, 'voice.connection_samples_revoked', connection_id, {'samples': revoked_samples})
             account_pictures.guarded(cur, account_pictures.remove, workspace_id, connection_id)
+            from .growth.history_import import purge_connection
+            account_pictures.guarded(cur, purge_connection, workspace_id, connection_id)   # imported history and pending readings
             audit(cur, workspace_id, principal, "channel.disconnected", connection_id, {"remoteRevoked": bool(remote)})
         snapshot = self.repository.get(workspace_id, token)
         try:
