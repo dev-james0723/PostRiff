@@ -65,6 +65,8 @@ class AIModelRouter:
     def complete_json(self, task, messages, *, schema: dict, workspace_id=None, subject=None) -> dict
 ```
 
+As built (Phase 0, supersedes the sketch above where they differ): `AIModelRouter(*, jev=None, chat=None, usage=None, tasks=None, sleep, clock)` where `chat(messages, model, max_tokens) -> (content, usage)`; `chat_from_runtime(ServerModelRuntime)` adapts the existing runtime and converts its private 429/bad-shape exceptions to `AlphaError` so each fallback attempt is still recorded (`rate_limited` / `upstream`). Task tuples are `(kind, primary, fallbacks, budget_s, max_output_tokens)`; Phase 0 tasks are `postdoctor.judge`, `genome.label`, `golden.compare` (no fallback, so comparisons never mix models). `evaluate(...)` returns `RouterEvaluation`; `router.evaluator(task)` plugs into `JudgmentService`. `complete_json` and `postdoctor.rewrite` are deferred to Phase 1 rewrites.
+
 `Evaluation` carries `raw` answers, `route`, `model`, cost fields and latency. On `JevRateLimited`/`JevUpstream`/`JevTimeout` the router retries once after `retry_after` or a bounded backoff (≤ 2 s total in the request path), then tries the fallback chain via `chat_runtime` using the question set compiled to a JSON-schema prompt (fallback answers are marked `route="fallback"`, `calibrated=False`). `JevAuthError`, `JevBudgetExceeded`, `JevBadRequest` never retry or fall back automatically. Every attempt writes exactly one `UsageEvent`, including failures (cost `None`, source `unknown` when not reported). `chat_runtime` is the existing `ServerModelRuntime` transport; reuse its gateway cost parsing.
 
 ## JudgmentService (`growth/judgments.py`)

@@ -94,6 +94,19 @@ class Routing(unittest.TestCase):
         with self.assertRaises(R.RouterError):
             router(FakeJev(J.JevUpstream("x"), J.JevUpstream("x")), chat=chat).evaluate("postdoctor.judge", QS, {})
 
+    def test_runtime_adapter_records_rate_limit_and_bad_shape(self):
+        from postriff_phase2.model_runtime import ServerModelRuntime
+        replies = [{"status": 429, "body": {}}, {"status": 200, "body": {"choices": []}}]
+        def transport(method, url, headers=None, body=None, **_):
+            return replies.pop(0)
+        runtime = ServerModelRuntime("test-key", transport=transport)
+        usage = MemoryUsageSink()
+        tasks = {"t": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite", "anthropic/claude-haiku-4.5"), 3.0, 100)}
+        r = R.AIModelRouter(jev=None, chat=R.chat_from_runtime(runtime), usage=usage, tasks=tasks, clock=Clock())
+        with self.assertRaises(R.RouterError):
+            r.evaluate("t", QS, {})
+        self.assertEqual([(e.route, e.status) for e in usage.events], [("fallback", "rate_limited"), ("fallback", "upstream")])
+
     def test_plugs_into_judgment_service(self):
         svc = JudgmentService(router(FakeJev(GOOD)).evaluator("postdoctor.judge"))
         j = svc.judge(QS, {}, subject=subject_hash("x"), scope="shared", model="typesafe-ai/jev")

@@ -66,9 +66,20 @@ def _json_object(content):
 
 
 def chat_from_runtime(runtime):
-    """Adapter: ServerModelRuntime -> chat(messages, model, max_tokens) -> (content, usage)."""
+    """Adapter: ServerModelRuntime -> chat(messages, model, max_tokens) -> (content, usage).
+
+    The runtime signals 429 and unexpected response shapes with private non-AlphaError exceptions meant for its
+    own retry loop; they become AlphaError here so the router records the attempt and moves on.
+    """
+    from postriff_phase2.model_runtime import _RateLimited, _Retry
+
     def chat(messages, model, max_tokens):
-        return runtime._call(messages, model, max_tokens=max_tokens)
+        try:
+            return runtime._call(messages, model, max_tokens=max_tokens)
+        except _RateLimited as error:
+            raise AlphaError(str(error), 429) from error
+        except _Retry as error:
+            raise AlphaError(str(error), 502) from error
     return chat
 
 
@@ -141,8 +152,9 @@ class AIModelRouter:
         started = self.clock()
         try:
             content, usage = self.chat(messages, model, max_tokens)
-        except AlphaError:
-            self._record(task=task, model=model, route="fallback", status="upstream",
+        except AlphaError as error:
+            status = "rate_limited" if getattr(error, "status", None) == 429 else "upstream"
+            self._record(task=task, model=model, route="fallback", status=status,
                          latency_ms=round((self.clock() - started) * 1000), workspace_id=workspace_id, subject=subject)
             return None
         latency = round((self.clock() - started) * 1000)
