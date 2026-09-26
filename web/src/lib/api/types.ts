@@ -812,7 +812,8 @@ export interface ReasoningItem {
   detail: string;
   label?: string;
   kind?: 'auto' | 'effort' | 'pass';
-  /** The gateway effort this level sends; null for Auto and Thorough. */
+  /** The gateway effort this level sends. Auto and Thorough send the model's drafting baseline (e.g. "low"), or null
+   *  when the model has no effort scale. */
   sends?: string | null;
   typicalMilliCredits?: number | null;
   ceilingMilliCredits?: number | null;

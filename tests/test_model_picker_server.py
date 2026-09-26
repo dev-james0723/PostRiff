@@ -385,6 +385,16 @@ def workspace(model=None):
 
 
 class WriterDefaultsTest(unittest.TestCase):
+    def test_only_an_owner_may_change_the_workspace_default(self):
+        # It decides which AI provider receives everyone's cloud-allowed sources (review of the picker draft).
+        from postriff_phase2.permissions import ROLES, Membership, classify, require
+        self.assertEqual(classify(writer_defaults.ACTION), "owner")
+        require(Membership("owner"), classify(writer_defaults.ACTION))
+        for role in (r for r in ROLES if r != "owner"):
+            with self.subTest(role=role), self.assertRaises(AlphaError) as refused:
+                require(Membership(role), classify(writer_defaults.ACTION))
+            self.assertEqual(refused.exception.status, 403)
+
     def test_an_owner_sets_a_priced_managed_model_and_can_clear_it(self):
         runtime = production(prices={**PRICES, "google/gemini-3.1-pro-preview": None})
         state = {}
