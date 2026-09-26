@@ -6,7 +6,7 @@
  * always visible). Mounted once in the app shell, beside the panel's hotkeys.
  */
 import { useEffect } from 'react';
-import { IconMicrophone, IconPhoneOff } from '@tabler/icons-react';
+import { IconMicrophone, IconMicrophoneOff, IconPhoneOff } from '@tabler/icons-react';
 import { panelStore, usePanel } from '@/features/site-agent/store';
 import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -29,9 +29,12 @@ export function VoiceIndicator() {
   );
   const state = useVoice((s) => s.state);
   const speaker = useVoice((s) => s.speaker);
+  const muted = useVoice((s) => s.micMuted);
+  const ending = useVoice((s) => s.endingAfterReply);
   const open = usePanel((s) => s.open || s.above);
   if (open || (state !== 'live' && state !== 'reconnecting')) return null;
-  const label = state === 'reconnecting' ? 'Voice connection lost' : speaker === 'rafii' ? 'Rafii is speaking' : 'Voice is on';
+  const label =
+    state === 'reconnecting' ? 'Voice connection lost' : ending ? 'Ending the call…' : muted ? 'Microphone off' : speaker === 'rafii' ? 'Rafii is speaking' : 'Voice is on';
   return (
     <div
       role='region'
@@ -39,11 +42,12 @@ export function VoiceIndicator() {
       className='rafii-glass fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 flex items-center gap-1 rounded-full p-1 pl-3 text-sm shadow-lg'
       data-rafii-voice-indicator={state}
     >
-      <IconMicrophone className='size-4' aria-hidden />
-      <button type='button' className='rafii-focus rounded-full px-2 py-1.5 font-medium' onClick={() => panelStore.setOpen(true)}>
+      {/* A muted microphone shows in the destructive colour here too, as in the panel. */}
+      {muted ? <IconMicrophoneOff className='text-destructive size-4' aria-hidden /> : <IconMicrophone className='size-4' aria-hidden />}
+      <button type='button' className='rafii-focus min-h-9 rounded-full px-2 py-1.5 font-medium' onClick={() => panelStore.setOpen(true)}>
         {label} · Open Rafii
       </button>
-      <button type='button' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-full' aria-label='End voice' onClick={() => void voiceSession.end()}>
+      <button type='button' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-full' aria-label='End voice' onClick={() => void voiceSession.end()}>
         <IconPhoneOff className='size-4' aria-hidden />
       </button>
     </div>

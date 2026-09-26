@@ -274,7 +274,9 @@ export class FakeLiveTransport implements LiveTransport {
       const generation = ++this.generation;
       this.level = 0.6;
       for (const word of text.split(/(\s+)/)) {
-        if (generation !== this.generation || this.muted) break;
+        // Like GPT-Live, which has no response cancel: a reply muted by the page keeps streaming its words (the page drops
+        // them); only the person talking over it (barge-in) or a newer reply ends it.
+        if (generation !== this.generation) break;
         this.emit({ type: 'session.output_transcript.delta', delta: word, start_ms: (this.clock += 30), end_ms: (this.clock += 30) });
         await new Promise((resolve) => setTimeout(resolve, options?.chunkMs ?? 40));
       }
@@ -302,7 +304,7 @@ export class FakeLiveTransport implements LiveTransport {
         this.states.emit('connected');
       },
       close: (reason = 'remote_hangup') => this.emit({ type: 'session.closed', reason, usage: { seconds: 42 } }),
-      speaking: () => this.level > 0,
+      speaking: () => this.level > 0 && !this.muted, // audible: a muted reply may still be streaming its words
       micEnabled: () => this.mic,
       outputMuted: () => this.muted
     };
@@ -318,10 +320,8 @@ export class FakeLiveTransport implements LiveTransport {
         // The stand-in "speaks" the commentary, as GPT-Live paraphrases it aloud.
         void window.rafiiLiveHarness?.rafiiSays(event.content, { chunkMs: 15 });
       }
-      if (event.type === 'session.instructions.append') {
-        this.generation += 1;
-        this.level = 0;
-      }
+      // An appended instruction ("Stop speaking now…") shapes later turns; like GPT-Live, it doesn't cancel the reply
+      // already streaming.
     }
     if (event.type === 'session.close') setTimeout(() => this.emit({ type: 'session.closed', reason: 'close_requested', usage: { seconds: 42 } }), 10);
   }
@@ -343,11 +343,8 @@ export class FakeLiveTransport implements LiveTransport {
   }
 
   setOutputMuted(muted: boolean) {
+    // Only the audio is silenced here, as with the real <audio> element; the reply's words keep arriving.
     this.muted = muted;
-    if (muted) {
-      this.generation += 1;
-      this.level = 0;
-    }
   }
 
   outputLevel() {
