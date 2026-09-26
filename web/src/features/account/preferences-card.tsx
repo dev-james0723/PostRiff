@@ -9,6 +9,8 @@ import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StyleSheet, styleSummary } from '@/features/rafii-voice/style-sheet';
+import { useAgentStyle } from '@/lib/agent-runtime/use-agent-style';
 import { keys, useMe } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { ProfileChanges } from '@/lib/api/types';
@@ -149,6 +151,32 @@ export function PreferencesCard() {
           Follow this device
         </Button>
       )}
+
+      <AgentStyleRow />
     </SettingsSection>
+  );
+}
+
+/** How Rafii talks to this person, in text and voice: the same sheet the Rafii panel opens. */
+function AgentStyleRow() {
+  const { style, loading } = useAgentStyle();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className='flex min-w-0 flex-col gap-3 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex min-w-0 flex-col gap-1'>
+        <span className='text-sm font-medium'>Rafii’s style</span>
+        {loading ? (
+          <Skeleton className='h-4 w-56 max-w-full' />
+        ) : (
+          <p id='pref-rafii-style' className='text-muted-foreground text-xs leading-relaxed'>
+            {styleSummary(style)}
+          </p>
+        )}
+      </div>
+      <Button variant='glass' className='min-h-11 w-fit shrink-0 px-4' aria-label='Change Rafii’s style' aria-describedby={loading ? undefined : 'pref-rafii-style'} onClick={() => setOpen(true)}>
+        Change
+      </Button>
+      <StyleSheet open={open} onOpenChange={setOpen} />
+    </div>
   );
 }

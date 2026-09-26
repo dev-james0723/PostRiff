@@ -15,9 +15,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.hosted import HostedWorkspaceService, workspace_summary
+from postriff_phase2.agent_runtime_v2 import style as agent_style
+from postriff_phase2.hosted import AGENT_STYLE_NOT_READY, HostedWorkspaceService, workspace_summary
 from postriff_phase2.hosted_app import HostedApplication, supabase_verifier
 from postriff_phase2.hosted_identity import SupabaseIdentityAdmin, verified_aal
+
+DEFAULT_STYLE = agent_style.normalize({})
+# /api/me reads Rafii's style inside a savepoint: SAVEPOINT, SELECT (no row here, so the default), RELEASE.
+STYLE_READ = [(None, 0)] * 3
 
 PRINCIPAL = "00000000-0000-0000-0000-000000000001"
 OTHER = "00000000-0000-0000-0000-000000000002"
@@ -272,7 +277,7 @@ class SecondFactorService(unittest.TestCase):
         me = service(cursor, verify).me("t")
         self.assertEqual(me["mfa"], {"available": False, "enforced": False, "enforcedAt": None, "aal": None})
         self.assertEqual(me["displayName"], "Dev")
-        self.assertEqual(me["preferences"], {"timeZone": "", "locale": "", "alertNewDevice": False})
+        self.assertEqual(me["preferences"], {"timeZone": "", "locale": "", "alertNewDevice": False, "agentStyle": DEFAULT_STYLE})
         with self.assertRaises(AlphaError) as unavailable:
             service(FakeCursor(), verify).enable_mfa("t")
         self.assertEqual(unavailable.exception.status, 503)
@@ -281,7 +286,7 @@ class SecondFactorService(unittest.TestCase):
         cursor = FakeCursor([(None, 1), (("James", 1_799_000_000.0, "Asia/Hong_Kong", "zh-Hant", True), 1)])
         me = service(cursor, verifier("aal2")).me("t")
         self.assertEqual((me["userId"], me["sessionId"], me["mfa"]["enforced"], me["mfa"]["enforcedAt"], me["mfa"]["aal"]), (PRINCIPAL, "session-current-0123456789", True, 1_799_000_000.0, "aal2"))
-        self.assertEqual(me["preferences"], {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": True})
+        self.assertEqual(me["preferences"], {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": True, "agentStyle": DEFAULT_STYLE})
 
 
 class SessionsAndProfile(unittest.TestCase):
@@ -301,7 +306,7 @@ class SessionsAndProfile(unittest.TestCase):
     def test_display_name_is_bounded_and_normalised(self):
         cursor = FakeCursor([(("James Au", "", "", False), 1)])
         saved = service(cursor, verifier()).update_profile("t", {"displayName": "  James   Au "})
-        self.assertEqual(saved, {"displayName": "James Au", "preferences": {"timeZone": "", "locale": "", "alertNewDevice": False}})
+        self.assertEqual(saved, {"displayName": "James Au", "preferences": {"timeZone": "", "locale": "", "alertNewDevice": False, "agentStyle": DEFAULT_STYLE}})
         sql, params = cursor.executed[0]
         self.assertEqual(params, (PRINCIPAL, "James Au"))
         self.assertIn("display_name=excluded.display_name", sql)
@@ -316,7 +321,7 @@ class SessionsAndProfile(unittest.TestCase):
     def test_preferences_are_validated_and_only_present_keys_change(self):
         cursor = FakeCursor([(("", "Asia/Hong_Kong", "zh-Hant", True), 1)])
         saved = service(cursor, verifier()).update_profile("t", {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": True})
-        self.assertEqual(saved["preferences"], {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": True})
+        self.assertEqual(saved["preferences"], {"timeZone": "Asia/Hong_Kong", "locale": "zh-Hant", "alertNewDevice": True, "agentStyle": DEFAULT_STYLE})
         sql, params = cursor.executed[0]
         self.assertIn("pr_profiles(user_id,time_zone,locale,alert_new_device)", sql)
         self.assertNotIn("display_name=excluded", sql)
@@ -337,6 +342,110 @@ class SessionsAndProfile(unittest.TestCase):
         self.assertEqual(service(cursor, verifier()).leave_workspace(WORKSPACE, "t"), {"workspaceId": WORKSPACE, "status": "left"})
         self.assertIn("SET status='revoked'", cursor.executed[1][0])
         self.assertEqual(cursor.executed[2][1][:3], (WORKSPACE, PRINCIPAL, "member.left"))
+
+
+class UnmigratedCursor(FakeCursor):
+    """A database before migration 026: any statement naming the agent_style column fails (savepoints still work)."""
+    def execute(self, sql, params=None):
+        if "agent_style" in sql and "SAVEPOINT" not in sql:
+            self.executed.append((sql, params))
+            raise RuntimeError('column "agent_style" does not exist')
+        super().execute(sql, params)
+
+
+class AgentStyleOnProfile(unittest.TestCase):
+    """How Rafii talks to the person (Contract 1): `preferences.agentStyle` on GET and PATCH /api/me."""
+
+    def test_me_reads_the_saved_style_through_a_savepoint_and_normalises_it(self):
+        saved = {"tone": "direct", "detail": "concise", "voice": "cedar", "pace": "fast!", "chosen": True, "extra": "dropped"}
+        cursor = FakeCursor([(None, 1), (("James", None, "", "", False), 1), (None, 0), ((saved,), 1), (None, 0)])
+        me = service(cursor, verifier()).me("t")
+        self.assertEqual(me["preferences"]["agentStyle"], {**DEFAULT_STYLE, "tone": "direct", "detail": "concise", "voice": "cedar", "chosen": True})
+        statements = [sql for sql, _ in cursor.executed]
+        self.assertEqual(statements[2:], ["SAVEPOINT agent_style_read", "SELECT agent_style FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", "RELEASE SAVEPOINT agent_style_read"])
+        self.assertEqual(cursor.executed[3][1], (PRINCIPAL,))
+
+    def test_me_answers_with_the_default_style_before_migration_026(self):
+        cursor = UnmigratedCursor([(None, 1), (("James", None, "Asia/Hong_Kong", "", False), 1)])
+        me = service(cursor, verifier()).me("t")
+        self.assertEqual(me["preferences"], {"timeZone": "Asia/Hong_Kong", "locale": "", "alertNewDevice": False, "agentStyle": DEFAULT_STYLE})
+        statements = [sql for sql, _ in cursor.executed]
+        self.assertIn("INSERT INTO public.pr_sessions", statements[0])  # the session is still recorded
+        self.assertEqual(statements[-1], "ROLLBACK TO SAVEPOINT agent_style_read")
+
+    def test_a_patch_merges_into_the_saved_style_under_a_row_lock(self):
+        stored = {"tone": "playful", "detail": "balanced", "pace": "normal", "voice": "sage", "language": "yue", "initiative": "suggest", "chosen": False}
+        cursor = FakeCursor([((True,), 1), ((stored,), 1), (("James", "", "", False), 1)])
+        saved = service(cursor, verifier()).update_profile("t", {"agentStyle": {"preset": "concise", "chosen": True}})
+        expected = {"tone": "direct", "detail": "concise", "pace": "normal", "voice": "sage", "language": "yue", "initiative": "ask", "chosen": True}
+        self.assertEqual(saved, {"displayName": "James", "preferences": {"timeZone": "", "locale": "", "alertNewDevice": False, "agentStyle": expected}})
+        (check, _), (read, read_params), (write, write_params) = cursor.executed
+        self.assertIn("pg_catalog.pg_attribute", check)
+        self.assertIn("attname='agent_style'", check)
+        self.assertIn("FOR UPDATE", read)
+        self.assertEqual(read_params, (PRINCIPAL,))
+        self.assertIn("pr_profiles(user_id,agent_style) VALUES(%s,%s::jsonb)", write)
+        self.assertIn("agent_style=excluded.agent_style", write)
+        self.assertEqual(write_params, (PRINCIPAL, json.dumps(expected)))
+        # A single field changes only that field; the preset's other choices stay.
+        cursor = FakeCursor([((True,), 1), ((expected,), 1), (("James", "", "", False), 1)])
+        saved = service(cursor, verifier()).update_profile("t", {"agentStyle": {"voice": "coral"}})
+        self.assertEqual(saved["preferences"]["agentStyle"], {**expected, "voice": "coral"})
+
+    def test_a_first_save_starts_from_the_default_style(self):
+        cursor = FakeCursor([((True,), 1), (({},), 1), (("", "", "", False), 1)])
+        saved = service(cursor, verifier()).update_profile("t", {"agentStyle": {"language": "cmn"}})
+        self.assertEqual(saved["preferences"]["agentStyle"], {**DEFAULT_STYLE, "language": "cmn"})
+
+    def test_style_saves_with_other_preferences_in_one_write(self):
+        cursor = FakeCursor([((True,), 1), (({},), 1), (("", "Asia/Hong_Kong", "", False), 1)])
+        saved = service(cursor, verifier()).update_profile("t", {"timeZone": "Asia/Hong_Kong", "agentStyle": {"pace": "slower"}})
+        self.assertEqual((saved["preferences"]["timeZone"], saved["preferences"]["agentStyle"]["pace"]), ("Asia/Hong_Kong", "slower"))
+        sql, params = cursor.executed[2]
+        self.assertIn("pr_profiles(user_id,time_zone,agent_style) VALUES(%s,%s,%s::jsonb)", sql)
+        self.assertEqual(params[:2], (PRINCIPAL, "Asia/Hong_Kong"))
+
+    def test_a_patch_without_a_style_reads_it_back_guarded(self):
+        cursor = FakeCursor([(("", "Asia/Hong_Kong", "", False), 1), (None, 0), (({"tone": "professional", "chosen": True},), 1), (None, 0)])
+        saved = service(cursor, verifier()).update_profile("t", {"timeZone": "Asia/Hong_Kong"})
+        self.assertEqual(saved["preferences"]["agentStyle"], {**DEFAULT_STYLE, "tone": "professional", "chosen": True})
+        self.assertNotIn("agent_style", cursor.executed[0][0])
+        self.assertEqual([sql for sql, _ in cursor.executed][1::2], ["SAVEPOINT agent_style_read", "RELEASE SAVEPOINT agent_style_read"])
+
+    def test_invalid_styles_are_refused_before_any_query(self):
+        for bad in (None, "friendly", [], {}, {"tone": "rude"}, {"voice": "Marin"}, {"language": "fr"}, {"preset": "chatty"}, {"volume": "loud"}, {"chosen": "yes"}, {"detail": ["concise"]}):
+            with self.subTest(bad=bad):
+                cursor = FakeCursor()
+                with self.assertRaises(AlphaError) as refused:
+                    service(cursor, verifier()).update_profile("t", {"agentStyle": bad})
+                self.assertEqual(refused.exception.status, 400)
+                self.assertEqual(cursor.executed, [])
+        # A bad style also stops the rest of the change.
+        cursor = FakeCursor()
+        with self.assertRaises(AlphaError):
+            service(cursor, verifier()).update_profile("t", {"displayName": "James", "agentStyle": {"tone": "rude"}})
+        self.assertEqual(cursor.executed, [])
+
+    def test_saving_waits_for_migration_026_and_writes_nothing_else(self):
+        for changes in ({"agentStyle": {"preset": "friendly", "chosen": True}}, {"displayName": "James", "agentStyle": {"tone": "direct"}}):
+            with self.subTest(changes=changes):
+                cursor = FakeCursor([((False,), 1)])
+                with self.assertRaises(AlphaError) as waiting:
+                    service(cursor, verifier()).update_profile("t", changes)
+                self.assertEqual((waiting.exception.status, str(waiting.exception)), (503, AGENT_STYLE_NOT_READY))
+                self.assertEqual(len(cursor.executed), 1)
+        # Other preferences still save before the migration, and read back the default style.
+        cursor = UnmigratedCursor([(("", "Asia/Hong_Kong", "", False), 1)])
+        saved = service(cursor, verifier()).update_profile("t", {"timeZone": "Asia/Hong_Kong"})
+        self.assertEqual(saved["preferences"]["agentStyle"], DEFAULT_STYLE)
+        self.assertEqual(cursor.executed[-1][0], "ROLLBACK TO SAVEPOINT agent_style_read")
+
+    def test_patch_route_passes_the_style_through(self):
+        fake = FakeAccountService()
+        app = HostedApplication(fake, None, {"provider": "supabase"}, "c" * 24)
+        status, _ = invoke(app, "PATCH", "/api/me", {"agentStyle": {"preset": "explainer", "chosen": True}}, AUTH)
+        self.assertEqual(status, 200)
+        self.assertEqual(fake.calls, [("update_profile", {"agentStyle": {"preset": "explainer", "chosen": True}})])
 
 
 class SecurityActivity(unittest.TestCase):
@@ -450,22 +559,22 @@ class NewDeviceAlerts(unittest.TestCase):
 
     def test_first_sighting_emails_only_when_the_person_opted_in(self):
         # New session, alert on: one email and one audit line naming the session.
-        cursor = FakeCursor([((True,), 1), (("James", None, "", "", True), 1), ((True,), 1), (None, 1)])
+        cursor = FakeCursor([((True,), 1), (("James", None, "", "", True), 1), *STYLE_READ, ((True,), 1), (None, 1)])
         svc = self.alerting(cursor)
         svc.me("t", client_label="Safari on iPhone")
         self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Safari on iPhone", "https://app.example/app/account/profile")])
         self.assertIn("RETURNING (xmax = 0)", cursor.executed[0][0])
-        self.assertEqual(cursor.executed[3][1][2:4], ("session.alerted", "session-current-0123456789"))
+        self.assertEqual(cursor.executed[6][1][2:4], ("session.alerted", "session-current-0123456789"))
         # New session, alert off: the preference is read and nothing else happens.
-        cursor = FakeCursor([((True,), 1), (("James", None, "", "", False), 1), ((False,), 1)])
+        cursor = FakeCursor([((True,), 1), (("James", None, "", "", False), 1), *STYLE_READ, ((False,), 1)])
         svc = self.alerting(cursor)
         svc.me("t", client_label="Safari on iPhone")
-        self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 3))
+        self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 6))
         # A session we have seen before never gets as far as the preference.
         cursor = FakeCursor([((False,), 1), (("James", None, "", "", True), 1)])
         svc = self.alerting(cursor)
         svc.me("t", client_label="Safari on iPhone")
-        self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 2))
+        self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 5))
 
     def test_sessions_route_takes_the_same_path(self):
         cursor = FakeCursor([((True,), 1), ([], 0), ((True,), 1), (None, 1)])
@@ -478,7 +587,7 @@ class NewDeviceAlerts(unittest.TestCase):
         svc = service(cursor, verifier(), email_lookup=lambda principal: "me@example.invalid")
         svc.mailer = FakeMailer()
         svc.me("t", client_label="Chrome")
-        self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 2))
+        self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 5))
 
 
 class ChannelsAndWorkspaces(unittest.TestCase):
