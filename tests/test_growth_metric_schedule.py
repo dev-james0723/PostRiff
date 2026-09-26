@@ -39,7 +39,7 @@ class Read(unittest.TestCase):
                 raise reply
             return reply
         s = M.MetricScheduler(None, OAuth(), transport=transport)
-        s._eligible = lambda row: True
+        s._eligible = lambda row: "read"
         return s
 
     ROW = {"workspaceId": "w", "connectionId": "c", "provider": "threads", "postId": "p"}

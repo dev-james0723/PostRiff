@@ -1,14 +1,13 @@
 """Growth Phase 0 history import and verified-job backfill on the disposable PostgreSQL loaded by rls.sql.
 
 A confirmed request by a connection manager creates one import run per connection; the cron step pages through the
-account's own posts (synthetic transport), keeps metadata and a caption hash but never caption text, schedules one
+account's own posts (synthetic transport), keeps metadata and caption length only (no text, no hash), schedules one
 backfill reading per post inside the 90-day window, and the metric step then reads them. Rate limits keep the cursor,
 401 fails the run, and disconnecting purges what was imported. The operator backfill schedules one reading for
 recent verified jobs that have none, dry-run by default.
 
     POSTRIFF_PG_BIN=... python scripts/postriff_pg_suite.py postgres_growth_history
 """
-import hashlib
 import json
 import sys
 import time
@@ -106,16 +105,18 @@ transport.replies = [page1, page2]
 result = importer.tick()
 assert result.get("done") == 1, result
 with connection() as db:
-    owned = db.execute("SELECT provider_post_id, caption_sha256, caption_chars, permalink FROM public.pr_owned_posts ORDER BY provider_post_id").fetchall()
+    owned = db.execute("SELECT provider_post_id, caption_chars, permalink FROM public.pr_owned_posts ORDER BY provider_post_id").fetchall()
+    columns = {r[0] for r in db.execute("SELECT column_name FROM information_schema.columns WHERE table_name='pr_owned_posts'").fetchall()}
     reads = db.execute("SELECT provider_post_id, read_offset, source, due_at <= now(), job_id FROM public.pr_metric_reads ORDER BY provider_post_id").fetchall()
     run = db.execute("SELECT status, pages, posts, cursor FROM public.pr_history_imports").fetchone()
     stored_text = db.execute("SELECT count(*) FROM public.pr_owned_posts WHERE row_to_json(pr_owned_posts)::text LIKE '%%private words%%'").fetchone()[0]
 assert [o[0] for o in owned] == ["h1", "h2", "h3"], owned
-assert owned[0][1] == hashlib.sha256(caption.encode()).hexdigest() and owned[0][2] == len(caption) and owned[1][3] is None and stored_text == 0, owned
+assert owned[0][1] == len(caption) and owned[1][2] is None and stored_text == 0, owned
+assert not any("caption" in c and c != "caption_chars" for c in columns), columns
 assert reads == [(p, "backfill", "history_import", True, None) for p in ("h1", "h2", "h3")], reads
 assert run == ("done", 2, 3, "CUR2"), run
 assert "/me/threads?" in transport.urls[1][0] and "after=CUR1" in transport.urls[2][0]
-checks.append("the import pages newest-first, stops at the 90-day window, keeps metadata and a caption hash (never the text, never an insecure link) and schedules one backfill reading per post")
+checks.append("the import pages newest-first, stops at the 90-day window, keeps metadata and caption length only (no text, no guessable hash, no insecure link) and schedules one backfill reading per post")
 
 metric_transport = Transport()
 metric_transport.replies = [{"status": 200, "body": {"data": [{"name": "views", "total_value": {"value": n}}]}} for n in (10, 20, 30)]
@@ -180,19 +181,115 @@ with connection() as db, db.cursor() as cur:
 with connection() as db:
     left = db.execute("SELECT (SELECT count(*) FROM public.pr_owned_posts), (SELECT count(*) FROM public.pr_metric_observations WHERE job_id IS NULL), "
                       "(SELECT status FROM public.pr_metric_reads WHERE provider_post_id='h9')").fetchone()
-assert removed == 5 and left == (0, 0, "cancelled"), (removed, left)   # h1-h3, h5 and h9
-checks.append("disconnect purges imported posts and their observations and cancels pending readings")
+assert removed == 5 and left == (0, 0, None), (removed, left)   # h1-h3, h5, h9; the import's reading rows are deleted
+checks.append("disconnect purges imported posts, their observations and their reading rows, and cancels other pending readings")
+
+run_id = fresh_run(0)
+transport.replies = [{"status": 200, "body": {"data": [{"id": "h1", "timestamp": iso(now - 3600), "text": "again"}], "paging": {}}}]
+assert importer.tick().get("done") == 1
+with connection() as db:
+    again = db.execute("SELECT status, source FROM public.pr_metric_reads WHERE provider_post_id='h1'").fetchall()
+assert again == [("pending", "history_import")], again
+checks.append("after disconnect and reconnect a new import schedules readings for the same posts again")
+
+reader = M.MetricScheduler(connection, service.oauth, transport=metric_transport, worker_id="mr-race")
+late_rows = [r for r in reader.claim(10) if r["postId"] == "h1"]
+with connection() as db, db.cursor() as cur:
+    H.purge_connection(cur, wid, CONN)                        # disconnect lands while the reading is in flight
+    db.commit()
+assert reader.complete(late_rows[0], {"state": "done", "found": {"views": 1}, "endpoint": "x"}) is False
+with connection() as db:
+    leaked = db.execute("SELECT count(*) FROM public.pr_metric_observations WHERE provider_post_id='h1' AND job_id IS NULL").fetchone()[0]
+assert leaked == 0, leaked
+with connection() as db, db.cursor() as cur:
+    cur.execute("INSERT INTO public.pr_owned_posts(workspace_id,connection_id,provider,provider_post_id,source) VALUES(%s,%s,'threads','hr','history_import')", (wid, CONN))
+    M.schedule(cur, wid, CONN, "threads", "hr", None, now, "history_import", (("backfill", 0),))
+    db.commit()
+first = [r for r in reader.claim(10) if r["postId"] == "hr"]
+assert reader.complete(first[0], {"state": "done", "found": {"views": 3}, "endpoint": "x"}) is True   # completes first
+with connection() as db, db.cursor() as cur:
+    H.purge_connection(cur, wid, CONN)
+    db.commit()
+    leaked = db.execute("SELECT count(*) FROM public.pr_metric_observations WHERE provider_post_id='hr'").fetchone()[0]
+assert leaked == 0, leaked
+checks.append("a reading completing around a disconnect never leaves observations behind, in either order")
+
+with connection() as db, db.cursor() as cur:
+    cur.execute("DELETE FROM public.pr_auth_throttle")   # this script makes more import requests than one person's hourly allowance
+    cur.execute("UPDATE public.pr_history_imports SET status='done' WHERE status IN ('pending','running')")
+    cur.execute("INSERT INTO public.pr_owned_posts(workspace_id,connection_id,provider,provider_post_id,source,updated_at) VALUES(%s,%s,'threads','old-imp','history_import',now() - interval '1 hour')", (wid, CONN))
+    cur.execute("INSERT INTO public.pr_owned_posts(workspace_id,connection_id,provider,provider_post_id,source) VALUES(%s,%s,'threads','new-imp','history_import')", (wid, CONN))
+    M.schedule(cur, wid, CONN, "threads", "own-post", "job-own", now, "verification", (("24h", 86400),))
+    cur.execute("INSERT INTO public.pr_growth_purges(workspace_id,connection_id,requested_at) VALUES(%s,%s,now() - interval '20 minutes')", (wid, CONN))
+    db.commit()
+assert refused(409, lambda: importer.request(wid, "fixture-one", CONN, {"confirmed": True})).code == "history_purge_pending"
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, "threads", "blocked-imp", None, now - 60, "history_import", (("backfill", 0),))
+    M.schedule(cur, wid, CONN, "threads", "rafii-post", "job-rafii", now - 60, "backfill", (("backfill", 0),))
+    cur.execute("UPDATE public.pr_metric_reads SET status='cancelled' WHERE provider_post_id='rafii-post'")
+    M.schedule(cur, wid, CONN, "threads", "rafii-post", None, now - 60, "history_import", (("backfill", 0),))   # an import lists Rafii's post
+    db.commit()
+    kept_source = db.execute("SELECT source, job_id FROM public.pr_metric_reads WHERE provider_post_id='rafii-post'").fetchone()
+assert kept_source == ("backfill", "job-rafii"), kept_source
+blocked = M.MetricScheduler(connection, service.oauth, transport=metric_transport, worker_id="mr-blocked").tick()
+with connection() as db:
+    states = dict(db.execute("SELECT provider_post_id, status FROM public.pr_metric_reads WHERE provider_post_id IN ('blocked-imp','rafii-post')").fetchall())
+    waiting = db.execute("SELECT failure_class, due_at > now() FROM public.pr_metric_reads WHERE provider_post_id='rafii-post'").fetchone()
+assert states == {"blocked-imp": "cancelled", "rafii-post": "pending"} and waiting == ("purge_pending", True), (states, waiting, blocked)
+with connection() as db:
+    stuck = db.execute("INSERT INTO public.pr_history_imports(workspace_id,connection_id,provider,status) VALUES(%s,%s,'threads','running') RETURNING id::text", (wid, CONN)).fetchone()[0]
+assert importer.tick().get("cancelled") == 1 and run_state(stuck)[0] == "cancelled", run_state(stuck)
+from postriff_phase2.operational_signals import snapshot
+assert snapshot(connection)["counts"]["historyPurgesPending"] == 1, "owed purges are visible whatever the flags say"
+swept = H.sweep_pending_purges(connection)
+with connection() as db:
+    imported = db.execute("SELECT count(*) FROM public.pr_owned_posts WHERE connection_id=%s AND source='history_import'", (CONN,)).fetchone()[0]
+    own = db.execute("SELECT status FROM public.pr_metric_reads WHERE provider_post_id='own-post'").fetchone()[0]
+    markers = db.execute("SELECT count(*) FROM public.pr_growth_purges").fetchone()[0]
+assert swept == {"status": "ok", "purged": 1, "failed": 0} and (imported, own, markers) == (0, "pending", 0), (swept, imported, own, markers)
+with connection() as db:
+    rafii = db.execute("SELECT count(*) FROM public.pr_metric_reads WHERE provider_post_id='rafii-post'").fetchone()[0]
+assert rafii == 1, "a reading of Rafii's own post is never deleted as import data"
+assert importer.request(wid, "fixture-one", CONN, {"confirmed": True})["status"] == "pending"
+checks.append("an owed disconnect purge blocks imports and cancels import readings while Rafii's own readings wait and retry; it is retried by the flag-independent cron sweep, removes all import-derived data but never the readings of Rafii's own posts (reviving a row never relabels a job's reading), then imports work again")
+
+with connection() as db:
+    db.execute("INSERT INTO public.pr_owned_posts(workspace_id,connection_id,provider,provider_post_id,source,updated_at) VALUES(%s,'conn-busy-000','threads','busy','history_import',now() - interval '1 hour')", (wid,))
+    db.execute("INSERT INTO public.pr_growth_purges(workspace_id,connection_id) VALUES(%s,'conn-busy-000')", (wid,))
+holder = connection()
+holder.execute("SELECT 1 FROM public.pr_owned_posts WHERE provider_post_id='busy' FOR UPDATE")   # another session holds the rows
+started = time.monotonic()
+busy = H.sweep_pending_purges(connection)
+holder.rollback()
+holder.close()
+with connection() as db:
+    marker = db.execute("SELECT attempts, failure_class, next_attempt_at > now() + interval '30 seconds' FROM public.pr_growth_purges WHERE connection_id='conn-busy-000'").fetchone()
+assert busy["failed"] == 1 and marker == (1, "LockNotAvailable", True) and time.monotonic() - started < 8, (busy, marker)
+again = H.sweep_pending_purges(connection)
+assert again == {"status": "ok", "purged": 0, "failed": 0}, again   # backing off: not retried every minute
+checks.append("a purge blocked by another session gives up after the 2 s lock timeout, records why and backs off instead of stalling the cron")
+
+run_id = fresh_run(0)
+transport.replies = [{"status": 200, "body": {"data": [{"id": "hk", "timestamp": iso(now - 600)}], "paging": {"next": "https://graph.threads.net/n"}}}]
+assert importer.tick().get("failed") == 1 and run_state(run_id) == ("failed", 0, "incomplete_paging", 1), run_state(run_id)
+with connection() as db:
+    kept = db.execute("SELECT count(*) FROM public.pr_owned_posts WHERE provider_post_id='hk'").fetchone()[0]
+assert kept == 1
+checks.append("a next page without a cursor keeps that page's posts, then fails the run instead of reporting a partial import as done")
 
 jobs = [
     {"id": "j-recent", "providerReference": "v1", "verification": {"at": now - 10 * 86400}, "manifest": {"platform": "Threads", "channelId": CONN}},
     {"id": "j-old", "providerReference": "v2", "verification": {"at": now - 100 * 86400}, "manifest": {"platform": "Threads", "channelId": CONN}},
-    {"id": "j-read", "providerReference": "h1", "verification": {"at": now - 86400}, "manifest": {"platform": "Threads", "channelId": CONN}},
+    {"id": "j-read", "providerReference": "v-read", "verification": {"at": now - 86400}, "manifest": {"platform": "Threads", "channelId": CONN}},
     {"id": "j-linkedin", "providerReference": "v3", "verification": {"at": now - 86400}, "manifest": {"platform": "LinkedIn", "channelId": CONN}},
     {"id": "j-unverified", "providerReference": "v4", "verification": None, "manifest": {"platform": "Threads", "channelId": CONN}},
 ]
 with connection() as db:
     db.execute("UPDATE public.pr_workspaces SET state = jsonb_set(coalesce(state,'{}'::jsonb), '{phase2}', %s::jsonb) WHERE id=%s",
                (json.dumps({"jobs": jobs}), wid))
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, "threads", "v-read", "j-read", now - 86400, "verification")   # already has readings
+    db.commit()
 dry = B.backfill_verified_jobs(connection, now=now)
 with connection() as db:
     none_yet = db.execute("SELECT count(*) FROM public.pr_metric_reads WHERE provider_post_id='v1'").fetchone()[0]
@@ -202,7 +299,16 @@ with connection() as db:
     v1 = db.execute("SELECT read_offset, source, job_id, extract(epoch from anchor_at)::bigint FROM public.pr_metric_reads WHERE provider_post_id='v1'").fetchall()
 assert (dry["eligible"], dry["scheduled"], none_yet) == (1, 0, 0), (dry, none_yet)
 assert (applied["candidates"], applied["scheduled"], again["eligible"]) == (2, 1, 0), (applied, again)
-assert v1 == [("backfill", "backfill", "j-recent", int(now - 10 * 86400))], v1
+assert [r[:3] for r in v1] == [("backfill", "backfill", "j-recent")] and abs(v1[0][3] - (now - 10 * 86400)) <= 1, v1
+with connection() as db:
+    two = str(db.execute("select workspace_id from public.pr_memberships where user_id=%s", ("00000000-0000-0000-0000-000000000002",)).fetchone()[0])
+    db.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,%s,'analytics','Direct')", (two, CONN))
+    db.execute("UPDATE public.pr_workspaces SET state = jsonb_set(coalesce(state,'{}'::jsonb), '{phase2}', %s::jsonb) WHERE id=%s",
+               (json.dumps({"jobs": [dict(jobs[0], id="j-two", providerReference="w2")]}), two))
+paged = B.backfill_verified_jobs(connection, now=now, batch_size=1, apply=True)
+assert paged["batches"] >= 2 and paged["scheduled"] == 1, paged
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM public.pr_metric_reads WHERE workspace_id=%s AND provider_post_id='w2'", (two,)).fetchone()[0] == 1
 checks.append("the operator backfill is dry-run by default and schedules one reading only for recent verified Threads/Instagram jobs without readings")
 
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

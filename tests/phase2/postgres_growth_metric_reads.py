@@ -241,14 +241,60 @@ assert (p8["likes"]["value"], p8["likes"]["readOffset"]) == (9.0, "1h"), p8["lik
 assert p8["shares"]["availability"] == "unavailable" and p8["shares"]["value"] is None
 checks.append("analytics keep the latest available value per metric (a later reading missing it never hides it) and say which offset each value was read at")
 
+import os
 from postriff_phase2.operational_signals import snapshot
+os.environ.pop(M.FLAG, None)
+assert snapshot(connection)["counts"]["metricReadsOverdue"] == 0, "flag off: leftover rows are not an incident"
+os.environ[M.FLAG] = "1"
 before = snapshot(connection)["counts"]
 with connection() as db, db.cursor() as cur:
-    M.schedule(cur, wid, CONN, "threads", "late", None, now - 1200, "backfill", (("backfill", 0),))
+    M.schedule(cur, wid, CONN, "threads", "late-fresh", "job-late", now - 1200, "verification", (("t0", 0),))
+    M.schedule(cur, wid, CONN, "threads", "late-import", None, now - 30 * 86400, "history_import", (("backfill", 0),))
     db.commit()
 after = snapshot(connection)
 assert after["counts"]["metricReadsOverdue"] == before["metricReadsOverdue"] + 1 and after["status"] == "attention", after
-assert {"metricReadsDead24h", "historyImportsFailed24h"} <= set(after["counts"]), after["counts"]
-checks.append("the cron operations snapshot counts readings overdue by 10 minutes (ids-free aggregate)")
+assert after["counts"]["metricBackfillStale"] == before["metricBackfillStale"], "a fresh import's old anchors are not overdue"
+os.environ.pop(M.FLAG, None)
+checks.append("the operations snapshot counts only fresh readings overdue by 10 minutes, and only while metric reads are on")
+
+with connection() as db, db.cursor() as cur:
+    for i in range(30):
+        M.schedule(cur, wid, CONN, "threads", f"imp{i}", None, now - 60 * 86400, "history_import", (("backfill", 0),))
+    M.schedule(cur, wid, CONN, "threads", "fresh", "job-fresh", now - 5, "verification", (("t0", 0),))
+    db.commit()
+with connection() as db:
+    db.execute("UPDATE public.pr_metric_reads SET status='claimed', lease_owner='mr-dead', lease_until=now() - interval '1 second' WHERE provider_post_id='imp0'")
+claimed = M.MetricScheduler(connection, oauth, transport=transport, worker_id="mr-prio").claim(10)
+order = [r["postId"] for r in claimed]
+assert order[0] == "imp0" and {"fresh", "late-fresh"} <= set(order[1:4]) and len(order) == 10, order
+checks.append("claims take crashed leases, then fresh verification readings, then a large import's backfill, however old its anchors")
+
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, "threads", "p1", "job-p1", now, "verification")
+    db.commit()
+    revived = dict(db.execute("SELECT read_offset, status FROM public.pr_metric_reads WHERE provider_post_id='p1'").fetchall())
+assert revived == {"t0": "done", "1h": "unavailable", "24h": "unavailable", "7d": "pending"}, revived
+with connection() as db:
+    fresh_mark = db.execute("SELECT scheduled_at > now() - interval '1 minute', created_at < scheduled_at FROM public.pr_metric_reads WHERE provider_post_id='p1' AND read_offset='7d'").fetchone()
+assert fresh_mark == (True, True), fresh_mark
+checks.append("rescheduling revives only cancelled readings; finished ones are kept")
+
+with connection() as db, db.cursor() as cur:
+    insights.record_observations(cur, wid, CONN, "threads", "p8", "job-p8", {"views": 70}, insights.insights_endpoint("threads", "p8"), now, read_offset="24h")
+    cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at) "
+                "VALUES(%s,%s,'threads','legacy1','job-l','views','2026-09',5,'count','available',now())", (wid, CONN))
+    display = {p["providerPostId"]: p for p in insights.summary(cur, wid, [], now)["posts"]}
+    alike = {p["providerPostId"]: p for p in insights.summary(cur, wid, [], now, basis=insights.COMPARISON_BASIS)["posts"]}
+    db.commit()
+assert display["p8"]["metrics"]["views"]["value"] == 70.0 and "p1" in display, display["p8"]["metrics"]["views"]
+assert alike["p8"]["metrics"]["views"] == dict(alike["p8"]["metrics"]["views"], value=70.0, readOffset="24h")
+assert "p1" not in alike and alike["legacy1"]["metrics"]["views"]["value"] == 5.0, sorted(alike)
+from postriff_phase2.learning_service import latest_metrics_by_job
+with connection() as db, db.cursor() as cur:
+    by_job = latest_metrics_by_job(cur, wid)
+    trigger = {p["providerPostId"]: p for p in insights.summary(cur, wid, [], now, basis=insights.TRIGGER_BASIS)["posts"]}
+assert by_job["job-p8"] == {"views": 70.0} and by_job["job-l"] == {"views": 5.0} and "job-p1" not in by_job, by_job
+assert trigger["p8"]["metrics"]["likes"]["value"] == 9.0 and trigger["p8"]["metrics"]["likes"]["readOffset"] == "1h"
+checks.append("cross-post consumers read every post at +24h and the strong-post trigger at +1h (legacy rows keep today's behaviour); learning notes compare jobs the same way")
 
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

@@ -159,6 +159,23 @@ class Evaluate(unittest.TestCase):
             with self.assertRaises(ValueError):
                 G.load_profile(dst, QS)
 
+    def test_profile_needs_one_served_model_and_ships_the_calibrator(self):
+        report = G.evaluate(self.rows, self.judgments, QS)
+        self.assertEqual(report["served_models"], ["typesafe-ai/jev"])
+        profile = G.calibration_profile(report, model="jev")
+        self.assertEqual((profile["model"], profile["requested_model"]), ("typesafe-ai/jev", "jev"))
+        self.assertTrue(profile["languages"]["en"]["hook"]["isotonic"]["x"])
+        mixed = dict(report, served_models=["a", "b"])
+        with self.assertRaises(ValueError):
+            G.calibration_profile(mixed, model="jev")
+
+    def test_latency_is_what_the_person_waited(self):
+        from dataclasses import replace
+        waited = {k: replace(j, elapsed_ms=3000) for k, j in self.judgments.items()}
+        report = G.evaluate(self.rows, waited, QS)
+        self.assertEqual(report["latency_ms"], {"p50": 3000, "p95": 3000})
+        self.assertFalse(G.calibration_profile(report, model="m")["latency"]["met"])
+
     def test_missing_and_too_few(self):
         report = G.evaluate(self.rows[:6], {self.rows[0].id: self.judgments[self.rows[0].id]}, QS)
         hook = report["dimensions"]["hook"]
@@ -239,6 +256,50 @@ class Compare(unittest.TestCase):
         self.assertEqual(report["stopped"]["reason"], "auth")
         self.assertEqual(report["results"]["typesafe-ai/jev"]["judged"], 3)
         self.assertAlmostEqual(report["spend"]["known_usd"], 0.012)
+
+    def test_non_finite_money_is_refused_before_any_call(self):
+        for extra in (["--max-usd", "nan"], ["--max-usd", "inf"], ["--max-usd", "0"], ["--max-usd", "20", "--price", "jev=nan,nan"]):
+            out = io.StringIO()
+            args = ["--labels", self.labels, "--models", "jev", "--price", "jev=1,5", *extra, "--confirm-live", "--out", "x.json"]
+            with self.subTest(extra=extra):
+                self.assertEqual(C.main(args, env={}, out=out, factories=self.factories), 2)
+        self.assertEqual(self.calls, [])
+
+    def test_unknown_cost_counts_at_the_requested_models_estimate(self):
+        rows = G.load(self.labels)
+        class Echoing:
+            def evaluate(self, state, questions, *, timeout_s):
+                answers = {n: {"type": "boolean", "probability": 0.9} for n in questions}
+                return J.RawEvaluation("typesafe-ai/jev-2", answers, 1, 1, None, "unknown", "g", "typesafe-ai", 5)
+        costs = C.estimate(rows, QS, ["typesafe-ai/jev"], {"typesafe-ai/jev": (1, 5)})
+        per_call = costs["models"]["typesafe-ai/jev"]["per_call_usd"]
+        report = C.run(rows, QS, ["typesafe-ai/jev"], jev_factory=Echoing, chat=None, max_usd=per_call * 3.5, costs=costs)
+        self.assertEqual(report["results"]["typesafe-ai/jev"]["judged"], 3)
+        self.assertEqual(report["stopped"]["reason"], "cap")
+        self.assertEqual(report["results"]["typesafe-ai/jev"]["served_models"], ["typesafe-ai/jev-2"])
+
+    def test_chat_model_with_a_rejected_key_stops_with_auth(self):
+        from postriff_phase2.model_runtime import ServerModelRuntime
+        from postriff_phase2.growth.router import chat_from_runtime
+        calls = []
+        def transport(method, url, headers=None, body=None, timeout=None):
+            calls.append(1)
+            return {"status": 401, "body": {}}
+        chat = chat_from_runtime(ServerModelRuntime("k", transport=transport))
+        rows = G.load(self.labels)
+        costs = C.estimate(rows, QS, ["anthropic/claude-haiku-4.5"], {"anthropic/claude-haiku-4.5": (1, 5)})
+        report = C.run(rows, QS, ["anthropic/claude-haiku-4.5"], jev_factory=None, chat=chat, max_usd=20, costs=costs)
+        self.assertEqual((report["stopped"]["reason"], len(calls)), ("auth", 1))
+
+    def test_estimate_includes_reasoning_for_thinking_models(self):
+        from postriff_phase2.model_runtime import TYPICAL_REASONING_TOKENS, thinking
+        rows = G.load(self.labels)
+        model = "google/gemini-2.5-flash-lite"
+        self.assertTrue(thinking(model))
+        costs = C.estimate(rows, QS, [model, "typesafe-ai/jev"], {model: (1, 1), "typesafe-ai/jev": (1, 1)})
+        answers = C.OUTPUT_TOKENS_PER_ANSWER * len(QS.names) * len(rows)
+        self.assertEqual(costs["models"][model]["output_tokens"], answers + TYPICAL_REASONING_TOKENS * len(rows))
+        self.assertEqual(costs["models"]["typesafe-ai/jev"]["output_tokens"], answers)
 
     def test_live_run_writes_report(self):
         out, target = io.StringIO(), tempfile.mktemp(suffix=".json")

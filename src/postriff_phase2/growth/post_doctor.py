@@ -17,10 +17,11 @@ Assumptions (reversible, documented in CONTRACTS):
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .. import text_measure
 from . import calibration, questions
@@ -33,6 +34,7 @@ DEFAULT_MODEL = "typesafe-ai/jev"
 RISK_THRESHOLD = 0.65
 MAX_FIXES = 2
 CONFIDENCE = ("low", "medium", "high")
+PROFILE_VERSION = 2   # 2: accepted entries carry an isotonic calibrator; `model` is the served model
 _SPACE = re.compile(r"\s+")
 
 
@@ -53,6 +55,8 @@ class DimensionResult:
     fixes: tuple               # localized hints for the weakest answered questions (max 2)
     answered_weight: float     # fraction of the dimension's total weight that was answered, 0..1
     calibrated: bool = False   # level used thresholds accepted for this language on the golden set
+    p_strong: float | None = None   # calibrated P(a person rates this dimension strong or better); calibrated dims only.
+                                    # For monitoring and ranking fixes; never shown as a score or read as virality.
 
 
 @dataclass(frozen=True)
@@ -182,6 +186,42 @@ def confidence(qs, judgment, *, calibrated, posts_with_metrics):
     return CONFIDENCE[step], tuple(reasons)
 
 
+def _numbers(values, length=None):
+    return (isinstance(values, list) and bool(values) and (length is None or len(values) == length)
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values))
+
+
+def validate_profile(profile, qs):
+    """Return `profile` if it is a calibration profile for this exact question set whose accepted entries carry
+    ascending finite thresholds (one per level boundary) and a non-decreasing finite isotonic calibrator on [0, 1];
+    otherwise raise ValueError (never another exception type)."""
+    if not isinstance(profile, dict) or profile.get("version") != PROFILE_VERSION:
+        raise ValueError("unsupported calibration profile")
+    if profile.get("question_set") != qs.key or profile.get("digest") != qs.digest:
+        raise ValueError("calibration profile was fitted on a different question set; recalibrate")
+    languages = profile.get("languages")
+    if not isinstance(profile.get("model"), str) or not isinstance(languages, dict):
+        raise ValueError("calibration profile has no model or languages")
+    boundaries = len(qs.levels["thresholds"])
+    for dims in languages.values():
+        if not isinstance(dims, dict):
+            raise ValueError("calibration profile has a malformed language entry")
+        for entry in dims.values():
+            if not isinstance(entry, dict):
+                raise ValueError("calibration profile has a malformed dimension entry")
+            if entry.get("accepted") is not True:
+                continue
+            ts, iso = entry.get("thresholds"), entry.get("isotonic")
+            if not _numbers(ts, boundaries) or ts != sorted(ts):
+                raise ValueError("calibration profile has malformed thresholds")
+            xs = iso.get("x") if isinstance(iso, dict) else None
+            ys = iso.get("y") if isinstance(iso, dict) else None
+            if (not _numbers(xs) or not _numbers(ys, len(xs)) or xs != sorted(xs) or ys != sorted(ys)
+                    or not all(0 <= y <= 1 for y in ys)):
+                raise ValueError("calibration profile has a malformed calibrator")
+    return profile
+
+
 def _creator_state(creator):
     """Only plain text/number facts the creator supplied; nested or other values are dropped."""
     out = {}
@@ -203,9 +243,7 @@ class PostDoctorService:
         self.judgments = judgments
         self.qs = question_set or questions.get("postdoctor")
         self.model = model
-        if profile is not None and (profile.get("question_set") != self.qs.key or profile.get("digest") != self.qs.digest):
-            raise ValueError("calibration profile does not match the question set; recalibrate")
-        self.profile = profile
+        self.profile = None if profile is None else validate_profile(profile, self.qs)
         self.env = env
 
     def check(self, *, workspace_id, draft_text, platform, lang, creator=None, recent_texts=(),
@@ -220,7 +258,9 @@ class PostDoctorService:
         judgment = self.judgments.judge(self.qs, state, subject=subject, scope=f"personal:{workspace_id}",
                                         model=self.model, workspace_id=workspace_id)
         accepted = self.accepted(lang, judgment)
-        dims = levels_from_judgment(self.qs, judgment, thresholds=accepted, lang=lang)
+        dims = levels_from_judgment(self.qs, judgment, thresholds={d: e["thresholds"] for d, e in accepted.items()}, lang=lang)
+        dims = tuple(replace(d, p_strong=round(calibration.isotonic_apply(accepted[d.id]["isotonic"], d.score), 4))
+                     if d.calibrated else d for d in dims)
         calibrated = len(accepted) == len(self.qs.dimensions)
         computed = {
             "similarity_recent": similarity_recent(draft_text, recent_texts),
@@ -234,12 +274,12 @@ class PostDoctorService:
                                 reasons, judgment)
 
     def accepted(self, lang, judgment):
-        """{dimension: thresholds} accepted for this language group. Fits were made on primary (Jev) answers, so a
-        fallback model's judgment gets none; nor does any language without its own accepted fit."""
+        """{dimension: profile entry} accepted for this language group. Fits were made on primary answers from the
+        profiled model, so a fallback model's judgment gets none; nor does any language without its own accepted fit."""
         if self.profile is None or not judgment.calibrated or getattr(judgment, "status", "ok") != "ok":
             return {}
         if judgment.model != self.profile.get("model"):
             return {}
         dims = (self.profile.get("languages") or {}).get(lang_group(lang)) or {}
-        return {d: e["thresholds"] for d, e in dims.items() if e.get("accepted") and d in self.qs.dimensions}
+        return {d: e for d, e in dims.items() if isinstance(e, dict) and e.get("accepted") is True and d in self.qs.dimensions}
 

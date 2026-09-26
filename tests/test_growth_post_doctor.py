@@ -102,8 +102,9 @@ class FakeJev:
 def profile(groups, *, accepted=True, model="typesafe-ai/jev", thresholds=(0.95, 0.97, 0.99), dims=None):
     """A SYNTHETIC calibration profile shaped like golden.calibration_profile output."""
     dims = list(QS.dimensions) if dims is None else dims
-    entry = {"thresholds": list(thresholds), "n": 50, "kappa_cv": 0.7, "ece_cv": 0.05, "accepted": accepted, "reasons": []}
-    return {"version": 1, "question_set": QS.key, "digest": QS.digest, "model": model,
+    entry = {"thresholds": list(thresholds), "isotonic": {"x": [0.2, 0.9], "y": [0.1, 0.8]}, "n": 50, "kappa_cv": 0.7,
+             "ece_cv": 0.05, "accepted": accepted, "reasons": []}
+    return {"version": P.PROFILE_VERSION, "question_set": QS.key, "digest": QS.digest, "model": model,
             "languages": {g: {d: dict(entry) for d in dims} for g in groups}}
 
 
@@ -128,6 +129,8 @@ class Service(unittest.TestCase):
                            creator=creator, recent_texts=["I practised three hours today!"], posts_with_metrics=3)
         self.assertEqual(len(result.dimensions), 9)
         self.assertTrue(all(d.calibrated for d in result.dimensions))
+        hook = result.dimensions[0]
+        self.assertAlmostEqual(hook.p_strong, round(0.1 + 0.7 * (hook.score - 0.2) / 0.7, 4))   # the shipped calibrator
         self.assertEqual(result.confidence, "medium")
         self.assertGreater(result.computed["similarity_recent"], 0.8)
         self.assertIsNone(result.computed["fit_winners"])
@@ -174,11 +177,37 @@ class Service(unittest.TestCase):
         other, _ = service(None, profile=profile(["en"], model="google/gemini-2.5-flash-lite"))
         self.assertFalse(any(d.calibrated for d in other.check(workspace_id="ws1", draft_text="z", platform="X", lang="en").dimensions))
 
-    def test_profile_for_another_rubric_is_refused(self):
+    def test_profile_for_another_rubric_or_malformed_is_refused(self):
         stale = profile(["en"])
         stale["digest"] = "0" * 64
         with self.assertRaises(ValueError):
             service(None, profile=stale)
+        for breakage in ({"isotonic": None}, {"isotonic": {"x": [0.9, 0.2], "y": [0.1, 0.8]}}, {"thresholds": [0.9, 0.5, 0.7]},
+                         {"isotonic": [0.1, 0.2]}, {"isotonic": "abc"}, {"thresholds": [None, None, None]}, {"thresholds": ["a", "b", "c"]},
+                         {"isotonic": {"x": [0.1, 0.2], "y": ["a", "b"]}}, {"isotonic": {"x": [0.1, float("nan")], "y": [0.1, 0.2]}},
+                         {"isotonic": {"x": [0.1, 0.2], "y": [0.1, 1.5]}}, {"thresholds": [0.1, 0.2]}):
+            bad = profile(["en"])
+            bad["languages"]["en"]["hook"].update(breakage)
+            with self.subTest(breakage=breakage), self.assertRaises(ValueError):
+                service(None, profile=bad)
+        for shape in ({"languages": {"en": []}}, {"languages": {"en": {"hook": "x"}}}, {"languages": []}):
+            broken = dict(profile(["en"]), **shape)
+            with self.subTest(shape=shape), self.assertRaises(ValueError):
+                service(None, profile=broken)
+        rejected = profile(["en"], accepted=False)
+        rejected["languages"]["en"]["hook"]["isotonic"] = None   # an unaccepted fit may lack a calibrator
+        service(None, profile=rejected)
+        old = dict(profile(["en"]), version=1)
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            service(None, profile=old)
+
+    def test_only_a_literal_true_accepts_a_fit(self):
+        truthy = profile(["en"])
+        for d in truthy["languages"]["en"].values():
+            d.update(accepted=1, thresholds="abc", isotonic=None)   # skipped by validation, so it must not be applied
+        svc, _ = service(None, profile=truthy)
+        result = svc.check(workspace_id="ws1", draft_text="x", platform="X", lang="en")
+        self.assertFalse(any(d.calibrated for d in result.dimensions))
 
 
 if __name__ == "__main__":

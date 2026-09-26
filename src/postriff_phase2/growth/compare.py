@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 
@@ -59,8 +60,8 @@ def parse_prices(items):
             inp, outp = (float(x) for x in pair.split(","))
         except ValueError as error:
             raise CompareError(f"--price must look like MODEL=IN,OUT, got {item!r}") from error
-        if inp < 0 or outp < 0:
-            raise CompareError("prices must be non-negative")
+        if not (math.isfinite(inp) and math.isfinite(outp)) or inp < 0 or outp < 0:
+            raise CompareError("prices must be finite and non-negative")
         prices[ALIASES.get(model, model)] = (inp, outp)
     return prices
 
@@ -73,13 +74,16 @@ def estimate(rows, qs, models, prices):
     payload = qs.payload_questions()
     question_tokens = questions.estimate_tokens(payload)
     system_tokens = questions.estimate_tokens(FALLBACK_SYSTEM)
-    output = OUTPUT_TOKENS_PER_ANSWER * len(qs.names)
+    from postriff_phase2.model_runtime import TYPICAL_REASONING_TOKENS, thinking
+    answers = OUTPUT_TOKENS_PER_ANSWER * len(qs.names)
     report, total = {}, 0.0
     for model in models:
         if model not in prices:
             raise CompareError(f"no price for {model}; pass --price {model}=IN,OUT (USD per 1M tokens)")
         inp_price, out_price = prices[model]
         extra = 0 if model == JEV else system_tokens
+        # Thinking models bill their reasoning as output tokens on top of the answers.
+        output = answers + (TYPICAL_REASONING_TOKENS if model != JEV and thinking(model) else 0)
         inp = sum(questions.estimate_tokens(state_for(r)) + question_tokens + extra for r in rows)
         usd = (inp * inp_price + output * len(rows) * out_price) / 1_000_000
         report[model] = {"calls": len(rows), "input_tokens": inp, "output_tokens": output * len(rows),
@@ -88,16 +92,19 @@ def estimate(rows, qs, models, prices):
     return {"models": report, "total_usd": round(total, 6)}
 
 
-def _spent(sink, per_call):
-    return sum(e.cost_usd if e.cost_usd is not None else per_call.get(e.model, 0.0) for e in sink.events)
+def _spent(sinks, per_call):
+    """Known cost, plus the estimate for every attempt whose cost was not reported. Sinks are per *requested* model,
+    so an attempt counts at its model's estimate whatever model id the provider echoed."""
+    return sum(e.cost_usd if e.cost_usd is not None else per_call[model] for model, sink in sinks.items() for e in sink.events)
 
 
 def run(rows, qs, models, *, jev_factory, chat, max_usd, costs):
     """Judge every row with every model until the cap; returns the report dict."""
-    sink = MemoryUsageSink()
+    sinks = {}
     per_call = {m: costs["models"][m]["per_call_usd"] for m in models}
     results, stopped = {}, None
     for model in models:
+        sink = sinks[model] = MemoryUsageSink()
         if model == JEV:
             router = AIModelRouter(jev=jev_factory(), usage=sink, tasks={TASK: TASKS[TASK]})
         else:
@@ -106,28 +113,30 @@ def run(rows, qs, models, *, jev_factory, chat, max_usd, costs):
         service = JudgmentService(router.evaluator(TASK), MemoryJudgmentCache())
         judgments = {}
         for row in rows:
-            if _spent(sink, per_call) + per_call[model] > max_usd:
-                stopped = {"model": model, "row": row.id, "reason": "cap", "spent_usd": round(_spent(sink, per_call), 6)}
+            if _spent(sinks, per_call) + per_call[model] > max_usd:
+                stopped = {"model": model, "row": row.id, "reason": "cap", "spent_usd": round(_spent(sinks, per_call), 6)}
                 break
             try:
                 judgments[row.id] = service.judge(qs, state_for(row), subject=subject_hash("golden", row.id, row.text),
                                                   scope=SCOPE, model=model)
             except RouterError as error:   # auth / budget / bad request: stop, but keep what was already paid for
-                stopped = {"model": model, "row": row.id, "reason": error.code, "spent_usd": round(_spent(sink, per_call), 6)}
+                stopped = {"model": model, "row": row.id, "reason": error.code, "spent_usd": round(_spent(sinks, per_call), 6)}
                 break
         results[model] = golden.evaluate(rows, judgments, qs)
         if stopped:
             break
-    known = [e.cost_usd for e in sink.events if e.cost_usd is not None]
+    events = [e for sink in sinks.values() for e in sink.events]
+    known = [e.cost_usd for e in events if e.cost_usd is not None]
     return {"estimate": costs, "results": results, "stopped": stopped,
-            "spend": {"known_usd": round(sum(known), 6), "unknown_calls": len(sink.events) - len(known),
-                      "attempts": len(sink.events)}}
+            "spend": {"known_usd": round(sum(known), 6), "unknown_calls": len(events) - len(known),
+                      "attempts": len(events), "counted_usd": round(_spent(sinks, per_call), 6)}}
 
 
 def _live_factories(api_key):
     from postriff_phase2.model_runtime import ServerModelRuntime
     from .jev import JevService
-    return (lambda: JevService(api_key)), chat_from_runtime(ServerModelRuntime(api_key))
+    # The model is pinned: POSTRIFF_JEV_MODEL must not change what a paid comparison measures.
+    return (lambda: JevService(api_key, model=JEV)), chat_from_runtime(ServerModelRuntime(api_key))
 
 
 def main(argv=None, *, env=None, out=sys.stdout, factories=None):
@@ -142,6 +151,8 @@ def main(argv=None, *, env=None, out=sys.stdout, factories=None):
     parser.add_argument("--out")
     args = parser.parse_args(argv)
     try:
+        if not math.isfinite(args.max_usd) or args.max_usd <= 0:
+            raise CompareError("--max-usd must be a finite amount above 0")
         rows = golden.load(args.labels)
         qs = questions.get(args.question_set)
         models = resolve([m.strip() for m in args.models.split(",") if m.strip()])

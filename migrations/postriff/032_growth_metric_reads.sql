@@ -27,14 +27,19 @@ create table if not exists public.pr_metric_reads (
   last_http_status integer,
   failure_class text check (failure_class is null or length(failure_class) <= 40),
   observed_at timestamptz,
+  scheduled_at timestamptz not null default now(),   -- when this reading was (re)scheduled; a revival resets it
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (workspace_id, provider, provider_post_id, read_offset)
 );
-create index if not exists pr_metric_reads_due on public.pr_metric_reads (due_at) where status in ('pending','claimed');
+-- MetricScheduler.claim takes expired leases, then due fresh verification readings, then due backfill readings; each
+-- step is a range scan on its own partial index that stops at its LIMIT, whatever the size of the future queue.
+create index if not exists pr_metric_reads_due_fresh on public.pr_metric_reads (due_at) where status='pending' and source='verification';
+create index if not exists pr_metric_reads_due_backfill on public.pr_metric_reads (due_at) where status='pending' and source<>'verification';
+create index if not exists pr_metric_reads_lease on public.pr_metric_reads (lease_until) where status='claimed';
 
--- The account's own posts found by history import (and, optionally, Rafii's verified ones). Metadata only: caption
--- text is not retained in Phase 0; a sha256 and length let later phases match posts without keeping the words.
+-- The account's own posts found by history import (and, optionally, Rafii's verified ones). Metadata only: neither
+-- caption text nor a hash of it is retained in Phase 0 (a hash of a short caption can be guessed); only its length.
 create table if not exists public.pr_owned_posts (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.pr_workspaces(id) on delete cascade,
@@ -45,7 +50,6 @@ create table if not exists public.pr_owned_posts (
   media_type text check (media_type is null or length(media_type) <= 40),
   media_product_type text check (media_product_type is null or length(media_product_type) <= 40),
   permalink text check (permalink is null or (length(permalink) <= 500 and permalink like 'https://%')),
-  caption_sha256 text check (caption_sha256 is null or caption_sha256 ~ '^[0-9a-f]{64}$'),
   caption_chars integer check (caption_chars is null or caption_chars >= 0),
   source text not null check (source in ('history_import','verification')),
   first_seen_at timestamptz not null default now(),
@@ -76,6 +80,20 @@ create table if not exists public.pr_history_imports (
 create unique index if not exists pr_history_imports_active on public.pr_history_imports (workspace_id, connection_id)
   where status in ('pending','running');
 
+-- A disconnected connection whose imported history must be purged. oauth.disconnect inserts it (history_import.
+-- mark_for_purge) and purges right after its commit (purge_after_disconnect), which deletes the row; a row that stays
+-- means that purge failed. While it exists the connection imports nothing and its import readings are cancelled; the
+-- cron retries the purge whatever the growth flags say, so a rollback never strands a disconnected account's data.
+create table if not exists public.pr_growth_purges (
+  workspace_id uuid not null references public.pr_workspaces(id) on delete cascade,
+  connection_id text not null check (length(connection_id) <= 200),
+  requested_at timestamptz not null default now(),
+  next_attempt_at timestamptz not null default now(),
+  attempts integer not null default 0 check (attempts >= 0),
+  failure_class text check (failure_class is null or length(failure_class) <= 80),
+  primary key (workspace_id, connection_id)
+);
+
 -- One row per model or evaluation attempt (growth/usage.py). Opaque ids and numbers only, never prompt or post text.
 -- cost_usd_micro is NULL when the provider reported no cost: unknown, never zero.
 create table if not exists public.pr_model_usage_events (
@@ -102,9 +120,15 @@ create index if not exists pr_model_usage_events_workspace on public.pr_model_us
 -- Readings taken on a schedule say which offset they were (NULL for every older row and for other writers), so
 -- comparisons can hold read age constant.
 alter table public.pr_metric_observations add column if not exists read_offset text;
-alter table public.pr_metric_observations drop constraint if exists pr_metric_observations_read_offset_check;
-alter table public.pr_metric_observations add constraint pr_metric_observations_read_offset_check
-  check (read_offset is null or read_offset in ('t0','1h','24h','7d','backfill'));
+-- Added only when missing: a re-run must not re-validate every observation under an exclusive lock.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname='pr_metric_observations_read_offset_check'
+                 and conrelid='public.pr_metric_observations'::regclass) then
+    alter table public.pr_metric_observations add constraint pr_metric_observations_read_offset_check
+      check (read_offset is null or read_offset in ('t0','1h','24h','7d','backfill'));
+  end if;
+end $$;
 
 do $$
 declare t text;
@@ -122,7 +146,7 @@ begin
       execute format('create policy trusted_write on public.%I for all to service_role using (true) with check (true)', t);
     end if;
   end loop;
-  foreach t in array array['pr_model_usage_events'] loop
+  foreach t in array array['pr_model_usage_events','pr_growth_purges'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('alter table public.%I force row level security', t);
     execute format('revoke all on public.%I from public, anon, authenticated', t);

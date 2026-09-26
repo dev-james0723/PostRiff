@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from postriff_alpha.domain import AlphaError
 
@@ -24,6 +24,9 @@ TASKS = {
     "golden.compare": ("evaluate", "typesafe-ai/jev", (), 10.0, 1500),
 }
 RETRYABLE = (J.JevRateLimited, J.JevUpstream, J.JevTimeout)
+# Provider rejections that no other model or retry can fix: the key, the budget or the request itself.
+REJECTED_CODES = {401: "auth", 403: "auth", 402: "budget", 400: "bad_request", 413: "bad_request", 422: "bad_request"}
+FINAL_CODES = frozenset(REJECTED_CODES.values())
 MAX_BACKOFF = 1.0
 MIN_ATTEMPT_S = 0.05   # never start an attempt with less time than this left
 
@@ -48,6 +51,7 @@ class RouterEvaluation:
     latency_ms: int
     attempts: tuple = ()          # UsageEvents of this call, in order
     late: bool = False            # answered after the task deadline (transport could not enforce it)
+    elapsed_ms: int = 0           # end to end: every attempt, the retry pause and any fallback (what the person waited)
 
 
 class RouterError(Exception):
@@ -55,6 +59,7 @@ class RouterError(Exception):
         super().__init__(message)
         self.code = code
         self.attempts = tuple(attempts)
+        self.elapsed_ms = None    # set by AIModelRouter.evaluate
 
 
 class RouterTimeout(RouterError):
@@ -84,15 +89,23 @@ def chat_from_runtime(runtime):
     forwarded only when the runtime's transport accepts a timeout; `chat.enforces_timeout` says whether it does,
     so nobody claims a latency bound the transport cannot keep.
     """
-    from postriff_phase2.model_runtime import _RateLimited, _Retry, _takes_timeout
+    from postriff_phase2.model_runtime import _RateLimited, _Rejected, _Retry, _takes_timeout, output_cap, thinking
 
     def chat(messages, model, max_tokens, timeout_s=None):
+        if thinking(model):   # reasoning tokens count inside max_tokens; keep the runtime's headroom or the JSON is cut off
+            max_tokens = max(max_tokens, output_cap(model))
         try:
             return runtime._call(messages, model, max_tokens=max_tokens, timeout=timeout_s)
         except _RateLimited as error:
             raise AlphaError(str(error), 429) from error
         except _Retry as error:
             raise AlphaError(str(error), 502) from error
+        except _Rejected as error:
+            status = getattr(error, "http_status", None)
+            code = REJECTED_CODES.get(status)
+            if code is None:
+                raise
+            raise AlphaError(str(error), status, code=code) from error
     chat.enforces_timeout = _takes_timeout(runtime.transport)
     return chat
 
@@ -129,6 +142,15 @@ class AIModelRouter:
         return evaluate
 
     def evaluate(self, task, question_set, state, *, names=None, workspace_id=None, subject=None):
+        started = self.clock()
+        try:
+            result = self._evaluate(task, question_set, state, names, workspace_id, subject)
+        except RouterError as error:
+            error.elapsed_ms = self._ms(started)
+            raise
+        return replace(result, elapsed_ms=self._ms(started))
+
+    def _evaluate(self, task, question_set, state, names, workspace_id, subject):
         kind, primary, fallbacks, budget, max_tokens = self.tasks[task]
         if kind != "evaluate":
             raise ValueError(f"{task} is not an evaluation task")
@@ -188,6 +210,10 @@ class AIModelRouter:
         try:
             content, usage = self.chat(messages, model, max_tokens, remaining)
         except AlphaError as error:
+            code = getattr(error, "code", None)
+            if code in FINAL_CODES:   # same contract as Jev: never retried and never routed elsewhere
+                self._record(ledger, task=task, model=model, route="fallback", status=code, latency_ms=self._ms(started), **ids)
+                raise RouterError(str(error), code, ledger) from error
             status = {429: "rate_limited", 504: "timeout"}.get(getattr(error, "status", None), "upstream")
             self._record(ledger, task=task, model=model, route="fallback", status=status,
                          latency_ms=self._ms(started), **ids)

@@ -52,6 +52,7 @@ class Judgment:
     cached: bool = False
     status: str = "ok"     # "ok", or the router error code when no model answered ("timeout", "upstream", ...)
     attempts: tuple = ()   # UsageEvents of the call that produced this judgment (empty when cached)
+    elapsed_ms: int | None = None   # end-to-end wait including retries and fallbacks (None when unknown)
 
     def probability(self, name):
         """P(true) for a boolean answer that is valid and not abstained, else None."""
@@ -181,19 +182,20 @@ class JudgmentService:
         except RouterError as error:
             if error.code not in DEGRADABLE:
                 raise
-            return unanswered(question_set, key, error.code, error.attempts)
+            return unanswered(question_set, key, error.code, error.attempts, getattr(error, "elapsed_ms", None))
         answers, invalid = validate_answers(question_set, evaluation.answers)
         judgment = Judgment(
             question_set=question_set.key, digest=question_set.digest, model=evaluation.model, route=evaluation.route,
             calibrated=bool(evaluation.calibrated) and evaluation.route == "primary", answers=answers, invalid=invalid,
             cost_usd=evaluation.cost_usd, cost_source=evaluation.cost_source, generation_id=evaluation.generation_id,
-            latency_ms=evaluation.latency_ms, cache_key=key, attempts=tuple(getattr(evaluation, "attempts", ()) or ()))
+            latency_ms=evaluation.latency_ms, cache_key=key, attempts=tuple(getattr(evaluation, "attempts", ()) or ()),
+            elapsed_ms=getattr(evaluation, "elapsed_ms", None))
         if not invalid:  # never cache a partly invalid judgment; the next request can succeed
             self.cache.put(key, judgment)
         return judgment
 
 
-def unanswered(question_set, key, status, attempts=()):
+def unanswered(question_set, key, status, attempts=(), elapsed_ms=None):
     """A judgment in which every question abstained because no model answered; never cached."""
     known = [e.cost_usd for e in attempts if e.cost_usd is not None]
     return Judgment(
@@ -201,4 +203,4 @@ def unanswered(question_set, key, status, attempts=()):
         answers={}, invalid=(), cost_usd=sum(known) if known else None,
         cost_source="gateway" if attempts and len(known) == len(attempts) else "unknown",
         generation_id=None, latency_ms=sum(e.latency_ms for e in attempts), cache_key=key, status=status,
-        attempts=tuple(attempts))
+        attempts=tuple(attempts), elapsed_ms=elapsed_ms)

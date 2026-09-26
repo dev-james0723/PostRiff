@@ -531,9 +531,12 @@ class OAuthService:
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
                 audit(cur, workspace_id, principal, 'voice.connection_samples_revoked', connection_id, {'samples': revoked_samples})
             account_pictures.guarded(cur, account_pictures.remove, workspace_id, connection_id)
-            from .growth.history_import import purge_connection
-            account_pictures.guarded(cur, purge_connection, workspace_id, connection_id)   # imported history and pending readings
+            from .growth.history_import import mark_for_purge
+            mark_for_purge(cur, workspace_id, connection_id)   # imported history goes after commit (purge_after_disconnect)
             audit(cur, workspace_id, principal, "channel.disconnected", connection_id, {"remoteRevoked": bool(remote)})
+        # Outside the transaction that held the workspace row, so it cannot deadlock with the import or metric steps.
+        from .growth.history_import import purge_after_disconnect
+        purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)
         snapshot = self.repository.get(workspace_id, token)
         try:
             saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})

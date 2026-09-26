@@ -15,6 +15,27 @@ FAMILIES = {
 }
 INSIGHT_METRICS = {"threads": ("views", "likes", "replies", "reposts", "quotes", "shares"), "instagram": ("reach", "views", "likes", "comments", "saved", "shares")}
 MIN_COMPARABLE = 3
+# Cross-post comparisons (coworker performance, campaign triggers) read every post at the same age: the +24h scheduled
+# reading, or a legacy row with no offset. Values read at t0, +1h, +7d or by a backfill are not like-for-like.
+COMPARISON_BASIS = "24h"
+# Event triggers that must fire within a day of posting (campaign "strong post", withinDays >= 1) compare at +1h.
+TRIGGER_BASIS = "1h"
+_READ_OFFSET = {"present": False, "checked": None}
+READ_OFFSET_RECHECK_SECONDS = 300
+
+
+def read_offset_column(cur, now=None):
+    """SQL for an observation's read offset: the column once migration 032 is applied, else NULL. Presence is cached
+    for the process (a column is never dropped); absence is re-checked at most every five minutes, so databases
+    without 032 do not pay a catalog query per read."""
+    import time as _time
+    now = _time.monotonic() if now is None else now
+    checked = _READ_OFFSET["checked"]
+    if not _READ_OFFSET["present"] and (checked is None or now - checked >= READ_OFFSET_RECHECK_SECONDS):
+        cur.execute("SELECT 1 FROM pg_attribute WHERE attrelid='public.pr_metric_observations'::regclass AND attname='read_offset' AND NOT attisdropped")
+        _READ_OFFSET["present"] = cur.fetchone() is not None
+        _READ_OFFSET["checked"] = now
+    return "o.read_offset" if _READ_OFFSET["present"] else "NULL::text"
 
 
 def insights_endpoint(provider, provider_post_id):
@@ -77,18 +98,23 @@ def rate(numerator, denominator):
     return {"value": str(Fraction(int(numerator), int(denominator))), "display": f"{numerator}/{denominator}", "numerator": numerator, "denominator": denominator}
 
 
-def latest_observations(cur, workspace_id):
+def latest_observations(cur, workspace_id, basis=None):
     """Per post and metric: the latest available reading, else the latest reading. Scheduled reads (growth Phase 0)
     take several readings per post; a later reading that lacks a metric must not hide a real earlier value.
-    The last column is the reading's offset (t0/1h/24h/7d/backfill, or None); read through to_jsonb so databases
-    without migration 032 simply return None."""
-    cur.execute("SELECT DISTINCT ON (provider,provider_post_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,to_jsonb(o)->>'read_offset' FROM public.pr_metric_observations o WHERE workspace_id=%s ORDER BY provider,provider_post_id,metric,(availability='available') DESC,observed_at DESC", (workspace_id,))
+    The last column is the reading's offset (t0/1h/24h/7d/backfill, or None); databases without migration 032
+    return None. With `basis`, only readings taken at that offset (or legacy rows
+    without one) are considered, so every post is read at the same age."""
+    offset = read_offset_column(cur)
+    where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
+    params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
+    cur.execute(f"SELECT DISTINCT ON (provider,provider_post_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,provider_post_id,metric,(availability='available') DESC,observed_at DESC", params)
     return cur.fetchall()
 
 
-def summary(cur, workspace_id, jobs, now):
-    """Per-post rows with native metrics; families only group, never sum across providers."""
-    rows = latest_observations(cur, workspace_id)
+def summary(cur, workspace_id, jobs, now, basis=None):
+    """Per-post rows with native metrics; families only group, never sum across providers. Display uses the
+    latest values (basis None); anything comparing posts passes basis=COMPARISON_BASIS."""
+    rows = latest_observations(cur, workspace_id, basis)
     posts = {}
     for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset in rows:
         post = posts.setdefault((provider, post_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
@@ -111,7 +137,7 @@ def summary(cur, workspace_id, jobs, now):
         post["rates"] = {"likesPerView": rate(int(engagement) if engagement is not None else None, int(reach) if reach is not None else None)}
         items.append(post)
     # Connections without any observation are reported explicitly, never as zeros.
-    return {"posts": items, "families": FAMILIES, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same provider, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
+    return {"posts": items, "families": FAMILIES, "basis": basis, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same provider, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
 
 
 def compare(posts, metric):

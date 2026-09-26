@@ -2,7 +2,8 @@
 
 A person with manage_connections asks for it explicitly (`request`, interactive session, `confirmed: true`). The cron
 step (`tick`) then pages through the account's posts with the server-side token, stores metadata only in
-pr_owned_posts (caption sha256 and length, never caption text), and schedules one 'backfill' reading per post in
+pr_owned_posts (caption length, never caption text or a hash of it: a hash of a short caption can be guessed),
+and schedules one 'backfill' reading per post in
 pr_metric_reads, which MetricScheduler reads like any other. Each page and its cursor are written in one transaction
 fenced on the run's lease. Reading needs the connection's analytics capability to be Direct (its grant carries
 threads_basic / instagram_business_basic, which list the account's own posts), so no new scope is requested.
@@ -12,7 +13,6 @@ consent copy that says analytics reads "posts Rafii created" must be updated (do
 """
 from __future__ import annotations
 
-import hashlib
 import time
 import uuid
 from datetime import datetime, timezone
@@ -60,7 +60,9 @@ def _short(value, limit):
 
 
 def list_page(transport, provider, access_token, cursor=None):
-    """One page of the account's own posts, newest first: {"posts": [...], "next": cursor | None}."""
+    """One page of the account's own posts, newest first: {"posts": [...], "next": cursor | None, "incomplete": bool}.
+    `incomplete` means the provider announced a next page without a usable cursor: this page's posts are still good,
+    but coverage cannot continue, so the run must not report itself complete."""
     if provider == "threads":
         params = {"fields": "id,timestamp,media_type,permalink,text", "limit": PAGE_LIMIT, "access_token": access_token}
         if cursor:
@@ -91,29 +93,119 @@ def list_page(transport, provider, access_token, cursor=None):
             "mediaType": _short(item.get("media_type"), 40),
             "mediaProductType": _short(item.get("media_product_type"), 40),
             "permalink": _short(permalink, 500),
-            "captionSha256": hashlib.sha256(caption.encode("utf-8")).hexdigest() if caption else None,
-            "captionChars": len(caption) if caption else 0,
+            "captionChars": len(caption),
         })
     paging = body.get("paging") if isinstance(body.get("paging"), dict) else {}
+    if not paging.get("next"):
+        return {"posts": posts, "next": None, "incomplete": False}
     cursors = paging.get("cursors") if isinstance(paging.get("cursors"), dict) else {}
-    after = cursors.get("after") if paging.get("next") else None
-    return {"posts": posts, "next": after if isinstance(after, str) and after else None}
+    after = cursors.get("after")
+    if not isinstance(after, str) or not after or len(after) > 500:
+        return {"posts": posts, "next": None, "incomplete": True}
+    return {"posts": posts, "next": after, "incomplete": False}
 
 
-def purge_connection(cur, workspace_id, connection_id):
-    """Disconnect: remove what history import stored for this connection. Safe before migration 032 is applied."""
+def purge_connection(cur, workspace_id, connection_id, imports_only=False):
+    """Remove what history import stored for this connection. Safe before migration 032 is applied.
+
+    Runs in its own transaction, never inside the disconnect's (which holds the workspace row FOR UPDATE while the
+    import and metric steps take their own rows first and then a key-share lock on that workspace row for their
+    inserts: purging there could deadlock). Locks follow the import step's order: run rows, owned posts, readings.
+    Deleting the import's job-less reading rows before the observations fences an in-flight metric completion: it
+    either committed first (its observations are deleted below) or finds its row gone and writes nothing. Readings
+    of Rafii's own published posts (job_id set) are never deleted; unless `imports_only`, every pending reading of
+    the connection is cancelled."""
     cur.execute("SELECT to_regclass('public.pr_owned_posts') IS NOT NULL")
     if not cur.fetchone()[0]:
         return 0
+    key = (workspace_id, connection_id)
+    cur.execute("SELECT 1 FROM public.pr_history_imports WHERE workspace_id=%s AND connection_id=%s FOR UPDATE", key)
+    cur.execute("SELECT 1 FROM public.pr_owned_posts WHERE workspace_id=%s AND connection_id=%s AND source='history_import' FOR UPDATE", key)
+    cur.execute("DELETE FROM public.pr_metric_reads WHERE workspace_id=%s AND connection_id=%s AND source='history_import' AND job_id IS NULL", key)
+    if not imports_only:
+        cur.execute("UPDATE public.pr_metric_reads SET status='cancelled', lease_owner=NULL, lease_until=NULL, updated_at=now() "
+                    "WHERE workspace_id=%s AND connection_id=%s AND status IN ('pending','claimed')", key)
+    cur.execute("UPDATE public.pr_history_imports SET status='cancelled', lease_owner=NULL, lease_until=NULL, updated_at=now() "
+                "WHERE workspace_id=%s AND connection_id=%s AND status IN ('pending','running')", key)
     cur.execute("""DELETE FROM public.pr_metric_observations o USING public.pr_owned_posts p
                    WHERE p.workspace_id=%s AND p.connection_id=%s AND p.source='history_import' AND o.workspace_id=p.workspace_id
-                     AND o.provider=p.provider AND o.provider_post_id=p.provider_post_id AND o.job_id IS NULL""", (workspace_id, connection_id))
-    cur.execute("UPDATE public.pr_metric_reads SET status='cancelled', lease_owner=NULL, lease_until=NULL, updated_at=now() "
-                "WHERE workspace_id=%s AND connection_id=%s AND status IN ('pending','claimed')", (workspace_id, connection_id))
-    cur.execute("UPDATE public.pr_history_imports SET status='cancelled', lease_owner=NULL, lease_until=NULL, updated_at=now() "
-                "WHERE workspace_id=%s AND connection_id=%s AND status IN ('pending','running')", (workspace_id, connection_id))
-    cur.execute("DELETE FROM public.pr_owned_posts WHERE workspace_id=%s AND connection_id=%s AND source='history_import'", (workspace_id, connection_id))
+                     AND o.provider=p.provider AND o.provider_post_id=p.provider_post_id AND o.job_id IS NULL""", key)
+    cur.execute("DELETE FROM public.pr_owned_posts WHERE workspace_id=%s AND connection_id=%s AND source='history_import'", key)
     return cur.rowcount
+
+
+purge_pending = metric_schedule.purge_pending
+
+
+def mark_for_purge(cur, workspace_id, connection_id):
+    """oauth.disconnect, inside its transaction: record that this connection's imported history must go. One small
+    insert, no locks the import or metric steps hold; from its commit on, nothing new is imported or read for the
+    connection. `requested_at` keeps the first time a purge was owed. Never raises (own savepoint, logged)."""
+    return metric_schedule.guarded(cur, lambda: cur.execute(
+        """INSERT INTO public.pr_growth_purges(workspace_id,connection_id) VALUES(%s,%s)
+           ON CONFLICT (workspace_id,connection_id) DO UPDATE SET next_attempt_at=now(), attempts=0, failure_class=NULL""",
+        (workspace_id, connection_id)) if _purges_table(cur) else None, "history_import.purge_mark_failed")
+
+
+def _purges_table(cur):
+    cur.execute("SELECT to_regclass('public.pr_growth_purges') IS NOT NULL")
+    return cur.fetchone()[0]
+
+
+def purge_after_disconnect(connection_factory, workspace_id, connection_id):
+    """oauth.disconnect, after its transaction committed: purge this connection now, in a fresh transaction. If it
+    fails the marker stays and the cron sweep retries. Never raises."""
+    return _sweep(connection_factory, limit=1, only=(workspace_id, connection_id), imports_only=False)
+
+
+def sweep_pending_purges(connection_factory, limit=10, max_seconds=10.0, monotonic=time.monotonic):
+    """Cron: retry owed purges whatever the growth flags say. One transaction per marker (lock timeout 2 s, statement
+    timeout 5 s) and a step deadline, so it never stalls the cron handler; a failing marker backs off
+    (metric_schedule.backoff) so it cannot starve newer ones; one connection when there is nothing to do. Imports and
+    readings were blocked since the marker was set, so all import-derived data goes. Never raises."""
+    return _sweep(connection_factory, limit=limit, only=None, imports_only=True, max_seconds=max_seconds, monotonic=monotonic)
+
+
+def _sweep(connection_factory, *, limit, only, imports_only, max_seconds=10.0, monotonic=time.monotonic):
+    counts = {"status": "ok", "purged": 0, "failed": 0}
+    deadline = monotonic() + max_seconds
+    try:
+        for index in range(limit):
+            if monotonic() >= deadline:
+                counts["deferred"] = True
+                break
+            with connection_factory() as db, db.cursor() as cur:
+                if index == 0 and not _purges_table(cur):
+                    return {"status": "not_migrated"}
+                cur.execute("SET LOCAL lock_timeout = '2s'")
+                cur.execute("SET LOCAL statement_timeout = '5s'")
+                if only is None:
+                    cur.execute("""SELECT workspace_id::text, connection_id, attempts FROM public.pr_growth_purges
+                                   WHERE next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 1 FOR UPDATE SKIP LOCKED""")
+                else:
+                    cur.execute("""SELECT workspace_id::text, connection_id, attempts FROM public.pr_growth_purges
+                                   WHERE workspace_id=%s AND connection_id=%s FOR UPDATE SKIP LOCKED""", only)
+                marker = cur.fetchone()
+                if marker is None:
+                    break
+                workspace_id, connection_id, attempts = marker
+                failures = []
+                done = metric_schedule.guarded(cur, lambda: purge_connection(cur, workspace_id, connection_id, imports_only=imports_only),
+                                               "history_import.purge_failed", failures)
+                if done is None:
+                    counts["failed"] += 1
+                    cur.execute("""UPDATE public.pr_growth_purges SET attempts=attempts+1, failure_class=%s,
+                                          next_attempt_at=now() + make_interval(secs => %s) WHERE workspace_id=%s AND connection_id=%s""",
+                                ((failures[-1] if failures else "unknown")[:80], metric_schedule.backoff(f"{workspace_id}:{connection_id}", attempts + 1),
+                                 workspace_id, connection_id))
+                else:
+                    counts["purged"] += 1
+                    cur.execute("DELETE FROM public.pr_growth_purges WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+                db.commit()
+    except Exception as error:  # noqa: BLE001 - never fail the disconnect or the cron steps after this one
+        metric_schedule._note("history_import.purge_sweep_failed", error)
+        counts["status"] = "unavailable"
+    return counts
 
 
 class HistoryImporter:
@@ -144,6 +236,9 @@ class HistoryImporter:
                 raise AlphaError("History import is available for connected Threads and Instagram accounts.", 404)
             if not metric_schedule.analytics_direct(cur, workspace_id, connection_id):
                 raise AlphaError("Connect this account for insights first.", 409, code="analytics_required")
+            if purge_pending(cur, workspace_id, connection_id):
+                raise AlphaError("Rafii is still removing this account's earlier imported history. Try again in a few minutes.", 409,
+                                 code="history_purge_pending")
             cur.execute("""INSERT INTO public.pr_history_imports(workspace_id,connection_id,provider,requested_by) VALUES(%s,%s,%s,%s)
                            ON CONFLICT (workspace_id,connection_id) WHERE status IN ('pending','running') DO NOTHING""",
                         (workspace_id, connection_id, found[0], actor))
@@ -185,7 +280,8 @@ class HistoryImporter:
         with self.connection_factory() as db, db.cursor() as cur:
             cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s", (run["workspaceId"],))
             found = cur.fetchone()
-            return bool(found) and not found[0] and metric_schedule.analytics_direct(cur, run["workspaceId"], run["connectionId"])
+            return (bool(found) and not found[0] and metric_schedule.analytics_direct(cur, run["workspaceId"], run["connectionId"])
+                    and not purge_pending(cur, run["workspaceId"], run["connectionId"]))
 
     def _finish(self, run, status, failure=None, backoff_seconds=None, refund=False):
         """Close the run, or (with backoff_seconds) hand it back keeping its cursor. `refund` returns the attempt the
@@ -194,41 +290,42 @@ class HistoryImporter:
             if backoff_seconds is not None:   # keep the run and its cursor; claimable again once the lease lapses
                 cur.execute("""UPDATE public.pr_history_imports SET lease_until=now() + make_interval(secs => %s), lease_owner=NULL, failure_class=%s,
                                       attempts=CASE WHEN %s THEN greatest(0, attempts-1) ELSE attempts END, updated_at=now()
-                               WHERE id::text=%s AND lease_owner=%s AND status='running'""",
+                               WHERE id=%s::uuid AND lease_owner=%s AND status='running'""",
                             (backoff_seconds, failure, refund, run["id"], self.worker_id))
             else:
                 cur.execute("""UPDATE public.pr_history_imports SET status=%s, failure_class=%s, lease_owner=NULL, lease_until=NULL, updated_at=now()
-                               WHERE id::text=%s AND lease_owner=%s AND status='running'""", (status, failure, run["id"], self.worker_id))
+                               WHERE id=%s::uuid AND lease_owner=%s AND status='running'""", (status, failure, run["id"], self.worker_id))
             db.commit()
 
-    def _store_page(self, run, page, cutoff, done):
-        """Posts, their backfill readings and the cursor in one transaction fenced on the lease. Returns stored count or None."""
+    def _store_page(self, run, page, cutoff, done, failure=None):
+        """Posts, their backfill readings and the cursor in one transaction fenced on the lease. `failure` stores the
+        page and then fails the run with that class. Returns the stored count, or None if the lease was lost."""
         with self.connection_factory() as db, db.cursor() as cur:
-            cur.execute("SELECT 1 FROM public.pr_history_imports WHERE id::text=%s AND lease_owner=%s AND status='running' FOR UPDATE",
+            cur.execute("SELECT 1 FROM public.pr_history_imports WHERE id=%s::uuid AND lease_owner=%s AND status='running' FOR UPDATE",
                         (run["id"], self.worker_id))
-            if not cur.fetchone():
-                db.rollback()
+            if not cur.fetchone() or purge_pending(cur, run["workspaceId"], run["connectionId"]):
+                db.rollback()   # lease lost, or the account was disconnected: store nothing more
                 return None
             stored = 0
             for post in page["posts"]:
                 if post["publishedAt"] is None or post["publishedAt"] < cutoff:
                     continue
                 cur.execute("""INSERT INTO public.pr_owned_posts(workspace_id,connection_id,provider,provider_post_id,published_at,media_type,
-                                                                 media_product_type,permalink,caption_sha256,caption_chars,source)
-                               VALUES(%s,%s,%s,%s,to_timestamp(%s),%s,%s,%s,%s,%s,'history_import')
-                               ON CONFLICT (workspace_id,provider,provider_post_id) DO UPDATE SET media_type=excluded.media_type,
-                                 media_product_type=excluded.media_product_type, permalink=excluded.permalink, caption_sha256=excluded.caption_sha256,
+                                                                 media_product_type,permalink,caption_chars,source)
+                               VALUES(%s,%s,%s,%s,to_timestamp(%s),%s,%s,%s,%s,'history_import')
+                               ON CONFLICT (workspace_id,provider,provider_post_id) DO UPDATE SET connection_id=excluded.connection_id,
+                                 media_type=excluded.media_type, media_product_type=excluded.media_product_type, permalink=excluded.permalink,
                                  caption_chars=excluded.caption_chars, updated_at=now()""",
                             (run["workspaceId"], run["connectionId"], run["provider"], post["id"], post["publishedAt"], post["mediaType"],
-                             post["mediaProductType"], post["permalink"], post["captionSha256"], post["captionChars"]))
+                             post["mediaProductType"], post["permalink"], post["captionChars"]))
                 metric_schedule.schedule(cur, run["workspaceId"], run["connectionId"], run["provider"], post["id"], None,
                                          post["publishedAt"], "history_import", BACKFILL)   # due at once; anchor = publish time
                 stored += 1
-            cur.execute("""UPDATE public.pr_history_imports SET cursor=%s, pages=pages+1, posts=posts+%s, status=%s, failure_class=NULL,
+            cur.execute("""UPDATE public.pr_history_imports SET cursor=%s, pages=pages+1, posts=posts+%s, status=%s, failure_class=%s,
                                   attempts=0, updated_at=now(), lease_owner=CASE WHEN %s THEN NULL ELSE lease_owner END,
                                   lease_until=CASE WHEN %s THEN NULL ELSE lease_until END
-                           WHERE id::text=%s""",
-                        (page["next"], stored, "done" if done else "running", done, done, run["id"]))
+                           WHERE id=%s::uuid""",   # a failure always has done=True (no next page), so `done` closes the lease
+                        (page["next"], stored, "failed" if failure else ("done" if done else "running"), failure, done, done, run["id"]))
             db.commit()
         return stored
 
@@ -264,15 +361,19 @@ class HistoryImporter:
                 return self._retry(run, "error")
             pages += 1
             oldest = min((p["publishedAt"] for p in page["posts"] if p["publishedAt"] is not None), default=None)
-            done = page["next"] is None or pages >= MAX_PAGES or (oldest is not None and oldest < cutoff)
+            exhausted = pages >= MAX_PAGES or (oldest is not None and oldest < cutoff)   # nothing further is wanted
+            done = page["next"] is None or exhausted
+            failure = "incomplete_paging" if page["incomplete"] and not exhausted else None
             try:
-                stored = self._store_page(run, page, cutoff, done)
+                stored = self._store_page(run, page, cutoff, done, failure)
             except Exception as error:  # noqa: BLE001 - the page's transaction rolled back; retry from the same cursor
                 metric_schedule._note("history_import.store_failed", error)
                 return self._retry(run, "store")
             if stored is None:
                 return "lost_lease"
             run["attempts"] = 0          # the stored page reset the run's attempts; keep the in-memory copy in step
+            if failure:
+                return "failed"
             if done:
                 return "done"
             cursor = page["next"]

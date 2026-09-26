@@ -184,6 +184,87 @@ class Deadline(unittest.TestCase):
         self.assertFalse(chat.enforces_timeout)
 
 
+class Rejections(unittest.TestCase):
+    """Chat providers' 4xx map to the same final codes as Jev: never retried, never routed elsewhere, never degraded."""
+
+    def runtime_router(self, status, models=("google/gemini-2.5-flash-lite", "anthropic/claude-haiku-4.5")):
+        from postriff_phase2.model_runtime import ServerModelRuntime
+        seen = []
+        def transport(method, url, headers=None, body=None, timeout=None):
+            seen.append((body["model"], body["max_tokens"]))
+            return {"status": status, "body": {"error": "x"}}
+        usage = MemoryUsageSink()
+        tasks = {"t": ("evaluate", "typesafe-ai/jev", models, 3.0, 1500)}
+        return R.AIModelRouter(chat=R.chat_from_runtime(ServerModelRuntime("k", transport=transport)), usage=usage, tasks=tasks, clock=Clock()), seen, usage
+
+    def test_auth_budget_bad_request_stop_the_chain(self):
+        for status, code in ((401, "auth"), (403, "auth"), (402, "budget"), (400, "bad_request"), (422, "bad_request")):
+            router_, seen, usage = self.runtime_router(status)
+            with self.subTest(status=status), self.assertRaises(R.RouterError) as ctx:
+                router_.evaluate("t", QS, {})
+            self.assertEqual((ctx.exception.code, len(seen), [e.status for e in usage.events]), (code, 1, [code]))
+            self.assertEqual(list(ctx.exception.attempts), usage.events)
+
+    def test_judgment_service_does_not_degrade_a_rejected_key(self):
+        router_, _, _ = self.runtime_router(401)
+        with self.assertRaises(R.RouterError):
+            JudgmentService(router_.evaluator("t")).judge(QS, {}, subject=subject_hash("x"), scope="shared", model="m")
+
+    def test_other_rejections_still_fall_through(self):
+        router_, seen, usage = self.runtime_router(404)
+        with self.assertRaises(R.RouterError) as ctx:
+            router_.evaluate("t", QS, {})
+        self.assertEqual((ctx.exception.code, len(seen)), ("unavailable", 2))
+
+    def test_thinking_models_keep_reasoning_headroom(self):
+        from postriff_phase2.model_runtime import output_cap, thinking
+        router_, seen, _ = self.runtime_router(503)
+        with self.assertRaises(R.RouterError):
+            router_.evaluate("t", QS, {})
+        for model, max_tokens in seen:
+            self.assertEqual(max_tokens, max(1500, output_cap(model)) if thinking(model) else 1500)
+        self.assertTrue(any(thinking(m) for m, _ in seen), "fixture should include a thinking model")
+
+
+class Elapsed(unittest.TestCase):
+    def test_elapsed_covers_retries_pauses_and_failures(self):
+        clock = Clock()
+        jev = FakeJev(J.JevRateLimited("x", retry_after=0.5), GOOD, clock=clock, spend=0.2)
+        result = router(jev, clock=clock).evaluate("postdoctor.judge", QS, {})
+        self.assertEqual(result.elapsed_ms, 900)          # 0.2 + 0.5 pause + 0.2
+        self.assertEqual(result.latency_ms, 120)          # the answering attempt alone, as reported
+        failing = FakeJev(J.JevTimeout("t"), clock=Clock(), spend=5)
+        failing.clock = clock = Clock()
+        with self.assertRaises(R.RouterTimeout) as ctx:
+            router(failing, clock=clock).evaluate("postdoctor.judge", QS, {})
+        self.assertEqual(ctx.exception.elapsed_ms, 5000)
+        svc = JudgmentService(router(FakeJev(J.JevTimeout("t"), clock=clock, spend=4), clock=clock).evaluator("postdoctor.judge"))
+        self.assertEqual(svc.judge(QS, {}, subject=subject_hash("y"), scope="shared", model="m").elapsed_ms, 4000)
+
+
+class ReadOffsetColumn(unittest.TestCase):
+    def test_absence_is_rechecked_at_most_every_five_minutes(self):
+        from postriff_phase2 import insights
+        class Cur:
+            def __init__(self, present):
+                self.present, self.queries = present, 0
+            def execute(self, sql, params=None):
+                self.queries += 1
+            def fetchone(self):
+                return (1,) if self.present else None
+        saved = dict(insights._READ_OFFSET)
+        self.addCleanup(lambda: insights._READ_OFFSET.update(saved))
+        insights._READ_OFFSET.update(present=False, checked=None)
+        cur = Cur(False)
+        self.assertEqual(insights.read_offset_column(cur, now=0), "NULL::text")
+        self.assertEqual(insights.read_offset_column(cur, now=299), "NULL::text")
+        self.assertEqual(cur.queries, 1)
+        cur.present = True
+        self.assertEqual(insights.read_offset_column(cur, now=300), "o.read_offset")
+        self.assertEqual(insights.read_offset_column(cur, now=10_000), "o.read_offset")
+        self.assertEqual(cur.queries, 2)
+
+
 class Ledger(unittest.TestCase):
     def test_postgres_sink_parameterised(self):
         class Cur:

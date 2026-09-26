@@ -473,6 +473,10 @@ class HostedApplication:
                 metric_reads = getattr(service, 'metric_reads', None)
                 if metric_reads is not None:   # right after the worker, so t0 rows read before campaign/coworker steps
                     result['metricReads'] = metric_reads.tick()
+                repository = getattr(service, 'repository', None)
+                if repository is not None:   # flag-independent: a failed disconnect purge is retried even after a rollback
+                    from .growth.history_import import sweep_pending_purges
+                    result['historyPurges'] = sweep_pending_purges(repository.connection_factory)
                 ideas = getattr(service, 'ideas', None)
                 if ideas is not None:
                     site_agent = getattr(service, 'site_agent', None)
