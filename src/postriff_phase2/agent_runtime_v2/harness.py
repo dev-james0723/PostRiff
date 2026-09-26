@@ -52,6 +52,21 @@ def live_transport(method, url, headers=None, body=None, timeout=None):
     return {"status": 201, "body": {"session": {"id": "live_harness_" + uuid.uuid4().hex[:8]}, "transport": {"type": "webrtc", "sdp": "v=0\r\no=- harness answer\r\n"}}}
 
 
+def weather_transport(url, params, timeout=None):
+    """Open-Meteo stand-in: the same mild afternoon wherever the place is (the harness never looks up real weather).
+    "Atlantis" is a place that doesn't exist."""
+    from .live_tools import GEOCODING_URL
+    if url == GEOCODING_URL:
+        name = str(params.get("name") or "").strip()
+        if not name or name.lower() == "atlantis":
+            return {"generationtime_ms": 0.1}
+        return {"results": [{"name": name.title(), "latitude": 22.28, "longitude": 114.17, "country": "Harness", "country_code": "HX"}]}
+    return {"timezone": "Asia/Hong_Kong", "utc_offset_seconds": 28800,
+            "current": {"time": "2026-09-25T14:00", "temperature_2m": 26.0, "apparent_temperature": 28.0, "weather_code": 2, "wind_speed_10m": 10.0,
+                        "relative_humidity_2m": 70},
+            "daily": {"time": ["2026-09-25"], "temperature_2m_max": [28.0], "temperature_2m_min": [24.0], "precipitation_probability_max": [20]}}
+
+
 # --- deterministic reasoning ----------------------------------------------------------------------------------------------
 def _items(call):
     return call.input if isinstance(call.input, list) else [{"role": "user", "content": call.input}]
@@ -116,12 +131,36 @@ def _say(text):
     return [assistant_message(text)]
 
 
+def _live_agent_step(request, lower, called):
+    """Rafii live agent flows for local QA of the panel and Voice Mode: goodbye, guides, the weather, navigation."""
+    from ..site_agent import classifier, guides
+    from .tool_adapter import wants_to_be_shown, wants_to_go
+    if re.search(r"\b(?:bye|goodbye|good\s+bye|hang\s+up|end\s+the\s+call)\b|拜拜|再見|再见", lower):
+        return _call("ui_voice", {"command": "end_call"}) if "ui_voice" not in called else _reply("Bye for now.", "Okay, bye for now.")
+    guide = guides.match(request) if wants_to_be_shown(request) else None
+    if guide:
+        return (_call("ui_guide", {"guideId": guide["id"], "auto": True}) if "ui_guide" not in called
+                else _reply(f"Here's how: {guide['title']}. Follow the pointer on the screen.", "I'll show you each step on the screen."))
+    if "weather" in lower or "天氣" in request or "天气" in request:
+        if "weather_now" not in called:
+            place = re.search(r"\b(?:in|at|for)\s+([A-Za-z][A-Za-z .'-]{1,60})", request)
+            return _call("weather_now", {"place": place.group(1).strip(" ?.!") if place else ""})
+        return _reply("Here's the weather from Open-Meteo (harness data).")
+    routes = [("queue" if r == "queue_drafts" else r) for r in classifier.target_routes(request)]
+    if routes and wants_to_go(request):
+        return _call("ui_navigate", {"routeId": routes[0], "auto": True}) if "ui_navigate" not in called else _reply("Opening it now.")
+    return None
+
+
 def manager_step(call):
     request, app = _request(call)
     lower = request.lower()
     done = _outputs(call)
     called = [name for name, _ in done]
     blob = " ".join(out for _, out in done)
+    live_step = _live_agent_step(request, lower, called)
+    if live_step is not None:
+        return live_step
     campaign = next(iter(_ids(blob, "campaignId")), None)
     compound = ("schedule" in lower and ("generate" in lower or "make" in lower)) or ("asset" in lower and "copy" in lower)
     platform = next((name for name in ("LinkedIn", "Threads", "Instagram") if name.lower() in lower), "Instagram")
