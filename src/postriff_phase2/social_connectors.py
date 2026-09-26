@@ -12,6 +12,7 @@ import json
 import re
 import secrets
 import socket
+import string
 from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import assert_public, public_host
@@ -441,7 +442,7 @@ class TelegramConnector(OAuthProvider):
         self._webhook_ready = True
 
     def new_code(self):
-        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        alphabet = string.ascii_uppercase + "234567"  # RFC 4648 base32
         return self.CODE_PREFIX + "".join(secrets.choice(alphabet) for _ in range(16))
 
     def connect_instructions(self):

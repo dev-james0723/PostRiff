@@ -27,7 +27,7 @@ from postriff_phase2.social_connectors import DiscordProvider, MastodonProvider,
 BASE = "https://app.example"
 DID = "did:plc:abcdefghijklmnopqrstuvwx"
 BOT = "123456789:" + "A" * 35
-SECRET = "webhook-secret-0123456789"
+HOOK = "hook-value-0123456789"
 
 
 def PUBLIC(host, port, type=None):
@@ -83,7 +83,7 @@ class MountRules(unittest.TestCase):
     def test_each_wave1_adapter_mounts_only_with_its_own_complete_configuration(self):
         values = {"POSTRIFF_PUBLIC_BASE_URL": BASE, "POSTRIFF_BLUESKY_CLIENT_JWK": json.dumps(client_jwk()),
                   "POSTRIFF_OAUTH_MASTODON_ENABLED": "true",
-                  "POSTRIFF_TELEGRAM_BOT_TOKEN": BOT, "POSTRIFF_TELEGRAM_WEBHOOK_SECRET": SECRET,
+                  "POSTRIFF_TELEGRAM_BOT_TOKEN": BOT, "POSTRIFF_TELEGRAM_WEBHOOK_SECRET": HOOK,
                   "POSTRIFF_OAUTH_DISCORD_CLIENT_ID": "1234567", "POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET": "ds", "POSTRIFF_DISCORD_BOT_TOKEN": "bot.token",
                   "POSTRIFF_OAUTH_X_CLIENT_ID": "xid", "POSTRIFF_OAUTH_X_CLIENT_SECRET": "xs", "POSTRIFF_OAUTH_X_REVIEWED": "true",
                   "POSTRIFF_OAUTH_DISCORD_DISABLED": "true"}
@@ -233,13 +233,13 @@ class TelegramAdapter(unittest.TestCase):
                      ok({"ok": True, "result": {"id": 999, "username": "RafiiBot"}}),
                      ok({"ok": True, "result": {"status": "administrator", "can_post_messages": True}}),
                      ok({"ok": True, "result": {"id": -100123, "type": "channel", "username": "jamesau"}})])
-        telegram = TelegramConnector(BOT, SECRET, BASE, transport=wire)
+        telegram = TelegramConnector(BOT, HOOK, BASE, transport=wire)
         code = telegram.new_code()
         self.assertRegex(code, r"^rafii-connect-[A-Z2-7]{16}$")
         instructions = telegram.connect_instructions()
         self.assertEqual(instructions["botUsername"], "@RafiiBot")
         self.assertEqual(wire.calls[1]["body"]["url"], BASE + "/api/telegram/webhook")
-        self.assertEqual(wire.calls[1]["body"]["secret_token"], SECRET)
+        self.assertEqual(wire.calls[1]["body"]["secret_token"], HOOK)
         self.assertNotIn(BOT, json.dumps(instructions))
         update = {"channel_post": {"message_id": 5, "text": f"connect {code}", "chat": {"id": -100123, "type": "channel", "title": "James"}}}
         self.assertEqual(telegram.observe(update)[0], code)
@@ -455,7 +455,7 @@ class ServiceFlows(unittest.TestCase):
     @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
     def test_telegram_code_is_claimed_by_the_first_channel_post_then_connects(self):
         wire = Wire([ok({"ok": True, "result": {"url": BASE + "/api/telegram/webhook"}}), ok({"ok": True, "result": {"id": 999, "username": "RafiiBot"}})])
-        telegram = TelegramConnector(BOT, SECRET, BASE, transport=wire)
+        telegram = TelegramConnector(BOT, HOOK, BASE, transport=wire)
         service = self.service({"telegram": telegram})
         started = service.start("workspace", "session", "telegram", "publish")
         self.assertIsNone(started["authorizeUrl"])
@@ -466,9 +466,9 @@ class ServiceFlows(unittest.TestCase):
             service.telegram_webhook("wrong-secret", b"{}")
         post = lambda chat, message: json.dumps({"channel_post": {"message_id": message, "text": code, "chat": {"id": chat, "type": "channel", "title": "James"}}}).encode()
         wire.responses = [ok({"ok": True, "result": True})]
-        self.assertEqual(service.telegram_webhook(SECRET, post(-100123, 7)), {"ok": True})
+        self.assertEqual(service.telegram_webhook(HOOK, post(-100123, 7)), {"ok": True})
         self.assertEqual(wire.calls[-1]["body"], {"chat_id": -100123, "message_id": 7})  # the code message is deleted
-        self.assertEqual(service.telegram_webhook(SECRET, post(-100999, 8)), {"ok": True})  # a later copy elsewhere changes nothing
+        self.assertEqual(service.telegram_webhook(HOOK, post(-100999, 8)), {"ok": True})  # a later copy elsewhere changes nothing
         wire.responses = [ok({"ok": True, "result": {"status": "administrator", "can_post_messages": True}}),
                           ok({"ok": True, "result": {"id": -100123, "type": "channel", "title": "James"}})]
         result = service.complete("workspace", "session", "telegram", code, None)
@@ -562,7 +562,7 @@ class Publishing(unittest.TestCase):
         text = manifest("Telegram", "-100123")["payload"]["text"]
         wire = Wire([ok({"ok": True, "result": {"message_id": 9, "chat": {"id": -100123, "type": "channel", "username": "jamesau"}, "text": text}}),
                      ok({"ok": True, "result": {"message_id": 10, "chat": {"id": -100123, "type": "channel"}, "text": "edited"}})])
-        telegram = self.reviewed(TelegramConnector(BOT, SECRET, BASE, transport=wire))
+        telegram = self.reviewed(TelegramConnector(BOT, HOOK, BASE, transport=wire))
         social = HostedSocial(Grants(json.dumps({"v": 1, "chat": -100123}), ["can_post_messages"]), {"telegram": telegram})
         receipt = social.submit(manifest("Telegram", "-100123"))
         self.assertEqual(normalize_result(receipt, {"manifest": {"platform": "Telegram"}})["state"], "verified")
@@ -622,7 +622,7 @@ class DefiniteRejections(unittest.TestCase):
                  (502, {"raw": "Bad Gateway"}, "uncertain"))
         for status, body, state in cases:
             with self.subTest(status=status):
-                telegram = TelegramConnector(BOT, SECRET, BASE, transport=Wire([ok(body, status)]))
+                telegram = TelegramConnector(BOT, HOOK, BASE, transport=Wire([ok(body, status)]))
                 telegram.production_reviewed = True
                 result = HostedSocial(Grants(json.dumps({"v": 1, "chat": -100123}), ["can_post_messages"]), {"telegram": telegram}).submit(manifest("Telegram", "-100123"))
                 self.assertEqual(result["state"], state)

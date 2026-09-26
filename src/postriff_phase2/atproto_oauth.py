@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import secrets
+import string
 import socket
 import time
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
@@ -370,7 +371,7 @@ class BlueskyProvider(OAuthProvider):
         return self._dpop_get(session["pds"] + "/xrpc/" + method + "?" + urlencode(params), session)
 
 
-_TID_ALPHABET = "234567abcdefghijklmnopqrstuvwxyz"
+_TID_ALPHABET = "234567" + string.ascii_lowercase  # base32-sortable
 
 
 def tid(micros, clock_id=0):
