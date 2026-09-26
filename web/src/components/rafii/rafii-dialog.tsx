@@ -45,6 +45,7 @@ export function RafiiDialogContent({ size = 'md', className, children, ...props 
       >
         <span aria-hidden className='bg-foreground/35 mx-auto mt-2.5 h-1 w-8 shrink-0 rounded-full md:hidden' />
         {children}
+        <div data-rafii-guide-host='' className='shrink-0 empty:hidden' />
       </DialogPrimitive.Popup>
     </DialogPrimitive.Portal>
   );

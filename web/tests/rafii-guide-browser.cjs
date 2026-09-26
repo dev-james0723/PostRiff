@@ -115,12 +115,14 @@ function watchOAuth(page) {
 const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? []);
 
 (async () => {
+  let currentPage = null;
   const executablePath = (args.browser === 'webkit' ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
   const browser = await engine.launch({ headless: true, executablePath });
   try {
     // Desktop, docked panel: the guide opens Channels and walks to the platform's own sign-in, which it leaves alone.
     const desk = await context(browser, { width: 1440, height: 900 });
     const page = await desk.newPage();
+    currentPage = page;
     const oauth = watchOAuth(page);
     await page.goto(`${base}/app/overview`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(page);
@@ -158,10 +160,17 @@ const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? [])
     await page.waitForFunction(() => document.querySelector('[data-tour="connect-platform"][aria-pressed="true"]'), null, { timeout: 30000 });
     await stepText(page, 4).waitFor({ timeout: 30000 });
     check('desktop: step 3: a platform is picked', (await page.locator('[data-tour="connect-platform"][aria-pressed="true"]').count()) === 1);
-    check('desktop: the card sits above the sheet and can be pressed', await card(page).getByRole('button', { name: 'Next', exact: true }).isEnabled());
+    const modalState = await card(page).evaluate((el) => ({
+      inModal: Boolean(el.closest('[role="dialog"]')),
+      backgroundProtected: Boolean(document.querySelector('#rafii-panel [aria-label="Ask Rafii"]')?.closest('[aria-hidden="true"], [inert], [data-base-ui-inert]'))
+    }));
+    check('desktop: the card is accessible inside the modal, with background protection intact', modalState.inModal && modalState.backgroundProtected, modalState);
     await shot(page, 'guide-desktop-step-4-what-rafii-may-do.png');
 
-    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    const next = card(page).getByRole('button', { name: 'Next', exact: true });
+    await next.focus();
+    check('desktop: modal guide controls receive keyboard focus', await next.evaluate((el) => document.activeElement === el));
+    await next.press('Enter');
     await stepText(page, 5).waitFor({ timeout: 30000 });
     await card(page).getByText('Your turn', { exact: true }).waitFor({ timeout: 10000 });
     // Timing is what is checked: the guide must leave Continue alone however long it waits.
@@ -200,6 +209,7 @@ const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? [])
     // Phone: the Rafii drawer makes way for the page the guide shows, and the same steps run.
     const phone = await context(browser, { width: 390, height: 844 });
     const small = await phone.newPage();
+    currentPage = small;
     const phoneOAuth = watchOAuth(small);
     await small.goto(`${base}/app/overview`, { waitUntil: 'domcontentloaded', timeout: 400000 });
     await ready(small);
@@ -229,6 +239,15 @@ const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? [])
     await phone.close();
   } catch (error) {
     check('the guide scene ran to the end', false, String(error?.stack ?? error).slice(0, 800));
+    if (currentPage && !currentPage.isClosed()) {
+      await shot(currentPage, 'guide-failure.png');
+      const state = await currentPage.evaluate(() => {
+        const describe = (el) => el ? { tag: el.tagName, role: el.getAttribute('role'), hidden: el.getAttribute('aria-hidden'), inert: el.hasAttribute('inert'), portal: el.hasAttribute('data-base-ui-portal'), text: el.textContent?.trim().slice(0, 300) } : null;
+        const overlay = document.querySelector('[data-guide-overlay]');
+        return { overlay: describe(overlay), parents: overlay ? [describe(overlay.parentElement), describe(overlay.parentElement?.parentElement)] : [], dialog: describe(document.querySelector('[role="dialog"]')) };
+      }).catch(() => null);
+      fs.writeFileSync(path.join(out, 'guide-failure-state.json'), JSON.stringify(state, null, 2));
+    }
   } finally {
     await browser.close();
   }
