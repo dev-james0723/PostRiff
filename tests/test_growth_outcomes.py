@@ -15,9 +15,16 @@ from postriff_phase2.growth.judgments import Judgment, validate_answers
 QS = Q.get("postdoctor")
 INVERTED = {i["q"] for d in QS.dimensions.values() for i in d["items"] if i.get("invert")}
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("collector", ROOT / "scripts" / "growth_collect_bluesky.py")
-C = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(C)
+def _script(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+K = _script("growth_collect_common")
+C = _script("growth_collect_bluesky")
+M = _script("growth_collect_mastodon")
 
 
 def judgment(p):
@@ -153,6 +160,27 @@ class Evaluate(unittest.TestCase):
         self.assertFalse(en["passes"], en)
 
 
+class Sampling(unittest.TestCase):
+    def test_deterministic_caps_and_platform_report(self):
+        rows, quality = dataset(authors=18, per=25)
+        for r in rows[: 18 * 25 // 2]:
+            r["platform"] = "mastodon"
+        path = write(rows)
+        self.addCleanup(os.unlink, path)
+        posts, _ = O.parse_many([path])
+        small = O.sample(posts, max_creators=5, max_posts=21)
+        cells = {}
+        for p in small:
+            cells.setdefault((p.platform, p.author), 0)
+            cells[(p.platform, p.author)] += 1
+        self.assertEqual(len([k for k in cells if k[0] == "mastodon"]), 5)
+        self.assertTrue(all(n <= 21 for n in cells.values()))
+        self.assertEqual([p.id for p in small], [p.id for p in O.sample(posts, max_creators=5, max_posts=21)])
+        report = O.evaluate(posts, score_as(quality, noise=0.1), QS, rounds=200)
+        self.assertEqual(set(report["platforms"]), {"mastodon", "other"})
+        self.assertIn("mastodon/en", report["platform_languages"])
+
+
 class CompareOutcomes(unittest.TestCase):
     def test_dry_run_then_faked_live_run(self):
         from postriff_phase2.growth import compare as CMP
@@ -184,10 +212,10 @@ class CompareOutcomes(unittest.TestCase):
 class Collector(unittest.TestCase):
     NOW = 1_790_000_000.0
 
-    def item(self, text, days=30, reply=False, repost=False, likes=3, embed=False):
+    def item(self, text, days=30, reply=False, repost=False, likes=3, embed=False, langs=("en",)):
         created = self.NOW - days * 86400
         from datetime import datetime, timezone
-        rec = {"text": text, "createdAt": datetime.fromtimestamp(created, timezone.utc).isoformat().replace("+00:00", "Z")}
+        rec = {"text": text, "langs": list(langs), "createdAt": datetime.fromtimestamp(created, timezone.utc).isoformat().replace("+00:00", "Z")}
         if reply:
             rec["reply"] = {"parent": {}}
         post = {"uri": "at://did:plc:x/app.bsky.feed.post/1", "author": {"did": "did:plc:x"}, "record": rec,
@@ -213,6 +241,35 @@ class Collector(unittest.TestCase):
         self.assertIsNone(C.row_from_feed_item(self.item("too short"), "en", self.NOW))
         self.assertIsNone(C.row_from_feed_item(self.item(zh), "en", self.NOW))
         self.assertIsNone(C.row_from_feed_item(self.item("这个问题我们说过很多次了，为什么还会这样呢？今天再说一次吧大家"), "zh-HK", self.NOW))
+        self.assertIsNone(C.row_from_feed_item(self.item(en, langs=()), "en", self.NOW))      # untagged Latin text is unclear
+        self.assertEqual(C.row_from_feed_item(self.item(en), "en", self.NOW)["platform"], "bluesky")
+
+    def test_language_detection(self):
+        self.assertEqual(K.detect("今日はピアノの練習をしました。先生にほめられてとても嬉しかったです。"), "ja")
+        self.assertEqual(K.detect("오늘은 피아노 연습을 했어요. 선생님께 칭찬을 받아서 정말 기뻤어요."), "ko")
+        self.assertEqual(K.detect("今天練琴練了三個小時，老師說我的手型進步很多，真的很開心。"), "zh-TW")
+        self.assertEqual(K.detect("今日練咗三個鐘琴，老師話我手型進步咗好多，真係好開心呀。"), "zh-HK")
+        self.assertEqual(K.detect("Hoy practiqué piano tres horas y mi profesora dijo que mejoré mucho la postura.", ["es"]), "es")
+        self.assertIsNone(K.detect("Hoy practiqué piano tres horas y mi profesora dijo que mejoré mucho la postura.", []))
+
+    def test_mastodon_rules(self):
+        base = {"id": "1", "acct": "a", "statuses_count": 500, "discoverable": True}
+        self.assertTrue(M.eligible_account(base))
+        for flag in ({"noindex": True}, {"indexable": False}, {"bot": True}, {"group": True}, {"statuses_count": 3}):
+            self.assertFalse(M.eligible_account(dict(base, **flag)), flag)
+        from datetime import datetime, timezone
+        ts = datetime.fromtimestamp(self.NOW - 30 * 86400, timezone.utc).isoformat()
+        status = {"id": "9", "uri": "https://m.example/users/a/statuses/9", "account": {"url": "https://m.example/@a"},
+                  "created_at": ts, "visibility": "public", "language": "en", "favourites_count": 4, "reblogs_count": 2,
+                  "replies_count": 1, "content": "<p>Three things I stopped doing in my first piano lessons,<br>and what I teach instead after ten years.</p>"}
+        row = M.row_from_status(status, "m.example", self.NOW)
+        self.assertEqual((row["platform"], row["lang"], row["likes"], row["reposts"], row["replies"]), ("mastodon", "en", 4, 2, 1))
+        self.assertIn("\n", row["text"])
+        for change in ({"spoiler_text": "cw"}, {"visibility": "unlisted"}, {"in_reply_to_id": "8"}, {"reblog": {"id": "x"}}):
+            self.assertIsNone(M.row_from_status(dict(status, **change), "m.example", self.NOW), change)
+
+    def test_never_writes_inside_a_repository(self):
+        self.assertIsNone(K.outside_repo(str(ROOT / "data" / "x.csv")))
 
 
 if __name__ == "__main__":

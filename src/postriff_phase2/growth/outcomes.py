@@ -22,7 +22,9 @@ The dataset lives outside the repository (it holds other people's public posts) 
 from __future__ import annotations
 
 import csv
+import hashlib
 import math
+import os
 import random
 import re
 import statistics
@@ -95,11 +97,46 @@ def parse(path):
     return posts, problems
 
 
+def parse_many(paths):
+    """Parse several dataset files (for example one per platform and language); problems are prefixed by file."""
+    posts, problems, seen = [], [], set()
+    for path in paths:
+        got, issues = parse(path)
+        problems += [(f"{os.path.basename(path)}:{line}", msg) for line, msg in issues]
+        for p in got:
+            if p.id in seen:
+                problems.append((f"{os.path.basename(path)}:{p.line}", "id repeats a row from another file"))
+                continue
+            seen.add(p.id)
+            posts.append(p)
+    return posts, problems
+
+
+def sample(posts, *, max_creators=None, max_posts=None, seed=20260926):
+    """Deterministic subset for a budget: per (platform, language group) at most `max_creators` creators (chosen by a
+    seeded hash of their id), and per creator their `max_posts` most recent posts."""
+    if not max_creators and not max_posts:
+        return list(posts)
+    by_creator = {}
+    for p in posts:
+        by_creator.setdefault((p.platform, lang_group(p.lang), p.author), []).append(p)
+    cells = {}
+    for key in by_creator:
+        cells.setdefault(key[:2], []).append(key)
+    rank = lambda key: hashlib.sha256(f"{seed}:{key[2]}".encode()).hexdigest()
+    chosen = []
+    for keys in cells.values():
+        for key in sorted(keys, key=rank)[:max_creators or None]:
+            group = sorted(by_creator[key], key=lambda p: -p.created_at)
+            chosen += group[:max_posts or None]
+    return chosen
+
+
 def eligible(posts, min_posts=MIN_POSTS_PER_AUTHOR):
     """Posts whose creator has at least `min_posts` posts in the same language group."""
     by_key = {}
     for p in posts:
-        by_key.setdefault((lang_group(p.lang), p.author), []).append(p)
+        by_key.setdefault((p.platform, lang_group(p.lang), p.author), []).append(p)
     return [p for group in by_key.values() if len(group) >= min_posts for p in group]
 
 
@@ -108,7 +145,7 @@ def relative_outcomes(posts):
     'top' / 'middle' / 'bottom' within that creator (ties broken by id, deterministically)."""
     by_author = {}
     for p in posts:
-        by_author.setdefault((lang_group(p.lang), p.author), []).append(p)
+        by_author.setdefault((p.platform, lang_group(p.lang), p.author), []).append(p)
     out = {}
     for group in by_author.values():
         logs = {p.id: math.log1p(p.engagement) for p in group}
@@ -192,54 +229,59 @@ def overall_score(dimensions):
     return statistics.fmean(scores) if scores else None
 
 
+def _score_group(members, outcomes, judgments_by_id, qs, rounds, seed):
+    items, per_dim, unscored, text_only = [], {}, 0, []
+    for p in members:
+        judgment = judgments_by_id.get(p.id)
+        dims = levels_from_judgment(qs, judgment) if judgment is not None else ()
+        score = overall_score(dims) if judgment is not None else None
+        if score is None:
+            unscored += 1
+            continue
+        outcome, tercile = outcomes[p.id]
+        items.append((p.author, score, outcome, tercile))
+        if not p.has_media:
+            text_only.append((score, outcome))
+        for d in dims:
+            if d.score is not None:
+                per_dim.setdefault(d.id, []).append((d.score, outcome))
+    authors = len({a for a, _, _, _ in items})
+    rho, area = _metrics(items) if items else (None, None)
+    rho_ci, auc_ci = _bootstrap(items, rounds, seed, PREREGISTERED["confidence"]) if authors >= 2 else (None, None)
+    reasons = []
+    if authors < PREREGISTERED["min_authors"]:
+        reasons.append("too_few_creators")
+    if rho is None or rho < PREREGISTERED["spearman_min"]:
+        reasons.append("correlation_below_target")
+    if rho_ci is None or rho_ci[0] <= PREREGISTERED["ci_lower_above"]:
+        reasons.append("interval_includes_zero")
+    if area is None or area < PREREGISTERED["auc_min"]:
+        reasons.append("auc_below_target")
+    return {
+        "posts": len(members), "scored": len(items), "unscored": unscored, "creators": authors,
+        "spearman": _round(rho), "spearman_ci": rho_ci, "auc_top_vs_bottom": _round(area), "auc_ci": auc_ci,
+        "per_dimension_spearman": {d: _round(spearman([s for s, _ in v], [o for _, o in v])) for d, v in sorted(per_dim.items())},
+        "text_only_spearman": _round(spearman([s for s, _ in text_only], [o for _, o in text_only])),
+        "passes": not reasons, "reasons": reasons,
+    }
+
+
 def evaluate(posts, judgments_by_id, qs, *, seed=20260926, rounds=None):
-    """Pre-registered evaluation per language group. `judgments_by_id` maps post id -> Judgment."""
+    """Pre-registered evaluation. `groups` (one per language group) carry the pass/fail verdicts; `platforms` and
+    `platform_languages` apply the same criteria as diagnostics. Outcomes are always within a creator on one
+    platform, so platforms never mix inside a creator's baseline."""
     rounds = rounds or PREREGISTERED["bootstrap"]
     posts = eligible(posts)
     outcomes = relative_outcomes(posts)
-    report = {"preregistered": dict(PREREGISTERED), "groups": {}}
-    groups = {}
-    for p in posts:
-        groups.setdefault(lang_group(p.lang), []).append(p)
-    for group, members in sorted(groups.items()):
-        items, per_dim, unscored, text_only = [], {}, 0, []
-        for p in members:
-            judgment = judgments_by_id.get(p.id)
-            if judgment is None:
-                unscored += 1
-                continue
-            dims = levels_from_judgment(qs, judgment)
-            score = overall_score(dims)
-            outcome, tercile = outcomes[p.id]
-            if score is None:
-                unscored += 1
-                continue
-            items.append((p.author, score, outcome, tercile))
-            if not p.has_media:
-                text_only.append((score, outcome))
-            for d in dims:
-                if d.score is not None:
-                    per_dim.setdefault(d.id, []).append((d.score, outcome))
-        authors = len({a for a, _, _, _ in items})
-        rho, area = _metrics(items) if items else (None, None)
-        rho_ci, auc_ci = _bootstrap(items, rounds, seed, PREREGISTERED["confidence"]) if authors >= 2 else (None, None)
-        reasons = []
-        if authors < PREREGISTERED["min_authors"]:
-            reasons.append("too_few_creators")
-        if rho is None or rho < PREREGISTERED["spearman_min"]:
-            reasons.append("correlation_below_target")
-        if rho_ci is None or rho_ci[0] <= PREREGISTERED["ci_lower_above"]:
-            reasons.append("interval_includes_zero")
-        if area is None or area < PREREGISTERED["auc_min"]:
-            reasons.append("auc_below_target")
-        report["groups"][group] = {
-            "posts": len(members), "scored": len(items), "unscored": unscored, "creators": authors,
-            "spearman": None if rho is None else round(rho, 4), "spearman_ci": rho_ci,
-            "auc_top_vs_bottom": None if area is None else round(area, 4), "auc_ci": auc_ci,
-            "per_dimension_spearman": {d: _round(spearman([s for s, _ in v], [o for _, o in v])) for d, v in sorted(per_dim.items())},
-            "text_only_spearman": _round(spearman([s for s, _ in text_only], [o for _, o in text_only])),
-            "passes": not reasons, "reasons": reasons,
-        }
+    report = {"preregistered": dict(PREREGISTERED), "groups": {}, "platforms": {}, "platform_languages": {}}
+    cuts = {"groups": lambda p: lang_group(p.lang), "platforms": lambda p: p.platform,
+            "platform_languages": lambda p: f"{p.platform}/{lang_group(p.lang)}"}
+    for section, key in cuts.items():
+        buckets = {}
+        for p in posts:
+            buckets.setdefault(key(p), []).append(p)
+        for name, members in sorted(buckets.items()):
+            report[section][name] = _score_group(members, outcomes, judgments_by_id, qs, rounds, seed)
     return report
 
 
@@ -248,28 +290,28 @@ def _round(value):
 
 
 def summarize(posts):
-    groups = {}
+    cells = {}
     for p in posts:
-        g = groups.setdefault(lang_group(p.lang), {})
+        g = cells.setdefault(f"{p.platform}/{lang_group(p.lang)}", {})
         g[p.author] = g.get(p.author, 0) + 1
     out = {}
-    for group, authors in sorted(groups.items()):
+    for cell, authors in sorted(cells.items()):
         ok = {a: n for a, n in authors.items() if n >= MIN_POSTS_PER_AUTHOR}
-        out[group] = {"posts": sum(authors.values()), "creators": len(authors), "eligible_creators": len(ok),
-                      "eligible_posts": sum(ok.values()), "meets_minimum": len(ok) >= MIN_AUTHORS}
+        out[cell] = {"posts": sum(authors.values()), "creators": len(authors), "eligible_creators": len(ok),
+                     "eligible_posts": sum(ok.values()), "meets_minimum": len(ok) >= MIN_AUTHORS}
     return out
 
 
 def main(argv=None, out=sys.stdout):
     argv = list(sys.argv[1:] if argv is None else argv)
-    if len(argv) != 2 or argv[0] != "summarize":
-        print("usage: python -m postriff_phase2.growth.outcomes summarize FILE", file=out)
+    if len(argv) < 2 or argv[0] != "summarize":
+        print("usage: python -m postriff_phase2.growth.outcomes summarize FILE [FILE ...]", file=out)
         return 2
-    posts, problems = parse(argv[1])
+    posts, problems = parse_many(argv[1:])
     for line, message in problems[:50]:
         print(f"line {line}: {message}", file=out)
-    for group, info in summarize(posts).items():
-        print(f"{group}: {info['eligible_creators']}/{info['creators']} creators and {info['eligible_posts']}/{info['posts']} posts "
+    for cell, info in summarize(posts).items():
+        print(f"{cell}: {info['eligible_creators']}/{info['creators']} creators and {info['eligible_posts']}/{info['posts']} posts "
               f"eligible; {'enough' if info['meets_minimum'] else 'needs at least ' + str(MIN_AUTHORS) + ' eligible creators'}", file=out)
     print(f"{len(posts)} valid rows, {len(problems)} problems", file=out)
     return 1 if problems else 0

@@ -1,61 +1,49 @@
 """Collect public Bluesky posts with their engagement for growth outcome validation (growth/outcomes.py).
 
-Read-only use of Bluesky's public AppView (no login, no writes), rate limited, standard library only. Output rows
-match outcomes.COLUMNS. Creators are stored as a hash of their DID; post text and counts are kept because the
-evaluation needs them. Keep the output OUTSIDE the repository (the repository is public): the default folder is
-~/Documents/rafii-outcomes.
+Read-only use of Bluesky's public AppView (no login, no writes), rate limited, standard library only. Creators are
+stored as a hash of their DID. Output stays outside the repository (it is public); default ~/Documents/rafii-outcomes.
 
-    python3 scripts/growth_collect_bluesky.py discover --lang en    --out ~/Documents/rafii-outcomes/creators-en.json
-    python3 scripts/growth_collect_bluesky.py discover --lang zh-HK --out ~/Documents/rafii-outcomes/creators-zh.json
-    python3 scripts/growth_collect_bluesky.py collect  --creators ~/Documents/rafii-outcomes/creators-en.json \\
-        --lang en --out ~/Documents/rafii-outcomes/bluesky-en.csv
+    python3 scripts/growth_collect_bluesky.py run-all  --dir ~/Documents/rafii-outcomes [--langs en,zh-HK,ja]
+    python3 scripts/growth_collect_bluesky.py discover --lang ja --out DIR/bluesky-creators-ja.json
+    python3 scripts/growth_collect_bluesky.py collect  --lang ja --creators DIR/bluesky-creators-ja.json --out DIR/bluesky-ja.csv
 
-Selection rules (fixed before collection, see CONTRACTS "Outcome validation"): original posts only (no reposts or
-replies), at least 7 and at most 365 days old, at least 80 characters (English) or 30 (Chinese), language matching
-the target; creators with at least 20 such posts; at most 60 most recent eligible posts per creator.
+Selection rules are shared with every platform (growth_collect_common.py). English creators are found by searching
+profiles for topics close to Rafii's users; other languages by searching recent posts in that language (Bluesky
+answers the first page of a post search without login).
 """
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import json
 import os
-import re
 import sys
 import time
 import urllib.error
-import urllib.parse
-import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime
 
-PUBLIC = "https://public.api.bsky.app/xrpc/"
-SEARCH = "https://api.bsky.app/xrpc/"          # searchPosts answers here without login (first page only)
-UA = "rafii-outcome-research/0.1 (read-only; contact via github.com/dev-james0723/PostRiff)"
-PAUSE = 0.35
-MIN_AGE_DAYS, MAX_AGE_DAYS = 7, 365
-MIN_CHARS = {"en": 80, "zh-HK": 30}
-MIN_POSTS, MAX_POSTS = 20, 60
-COLUMNS = ("id", "platform", "lang", "author", "created_at", "text", "likes", "reposts", "replies", "quotes",
-           "has_media", "collected_at", "source_uri")
-EN_TOPICS = ("music teacher", "piano teacher", "music educator", "musician", "writing coach", "author", "teacher",
-             "educator", "coach", "small business", "designer", "illustrator", "photographer", "content creator",
-             "language teacher", "yoga teacher", "chef", "podcaster", "freelancer", "productivity")
-ZH_QUERIES = ("嘅", "咗", "唔係", "喺度", "冇", "啲", "嘢", "睇", "嚟", "點解", "而家", "佢哋", "我哋", "今日", "返工",
-              "香港", "好似", "真係", "唔好", "邊度")
-CANTONESE = re.compile(r"[嘅咗喺冇啲嘢睇嚟佢哋]|唔[係好該使會]")
-HAN = re.compile("[\u3400-\u9fff\uf900-\ufaff]")   # CJK ideographs (Python re has no \p{Han})
-SIMPLIFIED_ONLY = re.compile(r"[这们说为时会对过发还吗个样么]")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import growth_collect_common as K  # noqa: E402
 
-
-def classify(text, target):
-    """True when `text` belongs to the target language: English, or Cantonese (at least one Cantonese particle and
-    no simplified-only characters)."""
-    han = len(HAN.findall(text))
-    latin = len(re.findall(r"[A-Za-z]", text))
-    if target == "en":
-        return han == 0 and latin >= 40
-    return han >= 15 and bool(CANTONESE.search(text)) and not SIMPLIFIED_ONLY.search(text)
+PUBLIC = "https://public.api.bsky.app/xrpc"
+SEARCH = "https://api.bsky.app/xrpc"
+EN_TOPICS = ("music teacher", "piano teacher", "music educator", "musician", "composer", "writing coach", "author",
+             "teacher", "educator", "coach", "small business", "designer", "illustrator", "photographer",
+             "content creator", "language teacher", "yoga teacher", "chef", "podcaster", "freelancer", "productivity",
+             "marketing", "startup founder", "nonprofit", "therapist", "fitness coach", "baker", "artist")
+QUERIES = {
+    "zh-HK": ("嘅", "咗", "唔係", "喺度", "冇", "啲", "嘢", "睇", "嚟", "點解", "而家", "佢哋", "我哋", "今日", "返工",
+              "香港", "好似", "真係", "唔好", "邊度", "食飯", "咁樣", "其實", "朋友", "屋企"),
+    "zh-TW": ("今天", "覺得", "真的", "我們", "音樂", "學生", "老師", "分享", "因為", "這個", "台灣", "工作", "朋友",
+              "喜歡", "時間", "問題", "應該", "還是", "東西", "開始"),
+    "ja": ("今日", "ピアノ", "仕事", "思う", "本当に", "みんな", "ありがとう", "練習", "先生", "写真", "音楽", "好き",
+           "時間", "友達", "作品"),
+    "ko": ("오늘", "생각", "정말", "사람", "음악", "공부", "사진", "일상", "감사", "선생님", "시간", "친구", "작업"),
+    "es": ("hoy", "gracias", "música", "profesor", "creo", "nuevo", "vida", "clase", "siempre", "trabajo", "libro"),
+    "pt": ("hoje", "obrigado", "música", "professor", "acho", "novo", "vida", "aula", "sempre", "trabalho", "livro"),
+    "de": ("heute", "danke", "Musik", "Lehrer", "glaube", "neue", "Leben", "Unterricht", "immer", "Arbeit", "Buch"),
+    "fr": ("aujourd'hui", "merci", "musique", "professeur", "pense", "nouveau", "vie", "cours", "toujours", "travail", "livre"),
+}
+SEARCH_LANG = {"zh-HK": None, "zh-TW": "zh", "ja": "ja", "ko": "ko", "es": "es", "pt": "pt", "de": "de", "fr": "fr"}
 
 
 def _ts(value):
@@ -75,67 +63,48 @@ def row_from_feed_item(item, target, now):
         return None
     text = (record.get("text") or "").strip()
     created = _ts(record.get("createdAt"))
-    if created is None or not text:
+    if not text or not K.age_ok(created, now) or len(text) < K.min_chars(target):
         return None
-    age_days = (now - created) / 86400
-    if not MIN_AGE_DAYS <= age_days <= MAX_AGE_DAYS or len(text) < MIN_CHARS[target] or not classify(text, target):
+    if K.detect(text, record.get("langs") or ()) != target:
         return None
     uri, did = post.get("uri") or "", (post.get("author") or {}).get("did") or ""
     counts = [post.get(k) for k in ("likeCount", "repostCount", "replyCount", "quoteCount")]
     if not uri or not did or any(not isinstance(c, int) or c < 0 for c in counts):
         return None
-    return {"id": "bsky-" + hashlib.sha256(uri.encode()).hexdigest()[:20], "platform": "other", "lang": target,
-            "author": hashlib.sha256(did.encode()).hexdigest()[:16], "created_at": f"{created:.0f}", "text": text,
-            "likes": counts[0], "reposts": counts[1], "replies": counts[2], "quotes": counts[3],
-            "has_media": "1" if post.get("embed") else "0", "collected_at": f"{now:.0f}", "source_uri": uri}
-
-
-def _get(base, method, params, retries=4):
-    url = base + method + "?" + urllib.parse.urlencode(params)
-    for attempt in range(retries):
-        try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=25) as r:
-                data = json.load(r)
-            time.sleep(PAUSE)
-            return data
-        except urllib.error.HTTPError as error:
-            if error.code in (429, 502, 503) and attempt + 1 < retries:
-                time.sleep(2 ** (attempt + 1))
-                continue
-            raise
-        except urllib.error.URLError:
-            if attempt + 1 < retries:
-                time.sleep(2 ** (attempt + 1))
-                continue
-            raise
+    return {"id": "bsky-" + K.digest(uri, 20), "platform": "bluesky", "lang": target, "author": "bsky-" + K.digest(did),
+            "created_at": f"{created:.0f}", "text": text, "likes": counts[0], "reposts": counts[1], "replies": counts[2],
+            "quotes": counts[3], "has_media": "1" if post.get("embed") else "0", "collected_at": f"{now:.0f}",
+            "source_uri": uri}
 
 
 def discover(target, limit):
-    """Candidate creators as [{did, handle, source}] — English by topic search over profiles, Cantonese from the first
-    page of post searches for common Cantonese words. Nothing is kept about them but the DID and handle."""
     found = {}
     if target == "en":
         for topic in EN_TOPICS:
-            for actor in _get(PUBLIC, "app.bsky.actor.searchActors", {"q": topic, "limit": 25}).get("actors", []):
-                found.setdefault(actor["did"], {"did": actor["did"], "handle": actor.get("handle"), "source": topic})
-    else:
-        counts = {}
-        for q in ZH_QUERIES:
             try:
-                posts = _get(SEARCH, "app.bsky.feed.searchPosts", {"q": q, "limit": 100}).get("posts", [])
+                actors = K.fetch(K.url(PUBLIC, "/app.bsky.actor.searchActors", {"q": topic, "limit": 25})).get("actors", [])
             except urllib.error.HTTPError:
                 continue
-            for p in posts:
-                if classify((p.get("record") or {}).get("text", ""), "zh-HK"):
-                    did = p["author"]["did"]
-                    counts[did] = counts.get(did, 0) + 1
-                    found.setdefault(did, {"did": did, "handle": p["author"].get("handle"), "source": "cantonese-search"})
-        found = {d: v for d, v in found.items() if counts.get(d, 0) >= 1}
+            for actor in actors:
+                found.setdefault(actor["did"], {"did": actor["did"], "handle": actor.get("handle"), "source": topic})
+        return list(found.values())[:limit]
+    for q in QUERIES[target]:
+        params = {"q": q, "limit": 100}
+        if SEARCH_LANG[target]:
+            params["lang"] = SEARCH_LANG[target]
+        try:
+            posts = K.fetch(K.url(SEARCH, "/app.bsky.feed.searchPosts", params)).get("posts", [])
+        except urllib.error.HTTPError:
+            continue
+        for p in posts:
+            record = p.get("record") or {}
+            if K.detect(record.get("text", ""), record.get("langs") or ()) == target:
+                did = p["author"]["did"]
+                found.setdefault(did, {"did": did, "handle": p["author"].get("handle"), "source": f"search:{q}"})
     return list(found.values())[:limit]
 
 
-def collect(creators, target, now=None, max_pages=8):
-    """Rows for creators with at least MIN_POSTS eligible posts (their MAX_POSTS most recent)."""
+def collect(creators, target, now=None, max_pages=8, log=sys.stderr):
     now = time.time() if now is None else now
     rows, kept = [], 0
     for creator in creators:
@@ -145,21 +114,17 @@ def collect(creators, target, now=None, max_pages=8):
             if cursor:
                 params["cursor"] = cursor
             try:
-                page = _get(PUBLIC, "app.bsky.feed.getAuthorFeed", params)
-            except urllib.error.HTTPError:
+                page = K.fetch(K.url(PUBLIC, "/app.bsky.feed.getAuthorFeed", params))
+            except (urllib.error.HTTPError, urllib.error.URLError):
                 break
-            for item in page.get("feed", []):
-                row = row_from_feed_item(item, target, now)
-                if row:
-                    eligible.append(row)
+            eligible += [r for r in (row_from_feed_item(i, target, now) for i in page.get("feed", [])) if r]
             cursor = page.get("cursor")
-            if not cursor or len(eligible) >= MAX_POSTS:
+            if not cursor or len(eligible) >= K.MAX_POSTS:
                 break
-        if len(eligible) >= MIN_POSTS:
-            eligible.sort(key=lambda r: -float(r["created_at"]))
-            rows += eligible[:MAX_POSTS]
-            kept += 1
-        print(f"  {creator.get('handle')}: {len(eligible)} eligible{' - kept' if len(eligible) >= MIN_POSTS else ''}", file=sys.stderr)
+        chosen = K.keep_creator(eligible)
+        rows += chosen
+        kept += bool(chosen)
+        print(f"  {creator.get('handle')}: {len(eligible)} eligible{' - kept' if chosen else ''}", file=log, flush=True)
     return rows, kept
 
 
@@ -167,33 +132,49 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="growth_collect_bluesky.py")
     sub = parser.add_subparsers(dest="command", required=True)
     d = sub.add_parser("discover")
-    d.add_argument("--lang", choices=("en", "zh-HK"), required=True)
+    d.add_argument("--lang", choices=K.LANGS, required=True)
     d.add_argument("--out", required=True)
     d.add_argument("--limit", type=int, default=300)
     c = sub.add_parser("collect")
     c.add_argument("--creators", required=True)
-    c.add_argument("--lang", choices=("en", "zh-HK"), required=True)
+    c.add_argument("--lang", choices=K.LANGS, required=True)
     c.add_argument("--out", required=True)
+    a = sub.add_parser("run-all")
+    a.add_argument("--dir", required=True)
+    a.add_argument("--langs", default=",".join(K.LANGS))
+    a.add_argument("--limit", type=int, default=300)
     args = parser.parse_args(argv)
-    out = os.path.abspath(os.path.expanduser(args.out))
-    if os.path.exists(os.path.join(os.getcwd(), ".git")) and out.startswith(os.getcwd() + os.sep):
-        print("error: write the dataset outside the repository (it is public)", file=sys.stderr)
-        return 2
-    os.makedirs(os.path.dirname(out), exist_ok=True)
     if args.command == "discover":
+        out = K.outside_repo(args.out)
+        if not out:
+            return 2
         creators = discover(args.lang, args.limit)
         with open(out, "w", encoding="utf-8") as handle:
             json.dump(creators, handle, ensure_ascii=False, indent=1)
         print(f"{len(creators)} candidate creators -> {out}")
         return 0
-    with open(os.path.expanduser(args.creators), encoding="utf-8") as handle:
-        creators = json.load(handle)
-    rows, kept = collect(creators, args.lang)
-    with open(out, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=COLUMNS)
-        writer.writeheader()
-        writer.writerows(rows)
-    print(f"{kept} creators kept, {len(rows)} posts -> {out}")
+    if args.command == "collect":
+        out = K.outside_repo(args.out)
+        if not out:
+            return 2
+        with open(os.path.expanduser(args.creators), encoding="utf-8") as handle:
+            creators = json.load(handle)
+        rows, kept = collect(creators, args.lang)
+        K.write_rows(out, rows)
+        print(f"{kept} creators kept, {len(rows)} posts -> {out}")
+        return 0
+    base = K.outside_repo(os.path.join(args.dir, "x"))
+    if not base:
+        return 2
+    base = os.path.dirname(base)
+    for lang in [l.strip() for l in args.langs.split(",") if l.strip()]:
+        creators = discover(lang, args.limit)
+        with open(os.path.join(base, f"bluesky-creators-{lang}.json"), "w", encoding="utf-8") as handle:
+            json.dump(creators, handle, ensure_ascii=False, indent=1)
+        print(f"[{lang}] {len(creators)} candidates", flush=True)
+        rows, kept = collect(creators, lang)
+        K.write_rows(os.path.join(base, f"bluesky-{lang}.csv"), rows)
+        print(f"[{lang}] {kept} creators kept, {len(rows)} posts", flush=True)
     return 0
 
 

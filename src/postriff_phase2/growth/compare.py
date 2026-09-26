@@ -144,7 +144,9 @@ def main(argv=None, *, env=None, out=sys.stdout, factories=None):
     parser = argparse.ArgumentParser(prog="python -m postriff_phase2.growth.compare")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--labels", help="hand-labelled golden CSV (growth.golden)")
-    source.add_argument("--outcomes", help="public posts with engagement (growth.outcomes); pre-registered evaluation")
+    source.add_argument("--outcomes", nargs="+", help="public-post datasets with engagement (growth.outcomes); pre-registered evaluation")
+    parser.add_argument("--max-creators", type=int, help="outcomes: at most this many creators per platform and language")
+    parser.add_argument("--max-posts", type=int, help="outcomes: at most this many recent posts per creator")
     parser.add_argument("--models", required=True)
     parser.add_argument("--max-usd", type=float, required=True)
     parser.add_argument("--price", action="append", default=[])
@@ -156,10 +158,13 @@ def main(argv=None, *, env=None, out=sys.stdout, factories=None):
         if not math.isfinite(args.max_usd) or args.max_usd <= 0:
             raise CompareError("--max-usd must be a finite amount above 0")
         if args.outcomes:
-            posts, problems = outcomes.parse(args.outcomes)
+            if args.max_posts is not None and args.max_posts < outcomes.MIN_POSTS_PER_AUTHOR:
+                raise CompareError(f"--max-posts must be at least {outcomes.MIN_POSTS_PER_AUTHOR} (fewer disqualifies every creator)")
+            posts, problems = outcomes.parse_many(args.outcomes)
             if problems:
-                raise CompareError(f"{len(problems)} problem rows in {args.outcomes}; run growth.outcomes summarize")
-            rows = outcomes.eligible(posts)
+                raise CompareError(f"{len(problems)} problem rows; run growth.outcomes summarize")
+            rows = outcomes.eligible(outcomes.sample(outcomes.eligible(posts), max_creators=args.max_creators,
+                                                     max_posts=args.max_posts))
             if not rows:
                 raise CompareError("no creator has enough eligible posts; run growth.outcomes summarize")
         else:
