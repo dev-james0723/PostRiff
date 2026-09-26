@@ -11,7 +11,9 @@ from unittest import mock
 from postriff_alpha.domain import AlphaError
 from postriff_phase2 import campaigns, gateway_catalog, model_runtime, writer_defaults
 from postriff_phase2.agent_runtime import FixtureAgentRuntime
+from postriff_phase2.auth import initial_phase2_state
 from postriff_phase2.cli_runtime import ClaudeCliRuntime
+from postriff_phase2.hosted import HostedPhase2Commands
 from postriff_phase2.ideas import IdeasService, RunSink, requested_level, translate_reasoning
 from postriff_phase2.model_runtime import ProviderFailure, ServerModelRuntime, check_level_ceiling, level_quote
 from test_postriff_model_runtime import DESTS, GOOD, context
@@ -26,7 +28,8 @@ PAID = {"POSTRIFF_BUDGET_POLICY": "paid-2026-09-24"}
 
 
 def production(transport=None, **kwargs):
-    return ServerModelRuntime("key", model="openai/gpt-6-sol", models=MODELS, prices=PRICES, transport=transport, **kwargs)
+    kwargs.setdefault("prices", PRICES)
+    return ServerModelRuntime("key", model="openai/gpt-6-sol", models=MODELS, transport=transport, **kwargs)
 
 
 class Transport:
@@ -499,7 +502,8 @@ class TurnTest(unittest.TestCase):
         self.fixture = FixtureAgentRuntime()
 
     def ideas(self, repository):
-        return IdeasService(repository, None, runtime=self.fixture, runtimes=[self.fixture, self.managed], researcher=False)
+        # The real command handler: a quick-start estimate stores its source in a copy of the state, never the workspace.
+        return IdeasService(repository, HostedPhase2Commands(time.time), runtime=self.fixture, runtimes=[self.fixture, self.managed], researcher=False)
 
     def reserved_request(self, ideas, payload, **kwargs):
         """The request and model a turn prices for its reservation (the turn stops there)."""
@@ -555,7 +559,8 @@ class TurnTest(unittest.TestCase):
         self.assertEqual((refused.exception.status, str(refused.exception)), (400, "Choose a reasoning level this writer supports."))
 
     def test_quick_start_refuses_an_explicit_level_over_the_limit_before_storing_the_source(self):
-        repository = Repository(workspace("openai/gpt-6-astra"))
+        # A full workspace state: the estimate stores the source in a copy, which the source command needs.
+        repository = Repository({**initial_phase2_state("w", "u1", "Owner", "studio", 1.0), **workspace("openai/gpt-6-astra"), "sources": []})
         ideas = self.ideas(repository)
         payload = {"text": "A note about practising slowly.", "confirmUse": True, "ownContent": True, "reasoning": "high", "research": False}
         with mock.patch.dict(os.environ, LAUNCH), mock.patch.object(ideas, "_understand", side_effect=lambda w, t, text, z, r, parsed: (parsed, None)), \
