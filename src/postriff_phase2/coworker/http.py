@@ -113,6 +113,22 @@ def handle(app, environ, start_response, service, token, method, parts):
             return json_(200, notifications.unsubscribe_push(workspace_id, token, subscription_id=rest[0]))
     if resource == "coworker" and rest:
         area, tail = rest[0], rest[1:]
+        if area == "growth-loop":
+            loop = coworker.growth_loop
+            if not tail and method == "GET":
+                return json_(200, loop.summary(workspace_id, token))
+            if tail == ["goals"] and method == "POST":
+                return json_(201, loop.create_goal(workspace_id, token, body()))
+            if len(tail) == 3 and tail[0] == "goals" and tail[2] == "status" and method == "POST":
+                return json_(200, loop.goal_status(workspace_id, token, tail[1], body()))
+            if tail == ["experiments"] and method == "POST":
+                return json_(201, loop.propose(workspace_id, token, body()))
+            if len(tail) == 3 and tail[0] == "experiments" and tail[2] == "action" and method == "POST":
+                return json_(200, loop.experiment_action(workspace_id, token, tail[1], body()))
+            if tail == ["proofs"] and method == "POST":
+                return json_(201, loop.generate_proof(workspace_id, token, body().get("frequency", "weekly")))
+            if len(tail) == 3 and tail[0] == "proofs" and tail[2] == "action" and method == "POST":
+                return json_(200, loop.proof_action(workspace_id, token, tail[1], body().get("action")))
         if area == "status" and method == "GET":
             return json_(200, coworker.status(workspace_id, token))
         if area == "attention" and method == "GET":

@@ -47,6 +47,8 @@ class CoworkerService:
         self.hosted = hosted
         self.values = dict(values or {})
         self.clock = clock or getattr(hosted, "clock", None) or time.time
+        from .growth_loop import GrowthLoop
+        self.growth_loop = GrowthLoop(self)
 
     # --- plumbing ----------------------------------------------------------------------------------------------------------
     @property

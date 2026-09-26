@@ -4,6 +4,7 @@
  * stays untouched. Workspace routes are session-only: the server refuses API tokens.
  */
 import { ApiError, APP_GUARD_HEADER, type TokenSource } from '@/lib/api/client';
+import type { GoalInput, GrowthGoal, GrowthExperiment, GrowthProof, GrowthLoopView, GrowthWrite } from './growth-types';
 import type {
   AttentionResponse,
   CoworkerStatus,
@@ -84,6 +85,13 @@ export function createCoworkerApi(getToken: TokenSource) {
   const co = (w: string) => `${ws(w)}/coworker`;
 
   return {
+    growthLoop: (w: string) => get<GrowthLoopView>(`${co(w)}/growth-loop`),
+    createGrowthGoal: (w: string, body: GoalInput) => send<GrowthWrite<GrowthGoal>>('POST', `${co(w)}/growth-loop/goals`, body),
+    growthGoalStatus: (w: string, id: string, status: GrowthGoal['status']) => send<GrowthWrite<GrowthGoal>>('POST', `${co(w)}/growth-loop/goals/${seg(id)}/status`, { status }),
+    proposeGrowthExperiment: (w: string, body: { hypothesisId: string; minimumPerArm: number; windowDays: number; idempotencyKey: string }) => send<GrowthWrite<GrowthExperiment>>('POST', `${co(w)}/growth-loop/experiments`, body),
+    growthExperimentAction: (w: string, id: string, action: string) => send<GrowthWrite<GrowthExperiment>>('POST', `${co(w)}/growth-loop/experiments/${seg(id)}/action`, { action }),
+    generateGrowthProof: (w: string, frequency: 'weekly' | 'monthly') => send<GrowthWrite<GrowthProof>>('POST', `${co(w)}/growth-loop/proofs`, { frequency }),
+    growthProofAction: (w: string, id: string, action: 'opened' | 'acted') => send<Verified & { href: string }>('POST', `${co(w)}/growth-loop/proofs/${seg(id)}/action`, { action }),
     /* status + attention */
     status: (w: string) => get<CoworkerStatus>(`${co(w)}/status`),
     attention: (w: string) => get<AttentionResponse>(`${co(w)}/attention`),
