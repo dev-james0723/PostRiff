@@ -6,7 +6,7 @@
  * a citation only when the server returned one, "applied" only after the server said so.
  */
 import Link from 'next/link';
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { Surface } from '@/components/rafii';
@@ -14,12 +14,16 @@ import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
 import { ReviewApproveButton } from '@/components/jobs/review-approve-button';
 import { useRun } from '@/features/agent/use-run';
+import { guideFor } from '@/features/rafii-guide/guides';
+import { guideStore, useGuideStore } from '@/features/rafii-guide/store';
+import { onPanelActionsChange, panelActions } from '@/lib/agent-runtime/panel-actions';
+import { DETAIL_LABELS, INITIATIVE_LABELS, LANGUAGE_LABELS, PACE_LABELS, PRESETS, TONE_LABELS, VOICE_LABELS, type AgentStylePatch } from '@/lib/agent-runtime/style';
 import { keys, useSnapshot } from '@/lib/api/hooks';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import type { Snapshot } from '@/lib/api/types';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
 import { safeHref, type RouteManifest } from '@/lib/site-agent/routes';
-import type { SiteAgentBlock, SiteAgentBody, SiteAgentProposalView } from '@/lib/site-agent/types';
+import type { GuideCardBlock, SiteAgentBlock, SiteAgentBody, SiteAgentProposalView, VoiceCommandBlock } from '@/lib/site-agent/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { AUTOMATION_CHANGED } from './store';
@@ -130,6 +134,18 @@ function AnswerBlock({ block, actions }: { block: SiteAgentBlock; actions: Answe
           <Icons.arrowRight className='size-4 shrink-0' aria-hidden />
         </SafeLink>
       );
+    case 'guide_card':
+      return <GuideCard block={block} actions={actions} />;
+    case 'voice_command': {
+      // The voice call carries these out (a text answer applies a style change once, in the panel); this is the record.
+      const line = voiceCommandLine(block);
+      return line ? (
+        <p role='status' className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+          <Icons.adjustments className='size-3.5 shrink-0' aria-hidden />
+          <span>{line}</span>
+        </p>
+      ) : null;
+    }
     case 'citation_list':
       return (
         <nav aria-label='Sources' className='flex flex-wrap items-center gap-1.5'>
@@ -251,6 +267,99 @@ function AnswerBlock({ block, actions }: { block: SiteAgentBlock; actions: Answe
           )}
         </section>
       );
+    default:
+      return null;
+  }
+}
+
+const canStartGuides = () => typeof panelActions().startGuide === 'function';
+
+/**
+ * A walkthrough Rafii offers (Contract 2). "Show me" (re)starts it: the page opens and the cursor walks through the
+ * steps. When this answer asked for it (`auto`), the panel has already started it once; this card is how to see it
+ * again. Where guides can't run, the card is a plain link to the page.
+ */
+function GuideCard({ block, actions }: { block: GuideCardBlock; actions: AnswerActions }) {
+  const running = useGuideStore((s) => s.run?.guideId === block.guideId);
+  const startable = useSyncExternalStore(onPanelActionsChange, canStartGuides, () => false) && guideFor(block.guideId) !== null;
+  const [note, setNote] = useState<string | null>(null);
+  const page = MANIFEST.routes.find((route) => route.id === block.routeId)?.title;
+
+  async function show() {
+    setNote(null);
+    const started = await panelActions().startGuide?.(block.guideId);
+    if (started === false) setNote('I can’t show this one here. It may need a permission you don’t have.');
+    else actions.onNavigate?.();
+  }
+
+  return (
+    <Surface material='glass' padding='sm' className='flex flex-col gap-2.5' role='group' aria-label={`Guide: ${block.title}`}>
+      <div className='flex items-start gap-2.5'>
+        <span aria-hidden className='rafii-quiet text-muted-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full'>
+          <Icons.play className='size-3.5' />
+        </span>
+        <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
+          <span className='text-sm font-medium break-words'>{block.title}</span>
+          {block.summary && <span className='text-muted-foreground text-xs leading-relaxed break-words'>{block.summary}</span>}
+        </div>
+      </div>
+      <div className='flex flex-wrap items-center gap-2'>
+        {running ? (
+          <>
+            <span role='status' className='text-muted-foreground text-xs'>
+              Showing you now
+            </span>
+            <Button type='button' variant='quiet' size='sm' className='min-h-9' onClick={() => guideStore.stop()}>
+              Stop
+            </Button>
+          </>
+        ) : startable ? (
+          <Button type='button' variant='glass' size='sm' className='min-h-9 gap-1.5 px-3' onClick={() => void show()}>
+            <Icons.play className='size-3.5' aria-hidden />
+            Show me
+          </Button>
+        ) : (
+          <SafeLink href={block.href} onNavigate={actions.onNavigate} className='text-xs font-medium underline underline-offset-2'>
+            {page ? `Open ${page}` : 'Open the page'}
+          </SafeLink>
+        )}
+        {note && (
+          <span role='status' className='text-muted-foreground text-xs'>
+            {note}
+          </span>
+        )}
+      </div>
+    </Surface>
+  );
+}
+
+/** The parts of a style change, in the words the style picker uses. */
+function styleParts(patch: AgentStylePatch | null | undefined): string[] {
+  if (!patch) return [];
+  const parts: (string | undefined)[] = [
+    patch.preset ? PRESETS[patch.preset]?.label : undefined,
+    patch.tone ? `${TONE_LABELS[patch.tone] ?? ''} tone` : undefined,
+    patch.detail ? `${DETAIL_LABELS[patch.detail] ?? ''} answers` : undefined,
+    patch.pace ? `${PACE_LABELS[patch.pace] ?? ''} pace` : undefined,
+    patch.voice ? `${VOICE_LABELS[patch.voice] ?? ''} voice` : undefined,
+    patch.language ? LANGUAGE_LABELS[patch.language] : undefined,
+    patch.initiative ? INITIATIVE_LABELS[patch.initiative] : undefined
+  ];
+  return parts.filter((part): part is string => Boolean(part && !part.startsWith(' ')));
+}
+
+function voiceCommandLine(block: VoiceCommandBlock): string | null {
+  switch (block.command) {
+    case 'end_call':
+      return 'Ending the voice call.';
+    case 'mute':
+      return 'Microphone muted.';
+    case 'stop_speaking':
+      return 'Stopped talking.';
+    case 'style': {
+      const parts = styleParts(block.style);
+      return parts.length ? `How Rafii talks: ${parts.join(', ')}.` : 'Changed how Rafii talks.';
+    }
     default:
       return null;
   }

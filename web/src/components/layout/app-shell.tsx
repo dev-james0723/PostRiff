@@ -15,6 +15,7 @@ import Header from './header';
 import { MobileTabBar } from './mobile-tab-bar';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { SiteAgentAbove, SiteAgentDock, SiteAgentHotkeys, SiteAgentOverlay } from '@/features/site-agent/panel';
+import { GuideMount } from '@/features/rafii-guide/guide-mount';
 import { PostApprovalCalibration } from '@/features/time-back/post-approval-calibration';
 
 /**
@@ -51,6 +52,8 @@ export function AppShell({ defaultOpen, children, initial }: { defaultOpen: bool
                 <SiteAgentOverlay />
                 <SiteAgentAbove />
                 <SiteAgentHotkeys />
+                {/* Rafii's guided walkthroughs: the ghost cursor, and the page actions Rafii may take (open a page, show how). */}
+                <GuideMount />
                 <MobileTabBar />
                 <ShortcutsDialog />
                 {/* Time back: the optional, rate-limited calibration question after a post approval, on any page. */}

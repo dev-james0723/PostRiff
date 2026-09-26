@@ -8,6 +8,23 @@ import type { AgentStatus, AgentTurnRequest, AgentTurnResponse, ConversationStat
 
 const base = (workspaceId: string) => `/api/workspaces/${encodeURIComponent(workspaceId)}/agent`;
 
+/** The longest command argument the server accepts (Contract 7). */
+export const COMMAND_ARGS_MAX = 1000;
+const COMMAND_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
+
+/**
+ * The turn body as sent. A slash command travels only with a plain lowercase name and its arguments trimmed to
+ * 1,000 characters; anything else is left out and the turn runs as plain text.
+ */
+export function turnPayload(body: AgentTurnRequest): AgentTurnRequest {
+  const { command, ...rest } = body;
+  if (!command) return rest;
+  const name = typeof command.name === 'string' ? command.name.trim().toLowerCase() : '';
+  if (!COMMAND_NAME.test(name)) return rest;
+  const args = typeof command.args === 'string' ? command.args.trim().slice(0, COMMAND_ARGS_MAX) : '';
+  return { ...rest, command: { name, args } };
+}
+
 async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = 'Rafii could not complete that request.';
@@ -38,7 +55,7 @@ export function createAgentApi(getToken: TokenSource) {
   }
   return {
     status: (w: string) => get<AgentStatus>(`${base(w)}/status`),
-    turn: (w: string, body: AgentTurnRequest, signal?: AbortSignal) => post<AgentTurnResponse>(`${base(w)}/turns`, body, signal),
+    turn: (w: string, body: AgentTurnRequest, signal?: AbortSignal) => post<AgentTurnResponse>(`${base(w)}/turns`, turnPayload(body), signal),
     run: (w: string, runId: string) => get<AgentTurnResponse>(`${base(w)}/runs/${encodeURIComponent(runId)}`),
     cancel: (w: string, runId: string) => post<{ runId: string; status: string }>(`${base(w)}/runs/${encodeURIComponent(runId)}/cancel`),
     conversationState: (w: string, conversationId: string) => get<ConversationState>(`${base(w)}/conversations/${encodeURIComponent(conversationId)}/state`),
