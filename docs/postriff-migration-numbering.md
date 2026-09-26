@@ -11,7 +11,10 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 023 | `023_time_savings` | Time Back (PR #9) | **Taken, against the reservation.** The owner's decision retired 023, but PR #9 merged `023_time_savings.sql` into `consumer-saas` (`b5b7964`, 2026-09-25 17:30 UTC). Renumbering a migration on the shared branch is riskier than keeping it: once any database applies it, the runner refuses a changed ledger. So 023 now means Time Back, unless the owner decides otherwise. ai-routing's old `023_companion_relay` still moves to 029. The release executor confirms whether production has 023. |
 | 024–025 | `024_notification_core`, `025_coworker_evidence_growth` | Rafii Adaptive Social Coworker (`ecb3ff3`) | Local only. Do not renumber them unless a real dependency requires it. |
 | 026–029 | ai-routing's four migrations, renumbered from 020–023 | ai-routing | Reserved. The files still carry 020–023 on `ai-routing` and must be renamed before that branch lands (checklist below). |
-| 030 and up | — | next new migration | Free. |
+| 030 | `030_agent_style` | live agent (`feat/rafii-live-agent`, `bc6d5b5`) | Reserved (observed 2026-09-26 in the growth cloud handoff). |
+| 031 | `031_chat_media` | chat attachments (`feat/chat-attachments`) | Reserved in its SPEC/PLAN; not implemented yet. Never claim it for growth. |
+| 032 | `032_growth_metric_reads` | growth Phase 0 (`claude/growth-phase0`) | Local only. Metric reads, owned posts, history imports, AI usage ledger; additive. Production apply needs separate approval. |
+| 033 and up | — | next new migration | Free. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
@@ -60,7 +63,7 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read wt; do
 
 ## Test loader (`tests/phase2/rls.sql`)
 
-It loads 001, 002, 004–012, 018, 019, then 023, 024 and 025 (and later 026–029). **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
+It loads 001, 002, 004–012, 018, 019, then 023, 024 and 025, then 032 on `claude/growth-phase0` (and later 026–029, placed before 032). **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
 
 ## ai-routing renumbering checklist (later, when that stage is authorized)
 

@@ -43,9 +43,31 @@ def snapshot(connection_factory, now=None):
             delivery_backlog, delivery_dead = cur.fetchone()
         cur.execute("SELECT count(*) FROM public.pr_data_requests WHERE kind='deletion' AND status='requested'")
         deletions = cur.fetchone()[0]
+        # Growth Phase 0 queues (migration 032), only while POSTRIFF_METRIC_READS is on (after a rollback the leftover
+        # rows are not an incident): fresh readings overdue by 10 min, backfill readings still pending a day after they
+        # were scheduled, dead readings and failed imports in the last 24 h.
+        reads_overdue = backfill_stale = reads_dead = imports_failed = purges_pending = 0
+        # Disconnect purges still owed are a privacy obligation, counted whatever the growth flags say.
+        cur.execute("SELECT to_regclass('public.pr_growth_purges') IS NOT NULL")
+        if cur.fetchone()[0]:
+            cur.execute("SELECT count(*) FROM public.pr_growth_purges WHERE requested_at < to_timestamp(%s)", (now-600,))
+            purges_pending = cur.fetchone()[0]
+        import os
+        from .growth import metric_schedule
+        cur.execute("SELECT to_regclass('public.pr_metric_reads') IS NOT NULL AND to_regclass('public.pr_history_imports') IS NOT NULL")
+        if cur.fetchone()[0] and metric_schedule.enabled(os.environ):
+            cur.execute("""SELECT count(*) FILTER (WHERE source='verification' AND status IN ('pending','claimed') AND due_at < to_timestamp(%s)),
+                                  count(*) FILTER (WHERE source<>'verification' AND status IN ('pending','claimed') AND scheduled_at < to_timestamp(%s)),
+                                  count(*) FILTER (WHERE status='dead' AND updated_at > to_timestamp(%s))
+                           FROM public.pr_metric_reads""", (now-600, now-86400, now-86400))
+            reads_overdue, backfill_stale, reads_dead = cur.fetchone()
+            cur.execute("SELECT count(*) FROM public.pr_history_imports WHERE status='failed' AND updated_at > to_timestamp(%s)", (now-86400,))
+            imports_failed = cur.fetchone()[0]
     counts = dict(publicationUncertain=stuck, queueDelayed=delayed, publicationFailed=failed, publicationHeld=held,
                   modelStuck=model_stuck, researchStuck=research_stuck, costUnsettled=unsettled,
                   budgetStops=budgets, budgetWarnings=budget_warnings, billingRejected24h=billing, notificationsUnsent=notifications, deletionPending=deletions,
-                  notificationBacklog=delivery_backlog, notificationDead24h=delivery_dead)
+                  notificationBacklog=delivery_backlog, notificationDead24h=delivery_dead,
+                  metricReadsOverdue=reads_overdue, metricBackfillStale=backfill_stale, metricReadsDead24h=reads_dead,
+                  historyImportsFailed24h=imports_failed, historyPurgesPending=purges_pending)
     return {'status':'attention' if any(counts.values()) else 'ok', 'observedAt':now, 'counts':counts,
             'notificationDelivery':'rafii_v2' if v2 else 'not_configured'}

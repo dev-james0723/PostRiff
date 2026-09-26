@@ -77,9 +77,11 @@ DIMENSIONS = {
 }
 
 
-def observations(cur, workspace_id, state, now):
+def observations(cur, workspace_id, state, now, basis=insights.COMPARISON_BASIS):
+    """Verified posts with their primary metric. The default basis reads every post at the same age, for comparisons
+    (hypotheses, anomalies); counts pass basis=None so recent and backfilled posts are still counted."""
     jobs = (state.get("phase2") or {}).get("jobs") or []
-    summary = insights.summary(cur, workspace_id, jobs, now)
+    summary = insights.summary(cur, workspace_id, jobs, now, basis=basis)
     by_ref = {j.get("providerReference"): j for j in jobs if j.get("providerReference")}
     rows = []
     for post in summary["posts"]:
@@ -192,7 +194,10 @@ def refresh(cur, workspace_id, state, now, notifications=None):
         created += cur.rowcount
     cur.execute("UPDATE public.pr_strategy_hypotheses SET status='expired' WHERE workspace_id=%s AND status IN ('candidate','supported') AND expires_at < now()", (workspace_id,))
     expired = cur.rowcount
-    recent = [r for r in rows if r.get("publishedAt") and now - WEEK <= r["publishedAt"] <= now]
+    # A second, indexed per-workspace read (basis None) so posts younger than 24 h and backfilled ones are still
+    # counted; hypotheses and anomalies above use the like-for-like rows. Bounded by performance_cron's batch.
+    counted = observations(cur, workspace_id, state, now, basis=None)
+    recent = [r for r in counted if r.get("publishedAt") and now - WEEK <= r["publishedAt"] <= now]
     if notifications is not None and recent:   # "last week" means posts published in the last 7 days, nothing older
         week = datetime.fromtimestamp(now, timezone.utc).isocalendar()
         measured = sum(1 for r in recent if r["value"] is not None)
@@ -209,7 +214,7 @@ def refresh(cur, workspace_id, state, now, notifications=None):
 
 
 def view(cur, workspace_id, state, now):
-    rows = observations(cur, workspace_id, state, now)
+    rows = observations(cur, workspace_id, state, now, basis=None)   # counts only; hypotheses were compared like-for-like
     cur.execute("""SELECT id::text, platform, dimension, statement, confidence, status, sample_a, sample_b, effect, evidence_ids, counter_evidence_ids, causal,
                           extract(epoch from date_from), extract(epoch from date_to), extract(epoch from expires_at), revision, experiment
                    FROM public.pr_strategy_hypotheses WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 50""", (workspace_id,))
