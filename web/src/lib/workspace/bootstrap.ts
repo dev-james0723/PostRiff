@@ -11,7 +11,10 @@ export interface WorkspaceBootstrap {
 
 export function bootstrapOrigin(values: Record<string, string | undefined>): string | null {
   const local = values.POSTRIFF_DEV_SSR === '1' && !values.VERCEL;
-  const raw = local ? values.POSTRIFF_API_ORIGIN : values.NEXT_PUBLIC_APP_URL;
+  const preview = values.VERCEL_ENV === 'preview';
+  const raw = local ? values.POSTRIFF_API_ORIGIN
+    : preview ? (values.VERCEL_URL ? `https://${values.VERCEL_URL}` : undefined)
+    : values.NEXT_PUBLIC_APP_URL;
   if (!raw) return null;
   try {
     const url = new URL(raw);

@@ -29,3 +29,10 @@ test('bootstrap refuses failed identity, missing memberships, enforced MFA and u
  const result=await fetchWorkspaceBootstrap('https://example.com','token','supabase',undefined,async url=>Response.json(url.endsWith('/me')?{...me,mfa:{enforced:true,aal:'aal2'}}:{workspaces}));
  assert.equal(result.me.userId,'user-a');
 });
+
+test('preview bootstrap uses its deployment and fails closed without a valid deployment host',()=>{
+ const base={VERCEL:'1',VERCEL_ENV:'preview',NEXT_PUBLIC_APP_URL:'https://fixed-staging.example.com',POSTRIFF_DEV_SSR:'1',POSTRIFF_API_ORIGIN:'http://127.0.0.1:4438'};
+ assert.equal(bootstrapOrigin({...base,VERCEL_URL:'preview-123.vercel.app'}),'https://preview-123.vercel.app');
+ for(const host of [undefined,'','https://preview.vercel.app','user:pass@example.com','preview.vercel.app/path','preview.vercel.app?x=1','preview.vercel.app/#x']) assert.equal(bootstrapOrigin({...base,VERCEL_URL:host}),null);
+ assert.equal(bootstrapOrigin({...base,VERCEL_ENV:'production',VERCEL_URL:'preview-123.vercel.app'}),'https://fixed-staging.example.com');
+});
