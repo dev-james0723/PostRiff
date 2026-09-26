@@ -4702,6 +4702,7 @@
    "kind": "policy",
    "sha256": "sha256:e05d996bb8692b6fabe0266f72bc95d1a67f4bd3c2a371a9cfe751cd77b0c885",
    "description": "Deterministic unified attention planning: recipients by permission class, urgency, consent, separate SMS/phone channels, durable escalation, acknowledgement, quiet hours, digest, mute, unsubscribe, rate limits and dedupe. A model never decides these.",
+
    "intents": [
     "*"
    ],

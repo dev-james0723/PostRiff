@@ -71,6 +71,7 @@ import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runti
 import type { ChatAutomation } from '@/lib/api/types';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
+import { GrowthHome } from '@/features/growth/growth-loop';
 
 /*
  * Home's dialogs are code-split: none is needed to paint Home, so each loads when the browser is idle
@@ -565,6 +566,7 @@ function HomeWorkspace() {
       <div className='mx-auto grid w-full max-w-[1192px] gap-10 lg:grid-cols-[minmax(0,580px)_minmax(310px,1fr)] lg:gap-16 xl:gap-[88px]'>
         {/* Creation column */}
         <div className='flex min-w-0 flex-col gap-6'>
+          <GrowthHome />
           <div className='flex flex-col gap-3'>
             <h1 className='text-foreground text-[2.5rem] leading-[1.05] font-normal tracking-[-0.03em] md:text-[2.75rem] xl:text-[3.05rem]'>
               What’s the idea

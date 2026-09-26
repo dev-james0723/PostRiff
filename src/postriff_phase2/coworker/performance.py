@@ -90,8 +90,8 @@ def observations(cur, workspace_id, state, now, basis=insights.COMPARISON_BASIS)
         job = by_ref.get(post["providerPostId"])
         if job is None or job.get("state") != "verified":
             continue  # only posts the application verified as published are evidence
-        rows.append({"postId": post["providerPostId"], "jobId": job.get("id"), "provider": post["provider"], "cohort": post["cohort"], "metric": metric,
-                     "value": value, "observedAt": post["freshness"]["observedAt"], "publishedAt": published_at(job), "features": features(job)})
+        rows.append({"postId": post["providerPostId"], "jobId": job.get("id"), "provider": post["provider"], "cohort": {**post["cohort"], "connectionId": post.get("connectionId")}, "metric": metric,
+                     "value": value, "readOffset": (post["metrics"].get(metric) or {}).get("readOffset"), "observedAt": post["freshness"]["observedAt"], "publishedAt": published_at(job), "features": features(job)})
     return rows
 
 
@@ -155,7 +155,7 @@ def hypotheses_from(rows, now):
             subject = label if better_arm == arm_a else {"opening": "Opening with a statement", "length": "Longer posts", "cta": "Posts without a call to action",
                                                          "visual": "Text-only posts", "weekday": "Weekday posting", "time": "Posting later in the day"}[dimension]
             platform = PLATFORM.get(provider, provider)
-            out.append({"platform": platform, "dimension": dimension, "cohort": cohort, "metric": rows[0]["metric"] if rows else "views",
+            out.append({"platform": platform, "dimension": dimension, "cohort": cohort, "metric": members[0]["metric"],
                         "arm_a": arm_a, "arm_b": arm_b, "sample_a": len(a), "sample_b": len(b), "effect": round((median_a - median_b) / base, 3),
                         "statement": f"{subject} may reach more people on {platform} for this account ({n}+ posts per group; not proven to cause it).",
                         "evidence_ids": evidence[:20], "counter_evidence_ids": counter[:20], "confidence": confidence,
@@ -177,7 +177,7 @@ def refresh(cur, workspace_id, state, now, notifications=None, *, trend_report=N
     created = updated = superseded = 0
     for h in found:
         cur.execute("""SELECT id::text, arm_a, arm_b, effect, revision, status FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND platform=%s AND dimension=%s
-                       AND metric=%s AND status IN ('candidate','experiment','supported') ORDER BY revision DESC LIMIT 1""", (workspace_id, h["platform"], h["dimension"], h["metric"]))
+                       AND metric=%s AND cohort=%s::jsonb AND status IN ('candidate','experiment','supported') ORDER BY revision DESC LIMIT 1""", (workspace_id, h["platform"], h["dimension"], h["metric"], json.dumps(h["cohort"])))
         current = cur.fetchone()
         flipped = current is not None and current[3] is not None and (float(current[3]) > 0) != (h["effect"] > 0)
         if current is not None and not flipped:
@@ -187,7 +187,11 @@ def refresh(cur, workspace_id, state, now, notifications=None, *, trend_report=N
                          EXPIRY_DAYS, h["date_to"], current[0]))
             updated += 1
             continue
-        revision = (current[4] + 1) if current else 1
+        # The existing uniqueness key predates account cohorts: allocate a revision
+        # across that key, while support/replacement are confined to this cohort.
+        cur.execute("SELECT coalesce(max(revision),0)+1 FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND platform=%s AND dimension=%s AND metric=%s",
+                    (workspace_id, h["platform"], h["dimension"], h["metric"]))
+        revision = cur.fetchone()[0]
         if flipped:
             cur.execute("UPDATE public.pr_strategy_hypotheses SET status='rejected', decided_at=now() WHERE id::text=%s", (current[0],))
             superseded += 1
@@ -232,6 +236,7 @@ def view(cur, workspace_id, state, now, *, trend_report=None):
               "expiresAt": float(r[14]) if r[14] is not None else None, "revision": r[15], "experiment": r[16],
               "canAcceptPlanning": flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED") and r[2].startswith("scout_") and r[6] >= MIN_ARM and r[7] >= MIN_ARM,
               "planningAccepted": bool((r[16] or {}).get("planningAccepted")) and r[5] == "supported",
+
               "why": f"Compared {r[6]} and {r[7]} verified posts in one like-for-like group; {len(r[10] or [])} posts go against it. This is a pattern for this account, not a rule and not a cause."}
              for r in cur.fetchall()]
     if any(h['dimension'].startswith('trend_') for h in items):

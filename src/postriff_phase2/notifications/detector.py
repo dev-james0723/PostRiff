@@ -132,6 +132,17 @@ def from_state(workspace_id, state, now=None):
         if asset.get("origin") == "rafii_agent" and not asset.get("deleted") and asset.get("id") not in used:
             out.append({"event_type": "asset.review_required", "dedupe_key": f"asset_review:{asset.get('id')}", "entity_type": "asset", "entity_id": asset.get("id"),
                         "payload": {"platform": lineage.get("platform") or "a post", "href": "/app/library"}})
+    for proof in ((state.get("coworker") or {}).get("growthLoop") or {}).get("proofs") or []:
+        frequency = proof.get("frequency")
+        if frequency not in ("weekly", "monthly"):
+            continue
+        counts = proof.get("counts") or {}
+        out.append({"event_type": f"{frequency}_proof.generated", "dedupe_key": f"growth_proof:{proof['id']}",
+                    "entity_type": "growth_proof", "entity_id": proof["id"],
+                    "payload": {"href": proof["href"], "metrics": [
+                        {"label": "Approved posts", "value": str(counts.get("approvedPosts", 0))},
+                        {"label": "Verified published posts", "value": str(counts.get("verifiedPublishedPosts", 0))},
+                        {"label": "Completed experiments", "value": str(counts.get("completedExperiments", 0))}]}})
     return out
 
 
