@@ -53,3 +53,12 @@ test('protected preview forwards existing deployment access only to fixed API re
  }
  for(const secret of ['test-token','fixture-cookie','fixture-bypass']) assert.equal(JSON.stringify(result).includes(secret),false);
 });
+
+test('preview uses only pinned request aliases so deployment cookies stay on their own host',()=>{
+ const env={VERCEL:'1',VERCEL_ENV:'preview',VERCEL_URL:'deployment.vercel.app',VERCEL_BRANCH_URL:'branch.vercel.app',POSTRIFF_STAGING_PUBLIC_BASE_URL:'https://approved-staging.vercel.app',NEXT_PUBLIC_APP_URL:'https://stale-staging.example.com'};
+ for(const host of ['deployment.vercel.app','branch.vercel.app','approved-staging.vercel.app']) assert.equal(bootstrapOrigin(env,host),'https://'+host);
+ for(const host of ['attacker.example.com','approved-staging.vercel.app.attacker.com','approved-staging.vercel.app/path','approved-staging.vercel.app, attacker.com']) assert.equal(bootstrapOrigin(env,host),'https://deployment.vercel.app');
+ assert.equal(bootstrapOrigin({...env,VERCEL_URL:undefined},'approved-staging.vercel.app'),null);
+ assert.equal(bootstrapOrigin({...env,POSTRIFF_STAGING_PUBLIC_BASE_URL:'https://user:pass@approved-staging.vercel.app'},'approved-staging.vercel.app'),'https://deployment.vercel.app');
+ assert.equal(bootstrapOrigin({...env,VERCEL_ENV:'production'},'approved-staging.vercel.app'),'https://stale-staging.example.com');
+});

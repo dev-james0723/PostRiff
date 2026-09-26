@@ -9,11 +9,20 @@ export interface WorkspaceBootstrap {
   fetchedAt: number;
 }
 
-export function bootstrapOrigin(values: Record<string, string | undefined>): string | null {
+export function bootstrapOrigin(values: Record<string, string | undefined>, requestHost?: string | null): string | null {
   const local = values.POSTRIFF_DEV_SSR === '1' && !values.VERCEL;
   const preview = values.VERCEL_ENV === 'preview';
+  let previewHost = values.VERCEL_URL;
+  if (preview && previewHost && requestHost) {
+    const allowed = [previewHost, values.VERCEL_BRANCH_URL];
+    try {
+      const alias = new URL(values.POSTRIFF_STAGING_PUBLIC_BASE_URL || '');
+      if (alias.protocol === 'https:' && !alias.username && !alias.password && alias.pathname === '/' && !alias.search && !alias.hash) allowed.push(alias.host);
+    } catch { /* no approved alias */ }
+    if (allowed.includes(requestHost)) previewHost = requestHost;
+  }
   const raw = local ? values.POSTRIFF_API_ORIGIN
-    : preview ? (values.VERCEL_URL ? `https://${values.VERCEL_URL}` : undefined)
+    : preview ? (previewHost ? `https://${previewHost}` : undefined)
     : values.NEXT_PUBLIC_APP_URL;
   if (!raw) return null;
   try {
