@@ -78,6 +78,7 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
         disabled={disabled}
         aria-label='Message'
         aria-describedby={helpId}
+        data-tour='composer-idea'
         placeholder={placeholder}
         spellCheck
         className='rafii-serif placeholder:text-muted-foreground/80 mt-3 min-h-[170px] w-full resize-none bg-transparent text-[25px] leading-[1.45] tracking-[-0.02em] outline-none disabled:opacity-60 md:mt-4 md:min-h-[190px] md:text-[26px]'
@@ -132,9 +133,9 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
             </button>
           ))}
         </div>
-        <div className='mt-2.5 mb-[19px]'>{settings}</div>
+        <div className='mt-2.5 mb-[19px]' data-tour='composer-settings'>{settings}</div>
         {notes}
-        <Button variant='action' size='hero' disabled={generate.disabled} aria-describedby={helpId} onClick={generate.onClick} className='w-full justify-start text-left'>
+        <Button variant='action' size='hero' data-tour='composer-generate' disabled={generate.disabled} aria-describedby={helpId} onClick={generate.onClick} className='w-full justify-start text-left'>
           <Icons.sparkles className={cn(busy && 'animate-spin motion-reduce:animate-none')} />
           <span className='flex-1 truncate'>{generate.label}</span>
           {generate.count > 0 && !busy && <span className='bg-background/15 text-inherit flex size-6 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums'>{generate.count}</span>}

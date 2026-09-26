@@ -173,7 +173,7 @@ export function AutomationsView() {
       pageHeaderAction={
         // The empty state carries the one "New automation" action when there is nothing yet.
         canEdit && (snapshot.isLoading || live.length > 0) ? (
-          <Button variant='action' size='control' onClick={() => open(blankInitial(timeZone))}>
+          <Button variant='action' size='control' data-tour='automations-new' data-guide-safe onClick={() => open(blankInitial(timeZone))}>
             <Icons.add />
             New automation
           </Button>
@@ -214,7 +214,7 @@ export function AutomationsView() {
               title='No automations yet'
               action={
                 canEdit ? (
-                  <Button variant='action' size='control' onClick={() => open(blankInitial(timeZone))}>
+                  <Button variant='action' size='control' data-tour='automations-new' data-guide-safe onClick={() => open(blankInitial(timeZone))}>
                     <Icons.add />
                     New automation
                   </Button>

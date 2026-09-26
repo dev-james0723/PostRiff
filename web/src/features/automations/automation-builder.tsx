@@ -467,7 +467,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
       <RafiiDialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
         <RafiiDialogContent size='lg' className='md:h-[min(52rem,92dvh)]'>
           <RafiiDialogHeader title={title} accent='automation' intro={workflow ? policy?.label : undefined} />
-          <div className='px-5 pb-1 md:px-7'>
+          <div className='px-5 pb-1 md:px-7' data-tour='automation-steps' data-guide-safe='tabs'>
             <SegmentedControl options={STEPS.map((s) => ({ value: s.value, label: s.label }))} value={step} onChange={setStep} pattern='tabs' label='Automation steps' size='sm' panelIds={STEPS.map((s) => `automation-step-${s.value}`)} />
           </div>
           <RafiiDialogBody className='flex flex-col gap-5'>
@@ -498,7 +498,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   <Input id='automation-name' value={name} onChange={(e) => setName(e.target.value)} placeholder='Weekly tip' maxLength={120} className={FIELD} />
                 </Field>
                 <Field label='What should each draft be about?' htmlFor='automation-goal' tip='Sent to the writer each run. Apps, times or instructions in it are read as text, not settings.' tipLabel='About the brief'>
-                  <Textarea id='automation-goal' value={goal} onChange={(e) => setGoal(e.target.value)} placeholder='One practical tip for my audience, drawn from this week’s work.' maxLength={1200} className='rafii-field min-h-24 rounded-[var(--rafii-radius-control)] px-3.5 py-3 text-base md:text-sm' />
+                  <Textarea id='automation-goal' data-tour='automation-goal' value={goal} onChange={(e) => setGoal(e.target.value)} placeholder='One practical tip for my audience, drawn from this week’s work.' maxLength={1200} className='rafii-field min-h-24 rounded-[var(--rafii-radius-control)] px-3.5 py-3 text-base md:text-sm' />
                 </Field>
                 <Field label='Who is it for?' htmlFor='automation-audience'>
                   <Input id='automation-audience' value={audience} onChange={(e) => setAudience(e.target.value)} placeholder='Beginners who follow my work, and the people who support them' maxLength={800} className={FIELD} />
@@ -581,7 +581,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
             )}
 
             {step === 'when' && (
-              <section id='automation-step-when' role='tabpanel' aria-label='When' className='flex flex-col gap-5'>
+              <section id='automation-step-when' role='tabpanel' aria-label='When' data-tour='automation-when' className='flex flex-col gap-5'>
                 {fixed ? (
                   <Surface material='quiet' radius='control' padding='sm' className='flex flex-col gap-1.5'>
                     <span className='rafii-eyebrow'>Schedule</span>
@@ -760,7 +760,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
             )}
 
             {step === 'where' && (
-              <section id='automation-step-where' role='tabpanel' aria-label='Where' className='flex flex-col gap-4'>
+              <section id='automation-step-where' role='tabpanel' aria-label='Where' data-tour='automation-where' className='flex flex-col gap-4'>
                 {draftable.length > 0 ? (
                   <div className='flex flex-wrap items-center justify-between gap-2'>
                     <Button variant='glass' size='control' onClick={() => setInner('channels')}>
@@ -981,7 +981,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                 <Icons.arrowRight />
               </Button>
             ) : (
-              <span className='flex flex-wrap gap-2'>
+              <span className='flex flex-wrap gap-2' data-tour='automation-save'>
                 <Button variant={isOwner ? 'glass' : 'action'} size='control' disabled={saving || blockers.length > 0} onClick={() => void save(false)}>
                   {saving ? 'Saving…' : 'Save as draft'}
                 </Button>

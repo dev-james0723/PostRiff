@@ -60,6 +60,7 @@ function ProviderTile({
   return (
     <button
       type='button'
+      data-tour='connect-platform' data-guide-safe
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
@@ -229,7 +230,7 @@ export function ConnectSheet({
                 </div>
               )}
 
-              <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading'>
+              <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading' data-tour='connect-capability'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
                   What Rafii may do
                 </h3>
@@ -264,7 +265,7 @@ export function ConnectSheet({
               <Button variant='glass' size='control' onClick={() => setPending(null)}>
                 Back
               </Button>
-              <a href={pending.authorizeUrl} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'gap-2')}>
+              <a href={pending.authorizeUrl} data-tour='connect-authorize' className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'gap-2')}>
                 Continue to {pending.platform}
                 <Icons.externalLink className='size-4' aria-hidden />
               </a>
@@ -275,6 +276,7 @@ export function ConnectSheet({
                 Cancel
               </Button>
               <StatefulButton
+                data-tour='connect-continue'
                 variant='primary'
                 className={cn(STATEFUL_ACTION, CONTROL_48)}
                 state={busy ? 'loading' : 'idle'}

@@ -215,6 +215,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
         <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]'>
           <Textarea
             aria-label='Writing sample'
+            data-tour='voice-sample-text'
             value={text}
             onChange={(event) => {
               setText(event.target.value);
@@ -241,11 +242,11 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
                 className={FIELD_CLASS}
               />
             )}
-            <label htmlFor={manualConsentId} className='text-foreground flex items-start gap-2 text-xs leading-relaxed'>
+            <label htmlFor={manualConsentId} data-tour='voice-sample-consent' className='text-foreground flex items-start gap-2 text-xs leading-relaxed'>
               <Checkbox id={manualConsentId} className='mt-0.5' aria-label='Confirm manual writing sample authorship and retention' checked={manualConsent} onCheckedChange={(checked) => setManualConsent(checked === true)} disabled={act.isPending} />
               I wrote or have permission to use this text and consent to private retention, not AI analysis or generation.
             </label>
-            <Button variant='action' size='control' disabled={act.isPending || !text.trim() || !manualConsent} onClick={() => void importSample()}>
+            <Button variant='action' size='control' data-tour='voice-sample-save' disabled={act.isPending || !text.trim() || !manualConsent} onClick={() => void importSample()}>
               {act.isPending ? (
                 <>
                   <Icons.spinner className='motion-safe:animate-spin' /> Saving…
@@ -310,7 +311,7 @@ export function VoiceSamplesCard({ state, revision, isOwner, preferredPlatform, 
             ))}
           </ul>
           <div className='flex flex-wrap items-center gap-3'>
-            <Button variant='action' size='control' disabled={act.isPending || analyzable.length === 0 || analyzable.length !== selected.length} onClick={() => void analyzeSelected()}>
+            <Button variant='action' size='control' data-tour='voice-analyse' disabled={act.isPending || analyzable.length === 0 || analyzable.length !== selected.length} onClick={() => void analyzeSelected()}>
               {act.isPending ? (
                 <>
                   <Icons.spinner className='motion-safe:animate-spin' /> Analysing…
