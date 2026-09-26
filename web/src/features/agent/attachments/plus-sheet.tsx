@@ -234,7 +234,7 @@ function SkillsView({
         </ul>
       ) : (
         <p className='text-muted-foreground px-2 py-4 text-sm'>
-          {skills.length ? 'No matching skills.' : 'No explicit skills are available on this deployment.'}
+          {skills.length ? 'No matching skills.' : 'No explicit skills are available here yet.'}
         </p>
       )}
     </div>
@@ -342,7 +342,7 @@ function ConnectedAppsView({
                 <span className='block text-sm font-medium'>{name}</span>
                 <span className='text-muted-foreground block text-xs'>
                   {!provider.enabled
-                    ? 'Off on this deployment'
+                    ? 'Not turned on here'
                     : !provider.configured
                       ? 'Server setup required'
                       : live.length

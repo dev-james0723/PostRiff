@@ -17,7 +17,7 @@ const view = fs.readFileSync(path.join(AGENT, 'conversation-view.tsx'), 'utf8');
 
 test('the composer mounts the bar between the textarea and "Draft for"', () => {
   const textarea = composer.indexOf('<Textarea');
-  const bar = composer.indexOf('<AttachmentBar attachments=');
+  const bar = composer.search(/<AttachmentBar\s+attachments=/);
   const draftFor = composer.indexOf("aria-label='Draft for'");
   assert.ok(textarea > 0 && bar > textarea && draftFor > bar, 'Textarea → AttachmentBar → Draft for');
   assert.match(composer, /<MentionList/);
@@ -35,9 +35,12 @@ test('textarea handlers are composed explicitly, never spread over the composer�
 });
 
 test('⌘/Ctrl+Enter respects IME, and send waits for uploads', () => {
-  assert.match(composer, /!isImeEvent\(event\) && !attachments\?\.ime\.composing\(event\)/);
+  assert.match(composer, /!isImeEvent\(event\)\s*&&\s*!attachments\?\.ime\.composing\(event\)/);
   assert.match(composer, /!attachments\?\.blockers\.length/);
-  assert.match(composer, /attachments\.blockerMessage \?\? attachments\.readingMessage \?\? attachments\.imageGenerationNotice/);
+  assert.match(
+    composer,
+    /attachments\.blockerMessage\s*\?\?\s*attachments\.readingMessage\s*\?\?\s*attachments\.imageGenerationNotice/
+  );
 });
 
 test('the conversation sends one set of chip fields to the estimate and the turn, none with quick replies', () => {
