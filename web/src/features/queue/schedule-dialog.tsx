@@ -2,7 +2,7 @@
 
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -26,6 +26,7 @@ import { AssetPicker } from '@/components/application/asset-picker';
 import { languageLabel } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
+import { firstPostImageId, isPostableImage } from '@/lib/media/asset-kinds';
 
 interface ScheduleDialogProps {
   open: boolean;
@@ -164,7 +165,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const usable = (v: SnapshotVariant) => v.voiceRevision === activeVoice || v.proposedUpdate?.voiceRevision === activeVoice;
   const drafts = useMemo(() => (state?.variants ?? []).filter((v) => !v.blockedByRetraction && usable(v)), [state?.variants, activeVoice]); // eslint-disable-line react-hooks/exhaustive-deps
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
-  const assets = useMemo(() => (state?.phase2?.assets ?? []).filter((a) => !a.deleted), [state?.phase2?.assets]);
+  // Only photos that can go out with a post; a video can't be scheduled from Rafii yet (chat-context SPEC §7.6).
+  const assets = useMemo(() => (state?.phase2?.assets ?? []).filter(isPostableImage), [state?.phase2?.assets]);
   const voiceActive = Boolean(state?.speaker?.activeRevision);
   const staleDrafts = (state?.variants ?? []).filter((v) => !v.blockedByRetraction && !usable(v)).length;
 
@@ -192,6 +194,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
+  // The draft's own post-role photo is the default image, unless the dialog was opened for a specific one.
+  const defaultAsset = preselectedAsset ? null : firstPostImageId(variant?.media, assets);
+  useEffect(() => {
+    if (defaultAsset) setAssetId(defaultAsset);
+  }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
@@ -301,7 +308,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {staleDrafts} draft{staleDrafts === 1 ? ' uses' : 's use'} an older voice and can’t be scheduled.
             </p>
           )}
-          <div className='flex flex-col gap-1.5'>
+          <div className='flex flex-col gap-1.5' data-tour='schedule-draft'>
             <Label htmlFor='schedule-draft'>Draft</Label>
             <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); }}>
               <SelectTrigger id='schedule-draft' className='h-12 w-full text-base'>
@@ -340,7 +347,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             )}
           </div>
 
-          <div className='flex flex-col gap-1.5'>
+          <div className='flex flex-col gap-1.5' data-tour='schedule-account'>
             <Label htmlFor='schedule-channel'>Account</Label>
             <Select value={channelId} onValueChange={(value) => setChannelId(String(value))}>
               <SelectTrigger id='schedule-channel' disabled={!variant || Boolean(variant.channelId)} className='h-12 w-full text-base'>
@@ -378,7 +385,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           </div>
 
           <div className='grid gap-4 sm:grid-cols-2'>
-            <div className='flex flex-col gap-1.5'>
+            <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
               <Label htmlFor='schedule-time'>Publish at</Label>
               <Input
                 id='schedule-time'
@@ -447,7 +454,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             Cancel
           </Button>
           {/* The server refuses `p2_review` without the approve permission; the sentence above says who can. */}
-          <Button variant='action' size='control' disabled={!ready || !canPrepare || act.isPending} onClick={() => void submit()}>
+          <Button variant='action' size='control' data-tour='schedule-prepare' disabled={!ready || !canPrepare || act.isPending} onClick={() => void submit()}>
             {act.isPending ? 'Preparing…' : 'Prepare review'}
           </Button>
         </DialogFooter>

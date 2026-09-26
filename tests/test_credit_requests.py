@@ -18,3 +18,25 @@ class CreditRequestTests(unittest.TestCase):
 
     def test_private_authority_cannot_be_inserted_in_request(self):
         with self.assertRaises(ValueError): self.digest({'_credit_authority':{'maximum':1}})
+
+    def test_chips_are_part_of_the_approved_request(self):
+        # Chat-context S21: the same body goes to estimate, quote and turn, so every chip detail is bound.
+        chips={'text':'hello','model':'a','references':[{'kind':'post','id':'p1','label':'Spring','role':'rework'}],
+               'attachments':[{'assetId':'a'*32,'role':'post','slot':'A'}]}
+        changed=[('references',[]),('attachments',[]),
+                 ('references',[{'kind':'post','id':'p1','label':'Autumn','role':'rework'}]),
+                 ('references',[{'kind':'post','id':'p1','label':'Spring','role':'inspire'}]),
+                 ('attachments',[{'assetId':'a'*32,'role':'post','slot':'B'}]),
+                 ('attachments',[{'assetId':'a'*32,'role':'reference','slot':'A'}])]
+        for field,value in changed:
+            with self.subTest(field=field,value=value): self.assertNotEqual(self.digest(chips,'c'),self.digest({**chips,field:value},'c'))
+
+    def test_media_notes_binds_one_asset_only(self):
+        one=credit_wallet.request_digest('media-notes',{'assetId':'a'*32})
+        self.assertEqual(one,credit_wallet.request_digest('media-notes',{'assetId':'a'*32,'creditQuoteId':'q','expectedRevision':4}))
+        self.assertNotEqual(one,credit_wallet.request_digest('media-notes',{'assetId':'b'*32}))
+        self.assertNotEqual(one,credit_wallet.request_digest('quick-start',{'assetId':'a'*32}))
+        for bad in ({},{'assetId':'a'*32,'model':'x'},{'assetId':7}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError): credit_wallet.request_digest('media-notes',bad)
+        with self.assertRaises(ValueError): credit_wallet.request_digest('media-notes',{'assetId':'a'*32},'conversation')
+        with self.assertRaises(ValueError): credit_wallet.request_digest('media-notes',{'_credit_authority':{}})

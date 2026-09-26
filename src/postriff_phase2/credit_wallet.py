@@ -177,12 +177,19 @@ class CreditBook:
                 'released':credit['maximum']-used,'absorbed':max(0,millicredits(actual)-used) if outcome=='completed' else 0}
 
 
+NOTES_KEYS=frozenset({'assetId'})
+
+
 def request_digest(operation, payload, conversation_id=None):
-    if operation not in ('quick-start','turn') or not isinstance(payload,dict):
+    if operation not in ('quick-start','turn','media-notes') or not isinstance(payload,dict):
         raise ValueError('Unknown credit operation.')
     if any(not isinstance(key,str) or key.startswith('_') for key in payload):
         raise ValueError('Private execution fields are not accepted.')
     binding={key:value for key,value in payload.items() if key not in ('creditQuoteId','expectedRevision','idempotencyKey')}
+    if operation=='media-notes':
+        # A photo or video read is bound to its asset only (chat-context SPEC §5.5); nothing else can ride on the quote.
+        if set(binding)!=NOTES_KEYS or not isinstance(binding['assetId'],str) or conversation_id is not None:
+            raise ValueError('A media notes limit names one asset.')
     encoded=json.dumps(binding,ensure_ascii=False,allow_nan=False)
     if len(encoded.encode())>200000: raise ValueError('Draft request too large.')
     return digest({'operation':operation,'conversationId':conversation_id,'request':binding})

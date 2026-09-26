@@ -13,6 +13,7 @@ import type { Asset } from '@/lib/api/types';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { isPostableImage, isReady, kindOf, type AssetKind } from '@/lib/media/asset-kinds';
 
 /**
  * Choose a Library image by its thumbnail instead of its hash. The thumbnails use the Library's query key
@@ -63,6 +64,8 @@ export interface AssetPickerProps {
   'aria-label'?: string;
   /** Label for the empty choice. */
   noneLabel?: string;
+  /** Which kinds to offer (chat-context SPEC §7.6); scheduling uses the default, photos only. */
+  kinds?: readonly AssetKind[];
 }
 
 /** A tile's selected state sits in a predictable corner, outside the image's meaningful content (DNA §21.9). */
@@ -74,9 +77,12 @@ function SelectedMark() {
   );
 }
 
-export function AssetPicker({ assets, value, onValueChange, id, disabled, className, noneLabel = 'No image', ...props }: AssetPickerProps) {
+export function AssetPicker({ assets, value, onValueChange, id, disabled, className, noneLabel = 'No image', kinds = ['image'], ...props }: AssetPickerProps) {
   const [open, setOpen] = useState(false);
-  const live = assets.filter((asset) => !asset.deleted);
+  const live = assets.filter((asset) => {
+    const kind = kindOf(asset);
+    return kind !== null && kinds.includes(kind) && (kind === 'image' ? isPostableImage(asset) : isReady(asset));
+  });
   const selected = live.find((asset) => asset.id === value) ?? null;
 
   function choose(assetId: string) {

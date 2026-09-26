@@ -51,8 +51,15 @@ def _delete(service, workspace_id, principal):
         cur.execute("SELECT 1 FROM public.pr_subscriptions WHERE workspace_id=%s AND provider<>'fixture' AND provider_subscription_id IS NOT NULL AND status NOT IN ('cancelled','expired') AND NOT cancel_at_period_end", (workspace_id,))
         if cur.fetchone():
             raise AlphaError('Cancel the renewing subscription in Billing before deleting your account.', 409)
-        assets = [copy.deepcopy(a) for a in state.get('phase2', {}).get('assets', []) if a.get('objectName') and not a.get('deleted')]
+        # Live assets and ones whose Library deletion didn't finish (`deletionPending`); a video also owns a poster and frames.
+        assets = [copy.deepcopy(a) for a in state.get('phase2', {}).get('assets', [])
+                  if (a.get('objectName') or a.get('poster') or a.get('frames')) and (not a.get('deleted') or a.get('deletionPending'))]
         if assets and service.assets is None:
+            raise AlphaError('Private storage deletion is unavailable. No data was deleted.', 503)
+        # Video uploads (chat-context SPEC §7.3): every upload row's object, then the workspace's video prefix.
+        uploads = getattr(service, 'video_uploads', None)
+        cur.execute("SELECT 1 FROM public.pr_media_uploads WHERE workspace_id=%s LIMIT 1", (workspace_id,))
+        if cur.fetchone() and (uploads is None or uploads.storage is None):
             raise AlphaError('Private storage deletion is unavailable. No data was deleted.', 503)
         pending = state.get('accountDeletion')
         if not pending:
@@ -78,6 +85,13 @@ def _delete(service, workspace_id, principal):
             service.assets.remove(workspace_id, asset)
         except Exception as error:
             raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
+    if uploads is not None and uploads.storage is not None:
+        # Before the workspace row goes: the rows name the objects, and the prefix backstop catches anything they don't.
+        try:
+            with service.connection_factory() as db, db.cursor() as cur:
+                uploads.purge_workspace(cur, workspace_id)
+        except Exception as error:
+            raise AlphaError('Deletion is pending. The workspace is frozen; retry deletion to finish private storage cleanup.', 503, code='account_deletion_pending') from error
     # Disconnect grants where supported. Never retain plaintext tokens in receipts or logs.
     revocation_pending = []
     with service.connection_factory() as db, db.cursor() as cur:
@@ -90,6 +104,11 @@ def _delete(service, workspace_id, principal):
             revoked = False
         if not revoked and provider not in revocation_pending:
             revocation_pending.append(provider)
+    connector_service = getattr(service, 'productivity_connectors', None)
+    if connector_service is not None:
+        for provider in connector_service.revoke_workspace(workspace_id):
+            if provider not in revocation_pending:
+                revocation_pending.append(provider)
     with service.connection_factory() as db, db.cursor() as cur:
         cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
         current = cur.fetchone()

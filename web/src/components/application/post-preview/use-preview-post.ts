@@ -2,7 +2,7 @@
 
 import { useQueries } from '@tanstack/react-query';
 import { channelByPlatform } from '@/config/channels';
-import type { Manifest } from '@/lib/api/types';
+import type { Asset, Manifest, RunMedia } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { PreviewMedia, PreviewPost } from './types';
 import { useAccountPicture } from './use-account-picture';
@@ -51,4 +51,45 @@ export function usePreviewPost(manifest: Manifest, timeZone: string): PreviewPos
     publishAt: new Date(manifest.timing.utc),
     timeZone
   };
+}
+
+/**
+ * A run's post media as preview media (chat-context SPEC §5.10): photos load through the private media route; a video
+ * shows its poster (the same route serves a video's poster) and plays from a short-lived signed URL.
+ */
+export function useRunPreviewMedia(media: readonly RunMedia[] | null | undefined, assets?: readonly Asset[]): PreviewMedia[] {
+  const { api, workspaceId } = useWorkspaceApi();
+  // Without the Library at hand the run's own record is trusted for display; the server re-checks at scheduling.
+  const items = (media ?? []).filter((item) => item.role === 'post' && (!assets || assets.some((asset) => asset.id === item.assetId && !asset.deleted)));
+  const posters = useQueries({
+    queries: items.map((item) => ({
+      queryKey: ['media', workspaceId, item.assetId],
+      queryFn: async () => URL.createObjectURL(await api.media(workspaceId, item.assetId)),
+      staleTime: Infinity
+    }))
+  });
+  const players = useQueries({
+    queries: items.map((item) => ({
+      queryKey: ['media-url', workspaceId, item.assetId],
+      queryFn: async () => (await api.mediaUrl(workspaceId, item.assetId)).url,
+      enabled: item.kind === 'video',
+      staleTime: 5 * 60 * 1000
+    }))
+  });
+  return items.map((item, index) => {
+    const asset = assets?.find((candidate) => candidate.id === item.assetId);
+    const video = item.kind === 'video';
+    const url = video ? players[index]?.data : posters[index]?.data;
+    const failed = video ? players[index]?.isError : posters[index]?.isError;
+    return {
+      id: item.assetId,
+      kind: video ? 'video' : 'image',
+      url,
+      poster: video ? posters[index]?.data : undefined,
+      alt: `${video ? 'Video' : 'Photo'} ${item.slot}`,
+      width: asset?.width,
+      height: asset?.height,
+      status: failed ? 'error' : url ? 'ready' : 'loading'
+    };
+  });
 }

@@ -188,5 +188,88 @@ class IdeasRoutes(unittest.TestCase):
         self.assertEqual(status, 403)
 
 
+class FakeUploads:
+    """Records what the chat-media routes ask of `VideoUploads` (chat-context SPEC §5.7-5.8)."""
+    storage = object()
+
+    def __init__(self):
+        self.calls = []
+
+    def begin(self, w, t, body):
+        self.calls.append(("begin", w, body))
+        return {"upload": {"assetId": "a" * 32, "method": "PUT", "uploadUrl": "https://x.supabase.co/storage/v1/object/upload/sign/b/p?token=t", "headers": {}, "expiresAt": 1, "maxBytes": 100}}
+
+    def commit(self, w, t, upload_id, body):
+        self.calls.append(("commit", upload_id, body))
+        return {"revision": 4, "video": {"assetId": upload_id}}
+
+    def abort(self, w, t, upload_id):
+        self.calls.append(("abort", upload_id))
+        return {"assetId": upload_id, "status": "aborted"}
+
+    def url(self, w, t, asset_id):
+        self.calls.append(("url", asset_id))
+        return {"url": "https://x.supabase.co/signed", "expiresAt": 2, "mime": "video/mp4"}
+
+    def sweep(self, connect):
+        self.calls.append(("sweep",))
+        return {"removed": 0, "failed": 0}
+
+
+class ChatMediaRoutes(unittest.TestCase):
+    def setUp(self):
+        self.service = FakeService()
+        self.service.ideas = FakeIdeas()
+        self.service.video_uploads = FakeUploads()
+        self.service.read_media_notes = lambda w, t, body: {"assetId": body["assetId"], "status": "unavailable", "reason": "reader_unavailable", "message": "Photo reading isn't available here."}
+        self.app = HostedApplication(self.service, FakeWorker(), {"projectUrl": "x", "publishableKey": "public", "flow": "pkce"}, "c" * 24)
+        self.auth = {"Authorization": "Bearer " + "t" * 32, "X-PostRiff-Request": "founder-alpha"}
+
+    def test_video_and_notes_routes_reach_their_services(self):
+        asset = "a" * 32
+        status, _, ticket = invoke(self.app, "POST", "/api/workspaces/w/media/videos", {"mime": "video/mp4", "bytes": 10, "duration": 3, "width": 1, "height": 1}, self.auth)
+        self.assertEqual((status, ticket["upload"]["assetId"]), (201, asset))
+        status, _, committed = invoke(self.app, "POST", f"/api/workspaces/w/media/videos/{asset}/commit", {"frames": [], "locationCleared": True}, self.auth)
+        self.assertEqual((status, committed["video"]["assetId"]), (200, asset))
+        status, _, aborted = invoke(self.app, "DELETE", f"/api/workspaces/w/media/videos/{asset}", {}, self.auth)
+        self.assertEqual((status, aborted["status"]), (200, "aborted"))
+        status, _, signed = invoke(self.app, "GET", f"/api/workspaces/w/media/{asset}/url", headers=self.auth)
+        self.assertEqual((status, signed["mime"]), (200, "video/mp4"))
+        status, _, notes = invoke(self.app, "POST", "/api/workspaces/w/ideas/media-notes", {"assetId": asset, "idempotencyKey": "k"}, self.auth)
+        self.assertEqual((status, notes["reason"]), (200, "reader_unavailable"))
+        self.assertEqual([call[0] for call in self.service.video_uploads.calls], ["begin", "commit", "abort", "url"])
+        status, _, _ = invoke(self.app, "GET", "/api/workspaces/w/media/videos", headers=self.auth)
+        self.assertEqual(status, 404)
+        # Mutations still need the app's request header (CSRF), like every other workspace mutation.
+        status, _, _ = invoke(self.app, "POST", "/api/workspaces/w/media/videos", {"mime": "video/mp4"}, {"Authorization": "Bearer " + "t" * 32})
+        self.assertEqual(status, 403)
+
+    def test_picker_search_route(self):
+        seen = {}
+
+        class SiteAgent:
+            def search(self, w, t, q, categories, limit):
+                seen.update({"q": q, "categories": categories, "limit": limit})
+                return {"query": q, "categories": {"posts": [{"kind": "post", "id": "p1", "label": "Spring"}]}, "verified": True}
+
+        self.service.site_agent = SiteAgent()
+        status, _, body = invoke(self.app, "GET", "/api/workspaces/w/site-agent/search?q=%E6%98%A5&categories=posts,sources&limit=5", headers=self.auth)
+        self.assertEqual((status, body["categories"]["posts"][0]["id"]), (200, "p1"))
+        self.assertEqual(seen, {"q": "春", "categories": ["posts", "sources"], "limit": 5})
+        status, _, _ = invoke(self.app, "GET", "/api/workspaces/w/site-agent/search?q=x&limit=lots", headers=self.auth)
+        self.assertEqual(status, 400)
+
+    def test_environment_keeps_every_flag_off_by_default(self):
+        from postriff_phase2.hosted_app import chat_media_from_environment
+        off = chat_media_from_environment({})
+        self.assertEqual(off["flags"], {"attachments": False, "notes": False, "video": False})
+        self.assertFalse(off["reader"].available)
+        self.assertFalse(off["videoPolicy"].enabled)
+        self.assertEqual((off["videoPolicy"].max_bytes, off["videoPolicy"].max_seconds, off["videoPolicy"].bucket), (100_000_000, 180, "postriff-video"))
+        on = chat_media_from_environment({"RAFII_CHAT_ATTACHMENTS_ENABLED": "1", "RAFII_MEDIA_NOTES_ENABLED": "1", "RAFII_VIDEO_UPLOADS_ENABLED": "1", "POSTRIFF_VIDEO_MAX_BYTES": "999999999999"})
+        self.assertEqual(on["flags"], {"attachments": True, "notes": True, "video": True})
+        self.assertEqual(on["videoPolicy"].max_bytes, 100_000_000, "the Phase 1 cap can't be raised from the environment")
+
+
 if __name__ == "__main__":
     unittest.main()

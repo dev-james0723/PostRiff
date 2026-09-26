@@ -86,4 +86,23 @@ except AlphaError as error:
 assert len(service.get(wid, "one")["state"]["sources"]) == count
 checks.append("Context Pocket: a chosen usable source is read with the idea; an unknown id is refused (409) before any source is stored")
 
+# 5. Chat-context S25: chips on a quick start are forwarded to the turn only when present, and never route elsewhere.
+with psycopg.connect(DSN) as db:
+    def turn_bodies():
+        return [row[0] for row in db.execute("SELECT body FROM public.pr_messages m JOIN public.pr_conversations c ON c.id=m.conversation_id WHERE c.workspace_id=%s AND m.role='user' ORDER BY m.created_at, m.seq", (wid,)).fetchall()]
+    before = len(turn_bodies())
+    posted = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "Every Monday at 9am post a practice tip.", "ownContent": True, "confirmUse": True, "destinations": destinations,
+                                                                                "references": [{"kind": "source", "id": note["sourceId"], "label": "Rehearsal notes"}]})
+    assert posted["status"] == "completed" and posted.get("runId"), posted
+    usage = db.execute("SELECT usage FROM public.pr_agent_runs WHERE id::text=%s", (posted["runId"],)).fetchone()[0]
+    # The client's label never reaches the report; the server names the source by its own title.
+    assert "Rehearsal notes" not in json.dumps(usage["references"]), usage["references"]
+    assert [u["id"] for u in usage["references"]["used"]] == [note["sourceId"]], usage.get("references")
+    assert "This message has attachments" in " ".join(usage["references"]["reminders"]), usage["references"]["reminders"]
+    plain = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "One more thought about scales.", "ownContent": True, "confirmUse": True, "destinations": destinations})
+    plain_usage = db.execute("SELECT usage FROM public.pr_agent_runs WHERE id::text=%s", (plain["runId"],)).fetchone()[0]
+    # A quick start's turn has no typed text, so it writes no user message of its own.
+    assert "references" not in plain_usage and len(turn_bodies()) == before, plain_usage
+checks.append("chips on a quick start reach the turn (the report is on the run, labels dropped), automation wording still drafts with the reminder, and a chip-less quick start carries no chip keys")
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))

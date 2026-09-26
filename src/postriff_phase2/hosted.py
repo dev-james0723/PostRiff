@@ -22,7 +22,8 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state
-from . import campaigns, locales, memory, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
 MEMBER_COLUMNS = "m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections"
@@ -43,6 +44,10 @@ PROFILE_NAME_MAX = 80
 # server itself can resolve, so a stored zone never breaks scheduling later.
 LOCALE_TAG = re.compile(r"^[a-z]{2,3}(?:-[A-Za-z]{2,4})?(?:-[A-Z]{2})?$")
 ZONE_NAME = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+\-]+){0,2}$")
+# How Rafii talks to the person (migration 030, agent_runtime_v2/style.py). This code can run before 030 is applied:
+# reading then falls back to the default style, and saving asks the person to try again later.
+AGENT_STYLE_COLUMN = "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid='public.pr_profiles'::regclass AND attname='agent_style' AND attnum>0 AND NOT attisdropped)"
+AGENT_STYLE_NOT_READY = "Rafii's style can't be saved yet. Try again after the update finishes."
 
 
 def known_zone(name):
@@ -169,9 +174,20 @@ class PostgresWorkspaceRepository:
         audit_event = (lambda state: ("memory.egress_decided", "cloud", {"cloud": memory.egress(state).get("cloud") is True})) if action == memory.EGRESS_ACTION else None
         if action == research.CONSENT_ACTION:
             audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
+        if action == productivity_connectors.CONSENT_ACTION:
+            audit_event = lambda state: ("connector.egress_decided", "cloud", {"cloud": productivity_connectors.egress_decision(state).get("cloud") is True})
         if action == writer_defaults.ACTION:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
         after = None
+        if action == media_consent.ACTION:
+            # Chat-context SPEC §8.1: the owner's decision is audited with the processors it names, and turning it off
+            # deletes the kept notes in the same transaction.
+            audit_event = lambda state: ("media.egress_decided", "cloud", {"cloud": media_consent.decision(state).get("cloud") is True, "processors": media_consent.processor_ids(state)})
+
+            def after(cur, state, principal):
+                if media_consent.decision(state).get("cloud") is not True:
+                    from .media_notes import purge_workspace
+                    purge_workspace(cur, workspace_id)
         if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
@@ -195,6 +211,8 @@ class HostedPhase2Commands:
 
     def __init__(self, clock=time.time):
         self.clock = clock
+        # The processors a photo or frame would go to now ({id, label}); the hosted service sets it (never the client).
+        self.media_processors = lambda: ()
         self.engine = Phase2Store.__new__(Phase2Store)
         self.engine.clock = clock
         # Hosted entitlement checks use live SQL, including paid plans after the original trial ends.
@@ -217,9 +235,13 @@ class HostedPhase2Commands:
             return state
         if memory.apply_memory_action(state, action, payload, principal, self.clock()):
             return state
+        if media_consent.apply_action(state, action, payload, principal, self.clock(), processors=self.media_processors()):
+            return state
         if locales.apply_language_action(state, action, payload, principal, self.clock()):
             return state
         if research.apply_research_action(state, action, payload, principal, self.clock()):
+            return state
+        if productivity_connectors.apply_connector_egress(state, action, payload, principal, self.clock()):
             return state
         if writer_defaults.apply_action(state, action, payload, principal, self.clock(), self.writers):
             return state
@@ -326,7 +348,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -349,7 +371,13 @@ class HostedWorkspaceService:
         from .billing import Billing, Ledger
         from .privacy import DataRequests
         from .audience import AudienceService
-        self.oauth = OAuthService(self.repository, self.commands, vault or CredentialVault(None), providers or {}, public_base_url, clock)
+        credential_vault = vault or CredentialVault(None)
+        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock)
+        self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
+            self.repository, credential_vault, productivity_providers or {}, public_base_url,
+            flags=productivity_flags or {}, clock=clock,
+        )
+        self.ideas.productivity_connectors = self.productivity_connectors
         # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
         self.publishing_live = False
         self.ideas.service_ref = self
@@ -383,6 +411,42 @@ class HostedWorkspaceService:
         # The workspace default writer is validated against the managed writer mounted now (a live lookup: runtimes can
         # change after construction).
         self.commands.writers = lambda: rt if (rt := self.ideas.default_runtime()) and getattr(rt, 'cost_class', None) == 'paid' and getattr(rt, 'provider_class', None) == 'cloud' else None
+        self._wire_chat_media(chat_media or {})
+
+    def _wire_chat_media(self, config):
+        """Chat attachments (chat-context SPEC §14.2): photo/video notes, video uploads and the three flags. Everything is
+        off unless configured: `{"flags": {"attachments", "notes", "video"}, "reader": MediaReader, "videoPolicy": VideoPolicy}`."""
+        from . import media_notes as notes_module, video_uploads
+        flags = config.get("flags") or {}
+        policy = config.get("videoPolicy") or video_uploads.VideoPolicy()
+        self.video_uploads = video_uploads.VideoUploads(self, policy, clock=self.clock, audit=audit)
+        reader = config.get("reader")
+        self.media_notes = notes_module.MediaNotes(self.ideas, reader, fetch_images=self._note_images, clock=self.clock) if reader is not None else None
+        ideas = self.ideas
+        ideas.media_notes, ideas.video_policy, ideas.video_uploads = self.media_notes, policy, self.video_uploads
+        if self.media_notes is not None:
+            self.media_notes.credit_requests = ideas.credit_requests
+        ideas.attachments_enabled = bool(flags.get("attachments"))
+        ideas.notes_enabled = bool(flags.get("notes"))
+        ideas.video_enabled = bool(flags.get("video")) and policy.enabled
+        self.commands.media_processors = lambda: [processor for processor in ideas.media_consent_current().values() if processor]
+
+    def _note_images(self, workspace_id, token, asset):
+        """The bytes a note reads: the photo itself, or a video's stored frames (never the video)."""
+        if self.assets is None:
+            raise AlphaError("Media uploads aren't available yet.", 503, code="media_storage_not_configured")
+        storage = self.assets.storage
+        if (asset.get("mime") or "").startswith("video/"):
+            return [(storage.get(workspace_id, "media", frame["objectName"]), "image/jpeg") for frame in asset.get("frames") or [] if isinstance(frame, dict) and frame.get("objectName")]
+        return [(storage.get(workspace_id, "media", asset["objectName"]), asset.get("mime") or "image/jpeg")]
+
+    def read_media_notes(self, workspace_id, token, payload):
+        """`POST /ideas/media-notes` (SPEC §5.6); without a configured reader it answers `unavailable`, never 500."""
+        if self.media_notes is None or not self.ideas.notes_enabled:
+            asset_id = payload.get("assetId") if isinstance(payload, dict) else None
+            from .turn_references import REASONS
+            return {"assetId": asset_id, "status": "unavailable", "reason": "reader_unavailable", "message": REASONS["reader_unavailable"]}
+        return self.media_notes.read(workspace_id, token, payload)
 
     # --- usage, privacy, analytics (Milestone D) -------------------------------------
     def usage(self, workspace_id, token):
@@ -703,6 +767,9 @@ class HostedWorkspaceService:
                 fresh = self._touch_session(cur, principal, session_id, client_label)
                 cur.execute("SELECT coalesce(p.display_name,''),extract(epoch from e.enforced_at),coalesce(p.time_zone,''),coalesce(p.locale,''),coalesce(p.alert_new_device,false) FROM public.pr_profiles p LEFT JOIN public.pr_mfa_enforcement e ON e.user_id=p.user_id WHERE p.user_id=%s AND p.deleted_at IS NULL", (principal,))
                 row = cur.fetchone()
+                # A savepoint-guarded read of its own: before migration 030 the default style applies, and the session
+                # recorded above still commits.
+                style = agent_style.load(cur, principal)
         if fresh:
             self._alert_new_device(principal, session_id, client_label)
         display_name, enforced_at, time_zone, locale, alert_new_device = row if row else ("", None, "", "", False)
@@ -712,8 +779,8 @@ class HostedWorkspaceService:
             "sessionId": session_id,
             # `available` is false for identities without assurance levels (the dev harness).
             "mfa": {"available": aal is not None, "enforced": enforced_at is not None, "enforcedAt": float(enforced_at) if enforced_at else None, "aal": aal(token, principal) if aal else None},
-            # Empty strings mean "follow the device"; the browser fills them in.
-            "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device)},
+            # Empty strings mean "follow the device"; the browser fills them in. `agentStyle` is always complete.
+            "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device), "agentStyle": style},
         }
 
     def update_profile(self, token, changes):
@@ -740,17 +807,38 @@ class HostedWorkspaceService:
             if type(changes["alertNewDevice"]) is not bool:
                 raise AlphaError("The new-device alert is either on or off.")
             columns["alert_new_device"] = changes["alertNewDevice"]
-        if not columns:
+        # How Rafii talks: a partial change (or a preset) merged into the saved style below.
+        style_change = agent_style.validate_patch(changes["agentStyle"]) if "agentStyle" in changes else None
+        if not columns and style_change is None:
             raise AlphaError("Nothing to update.")
         principal = self.verify_session(token)
-        names = list(columns)  # fixed identifiers from the mapping above, never client strings
+        style = None
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute(f"INSERT INTO public.pr_profiles(user_id,{','.join(names)}) VALUES(%s,{','.join('%s' for _ in names)}) ON CONFLICT (user_id) DO UPDATE SET {','.join(f'{n}=excluded.{n}' for n in names)} WHERE public.pr_profiles.deleted_at IS NULL RETURNING display_name,coalesce(time_zone,''),coalesce(locale,''),coalesce(alert_new_device,false)", (principal, *columns.values()))
+                if style_change is not None:
+                    style = agent_style.merge(self._saved_agent_style(cur, principal), style_change)
+                    columns["agent_style"] = json.dumps(style)
+                names = list(columns)  # fixed identifiers from the mapping above, never client strings
+                values = ",".join("%s::jsonb" if name == "agent_style" else "%s" for name in names)
+                cur.execute(f"INSERT INTO public.pr_profiles(user_id,{','.join(names)}) VALUES(%s,{values}) ON CONFLICT (user_id) DO UPDATE SET {','.join(f'{n}=excluded.{n}' for n in names)} WHERE public.pr_profiles.deleted_at IS NULL RETURNING display_name,coalesce(time_zone,''),coalesce(locale,''),coalesce(alert_new_device,false)", (principal, *columns.values()))
                 row = cur.fetchone()
+                if row and style is None:
+                    style = agent_style.load(cur, principal)
         if not row:
             raise AlphaError("Workspace unavailable.", 403)
-        return {"displayName": row[0], "preferences": {"timeZone": row[1], "locale": row[2], "alertNewDevice": bool(row[3])}}
+        return {"displayName": row[0], "preferences": {"timeZone": row[1], "locale": row[2], "alertNewDevice": bool(row[3]), "agentStyle": style}}
+
+    @staticmethod
+    def _saved_agent_style(cur, principal):
+        """The saved style, locked until this change commits so two quick changes can't undo each other. Before
+        migration 030 there is nowhere to save it yet: 503, and nothing else in the request is written either."""
+        cur.execute(AGENT_STYLE_COLUMN)
+        ready = cur.fetchone()
+        if not (ready and ready[0]):
+            raise AlphaError(AGENT_STYLE_NOT_READY, 503)
+        cur.execute("SELECT agent_style FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL FOR UPDATE", (principal,))
+        row = cur.fetchone()
+        return row[0] if row else {}
 
     def my_channels(self, token):
         """Every connected channel in every workspace the user belongs to, with whether they may
@@ -1109,7 +1197,9 @@ class HostedWorkspaceService:
         prepared = self.repository.command(workspace_id, token, revision, lambda state, actor: self.commands.prepare_asset_delete(state, actor, asset_id))
         asset = find(prepared["state"]["phase2"]["assets"], asset_id)
         self.assets.remove(workspace_id, asset)
-        finished = self.repository.command(workspace_id, token, prepared["revision"], lambda state, actor: self.commands.finish_asset_delete(state, actor, asset_id))
+        from .media_notes import purge_asset
+        finished = self.repository.command(workspace_id, token, prepared["revision"], lambda state, actor: self.commands.finish_asset_delete(state, actor, asset_id),
+                                           after=lambda cur, _state, _principal: purge_asset(cur, workspace_id, asset_id))
         return self._present(finished)
 
     def media(self, workspace_id, token, asset_id):
@@ -1119,6 +1209,12 @@ class HostedWorkspaceService:
         asset = find(snapshot["state"]["phase2"]["assets"], asset_id)
         if asset.get("deleted") or not asset.get("objectName"):
             raise AlphaError("This private media object is unavailable.", 404)
+        if (asset.get("mime") or "").startswith("video/"):
+            # A video is served as its poster (chat-context SPEC §5.8), labelled as the JPEG it is; playback uses /url.
+            poster = asset.get("poster") if isinstance(asset.get("poster"), dict) else {}
+            if not poster.get("objectName"):
+                raise AlphaError("This private media object is unavailable.", 404)
+            return self.assets.storage.get(workspace_id, "media", poster["objectName"]), "image/jpeg"
         return self.assets.storage.get(workspace_id, "media", asset["objectName"]), asset.get("mime", "application/octet-stream")
 
     def export(self, workspace_id, token):

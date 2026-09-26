@@ -46,6 +46,8 @@ export interface ContentLibraryDialogProps {
   onApply: (value: ContentLibraryValue) => void;
   /** App platforms the composer can draft for (names such as `LinkedIn`, `Xiaohongshu`); narrows the app-fit filter. */
   platformsForFit?: string[];
+  /** A template chosen for this message only (＋ Template or `@template`, chat-context SPEC §11.2): shown as a banner with Remove. */
+  messageTemplate?: { name: string; onRemove: () => void } | null;
 }
 
 type View = 'gallery' | 'list' | 'pairings';
@@ -88,7 +90,7 @@ function snapshotDate(iso: string): string {
  * filter hides (§13.6). Pairings stage both choices and never touch channels. Planning-only formats are
  * labelled, never coerced. Escape closes the deepest layer first: tooltip, evidence, filters, dialog.
  */
-export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platformsForFit }: ContentLibraryDialogProps) {
+export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platformsForFit, messageTemplate }: ContentLibraryDialogProps) {
   const panelId = useId();
   const noteId = useId();
   const [tab, setTab] = useState<Dimension>('editorial');
@@ -224,6 +226,14 @@ export function ContentLibraryDialog({ open, onOpenChange, value, onApply, platf
     >
       <RafiiDialogContent size='lg' className='h-[calc(100dvh-1rem)] md:h-[min(58rem,94dvh)]'>
         <RafiiDialogHeader eyebrow='Content Library' title='Find your' accent='next idea.' closeLabel='Close content library'>
+          {messageTemplate && (
+            <div role='status' className='rafii-quiet flex items-center justify-between gap-3 rounded-[var(--rafii-radius-control)] px-3 py-2 text-sm'>
+              <span className='min-w-0 truncate'>Template for this message: {messageTemplate.name}</span>
+              <Button variant='quiet' size='sm' onClick={messageTemplate.onRemove}>
+                Remove
+              </Button>
+            </div>
+          )}
           <Workbar
             tabs={
               <SegmentedControl<Dimension>

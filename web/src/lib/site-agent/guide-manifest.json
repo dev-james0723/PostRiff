@@ -1,0 +1,15 @@
+{
+  "version": "2026-09-25.1",
+  "guides": [
+    {"id": "connect_account", "routeId": "channels", "title": "Connect a social account", "summary": "Opens Connect account, picks the platform and what Rafii may do, then stops at the platform's sign-in, which the person completes themselves.", "keywords": ["connect", "channel", "channels", "account", "instagram", "linkedin", "threads", "set up channels", "link my account", "連接", "連結", "頻道", "帳戶", "帳號", "綁定", "設定頻道"]},
+    {"id": "write_first_post", "routeId": "home", "title": "Write a post with Rafii", "summary": "Type an idea, choose accounts and language, then ask Rafii to draft one version per account.", "keywords": ["write", "post", "draft", "idea", "create post", "first post", "寫", "出post", "帖子", "草稿", "寫post"]},
+    {"id": "schedule_draft", "routeId": "queue", "title": "Schedule a draft", "summary": "Open the Drafts tab, choose Schedule on a draft, pick the account and time, and prepare it for review.", "keywords": ["schedule", "post later", "publish time", "queue", "drafts", "排程", "預約", "定時", "發佈時間"]},
+    {"id": "approve_post", "routeId": "queue", "title": "Review and approve a post", "summary": "Find a post waiting for approval in the Queue, check it and approve it.", "keywords": ["approve", "review", "approval", "waiting", "批准", "審批", "檢查"]},
+    {"id": "set_up_voice", "routeId": "brand", "title": "Set up your writing voice", "summary": "Add writing samples on Brand so Rafii learns how you write.", "keywords": ["voice", "writing voice", "brand", "tone", "samples", "sound like me", "語氣", "寫作風格", "品牌", "樣本"]},
+    {"id": "create_automation", "routeId": "automations", "title": "Create an automation", "summary": "Start a new automation: when Rafii drafts, which accounts, and who reviews.", "keywords": ["automation", "recurring", "every week", "automatic", "自動", "定期", "每星期", "自動化"]},
+    {"id": "upload_image", "routeId": "library", "title": "Upload an image to the Library", "summary": "Add an image to the Library so it can be attached to posts.", "keywords": ["upload", "image", "photo", "picture", "library", "media", "上載", "相", "相片", "圖片", "圖庫"]},
+    {"id": "turn_on_web_search", "routeId": "memory", "title": "Turn on web search", "summary": "On Memory, the workspace owner allows Rafii to search the web for current facts.", "keywords": ["web search", "search the web", "internet", "research", "google", "news", "weather", "上網", "網上搜尋", "搜尋", "研究", "天氣"]},
+    {"id": "choose_model", "routeId": "models", "title": "Choose Rafii's writer", "summary": "On Models & providers, pick which AI writer drafts your posts.", "keywords": ["model", "writer", "ai model", "claude", "gpt", "provider", "模型", "寫手"]},
+    {"id": "check_plan", "routeId": "billing", "title": "Check your plan and credits", "summary": "On Usage & plan, see what is left of each allowance, including media credits for images.", "keywords": ["credits", "media credits", "plan", "billing", "usage", "top up", "buy", "額度", "積分", "計劃", "增值", "用量"]}
+  ]
+}

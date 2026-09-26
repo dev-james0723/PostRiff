@@ -1,0 +1,20 @@
+{
+  "schema": "rafii.rework-cues.v1",
+  "note": "Default post role vectors for turn_references.REWORK_CUES and web chips.ts postRoleDefault (chat-context SPEC §6.2). With exactly one post, a cue makes it the rework; otherwise posts are for ideas.",
+  "vectors": [
+    {"text": "改寫呢篇", "rework": true},
+    {"text": "幫我缩短", "rework": true},
+    {"text": "改「春季演奏會」，用 Photo A 做封面", "rework": true},
+    {"text": "精簡一點", "rework": true},
+    {"text": "翻译成英文", "rework": true},
+    {"text": "Please rewrite this", "rework": true},
+    {"text": "TRANSLATE to Chinese", "rework": true},
+    {"text": "shorten it for X", "rework": true},
+    {"text": "polish the opening", "rework": true},
+    {"text": "Write something like this", "rework": false},
+    {"text": "editorial calendar", "rework": false},
+    {"text": "prefix the title", "rework": false},
+    {"text": "Write a teaser like “Spring concert”, using the programme notes", "rework": false},
+    {"text": "", "rework": false}
+  ]
+}

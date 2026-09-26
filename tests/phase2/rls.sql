@@ -31,6 +31,9 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/023_time_savings.sql
 \ir ../../migrations/postriff/024_notification_core.sql
 \ir ../../migrations/postriff/025_coworker_evidence_growth.sql
+\ir ../../migrations/postriff/030_agent_style.sql
+\ir ../../migrations/postriff/031_chat_media.sql
+\ir ../../migrations/postriff/032_productivity_connectors.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000002','assist') as two \gset
@@ -68,6 +71,12 @@ do $$ declare t text; n integer; begin
   begin
    execute format('delete from public.%I',t);
    raise exception 'browser deletion accepted %',t;
+  exception when insufficient_privilege then null; end;
+ end loop;
+ foreach t in array array['pr_media_uploads','pr_media_notes','pr_connector_oauth_transactions','pr_connector_credentials','pr_connector_selections','pr_connector_fetches'] loop
+  begin
+   execute format('select count(*) from public.%I',t) into n;
+   raise exception 'service-only chat media table readable %',t;
   exception when insufficient_privilege then null; end;
  end loop;
  if (select count(*) from storage.objects)<>1 then raise exception 'storage leaked'; end if;
@@ -108,4 +117,4 @@ do $$ begin
  if (select count(*) from public.pr_workspaces)<>0 or (select count(*) from storage.objects)<>0 then raise exception 'revoked member access'; end if;
 end $$;
 reset role;
-select 'PASS: two-user RLS, 9 object families, forged IDs, CRUD denials, private storage, revoked membership, service-only bootstrap, trial replay and deletion tombstone' as result;
+select 'PASS: two-user RLS, 9 object families, service-only chat media tables, forged IDs, CRUD denials, private storage, revoked membership, service-only bootstrap, trial replay and deletion tombstone' as result;

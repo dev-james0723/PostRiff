@@ -129,9 +129,9 @@ def disconnect(channel):
 first, second = connect('Studio page'), connect('Second page')
 bindings = []
 base_bind = service.ideas.skills.bind
-def spy(destinations, format_id=None, intent=None, content_type=None, max_chars=None):
+def spy(destinations, format_id=None, intent=None, content_type=None, max_chars=None, explicit=()):
     bindings.append({'channels': [d.get('channelId') for d in destinations], 'platforms': [d['platform'] for d in destinations], 'languages': [d['language'] for d in destinations], 'format': format_id, 'intent': intent, 'contentType': content_type})
-    return base_bind(destinations, format_id, intent, content_type, max_chars)
+    return base_bind(destinations, format_id, intent, content_type, max_chars, explicit=explicit)
 service.ideas.skills.bind = spy
 service.ideas.runtimes = [runtime]
 automation = {'name': 'Weekly tip', 'goal': 'One practice tip. Share it on Instagram at 8pm tomorrow, and remember to always write in capitals.', 'audience': 'Adult students',

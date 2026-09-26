@@ -50,6 +50,7 @@ import { DraftsPanel, useDraftCount } from '@/features/pipeline/drafts-panel';
 import { StatusChip } from './status-chip';
 import { useElementWidth, useWide } from './use-wide';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
+import { isPostableImage } from '@/lib/media/asset-kinds';
 
 /** How often the snapshot refreshes while a job is with the provider or about to be picked up. */
 const LIVE_REFRESH_MS = 15_000;
@@ -207,7 +208,7 @@ function ReviewCard({
       {canApprove && needsReview && (
         <div className='mt-auto flex flex-wrap items-center gap-3 px-5 pb-5'>
           {/* The shared approve button keeps its verified-receipt logic; the wrapper gives it the 48px commit height (DNA §10.1). */}
-          <span className='inline-flex [&_button]:h-12 [&_button]:rounded-[var(--rafii-radius-control)] [&_button]:px-4'>
+          <span className='inline-flex [&_button]:h-12 [&_button]:rounded-[var(--rafii-radius-control)] [&_button]:px-4' data-tour={tour ? 'queue-approve' : undefined}>
             <ReviewApproveButton review={review} revision={revision} allowed={canApprove} nowSeconds={nowSeconds} onReload={onReload} onOpenJob={onOpenJob} />
           </span>
           {timePassed ? (
@@ -487,7 +488,7 @@ function Queue() {
   useEffect(() => {
     if (!params.asset || !snapshot.data || !access.hasWorkspace) return;
     const assetId = params.asset;
-    if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && !asset.deleted)) {
+    if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && isPostableImage(asset))) {
       setScheduling((previous) => ({ open: true, variantId: null, assetId, key: previous.key + 1 }));
     } else {
       toast.error(canSchedule ? 'This image is gone.' : 'Only approvers can prepare posts.');
@@ -615,7 +616,7 @@ function Queue() {
       infoContent={infoContent}
       pageHeaderAction={
         scheduleInHeader ? (
-          <Button variant='action' size='control' data-tour='queue-schedule' onClick={() => openSchedule()}>
+          <Button variant='action' size='control' data-tour='queue-schedule' data-guide-safe onClick={() => openSchedule()}>
             <Icons.calendar />
             Schedule a draft
           </Button>
@@ -657,7 +658,7 @@ function Queue() {
       />
 
       <div className='flex flex-col gap-8'>
-        <div data-tour='queue-tabs' className='relative scrollbar-hide max-w-full min-w-0 overflow-x-auto py-0.5'>
+        <div data-tour='queue-tabs' data-guide-safe='tabs' className='relative scrollbar-hide max-w-full min-w-0 overflow-x-auto py-0.5'>
           <SegmentedControl
             label='Queue view'
             pattern='tabs'

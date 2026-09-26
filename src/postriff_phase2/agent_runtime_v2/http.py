@@ -35,6 +35,8 @@ def runtime_for(service):
                                                          "RAFII_IMAGE_AGENT_ENABLED": "1", "RAFII_SPECIALISTS_ENABLED": "1"})
             runtime = AgentRuntimeService(service, cfg, model_factory=harness.model_factory(), image_studio=creative.ImageStudio(cfg, transport=harness.provider_transport),
                                           vision=creative.VisionAnalyzer(cfg, transport=harness.provider_transport), live_transport=harness.live_transport)
+            from .live_tools import Weather
+            service.weather = Weather(transport=harness.weather_transport)   # weather_now reads it: nothing reaches Open-Meteo
         else:
             runtime = AgentRuntimeService(service)
         service._agent_runtime_v2 = runtime

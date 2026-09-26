@@ -173,3 +173,63 @@ service.ideas.quick_start(wid,'one',latest['revision'],{**current_request,'credi
 assert seen[-1]['idea']==current_request['text'], 'The managed writer must receive the current brief, not a stale stored idea.'
 assert seen[-1]['approvedFacts']==[], 'A current brief cannot grant access to stored unapproved sources.'
 print('PASS: current brief reaches cloud drafting without granting stored-source access')
+
+# Chat-context S25: chips in credit mode. A quote at exactly the estimate's ceiling covers the run (no 402), and the
+# estimate's request is the run's; a quote for different chips doesn't authorize the turn; a padded reference note keeps
+# the ceiling above what the run holds.
+with connection() as db:
+    service.ledger.credits.grant(db.cursor(),wid,ONE,'chips-funding',500000,None)
+draft_id='d'*32
+def shape(state):
+    state.setdefault('variants',[]).append({'id':draft_id,'platform':'LinkedIn','language':'en-US','text':'A small creative habit, drafted earlier.','sourceIds':[],'revision':1,'warnings':[],'unknowns':[],
+                                            'needsReview':True,'blockedByRetraction':False,'revisions':[{'revision':1,'text':'A small creative habit, drafted earlier.','origin':'fixture'}]})
+    state.setdefault('phase2',{}).setdefault('channels',[]).append({'id':'ch-li','platform':'LinkedIn','account':'Studio page','configured':True,'revoked':False,'expiresAt':clock[0]+86400*30,
+                                                                 'identityVerified':True,'capabilityVerified':True,'verifiedAt':clock[0]})
+    state['phase2'].setdefault('assets',[]).append({'id':'0f3c0e3a9d5b4c1e8f7a6b5c4d3e2f10','mime':'image/jpeg','hash':'h-photo','processing':'decoded','deleted':False})
+    state['mediaEgress']={'cloud':True,'decidedBy':ONE,'decidedAt':clock[0],'processors':[{'id':'openai:gpt-6','label':'OpenAI'}],'scope':['photo','video_frames','photo_edit']}
+with connection() as db:
+    state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]; shape(state)
+    db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),wid))
+cid=service.ideas.create_conversation(wid,'one','chips in credit mode')['conversationId']
+sent=[]
+original_start=runtime.start_turn
+def capturing(request, emit):
+    sent.append(json.loads(json.dumps(request,default=str)))
+    return original_start(request, emit)
+runtime.start_turn=capturing
+body={'text':'Ideas from this draft for our page.','model':'test/cloud','reasoning':'quick','research':False,'timeZone':'UTC',
+      'references':[{'kind':'post','id':draft_id,'role':'inspire','label':'A small creative habit'},{'kind':'account','id':'ch-li','label':'LinkedIn · Studio page'}]}
+latest=service.get(wid,'one')
+estimate=service.ideas.credit_requests.estimate(wid,'one',{'operation':'turn','conversationId':cid,'request':body})
+approval=service.ideas.credit_requests.issue(wid,'one',{'operation':'turn','conversationId':cid,'request':body,'expectedRevision':latest['revision'],'maxMilliCredits':estimate['ceilingMilliCredits']})
+with connection() as db:
+    state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]
+_,_,estimated=service.ideas.estimate_request(state,body,'turn',ONE)
+run=service.ideas.turn(wid,'one',cid,{**body,'creditQuoteId':approval['quoteId'],'expectedRevision':latest['revision']})
+assert run['status']=='completed',run
+# `deadline` is the run's own monotonic clock, never priced or digested (ideas.turn); everything else must match.
+assert json.loads(json.dumps(estimated,default=str))=={k:v for k,v in sent[-1].items() if k!='deadline'},'the estimate must price exactly the request the run sends'
+assert [d.get('channelId') for d in sent[-1]['destinations']]==['ch-li'],sent[-1]['destinations']
+assert sent[-1]['material'][0]['role']=='inspire',sent[-1].get('material')
+print('PASS: a quote at the ceiling covers a turn with a post and an account chip; the estimate request equals the run request')
+
+latest=service.get(wid,'one')
+approval=service.ideas.credit_requests.issue(wid,'one',{'operation':'turn','conversationId':cid,'request':body,'expectedRevision':latest['revision'],'maxMilliCredits':estimate['ceilingMilliCredits']*2})
+changed={**body,'references':body['references'][:1]}
+try:
+    service.ideas.turn(wid,'one',cid,{**changed,'creditQuoteId':approval['quoteId'],'expectedRevision':latest['revision']})
+except AlphaError as error:
+    assert error.status==409,error
+else:
+    raise AssertionError('a quote for other chips authorized this turn')
+print('PASS: a quote for different chips does not authorize the turn (409)')
+
+photo={**body,'references':body['references'][:1],'destinations':[{'platform':'LinkedIn','language':'en-US'}],'attachments':[{'assetId':'0f3c0e3a9d5b4c1e8f7a6b5c4d3e2f10','role':'reference'}]}
+latest=service.get(wid,'one')
+estimate=service.ideas.credit_requests.estimate(wid,'one',{'operation':'turn','conversationId':cid,'request':photo})
+approval=service.ideas.credit_requests.issue(wid,'one',{'operation':'turn','conversationId':cid,'request':photo,'expectedRevision':latest['revision'],'maxMilliCredits':estimate['ceilingMilliCredits']})
+run=service.ideas.turn(wid,'one',cid,{**photo,'creditQuoteId':approval['quoteId'],'expectedRevision':latest['revision']})
+assert run['status']=='completed',run
+assert not sent[-1].get('referenceNotes'),'no reader here: the run sends no note, the estimate priced a full one'
+print('PASS: a reference photo priced as a full note keeps the ceiling above the run (no 402)')
+

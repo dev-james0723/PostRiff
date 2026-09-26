@@ -24,6 +24,7 @@ import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { AssetUse, LibraryAsset } from './use-library';
+import { kindOf } from '@/lib/media/asset-kinds';
 
 /**
  * The server's own wording when the deployment has no private media storage (`hosted.py` upload_media,
@@ -78,6 +79,12 @@ export async function copyHash(hash: string) {
   } catch {
     toast.error('Couldn’t copy');
   }
+}
+
+/** 42.4 → "0:42"; 125 → "2:05". */
+export function formatDuration(seconds: number) {
+  const whole = Math.round(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
 
 export function dimensionsOf(asset: LibraryAsset) {
@@ -164,7 +171,15 @@ export function AssetCard({
             {/* Only the image tilts; the caption stays still. The card clips the corners. */}
             <TiltCard max={6} className='rounded-none'>
               {image.data ? (
-                <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
+                <div className='relative'>
+                  <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
+                  {kindOf(asset) === 'video' && (
+                    <span className='bg-background/80 text-foreground absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>
+                      <Icons.play aria-hidden className='size-3' />
+                      {typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : 'Video'}
+                    </span>
+                  )}
+                </div>
               ) : image.isError ? (
                 <div
                   className={cn(

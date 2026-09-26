@@ -1,8 +1,10 @@
 export interface PreviewMedia {
   id: string;
   kind: 'image' | 'video' | 'file';
-  /** Object URL once the private media has loaded. */
+  /** Object URL once the private media has loaded (for a video, a short-lived signed playback URL). */
   url?: string;
+  /** A video's poster frame, shown until it plays. */
+  poster?: string;
   alt: string;
   width?: number;
   height?: number;

@@ -3,9 +3,30 @@
  * The turn result is surface-neutral: the panel renders `blocks` (site-agent block types), Voice Mode speaks
  * `speakableSummary`, and everything that happened is structured (no client parses prose to learn it).
  */
-import type { SiteAgentBlock, SiteAgentPageContext, SiteAgentTurnResult } from '@/lib/site-agent/types';
+import type {
+  GuideCardBlock,
+  NavigationCardBlock,
+  PageOutlineItem,
+  SiteAgentBlock,
+  SiteAgentPageContext,
+  SiteAgentTurnResult,
+  VoiceCommandBlock,
+  VoiceCommandName
+} from '@/lib/site-agent/types';
+
+/**
+ * The answer blocks that ask the panel to act (docs/design/rafii-live-agent/CONTRACTS.md, Contract 2): an `auto`
+ * navigation or guide runs once in the panel for the latest answer; a `voice_command` runs in the voice call.
+ */
+export type { GuideCardBlock, NavigationCardBlock, PageOutlineItem, VoiceCommandBlock, VoiceCommandName };
 
 export type Modality = 'text' | 'voice' | 'image';
+
+/** A slash command sent with a typed turn (Contract 7): `name` from the command list, `args` plain text (≤1,000 characters). */
+export interface TurnCommand {
+  name: string;
+  args: string;
+}
 export type StepState = 'planned' | 'running' | 'done' | 'needs_user' | 'blocked' | 'failed' | 'canceled';
 
 export interface AgentStep {
@@ -88,7 +109,8 @@ export interface AgentTurnRequest {
   conversationId?: string | null;
   modality: Modality;
   pageContext?: SiteAgentPageContext;
-  attachments?: { assetId: string }[];
+  /** A role-less attachment means `reference` on the server (chat-context SPEC §9); the panel always sends it. */
+  attachments?: { assetId: string; role?: 'post' | 'reference' }[];
   timeZone?: string;
   locale?: string;
   model?: string;
@@ -96,6 +118,8 @@ export interface AgentTurnRequest {
   delegationId?: string;
   voiceSessionId?: string;
   supersede?: boolean;
+  /** Typed `/name args`: the text above is still the message; the server maps the name to one fixed instruction. */
+  command?: TurnCommand;
 }
 
 export interface AgentStatus {

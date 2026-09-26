@@ -5,6 +5,7 @@ import { Icons } from '@/components/icons';
 import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { isImeEvent } from '@/lib/ime';
 import { FLAG_FONT, glyphFontFamily, locales, type LocaleEntry } from '@/lib/locales';
 import { cn } from '@/lib/utils';
 
@@ -148,7 +149,7 @@ function LanguageList({
     if (event.key in moves && count) {
       event.preventDefault();
       setActive((current) => Math.min(count - 1, Math.max(0, current + moves[event.key])));
-    } else if (event.key === 'Enter' && rows[active]) {
+    } else if (event.key === 'Enter' && rows[active] && !isImeEvent(event)) {
       event.preventDefault();
       onPick(rows[active].entry.tag);
     } else if (event.key === 'Escape') {
@@ -233,7 +234,7 @@ function LanguageList({
                     onMouseMove={() => position !== active && setActive(position)}
                     tabIndex={-1}
                     onClick={() => onPick(entry.tag)}
-                    onKeyDown={(event) => event.key === 'Enter' && onPick(entry.tag)}
+                    onKeyDown={(event) => event.key === 'Enter' && !isImeEvent(event) && onPick(entry.tag)}
                     className={cn('flex cursor-pointer items-center gap-2.5 rounded-md px-2', phone ? 'min-h-12 py-2' : 'py-1.5', position === active && 'bg-accent')}
                   >
                     <span aria-hidden className='w-6 shrink-0 text-center text-lg leading-none' style={{ fontFamily: FLAG_FONT }}>

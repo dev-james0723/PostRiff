@@ -141,6 +141,33 @@ class SkillLibrary:
     def available(self):
         return self.root is not None and (self.root / CORE_SKILL / "SKILL.md").is_file()
 
+    def eligible(self):
+        """Public, active registry skills that this installed library can actually bind.
+
+        The capability registry remains the source of truth.  A registry entry can hash more
+        than one file/package, so the picker exposes the concrete skill package ids and never
+        invents a second catalogue.
+        """
+        if not self.available():
+            return []
+        from .skill_registry import default_registry
+        registry = default_registry()
+        found = []
+        for entry in registry.defaults():
+            for source in entry.get("hashSources") or []:
+                skill_id = source.get("id") if source.get("type") == "skill" else None
+                if not skill_id or any(item["id"] == skill_id for item in found):
+                    continue
+                loaded = self.load(skill_id)
+                if loaded is None:
+                    continue
+                found.append({"id": skill_id, "name": skill_id.removeprefix("postriff-").removeprefix("rafii-").replace("-", " ").title(),
+                              "description": entry.get("description") or "", "version": loaded["version"]})
+        return found
+
+    def eligible_ids(self):
+        return {item["id"] for item in self.eligible()}
+
     def _read(self, skill_id, relative):
         base = (self.root / skill_id).resolve()
         path = (base / relative).resolve()
@@ -194,7 +221,7 @@ class SkillLibrary:
                     references.append(reference)
         return tuple(references)
 
-    def bind(self, destinations, format_id=None, intent=None, content_type=None, max_chars=None):
+    def bind(self, destinations, format_id=None, intent=None, content_type=None, max_chars=None, explicit=()):
         """Skills for a turn: the voice contract, the editorial core with write-time discovery, a visual
         handoff for visual formats, the claim rules when the turn cites sources, and the adapter
         contract plus one adapter per destination platform. `max_chars` is the route's budget
@@ -220,6 +247,12 @@ class SkillLibrary:
         if any((self.root / skill_id / "SKILL.md").is_file() for skill_id in adapters):
             wanted.append((ADAPTER_CONTRACT, ()))
         wanted.extend((skill_id, ()) for skill_id in adapters)
+        # Explicit chips are turn-scoped.  They use the same reviewed registry and loader as
+        # automatic routing; an unavailable id is never accepted merely because the client sent it.
+        eligible = self.eligible_ids()
+        for skill_id in explicit or ():
+            if skill_id in eligible and all(skill_id != selected[0] for selected in wanted):
+                wanted.append((skill_id, ()))
         # Registry v2 (RAFII_SKILL_REGISTRY_V2_ENABLED): the Humanizer pack for each destination language and the
         # active coworker workflow's own skill ride after the core. They are the first to go on a tight budget.
         from .skill_compiler import writer_extras
