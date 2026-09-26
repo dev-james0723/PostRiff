@@ -49,6 +49,7 @@ import type {
   WorkspaceListItem
 } from './types';
 import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentMessageBody, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
+import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -143,6 +144,9 @@ export function createApi(getToken: TokenSource) {
     me: () => get<Me>('/api/me'),
     updateProfile: (changes: ProfileChanges) =>
       send<{ displayName: string; preferences: Me['preferences'] }>('PATCH', '/api/me', changes),
+    /** How Rafii talks: the server validates the patch, merges it into the saved style and returns every preference. */
+    updateAgentStyle: (patch: AgentStylePatch) =>
+      send<{ displayName: string; preferences: Me['preferences'] }>('PATCH', '/api/me', { agentStyle: patch } satisfies ProfileChanges),
     myChannels: () => get<{ channels: MyChannel[] }>('/api/me/channels'),
     securityEvents: () => get<{ events: SecurityEvent[] }>('/api/me/security-events'),
     /* `available` is false when the deployment cannot confirm the person's email (the dev harness without a lookup) */
