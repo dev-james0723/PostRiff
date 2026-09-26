@@ -688,9 +688,32 @@ class SideCallTest(unittest.TestCase):
         GatewayCall("key", model="anthropic/claude-haiku-4.5", transport=transport, drafting=True)("system", "user", {"type": "object"})
         self.assertEqual((bodies[1]["max_tokens"], bodies[1]["temperature"]), (1_200, 0.2), "a model that does not think is unchanged")
 
-    def test_a_weekly_writer_run_has_room_for_two_thinking_attempts(self):
+    def test_the_worker_cron_can_start_a_weekly_writer_run(self):
+        # Review fix: a 195 s bound never fit the cron's weekly step (runtime.cron: 120 s, weekly ends 10 s early), so
+        # scheduled weeks stopped drafting. Starting needs WRITER_RUN_SECONDS; the run is bounded by the deadline.
+        import inspect
+        from postriff_phase2.coworker import runtime, service
+        cron_budget = inspect.signature(runtime.cron).parameters["max_seconds"].default - 10
+        self.assertLess(service.WRITER_RUN_SECONDS, cron_budget)
+
+    def test_a_weekly_writer_run_ends_inside_the_callers_deadline(self):
         from postriff_phase2.coworker import service
-        self.assertEqual(service.WRITER_RUN_SECONDS, 195)
+        seen = {}
+
+        class Ideas:
+            def turn(self, *args, **kwargs):
+                seen.update(kwargs)
+                raise AlphaError("stop", 503)
+        worker = service.CoworkerService.__new__(service.CoworkerService)
+        slot = {"id": "s1", "platform": "LinkedIn", "language": "en", "channelId": "c1", "sourceIds": []}
+        week = {"conversationId": "conv"}
+        deadline = time.monotonic() + 100
+        with mock.patch.object(service.weekly_operator, "slot_brief", return_value="brief"):
+            try:
+                worker._draft_slot(Ideas(), "w", "t", None, {"timeZone": "UTC"}, week, slot, "k", {}, deadline)
+            except Exception:  # noqa: BLE001 - only the turn's arguments matter here
+                pass
+        self.assertEqual(seen["_started"] + model_runtime.REQUEST_SECONDS, deadline - service.WRITER_SAVE_SECONDS)
 
 
 if __name__ == "__main__":
