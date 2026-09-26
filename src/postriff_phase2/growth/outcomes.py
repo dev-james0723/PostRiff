@@ -37,9 +37,14 @@ from .post_doctor import levels_from_judgment
 COLUMNS = ("id", "platform", "lang", "author", "created_at", "text", "likes", "reposts", "replies", "quotes",
            "has_media", "collected_at", "source_uri")
 MIN_POSTS_PER_AUTHOR = 20
+LINK_FEED_SHARE = 0.8          # creators whose posts are this often "mostly a link" are feeds, not writers
+LINK_POST_OWN_CHARS = 60
+_URL = re.compile(r"(https?://\S+|\b[\w-]+(\.[\w-]+)+/\S*)")
+_TAG = re.compile(r"[#@]\S+")
 MIN_AUTHORS = 15
 PREREGISTERED = {"spearman_min": 0.10, "ci_lower_above": 0.0, "auc_min": 0.56, "confidence": 0.95, "bootstrap": 2000,
-                 "min_authors": MIN_AUTHORS, "min_posts_per_author": MIN_POSTS_PER_AUTHOR}
+                 "min_authors": MIN_AUTHORS, "min_posts_per_author": MIN_POSTS_PER_AUTHOR,
+                 "exclude_link_feeds": {"share": 0.8, "own_chars_below": 60}}
 _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 
@@ -132,12 +137,25 @@ def sample(posts, *, max_creators=None, max_posts=None, seed=20260926):
     return chosen
 
 
+def mostly_link(text):
+    """A post that shares a link with little of the creator's own writing around it."""
+    if not _URL.search(text or ""):
+        return False
+    own = _TAG.sub("", _URL.sub("", text)).strip()
+    return len(own) < LINK_POST_OWN_CHARS
+
+
+def link_feed(group):
+    return bool(group) and sum(mostly_link(p.text) for p in group) >= LINK_FEED_SHARE * len(group)
+
+
 def eligible(posts, min_posts=MIN_POSTS_PER_AUTHOR):
-    """Posts whose creator has at least `min_posts` posts in the same language group."""
+    """Posts whose creator has at least `min_posts` posts in the same language group on the same platform and is not
+    a link feed (automated news or aggregator accounts are not the writers Post Doctor serves)."""
     by_key = {}
     for p in posts:
         by_key.setdefault((p.platform, lang_group(p.lang), p.author), []).append(p)
-    return [p for group in by_key.values() if len(group) >= min_posts for p in group]
+    return [p for group in by_key.values() if len(group) >= min_posts and not link_feed(group) for p in group]
 
 
 def relative_outcomes(posts):
@@ -290,15 +308,18 @@ def _round(value):
 
 
 def summarize(posts):
-    cells = {}
+    cells, by_creator = {}, {}
     for p in posts:
-        g = cells.setdefault(f"{p.platform}/{lang_group(p.lang)}", {})
+        cell = f"{p.platform}/{lang_group(p.lang)}"
+        g = cells.setdefault(cell, {})
         g[p.author] = g.get(p.author, 0) + 1
+        by_creator.setdefault((cell, p.author), []).append(p)
     out = {}
     for cell, authors in sorted(cells.items()):
-        ok = {a: n for a, n in authors.items() if n >= MIN_POSTS_PER_AUTHOR}
+        feeds = {a for a in authors if link_feed(by_creator[(cell, a)])}
+        ok = {a: n for a, n in authors.items() if n >= MIN_POSTS_PER_AUTHOR and a not in feeds}
         out[cell] = {"posts": sum(authors.values()), "creators": len(authors), "eligible_creators": len(ok),
-                     "eligible_posts": sum(ok.values()), "meets_minimum": len(ok) >= MIN_AUTHORS}
+                     "eligible_posts": sum(ok.values()), "link_feeds_excluded": len(feeds), "meets_minimum": len(ok) >= MIN_AUTHORS}
     return out
 
 
@@ -312,7 +333,8 @@ def main(argv=None, out=sys.stdout):
         print(f"line {line}: {message}", file=out)
     for cell, info in summarize(posts).items():
         print(f"{cell}: {info['eligible_creators']}/{info['creators']} creators and {info['eligible_posts']}/{info['posts']} posts "
-              f"eligible; {'enough' if info['meets_minimum'] else 'needs at least ' + str(MIN_AUTHORS) + ' eligible creators'}", file=out)
+              f"eligible ({info['link_feeds_excluded']} link feeds excluded); "
+              f"{'enough' if info['meets_minimum'] else 'needs at least ' + str(MIN_AUTHORS) + ' eligible creators'}", file=out)
     print(f"{len(posts)} valid rows, {len(problems)} problems", file=out)
     return 1 if problems else 0
 

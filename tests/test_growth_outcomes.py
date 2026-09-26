@@ -110,6 +110,23 @@ class Parse(unittest.TestCase):
         self.assertIn("needs at least 15", out.getvalue())
 
 
+class LinkFeeds(unittest.TestCase):
+    def test_link_feeds_are_excluded_writers_with_links_are_not(self):
+        self.assertTrue(O.mostly_link("New study out https://example.com/a/b #science"))
+        self.assertTrue(O.mostly_link("Breaking: markets fall example.com/news/123"))
+        self.assertFalse(O.mostly_link("I spent ten years teaching scales before I understood why students hate them. "
+                                       "Here is what changed my mind: https://example.com/essay"))
+        self.assertFalse(O.mostly_link("No link here at all, just a short thought."))
+        rows, _ = dataset(authors=2, per=20)
+        for r in rows[:20]:
+            r["text"] = f"Headline number {r['id']} https://news.example/{r['id']}"
+        path = write(rows)
+        self.addCleanup(os.unlink, path)
+        posts, _ = O.parse(path)
+        self.assertEqual({p.author for p in O.eligible(posts)}, {"en-creator1"})
+        self.assertEqual(O.summarize(posts)["other/en"]["link_feeds_excluded"], 1)
+
+
 class Evaluate(unittest.TestCase):
     def test_a_score_that_tracks_quality_passes(self):
         rows, quality = dataset()
