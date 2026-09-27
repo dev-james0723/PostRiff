@@ -28,6 +28,7 @@ TASKS = {
     # task: (kind, primary model, fallback chain, time budget seconds, max output tokens for chat)
     "postdoctor.judge": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 3.0, 1500),
     "genome.label": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 8.0, 1500),
+    "postdoctor.compare": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 4.0, 800),
     "postdoctor.grounding": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 3.0, 800),
     "postdoctor.rewrite": ("chat", "anthropic/claude-sonnet-5", ("anthropic/claude-haiku-4.5",), 45.0, 4000),
     "golden.compare": ("evaluate", "typesafe-ai/jev", (), 10.0, 1500),
@@ -191,6 +192,8 @@ class AIModelRouter:
                     last_error = error
                     self._record(ledger, task=task, model=primary, route="primary", status=error.code,
                                  latency_ms=self._ms(started), **ids)
+                    if getattr(self, "reconcile_unknown", False) and not isinstance(error, J.JevRateLimited):
+                        raise RouterError("The dispatched evaluation must be reconciled before retry", "dispatch_unknown", ledger) from error
                     if attempt == 0 and isinstance(error, RETRYABLE):
                         pause = min(MAX_BACKOFF, error.retry_after if error.retry_after is not None else 0.5)
                         if deadline - self.clock() >= pause + MIN_ATTEMPT_S:
@@ -238,6 +241,8 @@ class AIModelRouter:
             except AlphaError as error:
                 code = getattr(error, 'code', None) or REJECTED_CODES.get(error.status) or {429:'rate_limited',504:'timeout'}.get(error.status, 'upstream')
                 self._record(ledger, status=code, latency_ms=self._ms(started), **ids)
+                if getattr(self, 'reconcile_unknown', False) and code not in FINAL_CODES and error.status != 429:
+                    raise RouterError('The dispatched writer must be reconciled before retry', 'dispatch_unknown', ledger) from error
                 if code in FINAL_CODES:
                     raise RouterError('The writer rejected this request', code, ledger) from error
                 continue
@@ -277,6 +282,8 @@ class AIModelRouter:
             status = {429: "rate_limited", 504: "timeout"}.get(getattr(error, "status", None), "upstream")
             self._record(ledger, task=task, model=model, route="fallback", status=status,
                          latency_ms=self._ms(started), **ids)
+            if getattr(self, "reconcile_unknown", False) and error.status != 429:
+                raise RouterError("The dispatched fallback must be reconciled before retry", "dispatch_unknown", ledger) from error
             return None
         latency = self._ms(started)
         usage = usage if isinstance(usage, dict) else {}

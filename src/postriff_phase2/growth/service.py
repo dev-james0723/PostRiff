@@ -20,7 +20,7 @@ from postriff_alpha.domain import AlphaError
 from .. import memory, voice_sources
 from ..contracts import digest
 from ..permissions import require
-from . import genome, performance, questions, rewrite
+from . import advice, advice_context, genome, performance, questions, rewrite
 from .judgments import JudgmentService, subject_hash
 from .jev import JevService
 from .post_doctor import PostDoctorService, level_names
@@ -74,13 +74,14 @@ def serialize(result, lang):
     dimensions = [{'id':d.id,'label':qs.dimensions[d.id]['label'].get('zh-HK' if lang.startswith('zh') else 'en',d.id),
                    'level':d.level,'levelName':names[d.level] if d.level is not None else 'Not enough evidence',
                    'fixes':list(d.fixes),'calibrated':d.calibrated,'missingContext':list(d.missing_context)} for d in result.dimensions]
-    return {**({'goal':result.context['goal'],'contextDigest':result.context['digest'],
+    actions=advice.prioritize(dimensions,goal=result.context['goal'],missing_context={d.id:d.missing_context for d in result.dimensions if d.missing_context},lang=lang) if result.context else None
+    return {**({'_adviceContext':result.context,'priorityActions':actions,'goal':result.context['goal'],'contextDigest':result.context['digest'],
                  'missingContext':{d.id:list(d.missing_context) for d in result.dimensions if d.missing_context}} if result.context else {}),
             'questionSet':result.question_set,'dimensions':dimensions,'risks':list(result.risks),
             'computed':result.computed,'confidence':result.confidence,'confidenceReasons':list(result.confidence_reasons),
             'helping':[d['label'] for d in dimensions if d['level'] is not None and d['level']>=2],
             'hurting':[d['label'] for d in dimensions if d['level'] is not None and d['level']<=1],
-            'change':[hint for d in dimensions for hint in d['fixes']][:4],
+            'change':[a['change'] for a in actions] if actions is not None else [hint for d in dimensions for hint in d['fixes']][:4],
             'status':'complete' if result.judgment.status=='ok' else 'partial',
             '_judgment':{'model':result.judgment.model,'route':result.judgment.route,'rubricDigest':result.judgment.digest,
                          'calibrated':result.judgment.calibrated,
@@ -145,7 +146,7 @@ class GrowthService:
 
     def _router(self,sink,state=None,writer=None,guard=None):
         if self.router_factory:
-            return self._guard_router(self.router_factory(sink,writer),guard)
+            return self._guard_router(self.router_factory(sink,writer),guard, self.env.get("POSTRIFF_POST_DOCTOR_V2")=="1")
         tasks = copy.deepcopy(TASKS)
         grant = (state or {}).get('growthConsent',{}).get('routes',[])
         if state is None:
@@ -160,10 +161,11 @@ class GrowthService:
         jev = JevService(api_key) if api_key and self.env.get('POSTRIFF_JEV')=='1' and ROUTES[0] in grant else None
         runtime = (self.hosted.ideas._select_runtime(writer) if writer else
                    next((r for r in self.hosted.ideas.runtimes if getattr(r,'provider_class',None)=='cloud' and getattr(r,'cost_class',None)=='paid'),None))
-        return self._guard_router(AIModelRouter(jev=jev,chat=chat_from_runtime(runtime) if runtime else None,usage=sink,tasks=tasks),guard)
+        return self._guard_router(AIModelRouter(jev=jev,chat=chat_from_runtime(runtime) if runtime else None,usage=sink,tasks=tasks),guard, self.env.get("POSTRIFF_POST_DOCTOR_V2")=="1")
 
     @staticmethod
-    def _guard_router(router,guard):
+    def _guard_router(router,guard,reconcile_unknown=False):
+        router.reconcile_unknown=reconcile_unknown
         if guard is None:return router
         if router.jev:
             evaluate=router.jev.evaluate
@@ -416,6 +418,20 @@ class GrowthService:
                 raise AlphaError('New claims could not be grounded in your facts.',409,code='rewrite_ungrounded')
             after=self._check(router,workspace_id,run['state'],{**p['draft'],'text':result['rewrite']},p['posts'])
             result.update(before=p['check'],after=after,original=p['draft']['text'],facts=p['facts'],checkId=body['checkId'],draft=p['draft'],grounding='passed')
+            if p['check']['questionSet']=='postdoctor.v2':
+                ctx=after.get('_adviceContext',{})
+                comparison_state=advice.comparison_state(p['draft']['text'],result['rewrite'],context=ctx,facts=p['facts'],order='original_first')
+                if comparison_state['identical']:
+                    comparison={'recommended':'equivalent','status':'review','reasons':['no_material_difference'],'orderChecked':False}
+                else:
+                    qs=questions.get('postdoctor_compare',1)
+                    judge=JudgmentService(router.evaluator('postdoctor.compare'))
+                    first=judge.judge(qs,comparison_state,scope='personal:'+workspace_id,subject=subject_hash('comparison',run['id'],'original_first'),model='typesafe-ai/jev',workspace_id=workspace_id)
+                    reverse=judge.judge(qs,advice.comparison_state(p['draft']['text'],result['rewrite'],context=ctx,facts=p['facts'],order='candidate_first'),scope='personal:'+workspace_id,subject=subject_hash('comparison',run['id'],'candidate_first'),model='typesafe-ai/jev',workspace_id=workspace_id)
+                    comparison=advice.decide(first,grounded=True,voice_preserved=(grounding.probability('voice_preserved') or 0)>=.9,swapped=reverse)
+                    comparison.update(model=first.model,swappedModel=reverse.model,questionSet=qs.key,rubricDigest=qs.digest)
+                result['comparison']={**comparison,'originalDigest':digest(p['draft']['text']),'candidateDigest':digest(result['rewrite']),'contextDigest':after.get('contextDigest'),'goal':after.get('goal','general')}
+
         except Exception as caught:error=caught
         return self._finish(workspace_id,token,run,sink,result,error)
 
