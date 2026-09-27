@@ -163,7 +163,7 @@ class PhoneService:
                 return store.public_call(store.call(cur, prior[0]))
             identity, prefs = store.number(cur, principal), store.prefs(cur, principal, workspace_id)
             start = planner.day_start(now, prefs['timeZone'])
-            cur.execute('SELECT count(*),coalesce(sum(reserved_usd_micro),0),count(*) FILTER(WHERE kind<>\'explicit\') '
+            cur.execute(f'SELECT count(*),coalesce(sum({billing.DAILY_COST_SQL}),0),count(*) FILTER(WHERE kind<>\'explicit\') '
                         'FROM public.pr_phone_calls WHERE user_id=%s AND requested_at>=to_timestamp(%s)', (principal, start))
             count, reserved, automatic = cur.fetchone()
             reason = reason_key or 'explicit'
@@ -178,7 +178,7 @@ class PhoneService:
                 daily_calls=int(count if kind == 'explicit' else automatic), recent_equivalent=any(r[1] == reason and r[2] for r in recent),
                 active=any(r[0] not in contracts.TERMINAL for r in recent), reserved_cost=int(reserved), estimate=estimate, daily_budget=self.config.daily_budget)
             if blocker:
-                raise AlphaError('Rafii can’t place this call right now. Check your phone settings.', 409, code=blocker)
+                raise AlphaError(contracts.failure_message(blocker), 409, code=blocker)
             number = self.vault.decrypt(identity['ciphertext'], identity['key_id'])
             if self.provider.real:
                 allowed = [c for c in self.config.values.get('RAFII_PHONE_ALLOWED_COUNTRY_CODES', '').split(',') if re.fullmatch(r'\+[1-9][0-9]{0,2}', c)]
@@ -313,7 +313,7 @@ class PhoneService:
             if not isinstance(deadline,(int,float)) or not self.clock() <= deadline <= self.clock()+86400:
                 return None
         prefs,identity = store.prefs(cur,principal,workspace_id),store.number(cur,principal)
-        cur.execute('SELECT count(*) FILTER(WHERE kind<>\'explicit\'),coalesce(sum(reserved_usd_micro),0) FROM public.pr_phone_calls '
+        cur.execute(f'SELECT count(*) FILTER(WHERE kind<>\'explicit\'),coalesce(sum({billing.DAILY_COST_SQL}),0) FROM public.pr_phone_calls '
                     'WHERE user_id=%s AND requested_at>=to_timestamp(%s)',(principal,planner.day_start(self.clock(),prefs['timeZone'])))
         count,reserved = cur.fetchone()
         cur.execute('SELECT state,reason_key FROM public.pr_phone_calls WHERE user_id=%s AND (NOT(state=ANY(%s)) OR requested_at>now()-interval \'5 minutes\')',

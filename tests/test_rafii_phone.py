@@ -2,6 +2,10 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import io
+import json
+from unittest.mock import patch
+from urllib.error import HTTPError
 import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -129,6 +133,31 @@ class PhoneTransportTest(unittest.TestCase):
             self.assertEqual(p.create_outbound_call(number='+14155550111',call_id='one',max_seconds=600).state,'ambiguous')
             p.reconcile(number='+14155550111',call_id='one',call_ref=None,requested_at=0)
             self.assertEqual(calls,['POST','GET'])
+
+    def test_twilio_rejection_has_safe_reason_and_no_payload(self):
+        for status, code, reason in [(401,20003,'provider_auth'), (400,21219,'provider_trial_recipient'),
+                                    (400,21215,'provider_country'), (403,21216,'provider_destination'),
+                                    (400,21212,'provider_caller'), (429,20429,'provider_rate_limit'),
+                                    (400,99999,'provider_rejected')]:
+            calls=[]
+            def transport(method,url,fields=None):
+                calls.append(method)
+                return status,{'code':code,'message':'Private recipient +14155550111 and credentials'}
+            receipt=self.twilio(transport).create_outbound_call(number='+14155550111',call_id='one',max_seconds=600)
+            self.assertEqual(receipt.state,'failed')
+            self.assertEqual(receipt.failure,reason)
+            self.assertIsNone(receipt.call_ref)
+            self.assertEqual(calls,['POST'])
+            self.assertNotIn('+14155550111',str(receipt))
+
+    def test_twilio_http_error_retains_only_numeric_code(self):
+        for body, expected in [(json.dumps({'code':21219,'message':'Private +14155550111','more_info':'https://private.test'}).encode(), {'code':21219}),
+                               (b'invalid body +14155550111', {}), (b'{"code":"21219"}', {})]:
+            error=HTTPError('https://api.twilio.com',400,'bad request',{},io.BytesIO(body))
+            with patch('postriff_phase2.phone.providers.twilio.build_opener') as opener:
+                opener.return_value.open.side_effect=error
+                p=self.twilio()
+                self.assertEqual(p._http('POST',p._calls(),[]),(400,expected))
 
     def test_twilio_status_and_voicemail_xml(self):
         p=self.twilio()

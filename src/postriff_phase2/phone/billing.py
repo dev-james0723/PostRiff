@@ -7,6 +7,14 @@ from ..credit_meter import millicredits
 from . import store
 
 
+# Keep the original ceiling for audit. Until BOTH components have confirmed usage,
+# retain the whole hold; an ambiguous call must never free capacity for a redial.
+# This also applies to existing rows, so no migration or ledger rewrite is needed.
+DAILY_COST_SQL = """CASE WHEN live_cost_usd_micro IS NOT NULL AND telephony_cost_usd_micro IS NOT NULL
+    THEN live_cost_usd_micro + telephony_cost_usd_micro
+    ELSE greatest(reserved_usd_micro, coalesce(live_cost_usd_micro,0) + coalesce(telephony_cost_usd_micro,0)) END"""
+
+
 def estimates(phone):
     return (
         phone.agent().cfg.live_usd_micro_per_minute * math.ceil((phone.config.cap_seconds + 15) / 60),
