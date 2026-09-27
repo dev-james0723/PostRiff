@@ -70,10 +70,12 @@ assert sources_with(pasted)[0].get("origin") == {"kind": "quick_start"}
 assert not any(f["approved"] for f in sources_with(pasted)[0]["facts"])
 checks.append("pasted third-party text drafted again reuses its run-only source, uses the first line as its title and keeps rewrite_approval with nothing auto-approved")
 
-# 3. Different text still creates its own source.
-other = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "A different thought entirely.", "ownContent": True, "confirmUse": True, "destinations": destinations})
+# 3. Different/long text still creates its own source; deriving its display title never rejects the prompt.
+long_idea = "One thing piano practice taught me about creating: consistency matters more than waiting for inspiration."
+other = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": long_idea, "ownContent": True, "confirmUse": True, "destinations": destinations})
 assert other["sourceId"] not in (first["sourceId"], p1["sourceId"])
-checks.append("a different idea still becomes its own source")
+assert sources_with(long_idea)[0]["title"] == long_idea[:80]
+checks.append("a different idea still becomes its own source and a long first line gets a bounded title without rejecting the request")
 
 # 4. Context Pocket: an explicitly saved reusable source is read with the idea; an unknown id is refused before anything is stored.
 notes = "Rehearsal notes.\nThe second movement needs a slower start.\nBreathe before the coda."
