@@ -24,6 +24,8 @@ Structured receipt: [verification.json](evidence/phone-live-diagnostics-2026-09-
 
 ## Release and retry boundary
 
-The earlier deployment approval was executed for PR #41. This is a new production source change and awaits scoped deployment approval under the project's AGENTS.md. After approval, deploy only the reviewed candidate, verify its source and production alias, then use the already-approved retry to phone ending 0208 for roughly one minute, within the existing ten-minute maximum and configured US$3 daily ceiling. Keep scheduled and proactive calls off. A successful provider call record alone is insufficient: confirm that the user hears Rafii and receives a reply to speech.
+The earlier deployment approval was executed for PR #41. The user subsequently approved deploying diagnostic PR #43 after its checks pass. Its first local-gates CI run identified the unusable loopback SDK test key as a Secret Keyword. Add exactly that test-file/value-hash entry to the project's existing fixture allowlist; the scanner, application code, test inputs and assertions remain unchanged. Browser scenes passed. Production release still awaits successful final CI.
+
+Deploy only the reviewed diagnostic scope, verify its source and production alias, then use the already-approved retry to phone ending 0208 for roughly one minute, within the existing ten-minute maximum and configured US$3 daily ceiling. Keep scheduled and proactive calls off. A successful provider call record alone is insufficient: confirm that the user hears Rafii and receives a reply to speech.
 
 If the retry fails, reconcile it and inspect the bounded diagnostics before any further paid call. Do not consume another retry, erase unknown holds, expand spending or alter credentials without the relevant authority.

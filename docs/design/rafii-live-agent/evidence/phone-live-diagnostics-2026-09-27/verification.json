@@ -5,7 +5,8 @@
     "src/postriff_phase2/phone/asgi.py": "021467b0377241d734181eea9b80d3938dc1804c9761d65a3efeb75bfb1672d0",
     "src/postriff_phase2/phone/session.py": "c5068aa57a3e65b7e69e9f5ee00b582e11588897c56827bef1f0735d90e1868a",
     "src/postriff_phase2/phone/diagnostics.py": "4a2183834c1c0c6ee0743c5c042d752fc8e0a7f64a7e28a98e0dcb48354b79ed",
-    "tests/test_rafii_phone_media.py": "f9ca235924a92069d6dc9356cb461279d611da678f029761a7b8111103f0d821"
+    "tests/test_rafii_phone_media.py": "f9ca235924a92069d6dc9356cb461279d611da678f029761a7b8111103f0d821",
+    "docs/consumer-ready/secret-allowlist.json": "d923d412d7ee103ef1ea184dc3217138910015b48abb50ed7e08868b092e42ba"
   },
   "localChecks": {
     "pythonTests": 139,
@@ -13,7 +14,14 @@
     "installedOpenAISDK": "3.19.2",
     "sdkTransport": "loopback WebSocket with actual SDK and TwilioMediaTransport; synthetic Live events",
     "postgresPhoneMode": "PASS; disposable port 55769; actual Rafii runtime; synthetic external services",
-    "noNewRealCalls": true
+    "noNewRealCalls": true,
+    "secretScan": {
+      "status": "PASS",
+      "files": 1694,
+      "unexpected": 0,
+      "source": "af01a1c53b95dd8651c9e0a1452568cc63235059f1b2b6311bfc5f6bca3acee9",
+      "networkCredentialVerification": false
+    }
   },
   "approvedFirstRealCall": {
     "callId": "6fab99a1-b75b-484b-a5b7-df6bc136450c",
@@ -43,7 +51,16 @@
   "authorization": {
     "firstPaidTest": "consumed",
     "oneRetry": "approved and unconsumed",
-    "candidateProductionDeploy": "pending scoped approval"
+    "candidateProductionDeploy": "approved for PR43; only exact fixture-hash CI repair added under the same diagnostic scope"
   },
-  "productionCron": "pre-existing /api/cron/worker TypeError remains unresolved; no cron invoked or modified"
+  "productionCron": "pre-existing /api/cron/worker TypeError remains unresolved; no cron invoked or modified",
+  "ciFixtureRepair": {
+    "failedRun": 36351181380,
+    "failedStep": "Offline source secret scan",
+    "findingPath": "tests/test_rafii_phone_media.py",
+    "findingType": "Secret Keyword",
+    "fixtureHash": "3b100d07c2764b1bce131808828bdddfdf587eed",
+    "remedy": "existing exact file/value-hash fixture allowlist; detector and application code unchanged"
+  },
+  "runtimeFilesMatchApprovedA01ab03": true
 }
