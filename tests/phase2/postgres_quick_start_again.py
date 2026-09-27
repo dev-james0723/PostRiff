@@ -56,27 +56,38 @@ assert second["status"] == "completed", second["status"]
 assert second["sourceId"] == first["sourceId"] and second["conversationId"] != first["conversationId"]
 assert len(sources_with(idea)) == 1
 assert sources_with(idea)[0].get("reviewedAt") == reviewed
-checks.append("the same own idea drafted again reuses its source (one source, new conversation, completed run, no re-approval)")
+assert sources_with(idea)[0]["title"] == idea
+assert sources_with(idea)[0].get("origin") == {"kind": "quick_start"}
+checks.append("the same own idea drafted again reuses its run-only source with a meaningful title (one source, new conversation, completed run, no re-approval)")
 
 # 2. Pasted third-party text drafted twice stays rewrite_approval and is not auto-approved.
 pasted = "Third-party paragraph one.\nThird-party paragraph two."
 p1 = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": pasted, "ownContent": False, "confirmUse": True, "destinations": destinations})
 p2 = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": pasted, "ownContent": False, "confirmUse": True, "destinations": destinations})
 assert p1["sourceId"] == p2["sourceId"] and p2["sourcePolicy"] == "rewrite_approval"
+assert sources_with(pasted)[0]["title"] == "Third-party paragraph one."
+assert sources_with(pasted)[0].get("origin") == {"kind": "quick_start"}
 assert not any(f["approved"] for f in sources_with(pasted)[0]["facts"])
-checks.append("pasted third-party text drafted again reuses its source and keeps rewrite_approval with nothing auto-approved")
+checks.append("pasted third-party text drafted again reuses its run-only source, uses the first line as its title and keeps rewrite_approval with nothing auto-approved")
 
 # 3. Different text still creates its own source.
 other = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "A different thought entirely.", "ownContent": True, "confirmUse": True, "destinations": destinations})
 assert other["sourceId"] not in (first["sourceId"], p1["sourceId"])
 checks.append("a different idea still becomes its own source")
 
-# 4. Context Pocket: a chosen usable source is read with the idea; an unknown id is refused before anything is stored.
+# 4. Context Pocket: an explicitly saved reusable source is read with the idea; an unknown id is refused before anything is stored.
 notes = "Rehearsal notes.\nThe second movement needs a slower start.\nBreathe before the coda."
-note = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": notes, "ownContent": True, "confirmUse": True, "destinations": destinations})
-pocket = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "A thought that leans on my rehearsal notes.", "ownContent": True, "confirmUse": True, "destinations": destinations, "sourceIds": [note["sourceId"]]})
+current = service.get(wid, "one")
+with_note = service.mutate(wid, "one", current["revision"], "source", {"kind": "text", "text": notes, "title": "Rehearsal notes"})
+note = next(source for source in with_note["state"]["sources"] if source.get("text") == notes)
+with_policy = service.mutate(wid, "one", with_note["revision"], "source_policy", {"sourceId": note["id"], "policy": "public_quote", "egressConsent": ["local"], "confirmed": True})
+note = next(source for source in with_policy["state"]["sources"] if source["id"] == note["id"])
+with_approval = service.mutate(wid, "one", with_policy["revision"], "approve_source", {"sourceId": note["id"], "factIds": [fact["id"] for fact in note["facts"]]})
+note = next(source for source in with_approval["state"]["sources"] if source["id"] == note["id"])
+assert (note.get("origin") or {}).get("kind") != "quick_start"
+pocket = ideas.quick_start(wid, "one", with_approval["revision"], {"text": "A thought that leans on my rehearsal notes.", "ownContent": True, "confirmUse": True, "destinations": destinations, "sourceIds": [note["id"]]})
 assert pocket["status"] == "completed"
-assert any(e["type"] == "source.added" and e.get("sourceId") == note["sourceId"] for e in pocket["events"]), [e["type"] for e in pocket["events"]]
+assert any(e["type"] == "source.added" and e.get("sourceId") == note["id"] for e in pocket["events"]), [e["type"] for e in pocket["events"]]
 count = len(service.get(wid, "one")["state"]["sources"])
 try:
     ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "Another thought.", "ownContent": True, "confirmUse": True, "destinations": destinations, "sourceIds": ["not-a-source"]})
@@ -92,12 +103,12 @@ with psycopg.connect(DSN) as db:
         return [row[0] for row in db.execute("SELECT body FROM public.pr_messages m JOIN public.pr_conversations c ON c.id=m.conversation_id WHERE c.workspace_id=%s AND m.role='user' ORDER BY m.created_at, m.seq", (wid,)).fetchall()]
     before = len(turn_bodies())
     posted = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "Every Monday at 9am post a practice tip.", "ownContent": True, "confirmUse": True, "destinations": destinations,
-                                                                                "references": [{"kind": "source", "id": note["sourceId"], "label": "Rehearsal notes"}]})
+                                                                                "references": [{"kind": "source", "id": note["id"], "label": "Spoofed client label"}]})
     assert posted["status"] == "completed" and posted.get("runId"), posted
     usage = db.execute("SELECT usage FROM public.pr_agent_runs WHERE id::text=%s", (posted["runId"],)).fetchone()[0]
     # The client's label never reaches the report; the server names the source by its own title.
-    assert "Rehearsal notes" not in json.dumps(usage["references"]), usage["references"]
-    assert [u["id"] for u in usage["references"]["used"]] == [note["sourceId"]], usage.get("references")
+    assert "Spoofed client label" not in json.dumps(usage["references"]), usage["references"]
+    assert [u["id"] for u in usage["references"]["used"]] == [note["id"]], usage.get("references")
     assert "This message has attachments" in " ".join(usage["references"]["reminders"]), usage["references"]["reminders"]
     plain = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": "One more thought about scales.", "ownContent": True, "confirmUse": True, "destinations": destinations})
     plain_usage = db.execute("SELECT usage FROM public.pr_agent_runs WHERE id::text=%s", (plain["runId"],)).fetchone()[0]
