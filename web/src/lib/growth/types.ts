@@ -1,4 +1,5 @@
 export interface GrowthCatalog {
+  radar?: boolean;
   postDoctor: boolean;
   genome: boolean;
   consented: boolean;

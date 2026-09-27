@@ -1,0 +1,63 @@
+{
+  "status": "LOCAL_PASS",
+  "execution": "local services and disposable PostgreSQL; synthetic sources, identity and models",
+  "checks": {
+    "python": {
+      "passed": 1685,
+      "command": "PYTHONPATH=src:tests /tmp/rafii-phase1-env/bin/python -m unittest discover -s tests -p test*.py"
+    },
+    "web": {
+      "passed": 293,
+      "command": "cd web && node --test tests/*.test.cjs"
+    },
+    "postgresRadar": {
+      "status": "PASS",
+      "command": "/tmp/rafii-phase1-env/bin/python scripts/postriff_disposable_postgres.py tests/phase2/postgres_radar.py"
+    },
+    "postgresPhase2Regression": {
+      "status": "PASS",
+      "command": "/tmp/rafii-phase1-env/bin/python scripts/postriff_disposable_postgres.py tests/phase2/postgres_growth_phase2.py"
+    },
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "browser": "PASS",
+    "migrationNumber": {
+      "refsChecked": 133,
+      "other039Files": []
+    },
+    "liveProviders": "NOT_RUN",
+    "realEfficacy": "NOT_ESTABLISHED"
+  },
+  "sourceSha256": {
+    ".env.example": "c86287308cb015ec6a0e5466ed861d51a5b0576367b7c3738c2242a43b447a9c",
+    "migrations/postriff/039_radar.sql": "95243bc36bc0cfed6e462734fb2f9504943f53d7618a4d20c0249ebefa8297e1",
+    "scripts/postriff_dev_hosted.py": "a4cf87d5b871a621fc9da4496888d3c8b9c1bcff3bbcd2256285beeede9e4f03",
+    "scripts/postriff_radar_evaluate.py": "987546e26a191d86ad2b15cf5aee13b45244ff8cbce16d2f95dafda21f2eafe2",
+    "src/postriff_phase2/growth/http.py": "088527d4d7feb87ab06b5763b77281f3dab828b74544b72d12eeb8c39419ca4d",
+    "src/postriff_phase2/growth/question_sets/radar_triage.v1.json": "b273145ef5c848dc75491d3f9785e1ceed0887a641dced8e271cb28370dcae81",
+    "src/postriff_phase2/growth/router.py": "9f17652dced92d9af0f8d44ce838d19d8c261612dfdde53be9a83e1e95b9aeac",
+    "src/postriff_phase2/growth/service.py": "0e7c20e495781016a2db76af83494c3946b9785c1243db244dc86e7f2955a369",
+    "src/postriff_phase2/hosted_app.py": "964967ef934971a093c4d6bd83f6a9b40484b17eb73fc0c34d5ef609341f5c50",
+    "src/postriff_phase2/radar/__init__.py": "d106cd525757e7b78b3dc61225e0993cbadcf78f3dbfc388a46ac53e9a43f7f2",
+    "src/postriff_phase2/radar/core.py": "7c1178880b9ba285ebf06bdb19258696d43de167ca8a69e906d818182add8ba2",
+    "src/postriff_phase2/radar/service.py": "a31b7d42586c89c5323f8efd401720620bcabcf27f5fbe93eaffbab24a65282e",
+    "src/postriff_phase2/radar/sources.py": "b3d0e0078454acb1d633c0847f6e9e3ac3a7efa258fc1f73263e89f9e0ac0622",
+    "tests/phase2/postgres_radar.py": "e15d05d05fc658c51705624fcd3563710122bb9d16945192034d60d77322edc4",
+    "tests/phase2/rls.sql": "2eda97c2988d5820b0cf96b506083224cb82bbe3464ac184f39ce9234fff93a4",
+    "tests/radar_fixtures.py": "42d721925a1c4d98a09da6bf8683fd11ac0fc3feb918733e576691ea9f62e630",
+    "tests/test_radar.py": "4750a3c8dacd94c6ab7c87eb3ca9b79988617cbc9117d62ebd4e0c41516846a0",
+    "web/src/app/app/radar/page.tsx": "f09b4232cb7bddb9e3a0c6ef95dacded116deb7ff407bc019fdd2cee61f0deac",
+    "web/src/config/nav-config.ts": "77b6a47ceb8db2ebe37a27e202388d42bfcf3510a01bf0e67a25c172993b62bc",
+    "web/src/features/agent/home-view.tsx": "ff0b2dc21a0c448c049af46a51f2cce7da22441ad53f5fc9bf7f928be16e7e24",
+    "web/src/features/growth/radar.css": "2eb0146e69b7aa11b06368c5033baffcf63a0101f6097fb74e369414f89bc0b4",
+    "web/src/features/growth/radar.tsx": "ad8013ae236b9b6a79886bafa9d07a81ad2abef3434f5ea629d24c465354a9c3",
+    "web/src/features/growth/shared.tsx": "7b692b4a54888299a106e9defa360afee376075cb6e95fa0b645208da325f31d",
+    "web/src/features/growth/studio-parts.tsx": "7081f133332cdff64881b2c90f17cb6cc4fe8f249d119d8485c6e5035f4ea270",
+    "web/src/lib/api/client.ts": "da1a74034e5891eeb46ce08410f44582c112de26496423ed63f7a38899d5a2dc",
+    "web/src/lib/growth/radar-types.ts": "b677f8fb15f03b758cc2617d54697353f45904751984519db48763198dfc4ff7",
+    "web/src/lib/growth/types.ts": "7497b5438cfc34d9a8ccd9cd056ca455e0970ef231fdd2f81e455b9668578a75",
+    "web/tests/radar-browser.cjs": "0c56de6cb2656094c182792a289e3b77c9686dc83b2d6a5c0ef2107edd60cb36"
+  },
+  "verificationReuse": "Unaffected broad regression/build/browser results reused; final Radar scheduler and count-fencing changes validated with the focused PostgreSQL suite."
+}

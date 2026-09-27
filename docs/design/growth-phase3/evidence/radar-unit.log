@@ -1,0 +1,15 @@
+test_dedupe_unknowns_and_injection (test_radar.RadarCoreTests.test_dedupe_unknowns_and_injection) ... ok
+test_genome_supported_only (test_radar.RadarCoreTests.test_genome_supported_only) ... ok
+test_paid_source_cost_unknown_and_content_bound (test_radar.RadarCoreTests.test_paid_source_cost_unknown_and_content_bound) ... ok
+test_presence_check_uses_only_native_id (test_radar.RadarCoreTests.test_presence_check_uses_only_native_id) ... ok
+test_question_set (test_radar.RadarCoreTests.test_question_set) ... ok
+test_rights_and_native_numbers (test_radar.RadarCoreTests.test_rights_and_native_numbers) ... ok
+test_source_requires_configuration (test_radar.RadarCoreTests.test_source_requires_configuration) ... ok
+test_synthetic_never_passes_release (test_radar.RadarCoreTests.test_synthetic_never_passes_release) ... ok
+test_urls_preserve_identity_and_drop_tracking (test_radar.RadarCoreTests.test_urls_preserve_identity_and_drop_tracking) ... ok
+test_youtube_remains_native_only (test_radar.RadarCoreTests.test_youtube_remains_native_only) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.096s
+
+OK

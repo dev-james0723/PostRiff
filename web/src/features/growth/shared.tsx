@@ -31,7 +31,7 @@ export function GrowthConsent({
   const [confirmed, setConfirmed] = useState(false);
   const [audience, setAudience] = useState(catalog.audienceConsent ?? false);
   const [error, setError] = useState('');
-  const requiredRoutes = [...new Set([...catalog.routes, catalog.writerRoute, ...(catalog.postmortem || catalog.audienceMiner ? [catalog.summaryRoute] : [])])];
+  const requiredRoutes = [...new Set([...catalog.routes, catalog.writerRoute, ...(catalog.postmortem || catalog.audienceMiner || catalog.radar ? [catalog.summaryRoute] : [])])];
   if (access.role !== 'owner')
     return (
       <p className='text-muted-foreground text-sm'>
@@ -63,7 +63,7 @@ export function GrowthConsent({
       <p>
         AI analysis sends selected drafts to Jev, with Gemini Flash Lite as a fallback. Rewrites use
         your current writer. Each run uses the configured daily allowance.
-        {(catalog.postmortem || catalog.audienceMiner) && ' Growth reviews and audience topic suggestions also use Claude Haiku.'}
+        {(catalog.postmortem || catalog.audienceMiner || catalog.radar) && ' Growth reviews, audience topics and Radar angles also use Claude Haiku.'}
       </p>
       <details>
         <summary className='cursor-pointer text-muted-foreground'>Review AI models</summary>
@@ -82,7 +82,7 @@ export function GrowthConsent({
           onChange={(e) => setConfirmed(e.target.checked)}
           className='mt-1'
         />
-        Allow these models to analyze selected drafts, explain selected readings, and rewrite using the facts I supply.
+        Allow these models to analyze selected drafts, explain selected readings, review public Radar evidence with my approved lessons, and rewrite using the facts I supply.
       </label>
       <Button
         variant='glass'

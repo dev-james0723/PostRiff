@@ -1,3 +1,4 @@
+import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -129,6 +130,11 @@ export function createApi(getToken: TokenSource) {
 
   return {
     /* Growth advice never sends a post. Each model request has its own explicit confirmation. */
+    radarCatalog: (w: string) => get<RadarCatalog>(`${ws(w)}/growth/radar/catalog`),
+    radarScans: (w: string) => get<{ scans: RadarScan[] }>(`${ws(w)}/growth/radar/scans`),
+    radarQuote: (w: string, body: RadarRequest) => send<RadarScan>('POST', `${ws(w)}/growth/radar/quotes`, body),
+    radarStart: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/start`, { confirmed: true }),
+    radarAdvance: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/advance`, {}, 90_000),
     growthCatalog: (w: string) => get<GrowthCatalog>(`${ws(w)}/growth/catalog`),
     postDoctor: (w: string, body: DraftCheckBody) => send<PostCheck>('POST', `${ws(w)}/growth/check`, body, 30_000),
     postDoctorRewrite: (w: string, body: { checkId: string; model: string; facts: Record<string, string>; confirmed: boolean; requestKey: string }) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),

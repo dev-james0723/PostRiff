@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "execution": "local real service + disposable PostgreSQL; synthetic identity, sources and AI",
+  "checks": [
+    "owner permissions, source selection, quote before execution, bounded scan, inspectable evidence and saved idea without publishing",
+    "For You empty state without supported Genome",
+    "mobile reviewed idea action",
+    "1440/390/320 responsive, dark theme, reduced motion and no serious/critical axe violations",
+    "Deep scan and persisted reload",
+    "Home discovery and return to durable results"
+  ],
+  "realProviderCalls": 0
+}

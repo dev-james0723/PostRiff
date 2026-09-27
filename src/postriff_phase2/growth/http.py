@@ -24,7 +24,16 @@ def public(app,environ,start_response,method,path):
 def handle(app,environ,start_response,hosted,token,method,parts):
     service=ensure(hosted)
     workspace_id,rest=parts[2],parts[4:]
-    if method=='GET' and rest==['catalog']:
+    if rest and rest[0]=='radar':
+        radar=service.radar
+        if method=='GET' and rest==['radar','catalog']:value=radar.catalog(workspace_id,token)
+        elif method=='GET' and rest==['radar','scans']:value=radar.list(workspace_id,token)
+        elif method=='POST' and rest==['radar','quotes']:value=radar.quote(workspace_id,token,app._body(environ))
+        elif method=='POST' and len(rest)==3 and rest[2]=='start':value=radar.start(workspace_id,token,rest[1],app._body(environ))
+        elif method=='POST' and len(rest)==3 and rest[2]=='advance':value=radar.advance(workspace_id,token,rest[1])
+        else:raise AlphaError('Radar route unavailable.',404)
+        value=radar.response(workspace_id,token,value)
+    elif method=='GET' and rest==['catalog']:
         value=service.catalog(workspace_id,token)
     elif method=='GET' and rest==['genome']:
         value=service.genome(workspace_id,token)
