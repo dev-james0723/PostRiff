@@ -1,7 +1,7 @@
 """SQL phone ledger. Provider payloads and raw identity never enter call rows."""
 import json
 
-from .contracts import DEFAULTS, TERMINAL, transition
+from .contracts import DEFAULTS, TERMINAL, failure_message, transition
 
 CALL_COLUMNS = ('id', 'user_id', 'workspace_id', 'conversation_id', 'voice_run_id', 'kind', 'reason_key', 'provider', 'provider_call_ref', 'state',
                 'number_hash', 'max_seconds', 'live_reservation_id', 'telephony_reservation_id', 'reserved_usd_micro', 'requested_at', 'answered_at', 'ended_at',
@@ -48,4 +48,5 @@ def set_state(cur, value, state, duration=None):
 def public_call(value):
     return {'id': value['id'], 'conversationId': value['conversation_id'], 'state': value['state'], 'kind': value['kind'], 'provider': value['provider'],
             'requestedAt': float(value['requested_at']), 'durationSeconds': value['duration_seconds'], 'failure': value['failure_class'],
+            'failureMessage': failure_message(value['failure_class']) if value['failure_class'] or value['state'] in ('failed', 'cancelled') else None,
             'maxSeconds': value['max_seconds'], 'execution': 'fake' if value['provider'] == 'fake' else 'provider'}

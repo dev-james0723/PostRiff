@@ -66,7 +66,12 @@ class TwilioProvider:
             with build_opener(_NoRedirect(), HTTPSHandler(context=ssl.create_default_context())).open(request, timeout=15) as response:
                 return response.status, json.loads(response.read(200_000))
         except HTTPError as error:
-            return error.code, {}  # do not persist/return provider bodies: they may contain the recipient number
+            # Retain only the bounded numeric error code, never message/more_info/PII.
+            try:
+                code = json.loads(error.read(16384)).get('code')
+            except (ValueError, TypeError, AttributeError, OSError):
+                code = None
+            return error.code, {'code': code} if type(code) is int and 10000 <= code <= 99999 else {}
         except (URLError, TimeoutError, OSError):
             return 0, {}
 
@@ -82,7 +87,16 @@ class TwilioProvider:
         status, result = self.transport('POST', self._calls(), fields)
         if status == 201 and re.fullmatch(r'CA[0-9a-fA-F]{32}', str(result.get('sid',''))):
             return CallReceipt(STATUS.get(result.get('status'), 'ringing'), result['sid'])
-        return CallReceipt('failed' if 400 <= status < 500 and status != 408 else 'ambiguous')
+        if 400 <= status < 500 and status != 408:
+            code = result.get('code')
+            failure = {
+                20003: 'provider_auth', 20006: 'provider_account', 20403: 'provider_account',
+                21210: 'provider_caller', 21212: 'provider_caller', 21213: 'provider_caller',
+                21215: 'provider_country', 21216: 'provider_destination', 21219: 'provider_trial_recipient',
+                21264: 'provider_caller', 20429: 'provider_rate_limit',
+            }.get(code) if type(code) is int else None
+            return CallReceipt('failed', failure=failure or ('provider_rate_limit' if status == 429 else 'provider_auth' if status == 401 else 'provider_rejected'))
+        return CallReceipt('ambiguous')
 
     def end_call(self, call_ref):
         if not re.fullmatch(r'CA[0-9a-fA-F]{32}', call_ref):

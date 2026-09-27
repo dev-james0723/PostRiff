@@ -4,7 +4,7 @@ export type PhonePreferences = {
 };
 export type PhoneCall = {
   id: string; conversationId: string; state: string; kind: string; provider: string; requestedAt: number;
-  durationSeconds: number | null; failure: string | null; maxSeconds: number; execution: 'fake' | 'provider';
+  durationSeconds: number | null; failure: string | null; failureMessage?: string | null; maxSeconds: number; execution: 'fake' | 'provider';
 };
 export type PhoneSettingsData = {
   available: boolean; providerReady?: boolean; execution?: 'fake' | 'provider'; flags: Record<string, boolean>;

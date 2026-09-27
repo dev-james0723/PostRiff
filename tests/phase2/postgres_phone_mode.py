@@ -341,6 +341,57 @@ assert service.get(wid,ONE)['state']['variants'][1]['text']==new_text
 assert sql("SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s AND status='running' AND idempotency_key LIKE 'agent:%%'",wid)[0][0]==0
 print('PASS hangup during backend work: next mutation denied, exact phone-owned run cancelled, saved draft preserved')
 
+# Regression: a confirmed zero-cost failure cannot keep its original ten-minute
+# ceiling charged all day. Partial/unknown settlement still retains the full hold.
+from postriff_phase2.phone import billing, planner
+sql("UPDATE pr_phone_calls SET requested_at=now()-interval '1 day'")
+saved_values=dict(phone.config.values)
+phone.config.values.update(RAFII_PHONE_MAX_SECONDS='600',RAFII_PHONE_USD_MICRO_PER_MINUTE='170000',RAFII_PHONE_DAILY_USD_MICRO='3000000')
+attempts=[]
+outcome=[(401,{'code':20003,'message':'Secret provider payload +12025550123'})]
+def reject_or_accept(method,url,fields=None):
+    attempts.append(method)
+    return outcome[0]
+check_provider=TwilioProvider({'TWILIO_ACCOUNT_SID':'AC'+'a'*32,'TWILIO_AUTH_TOKEN':'local-only-secret','TWILIO_PHONE_NUMBER':'+12025550100','RAFII_PHONE_PUBLIC_BASE_URL':'https://phone.test'},transport=reject_or_accept)
+phone.provider=check_provider
+failed=request('confirmed-provider-rejection')
+assert failed['state']=='failed' and failed['failure']=='provider_auth' and 'verified' in failed['failureMessage']
+assert '+12025550123' not in json.dumps(failed)
+assert sql('SELECT provider_call_ref,live_cost_usd_micro,telephony_cost_usd_micro,reserved_usd_micro FROM pr_phone_calls WHERE id=%s',failed['id'])[0]==(None,0,0,2250000)
+assert request('confirmed-provider-rejection')['id']==failed['id'] and attempts==['POST']
+cooldown=denied(lambda:request('too-soon-after-failed-call'),409)
+assert cooldown.code=='recent_equivalent' and 'five minutes' in str(cooldown) and attempts==['POST']
+sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE requested_at>=to_timestamp(%s)",planner.day_start(clock[0],fixture_zone))
+outcome[0]=(403,{'code':21216})
+second=phone.request(wid,ONE,{'idempotencyKey':'confirmed-provider-rejection-two'},dispatch=False)
+delivery.deliver(phone,second['id'])  # Delivery must use settled costs too.
+assert read_call(second['id'])['state']=='failed' and read_call(second['id'])['failure_class']=='provider_destination'
+assert attempts==['POST','POST']
+sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE requested_at>=to_timestamp(%s)",planner.day_start(clock[0],fixture_zone))
+outcome[0]=(201,{'sid':'CA'+'d'*32,'status':'ringing'})
+held=request('real-provider-usage-unknown')
+sql("UPDATE pr_phone_calls SET state='answered',answered_at=now(),media_claimed_at=now() WHERE id=%s",held['id'])
+phone.finish(held['id'],'completed')
+sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE requested_at>=to_timestamp(%s)",planner.day_start(clock[0],fixture_zone))
+assert sql('SELECT live_cost_usd_micro,telephony_cost_usd_micro FROM pr_phone_calls WHERE id=%s',held['id'])[0]==(None,None)
+limit=denied(lambda:request('unknown-usage-retains-budget'),409)
+assert limit.code=='phone_budget' and attempts==['POST','POST','POST']
+phone.finish(held['id'],'completed',42)
+assert sql(f'SELECT {billing.DAILY_COST_SQL} FROM pr_phone_calls WHERE id=%s',held['id'])[0][0]==2250000,'Partial settlement retains full ceiling'
+phone.finish(held['id'],'completed',42,live_seconds=4)
+with connection() as db:
+    from postriff_phase2.permissions import Membership
+    attention=phone.notification_context(db.cursor(),{'userId':ONE,'membership':Membership.from_row('owner',True,True,True,True)},
+        {'event_type':'publish.failed','workspace_id':wid,'grouping_key':'budget-check'})
+assert 170000 <= attention['reserved_cost'] < 2250000,attention
+outcome[0]=(400,{'code':21212})
+after_settlement=request('settled-usage-allows-next-call')
+assert after_settlement['state']=='failed' and after_settlement['failure']=='provider_caller'
+assert attempts==['POST','POST','POST','POST']
+phone.config.values.clear(); phone.config.values.update(saved_values)
+phone.provider=provider
+print('PASS confirmed provider errors masked; cooldown/idempotency; zero-cost failures release daily capacity at request and delivery; unknown/partial holds retained; actual costs shared with notification policy')
+
 # Credit-mode calls use the existing wallet/quote/reservation path, never an implicit spend.
 import sys
 sys.path.insert(0,os.path.join(os.getcwd(),'scripts'))
