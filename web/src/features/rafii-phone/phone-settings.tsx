@@ -10,6 +10,7 @@ import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import type { PhonePreferences } from '@/lib/phone/types';
 import { CallRafii } from './call-rafii';
+import { parseCreditLimit } from '@/features/agent/credit-limit';
 
 const EVENTS = [['publish.failed', 'Publication failed'], ['publish.uncertain', 'Publication outcome uncertain'], ['campaign.approval_required', 'Approval blocking a deadline'], ['campaign.blocked', 'Campaign blocked'], ['channel.reconnect_required', 'Account connection needs attention']] as const;
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
@@ -55,6 +56,7 @@ export function PhoneSettings() {
       <CallRafii />
       {toggle('proactiveCalls', 'Allow proactive calls', !data.number?.verified || !data.flags.RAFII_PHONE_PROACTIVE_ENABLED)}
       {toggle('scheduledCalls', 'Allow scheduled briefings', !data.number?.verified || !data.flags.RAFII_PHONE_SCHEDULED_ENABLED)}
+      {data.spending?.usesCredits && <Label htmlFor='phone-automatic-credits' className='flex-col items-start'>Maximum credits per automatic call<Input id='phone-automatic-credits' inputMode='decimal' defaultValue={String(prefs.maxMilliCreditsPerCall / 1000)} key={prefs.maxMilliCreditsPerCall} disabled={busy} onBlur={(event) => { const value = event.target.value.trim() === '0' ? 0 : parseCreditLimit(event.target.value); if (value !== null && value !== prefs.maxMilliCreditsPerCall) void save({ maxMilliCreditsPerCall: value }); }} /><span className='text-muted-foreground text-xs'>Zero blocks automatic calls. Phone and voice time can hold up to {(Math.ceil(data.spending.ceilingMilliCredits / 100) / 10).toFixed(1)} credits per call. Rafii’s reasoning uses the remaining limit.</span></Label>}
       <Label htmlFor='rafii-phone-zone' className='flex-col items-start'>Time zone<Input id='rafii-phone-zone' defaultValue={prefs.timeZone} key={prefs.timeZone} disabled={busy} onBlur={(event) => { if (event.target.value !== prefs.timeZone) void save({ timeZone: event.target.value }); }} /></Label>
       <div className='grid grid-cols-2 gap-3'>
         <Label htmlFor='rafii-phone-quiet-start' className='flex-col items-start'>Quiet hours begin<Input id='rafii-phone-quiet-start' type='time' value={clock(prefs.quietStart)} disabled={busy} onChange={(event) => { if (event.target.value) void save({ quietStart: minutes(event.target.value) }); }} /></Label>

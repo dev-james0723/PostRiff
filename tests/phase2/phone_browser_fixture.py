@@ -40,6 +40,17 @@ if action == 'seed':
         return state
     service.repository.command(workspace_id, principal, snapshot['revision'], seed)
     print(json.dumps({'draftId':second,'editedText':edited}))
+elif action == 'fund':
+    # Synthetic credits only, restricted to this loopback fixture's opt-in terms.
+    from postriff_phase2.credit_wallet import CreditBook
+    with connection() as db:
+        cur = db.cursor()
+        cur.execute('SELECT plan_terms_id FROM public.pr_entitlements WHERE workspace_id=%s', (workspace_id,))
+        assert cur.fetchone() == ('dev-credit-fixture',), 'Only fund synthetic credit-mode workspaces'
+        service.repository.get(workspace_id, principal)
+        book = CreditBook()
+        book.grant(cur, workspace_id, principal, 'phone-browser-synthetic-grant', 500000, source='local-phone-test-only')
+        print(json.dumps({'execution':'synthetic credits only','wallet':book.view(cur, workspace_id)}))
 elif action == 'delegate':
     call_id, draft_id = rest
     call_id = str(uuid.UUID(call_id))

@@ -56,6 +56,18 @@ async function api(method,path,body) {
     await section.getByRole('switch',{name:'Enable Call Rafii',exact:true}).click();
     const button=section.getByRole('button',{name:'Call Rafii',exact:true});
     await button.waitFor();
+    const spending=(await api('GET',`/api/workspaces/${wid}/phone`)).spending;
+    if (spending?.usesCredits) {
+      assert.ok(await button.isDisabled(),'Missing call credit approval never dials');
+      await section.getByLabel('Maximum credits for this call',{exact:true}).fill((Math.ceil(spending.ceilingMilliCredits/100)/10).toFixed(1));
+      if (spending.availableMilliCredits < spending.ceilingMilliCredits) {
+        assert.ok(await button.isDisabled(),'Insufficient wallet never dials');
+        assert.equal(dialRequests,0,'No unapproved or unaffordable call reaches the API');
+        fixture('fund');
+        await page.reload({waitUntil:'domcontentloaded'});
+        await section.getByLabel('Maximum credits for this call',{exact:true}).fill((Math.ceil(spending.ceilingMilliCredits/100)/10).toFixed(1));
+      }
+    }
     await button.click();
     await section.getByText(/Rafii call: ringing/).waitFor();
     assert.equal(dialRequests,1,'Exactly one explicit call request');
@@ -96,6 +108,6 @@ async function api(method,path,body) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Mobile fits viewport');
     const out=process.env.RAFII_PHONE_BROWSER_EVIDENCE || '/tmp/rafii-phone-browser.png';
     await page.screenshot({path:out,fullPage:true});
-    console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
+    console.log(JSON.stringify({status:'PASS',execution:'actual web UI + disposable PostgreSQL + fake phone/Live/Manager input',checks:['fake-only transport guard','verified masked number','credit approval and wallet gate','explicit single dial','navigation/reload never dial','phone delegation saves second draft through Rafii','edited draft refreshes in open web app without reload','publish approval still required','hangup','scheduled briefing','revoke','mobile','axe no serious/critical violations'],realCalls:0,screenshot:out}));
   } finally {if(page) await page.screenshot({path:'/tmp/rafii-phone-browser-final.png',fullPage:true}).catch(() => {});await browser.close();}
 })().catch((error) => {console.error(error); process.exitCode=1;});

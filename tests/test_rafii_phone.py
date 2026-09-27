@@ -63,7 +63,7 @@ class PhonePolicyTest(unittest.TestCase):
         self.assertEqual(planner.eligibility('explicit',self.prefs,**{**self.args,'active':True}),'call_active')
 
     def test_preferences_validation(self):
-        for patch in ({'enabled':'yes'},{'timeZone':'Invalid/Zone'},{'maxCallsPerDay':99},{'eventAllowlist':['security.new_device']},{'phoneNumber':'+123456789'}):
+        for patch in ({'enabled':'yes'},{'timeZone':'Invalid/Zone'},{'maxCallsPerDay':99},{'maxMilliCreditsPerCall':True},{'maxMilliCreditsPerCall':-1},{'maxMilliCreditsPerCall':100_000_001},{'eventAllowlist':['security.new_device']},{'phoneNumber':'+123456789'}):
             with self.assertRaises(AlphaError):contracts.preferences(patch)
         self.assertEqual(contracts.preferences({}),contracts.DEFAULTS)
 

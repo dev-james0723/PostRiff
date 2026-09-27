@@ -82,7 +82,10 @@ phone.start_verification(wid,ONE,{'number':'+12025550123'})
 denied(lambda:phone.start_verification(wid,ONE,{'number':'+12025550123'}),429)
 denied(lambda:phone.confirm_verification(wid,ONE,{'code':'000000'}),400)
 phone.confirm_verification(wid,ONE,{'code':'123456'})
-phone.save_preferences(wid,ONE,{'enabled':True,'timeZone':'UTC'})
+# The lifecycle fixture ages calls by six minutes. Keep its local day away from
+# midnight so that aging doesn't accidentally remove today's daily-limit rows.
+fixture_zone='Etc/GMT+12' if time.gmtime(clock[0]).tm_hour<12 else 'UTC'
+phone.save_preferences(wid,ONE,{'enabled':True,'timeZone':fixture_zone})
 data = phone.settings(wid,ONE)
 assert data['number']=={'lastFour':'0123','verified':True}
 assert '+12025550123' not in json.dumps(data)
@@ -337,6 +340,80 @@ with ThreadPoolExecutor(max_workers=1) as pool:
 assert service.get(wid,ONE)['state']['variants'][1]['text']==new_text
 assert sql("SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s AND status='running' AND idempotency_key LIKE 'agent:%%'",wid)[0][0]==0
 print('PASS hangup during backend work: next mutation denied, exact phone-owned run cancelled, saved draft preserved')
+
+# Credit-mode calls use the existing wallet/quote/reservation path, never an implicit spend.
+import sys
+sys.path.insert(0,os.path.join(os.getcwd(),'scripts'))
+from launch_credit_fixture import configure as credit_fixture
+credit_fixture(service,connection)
+assert service.bootstrap(TWO,'studio')['workspaceId']==other
+phone.provider=provider
+phone.start_verification(other,TWO,{'number':'+12025550124'})
+phone.confirm_verification(other,TWO,{'code':'123456'})
+phone.save_preferences(other,TWO,{'enabled':True,'scheduledCalls':True,'quietStart':0,'quietEnd':0})
+price=phone.settings(other,TWO)['spending']
+assert price['usesCredits'] and price['ceilingMilliCredits']>0
+before_count=provider.create_count
+before_quotes=sql('SELECT count(*) FROM pr_credit_quotes WHERE workspace_id=%s',other)[0][0]
+for limit in (None,True,0,price['ceilingMilliCredits']-1):
+    denied(lambda:phone.request(other,TWO,{'idempotencyKey':uuid.uuid4().hex,'maxMilliCredits':limit}),402)
+assert provider.create_count==before_count
+assert sql('SELECT count(*) FROM pr_credit_quotes WHERE workspace_id=%s',other)[0][0]==before_quotes
+credit_call=phone.request(other,TWO,{'idempotencyKey':'approved-credit-call','maxMilliCredits':price['ceilingMilliCredits']})
+assert provider.create_count==before_count+1
+duplicate=phone.request(other,TWO,{'idempotencyKey':'approved-credit-call','maxMilliCredits':0})
+assert duplicate['id']==credit_call['id'] and provider.create_count==before_count+1
+with connection() as db:
+    wallet=service.ledger.credits.view(db.cursor(),other)
+assert wallet['heldMilliCredits']==price['ceilingMilliCredits'],wallet
+event(credit_call['id'],'answered',ref=read_call(credit_call['id'])['provider_call_ref'])
+scoped,capability,bound=phone.scoped_runtime(credit_call['id'])
+scoped.model_factory=None  # Exercise production reservation logic without opening a model connection.
+def open_manager(runtime,cap,binding):
+    return runtime._open_run(other,cap,binding['conversation_id'],'Make it warmer.','voice','agent:'+uuid.uuid4().hex,
+                             'trace_'+uuid.uuid4().hex,[],model='rafii-agent',reserve_for='standard_reasoning')
+quotes=sql('SELECT count(*) FROM pr_credit_quotes WHERE workspace_id=%s',other)[0][0]
+denied(lambda:open_manager(scoped,capability,bound),402)
+assert sql('SELECT count(*) FROM pr_credit_quotes WHERE workspace_id=%s',other)[0][0]==quotes
+phone.hangup(credit_call['id'],live_seconds=0)
+with connection() as db:
+    wallet=service.ledger.credits.view(db.cursor(),other)
+assert wallet['heldMilliCredits']==0 and wallet['usedMilliCredits']==0,wallet
+sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE workspace_id=%s",other)
+denied(lambda:phone.request(other,TWO,{'idempotencyKey':'automatic-no-credit-limit'},kind='scheduled'),402)
+phone.save_preferences(other,TWO,{'maxMilliCreditsPerCall':price['ceilingMilliCredits']})
+automatic=phone.request(other,TWO,{'idempotencyKey':'automatic-approved-credit-limit'},kind='scheduled')
+phone.hangup(automatic['id'],live_seconds=0)
+# The same Manager can reserve against the remaining approved call limit. Unknown
+# usage stays committed; releases free capacity; a model cannot enlarge the limit.
+sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE workspace_id=%s",other)
+with connection() as db:
+    service.ledger.credits.grant(db.cursor(),other,TWO,'phone-agent-synthetic-grant',500000,source='local-phone-test-only')
+route=cfg.route('standard_reasoning',reason='phone reservation acceptance')
+manager_cost=cfg.estimate_usd_micro(route.model,24000,4000)
+from postriff_phase2.credit_meter import millicredits
+maximum=price['ceilingMilliCredits']+2*millicredits(manager_cost)
+agent_call=phone.request(other,TWO,{'idempotencyKey':'phone-manager-credit-call','maxMilliCredits':maximum})
+event(agent_call['id'],'answered',ref=read_call(agent_call['id'])['provider_call_ref'])
+scoped,capability,bound=phone.scoped_runtime(agent_call['id'])
+scoped.model_factory=None
+first_run,first_hold=open_manager(scoped,capability,bound)
+second_run,second_hold=open_manager(scoped,capability,bound)
+with connection() as db:
+    service.ledger.settle(db.cursor(),other,first_hold['reservationId'],'unknown')
+denied(lambda:open_manager(scoped,capability,bound),402)
+with connection() as db:
+    service.ledger.reconcile_unknown(db.cursor(),other,first_hold['reservationId'],'failed',0,operator='local-test',evidence='synthetic provider confirms zero use')
+third_run,third_hold=open_manager(scoped,capability,bound)
+assert len({first_run,second_run,third_run})==3
+denied(lambda:open_manager(scoped,capability,bound),402)
+with connection() as db:
+    for hold in (second_hold,third_hold): service.ledger.settle(db.cursor(),other,hold['reservationId'],'failed',0)
+sql("UPDATE pr_agent_runs SET status='completed' WHERE id=ANY(%s::uuid[])",[first_run,second_run,third_run])
+phone.hangup(agent_call['id'],live_seconds=0)
+denied(lambda:open_manager(scoped,capability,bound),409)
+assert service.delete_account(other,TWO,'DELETE')['workspaceDeleted']
+print('PASS credit-mode call approval, exact component holds, bounded shared Manager spend/unknown holds/releases, retry idempotency, release and standing automatic-call limit')
 
 # Server-only RLS for every private phone table.
 tables=('pr_phone_numbers','pr_phone_preferences','pr_phone_verification_limits','pr_phone_calls','pr_phone_provider_events','pr_phone_delegations','pr_phone_schedules')

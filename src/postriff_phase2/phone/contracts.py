@@ -11,7 +11,7 @@ TERMINAL = frozenset(('completed', 'busy', 'declined', 'no_answer', 'voicemail',
 CALL_EVENTS = frozenset(('publish.failed', 'publish.uncertain', 'campaign.approval_required', 'campaign.blocked', 'channel.reconnect_required'))
 FLAGS = ('RAFII_PHONE_ENABLED', 'RAFII_PHONE_OUTBOUND_ENABLED', 'RAFII_PHONE_SCHEDULED_ENABLED', 'RAFII_PHONE_PROACTIVE_ENABLED', 'RAFII_PHONE_VERIFICATION_ENABLED')
 DEFAULTS = {'enabled': False, 'proactiveCalls': False, 'scheduledCalls': False, 'quietStart': 1320, 'quietEnd': 480,
-            'timeZone': 'UTC', 'maxCallsPerDay': 2, 'eventAllowlist': [], 'fallbackToPush': True, 'fallbackToEmail': True}
+            'timeZone': 'UTC', 'maxCallsPerDay': 2, 'maxMilliCreditsPerCall': 0, 'eventAllowlist': [], 'fallbackToPush': True, 'fallbackToEmail': True}
 GREETING = 'Hi, this is Rafii, your AI assistant.'
 
 
@@ -28,7 +28,7 @@ def preferences(patch, current=None):
     for key in ('enabled', 'proactiveCalls', 'scheduledCalls', 'fallbackToPush', 'fallbackToEmail'):
         if not isinstance(out[key], bool):
             raise AlphaError('Phone switches must be on or off.', 400)
-    for key, low, high in (('quietStart', 0, 1439), ('quietEnd', 0, 1439), ('maxCallsPerDay', 1, 2)):
+    for key, low, high in (('quietStart', 0, 1439), ('quietEnd', 0, 1439), ('maxCallsPerDay', 1, 2), ('maxMilliCreditsPerCall', 0, 100_000_000)):
         if type(out[key]) is not int or not low <= out[key] <= high:
             raise AlphaError('Choose valid quiet hours and a daily limit of one or two calls.', 400)
     try:

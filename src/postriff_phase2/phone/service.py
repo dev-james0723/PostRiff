@@ -16,7 +16,7 @@ from ..agent_runtime_v2 import live, style
 from ..agent_runtime_v2.http import runtime_for
 from ..automation_runs import principal_repository
 from ..permissions import require
-from . import contracts, planner, store
+from . import billing, contracts, planner, store
 from .config import PhoneConfig
 
 
@@ -51,6 +51,7 @@ class PhoneService:
             cur.execute('SELECT id::text,schedule,enabled,extract(epoch from next_at) FROM public.pr_phone_schedules WHERE user_id=%s AND workspace_id=%s ORDER BY created_at', (principal, workspace_id))
             schedules = [{'id': r[0], 'schedule': r[1], 'enabled': r[2], 'nextAt': float(r[3])} for r in cur.fetchall()]
             return {'available': True, 'providerReady': bool(self.provider and self.provider.configured), 'flags': self.config.public(),
+                    'spending': billing.spending(self, cur, workspace_id),
                     'execution': 'fake' if self.provider and not self.provider.real else 'provider',
                     'number': {'lastFour': number['last_four'], 'verified': number['verified']} if number else None,
                     'preferences': store.prefs(cur, principal, workspace_id), 'calls': calls, 'schedules': schedules}
@@ -169,8 +170,7 @@ class PhoneService:
             cur.execute('SELECT state,reason_key,requested_at>to_timestamp(%s) FROM public.pr_phone_calls WHERE user_id=%s AND (NOT(state=ANY(%s)) OR requested_at>to_timestamp(%s))',
                         (now - 300, principal, list(contracts.TERMINAL), now - 300))
             recent = cur.fetchall()
-            estimate_live = agent.cfg.live_usd_micro_per_minute * math.ceil((self.config.cap_seconds + 15) / 60)
-            estimate_tel = self.config.telephony_rate * math.ceil(self.config.cap_seconds / 60)
+            estimate_live, estimate_tel = billing.estimates(self)
             estimate = estimate_live + estimate_tel
             blocker = planner.eligibility(kind, prefs, now=now, verified=bool(identity and identity['verified']), membership=member.allows('edit'),
                 configured=bool(self.provider and self.provider.configured and (not self.provider.real or self.config.telephony_rate > 0)),
@@ -190,18 +190,23 @@ class PhoneService:
             else:
                 cur.execute('INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,\'Phone conversation with Rafii\') RETURNING id::text', (workspace_id, principal))
                 conversation_id = cur.fetchone()[0]
+            live_authority, tel_authority = billing.authorities(self, cur, workspace_id, principal, row[0],
+                maximum=payload.get('maxMilliCredits') if kind == 'explicit' else prefs['maxMilliCreditsPerCall'],
+                conversation_id=conversation_id, number_hash=identity['hash'], kind=kind, reason=reason, costs=(estimate_live, estimate_tel))
             call_id = str(uuid.uuid4())
             agent_style = style.load(cur, principal)
             locale, voice = live.locale_and_voice({}, agent_style)
             artifact = {'voice': {'state': 'connecting', 'locale': locale, 'voice': voice, 'startedAt': now, 'transcript': [], 'transport': 'phone'}}
+            if live_authority or tel_authority:
+                artifact['voice']['creditLimitMilliCredits'] = payload.get('maxMilliCredits') if kind == 'explicit' else prefs['maxMilliCreditsPerCall']
             cur.execute('INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,artifact) '
                         'VALUES(%s,%s,%s,\'running\',%s,\'quick\',%s,%s,%s,%s::jsonb) RETURNING id::text',
                         (conversation_id, workspace_id, principal, route.model, hashlib.sha256(call_id.encode()).hexdigest(), hashlib.sha256(b'phone-v1').hexdigest(), 'voice:phone:' + call_id, json.dumps(artifact)))
             run_id = cur.fetchone()[0]
             live_res = self.hosted.ledger.reserve(cur, workspace_id, principal, 'tool', estimate_live, 'phone-live:' + call_id, charge_batch=False,
-                         provider='openai', model=route.model, run_id=run_id, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds})
+                         provider='openai', model=route.model, run_id=run_id, credit_authority=live_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds})
             tel_res = self.hosted.ledger.reserve(cur, workspace_id, principal, 'tool', estimate_tel, 'phone-tel:' + call_id, charge_batch=False,
-                         provider=self.provider.name, model='pstn', run_id=run_id, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds})
+                         provider=self.provider.name, model='pstn', run_id=run_id, credit_authority=tel_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds})
             artifact['voice']['reservationId'] = live_res['reservationId']
             cur.execute('UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id=%s', (json.dumps(artifact), run_id))
             cur.execute('INSERT INTO public.pr_phone_calls(id,user_id,workspace_id,conversation_id,voice_run_id,kind,reason_key,provider,state,idempotency_key,number_hash,max_seconds,'
@@ -369,6 +374,7 @@ class PhoneService:
             scoped.coworker.hosted = scoped
         runtime = copy.copy(self.agent())
         runtime.service = scoped
+        runtime.reservation_approval = billing.manager_approval(self, call_id)
         return runtime, capability, value
 
     def abort_delegation(self, call_id, key):
