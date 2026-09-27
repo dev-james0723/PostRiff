@@ -76,6 +76,9 @@ After that local merge, 49 focused Dial, Phone Mode, media and deployment unit t
 The no-secret local setup check still reports `configuration_pending`: Dial credentials,
 the public origin, encryption key and telephony rate are absent from this worktree.
 It has not made a credential-backed provider GET, activated Audio mode or placed a call.
+The local privacy notice and public legal data now name Dial, the optional Twilio path,
+GPT-Live and phone retention. These are candidate disclosures for release review; no
+public page has been redeployed. Nineteen related privacy/data tests pass.
 
 The Self-Hosted access request was submitted and the user reports approval. No 10DLC
 registration, webhook registration, mode activation, deployment or live call has been submitted.
