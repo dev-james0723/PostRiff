@@ -61,6 +61,15 @@ try {
     // The composer shows an example of what to type, not instructions.
     await page.getByPlaceholder('Launch post for my new course').waitFor();
 
+    // The same `/` command menu used in full Agent Chat is available on Home, on desktop and phone.
+    const message = page.getByRole('textbox', { name: 'Message' });
+    await message.fill('/');
+    const commands = page.getByRole('listbox', { name: 'Commands' });
+    await commands.waitFor();
+    await commands.getByRole('option').filter({ hasText: '/write' }).first().waitFor();
+    await message.fill('');
+    await commands.waitFor({ state: 'hidden' });
+
     // Writing Voice: a setting that opens a dialog; choosing a voice closes it and the setting says which.
     const settings = page.getByRole('group', { name: 'Draft settings' });
     const voice = settings.getByRole('button', { name: /Writing Voice/ });
