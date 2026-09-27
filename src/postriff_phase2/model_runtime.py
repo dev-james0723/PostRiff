@@ -568,7 +568,9 @@ class ServerModelRuntime(AgentRuntime):
         if status is None or status >= 500:
             raise _Unknown("The model request outcome is unknown. Check usage before starting another run.", 502)
         if status != 200 or not isinstance(data, dict):
-            raise _Rejected("The AI writer couldn't take this request. Try again.", 502)
+            rejected = _Rejected("The AI writer couldn't take this request. Try again.", 502)
+            rejected.http_status = status   # kept for callers that must tell auth/budget from a bad request (growth router)
+            raise rejected
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:

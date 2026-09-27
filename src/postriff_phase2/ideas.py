@@ -803,6 +803,10 @@ class IdeasService:
             artifact["reworkOf"] = outcome["reworkOf"]
         if outcome.get("forCampaign"):
             artifact["forCampaign"] = outcome["forCampaign"]
+        if outcome.get("scoutLineage"):
+            from .growth.scout import validate_lineage
+            validate_lineage(current_state, outcome["scoutLineage"])
+            artifact["scoutLineage"] = outcome["scoutLineage"]
         artifact["sourceBindings"] = [{"id": item["id"], "hash": item["hash"]} for item in outcome["context"]["sources"]]
         references = outcome.get("references")
         if references is not None:
@@ -1246,6 +1250,10 @@ class IdeasService:
             if "references" in projected:
                 # What the chips did, the post media and the per-message content type (chat-context SPEC §5.10).
                 outcome.update({"references": projected["references"], "media": projected["media"], "contentType": projected["contentType"], "derivedSourceIds": projected["derivedSourceIds"]})
+            from .coworker import flags as coworker_flags
+            if coworker_flags.enabled("RAFII_OPPORTUNITY_FLIPPER_ENABLED"):
+                from .growth.scout import lineage
+                outcome["scoutLineage"] = lineage(state, source_ids)
             if projected.get("reworkOf"):
                 # A rework of one draft (handed in, or a post chip in the rework role): applying it updates that
                 # draft, not whichever draft shares its slot.
@@ -1671,6 +1679,9 @@ class IdeasService:
             if current["policyEpoch"] != epoch or current_bindings != original_bindings or current["excluded"]:
                 raise AlphaError("Sources or their policies changed. Preserve the candidate and draft again from current context.", 409)
             voice_sources.validate_bindings(state, artifact.get("voiceContext") or {})
+            if artifact.get("scoutLineage"):
+                from .growth.scout import validate_lineage
+                validate_lineage(state, artifact["scoutLineage"])
             # A variant that has ever entered the queue (approved, published, verified, in flight) is a
             # record of what went out; a new candidate never becomes an "update" to it. Only a draft that
             # is still unscheduled in the same platform/language slot is refreshed in place.
@@ -1702,6 +1713,8 @@ class IdeasService:
                     values["warnings"] = values["warnings"] + ["A photo attached to this draft was deleted."]
                 values.update(content)
                 if old:
+                    if artifact.get("scoutLineage"):
+                        values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
                     # Keeps the link to this run after the proposal is accepted or edited, so reopening the
@@ -1709,6 +1722,8 @@ class IdeasService:
                     old["runRefs"] = ([ref for ref in old.get("runRefs") or [] if ref != run_id] + [run_id])[-10:]
                     created.append({"platform": candidate["platform"], "language": candidate["language"], "channelId": candidate.get("channelId"), "variantId": old["id"], "proposedUpdate": True})
                 else:
+                    if artifact.get("scoutLineage"):
+                        values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
                     variant = {**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}}
                     if tag:
                         variant["automation"] = dict(tag)

@@ -56,9 +56,18 @@ def isolated_environment(values):
     result['POSTRIFF_LOCAL_CLI'] = '0'
     # Rafii coworker features that reach an outside service (email, push, the public web) stay off in preview.
     egress = ('RAFII_NOTIFICATIONS_V2_ENABLED', 'RAFII_WEB_PUSH_ENABLED', 'RAFII_RESEARCH_BROKER_ENABLED', 'RAFII_LISTENING_ENABLED',
-              'RAFII_PHONE_OUTBOUND_ENABLED', 'RAFII_PHONE_SCHEDULED_ENABLED', 'RAFII_PHONE_PROACTIVE_ENABLED', 'RAFII_PHONE_VERIFICATION_ENABLED','RAFII_SMS_ENABLED','RAFII_SMS_ESCALATION_ENABLED')
+              'RAFII_PHONE_OUTBOUND_ENABLED', 'RAFII_PHONE_SCHEDULED_ENABLED', 'RAFII_PHONE_PROACTIVE_ENABLED', 'RAFII_PHONE_VERIFICATION_ENABLED',
+              'RAFII_SMS_ENABLED', 'RAFII_SMS_ESCALATION_ENABLED',
+              'RAFII_ACTIVE_SCOUT_ENABLED', 'RAFII_JEV_SCOUT_ENABLED', 'RAFII_SCOUT_STRONG_MODEL_ESCALATION_ENABLED',
+              'RAFII_MULTIMODAL_ENRICHMENT_ENABLED', 'RAFII_WATCH_IT_LOCAL_ADAPTER_ENABLED')
     if any(str(result.get(name, '')).strip().lower() in ('1', 'true', 'yes', 'on') for name in egress):
         raise ValueError('Preview Rafii notifications, web push, research and listening must remain disabled.')
     for name in egress:
+        result[name] = ''
+    # Growth Phase 0 reaches Meta (metric reads, history import) and the paid AI Gateway (Post Doctor).
+    growth = ('POSTRIFF_METRIC_READS', 'POSTRIFF_HISTORY_IMPORT', 'POSTRIFF_POST_DOCTOR')
+    if any(str(result.get(name, '')).strip().lower() in ('1', 'true', 'yes', 'on') for name in growth):
+        raise ValueError('Preview growth metric reads, history import and Post Doctor must remain disabled.')
+    for name in growth:
         result[name] = ''
     return result

@@ -128,7 +128,7 @@ class CampaignWorker:
                                          'observation': f"{event['value']:g} {event['metric']}, compared with a typical {event['typical']:g} across {event['sampleSize']} comparable posts"}
             if (task.get('include') or {}).get('evergreen'):
                 if occurrence.get('evergreen') is None:
-                    posts = insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now)['posts']
+                    posts = insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now, basis=insights.COMPARISON_BASIS)['posts']
                     occurrence['evergreen'] = campaigns.evergreen_post(state, task, occurrence['scheduledFor'], posts) or {}
                     if occurrence['evergreen']:
                         task['evergreenUsed'] = (list(task.get('evergreenUsed') or []) + [occurrence['evergreen']['jobId']])[-200:]
@@ -281,7 +281,8 @@ class CampaignWorker:
                         events = campaigns.new_source_events(state, task)
                     else:
                         if posts is None:
-                            posts = insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now)['posts']
+                            # +1h: like-for-like and early enough for a trigger that must fire within a day of posting.
+                            posts = insights.summary(cur, workspace_id, (state.get('phase2') or {}).get('jobs', []), now, basis=insights.TRIGGER_BASIS)['posts']
                         events = campaigns.strong_post_events(state, task, posts, now)
                     before = len(task.get('pendingEvents') or [])
                     if campaigns.enqueue_events(state, task, events, now):

@@ -87,12 +87,13 @@ export function useDraftHandoff() {
       // An idea is its own brief; a link is named so web research (when allowed) can read the page;
       // anything else is drafted from its approved facts.
       const text = source.kind === 'idea' ? source.text : source.kind === 'link' ? `Write a post about ${source.text}` : `Write a post from “${source.title}”.`;
-      const language = detectLanguage(`${source.title}\n${source.text}`);
+      const plan = source.origin?.executionPlan;
+      const language = plan?.language || detectLanguage(`${source.title}\n${source.text}`);
       const conversation = await api.createConversation(workspaceId, source.title.slice(0, 60) || 'Draft from a source');
       const result = await api.turn(workspaceId, conversation.conversationId, {
         text,
         sourceIds: [source.id],
-        destinations: platforms.length > 0 ? destinations(language) : [{ platform: 'LinkedIn', language }],
+        destinations: plan ? [{ platform: plan.platform, channelId: plan.account, language }] : platforms.length > 0 ? destinations(language) : [{ platform: 'LinkedIn', language }],
         language,
         ...pinned,
         timeZone

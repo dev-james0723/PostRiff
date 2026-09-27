@@ -160,3 +160,14 @@ test('without a session nothing is sent', async () => {
   assert.equal(error.status, 401);
   assert.equal(calls.length, 0);
 });
+
+test('Scout creation and follow-up keep plan and observed job ids; watch is explicit', async () => {
+  const { calls, api } = harness();
+  await api.createOpportunity('w', 'op/a', 'plan-a', 'job-a');
+  assert.equal(calls[0].url, '/api/workspaces/w/coworker/listening/opportunities/op%2Fa/create');
+  assert.deepEqual(JSON.parse(calls[0].init.body), { planId: 'plan-a', outcomeJobId: 'job-a' });
+  await api.decideOpportunity('w', 'op', 'watch');
+  assert.deepEqual(JSON.parse(calls[1].init.body), { decision: 'watch' });
+  await api.saveWatchlist('w', { query: 'topic', goal: 'help', primaryObjective: 'shareability' });
+  assert.equal(JSON.parse(calls[2].init.body).primaryObjective, 'shareability');
+});
