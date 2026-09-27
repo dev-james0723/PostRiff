@@ -6,7 +6,7 @@ from postriff_phase2.growth import questions as Q
 from postriff_phase2.growth import router as R
 from postriff_phase2.growth.judgments import Judgment, JudgmentService, validate_answers
 
-QS = Q.get("postdoctor")
+QS = Q.get("postdoctor", 1)
 ON = {P.FLAG: "1"}
 
 

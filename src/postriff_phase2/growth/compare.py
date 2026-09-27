@@ -150,7 +150,7 @@ def main(argv=None, *, env=None, out=sys.stdout, factories=None):
     parser.add_argument("--models", required=True)
     parser.add_argument("--max-usd", type=float, required=True)
     parser.add_argument("--price", action="append", default=[])
-    parser.add_argument("--question-set", default="postdoctor")
+    parser.add_argument("--question-set", default="postdoctor.v1")
     parser.add_argument("--confirm-live", action="store_true")
     parser.add_argument("--out")
     args = parser.parse_args(argv)

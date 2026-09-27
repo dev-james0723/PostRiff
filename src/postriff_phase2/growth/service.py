@@ -69,12 +69,14 @@ def public_result(result):
 
 
 def serialize(result, lang):
-    qs = questions.get('postdoctor')
+    qs = questions.get(result.question_set)
     names = level_names(qs,lang)
     dimensions = [{'id':d.id,'label':qs.dimensions[d.id]['label'].get('zh-HK' if lang.startswith('zh') else 'en',d.id),
                    'level':d.level,'levelName':names[d.level] if d.level is not None else 'Not enough evidence',
-                   'fixes':list(d.fixes),'calibrated':d.calibrated} for d in result.dimensions]
-    return {'questionSet':result.question_set,'dimensions':dimensions,'risks':list(result.risks),
+                   'fixes':list(d.fixes),'calibrated':d.calibrated,'missingContext':list(d.missing_context)} for d in result.dimensions]
+    return {**({'goal':result.context['goal'],'contextDigest':result.context['digest'],
+                 'missingContext':{d.id:list(d.missing_context) for d in result.dimensions if d.missing_context}} if result.context else {}),
+            'questionSet':result.question_set,'dimensions':dimensions,'risks':list(result.risks),
             'computed':result.computed,'confidence':result.confidence,'confidenceReasons':list(result.confidence_reasons),
             'helping':[d['label'] for d in dimensions if d['level'] is not None and d['level']>=2],
             'hurting':[d['label'] for d in dimensions if d['level'] is not None and d['level']<=1],
@@ -192,8 +194,10 @@ class GrowthService:
                 if current['text']!=draft['text']:
                     raise AlphaError('This draft changed. Check its current version.',409,code='growth_input_changed')
 
-    def _doctor(self,router):
-        return PostDoctorService(JudgmentService(router.evaluator('postdoctor.judge')),env={'POSTRIFF_POST_DOCTOR':'1'},profile=self.profile)
+    def _doctor(self,router, *, legacy=False):
+        env={**self.env,"POSTRIFF_POST_DOCTOR":"1"}
+        if legacy:env["POSTRIFF_POST_DOCTOR_V2"]="0"
+        return PostDoctorService(JudgmentService(router.evaluator("postdoctor.judge")),env=env,profile=self.profile)
 
     def _consent(self,state):
         routes = (state.get('growthConsent') or {}).get('routes',[])
@@ -338,7 +342,7 @@ class GrowthService:
                 creator['genome']=[s['text'] for s in active.get('statements',[]) if s['grade']=='supported'][:12]
         target={'platform':draft['platform'],'connectionId':draft.get('channelId'),'language':draft['language'],'format':draft.get('formatId') or 'text','timeBucket':'unknown'}
         measured=sum(performance.cohort(p)==performance.cohort(target) and genome.relative(p,posts) is not None for p in posts)
-        result=serialize(self._doctor(router).check(workspace_id=workspace_id,draft_text=draft['text'],platform=draft['platform'],
+        result=serialize(self._doctor(router,legacy=workspace_id is None).check(workspace_id=workspace_id,draft_text=draft['text'],platform=draft['platform'],
                                                   lang=draft['language'],creator=creator,posts_with_metrics=measured),draft['language'])
         result['computed']['fit_winners']=genome.fit_winners(result['_scores'],posts,target)
         if workspace_id and self.enabled('postmortem'):
@@ -483,7 +487,7 @@ class GrowthService:
                 sample_router=self._router(sink,sample_state,guard=lambda:self.guard(workspace_id,token,run))
                 judgment=JudgmentService(sample_router.evaluator('genome.label')).judge(questions.get('genome'),{'draft':post['text'],'platform':post['platform'],'lang':post['language']},
                             scope='personal:'+workspace_id,subject=subject_hash('genome',post['sourceId'],post['sourceRevision']),model='typesafe-ai/jev',workspace_id=workspace_id)
-                post_result=self._doctor(sample_router).check(workspace_id=workspace_id,draft_text=post['text'],platform=post['platform'],lang=post['language'])
+                post_result=self._doctor(sample_router,legacy=True).check(workspace_id=workspace_id,draft_text=post['text'],platform=post['platform'],lang=post['language'])
                 assigned=genome.labels(judgment)
                 if judgment.status!='ok' or not assigned:
                     raise AlphaError('This history did not have enough AI evidence to propose a Genome.',503,code='genome_evidence_unavailable')
