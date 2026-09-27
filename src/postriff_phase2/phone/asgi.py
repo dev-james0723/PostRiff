@@ -9,6 +9,7 @@ import os
 from postriff_alpha.domain import AlphaError
 
 from . import contracts, store
+from .diagnostics import report_failure
 from .session import PhoneSessionController, bridge
 from .providers.twilio import TwilioMediaTransport
 
@@ -36,7 +37,8 @@ def create_lazy_app(*, values=None, application_factory=None):
                 try:
                     factory = application_factory or (lambda: create_app(media_only=True))
                     delegate = await asyncio.to_thread(factory)
-                except Exception:
+                except Exception as error:
+                    report_failure(socket.path_params.get('call_id'), 'runtime_init', error)
                     await socket.close(code=1008)
                     return
         await delegate(socket.scope, socket.receive, socket.send)
@@ -66,6 +68,7 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             return
         await socket.accept()
         controller=None
+        phase='stream_start'
         try:
             async with asyncio.timeout(10):
                 start=await socket.receive_json()
@@ -74,23 +77,31 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             meta=start.get('start') or {}
             if start.get('event')!='start' or meta.get('accountSid')!=provider.account or meta.get('mediaFormat')!={'encoding':'audio/x-mulaw','sampleRate':8000,'channels':1}:
                 raise AlphaError('Invalid phone stream.',403)
+            phase='stream_claim'
             with hosted.connection_factory() as db,db.cursor() as cur:
                 value=store.call(cur,call_id,lock=True)
                 if not value or value['state']!='answered' or value['provider_call_ref']!=meta.get('callSid') or value['media_claimed_at']:
                     raise AlphaError('Phone stream unavailable.',403)
                 cur.execute('UPDATE public.pr_phone_calls SET media_claimed_at=now() WHERE id=%s',(call_id,))
                 db.commit()
+            phase='controller_init'
             controller=PhoneSessionController(phone,call_id)
             transport=TwilioMediaTransport(socket,meta['streamSid'])
             if live_connect:
+                phase='live_connect'
                 async with live_connect() as connection:
+                    phase='live_bridge'
                     await bridge(controller,transport,connection)
             else:
+                phase='live_client'
                 from openai import AsyncOpenAI
                 async with AsyncOpenAI(api_key=controller.runtime.cfg.credential('openai'),max_retries=0) as client:
+                    phase='live_connect'
                     async with client.live.connect() as connection:
+                        phase='live_bridge'
                         await bridge(controller,transport,connection)
-        except Exception:
+        except Exception as error:
+            report_failure(call_id, phase, error)
             if controller:
                 controller.closed=True
                 await asyncio.to_thread(phone.hangup,call_id,reason='failed')
