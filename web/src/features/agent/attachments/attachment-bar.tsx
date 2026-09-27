@@ -63,6 +63,7 @@ export interface AttachmentBarProps {
   /** "More…" in the `@` list opens this view. */
   requestedView?: PlusView | null;
   onRequestedViewHandled?: () => void;
+  onRecentPosts?: () => void;
   /** Home splits the bar: the ＋ button in the Context row (`plus`), the chips under the text (`chips`). */
   part?: 'all' | 'plus' | 'chips';
 }
@@ -78,6 +79,7 @@ export function AttachmentBar({
   isOwner,
   requestedView,
   onRequestedViewHandled,
+  onRecentPosts,
   part = 'all'
 }: AttachmentBarProps) {
   const { chips } = attachments;
@@ -217,6 +219,7 @@ export function AttachmentBar({
             creditMode={creditMode}
             onPickDevice={() => deviceInput.current?.click()}
             onPickText={() => textInput.current?.click()}
+            onRecentPosts={onRecentPosts}
             onPickItem={(item) => void attachments.addReference(item)}
             onRememberConnectorItems={attachments.rememberConnectorItems}
             onAddAssets={(assets) => attachments.addLibrary(assets)}
