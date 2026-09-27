@@ -1,0 +1,10 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-dial/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+== tests/phase2/postgres_dial_phone.py exit=0
+PASS signed Dial audio/keepalive → same Rafii conversation → real draft edit → audio reply → confirmed hang-up/usage; no publication
+PASS real SQL signed callbacks, duplicate/out-of-order events, final duration and both usage settlements
+PASS accepted-but-lost response reconciliation without duplicate calls
+PASS cross-worker end signal, closed-call tool fencing and reconnect refuses duplicate sessions
+PASS declined/voicemail guard: generic prompt only, no Live session or private workspace access
+PASS Dial PostgreSQL acceptance; execution=synthetic providers and model, real local database and agent commands
+
+{"status": "pass", "execution": "disposable-local-postgres", "failed": []}

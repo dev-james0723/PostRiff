@@ -1,0 +1,25 @@
+{
+  "status": "configuration_pending",
+  "execution": "local_only",
+  "missingNames": [
+    "DIAL_API_KEY",
+    "DIAL_PHONE_NUMBER",
+    "DIAL_AUDIO_SIGNING_SECRET",
+    "DIAL_WEBHOOK_SIGNING_SECRET",
+    "DIAL_VERIFICATION_SECRET",
+    "RAFII_PHONE_PUBLIC_BASE_URL",
+    "RAFII_PHONE_ENCRYPTION_KEY"
+  ],
+  "providerConfigurationValid": false,
+  "telephonyRateConfigured": false,
+  "flags": {
+    "RAFII_PHONE_ENABLED": false,
+    "RAFII_PHONE_OUTBOUND_ENABLED": false,
+    "RAFII_PHONE_SCHEDULED_ENABLED": false,
+    "RAFII_PHONE_PROACTIVE_ENABLED": false,
+    "RAFII_PHONE_VERIFICATION_ENABLED": false
+  },
+  "providerReadiness": "not_checked",
+  "deployment": "not_run",
+  "liveCall": "not_run"
+}

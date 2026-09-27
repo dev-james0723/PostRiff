@@ -1,0 +1,17 @@
+[
+  {
+    "name": "dial-/calls",
+    "pass": true,
+    "errors": []
+  },
+  {
+    "name": "dial-/messages",
+    "pass": true,
+    "errors": []
+  },
+  {
+    "name": "vercel-config",
+    "pass": true,
+    "errors": []
+  }
+]
