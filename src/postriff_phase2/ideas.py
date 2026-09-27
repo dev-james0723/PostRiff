@@ -1822,7 +1822,7 @@ class IdeasService:
         if source is None:
             explicit_title = clean(payload.get("title", ""), 200)
             first_line = next((line.strip() for line in text.splitlines() if line.strip()), "") if text else ""
-            title = explicit_title or clean(first_line, 80) or ("Link" if url else "Source")
+            title = explicit_title or clean(first_line[:80], 80) or ("Link" if url else "Source")
             self.commands(state, actor, "source", {"kind": kind, "text": text or url, "title": title})
             source = state["sources"][-1]
             # A Home prompt needs a durable source for run provenance, but it is not reusable Context
