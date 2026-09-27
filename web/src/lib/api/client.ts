@@ -67,6 +67,7 @@ import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsight
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { PhoneCall, PhoneInboundCode, PhoneInboundStatus, PhonePreferences, PhoneProviderReadiness, PhoneSettingsData } from '@/lib/phone/types';
 import type { TikTokCreatorInfo } from '@/lib/channels/tiktok-rules';
+import type { GrowthCatalog, PostCheck, PostRewrite, GenomeResponse, CreatorGenome, PerformanceFeedback, DraftCheckBody } from '@/lib/growth/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -134,6 +135,15 @@ export function createApi(getToken: TokenSource) {
   }
 
   return {
+    /* Growth advice never sends a post. Each model request has its own explicit confirmation. */
+    growthCatalog: (w: string) => get<GrowthCatalog>(`${ws(w)}/growth/catalog`),
+    postDoctor: (w: string, body: DraftCheckBody) => send<PostCheck>('POST', `${ws(w)}/growth/check`, body, 30_000),
+    postDoctorRewrite: (w: string, body: { checkId: string; model: string; facts: Record<string, string>; confirmed: boolean; requestKey: string }) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
+    creatorGenome: (w: string) => get<GenomeResponse>(`${ws(w)}/growth/genome`),
+    analyzeHistory: (w: string, body: { data?: string; account?: string; connectionId?: string; sourceIds?: string[]; ownContent: boolean; retainText: boolean; confirmed: boolean; requestKey: string }) => send<{ genome: CreatorGenome }>('POST', `${ws(w)}/growth/history`, body, 240_000),
+    performanceFeedback: (w: string, jobId: string) => get<PerformanceFeedback>(`${ws(w)}/growth/feedback/${encodeURIComponent(jobId)}`),
+    publicPostDoctor: async (body: { text: string; platform: string; language: string; confirmed: boolean }) => parse<PostCheck>(await fetch('/api/post-doctor', { method: 'POST', headers: await headers(false), body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) })),
+    contentDNA: (token: string) => get<{ labels: string[]; description: string }>(`/api/content-dna/${encodeURIComponent(token)}`, false),
     /* public */
     tools: () => get<ToolRegistry>('/api/tools', false),
     catalog: () => get<Catalog>('/api/catalog', false),

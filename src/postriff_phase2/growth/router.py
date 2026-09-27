@@ -8,6 +8,7 @@ Authentication, budget and bad-request errors are never retried or silently rout
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from dataclasses import dataclass, replace
@@ -21,6 +22,8 @@ TASKS = {
     # task: (kind, primary model, fallback chain, time budget seconds, max output tokens for chat)
     "postdoctor.judge": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 3.0, 1500),
     "genome.label": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 8.0, 1500),
+    "postdoctor.grounding": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 3.0, 800),
+    "postdoctor.rewrite": ("chat", "anthropic/claude-sonnet-5", ("anthropic/claude-haiku-4.5",), 45.0, 4000),
     "golden.compare": ("evaluate", "typesafe-ai/jev", (), 10.0, 1500),
 }
 for _gate in ("signal", "cluster", "workspace_fit", "execution"):
@@ -207,6 +210,50 @@ class AIModelRouter:
 
     def _ms(self, started):
         return round((self.clock() - started) * 1000)
+
+    def complete_json(self, task, messages, *, validate, workspace_id=None, subject=None):
+        """One end-to-end chat deadline, one usage record per attempt; final rejections do not fall back."""
+        kind, primary, fallbacks, budget, max_tokens = self.tasks[task]
+        if kind != 'chat':
+            raise ValueError(f'{task} is not a chat task')
+        deadline = self.clock() + budget
+        ledger = []
+        if self.chat is None:
+            raise RouterError('No writer is available', 'unavailable')
+        for index, model in enumerate((primary, *fallbacks)):
+            remaining = deadline - self.clock()
+            if remaining < MIN_ATTEMPT_S:
+                raise RouterTimeout('The writer deadline passed', ledger)
+            started = self.clock()
+            ids = {'workspace_id': workspace_id, 'subject': subject, 'task': task, 'model': model,
+                   'route': 'primary' if index == 0 else 'fallback'}
+            try:
+                content, usage = self.chat(messages, model, max_tokens, remaining)
+            except AlphaError as error:
+                code = getattr(error, 'code', None) or REJECTED_CODES.get(error.status) or {429:'rate_limited',504:'timeout'}.get(error.status, 'upstream')
+                self._record(ledger, status=code, latency_ms=self._ms(started), **ids)
+                if code in FINAL_CODES:
+                    raise RouterError('The writer rejected this request', code, ledger) from error
+                continue
+            usage = usage if isinstance(usage, dict) else {}
+            cost = usage.get('gatewayCost')
+            cost = float(cost) if type(cost) in (int,float) and math.isfinite(cost) and cost >= 0 else None
+            data = _json_object(content) if isinstance(content, str) and len(content) <= 65536 else None
+            try:
+                if data is None:
+                    raise ValueError('Expected JSON')
+                result = validate(data)
+            except (ValueError, AlphaError) as error:
+                self._record(ledger, status='malformed', latency_ms=self._ms(started), cost_usd=cost,
+                             cost_source='gateway' if cost is not None else 'unknown',
+                             input_tokens=usage.get('prompt_tokens'), output_tokens=usage.get('completion_tokens'), **ids)
+                # A factual rejection cannot be repaired by silently paying another writer.
+                raise RouterError('The rewrite could not be validated', getattr(error, 'code', None) or 'malformed', ledger) from error
+            self._record(ledger, status='ok', latency_ms=self._ms(started), provider=usage.get('executionProvider'),
+                         cost_usd=cost, cost_source='gateway' if cost is not None else 'unknown',
+                         input_tokens=usage.get('prompt_tokens'), output_tokens=usage.get('completion_tokens'), **ids)
+            return {**result, 'model': model, 'route': ids['route'], 'late': self.clock() > deadline}
+        raise RouterError('No writer could answer', 'unavailable', ledger)
 
     def _fallback(self, task, model, state, questions, max_tokens, remaining, deadline, ledger, ids):
         if self.chat is None:

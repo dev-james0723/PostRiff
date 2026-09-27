@@ -25,6 +25,7 @@ import { VoiceStatusStrip } from './brand/voice-status-strip';
 import { VoiceSamplesCard } from './brand/voice-samples-card';
 import { activeProfile, canExportPackage, voiceStatus } from './brand/voice-model';
 import { VoiceSetup } from './voice-setup';
+import { GenomePanel } from '@/features/growth/genome-panel';
 
 const infoContent: InfobarContent = {
   title: 'About Brand & voice',
@@ -125,6 +126,7 @@ export function BrandView() {
           <div className='grid gap-4 md:gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
             {/* Action first: a waiting proposal, then setup or Learn my voice, then the approved profile. */}
             <div className='flex min-w-0 flex-col gap-4 md:gap-5'>
+              <GenomePanel />
               {status.kind === 'active' ? (
                 <>
                   {status.waiting && <ProposalReviewCard state={state} workspaceRevision={snapshot.data.revision} isOwner={isOwner} sample={sample} query={snapshot} />}

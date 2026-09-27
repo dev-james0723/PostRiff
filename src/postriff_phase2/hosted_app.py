@@ -205,6 +205,10 @@ def runtime_from_environment(environ=None):
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
             service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport)
+    from .growth.service import GrowthService
+    from .growth.performance import then_capture
+    service.growth=GrowthService(service,env=values)
+    on_verified=then_capture(on_verified,service.growth.enabled('check'))
     worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
@@ -468,6 +472,9 @@ class HostedApplication:
             from .coworker import http as coworker_http
             if (routed := coworker_http.public(self, environ, start_response, method, path)) is not None:
                 return routed
+            from .growth import http as growth_http
+            if (routed := growth_http.public(self, environ, start_response, method, path)) is not None:
+                return routed
             if path == "/api/billing/webhook" and method == "POST":
                 service = self._runtime()
                 length = int(environ.get("CONTENT_LENGTH") or "0")
@@ -583,6 +590,10 @@ class HostedApplication:
                 from .phone.runtime import cron as phone_cron
                 result['phone'] = phone_cron(service)
                 learning = getattr(service, "learning", None)
+                growth=getattr(service,'growth',None)
+                if growth and any(growth.enabled(kind) for kind in ('check','genome','public')):
+                    try:result['growthRetention']=growth.sweep()
+                    except Exception:result['growthRetention']={'status':'unavailable'}
                 if learning is not None:
                     result["learning"] = learning.sweep()
                 time_savings = getattr(service, "time_savings", None)
@@ -689,6 +700,8 @@ class HostedApplication:
                 return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
+                return growth_http.handle(self,environ,start_response,service,token,method,parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
                 return self._json(start_response, 200, service.billing_credit_packs(parts[2], token))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":
@@ -845,6 +858,8 @@ class HostedApplication:
                         result = service.upload_media(workspace_id, token, revision, payload)
                     elif action == "p2_media_delete":
                         result = service.delete_media(workspace_id, token, revision, payload.get("assetId"))
+                    elif action in growth_http.ACTIONS:
+                        result = growth_http.ensure(service).action(workspace_id,token,revision,action,payload)
                     else:
                         result = service.mutate(workspace_id, token, revision, action, payload)
                     return self._json(start_response, 200, result)

@@ -267,6 +267,7 @@ def main():
     parser.add_argument("--phone-fixture", action="store_true", help="local fake phone identity/calls; no SMS or PSTN egress")
     parser.add_argument("--inbound-phone-fixture", action="store_true", help="local one-time inbound codes with a synthetic Dial transport; no network calls")
     parser.add_argument("--notification-fixture", action="store_true", help="unified notifications with fake SMS/Push/Email only")
+    parser.add_argument('--growth-fixture',action='store_true',help='Phase 1 models are deterministic and zero-network; disposable database only')
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
@@ -286,7 +287,15 @@ def main():
     # Chat attachments (chat-context SPEC §14.2): the three flags are on here, with the canned reader and the in-memory bucket.
     from postriff_phase2.video_uploads import VideoPolicy
     chat_media = {"flags": {"attachments": True, "notes": True, "video": True}, "reader": DevMediaReader(), "videoPolicy": VideoPolicy(enabled=True)}
-    service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media)
+    growth_writer=None
+    if args.growth_fixture:
+        sys.path.insert(0,str(ROOT/'tests'))
+        from growth_phase1_fixtures import Writer, Models, ENV
+        growth_writer=Writer()
+    service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media,ideas_runtime=growth_writer)
+    if args.growth_fixture:
+        from postriff_phase2.growth.service import GrowthService
+        service.growth=GrowthService(service,env=ENV,router_factory=Models().router)
     if args.credit_fixture:
         from launch_credit_fixture import configure
         configure(service, connection)
@@ -326,6 +335,9 @@ def main():
         else:
             insights.ingest_post_insights(cur, transport, service.oauth, workspace_id, manifest["channelId"], provider, job["providerReference"], job["id"], time.time())
 
+    if args.growth_fixture:
+        from postriff_phase2.growth.performance import then_capture
+        on_verified=then_capture(on_verified,True)
     worker = PostgresWorker(connection, social=social, on_verified=with_time_back(on_verified, service.time_savings))
     app = HostedApplication(service, worker, {"provider": "dev", "execution": "dev-synthetic", "flow": "dev"}, "d" * 24)
     static = args.static.resolve()

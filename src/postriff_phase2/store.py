@@ -424,6 +424,9 @@ class Phase2Store(Store):
             freeze_manifest(s, v, manifest, self.clock())
         if v.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, v["trendLineage"]):
             raise AlphaError("Trend evidence changed or is unavailable. Review current evidence before publication.", 410, code="evidence_unavailable")
+        advice = v.get("postDoctor") or {}
+        if advice.get("revision") == v["revision"] and advice.get("textDigest") == digest(text):
+            manifest["postDoctor"] = copy.deepcopy(advice)
         root_key = digest(manifest)
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
         # key all duplicate reviews for this retry to the same preceding job, never a random nonce.
