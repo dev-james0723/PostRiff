@@ -219,7 +219,7 @@ export function useDecideHypothesis() {
   const { api, w } = useCoworkerApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; decision: 'experiment' | 'dismissed' | 'rejected' }) => api.decideHypothesis(w, input.id, input.decision),
+    mutationFn: (input: { id: string; decision: 'experiment' | 'dismissed' | 'rejected' | 'accepted' }) => api.decideHypothesis(w, input.id, input.decision),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: coworkerKeys.overlays(w) });
       void client.invalidateQueries({ queryKey: coworkerKeys.performance(w) });
@@ -238,7 +238,7 @@ export function useSaveWatchlist() {
   const { api, w } = useCoworkerApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { query: string; goal: string }) => api.saveWatchlist(w, input),
+    mutationFn: (input: { query: string; goal: string; primaryObjective?: string }) => api.saveWatchlist(w, input),
     onSettled: () => client.invalidateQueries({ queryKey: coworkerKeys.listening(w) })
   });
 }
@@ -247,7 +247,7 @@ export function useDecideOpportunity() {
   const { api, w } = useCoworkerApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; decision: 'act' | 'dismiss' }) => api.decideOpportunity(w, input.id, input.decision),
+    mutationFn: (input: { id: string; decision: 'act' | 'dismiss' | 'watch' }) => api.decideOpportunity(w, input.id, input.decision),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: coworkerKeys.listening(w) });
       void client.invalidateQueries({ queryKey: coworkerKeys.attention(w) });
@@ -258,4 +258,14 @@ export function useDecideOpportunity() {
 export function useEngagementSummary(enabledWhen = true) {
   const { api, w, enabled } = useCoworkerApi();
   return useQuery({ queryKey: coworkerKeys.engagement(w), queryFn: () => api.engagement(w), enabled: enabled && enabledWhen, ...base });
+}
+
+export function useCreateOpportunity() {
+  const { api, w } = useCoworkerApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; planId: string; outcomeJobId?: string }) =>
+      api.createOpportunity(w, input.id, input.planId, input.outcomeJobId),
+    onSettled: () => client.invalidateQueries({ queryKey: coworkerKeys.listening(w) })
+  });
 }

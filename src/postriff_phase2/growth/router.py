@@ -23,6 +23,8 @@ TASKS = {
     "genome.label": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 8.0, 1500),
     "golden.compare": ("evaluate", "typesafe-ai/jev", (), 10.0, 1500),
 }
+for _gate in ("signal", "cluster", "workspace_fit", "execution"):
+    TASKS["scout." + _gate] = ("evaluate", "typesafe-ai/jev", (), 2.0, 1000)
 RETRYABLE = (J.JevRateLimited, J.JevUpstream, J.JevTimeout)
 # Provider rejections that no other model or retry can fix: the key, the budget or the request itself.
 REJECTED_CODES = {401: "auth", 403: "auth", 402: "budget", 400: "bad_request", 413: "bad_request", 422: "bad_request"}

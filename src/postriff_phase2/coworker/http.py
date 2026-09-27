@@ -177,6 +177,9 @@ def handle(app, environ, start_response, service, token, method, parts):
                 return json_(201, coworker.watchlist_save(workspace_id, token, body()))
             if len(tail) == 3 and tail[0] == "opportunities" and tail[2] == "decide" and method == "POST":
                 return json_(200, coworker.opportunity_decide(workspace_id, token, tail[1], body().get("decision")))
+            if len(tail) == 3 and tail[0] == "opportunities" and tail[2] == "create" and method == "POST":
+                payload = body()
+                return json_(200, coworker.opportunity_create(workspace_id, token, tail[1], payload.get("planId"), payload.get("outcomeJobId")))
         if area == "engagement":
             if not tail and method == "GET":
                 return json_(200, coworker.engagement_triage(workspace_id, token))

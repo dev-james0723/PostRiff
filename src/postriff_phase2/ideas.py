@@ -678,6 +678,10 @@ class IdeasService:
             artifact["reworkOf"] = outcome["reworkOf"]
         if outcome.get("forCampaign"):
             artifact["forCampaign"] = outcome["forCampaign"]
+        if outcome.get("scoutLineage"):
+            from .growth.scout import validate_lineage
+            validate_lineage(current_state, outcome["scoutLineage"])
+            artifact["scoutLineage"] = outcome["scoutLineage"]
         artifact["sourceBindings"] = [{"id": item["id"], "hash": item["hash"]} for item in outcome["context"]["sources"]]
         artifact["voiceContext"] = {key: (outcome.get("voiceContext") or {}).get(key) for key in ("mode", "bindings", "digest", "route")}
         artifact_hash = digest(artifact)
@@ -1027,6 +1031,10 @@ class IdeasService:
                                  f"Raise the limit to at least US${estimate / 1_000_000:.2f} to let it write.", 402, code="automation_cost_limit")
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id, credit_authority=credit_authority)
             outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
+            from .coworker import flags as coworker_flags
+            if coworker_flags.enabled("RAFII_OPPORTUNITY_FLIPPER_ENABLED"):
+                from .growth.scout import lineage
+                outcome["scoutLineage"] = lineage(state, source_ids)
             if material_ref and material_ref.get("type") == "draft" and isinstance(material_ref.get("id"), str):
                 # A rework of one draft: applying it updates that draft, not whichever draft shares its slot.
                 outcome["reworkOf"] = material_ref["id"]
@@ -1327,6 +1335,9 @@ class IdeasService:
             if current["policyEpoch"] != epoch or current_bindings != original_bindings or current["excluded"]:
                 raise AlphaError("Sources or their policies changed. Preserve the candidate and draft again from current context.", 409)
             voice_sources.validate_bindings(state, artifact.get("voiceContext") or {})
+            if artifact.get("scoutLineage"):
+                from .growth.scout import validate_lineage
+                validate_lineage(state, artifact["scoutLineage"])
             # A variant that has ever entered the queue (approved, published, verified, in flight) is a
             # record of what went out; a new candidate never becomes an "update" to it. Only a draft that
             # is still unscheduled in the same platform/language slot is refreshed in place.
@@ -1347,6 +1358,8 @@ class IdeasService:
                 old = drafts[-1] if drafts else None
                 values = {"text": candidate["text"], "sourceIds": candidate["sourceIds"], "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if old:
+                    if artifact.get("scoutLineage"):
+                        values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
                     # Keeps the link to this run after the proposal is accepted or edited, so reopening the
@@ -1354,6 +1367,8 @@ class IdeasService:
                     old["runRefs"] = ([ref for ref in old.get("runRefs") or [] if ref != run_id] + [run_id])[-10:]
                     created.append({"platform": candidate["platform"], "language": candidate["language"], "channelId": candidate.get("channelId"), "variantId": old["id"], "proposedUpdate": True})
                 else:
+                    if artifact.get("scoutLineage"):
+                        values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
                     variant = {**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}}
                     if tag:
                         variant["automation"] = dict(tag)

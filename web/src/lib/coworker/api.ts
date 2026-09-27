@@ -128,13 +128,15 @@ export function createCoworkerApi(getToken: TokenSource) {
 
     /* performance learning */
     performance: (w: string) => get<PerformanceView>(`${co(w)}/performance`),
-    decideHypothesis: (w: string, id: string, decision: 'experiment' | 'dismissed' | 'rejected') =>
+    decideHypothesis: (w: string, id: string, decision: 'experiment' | 'dismissed' | 'rejected' | 'accepted') =>
       send<{ id: string; status: string; causal: boolean } & Verified>('POST', `${co(w)}/performance/hypotheses/${seg(id)}/decide`, { decision }),
 
     /* listening + engagement */
     listening: (w: string) => get<ListeningView>(`${co(w)}/listening`),
-    saveWatchlist: (w: string, input: { query: string; goal: string }) => send<{ watchlist: Watchlist | null } & Verified>('POST', `${co(w)}/listening/watchlists`, input),
-    decideOpportunity: (w: string, id: string, decision: 'act' | 'dismiss') =>
+    saveWatchlist: (w: string, input: { query: string; goal: string; primaryObjective?: string }) => send<{ watchlist: Watchlist | null } & Verified>('POST', `${co(w)}/listening/watchlists`, input),
+    createOpportunity: (w: string, id: string, planId: string, outcomeJobId?: string) =>
+      send<{ sourceId: string; href: string } & Verified>('POST', `${co(w)}/listening/opportunities/${seg(id)}/create`, { planId, ...(outcomeJobId ? { outcomeJobId } : {}) }),
+    decideOpportunity: (w: string, id: string, decision: 'act' | 'dismiss' | 'watch') =>
       send<{ opportunity: Opportunity | null } & Verified>('POST', `${co(w)}/listening/opportunities/${seg(id)}/decide`, { decision }),
     engagement: (w: string) => get<EngagementSummary>(`${co(w)}/engagement`)
   };

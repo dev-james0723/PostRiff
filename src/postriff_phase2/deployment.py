@@ -54,7 +54,9 @@ def isolated_environment(values):
     result['POSTRIFF_RESEARCH'] = '0'
     result['POSTRIFF_LOCAL_CLI'] = '0'
     # Rafii coworker features that reach an outside service (email, push, the public web) stay off in preview.
-    egress = ('RAFII_NOTIFICATIONS_V2_ENABLED', 'RAFII_WEB_PUSH_ENABLED', 'RAFII_RESEARCH_BROKER_ENABLED', 'RAFII_LISTENING_ENABLED')
+    egress = ('RAFII_NOTIFICATIONS_V2_ENABLED', 'RAFII_WEB_PUSH_ENABLED', 'RAFII_RESEARCH_BROKER_ENABLED', 'RAFII_LISTENING_ENABLED',
+              'RAFII_ACTIVE_SCOUT_ENABLED', 'RAFII_JEV_SCOUT_ENABLED', 'RAFII_SCOUT_STRONG_MODEL_ESCALATION_ENABLED',
+              'RAFII_MULTIMODAL_ENRICHMENT_ENABLED', 'RAFII_WATCH_IT_LOCAL_ADAPTER_ENABLED')
     if any(str(result.get(name, '')).strip().lower() in ('1', 'true', 'yes', 'on') for name in egress):
         raise ValueError('Preview Rafii notifications, web push, research and listening must remain disabled.')
     for name in egress:

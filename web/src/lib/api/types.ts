@@ -185,6 +185,9 @@ export interface SourceFact {
 
 /** Where a web-research page came from (`ideas._research`). */
 export interface SourceOrigin {
+  executionPlan?: { id: string; platform: string; account: string; language: string; primaryObjective: string };
+  opportunityId?: string;
+  trendObjectId?: string;
   kind: string;
   url?: string;
   host?: string;

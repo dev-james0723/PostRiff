@@ -167,6 +167,10 @@ def refresh(cur, workspace_id, state, now, notifications=None):
     """Recompute this workspace's hypotheses; update support, supersede flipped ones, expire stale ones."""
     rows = observations(cur, workspace_id, state, now)
     found = hypotheses_from(rows, now)
+    from . import flags
+    if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED"):
+        from ..growth import scout_outcomes
+        found += scout_outcomes.hypotheses(cur, workspace_id, state, now)
     created = updated = superseded = 0
     for h in found:
         cur.execute("""SELECT id::text, arm_a, arm_b, effect, revision, status FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND platform=%s AND dimension=%s
@@ -214,13 +218,17 @@ def refresh(cur, workspace_id, state, now, notifications=None):
 
 
 def view(cur, workspace_id, state, now):
+    from . import flags
     rows = observations(cur, workspace_id, state, now, basis=None)   # counts only; hypotheses were compared like-for-like
     cur.execute("""SELECT id::text, platform, dimension, statement, confidence, status, sample_a, sample_b, effect, evidence_ids, counter_evidence_ids, causal,
                           extract(epoch from date_from), extract(epoch from date_to), extract(epoch from expires_at), revision, experiment
                    FROM public.pr_strategy_hypotheses WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 50""", (workspace_id,))
     items = [{"id": r[0], "platform": r[1], "dimension": r[2], "statement": r[3], "confidence": r[4], "status": r[5], "samples": {"a": r[6], "b": r[7]},
               "effect": float(r[8]) if r[8] is not None else None, "evidenceIds": r[9], "counterEvidenceIds": r[10], "causal": r[11],
-              "dateRange": [r[12], r[13]], "expiresAt": r[14], "revision": r[15], "experiment": r[16],
+              "dateRange": [float(r[12]) if r[12] is not None else None, float(r[13]) if r[13] is not None else None],
+              "expiresAt": float(r[14]) if r[14] is not None else None, "revision": r[15], "experiment": r[16],
+              "canAcceptPlanning": flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED") and r[2].startswith("scout_") and r[6] >= MIN_ARM and r[7] >= MIN_ARM,
+              "planningAccepted": bool((r[16] or {}).get("planningAccepted")) and r[5] == "supported",
               "why": f"Compared {r[6]} and {r[7]} verified posts in one like-for-like group; {len(r[10] or [])} posts go against it. This is a pattern for this account, not a rule and not a cause."}
              for r in cur.fetchall()]
     measured = [r for r in rows if r["value"] is not None]
