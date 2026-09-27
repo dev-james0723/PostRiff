@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,7 +9,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { SnapshotVariant } from '@/lib/api/types';
-import type { PostCheck, PostRewrite } from '@/lib/growth/types';
+import type { AdviceGoal, PostCheck, PostRewrite } from '@/lib/growth/types';
 import { CheckResult, GrowthConsent, useGrowthCatalog } from './shared';
 
 export function PostDoctorPanel({
@@ -27,6 +27,7 @@ export function PostDoctorPanel({
   const snapshot = useSnapshot();
   const act = useAct();
   const client = useQueryClient();
+  const [goal, setGoal] = useState<AdviceGoal>(variant.postDoctorGoal ?? 'general');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [check, setCheck] = useState<PostCheck | null>(null);
@@ -37,6 +38,9 @@ export function PostDoctorPanel({
   // Keep the key after a lost response: another click reconciles instead of buying a duplicate run.
   const factsId = useId();
   const requests = useRef<{ check?: string; rewrite?: string }>({});
+  useEffect(() => {
+    setCheck(null); setRewritten(null); setSelected([]); requests.current = {};
+  }, [variant.id, variant.revision]);
   if (!catalog.data?.postDoctor) return null;
   const enabled = checkAccess(access, { permission: 'edit' });
 
@@ -47,6 +51,7 @@ export function PostDoctorPanel({
     try {
       if (kind === 'check') {
         const result = await api.postDoctor(workspaceId, {
+          ...(catalog.data?.postDoctorV2 ? { goal } : {}),
           variantId: variant.id,
           variantRevision: variant.revision,
           requestKey: requests.current.check!,
@@ -70,7 +75,7 @@ export function PostDoctorPanel({
           requestKey: requests.current.rewrite!
         });
         setRewritten(result);
-        setSelected(result.changes.map((c) => c.id));
+        setSelected(!result.comparison || result.comparison.recommended === 'candidate' ? result.changes.map((c) => c.id) : []);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'This request could not be completed.');
@@ -127,6 +132,23 @@ export function PostDoctorPanel({
         <GrowthConsent catalog={catalog.data} onChange={() => void catalog.refetch()} />
       ) : (
         <>
+          {catalog.data.postDoctorV2 && (
+            <label className='flex flex-col gap-2 text-sm'>
+              What should this post do?
+              <select aria-label='Advice goal' value={goal} disabled={Boolean(busy)}
+                className='bg-background border-input min-h-11 w-full rounded-lg border px-3'
+                onChange={(event) => {
+                  setGoal(event.target.value as AdviceGoal); setCheck(null); setRewritten(null);
+                  setSelected([]); requests.current = {};
+                }}>
+                <option value='general'>Make the idea clear</option>
+                <option value='conversation'>Start a conversation</option>
+                <option value='shareability'>Make it useful to share</option>
+                <option value='authority'>Support my expertise</option>
+                <option value='reach'>Strengthen the opening</option>
+              </select>
+            </label>
+          )}
           {dirty && (
             <p className='text-muted-foreground text-sm'>
               Save your edits before checking this revision.
@@ -178,7 +200,7 @@ export function PostDoctorPanel({
                   aria-label='Your real facts or examples'
                   value={facts}
                   onChange={(e) => {
-                    setFacts(e.target.value);
+                    setFacts(e.target.value); setRewritten(null); setSelected([]);
                     requests.current.rewrite = undefined;
                   }}
                   maxLength={10_000}
@@ -197,6 +219,19 @@ export function PostDoctorPanel({
           )}
           {rewritten && (
             <>
+              {rewritten.comparison && <div role='status' className='rafii-paper rounded-xl p-3 text-sm'>
+                <p className='font-medium'>{{ candidate: 'The proposed version better supports your goal.', original: 'Keep the original for this goal.', equivalent: 'Neither version has a clear advantage.', unsure: 'There is not enough evidence to choose a version.' }[rewritten.comparison.recommended]}</p>
+                <p className='text-muted-foreground mt-1'>{rewritten.comparison.reasons.map((reason) => ({
+                  criterion_improved: 'The comparison found a concrete improvement while preserving facts and voice.',
+                  original_preferred: 'The original better meets the selected writing criterion.',
+                  no_material_difference: 'The changes do not establish a material improvement.',
+                  insufficient_evidence: 'Review the edits yourself or provide more context.',
+                  voice_not_preserved: 'The proposed wording may change your voice.',
+                  order_disagreement: 'The comparison changed when the versions switched order.',
+                  unsupported_claims: 'The proposal contains claims that could not be supported.'
+                }[reason] ?? 'Review this change before accepting it.')).join(' ')}</p>
+                <p className='text-muted-foreground mt-1 text-xs'>This compares writing quality, not expected engagement.</p>
+              </div>}
               <h4 className='font-medium'>Choose sentence changes</h4>
               {rewritten.changes.map((change) => (
                 <label key={change.id} className='rafii-paper flex gap-3 rounded-xl p-3 text-sm'>

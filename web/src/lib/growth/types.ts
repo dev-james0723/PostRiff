@@ -1,6 +1,8 @@
+export type AdviceGoal = 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
 export interface GrowthCatalog {
   radar?: boolean;
   postDoctor: boolean;
+  postDoctorV2?: boolean;
   genome: boolean;
   consented: boolean;
   routes: string[];
@@ -22,8 +24,19 @@ export interface Dimension {
   levelName: string;
   fixes: string[];
   calibrated: boolean;
+  missingContext?: string[];
+}
+export interface PostComparison {
+  recommended: 'original' | 'candidate' | 'equivalent' | 'unsure';
+  status: string;
+  reasons: string[];
+  orderChecked: boolean;
 }
 export interface PostCheck {
+  goal?: AdviceGoal;
+  contextDigest?: string;
+  missingContext?: Record<string, string[]>;
+  priorityActions?: {dimension: string; kind: 'context' | 'improve'; concern: string; change: string}[];
   runId: string;
   questionSet: string;
   status: string;
@@ -105,6 +118,7 @@ export interface AudienceInsights {
   notice: string;
 }
 export interface PostRewrite {
+  comparison?: PostComparison;
   runId: string;
   original: string;
   rewrite: string;
@@ -176,6 +190,7 @@ export interface PerformanceFeedback {
   }[];
 }
 export interface DraftCheckBody {
+  goal?: AdviceGoal;
   confirmed: boolean;
   requestKey: string;
   variantId?: string;

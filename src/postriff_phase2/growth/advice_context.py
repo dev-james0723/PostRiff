@@ -26,3 +26,22 @@ def missing(qs, state):
         return isinstance(value, str) and bool(value.strip())
     return {dim: paths for dim, spec in qs.dimensions.items()
             if (paths := tuple(p for p in spec.get('needs', ()) if not present(p)))}
+
+
+def fingerprint(state):
+    from ..contracts import digest
+    return digest([state.get('growthConsent'),state.get('memoryEgress'),state.get('brandHub'),state.get('speaker'),
+                   state.get('you'),state.get('learning'),state.get('writerDefaults'),
+                   [(s.get('id'),s.get('revision'),s.get('active'),s.get('selected'),s.get('useGrants'))
+                    for s in state.get('sources',[]) if s.get('kind')=='voice_sample']])
+
+
+def prediction_current(prediction, state, variant):
+    from ..contracts import digest
+    from . import questions
+    if prediction.get('revision')!=variant['revision'] or prediction.get('textDigest')!=digest(variant['text']):return False
+    if prediction.get('questionSet')=='postdoctor.v2':
+        return (prediction.get('inputContextFingerprint')==fingerprint(state)
+                and prediction.get('goal')==variant.get('postDoctorGoal','general')
+                and prediction.get('evaluation',{}).get('rubricDigest')==questions.get('postdoctor',2).digest)
+    return prediction.get('questionSet') in (None,'postdoctor.v1')

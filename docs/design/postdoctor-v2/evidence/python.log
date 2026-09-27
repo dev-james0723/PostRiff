@@ -1,0 +1,28 @@
+............{"event": "weather.unavailable", "reason": "timeout", "traceId": "trace_1c637592b5d42480e6ecab37c25abccf"}
+.........................{"event": "weather.unavailable", "reason": "URLError: <urlopen error [Errno 8] nodename>", "traceId": "trace_e51f0699ea40d3db783681b85d31949d"}
+{"event": "agent_tool.failed", "tool": "weather_now", "errorClass": "KeyError", "traceId": "trace_f4570991763fcb6787ecf510a8957a2e"}
+...............................................................................................................................................................................................................................{"event": "metric_reads.complete_failed", "exceptionType": "RuntimeError"}
+.{"event": "metric_reads.read_failed", "exceptionType": "ValueError"}
+.....error: /Users/ouxianxing/Documents/James-Au-Studio-postdoctor-v2/data/x.csv is inside a git checkout; write the dataset outside the repository
+............................................................................................................................/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/case.py:213: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x12cc597b0>
+  def __init__(self, expected, test_case, expected_regex=None):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+............................................../opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <addinfourl at 5078596208 whose fp = <test_hosted_storage_video.CountingBody object at 0x12ec84540>>
+  _warnings.warn(self.warn_message, ResourceWarning)
+/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 302: 'scripted'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+...........................................................................................................................................................................................................{"event": "cron.completed", "requestId": "8cb3876e335e494c8e4709c347308d01", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}}
+................................................/Users/ouxianxing/Documents/James-Au-Studio-postdoctor-v2/src/postriff_phase2/cli_runtime.py:420: ResourceWarning: unclosed file <_io.BufferedReader name=6>
+  sink.fail(str(error))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.......................{"event": "request.completed", "requestId": "6971985039f847c99a6aec28e18cff93", "method": "POST", "status": 503, "durationMs": 0.05, "route": "api"}
+..........................................................................................................................................................................................................................................................{"event": "cron.completed", "requestId": "4d376defb9df48b8a5c3869815693113", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}}
+.......................................................................................................................................................................................................................{"event": "time_back.write_failed", "exceptionType": "RuntimeError"}
+.{"event": "time_back.publish_failed", "exceptionType": "RuntimeError"}
+................................................................................{"event": "coworker.weekly_recipe_failed", "error": "TypeError"}
+...................................................................................................................................................................................................................................................................................................{"event": "request.completed", "requestId": "8fb76466331b40209c7f4fc262857121", "method": "GET", "status": 503, "durationMs": 0.25, "route": "api"}
+........................................................................................................................................................
+----------------------------------------------------------------------
+Ran 1699 tests in 24.264s
+
+OK

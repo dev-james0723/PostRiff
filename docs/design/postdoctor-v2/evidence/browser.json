@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "execution": "local deterministic providers, synthetic observations, desktop/mobile emulation",
+  "checks": [
+    "1440/390/430 composer, goal, missing audience, three actions, both-order comparison, selective acceptance, recheck and frozen synthetic outcome"
+  ],
+  "realModelCalls": 0,
+  "pageErrors": []
+}

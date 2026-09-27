@@ -105,6 +105,7 @@ export function CheckResult({ result }: { result: PostCheck }) {
     uncalibrated_language: 'The rubric has not been calibrated for this language.',
     few_measured_posts: 'Too few comparable posts have metric readings.',
     fallback_model: 'A fallback model answered.',
+    missing_context: 'Some dimensions need more audience context.',
     many_abstained: 'Several questions lacked enough evidence.'
   };
   return (
@@ -115,12 +116,23 @@ export function CheckResult({ result }: { result: PostCheck }) {
           .map((r) => reasons[r] ?? 'The analysis was incomplete.')
           .join(' ')}
       </p>
+      {result.priorityActions && result.priorityActions.length > 0 && <div>
+        <h4 className='font-medium'>Your next changes</h4>
+        <ol aria-label='Priority actions' className='mt-2 list-decimal space-y-3 pl-5'>
+          {result.priorityActions.map((action) => <li key={action.dimension}>
+            <p className='font-medium'>{action.concern}</p>
+            <p>{action.change}</p>
+          </li>)}
+        </ol>
+      </div>}
       <dl className='grid grid-cols-2 gap-2 sm:grid-cols-3'>
         {result.dimensions.map((d) => (
           <div key={d.id} className='growth-dimension' data-level={d.level}>
             <dt className='text-muted-foreground text-xs'>{d.label}</dt>
-            <dd>{d.levelName}</dd>
+            <dd>{d.levelName}
+            {Boolean(d.missingContext?.length) && <p className='text-muted-foreground text-xs'>Audience context needed</p>}
             <div className='growth-level-bars' aria-hidden>{[0,1,2,3].map((i) => <i key={i} className={d.level !== null && i <= d.level ? 'is-on' : ''} />)}</div>
+            </dd>
           </div>
         ))}
       </dl>
@@ -134,7 +146,7 @@ export function CheckResult({ result }: { result: PostCheck }) {
           <strong>Hurting:</strong> {result.hurting.join(', ')}
         </p>
       )}
-      {result.change.length > 0 && (
+      {!result.priorityActions && result.change.length > 0 && (
         <ul className='list-disc space-y-1 pl-5'>
           {result.change.map((hint) => (
             <li key={hint}>{hint}</li>

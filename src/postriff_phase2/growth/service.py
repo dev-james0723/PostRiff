@@ -40,10 +40,7 @@ RESERVATIONS = {'check':10_000,'rewrite':200_000,'genome':800_000,'public':10_00
 
 
 def context_fingerprint(state):
-    return digest([state.get('growthConsent'),state.get('memoryEgress'),state.get('brandHub'),state.get('speaker'),
-                   state.get('you'),state.get('learning'),state.get('writerDefaults'),
-                   [(s.get('id'),s.get('revision'),s.get('active'),s.get('selected'),s.get('useGrants'))
-                    for s in state.get('sources',[]) if s.get('kind')=='voice_sample']])
+    return advice_context.fingerprint(state)
 
 
 def bindings_current(state, bindings):
@@ -97,8 +94,10 @@ def client_result(value):
     return value
 
 
-def prediction(result,run_id,revision,text):
-    return {'runId':run_id,'textDigest':digest(text),'revision':revision,'levels':result['dimensions'],
+def prediction(result,run_id,revision,text, *, comparison=None, accepted_change_ids=()):
+    return {**({'goal':result['goal'],'contextDigest':result['contextDigest'],'comparison':comparison,
+                 'acceptedChangeIds':list(accepted_change_ids),'inputContextFingerprint':result.get('_contextFingerprint')} if 'goal' in result else {}),
+            'runId':run_id,'textDigest':digest(text),'revision':revision,'levels':result['dimensions'],
             'baseline':result['baseline'],'questionSet':result['questionSet'],'evaluation':result.get('_judgment',{}),'scores':result.get('_scores',{})}
 
 
@@ -114,6 +113,19 @@ class GrowthService:
         from ..radar.service import Radar
         self.radar = Radar(self)
         self.repository.effects.append(self.invalidate)
+
+    def _context(self,state):
+        base=context_fingerprint(state)
+        if self.env.get('POSTRIFF_POST_DOCTOR_V2')!='1':return base
+        qs=questions.get('postdoctor',2)
+        return digest([base,qs.key,qs.digest,questions.get('postdoctor_compare',1).digest])
+
+    @staticmethod
+    def _draft_matches(state,draft):
+        if not draft or not draft.get('id'):return True
+        current=next((v for v in state.get('variants',[]) if v['id']==draft['id']),{})
+        return (current.get('revision')==draft['revision'] and current.get('text')==draft['text']
+                and (draft.get('adviceVersion')!=2 or current.get('postDoctorGoal','general')==draft.get('goal','general')))
 
     def enabled(self,kind):
         return self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get(FLAGS[kind])=='1'
@@ -188,12 +200,12 @@ class GrowthService:
         with self.repository.transaction(token,workspace_id) as (_,row,_):
             require(_membership(row),run.get('requirement','edit'))
             state=row[1]
-            if context_fingerprint(state)!=run['context']:
+            if self._context(state)!=run['context']:
                 raise AlphaError('The input or AI permission changed. Check the current version.',409,code='growth_input_changed')
             draft=run['prepared'].get('draft')
             if draft and draft.get('id'):
                 current=self._draft(state,{'variantId':draft['id'],'variantRevision':draft['revision']})
-                if current['text']!=draft['text']:
+                if not self._draft_matches(state,draft):
                     raise AlphaError('This draft changed. Check its current version.',409,code='growth_input_changed')
 
     def _doctor(self,router, *, legacy=False):
@@ -210,7 +222,7 @@ class GrowthService:
         self.session(token)
         saved=self.repository.get(workspace_id,token)
         _runtime,writer,_note=self.hosted.ideas.resolve_writer(saved['state'],None)
-        return {'radar':self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get('POSTRIFF_RADAR')=='1','postDoctor':self.enabled('check'),'genome':self.enabled('genome'),
+        return {'radar':self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get('POSTRIFF_RADAR')=='1','postDoctorV2':self.env.get('POSTRIFF_POST_DOCTOR_V2')=='1','postDoctor':self.enabled('check'),'genome':self.enabled('genome'),
                 'postmortem':self.enabled('postmortem'),'audienceMiner':self.enabled('audience'),
                 'summaryRoute':SUMMARY_ROUTE,'audienceConsent':saved['state'].get('growthConsent',{}).get('audience') is True,
                 'consented':bool(saved['state'].get('growthConsent',{}).get('routes')),
@@ -280,11 +292,16 @@ class GrowthService:
                     raise AlphaError('That request key belongs to another input.',409,code='growth_key_conflict')
                 if old[1]=='completed':
                     draft=old[3].get('draft')
-                    if old[4]!=context_fingerprint(state) or (draft and draft.get('id') and self._draft(state,{'variantId':draft['id'],'variantRevision':draft['revision']})['text']!=draft['text']):
+                    if old[4]!=self._context(state) or not self._draft_matches(state,draft):
                         raise AlphaError('This completed request belongs to an older input.',409,code='growth_input_changed')
                     return {'replayed':client_result(old[3])}
                 raise AlphaError('This request already started. Its result must be reconciled before trying again.',409,code='growth_request_pending')
             prepared=prepare(cur,state,principal)
+            if kind=='check' and prepared['draft'].get('adviceVersion')==2 and prepared['draft'].get('id'):
+                variant=next(v for v in state['variants'] if v['id']==prepared['draft']['id'])
+                variant['postDoctorGoal']=prepared['draft']['goal']
+                variant.pop('postDoctor',None)
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(state),workspace_id))
             amount=RESERVATIONS[kind]
             if kind=='rewrite':
                 runtime=self.hosted.ideas._select_runtime(prepared['writer'])
@@ -298,7 +315,7 @@ class GrowthService:
             self.reserve(cur,'global',amount,self.cap('POSTRIFF_GROWTH_DAILY_USD_CAP'),10000)
             self.reserve(cur,workspace_id,amount,self.cap('POSTRIFF_WORKSPACE_GROWTH_DAILY_USD_CAP'),1000)
             self.reserve(cur,f'{workspace_id}:{kind}',0,1,{'check':10,'rewrite':1,'genome':1,'postmortem':10,'audience':2}[kind])
-            run_id=str(uuid.uuid4());context=context_fingerprint(state)
+            run_id=str(uuid.uuid4());context=self._context(state)
             cur.execute('INSERT INTO public.pr_post_doctor_runs(id,workspace_id,request_key,kind,status,fingerprint,context_fingerprint,created_by) VALUES(%s,%s,%s,%s,\'running\',%s,%s,%s)',
                         (run_id,workspace_id,key,kind,fingerprint,context,principal))
             return {'id':run_id,'state':state,'context':context,'prepared':prepared,'requirement':requirement}
@@ -313,11 +330,11 @@ class GrowthService:
             with self.repository.transaction(token,workspace_id) as (cur,row,principal):
                 require(_membership(row),run.get('requirement','edit'))
                 current=row[1]
-                valid=context_fingerprint(current)==run['context']
+                valid=self._context(current)==run['context']
                 draft=(run.get('prepared') or {}).get('draft')
                 if draft and draft.get('id'):
                     candidate=next((v for v in current.get('variants',[]) if v['id']==draft['id']),{})
-                    valid=valid and candidate.get('revision')==draft['revision'] and candidate.get('text')==draft['text']
+                    valid=valid and self._draft_matches(current,draft)
                 status='cancelled' if not valid else 'unknown' if error and sink.events else 'failed' if error else 'completed'
                 if status=='completed' and store:
                     result=store(cur,current,principal,result)
@@ -345,13 +362,15 @@ class GrowthService:
         target={'platform':draft['platform'],'connectionId':draft.get('channelId'),'language':draft['language'],'format':draft.get('formatId') or 'text','timeBucket':'unknown'}
         measured=sum(performance.cohort(p)==performance.cohort(target) and genome.relative(p,posts) is not None for p in posts)
         result=serialize(self._doctor(router,legacy=workspace_id is None).check(workspace_id=workspace_id,draft_text=draft['text'],platform=draft['platform'],
-                                                  lang=draft['language'],creator=creator,posts_with_metrics=measured),draft['language'])
-        result['computed']['fit_winners']=genome.fit_winners(result['_scores'],posts,target)
+                                                  lang=draft['language'],creator=creator,posts_with_metrics=measured,goal=draft.get('goal','general'),format_id=draft.get('formatId') or 'text'),draft['language'])
+        # Imported history currently uses v1; never compare different rubric scores.
+        result['computed']['fit_winners']=genome.fit_winners(result['_scores'],posts,target) if result['questionSet']=='postdoctor.v1' else None
         if workspace_id and self.enabled('postmortem'):
             with self.hosted.connection_factory() as db,db.cursor() as cur:
                 profile=self.closed_loop.active_calibration(cur,workspace_id,state)
             if profile:
                 result['computed']['creatorFit']=creator_calibration.apply(profile,target,result['_judgment']['model'],result['_judgment']['rubricDigest'],result['_scores'])
+        result['_contextFingerprint']=context_fingerprint(state)
         result['draft']={**draft,'digest':digest(draft['text'])}
         result['baseline']={'measuredPosts':measured,'basis':'24h','genomeId':(current_genome(state) or {}).get('id')}
         result['judgment']={'model':result['_judgment']['model'],'questionSet':result['questionSet'],'calibrated':result['_judgment']['calibrated']}
@@ -360,6 +379,10 @@ class GrowthService:
     def check(self,workspace_id,token,body):
         def prepare(cur,state,principal):
             draft=self._draft(state,body)
+            if self.env.get('POSTRIFF_POST_DOCTOR_V2')=='1':
+                try:ctx=advice_context.build({},goal=body.get('goal','general'),format_id=draft.get('formatId') or 'text')
+                except ValueError as e:raise AlphaError(str(e)) from e
+                draft.update(goal=ctx['goal'],adviceVersion=2)
             if len(draft['text'])>8000:
                 raise AlphaError('Post Doctor checks up to 8,000 characters.',413)
             return {'draft':draft,'posts':self._history(cur,workspace_id,state)}
@@ -373,7 +396,9 @@ class GrowthService:
             draft=result['draft']
             if draft.get('id'):
                 variant=next(v for v in state['variants'] if v['id']==draft['id'])
-                variant['postDoctor']=prediction(result,run['id'],draft['revision'],draft['text'])
+                accepted=variant.get('postDoctorAccepted',{})
+                if accepted.get('textDigest')!=digest(draft['text']) or accepted.get('goal')!=result.get('goal') or accepted.get('contextDigest')!=result.get('contextDigest'):accepted={}
+                variant['postDoctor']=prediction(result,run['id'],draft['revision'],draft['text'],comparison=accepted.get('comparison'),accepted_change_ids=accepted.get('changeIds',()))
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(state),workspace_id))
             return result
         return self._finish(workspace_id,token,run,sink,result,error,store)
@@ -384,8 +409,9 @@ class GrowthService:
             row=cur.fetchone()
             if not row:raise AlphaError('Check unavailable.',404)
             check=row[0]
-            if row[1]!=context_fingerprint(state):raise AlphaError('Check your current voice and history again.',409)
+            if row[1]!=self._context(state):raise AlphaError('Check your current voice and history again.',409)
             draft=check['draft']
+            if not self._draft_matches(state,draft):raise AlphaError('The draft goal changed. Check again.',409,code='growth_input_changed')
             if draft.get('id'):self._draft(state,{'variantId':draft['id'],'variantRevision':draft['revision']})
             facts=body.get('facts',{})
             if (not isinstance(facts,dict) or len(facts)>10 or any(not isinstance(k,str) or not 1<=len(k)<=40 or not isinstance(v,str) or not 1<=len(v)<=1000 for k,v in facts.items())):
@@ -580,9 +606,9 @@ class GrowthService:
             elif action=='post_doctor_accept':
                 cur.execute("SELECT body,context_fingerprint FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND id::text=%s AND kind='rewrite' AND status='completed' FOR UPDATE",(workspace_id,payload.get('rewriteId')))
                 row=cur.fetchone()
-                if not row or row[1]!=context_fingerprint(state):raise AlphaError('This rewrite is stale or unavailable.',409)
+                if not row or row[1]!=self._context(state):raise AlphaError('This rewrite is stale or unavailable.',409)
                 result=row[0];draft=result['draft'];variant=self._draft(state,{'variantId':draft['id'],'variantRevision':draft['revision']}) if draft.get('id') else None
-                if not variant or variant['text']!=result['original']:raise AlphaError('Save this draft before accepting changes.',409)
+                if not variant or variant['text']!=result['original'] or not self._draft_matches(state,draft):raise AlphaError('Save this draft before accepting changes.',409)
                 selected=payload.get('changeIds',[])
                 if not selected:raise AlphaError('Select at least one sentence change.')
                 text=rewrite.apply(result['original'],result['changes'],selected)
@@ -599,10 +625,11 @@ class GrowthService:
                 target['needsReview']=True
                 if result.get('missingFacts'):
                     target['unknowns']=list(dict.fromkeys([*target.get('unknowns',[]),*result['missingFacts']]))
-                target['postDoctorAccepted']={'runId':payload['rewriteId'],'changeIds':selected}
+                target['postDoctorAccepted']={'runId':payload['rewriteId'],'changeIds':selected,'textDigest':digest(text),
+                                            'goal':result['after'].get('goal'),'contextDigest':result['after'].get('contextDigest'),'comparison':result.get('comparison')}
                 # Only a full exact rechecked rewrite can carry its recheck to publication. Partial edits need a fresh check.
                 if set(selected)=={c['id'] for c in result['changes']}:
-                    target['postDoctor']=prediction(result['after'],payload['rewriteId'],target['revision'],text)
+                    target['postDoctor']=prediction(result['after'],payload['rewriteId'],target['revision'],text,comparison=result.get('comparison'),accepted_change_ids=selected)
                 else:target.pop('postDoctor',None)
                 cur.execute('UPDATE public.pr_post_doctor_runs SET accepted_changes=%s::jsonb WHERE workspace_id=%s AND id::text=%s',(json.dumps(selected),workspace_id,payload['rewriteId']))
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),workspace_id))
@@ -631,6 +658,15 @@ class GrowthService:
 
     def invalidate(self,cur,workspace_id,before,after,principal):
         self.radar.invalidate(cur,workspace_id,before,after,principal)
+        if context_fingerprint(before)!=context_fingerprint(after):
+            removed=False
+            for variant in after.get('variants',[]):
+                if (variant.get('postDoctor') or {}).get('questionSet')=='postdoctor.v2':
+                    variant.pop('postDoctor',None);removed=True
+                if (variant.get('postDoctorAccepted') or {}).get('goal') is not None:
+                    variant.pop('postDoctorAccepted',None);removed=True
+            if removed:
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(after),workspace_id))
         changed=[]
         for old in before.get('sources',[]):
             if old.get('kind')!='voice_sample':continue

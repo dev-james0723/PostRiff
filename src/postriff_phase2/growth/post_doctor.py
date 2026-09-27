@@ -258,6 +258,8 @@ class PostDoctorService:
         state = {"draft": draft_text, "platform": platform, "lang": lang, "creator": creator}
         context = advice_context.build(creator, goal=goal, format_id=format_id) if self.qs.version >= 2 else {}
         if context:
+            context.update(platform=platform,language=lang)
+            context["digest"]=questions.digest({k:v for k,v in context.items() if k!="digest"})
             state.update(creator=context["creator"], goal=context["goal"], format=context["format"])
         subject = subject_hash("postdoctor", platform, lang, draft_text, questions.canonical(creator), questions.canonical(context))
         judgment = self.judgments.judge(self.qs, state, subject=subject, scope=f"personal:{workspace_id}",

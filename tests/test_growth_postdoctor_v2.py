@@ -61,3 +61,23 @@ class ContextContract(unittest.TestCase):
     def test_bad_goal_rejected_before_provider(self):
         with self.assertRaises(ValueError):self.check(self.doctor(),goal='go viral guaranteed')
         self.assertEqual(self.states,[])
+
+    def test_publication_fences_current_rubric_goal_and_context(self):
+        from postriff_phase2.growth import advice_context
+        from postriff_phase2.growth.service import context_fingerprint
+        from postriff_phase2.contracts import digest
+        state={'brandHub':{'audience':'beginners'}}
+        variant={'revision':2,'text':'A post.','postDoctorGoal':'conversation'}
+        saved={'revision':2,'textDigest':digest('A post.'),'questionSet':'postdoctor.v2','goal':'conversation',
+               'inputContextFingerprint':context_fingerprint(state),'evaluation':{'rubricDigest':Q.get('postdoctor',2).digest}}
+        self.assertTrue(advice_context.prediction_current(saved,state,variant))
+        self.assertFalse(advice_context.prediction_current({**saved,'goal':'authority'},state,variant))
+        self.assertFalse(advice_context.prediction_current({**saved,'evaluation':{'rubricDigest':'old'}},state,variant))
+        state['brandHub']['audience']='experts'
+        self.assertFalse(advice_context.prediction_current(saved,state,variant))
+
+    def test_context_identity_includes_language_and_platform(self):
+        svc=self.doctor()
+        a=self.check(svc)
+        b=svc.check(workspace_id='ws',draft_text='I practise slowly.',platform='Bluesky',lang='zh-Hant')
+        self.assertNotEqual(a.context['digest'],b.context['digest'])

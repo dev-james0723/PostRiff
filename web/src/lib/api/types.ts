@@ -224,6 +224,7 @@ export interface VariantFeedback {
 }
 
 export interface SnapshotVariant {
+  postDoctorGoal?: 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
   /** Post media recorded when the draft was written (chat-context SPEC §5.10). */
   media?: RunMedia[];
   revisions?: VariantRevision[];

@@ -425,7 +425,8 @@ class Phase2Store(Store):
         if v.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, v["trendLineage"]):
             raise AlphaError("Trend evidence changed or is unavailable. Review current evidence before publication.", 410, code="evidence_unavailable")
         advice = v.get("postDoctor") or {}
-        if advice.get("revision") == v["revision"] and advice.get("textDigest") == digest(text):
+        from .growth.advice_context import prediction_current
+        if prediction_current(advice, s, {**v, "text": text}):
             manifest["postDoctor"] = copy.deepcopy(advice)
         root_key = digest(manifest)
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
