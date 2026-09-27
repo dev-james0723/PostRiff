@@ -1,10 +1,10 @@
 {
-  "verifiedAtUtc": "2026-09-27T00:16:56.697760+00:00",
+  "verifiedAtUtc": "2026-09-27T00:21:43.528189+00:00",
   "status": "LOCALLY_VALIDATED_RELEASE_NOT_STARTED",
   "root": "/Users/ouxianxing/Documents/James-Au-Studio-live-agent",
   "branch": "feat/rafii-live-agent",
   "baselineMergeCommit": "bcb1f458d5b3f486eaede1a7f1a9102acabbc819",
-  "upstream": "81c4a9fe7e738e401551f72d341a8ccf214a3ea3",
+  "upstream": "9b3c935874f8e555faf6288ca63d71b8aad39a37",
   "implementationState": "local product commits 811371e and 35b6a47; upstream reconciliation committed; no push or deployment",
   "providerExecution": "fake/synthetic only; no real PSTN, SMS, provider/model calls or customer messages",
   "sourceFiles": [
@@ -319,7 +319,7 @@
         "phoneUnitTests": 18
       },
       "rawLog": ".token-pilot/evidence/rafii-phone-20260926/python-unit-release.log",
-      "logSha256": "1209897d99501b6d9c0b2d373086f2fe861d06bdaba0c25523dba4e8d410d2b2"
+      "logSha256": "62ecae4fadc23881f34768c07633de9f5237e52ce48c1fb7e384784a220c76dd"
     },
     {
       "id": "phone-postgres",
@@ -353,18 +353,18 @@
         "passedSuites": 1
       },
       "rawLog": ".token-pilot/evidence/rafii-phone-20260926/quick-start-release.log",
-      "logSha256": "8888354ee160ec57071be36752947f813d2bd200e03beae4791b6b5dad1306c6",
-      "note": "Repeated only this affected PostgreSQL suite after the latest incoming bounded-title fix; other passed checks cover unchanged behavior."
+      "logSha256": "e7b0c7305922721beaec5d4dde45af0713c56f4289d488cae822867d18ab31a7",
+      "note": "Repeated this affected PostgreSQL suite after the latest incoming policy-safe source-title fix; other passed checks cover unchanged behavior."
     },
     {
       "id": "web-unit",
       "status": "PASS",
       "command": "node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs",
       "result": {
-        "passed": 385
+        "passed": 387
       },
       "rawLog": ".token-pilot/evidence/rafii-phone-20260926/web-unit-release.log",
-      "logSha256": "afb951138c1836f02cd855925c5efc08a880520c5d1fa972c057f5262771e114"
+      "logSha256": "b7df006ca8d978fbde9f80e691ccb98c42c28485ca5599886f1d60758aab6259"
     },
     {
       "id": "phone-browser",
@@ -412,7 +412,7 @@
         "sourceFiles": 804
       },
       "rawLog": ".token-pilot/evidence/rafii-phone-20260926/oxlint-release.log",
-      "logSha256": "80b0a39ed485d365bcecee8c5265100ecffa45361455e4a4242121a20b7bc27e"
+      "logSha256": "20d6da03c93dfdd74302b723682a59992b71ca866466671267fda62442cf0152"
     },
     {
       "id": "copy-audit",
@@ -434,7 +434,7 @@
         "deployed": false
       },
       "rawLog": ".token-pilot/evidence/rafii-phone-20260926/build-release.log",
-      "logSha256": "65167e960ffbcf4a48c9202bfcb3b0d93dbdc7a65223906cdac6f5a17c1d7f8d"
+      "logSha256": "cbd21654d4e4c785d844a0e217ec615c0a95829edb3813e2d98d123032013154"
     },
     {
       "id": "deployment-structure",
@@ -519,7 +519,7 @@
   "pushed": false,
   "releaseMerged": false,
   "testServers": "stopped; disposable database removed",
-  "verifiedImplementationHead": "d25fe074afd5449a6f3f70e56895cbb768e2cd9b",
+  "verifiedImplementationHead": "b581c7b936ff5984c1d164de3e809b3487233041",
   "preservedUnrelatedWork": [
     "docs/design/site-agent/adaptive-social-coworker/NOTIFICATIONS.md",
     "docs/design/rafii-live-agent/RAFII_NOTIFICATION_SYSTEM_ENGINEERING_PLAN_2026-09-26.md",
