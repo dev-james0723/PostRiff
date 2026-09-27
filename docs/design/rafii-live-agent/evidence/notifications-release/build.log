@@ -3,18 +3,22 @@
 > next build
 
 ▲ Next.js 16.3.5 (Turbopack)
-✓ Running next.config.ts took 733ms
+✓ Running next.config.ts took 501ms
+- Experiments (use with caution):
+  · clientTraceMetadata
 
   Creating an optimized production build ...
-✓ Compiled successfully in 5.5s
+✓ Compiled successfully in 9.1s
+  Running next.config.js provided runAfterProductionCompile ...
+✓ Completed runAfterProductionCompile in 976ms
   Running TypeScript ...
-  Finished TypeScript in 6.4s ...
+  Finished TypeScript in 23.5s ...
   Collecting page data using 11 workers ...
-  Generating static pages using 11 workers (0/99) ...
-  Generating static pages using 11 workers (24/99)
-  Generating static pages using 11 workers (49/99)
-  Generating static pages using 11 workers (74/99)
-✓ Generating static pages using 11 workers (99/99) in 971ms
+  Generating static pages using 11 workers (0/100) ...
+  Generating static pages using 11 workers (25/100)
+  Generating static pages using 11 workers (50/100)
+  Generating static pages using 11 workers (75/100)
+✓ Generating static pages using 11 workers (100/100) in 1012ms
   Finalizing page optimization ...
 
 Route (app)
@@ -27,6 +31,7 @@ Route (app)
 ├ ƒ /app/account/notifications
 ├ ƒ /app/account/privacy
 ├ ƒ /app/account/profile
+├ ƒ /app/agent
 ├ ƒ /app/agent/[conversationId]
 ├ ƒ /app/analytics
 ├ ƒ /app/automations

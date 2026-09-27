@@ -1,0 +1,33 @@
+{
+  "execution": "local checks after merging current consumer-saas",
+  "head": "869fc2b75c074244b9096e0b7d08863ca3b591ca",
+  "upstream": "677595e2b08d9de949ff4cf3aa7d056e6b5783ed",
+  "checks": {
+    "python": {
+      "status": "PASS",
+      "tests": 1496
+    },
+    "web": {
+      "status": "PASS",
+      "tests": 388
+    },
+    "typecheck": {
+      "status": "PASS"
+    },
+    "lint": {
+      "status": "PASS"
+    },
+    "build": {
+      "status": "PASS"
+    },
+    "offlineSecretScan": {
+      "status": "PASS",
+      "files": 1647,
+      "findings": 313,
+      "unexpected": 0,
+      "change": "Reviewed exact fixed fake-provider HMAC fixture path/hash; scanner and Phone code unchanged."
+    }
+  },
+  "implementationHashPreserved": true,
+  "emailPgBrowserEvidenceReused": "Implementation verification remains valid for identical source/assets; upstream changed six unrelated Home/source-turn files."
+}

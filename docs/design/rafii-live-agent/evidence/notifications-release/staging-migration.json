@@ -1,0 +1,101 @@
+{
+  "execution": "authorized isolated staging migration apply",
+  "projectRef": "oxacvkhpfgytkepxcaqh",
+  "appliedThisTask": [
+    {
+      "name": "034_unified_notifications.sql",
+      "sha256": "df29f5f056955d74098b6de470250cc8013e8b9e683be0ae75ad5d3e7412f717",
+      "status": "PENDING"
+    }
+  ],
+  "ledgerEntries": 29,
+  "pending": 0,
+  "serverOnlyRlsTables": [
+    [
+      "pr_notification_acknowledgements",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_phone_calls",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_phone_delegations",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_phone_numbers",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_phone_preferences",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_phone_provider_events",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_phone_schedules",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_phone_verification_limits",
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      "pr_sms_consents",
+      true,
+      true,
+      false,
+      false
+    ]
+  ],
+  "policies": [
+    [
+      "pr_notification_acknowledgements",
+      "service_only",
+      [
+        "service_role"
+      ]
+    ],
+    [
+      "pr_sms_consents",
+      "service_only",
+      [
+        "service_role"
+      ]
+    ]
+  ],
+  "aggregateCounts": {
+    "pr_phone_numbers": 0,
+    "pr_phone_calls": 0,
+    "pr_sms_consents": 0,
+    "pr_notification_acknowledgements": 0
+  },
+  "outboundTransportsCalled": false
+}
