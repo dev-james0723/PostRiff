@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { orderMetricKeys, providerLabel } from './coverage';
 import { MetricCell } from './metric-value';
 import type { PostRowData } from './posts-table';
+import { PerformanceFeedback } from '@/features/growth/performance-feedback';
 
 function Row({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
@@ -79,6 +80,7 @@ export function PostSheet({ row, families, open, onOpenChange }: { row: PostRowD
               <SheetDescription>{[post.language, post.contentOrigin.replace(/_/g, ' ')].filter(Boolean).join(' · ')}</SheetDescription>
             </SheetHeader>
             <div className='flex flex-col gap-6 px-4 pb-4'>
+              {job && <PerformanceFeedback jobId={job.id} />}
               <section className='flex flex-col gap-2'>
                 <SectionTitle>Text</SectionTitle>
                 {text ? <p className='text-sm whitespace-pre-wrap'>{text}</p> : <p className='text-muted-foreground text-sm'>Text not available here. Open it in Queue.</p>}

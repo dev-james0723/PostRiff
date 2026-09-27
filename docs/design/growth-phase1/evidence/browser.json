@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "execution": "actual UI + disposable PostgreSQL + deterministic model/provider fixtures",
+  "checks": [
+    "composer consent, nine levels, selected edits and publishing boundary",
+    "Genome corpus, evidence, approval, public label preview and revoke",
+    "exact publication revision and native observed feedback screen",
+    "public checks, qualitative feedback, mobile layout and accessibility"
+  ],
+  "realModelCalls": 0,
+  "livePosts": 0
+}

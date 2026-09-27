@@ -402,6 +402,9 @@ class Phase2Store(Store):
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
+        advice=v.get('postDoctor') or {}
+        if advice.get('revision')==v['revision'] and advice.get('textDigest')==digest(text):
+            manifest['postDoctor']=copy.deepcopy(advice)
         root_key = digest(manifest)
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
         # key all duplicate reviews for this retry to the same preceding job, never a random nonce.

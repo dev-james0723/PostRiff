@@ -1,0 +1,24 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-v3-phase1/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+== tests/phase2/postgres_growth_history.py exit=0
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres; synthetic transport only",
+  "checks": [
+    "an import needs a confirmed request, a live Threads/Instagram credential and Direct analytics; one active run per connection",
+    "the import pages newest-first, stops at the 90-day window, keeps metadata and caption length only (no text, no guessable hash, no insecure link) and schedules one backfill reading per post",
+    "the metric step reads the imported posts; their observations carry read_offset backfill and no job",
+    "a 401 fails the run instead of retrying",
+    "progress resets a run's attempts: a transient error right after a stored page retries instead of failing the run",
+    "a run handed back at the step's deadline keeps its attempt count",
+    "a database error while storing a page retries that run from the same cursor without failing the cron step",
+    "disconnect purges imported posts, their observations and their reading rows, and cancels other pending readings",
+    "after disconnect and reconnect a new import schedules readings for the same posts again",
+    "a reading completing around a disconnect never leaves observations behind, in either order",
+    "an owed disconnect purge blocks imports and cancels import readings while Rafii's own readings wait and retry; it is retried by the flag-independent cron sweep, removes all import-derived data but never the readings of Rafii's own posts (reviving a row never relabels a job's reading), then imports work again",
+    "a purge blocked by another session gives up after the 2 s lock timeout, records why and backs off instead of stalling the cron",
+    "a next page without a cursor keeps that page's posts, then fails the run instead of reporting a partial import as done",
+    "the operator backfill is dry-run by default and schedules one reading only for recent verified Threads/Instagram jobs without readings"
+  ]
+}
+
+{"status": "pass", "execution": "disposable-local-postgres", "failed": []}
