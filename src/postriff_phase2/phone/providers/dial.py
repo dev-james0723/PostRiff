@@ -117,7 +117,18 @@ class DialProvider:
         if type(limit) is not int or not 60 <= limit <= 3600:
             return {'ready': False, 'reason': 'provider_account'}
         capabilities = lines[0].get('capabilities', [])
-        return {'ready': True, 'maxSeconds': min(600, limit), 'smsReady': 'sms' in capabilities and 'imessage' not in capabilities}
+        registration = lines[0].get('tenDlc')
+        registration_status = 'not_applicable'
+        if registration is not None:
+            registration_status = registration.get('status') if isinstance(registration, dict) else 'unknown'
+            if registration_status not in ('not_registered', 'in_review', 'with_carrier', 'approved', 'rejected'):
+                registration_status = 'unknown'
+        # Voice remains available to previously verified users. US carrier SMS needs
+        # approved registration when Dial says 10DLC applies to the originating line.
+        sms_ready = ('sms' in capabilities and 'imessage' not in capabilities and
+                     registration_status in ('not_applicable', 'approved'))
+        return {'ready': True, 'maxSeconds': min(600, limit), 'smsReady': sms_ready,
+                'smsRegistration': registration_status}
 
     def _receipt(self, value, *, number=None, call_id=None, call_ref=None):
         ref = value.get('id')

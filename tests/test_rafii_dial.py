@@ -32,11 +32,12 @@ class DialFixture:
         self.call={'id':'call_test','direction':'outbound','from':'+12025550100','to':'+12025550123',
                    'instruction':DialProvider.instruction(CALL),'status':'ringing','duration':0}
         self.create_status=201
+        self.line={'number':'+12025550100','setupStatus':'ready','callingEnabled':True,'capabilities':['call','sms']}
 
     def __call__(self, method, path, fields=None, headers=None):
         self.requests.append((method,path,fields,headers))
         if path=='/self-hosted': return 200,copy.deepcopy(self.config)
-        if path=='/numbers': return 200,{'numbers':[{'number':'+12025550100','setupStatus':'ready','callingEnabled':True,'capabilities':['call','sms']}]}
+        if path=='/numbers': return 200,{'numbers':[copy.deepcopy(self.line)]}
         if path=='/account': return 200,{'limits':{'maxCallDurationSeconds':300}}
         if path=='/messages': return 201,{'message':{'id':'message_synthetic'}}
         if path=='/calls' and method=='POST': return self.create_status,{'call':copy.deepcopy(self.call)}
@@ -65,6 +66,20 @@ class DialTests(unittest.TestCase):
                 provider=DialProvider(VALUES,transport=fixture)
                 self.assertEqual(provider.create_outbound_call(number='+12025550123',call_id=CALL,max_seconds=60).state,'failed')
                 self.assertFalse(any(r[0]=='POST' for r in fixture.requests))
+
+    def test_10dlc_readiness_reports_sms_block_without_disabling_verified_voice(self):
+        cases=[(None,'not_applicable',True),({'status':'approved'},'approved',True)]
+        cases += [({'status':status},status,False) for status in
+                  ('not_registered','in_review','with_carrier','rejected')]
+        cases += [({},'unknown',False),({'status':[]},'unknown',False)]
+        for registration,expected_status,sms_ready in cases:
+            with self.subTest(registration=registration):
+                self.http.line['tenDlc']=registration
+                readiness=self.provider.readiness()
+                self.assertEqual((readiness['ready'],readiness['smsReady'],readiness['smsRegistration']),
+                                 (True,sms_ready,expected_status))
+                receipt=self.provider.create_outbound_call(number='+12025550123',call_id=CALL,max_seconds=60)
+                self.assertEqual(receipt.state,'ringing')
 
     def test_unknown_response_has_no_automatic_retry(self):
         self.http.create_status=0

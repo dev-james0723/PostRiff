@@ -36,11 +36,35 @@ and preserves existing ten-minute/five-attempt/rate limits.
 Dial's **Self-Hosted audio mode requires per-account human approval**. It routes **all new
 inbound and outbound calls on that Dial account** to the selected server. Use a dedicated
 Rafii account/line. This integration accepts only outbound calls already authorized in Rafii;
-unsolicited inbound calls receive no workspace access. No account changes were submitted.
+unsolicited inbound calls receive no workspace access. Calling configuration remains unchanged.
 
-No Dial API key or local Dial CLI authentication was found. A read-only dashboard visit
-redirected to email sign-in. No email, OTP, account creation, access request, purchase,
-subscription, webhook registration or mode activation was submitted.
+The user-selected email and personal SMS number were verified through Dial's dashboard on
+2026-09-27. Sign-in succeeded and Dial automatically provisioned **+16055978162** with SMS
+and Voice capabilities and Calling On. An existing default API key is available in Settings;
+it has not been exported or saved to Rafii's server environment. There are no webhooks.
+
+Account evidence from the signed-in dashboard:
+
+- Self-Hosted displays **Request Self-Hosted access**. The request below is prepared in the
+  form and awaits user approval before submission to Dial's reviewer.
+- The number is **not registered for 10DLC**. Outbound US SMS/MMS is blocked; voice and inbound
+  texts are unaffected. Rafii's new-user SMS verification for US numbers needs registration
+  before launch. The dashboard quotes a **one-time $25 fee** and **3–5 business days**;
+  registration and payment have not been submitted. The registration flow requires a
+  confirmed sole-proprietor or business identity, brand/contact/address details, and the
+  campaign's consent flow and sample messages. These details must come from the account owner.
+- Billing shows **$5 welcome credit**, **$3 deducted for the first month of number ownership**,
+  and **$2 remaining**. The line costs **$3/month plus usage**. No payment method is attached,
+  auto-reload is off, and new spend pauses at a zero balance.
+- Free accounts are capped at **5 minutes per call** and **2 simultaneous calls**. Audio-mode
+  and destination-specific metered rates still need confirmation before a live call.
+
+The provider readiness check reports `smsReady: false` and the 10DLC registration state when
+US carrier registration is incomplete. This diagnostic does not block voice calls to users
+whose Rafii numbers are already verified; all existing consent and spending gates still apply.
+
+No Self-Hosted access request, 10DLC registration, webhook registration, mode activation,
+deployment or live call has been submitted.
 
 Prepared access-request text (review before sending to Dial):
 
