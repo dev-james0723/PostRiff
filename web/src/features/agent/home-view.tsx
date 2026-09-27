@@ -271,7 +271,7 @@ function HomeWorkspace() {
         aria: mentionTextareaProps(mention.open, mention.listId, activeOption)
       }
     : undefined;
-  const barProps = { attachments, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner' };
+  const barProps = { attachments, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, id: crypto.randomUUID() }) };
   const mentionList = (inline: boolean) =>
     attachmentsOn ? (
       <MentionList

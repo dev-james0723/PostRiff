@@ -28,6 +28,20 @@ test('the one plus sheet owns skills and connected apps, with on-demand connecto
   assert.doesNotMatch(sheet, /setInterval|background sync/i);
 });
 
+test('Recent posts opens the existing consent-separated writing-sample review on Home and conversation chat', () => {
+  const sheet = read('features', 'agent', 'attachments', 'plus-sheet.tsx');
+  const bar = read('features', 'agent', 'attachments', 'attachment-bar.tsx');
+  const home = read('features', 'agent', 'home-view.tsx');
+  const conversation = read('features', 'agent', 'conversation-view.tsx');
+  assert.match(sheet, /label: 'Recent posts'/);
+  assert.match(sheet, /onRecentPosts\?\.\(\)/);
+  assert.match(bar, /onRecentPosts=\{onRecentPosts\}/);
+  assert.match(home, /Review my recent Instagram and LinkedIn posts and help me learn how I write\./);
+  assert.match(conversation, /Review my recent Instagram and LinkedIn posts and help me learn how I write\./);
+  assert.match(home, /<VoiceLearningPanel/);
+  assert.match(conversation, /<VoiceLearningPanel/);
+});
+
 test('OAuth provider return has public forwarding and authenticated completion surfaces', () => {
   const publicPage = read('app', 'connectors', 'connect', 'forwarder.tsx');
   const appPage = read('app', 'app', 'connectors', 'connect', 'page.tsx');

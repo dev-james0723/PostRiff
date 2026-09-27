@@ -26,7 +26,7 @@ test('the composer mounts the bar between the textarea and "Draft for"', () => {
 
 test('textarea handlers are composed explicitly, never spread over the composer’s own', () => {
   assert.match(composer, /onInput=\{\(event\) => attachments\?\.textareaProps\.onInput\(event\)\}/);
-  assert.match(composer, /onSelect=\{\(event\) => attachments\?\.textareaProps\.onSelect\(event\)\}/);
+  assert.match(composer, /attachments\?\.textareaProps\.onSelect\(event\)/);
   assert.match(composer, /onCompositionStart=\{\(\) => attachments\?\.textareaProps\.onCompositionStart\(\)\}/);
   assert.match(composer, /onCompositionEnd=\{\(\) => attachments\?\.textareaProps\.onCompositionEnd\(\)\}/);
   assert.doesNotMatch(composer, /\{\.\.\.attachments\.textareaProps\}/);
@@ -41,6 +41,16 @@ test('⌘/Ctrl+Enter respects IME, and send waits for uploads', () => {
     composer,
     /attachments\.blockerMessage\s*\?\?\s*attachments\.readingMessage\s*\?\?\s*attachments\.imageGenerationNotice/
   );
+});
+
+test('the shared composer mounts slash commands and full Agent Chat sends agent commands through Agent Runtime V2', () => {
+  assert.match(composer, /<SlashCommandMenu/);
+  assert.match(composer, /slash\.onPick\(command, args, pick\)/);
+  assert.match(view, /const slash = override === undefined \? parseSlash\(body\) : null/);
+  assert.match(view, /slash\?\.command\.kind === 'agent'/);
+  assert.match(view, /await agent\.api\.turn\(workspaceId/);
+  assert.match(view, /command: commandPayload\(slash\)/);
+  assert.match(view, /slash=\{\{/);
 });
 
 test('the conversation sends one set of chip fields to the estimate and the turn, none with quick replies', () => {

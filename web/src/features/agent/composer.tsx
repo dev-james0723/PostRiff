@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useCallback, useMemo, useState, type KeyboardEvent } from 'react';
+import { forwardRef, useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ChannelLanguageChip, type ChipLanguage } from '@/components/application/language-picker/channel-language-chip';
 import { LanguageName } from '@/components/application/language-picker/language-badge';
 import { IconWaveSine } from '@tabler/icons-react';
@@ -17,6 +17,8 @@ import { AttachmentBar, type AttachmentBarProps } from './attachments/attachment
 import { MentionList, mentionOptions, mentionTextareaProps } from './attachments/mention-list';
 import type { PlusView } from './attachments/plus-sheet';
 import type { ComposerAttachments } from './attachments/use-composer-attachments';
+import { SlashCommandMenu, type SlashPick } from '@/features/rafii-commands/command-menu';
+import type { SlashCommand } from '@/lib/agent-runtime/commands';
 import { ModelPicker } from './model-picker';
 import type { ChannelLanguages } from './use-channel-languages';
 
@@ -80,6 +82,7 @@ interface ComposerProps {
   /** Chat attachments (chat-context SPEC §11.2): chips, uploads and the `@` list; the bar sits between the text and "Draft for". */
   attachments?: ComposerAttachments;
   attachmentBar?: Omit<AttachmentBarProps, 'attachments' | 'requestedView' | 'onRequestedViewHandled'>;
+  slash?: { onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
 }
 
 /** "More…" in the `@` list opens the ＋ sheet at the view of its best match. */
@@ -92,7 +95,7 @@ const MORE_VIEW: Record<string, PlusView> = { post: 'posts', template: 'template
  * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel, attachments, attachmentBar },
+  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel, attachments, attachmentBar, slash },
   ref
 ) {
   // An unavailable model is never swapped for another paid one: the person chooses again. Send also waits for uploads (SPEC §4.7).
@@ -108,6 +111,8 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
     [ref, textareaRef]
   );
   const [moreView, setMoreView] = useState<PlusView | null>(null);
+  const [caret, setCaret] = useState(value.length);
+  const composerBox = useRef<HTMLDivElement>(null);
   const mention = attachments?.mention;
   const activeOption = mention?.open ? (mentionOptions(mention.listId, mention.query, mention.items)[mention.active]?.id ?? null) : null;
   const parsed = useMemo(() => locales.parseMessageLanguages(value), [value]);
@@ -140,14 +145,15 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   }
 
   return (
-    <div className='rafii-composer @container/composer flex flex-col rounded-[var(--rafii-radius-card)]' data-tour='composer'>
+    <div ref={composerBox} className='rafii-composer @container/composer relative flex flex-col rounded-[var(--rafii-radius-card)]' data-tour='composer'>
+      {slash ? <SlashCommandMenu value={value} caret={caret} anchorRef={composerBox} onPick={(command, args, pick) => { setCaret(pick.caret); slash.onPick(command, args, pick); }} onDismiss={slash.onDismiss ?? (() => undefined)} /> : null}
       <Textarea
         ref={setTextarea}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => { onChange(event.target.value); setCaret(event.target.selectionStart ?? event.target.value.length); }}
         onKeyDown={onKeyDown}
         onInput={(event) => attachments?.textareaProps.onInput(event)}
-        onSelect={(event) => attachments?.textareaProps.onSelect(event)}
+        onSelect={(event) => { setCaret(event.currentTarget.selectionStart ?? event.currentTarget.value.length); attachments?.textareaProps.onSelect(event); }}
         onCompositionStart={() => attachments?.textareaProps.onCompositionStart()}
         onCompositionEnd={() => attachments?.textareaProps.onCompositionEnd()}
         {...(mention ? mentionTextareaProps(mention.open, mention.listId, activeOption) : {})}

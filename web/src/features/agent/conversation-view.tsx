@@ -62,8 +62,16 @@ import { VariantCard, destinationLabel } from './variant-card';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 import { ImageGenerationCard } from './image-generation-card';
+import { useAgent } from '@/lib/agent-runtime/use-agent';
+import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 
 /** The short verb beside the live timer (`writing` comes from either CLI route). */
+async function runClientSlash(command: SlashCommand, args: string): Promise<string | null> {
+  if (!command.execute) return 'That command isn’t available here.';
+  try { return (await command.execute(args)) ?? null; }
+  catch (error) { return error instanceof Error && error.message ? `That didn’t work: ${error.message}` : 'That didn’t work here.'; }
+}
+
 const STAGE_LABELS: Record<string, string> = {
   writing: 'Writing',
   drafting: 'Drafting',
@@ -126,6 +134,7 @@ function StreamCaret() {
 
 function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const { api, workspaceId } = useWorkspaceApi();
+  const agent = useAgent();
   const client = useQueryClient();
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
@@ -276,12 +285,58 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
    */
   async function sendTurn(override?: string) {
     const body = (override ?? text).trim();
-    if (!body || busy || running || !choice.available) return;
+    const slash = override === undefined ? parseSlash(body) : null;
+    if (!body || busy || running || (!choice.available && !slash)) return;
     const clear = () => {
       // Text typed while the request was in flight is kept.
       if (override === undefined) setText((current) => (current.trim() === body ? '' : current));
       setCreditLimit('');
     };
+    if (slash?.command.kind === 'client') {
+      if (slash.command.name === 'help') {
+        setText('/');
+        requestAnimationFrame(() => { composer.current?.focus(); composer.current?.setSelectionRange(1, 1); });
+        return;
+      }
+      const note = await runClientSlash(slash.command, slash.args);
+      setText('');
+      if (note) toast(note);
+      return;
+    }
+    if (slash?.command.kind === 'agent') {
+      if (!gate.enter()) return;
+      setBusy(true);
+      try {
+        const references = attachmentsOn ? (attachments.fields.references ?? []).filter((reference) => reference.kind === 'post' || reference.kind === 'template' || reference.kind === 'source') : [];
+        const media = attachmentsOn ? (attachments.fields.attachments ?? []).map((attachment) => ({ assetId: attachment.assetId, role: attachment.role })) : [];
+        await agent.api.turn(workspaceId, {
+          message: body,
+          idempotencyKey: crypto.randomUUID(),
+          conversationId,
+          modality: 'text',
+          timeZone,
+          ...choice.requestFields,
+          ...(references.length ? { references } : {}),
+          ...(media.length ? { attachments: media } : {}),
+          command: commandPayload(slash)
+        });
+        if (!gate.alive()) return;
+        setText((current) => (current.trim() === body ? '' : current));
+        setCreditLimit('');
+        await Promise.all([
+          client.invalidateQueries({ queryKey: keys.messages(workspaceId, conversationId) }),
+          client.invalidateQueries({ queryKey: keys.conversations(workspaceId) }),
+          client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) }),
+          client.invalidateQueries({ queryKey: keys.usage(workspaceId) })
+        ]);
+      } catch (err) {
+        if (gate.alive()) toast.error(err instanceof Error ? err.message : 'Rafii couldn’t run that command.');
+      } finally {
+        gate.leave();
+        if (gate.alive()) setBusy(false);
+      }
+      return;
+    }
     const learningRequest = voiceLearningIntent(body);
     if (learningRequest) {
       setLearning({ ...learningRequest, workspaceId, conversationId, id: crypto.randomUUID() });
@@ -571,8 +626,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               }}
               hint={imageRequested ? 'Uses 1 media credit' : '⌘↵ to send'}
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
+              slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
               attachments={attachmentsOn ? attachments : undefined}
-              attachmentBar={{ liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner' }}
+              attachmentBar={{ liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, conversationId, id: crypto.randomUUID() }) }}
             />
           ) : (
             <StateMessage kind='permission' title='Viewing only.' description='Ask an owner for edit access.' />
