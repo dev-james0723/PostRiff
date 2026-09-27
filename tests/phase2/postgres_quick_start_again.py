@@ -56,26 +56,26 @@ assert second["status"] == "completed", second["status"]
 assert second["sourceId"] == first["sourceId"] and second["conversationId"] != first["conversationId"]
 assert len(sources_with(idea)) == 1
 assert sources_with(idea)[0].get("reviewedAt") == reviewed
-assert sources_with(idea)[0]["title"] == idea
+assert sources_with(idea)[0]["title"] == "Pasted source"
 assert sources_with(idea)[0].get("origin") == {"kind": "quick_start"}
-checks.append("the same own idea drafted again reuses its run-only source with a meaningful title (one source, new conversation, completed run, no re-approval)")
+checks.append("the same own idea drafted again reuses one run-only source (new conversation, no re-approval); its stored title stays generic so source text cannot bypass policy")
 
 # 2. Pasted third-party text drafted twice stays rewrite_approval and is not auto-approved.
 pasted = "Third-party paragraph one.\nThird-party paragraph two."
 p1 = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": pasted, "ownContent": False, "confirmUse": True, "destinations": destinations})
 p2 = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": pasted, "ownContent": False, "confirmUse": True, "destinations": destinations})
 assert p1["sourceId"] == p2["sourceId"] and p2["sourcePolicy"] == "rewrite_approval"
-assert sources_with(pasted)[0]["title"] == "Third-party paragraph one."
+assert sources_with(pasted)[0]["title"] == "Pasted source"
 assert sources_with(pasted)[0].get("origin") == {"kind": "quick_start"}
 assert not any(f["approved"] for f in sources_with(pasted)[0]["facts"])
-checks.append("pasted third-party text drafted again reuses its run-only source, uses the first line as its title and keeps rewrite_approval with nothing auto-approved")
+checks.append("pasted third-party text drafted again reuses its run-only source, keeps a non-content title and keeps rewrite_approval with nothing auto-approved")
 
-# 3. Different/long text still creates its own source; deriving its display title never rejects the prompt.
+# 3. Different/long text still creates its own run-only source without using that text as metadata.
 long_idea = "One thing piano practice taught me about creating: consistency matters more than waiting for inspiration."
 other = ideas.quick_start(wid, "one", service.get(wid, "one")["revision"], {"text": long_idea, "ownContent": True, "confirmUse": True, "destinations": destinations})
 assert other["sourceId"] not in (first["sourceId"], p1["sourceId"])
-assert sources_with(long_idea)[0]["title"] == long_idea[:80]
-checks.append("a different idea still becomes its own source and a long first line gets a bounded title without rejecting the request")
+assert sources_with(long_idea)[0]["title"] == "Pasted source"
+checks.append("a different long idea still becomes its own run-only source without exposing the text through its stored title")
 
 # 4. Context Pocket: an explicitly saved reusable source is read with the idea; an unknown id is refused before anything is stored.
 notes = "Rehearsal notes.\nThe second movement needs a slower start.\nBreathe before the coda."
