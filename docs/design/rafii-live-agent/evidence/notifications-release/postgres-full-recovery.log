@@ -1,0 +1,747 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_account.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "workspace list carries name, trial plan, owner display name and role counts",
+    "a member sees each workspace's summary with their own role",
+    "channels span workspaces, skip placeholders, mark manage rights per membership and name who connected them",
+    "enforcement is written once from an AAL2 session, read back on /me, removed only by a fresh AAL2 session, and audited",
+    "revoke-others denies every other seen session and keeps the current one",
+    "a member leaves and loses access; the owner cannot leave; the departure is audited",
+    "the account history lists a person's own security actions and membership changes, newest first, with workspace names, and excludes workspace content activity",
+    "invitations to my email are listed with workspace and inviter, only I can accept or decline them, and both outcomes reach the account history",
+    "time zone, language and the new-device alert are stored per person, validated, and read back on /me",
+    "a new device records one opt-in notification attempt; NullTransport records sent=false in account history",
+    "ownership transfer is owner-only, needs a fresh sign-in and an active admin, swaps roles atomically, and is audited",
+    "the members list reports each person's display name alongside their role"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_agent_plan.py
+postgres_agent_plan: 7/7 checks passed
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_agent_runtime.py
+PASS    VS01 Start Voice Mode in a conversation (GPT-Live WebRTC broker)
+PASS    VS02 Ask what is missing, by voice, from the campaign (Manager → Campaign specialist)
+PASS    VS03 Attach a reference image during voice; the backend vision model reads it (MM01, MM02)
+PASS    MMC1 With photo reading off, Rafii doesn't look at the image: no vision call, a typed consent_required result and a warning
+PASS    VS04 Compound request by voice: generate a matching asset, write the copy, link both, schedule Thursday 18:00 (X04)
+PASS    VS05 The proposal is shown on screen and said aloud; nothing changes before the person decides
+PASS    VS06 Spoken “yes” binds to exactly that proposal; server re-checks; applied through the normal path; re-read; verified (§7.4)
+PASS    VS07 End Voice Mode; continue the same task by text with everything intact (V-A09)
+PASS    V-A08 Two open proposals: a generic “yes” applies neither and asks which
+PASS    V-A08b …“the second one” then binds exactly the second (and the stale one is refused by the app)
+PASS    V-A08c After Rafii asks which proposal, an unrelated follow-up applies nothing (no fuzzy binding)
+PASS    V-A07b A “yes” to a proposal that is not the latest answer is not bound; Rafii restates it
+PASS    V-A07c Cantonese / Mandarin confirmations and a rejection
+PASS    S-MOD1 Text proposal → voice approval, and a viewer can't approve by voice
+PASS    MM04 Edit the generated image: a NEW asset linked to its original; the original is unchanged; “the second image” resolves
+PASS    MM05 Edit an uploaded image: a new version linked to the upload; the upload itself is untouched
+PASS    MM06 Fast variants on Flare
+PASS    MM12 Text inside an image tries to instruct Rafii; policy is unchanged
+PASS    MM13 Image generation fails: no asset id, no success claim, spend held as unknown
+PASS    MM14 Another workspace's image is unreachable
+PASS    R01 Runtime off → the verified site agent answers, unchanged (safe fallback)
+PASS    R02 A viewer gets grounded answers with no model spend
+PASS    R03 Forbidden effects never reach the Manager
+PASS    R04 Idempotent turns: the same key returns the same run
+PASS    R05 “Cancel that”: running work stops in the backend and it is confirmed before Rafii says so (V-A06)
+PASS    R06 Refining a request while it runs supersedes the earlier spoken one — never a typed turn (V-A05)
+PASS    R07 The Manager's false claim is replaced by what the ledger confirms (§23)
+PASS    R08 SDK human-in-the-loop: proposal_apply pauses; the person's yes applies via the app; the run resumes and verifies (ADR-H1)
+PASS    R09 Correlation id across browser → delegation → Manager → tool → audit → asset (§30)
+PASS    R10 Voice Mode refuses cleanly: flag off, no OpenAI key, viewer, Live busy (V-A14/V-A15)
+PASS    R11 Voice transcripts are text only and live on the voice session (no raw audio)
+PASS    GAP-V04 “Does this sound like me?” — Brand Intelligence uses the deterministic voice check with evidence; no “exactly your voice”
+PASS    GAP-D04 Shorten a draft through the writing pipeline: a proposed update on that exact draft; its text unchanged until accepted
+PASS    GAP-H05 Who linked the draft to the campaign? — attribution only from stored evidence; an unknown person is not guessed
+PASS    A01-agent “What should I pay attention to?” — stored facts and derived observations with their rules, shown under the answer (§22)
+PASS    MM15 Image publishing checks stay enforced: an image without alt text can't be attached to a scheduled post
+PASS    MEM01 Layered memory with provenance: explicit vs inferred, confidence, and cloud consent respected (§14)
+PASS    S-MOD2 Voice request → text approval: a proposal made by voice is approved by typing “yes” (same proposal store, same checks)
+PASS    S-MOD3 A stale approval (presented more than 10 minutes ago) is re-stated, not applied, after a reconnect or a pause
+PASS    S-MOD5 Text starts a task; voice continues it (V-A10)
+PASS    S-MOD4 The panel's Apply (agent decide) applies the same proposal, re-reads it and closes the task step
+PASS    R12 Voice sessions belong to the person who started them; at most two live sessions per member
+PASS    HTTP01 The agent routes over HTTP: session, request guard, JSON, status, a turn, a decision, voice start — and no API-token access
+PASS    R13 A voice session the tab never ended is reaped: closed and billed to its last activity (never free, never held forever)
+PASS    R08b After a paused run, the person's “yes” binds to the proposal it named; the app applies it; the paused Manager resumes (ADR-H1)
+PASS    R14 A “yes” the application refuses leaves the waiting step waiting; the owner can still apply it
+PASS    R15 Cancelling needs edit and reaches only your own requests
+PASS    R16 Voice is billed on the server's clock: a client reporting 0 seconds doesn't make a call free
+PASS    R17 The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation
+{"event": "agent_turn.aborted", "errorClass": "RuntimeError", "traceId": "trace_3a35034922a9fad890c8ce67c2281a8b"}
+PASS    R18 Whatever fails after a turn opens, the run ends closed with a truthful answer (never stuck “running”)
+PASS    MM16 Images on the OpenAI route are booked at the configured price; the same image asked twice in a turn is made once
+PASS    LA01 Live agent: “How do I connect Instagram?” answers with a guide card that starts by itself; the screen's labels reach the Manager as data
+PASS    LA02 Live agent by voice: a style change reaches the panel (saved when migration 030 is applied, never a failed turn without it); goodbye ends the call
+PASS    LA03 Slash commands: /weather is answered without a model through the gate; /search reaches the Manager with its fixed instruction and the input fenced
+PASS    R19 What a spoken “yes” would apply is said in the application's words; model text is trimmed, never turned into an error
+PASS    R20 After a Rafii answer, 2–3 follow-up suggestions from the light model; never a decision; tapping one only sends it as a message (E2)
+{"PASS": 56, "PARTIAL": 0, "FAIL": 0}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_agent_runtime_references.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "manager turn answered",
+    "one writing run from draft_create",
+    "the writing run carries the chips and reports them",
+    "no client label reaches the report",
+    "chip ids are not listed as things Rafii read",
+    "malformed chips refused (400)",
+    "nothing stored for a refused turn",
+    "fallback: answered by the site agent",
+    "fallback: the chip is reported unused, not dropped"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_agent_style.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "the default: an empty object on the profile, read on /api/me as the complete default style",
+    "a preset and single fields merge into the saved style, read back on /api/me, beside the other preferences",
+    "unknown fields, values and presets are refused with 400 and nothing is written",
+    "each person's style is their own: saving one never touches another profile",
+    "the browser role sees only its own style and cannot write it; anon cannot read it",
+    "the database refuses a non-object, an oversized value and NULL",
+    "before 030 /api/me reads the default and keeps its session, other preferences save, style changes return 503 and write nothing; applying 030 (twice) restores saving"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_api_tokens.py
+{"status": "pass", "execution": "disposable local PostgreSQL", "checks": ["fresh session creation", "trial creation allowed", "invalid scopes and expiry denied", "secret only in creation", "read and draft routes work without browser guard", "sensitive routes denied", "cross workspace denied", "live downgrade and removal enforced", "expiry and revocation enforced", "RLS denies authenticated reads"]}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_audience.py
+{"status": "pass", "execution": "disposable local PostgreSQL; synthetic transport only", "checks": ["AI suggestions without a managed writer are refused (409 reply_writer_unavailable) and nothing is saved", "a template copilot draft reads back as a starter, never AI-written", "manual reply labelled 'Your reply'", "reply history and counts survive reload", "record approval with sender disabled", "enabling sender cannot replay old approvals", "explicit reconfirmation permits synthetic send", "ingestion failure preserves transaction"]}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_audit_access.py
+{"status": "pass", "execution": "disposable-local-postgres", "checks": ["owner/admin API and RLS read", "editor/approver/viewer denied by API and RLS", "cross-workspace read denied", "audit records retained"]}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_billing.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "usage view shows trial entitlement, proposed prices, stop-only overage, no live subscription",
+    "reserve is idempotent by key; completed consumes a batch; failed books cost but refunds batch; unknown keeps the reservation",
+    "workspace stop-line and exhausted entitlement refuse with 402 before execution",
+    "ideas turn writes a reserve/settle pair; fixture route costs $0 and consumes no batch; artifact returned for preview",
+    "webhooks: signature/replay/stale/unknown-plan handled; entitlement reconciles from plan terms; grace expiry \u2192 cancelled keeps export",
+    "export and diagnostics produce receipts; diagnostics require consent and contain no content",
+    "analytics and audience report truthful limited states with no fabricated numbers",
+    "ledger is append-only for service_role; budgets and billing events are never browser-readable"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_billing_stripe.py
+{"status": "pass", "checks": ["first bootstrap sends one welcome email; later sign-ins do not", "proposed plan terms refuse checkout (D3); usage shows no purchasable plan", "active terms + price open checkout with workspace metadata and idempotency; absolute return URLs refused; portal needs a customer", "signed checkout.session.completed → active subscription, entitlement from terms, one activation email; replay is duplicate; bad signature 401", "portal opens for the Stripe customer; active workspaces cannot start a second checkout", "payment failure → past_due + grace + email; events without a PostRiff workspace are recorded as ignored", "price-only subscription.updated resolves plan terms by provider_price_id and reconciles entitlement", "invite sends the accept link with the raw token to the invitee", "reminder sweep sends once and dedupes; every notification is recorded with sent=true"]}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_budget_policy.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "without a policy budgets stay candidate: paid work 402, free work passes, no global-month row",
+    "a policy approves candidate budgets with its caps; each reservation records and settles exactly its three budgets",
+    "the per-request ceiling refuses a worst case above US$1.00 and allows one at the limit",
+    "the per-person 24 h cap counts holds, then actual cost; it refuses one person without affecting another",
+    "workspace-month and global-month stop lines refuse with plain messages before any provider call",
+    "an owner-approved budget keeps its own caps when a policy is on",
+    "crossing a warning line logs one event with scope and policy, no identifiers",
+    "POSTRIFF_AI_PAUSED=1 and an unknown policy id refuse paid work (503); free work passes"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_channels.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "start binds workspace/member/provider/capability/redirect; state hashed; verifier encrypted; unsupported capability and provider refused",
+    "a state cannot be completed from another workspace or by another member",
+    "denied consent consumes the transaction and stores no credential",
+    "complete exchanges with PKCE, encrypts tokens at rest, records per-capability levels, single-use state, token absent from state and API",
+    "the account picture is fetched from the provider's image host, re-encoded, listed by digest, and member-only readable",
+    "scope drift downgrades publish to Assisted and the connection to read_verified",
+    "a failed picture refresh keeps the stored picture",
+    "expired access is refreshed only in the server worker path; credentials and transactions are never browser-readable",
+    "expired transactions are refused",
+    "disconnect needs step-up, revokes remotely, wipes ciphertext and the account picture, and the worker can no longer obtain a token",
+    "OAuth lifecycle is audited without tokens",
+    "unknown and empty OAuth scope responses do not acquire requested publish authority",
+    "provider pause blocks token use and new consent while retaining channel records",
+    "scope re-verification persists downgraded authority, fails closed on unknown grants, and fences a reauthorization race",
+    "an unexpected picture download fault never fails a connection that was saved"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_chat_automation.py
+PASS: Home and conversation requests become automations with the builder's checks and a reply card; nothing drafted, stored or published; non-owner requests wait; a model reading decides and is metered; a failed reading falls back; plain requests draft as before
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_cli_reasoning.py
+PASS: five CLI levels, legacy aliases, SQL persistence, invalid effort before source mutation; no model calls
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_cli_route.py
+postgres_cli_route: 11/11 checks passed
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_consumer_campaign_worker.py
+PASS: relational persistence, real worker/runtime call, restart/lease, idempotency, pause/cancel, legacy authority and no publish side effects
+PASS: explicit occurrence cost cap, in-flight cancellation, crash after provider completion reconciled without repeat charge
+PASS: automation drafts every activated account with its own content type, brief text stays data, disconnected accounts skipped then paused
+PASS: countdown and recap context reach the writer, costs and draft counts recorded, batched cron, one deduplicated drafts-ready email, countdown finishes
+PASS: new idea triggers exactly one run that reads it, strong-post scan reads real insights without side effects, evergreen without candidates still drafts
+PASS: an automation in your voice without an allowed writing sample drafts in a neutral voice and says so
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_consumer_deletion.py
+PASS deletion fence committed before storage; concurrent mutations denied; final identity result verified
+PASS storage retry, worker fences, unknown cost, subscription, other ownership, identity partial and bounded recovery
+PASS video objects, posters, frames, pending/aborted uploads, a deletionPending asset and the prefix are deleted before the workspace; no storage, no deletion
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_consumer_migrations.py
+{"status": "PASS", "execution": "disposable PostgreSQL only", "hostedMigrations": 29, "backupBytes": 349578, "backupSeconds": 0.167, "restoreSeconds": 0.395, "RPO": "0 for quiescent synthetic snapshot", "productionRPO": "NOT_RUN", "objectStorageRestore": "NOT_RUN"}
+PASS: fresh 001–019 excluding local-only 003; populated upgrade; ledger replay; checksum refusal; restore
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_consumer_model_safety.py
+PASS: managed commit-before-I/O, timeout replay, unknown usage, terminal settlement and late cancellation
+PASS: revoking initiating API token or session discards late generated content while retaining usage
+PASS: source revocation during call, crashed run recovery, retained cross-window reserves and concurrent quota protection
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_consumer_operations.py
+PASS real DB operational counts; no external alert, no contents, no state mutation
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_coworker.py
+PASS N01: migrations 024/025: tables exist, RLS enabled and forced, browser roles cannot read server-only tables
+PASS N02: an event emitted twice creates one event and one delivery per person and channel (dedupe + idempotency)
+PASS N03: delivery: claim → commit → send with the delivery's idempotency key → sent; routine events wait for the digest; failures are immediate
+PASS N04: crash after claim: the lease expires, the row is re-claimed and resent with the SAME idempotency key (the provider dedupes; one email)
+PASS N05: transient failures retry with backoff, then dead-letter after the bound; the domain state is untouched
+PASS N06: a hard bounce from the provider webhook fails the delivery and suppresses future non-transactional email; replays are duplicates
+PASS N07: quiet hours in the person's time zone defer push; the digest groups routine events into one email sent once
+PASS N08: web push: explicit subscription stored encrypted; minimal encrypted payload; 410 revokes; unlisted endpoints refused
+PASS N09: one-click unsubscribe with a signed token (GET confirms, POST applies); tampered tokens refused
+PASS T01: another workspace's member cannot read or change this workspace's notifications (identical 403), and RLS hides other people's deliveries
+PASS W01: only an owner can save a weekly recipe; the saved recipe is re-read and verified
+PASS W02: prepare next week end-to-end: plan → drafts through the writing pipeline → quality stage → ready_for_review, with one campaign.week_ready
+PASS W03: preparing again is idempotent: no new drafts, no second notification, same week
+PASS W04: accept hands the draft to Queue; approved/scheduled are read back from real reviews and jobs, never set by Rafii
+PASS W05: blocked states: a personal post asks one question (needs_input), a disconnected account is channel_unavailable; answering unblocks
+PASS W07: answering a question in a week that is already ready for review reopens it, and the next preparation drafts that post
+PASS W06: the cron prepares a due recipe as its owner (private capability), and a disabled flag stops it
+PASS S01: one source → FactPack → brief → drafts linked to a new campaign; injected instructions are data; provenance ids survive every stage
+PASS R01: research results are stored with full provenance as search_snippet evidence and are never usable facts; provider failures are reported as failures
+PASS O01: owner notes are scoped, explicit, reversible and exportable; editors can't add them; a note can't touch protected policy
+PASS E01: triage is deterministic and never urgent; a suggested reply is a draft (never sent); spam gets no reply; viewers cannot draft
+PASS P01: comparable verified posts become a non-causal, sample-sized hypothesis; a causal row is refused; only an owner decides
+PASS A01: “What needs my attention?” is ordered by fixed rules, explains why, respects the person's permissions and never makes engagement urgent
+PASS G01: growth metrics compute from authoritative tables; experiment assignment is deterministic, logged and not hard-coded
+PASS L01: a watchlist turns fresh, relevant, novel results into scored opportunities with evidence and expiry; decisions are recorded
+PASS H01: hosted_app routes reach the coworker: notification centre, preferences, weekly, attention, status; API tokens refused; unknown routes 404
+PASS H02: the email webhook route verifies Svix signatures before any processing (401 on a forged request)
+PASS V01: turning notifications on never mails people about the past: an existing workspace's first scan is a silent baseline; a new condition after it notifies
+PASS V02: an idle workspace is re-checked hourly: a failed payment reaches its owner with no change to the workspace itself
+PASS V03: an unsubscribe applies to email already queued (suppressed at send time, never sent); re-subscribing is read back as verified
+PASS V04: a $0 weekly drafting limit plans the week but starts no paid writer run
+PASS V05: viewers and approvers can open a week (read-only); only an editor's read saves the Queue sync
+PASS V06: a viewer's research search or link source is refused before any provider is called (no egress)
+PASS N10: a notification delivery failure never rolls back domain work (the week stays ready; the delivery is failed/dead)
+PASS V07: the fleet growth report runs read-only (trial → paid and paid retention by positioning arm, exposure); the coworker cron runs every step inside its budget, including the retention sweep
+{"PASS": 35, "FAIL": 0}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_credit_purchases.py
+PASS: server-bound checkout, no pre-payment credits, replay safety, refund-before-funding, failed/stale refunds, signature, amounts, pause and RLS
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_credits.py
+PASS: legacy isolation, funding replay, durable hold/settle, unknown, concurrency, request binding, expiry, permissions
+PASS: real Hosted service -> approved quote -> synthetic cloud -> durable credits settled once
+PASS: pausing does not prevent reconciliation; identical concurrent requests share one reservation
+PASS: explicit regenerate reuses the source while every model run requires its own credit approval
+PASS: current brief reaches cloud drafting without granting stored-source access
+PASS: a quote at the ceiling covers a turn with a post and an account chip; the estimate request equals the run request
+PASS: a quote for different chips does not authorize the turn (409)
+PASS: a reference photo priced as a full note keeps the ceiling above the run (no 402)
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_entitlement_race.py
+PASS concurrent first-use entitlement: 24 races x 6 callers, one row each, no errors
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_billing_notice_locks.py
+PASS: owner billing email: address lookup and send happen after commit (no row lock held), recorded once as sent, replay sends nothing
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_campaign_destinations.py
+PASS: the task drafts for its confirmed Threads zh-Hant-HK destination although the goal names Instagram and French; not read as a memory instruction
+PASS: a recurring destination naming an unknown account is refused
+PASS: in a workspace on credit terms, a free-route recurring task still completes (no false authority failure)
+PASS: a task without a chosen destination keeps LinkedIn and drafts in a neutral voice (no silent upgrade to personalized)
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_credit_estimate.py
+PASS: estimate 17.9 / ceiling 118.4 credits for a short brief; both grow with the brief and deep mode; labelled as not measured
+PASS: a limit below the ceiling is refused at quote time, naming the ceiling
+PASS: a limit at the ceiling completes; the actual 0.01 USD is charged as 3.0 credits and nothing stays held
+PASS: quick-start sends the typed thought as the idea, not the older saved brief
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_idempotency.py
+PASS: quick-start resend replays the original run: no second model call, reservation or run
+PASS: quick-start: same key + different request -> 409, nothing stored or charged
+PASS: turn: resend replays the original run even though its quote was claimed; different request -> 409
+PASS: crash after reservation: resend finds the same run (still running), no second reservation or model call
+PASS: a new key with a new quote is a separate task
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_image_routing.py
+PASS: an image made outside the approved providers is not kept; the media credit is given back and the known $0.05 provider cost is booked, not left unknown
+PASS: an approved image whose cost is reported only in gateway metadata settles as actual ($0.04) with the serving provider recorded, instead of waiting for reconciliation
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_monthly_credits.py
+PASS: checkout completion activates the plan but grants no credits before a paid invoice
+PASS: first paid invoice grants 3,500 credits once (replay and a second event for the same invoice grant nothing)
+PASS: a proration invoice and a failed payment grant nothing
+PASS: after the first period ends its credits expire; the renewal grants 3,500 and the 1,000 top-up is untouched
+PASS: an invoice.paid delivered after a newer subscription event leaves the status alone (stale) but still grants its period (money wins)
+PASS: a 50% refund of a plan payment takes back 1,750 of that period's credits
+PASS: a legacy plan keeps its 10 writing batches and gets no credits
+PASS: every plan invoice is recorded with its grant; the proration invoice is recorded with no grant and a note
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_ops_report.py
+PASS: the operator report lists unknown usage, payment events awaiting review, uncertain/held/stuck/overdue jobs and budgets past their stop line, with identifiers only and no writes
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_purchase_lifecycle.py
+PASS: expired and failed orders end without credits; the same request never gets an ended session back; sessions expire after 1 hour
+PASS: a paid order returns no URL on repeat; a verified payment funds an order even after an expiry notice (once)
+PASS: unknown order, mismatched amount, another workspace and an unknown refund status are kept as needs_review (acknowledged, replay-safe), nothing granted
+PASS: same-second succeeded/failed refund statuses: the later one is kept for review, credits unchanged by it
+PASS: disputes: withdrawn funds reverse the credits, a won dispute restores them, an inquiry reverses nothing, a lost one stays reversed
+PASS: a refund after spending leaves 100.0 credits of debt; the next 100.0 top-up repays it; spending resumes on the following one
+PASS: operator lists 5 review items and resolves one with a note; balances unchanged by resolving
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_run_refs.py
+PASS: a refreshed draft keeps the refreshing run in runRefs through the edit that accepts it
+PASS: a rework by reference proposes an update to the referenced draft and records the run in runRefs
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_final_unknown_usage.py
+PASS: refused before any provider request: hold released, nothing used, specific reason shown
+PASS: provider 4xx: not charged, hold released, provider cost recorded (0)
+PASS: provider 5xx: 90.0 credits stay held as unknown, nothing shown as free or used
+PASS: operator reconciliation: failed run settled once from evidence (hold released, provider cost 12300 booked, not charged), second attempt 409, audit recorded, remote DSN refused
+PASS: operator reconciliation to completed charges the actual cost (0.02 USD -> 6.0 credits) and releases the rest of the hold
+PASS: cancel mid-flight: the retry is not sent, nothing charged, the known provider cost settles the hold (no unknown left)
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_ideas.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "quick-start produces a completed run with two candidates and only safe events; zero model requests",
+    "event cursors replay exactly once with stable IDs",
+    "duplicate idempotency key returns the same run without re-running",
+    "conversations, runs, and events are tenant-bound; foreign identifiers are unavailable",
+    "apply is exact-hash and policy-epoch bound; a stale candidate is preserved not applied; a current one applies as reviewable variants; re-apply is idempotent",
+    "internal_reference source is excluded from the public draft projection and its text never appears in events",
+    "third-party pasted text is rewrite_approval and requires fact approval; nothing is auto-approved",
+    "RLS hides other tenants' conversations and events from direct reads"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_ideas_references.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "setup: the draft's run was given the pasted source, which has no cloud consent",
+    "fixture route: usage.references is written",
+    "fixture route: the post is reported free_writer with its copy",
+    "fixture route: the run summary carries the same report",
+    "material: the idea is the typed text only",
+    "material: the handed-in text is a material section",
+    "material: no referenceNotes field without reference media",
+    "laundering: the run still wrote (never blocked)",
+    "laundering: the post is unused with the source reason",
+    "laundering: neither the draft nor its source text reaches the gateway",
+    "laundering: no derived source ids on the run",
+    "rework: the post is used as the rework",
+    "rework: the material is the draft, fenced, as the rework section",
+    "rework: derivedSourceIds names the draft's source",
+    "rework: the source went to the writer as a binding",
+    "rework: a new draft for another platform records derivedFrom and the derived source",
+    "retraction: blocks the variant saved from the rework",
+    "notes: no consent \u2192 consent_required, nothing sent",
+    "notes: consent but no note yet \u2192 not_read_yet",
+    "notes: the read is ready",
+    "notes: ready + consent \u2192 used as notes",
+    "notes: the note reaches the writer as referenceNotes, not in the idea",
+    "notes: consent withdrawn \u2192 the stored note is not used",
+    "media: the run records post media and the template's content type",
+    "media: usage.media matches the artifact",
+    "apply: the reworked draft gets a proposal carrying media and content type",
+    "accept_update: media and content type are saved on the draft",
+    "estimate \u2265 run (note ready)",
+    "the run writes for the account chip (note ready)",
+    "estimate \u2265 run (note not read)",
+    "the run writes for the account chip (note not read)",
+    "every kind: a completed run",
+    "every kind: post, template, source, account, folder and both media roles used",
+    "every kind: an unavailable explicit skill and unknown ids are reported, never fatal",
+    "every kind: no client label anywhere in the report",
+    "every kind: the account chip is the destination",
+    "user message: resolved ids and roles only, unknown ids left out",
+    "presence rows: one per known asset, none for the unknown id",
+    "events: one warning with `reference` per unused item",
+    "presence rows: the same asset on the same conversation is recorded once",
+    "foreign ids: the run completes and both are not_in_workspace",
+    "foreign ids: nothing of the other workspace reaches the writer",
+    "forged materialRef: reminder, no reworkOf, still drafted",
+    "automation wording + chips: a draft run, the routing reminder, no automation"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_instagram_lifecycle.py
+{
+  "status": "pass",
+  "driver": "3.3.5",
+  "checks": [
+    "real PostgreSQL command persistence",
+    "existing alpha command reuse without SQLite",
+    "two-user membership denial",
+    "stale revision rejection",
+    "transaction rollback",
+    "viewer write denial",
+    "hosted bootstrap and full Phase 2 command composition",
+    "PostgreSQL worker lease recovery without duplicate submit"
+  ],
+  "execution": "disposable-local-postgres"
+}
+test_cancel_before_publish_stops_and_after_acceptance_remains_requested (__main__.Lifecycle.test_cancel_before_publish_stops_and_after_acceptance_remains_requested) ... ok
+test_cancel_between_claim_and_dispatch_sends_nothing (__main__.Lifecycle.test_cancel_between_claim_and_dispatch_sends_nothing) ... ok
+test_changed_approval_account_or_membership_blocks_publish (__main__.Lifecycle.test_changed_approval_account_or_membership_blocks_publish) ... ok
+test_crash_after_create_does_not_recreate (__main__.Lifecycle.test_crash_after_create_does_not_recreate) ... ok
+test_crash_after_publish_does_not_republish (__main__.Lifecycle.test_crash_after_publish_does_not_republish) ... ok
+test_crash_after_publish_intent_before_network_never_retries (__main__.Lifecycle.test_crash_after_publish_intent_before_network_never_retries) ... ok
+test_legacy_container_without_stage_never_recreates_or_publishes (__main__.Lifecycle.test_legacy_container_without_stage_never_recreates_or_publishes) ... ok
+test_permission_failure_after_container_holds_without_recreation (__main__.Lifecycle.test_permission_failure_after_container_holds_without_recreation) ... ok
+test_processing_container_is_persisted_and_resumed_after_restart (__main__.Lifecycle.test_processing_container_is_persisted_and_resumed_after_restart) ... ok
+test_rate_limit_after_creation_does_not_create_second_container (__main__.Lifecycle.test_rate_limit_after_creation_does_not_create_second_container) ... ok
+test_read_timeout_keeps_forward_progress_separate_from_unknown_publish (__main__.Lifecycle.test_read_timeout_keeps_forward_progress_separate_from_unknown_publish) ... ok
+test_slow_publish_and_competing_worker_never_duplicate (__main__.Lifecycle.test_slow_publish_and_competing_worker_never_duplicate) ... ok
+test_slow_response_cannot_commit_after_lease_expires (__main__.Lifecycle.test_slow_response_cannot_commit_after_lease_expires) ... ok
+test_two_workers_and_expired_lease_cannot_overwrite (__main__.Lifecycle.test_two_workers_and_expired_lease_cannot_overwrite) ... ok
+test_unknown_publish_response_does_not_resubmit (__main__.Lifecycle.test_unknown_publish_response_does_not_resubmit) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 1.393s
+
+OK
+RUN tests/phase2/postgres_safety.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "unknown reconciliation cannot requeue submission",
+    "revoked approver blocked at durable claim",
+    "read-only approver blocked at durable claim",
+    "cancel and rate-limit completion race",
+    "incomplete publication evidence rejected"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_isolation.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "bootstrap grants owner every action permission",
+    "cross-tenant read/mutate/export/members/audit/invitation paths deny with the nonexistent-workspace message",
+    "workspace list contains only own memberships",
+    "invitation is hashed at rest, single-use, email-normalized, and grants exactly the invited role",
+    "role matrix enforced server-side: editor/approver/viewer boundaries and owner protections",
+    "step-up freshness window enforced for invitations, member removal, and session revocation",
+    "worker holds a job whose approver lost publish authority before claim; no provider attempt",
+    "session list is self-scoped and revocation of another user's session is not possible",
+    "verify endpoint throttles the 31st attempt from one client within a minute",
+    "audit rows are tenant-read-only and immutable; invitations, sessions, and throttle buckets are never browser-readable"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_learning_decide.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "one scheduled job and one pending review on the hosted repository",
+    "deciding a learned preference is refused for an editor (decision D)",
+    "remembering a preference moves the style revision only; the scheduled job and pending review stay valid; VOICE.md shows it",
+    "the worker claims and submits the job after the preference was remembered",
+    "the next LinkedIn draft reads the preference and records the style revision",
+    "a workspace saved without learning state migrates on its next command: hidden proposals expire, nothing else moves"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_learning_events.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "an edit is captured in the command's transaction with features and no text",
+    "an approval is captured with the edit count and distance against the model's text",
+    "the worker records a verified publication",
+    "members read their own workspace's events only; the browser role cannot write",
+    "the export carries the learning tables without draft text",
+    "the sweep drops events past retention and reports no capture failures",
+    "with learning switched off nothing is captured"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_learning_extract.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "three closing-CTA edits across three channels become one language-level proposal; events marked seen; no state write",
+    "automatic proposals are capped at one a day",
+    "an editor's edits count only when the owner allows team edits",
+    "an extracted proposal is remembered like a chat one, with its evidence summary",
+    "a model extractor runs only with both consents and its candidates clear the same bar",
+    "a cloud model call is reserved and settled in the usage ledger, refused past the stop-line, and free on the person's own CLI",
+    "learning reservation and event claim commit before I/O; concurrent cron makes no repeat call; revoked consent discards output; process crash retains unknown spend without replay",
+    "the newest available metric per job feeds a like-for-like performance note"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_media_notes.py
+postgres_media_notes: 31/31 checks passed
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_media_notes_credits.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "estimate: photo, one frame, not cached, priced",
+    "no quote: 402 and no reader call",
+    "a limit under the ceiling is refused (402)",
+    "a quote for another asset: 409 and no reader call",
+    "quoted read: ready, one reader call, usage in credits",
+    "quoted read: settled, nothing left held",
+    "other asset: read with its own quote",
+    "a used quote can't pay again",
+    "cached: estimate is zero and marked cached",
+    "cached: read without a quote, from the cache",
+    "a notes request carries the asset id only (400 otherwise)"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_memory_egress.py
+postgres_memory_egress: 14/14 checks passed
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_memory_proposals.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "a chat instruction becomes a pending proposal with no run, no charge, and a card in the reply",
+    "a repeated instruction proposes nothing new; a fact is refused with the reason",
+    "deciding is owner-only, and a refused edit leaves proposal, versions and state untouched",
+    "remembering writes the version and the style revision in one transaction and VOICE.md shows it",
+    "the next LinkedIn draft carries the learned item and the Instagram draft does not; both runs record the binding",
+    "dismiss suppresses the scope; pause and retire update the version row with the state",
+    "reset is owner-only and clears versions, proposals and events with the state",
+    "Recent total includes all decisions and excludes pending proposals"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_migration_008.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "pr_plan_terms.provider_price_id exists (text, nullable)",
+    "pr_notifications exists with the contract columns",
+    "pr_notifications has RLS enabled and forced",
+    "dedupe_key is unique",
+    "pr_notifications is never browser-readable or writable",
+    "service_role can write notifications and provider price ids"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_migration_013.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "proposal keys and bodies read en / zh-Hant; tags already in use are untouched",
+    "a legacy current version that would collide is retired; the others move to the new key",
+    "running it again changes nothing"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_onboarding_chat.py
+PASS: durable answers, stale replay, proposal-only voice/context, owner activation, viewer/token denial, zero agent runs
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_orchestration.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "A: a one-time request becomes a staged automation; the only question asked is the publishing policy, answered in the same conversation",
+    "A: drafted now, waits for approval (silence never approves), approved, queued through review/approve as the approver, published at 14:00",
+    "A: \u201cwhy did Rafii post this?\u201d is answered from the run history",
+    "A: a review-required post that is never approved expires at its time, unpublished, and can no longer be approved",
+    "A: \u201cwhy wasn't it published?\u201d names the missing approval",
+    "B: Wednesday+Friday 16:30 for Xiaohongshu, LinkedIn and X; auto-publish granted by the owner in chat; the card says X and Xiaohongshu can't publish; skills composed from the request",
+    "B: three platform versions (X within 280), a quote verified on two sites, LinkedIn published automatically under the owner's standing authority; X and Xiaohongshu stay drafts with the reason",
+    "B: the next run is Friday 16:30",
+    "C: generation (Thursday), review (Friday morning) and publication (Sunday 18:00) are separate stages; BBC only; in the person's voice; no question needed",
+    "C: the chosen article is from bbc.co.uk and recent; the review request goes out Friday morning, not when drafted",
+    "E: \u201cActually move it to Saturday at 6\u201d moves the same automation's publish time and the waiting post with it; no duplicate task, run or post",
+    "C: approved and published Saturday 18:00 exactly once; the source carries its provenance and \u201cwhere did this article come from?\u201d is answered",
+    "D: approval without a review time \u2192 Rafii asks when the drafts should be ready; the quick reply sets drafting the day before at 17:00",
+    "D: nothing worth posting \u2192 the week is skipped with the reason and no draft; an unreachable source \u2192 source unavailable; both explained",
+    "F: with LinkedIn disconnected the post is blocked as \u201caccount disconnected\u201d, never submitted, explained; new automations say it can't publish until reconnected",
+    "pause for two weeks, resume and delete by name work in chat; a deleted automation keeps its run history",
+    "G: an unanticipated monthly, sourced, conditional request is read by the strong model into a staged workflow; the model choice is recorded, never shown",
+    "G: a model-read edit adds a platform to the same automation"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_phone_mode.py
+/Users/ouxianxing/Documents/James-Au-Studio-live-agent/src/postriff_phase2/phone/asgi.py:49: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+{"event": "agent_turn.aborted", "errorClass": "AlphaError", "traceId": "trace_5fd45a6ad7a46e783e11a989537cafd0"}
+PASS verified encrypted identity, verification rate/attempts, cross-account disclosure
+PASS text/browser/phone continuity; real second-draft edit; verified speakable result; publish approval; closed-call capability
+PASS ambiguous create reconciliation, single dial, duplicate and out-of-order signed events
+PASS membership/opt-out fencing, weekly schedule parser and exactly-once cron slot
+PASS Notification V2 phone outbox opt-in/single delivery/daily cap; routine and non-deadline approvals never call; fallback; phone payload redaction
+PASS signed ASGI audio roundtrip → actual draft visible through web API → verified spoken result; interruption; publish approval; uncertain hangup fences redial; signed final duration and usage reconciliation
+PASS hangup during backend work: next mutation denied, exact phone-owned run cancelled, saved draft preserved
+PASS credit-mode call approval, exact component holds, bounded shared Manager spend/unknown holds/releases, retry idempotency, release and standing automatic-call limit
+PASS PostgreSQL grants and RLS: client roles cannot read identity/call/delegation tables
+PASS number revocation and account-deletion cascades with global egress disabled
+{"execution": "local fake transport + actual Rafii runtime and PostgreSQL", "status": "PASS", "realCalls": 0}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_repository.py
+{
+  "status": "pass",
+  "driver": "3.3.5",
+  "checks": [
+    "real PostgreSQL command persistence",
+    "existing alpha command reuse without SQLite",
+    "two-user membership denial",
+    "stale revision rejection",
+    "transaction rollback",
+    "viewer write denial",
+    "hosted bootstrap and full Phase 2 command composition",
+    "PostgreSQL worker lease recovery without duplicate submit"
+  ],
+  "execution": "disposable-local-postgres"
+}
+RUN tests/phase2/postgres_plan_guards.py
+{"status": "pass", "execution": "disposable local PostgreSQL; synthetic worker", "checks": ["same period does not refill", "new period refills once", "member and account caps", "non-owner spend redaction", "expired trial stops submission", "uncertain posts still reconcile"]}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_quick_start_again.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "the same own idea drafted again reuses one run-only source (new conversation, no re-approval); its stored title stays generic so source text cannot bypass policy",
+    "pasted third-party text drafted again reuses its run-only source, keeps a non-content title and keeps rewrite_approval with nothing auto-approved",
+    "a different long idea still becomes its own run-only source without exposing the text through its stored title",
+    "Context Pocket: a chosen usable source is read with the idea; an unknown id is refused (409) before any source is stored",
+    "chips on a quick start reach the turn (the report is on the run, labels dropped), automation wording still drafts with the reminder, and a chip-less quick start carries no chip keys"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_raffi_planning.py
+PASS: campaign and recurrence persist; owner activation and tenant/RLS boundaries hold
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_raffi_voice_sources.py
+PASS: persisted import, exact grant, personalized binding, viewer denial, revocation cleanup, completion race and stale-apply block
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_research.py
+postgres_research: 8/8 checks passed
+PASS durable research: committed claim, concurrent/replay/crash no duplicate I/O, revoked consent discards pages; reworks look nothing up unless linked
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_reverify.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "a stale channel is re-verified on worker authority (no session) and is Ready for posting again",
+    "a scope reorder keeps the stored list, so the approved job is not held (a reordered list would have been)",
+    "each re-verification writes a content-free audit row with a NULL system actor",
+    "provider/network failure and operator pause return verification_unavailable with the channel untouched",
+    "a credential rotated during verification fences the worker write",
+    "scope loss downgrades (scope_changed / scope_missing), holds the approved job, and the worker never upgrades authority",
+    "account drift marks the channel revoked (reauthorization_required)",
+    "unknown, foreign-workspace and revoked connections raise 404",
+    "a read-only proof (Instagram) neither extends trust nor destroys the stored publish grant",
+    "a person's Re-verify on a read-proof account (Instagram) confirms it without a TypeError and keeps the stored publish grant",
+    "every outcome is audited without tokens"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_site_agent.py
+postgres_site_agent: ok
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_site_agent_scenarios.py
+postgres_site_agent_scenarios: 101 pass, 0 partial, 0 fail, 101 total
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_source_approval.py
+{
+  "status": "pass",
+  "driver": "3.3.5",
+  "checks": [
+    "real PostgreSQL command persistence",
+    "existing alpha command reuse without SQLite",
+    "two-user membership denial",
+    "stale revision rejection",
+    "transaction rollback",
+    "viewer write denial",
+    "hosted bootstrap and full Phase 2 command composition",
+    "PostgreSQL worker lease recovery without duplicate submit"
+  ],
+  "execution": "disposable-local-postgres"
+}
+postgres_source_approval: stale review rejected and rolled back; fresh replacement accepted; old publication remains held; foreign actor denied
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_time_savings.py
+{"event": "time_back.capture_failed", "exceptionType": "UndefinedTable"}
+{"event": "time_back.publish_failed", "exceptionType": "UndefinedTable"}
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "a generated draft that is not used saves nothing",
+    "heartbeats store aggregate seconds only; retries, late or inflated beats cannot add time; another person's id in the payload is ignored",
+    "approving a generated draft for publishing records one draft row: baseline 8m minus 145 measured seconds",
+    "a provider-verified publication records exactly one publish row for the approving person",
+    "replaying the verified outcome or ticking the worker again adds nothing",
+    "published, uncertain and failed results earn no publish time; re-scheduling a draft earns no second draft row",
+    "with the ledger unavailable the approval still succeeds and the publication stays verified; the cron repair then records it once",
+    "a failing comment-ingestion hook neither blocks nor duplicates the publish row",
+    "a post's first version is a draft; each separate platform, language or account version is an adaptation (derived ones included); a re-worded version of a counted slot, a version identical to one counted, an author's own draft or a replay adds nothing",
+    "activating an automation counts once; a resume or a re-activation after an edit does not",
+    "the summary reconciles: breakdown minutes and counts add up to the displayed total; foreign workspaces and API tokens are refused",
+    "three answers personalize the baseline (median), an explicit setting overrides it and can be cleared, dismissing or answering pauses the prompt, earlier rows never change",
+    "a member reads only their own rows in an active workspace; the browser role cannot insert ledger, calibration or activity rows",
+    "ledger rows are immutable; saved time and provenance must follow from the row; one outcome cannot be counted again under another calculator version",
+    "a publication approved by someone no longer in the workspace records no row, and a former member can no longer read Time Back there",
+    "deleting an account removes that person's Time Back rows in every workspace",
+    "activity aggregates past the 30-day window are dropped by the cron"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_unified_notifications.py
+PASS defaults off, verified/calling alone never grant SMS, explicit consent, 10/30-minute durable timing and dedupe
+PASS strong cross-channel acknowledgement, cross-user isolation, read-all and domain resolution cancel escalation
+PASS no-push immediate Important Texts, expiry, membership/permission, consent, quiet/mute and serialized hourly/daily limits
+PASS fake acceptance, uncertain response/crash never resend, known rejection retry and provider cap
+PASS signed accepted/delivered/failed callbacks, numeric segments/cost, replay, STOP before/after consent disables SMS only, START never grants consent
+PASS binding invalidation, no plaintext in rows/receipts, forced RLS/server-only denial and account deletion with sending off
+PASS forward migration re-application
+{"status": "PASS", "execution": "disposable PostgreSQL / fake and injected provider transport", "realSMS": 0}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_video.py
+postgres_video: 24/24 checks passed
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_account.py", "exitCode": 0, "seconds": 0.8}, {"script": "tests/phase2/postgres_agent_plan.py", "exitCode": 0, "seconds": 0.83}, {"script": "tests/phase2/postgres_agent_runtime.py", "exitCode": 0, "seconds": 8.03}, {"script": "tests/phase2/postgres_agent_runtime_references.py", "exitCode": 0, "seconds": 2.17}, {"script": "tests/phase2/postgres_agent_style.py", "exitCode": 0, "seconds": 0.41}, {"script": "tests/phase2/postgres_api_tokens.py", "exitCode": 0, "seconds": 0.52}, {"script": "tests/phase2/postgres_audience.py", "exitCode": 0, "seconds": 0.7}, {"script": "tests/phase2/postgres_audit_access.py", "exitCode": 0, "seconds": 0.35}, {"script": "tests/phase2/postgres_billing.py", "exitCode": 0, "seconds": 0.53}, {"script": "tests/phase2/postgres_billing_stripe.py", "exitCode": 0, "seconds": 0.79}, {"script": "tests/phase2/postgres_budget_policy.py", "exitCode": 0, "seconds": 0.44}, {"script": "tests/phase2/postgres_channels.py", "exitCode": 0, "seconds": 1.28}, {"script": "tests/phase2/postgres_chat_automation.py", "exitCode": 0, "seconds": 1.03}, {"script": "tests/phase2/postgres_cli_reasoning.py", "exitCode": 0, "seconds": 0.82}, {"script": "tests/phase2/postgres_cli_route.py", "exitCode": 0, "seconds": 1.08}, {"script": "tests/phase2/postgres_consumer_campaign_worker.py", "exitCode": 0, "seconds": 3.5}, {"script": "tests/phase2/postgres_consumer_deletion.py", "exitCode": 0, "seconds": 1.28}, {"script": "tests/phase2/postgres_consumer_migrations.py", "exitCode": 0, "seconds": 1.5}, {"script": "tests/phase2/postgres_consumer_model_safety.py", "exitCode": 0, "seconds": 2.44}, {"script": "tests/phase2/postgres_consumer_operations.py", "exitCode": 0, "seconds": 0.22}, {"script": "tests/phase2/postgres_coworker.py", "exitCode": 0, "seconds": 4.89}, {"script": "tests/phase2/postgres_credit_purchases.py", "exitCode": 0, "seconds": 0.52}, {"script": "tests/phase2/postgres_credits.py", "exitCode": 0, "seconds": 1.38}, {"script": "tests/phase2/postgres_entitlement_race.py", "exitCode": 0, "seconds": 0.75}, {"script": "tests/phase2/postgres_final_billing_notice_locks.py", "exitCode": 0, "seconds": 0.32}, {"script": "tests/phase2/postgres_final_campaign_destinations.py", "exitCode": 0, "seconds": 0.69}, {"script": "tests/phase2/postgres_final_credit_estimate.py", "exitCode": 0, "seconds": 0.53}, {"script": "tests/phase2/postgres_final_idempotency.py", "exitCode": 0, "seconds": 1.0}, {"script": "tests/phase2/postgres_final_image_routing.py", "exitCode": 0, "seconds": 0.4}, {"script": "tests/phase2/postgres_final_monthly_credits.py", "exitCode": 0, "seconds": 0.4}, {"script": "tests/phase2/postgres_final_ops_report.py", "exitCode": 0, "seconds": 0.32}, {"script": "tests/phase2/postgres_final_purchase_lifecycle.py", "exitCode": 0, "seconds": 1.27}, {"script": "tests/phase2/postgres_final_run_refs.py", "exitCode": 0, "seconds": 0.53}, {"script": "tests/phase2/postgres_final_unknown_usage.py", "exitCode": 0, "seconds": 2.3}, {"script": "tests/phase2/postgres_ideas.py", "exitCode": 0, "seconds": 0.61}, {"script": "tests/phase2/postgres_ideas_references.py", "exitCode": 0, "seconds": 2.49}, {"script": "tests/phase2/postgres_instagram_lifecycle.py", "exitCode": 0, "seconds": 1.86}, {"script": "tests/phase2/postgres_safety.py", "exitCode": 0, "seconds": 0.37}, {"script": "tests/phase2/postgres_isolation.py", "exitCode": 0, "seconds": 0.94}, {"script": "tests/phase2/postgres_learning_decide.py", "exitCode": 0, "seconds": 0.49}, {"script": "tests/phase2/postgres_learning_events.py", "exitCode": 0, "seconds": 0.46}, {"script": "tests/phase2/postgres_learning_extract.py", "exitCode": 0, "seconds": 0.85}, {"script": "tests/phase2/postgres_media_notes.py", "exitCode": 0, "seconds": 1.1}, {"script": "tests/phase2/postgres_media_notes_credits.py", "exitCode": 0, "seconds": 0.55}, {"script": "tests/phase2/postgres_memory_egress.py", "exitCode": 0, "seconds": 0.61}, {"script": "tests/phase2/postgres_memory_proposals.py", "exitCode": 0, "seconds": 0.84}, {"script": "tests/phase2/postgres_migration_008.py", "exitCode": 0, "seconds": 0.17}, {"script": "tests/phase2/postgres_migration_013.py", "exitCode": 0, "seconds": 1.15}, {"script": "tests/phase2/postgres_onboarding_chat.py", "exitCode": 0, "seconds": 0.5}, {"script": "tests/phase2/postgres_orchestration.py", "exitCode": 0, "seconds": 8.55}, {"script": "tests/phase2/postgres_phone_mode.py", "exitCode": 0, "seconds": 5.73}, {"script": "tests/phase2/postgres_repository.py", "exitCode": 0, "seconds": 0.62}, {"script": "tests/phase2/postgres_plan_guards.py", "exitCode": 0, "seconds": 0.37}, {"script": "tests/phase2/postgres_quick_start_again.py", "exitCode": 0, "seconds": 0.88}, {"script": "tests/phase2/postgres_raffi_planning.py", "exitCode": 0, "seconds": 0.4}, {"script": "tests/phase2/postgres_raffi_voice_sources.py", "exitCode": 0, "seconds": 1.14}, {"script": "tests/phase2/postgres_research.py", "exitCode": 0, "seconds": 1.42}, {"script": "tests/phase2/postgres_reverify.py", "exitCode": 0, "seconds": 0.7}, {"script": "tests/phase2/postgres_site_agent.py", "exitCode": 0, "seconds": 1.82}, {"script": "tests/phase2/postgres_site_agent_scenarios.py", "exitCode": 0, "seconds": 5.01}, {"script": "tests/phase2/postgres_source_approval.py", "exitCode": 0, "seconds": 0.55}, {"script": "tests/phase2/postgres_time_savings.py", "exitCode": 0, "seconds": 1.7}, {"script": "tests/phase2/postgres_unified_notifications.py", "exitCode": 0, "seconds": 2.75}, {"script": "tests/phase2/postgres_video.py", "exitCode": 0, "seconds": 0.62}]}
