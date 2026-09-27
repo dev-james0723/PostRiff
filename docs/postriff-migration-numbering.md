@@ -13,7 +13,10 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 026–029 | ai-routing's four migrations, renumbered from 020–023 | ai-routing | Reserved. The files still carry 020–023 on `ai-routing` and must be renamed before that branch lands (checklist below). |
 | 030 | `030_agent_style` | Rafii live agent (not yet on any remote branch) | Reserved. The live-agent work carries it; it lands with that work. |
 | 031 | `031_chat_media` | Chat attachments (chat-context SPEC §10) | Taken. Applied in production with a one-off, sha256-pinned run (see `docs/design/chat-context/VERIFICATION.md`). |
-| 032 and up | — | next new migration | Free. |
+| 032 | `032_productivity_connectors` | Chat productivity connectors | Taken on `consumer-saas`. Growth branches also contain `032_growth_metric_reads`; reconcile that separate branch's collision before integrating it. |
+| 033 | `033_phone_mode` | Rafii Phone Mode | Taken on `feat/rafii-live-agent`; applied only to disposable local PostgreSQL. Staging and production remain unapplied. |
+| 034 | `034_unified_notifications` | Rafii Unified Notifications | Taken on `feat/rafii-live-agent` after the 2026-09-26 inventory of all 44 registered worktrees (highest 033). Disposable local PostgreSQL only. |
+| 035 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
@@ -23,6 +26,8 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 - 024–025: only `rafii/coworker-wp0-wp11`, `rafii/coworker-integration` and `rafii/integration-runtime-coworker`.
 - 026–029: only `rafii/ai-routing-renumber-026-029` and its worktree.
 - 030–035: unused on every local and remote ref and in every worktree's `migrations/postriff/`, tracked or not.
+
+Phone Mode inventory rechecked on 2026-09-26 after `consumer-saas` advanced to `96426af`: all relevant local/remote refs and all active worktrees were inspected, including untracked migration files. 030, 031 and both existing uses of 032 are occupied. Only the Phone Mode worktree contains 033. No applied migration was renamed or changed. The earlier 2026-09-25 inventory above is historical.
 
 Re-run this before choosing or applying any number:
 

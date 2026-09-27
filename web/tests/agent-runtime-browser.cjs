@@ -94,8 +94,36 @@ function approveBudget(workspaceId) {
   execFileSync(process.env.RAFII_PYTHON || 'python3', ['-c', code], { cwd: root, env: { ...process.env, PYTHONPATH: 'src:tests' }, stdio: 'inherit' });
 }
 
+function approveHarnessMedia(workspaceId) {
+  // The dev app advertises its synthetic notes/image processors. The injected
+  // Agent provider has its own routes; consent to those synthetic processors as
+  // the fixture owner too, exactly as the PostgreSQL multimodal fixture does.
+  const { execFileSync } = require('node:child_process');
+  const code = [
+    'import psycopg, time',
+    'from postriff_phase2 import media_consent',
+    'from postriff_phase2.hosted import HostedWorkspaceService',
+    'from postriff_phase2.agent_runtime_v2.config import RuntimeConfig',
+    `dsn = "host=127.0.0.1 port=${process.env.RAFII_HARNESS_PG_PORT || '55622'} dbname=postgres"`,
+    `svc = HostedWorkspaceService(lambda: psycopg.connect(dsn), lambda token: ${JSON.stringify(principal)})`,
+    `cfg = RuntimeConfig.from_environment({'OPENAI_API_KEY':'harness-placeholder','RAFII_IMAGE_AGENT_ENABLED':'1'})`,
+    'processors = [media_consent.processor(r.provider,r.model) for r in [cfg.route(kind,reason="synthetic owner consent") for kind in ("vision","image_quality","image_fast")]]',
+    'def consent(state, actor):',
+    '    assert state["mediaEgress"]["cloud"] and state["mediaEgress"]["decidedBy"] == actor',
+    '    known = state["mediaEgress"]["processors"]',
+    '    for p in processors:',
+    '        if p and p["id"] not in [k["id"] for k in known]: known.append(p)',
+    '    return state',
+    `snap = svc.repository.get(${JSON.stringify(workspaceId)}, "fixture")`,
+    `svc.repository.command(${JSON.stringify(workspaceId)}, "fixture", snap["revision"], consent)`
+  ].join('\n');
+  execFileSync(process.env.RAFII_PYTHON || 'python3', ['-c', code], { cwd: path.resolve(__dirname, '../..'), env: { ...process.env, PYTHONPATH: 'src:tests' }, stdio: 'inherit' });
+}
+
 async function seed() {
   const { workspaceId } = await call('POST', '/api/auth/verify', {});
+  // Current browser voice offers a style picker before the first call. This regression fixture starts with a saved choice.
+  await call('PATCH', '/api/me', { agentStyle: { preset: 'friendly', chosen: true } });
   approveBudget(workspaceId);
   const start = await call('POST', `/api/workspaces/${workspaceId}/channels/linkedin/oauth/start`, { capability: 'publish' });
   const state = new URL(start.authorizeUrl).searchParams.get('state');
@@ -103,6 +131,14 @@ async function seed() {
   if (!done.connected) throw new Error('LinkedIn did not connect in the harness');
   verifyLinkedIn(workspaceId);
   let snapshot = await call('GET', `/api/workspaces/${workspaceId}`);
+  // This success scenario sends synthetic reference pixels to the injected image
+  // provider. The fixture owner explicitly consents through the actual action;
+  // the product's new default-off media gate stays intact.
+  snapshot = await call('POST', `/api/workspaces/${workspaceId}/actions`, {
+    expectedRevision: snapshot.revision, action: 'media_egress', payload: { cloud: true, confirmed: true }
+  });
+  approveHarnessMedia(workspaceId);
+  snapshot = await call('GET', `/api/workspaces/${workspaceId}`);
   snapshot = await call('POST', `/api/workspaces/${workspaceId}/actions`, {
     expectedRevision: snapshot.revision, action: 'raffi_campaign_create',
     payload: { goal: 'Autumn launch of the practice journal', audience: 'Adult piano learners returning to the instrument', facts: { product: 'Practice journal' } }

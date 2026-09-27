@@ -1,4 +1,4 @@
-# Notification platform: contract, runbook, deliverability
+# Rafii unified attention and notification platform
 
 Spec §14–§18. The code lives in `src/postriff_phase2/notifications/`. The generated event and template tables are in [NOTIFICATION_CATALOG.md](NOTIFICATION_CATALOG.md).
 
@@ -7,10 +7,12 @@ Spec §14–§18. The code lives in `src/postriff_phase2/notifications/`. The ge
 ```text
 authoritative state / explicit emit (inside the domain transaction)
   → pr_notification_events (dedupe: scope_key + dedupe_key)
-  → planner (pure code: recipients by permission, urgency, channels, quiet hours, digest, mute, unsubscribe, rate limits)
+  → deterministic planner / Attention Router (permission, urgency, consent, quiet hours, mute, rate and cost limits)
   → pr_notification_deliveries (one per event × person × channel; unique; idempotency_key)
   → in-app: delivered at creation (the notification centre)
-  → email / push: claimed by the cron worker → commit → send → fenced completion
+  → email / push / sms: claimed by the cron worker → commit → send → fenced completion
+  → phone: existing Phone Mode worker, sharing the same event/delivery ledger
+  → durable receipts / acknowledgements → Rafii Notification Centre
 ```
 
 ### Where events come from
@@ -39,7 +41,7 @@ The model never decides any of these:
 - recipients (the permission class in the catalogue, re-checked against live memberships);
 - urgency, channels and transactional status;
 - security classification;
-- dedupe, quiet hours, digest, mute, unsubscribe and rate limits.
+- consent, routing, escalation timing, dedupe, quiet-hour bypass, digest, mute, unsubscribe, retries and rate/cost limits.
 
 The model's only role is the words in an in-app summary, where one exists.
 
@@ -49,7 +51,7 @@ Each preference row is keyed by `(user_id, scope_key, category)`:
 - `scope_key` is a workspace id, or `*` for the person's defaults;
 - `category` is a catalogue category, or `*` for every category.
 
-The fields are `in_app`, `email_mode` (immediate, digest or off), `push_mode` (immediate or off), `digest_frequency` (daily, weekly or off), `quiet_start`/`quiet_end` (minutes after midnight in `time_zone`, falling back to the profile's zone), `muted_until` and `email_unsubscribed`. Every field is nullable: null means "not set in this row", so a broader row or the catalogue default decides. An explicit `email_unsubscribed = false` on a narrower scope therefore re-subscribes it even when a broader row unsubscribes.
+The fields are `in_app`, `email_mode` (immediate, digest or off), `push_mode` (immediate or off), `sms_mode` (important_only or off), `smart_escalation`, `digest_frequency` (daily, weekly or off), `quiet_start`/`quiet_end` (minutes after midnight in `time_zone`, falling back to the profile's zone), `muted_until` and `email_unsubscribed`. Every field is nullable: null means "not set in this row", so a broader row or the catalogue default decides. An explicit `email_unsubscribed = false` on a narrower scope therefore re-subscribes it even when a broader row unsubscribes. SMS defaults to off; Smart escalation defaults to on but cannot enable SMS or grant consent.
 
 Resolution takes the first non-null value for each field, most specific first:
 1. (workspace, category)
@@ -58,13 +60,13 @@ Resolution takes the first non-null value for each field, most specific first:
 4. (`*`, `*`)
 5. the catalogue default
 
-Transactional events (`billing.*`, `security.*`) always send email. Unsubscribe and mute do not apply to them, and security events break quiet hours.
+Transactional events (`billing.*`, `security.*`) always send email. Email unsubscribe and mute do not apply to them; security Email/Push can break quiet hours. SMS always requires its own consent, obeys mute and quiet hours, and never inherits transactional exceptions.
 
 Quiet hours work like this:
 - They defer push, and routine (info or action) email, until the end of the window in the person's time zone. The time is resolved on the actual date, so DST changes are handled.
 - Critical email (a failure, an uncertain publish, a reconnect) is not held back.
 - Critical push waits for the end of quiet hours.
-- Security breaks through.
+- Security Email/Push breaks through. All SMS, including security, waits.
 
 Rate limits: after 6 immediate pushes or 12 immediate emails per person per hour, email goes to the digest and push is suppressed. Critical and security push is exempt. Nothing is dropped silently: a suppressed row keeps its reason.
 
@@ -75,6 +77,8 @@ Rate limits: after 6 immediate pushes or 12 immediate emails per person per hour
 **Idempotency.** The idempotency key is `delivery.idempotency_key`. It is sent to Resend as the `Idempotency-Key` header and as a `delivery_id` tag. After a crash following a claim, the lease expires, the row is re-claimed and it is resent with the same key, so Resend dedupes it. A push repeat carries the same `Topic`, so it replaces the earlier notice on the device.
 
 **Retries.** Transient failures (5xx, 429, a timeout or a lost response) retry with backoff `min(60 s · 2^(attempt−1), 6 h)` plus 0–29 s of deterministic jitter. There are at most 6 attempts for email and 5 for push. After that the delivery is `dead`.
+
+SMS has a stricter uncertainty fence: at most 3 attempts, only after known rejection before acceptance (for example HTTP 429). A lost response, ambiguous 5xx/408, malformed accepted response, or crash after the committed dispatch marker becomes terminal `uncertain`. It is never blindly resent. Phone retains its existing one-attempt call policy.
 
 **Other outcomes.**
 - Preferences are re-checked when the message is about to go out. An unsubscribe, a bounce or complaint suppression, a mute, or a channel switched off after the delivery was planned completes it as `suppressed` with the reason; transactional notices ignore these, as at planning time.
@@ -89,13 +93,76 @@ Rate limits: after 6 immediate pushes or 12 immediate emails per person per hour
 
 **Stable bodies.** An unsubscribe link's expiry is based on when the delivery was created, not when it is sent, so a retry renders the same body under the same Idempotency-Key (Resend refuses a different body under a key it has seen).
 
-**Legacy bridge.** With `RAFII_NOTIFICATIONS_V2_ENABLED` on, `Mailer._deliver` refuses the kinds v2 owns, returning `routed_to_notifications_v2`. Invitations and the welcome email stay direct. With the flag off, the old path is byte-for-byte unchanged.
+**Legacy bridge.** With `RAFII_NOTIFICATIONS_V2_ENABLED` on, `Mailer._deliver` refuses the kinds v2 owns, returning `routed_to_notifications_v2`. Invitations and the welcome email stay direct. With the flag off, existing direct delivery behavior remains available; its HTML now uses the same branded Python components and its subjects/preheaders exclude private automation names and arbitrary plan labels.
 
-**Operations.** `operational_signals.snapshot` reports `notificationBacklog` (due for more than 10 minutes) and `notificationDead24h` when v2 is on.
+**Operations.** `operational_signals.snapshot` reports `notificationBacklog` (due for more than 10 minutes), `notificationDead24h` and a separate aggregate `sms` object when v2 is on. SMS metrics include overdue backlog, failed/dead/uncertain deliveries, suppressed/deferred quiet-hour rows, acknowledged cancellations, dispatch counts, segments and known provider cost. Unknown cost is held at its configured reservation for budget enforcement. These aggregates contain no message body, number or address.
+
+## Text messages and durable escalation
+
+`sms` is a first-class channel on the existing `pr_notification_events` → `pr_notification_deliveries` pipeline. `phone` continues to mean a voice call. No second inbox, outbox or raw phone-number store exists.
+
+`RAFII_SMS_ENABLED=0` and `RAFII_SMS_ESCALATION_ENABLED=0` are the safe deployment defaults. Notification V2 must also be enabled. Sending and escalation are server-controlled; isolated Preview environments force both off. Fake local harnesses explicitly enable them with injected fake transports.
+
+### Consent and the shared identity
+
+`pr_sms_consents` is server-only, forced-RLS storage keyed by person. It contains the verified Phone Mode binding hash, opt-in status/version/source, timestamps, separate security-SMS permission and provider STOP state. The encrypted number remains exclusively in `pr_phone_numbers`; the existing Phone Mode vault decrypts it only immediately before egress. Phone verification, call consent and enabling Call Rafii do not grant text consent.
+
+Account → Notifications exposes Push, Email, Text messages (Off / Important only), Smart escalation, Quiet hours and Digest frequency. Selecting Important only explicitly submits consent version `rafii-sms/1`. The UI shows only the last four digits and links to the existing Phone Mode verification flow when needed. Account-change texts require a second explicit setting.
+
+A database trigger invalidates consent and suppresses unsent SMS when the binding changes, becomes unverified or is deleted, even when the change happens outside PhoneService. STOP immediately marks SMS opted out and cancels unsent texts, including when sending flags are off or there was no earlier consent. It leaves Phone, Email and Push preferences alone. START can remove the provider block; it never re-grants application consent. The person must explicitly opt in again.
+
+### Deterministic policy and timing
+
+The catalogue and durable event carry `sms_policy`: `off | escalate | immediate`. Initial `escalate` classes are `publish.failed`, `publish.uncertain`, `channel.reconnect_required`, `billing.payment_failed`, time-sensitive `campaign.approval_required`, and separately consented `security.account_change`. Every other current class is off. `immediate` is supported but no initial event uses it.
+
+Approval becomes time-sensitive only from an authoritative scheduled publish deadline within the next 24 hours. The event expires at that deadline. A later hourly scan can emit a distinct timely occurrence when an existing distant approval enters that window; presentation payloads cannot declare urgency.
+
+- With an eligible pending Push delivery, critical/security fallback is due 10 minutes after its planned Push time; time-sensitive action fallback is due after 30 minutes.
+- When Push is unavailable, explicit Important only consent permits immediate eligible SMS, subject to quiet hours and all remaining checks.
+- Push-first fallback requires both Smart escalation and the server escalation flag. Turning either off before egress suppresses an already scheduled fallback, even if the Push subscription later disappears.
+- The fallback is a durable `sms` delivery with future `next_attempt_at` and `sms_escalation=true`. There is no in-memory timer. Quiet hours can move the due time further; a due time beyond event expiry suppresses it.
+
+At egress, the worker locks the existing identity/consent/event/delivery and re-checks current membership and permission, expiry, authoritative resolution, acknowledgement, consent/version/current verified binding, preference, security opt-in, quiet hours, mute and limits. Per-person limits are 2 texts per rolling hour and 4 per rolling 24 hours. Critical/security messages do not bypass them. Dedupe remains the existing unique event/person/channel contract.
+
+Copy is fixed and localized in `notifications/sms.py` for the four shipped locales (yue uses Hong Kong written Chinese). It contains a static Rafii reason, same-origin HTTPS `/app?notification=…` link and STOP instruction. It never interpolates domain payloads, draft text, DMs, credentials, email addresses or full phone numbers. Maximum copy length is 2 GSM-7/UCS-2 segments; an overly long origin/copy fails closed.
+
+### Provider adapter and prerequisites
+
+`FakeSMSTransport` is used for local acceptance; its receipts retain only delivery references and segment counts. `TwilioSMSTransport` is a separate Messaging adapter using the existing account credential pattern, with its own `TWILIO_SMS_FROM_NUMBER` or `TWILIO_SMS_MESSAGING_SERVICE_SID`. It does not route through the voice-call provider.
+
+Real egress requires an HTTPS `POSTRIFF_PUBLIC_BASE_URL`, configured account/auth/sender, positive `RAFII_SMS_USD_MICRO_PER_SEGMENT` and `RAFII_SMS_DAILY_USD_MICRO`, and `RAFII_SMS_PROVIDER_DAILY_LIMIT` (default 100). The worker serializes provider-cap/budget checks with a PostgreSQL advisory lock and commits the dispatch marker, binding hash, segment estimate and cost reservation before the external call. Signed receipts can replace the estimate with bounded numeric segments/USD cost where supplied. There is no live billing-price polling; the configured estimate must conservatively cover the destination and provider charges. Deletion removes personal delivery rows, so this queue budget is not an immutable provider billing ledger.
+
+Configure the provider's status callback at `/api/notifications/sms/webhook/{delivery_id}` and inbound messaging URL at `/api/notifications/sms/inbound`, matching the exact public origin used for signature verification. HMAC signatures, account identity, delivery binding and lifecycle values are checked; receipt replays are deduped in the shared provider-event ledger. Inbound handling returns empty TwiML and sends no application-generated reply. Sender registration, regional compliance, provider-managed opt-out replies, actual pricing and real delivery require separate owner verification. No live message was sent during implementation.
+
+## Cross-channel acknowledgement and resolution
+
+`pr_notification_acknowledgements` is a forced-RLS server-only row per `(event_id, user_id)`. In-app read/acted/dismissed, authenticated Email/Push/SMS deep-link navigation and relevant domain resolution persist acknowledgement and cancel that person's unsent escalation. Acknowledgement of a digest's primary deep link applies to its included events that the person can still access. Read-all acknowledges the returned in-app events. Email open pixels and provider click telemetry never count as acknowledgement.
+
+The existing Push service worker keeps its architecture. Its safe same-origin deep link now carries a non-secret delivery reference. After authentication, the app calls the workspace-scoped acknowledgement endpoint; ownership and live membership are checked server-side. Knowing a delivery UUID does not grant access or permission to acknowledge another person's event.
+
+Repository effects, cron scan and the SMS egress boundary independently re-check authoritative publish/review/channel/automation/billing state. Resolution records `resolved_at`, acknowledges recipients and cancels unsent texts. Cancellation applies to pending/claimed rows whose dispatch has not started; a provider call already begun cannot be recalled. Events remain in the unified Notification Centre, with channel status and receipts in the same durable delivery ledger.
+
+Migration [034_unified_notifications.sql](../../../../migrations/postriff/034_unified_notifications.sql) was chosen after inspecting all 44 registered worktrees and their migration numbers. It retains `phone`, adds SMS/event policy/preferences/consent/acknowledgements, indexes and forced RLS, and invalidates consent on identity changes. Profile/event foreign-key cascades and account deletion remove SMS consent, acknowledgements, deliveries and associated provider receipts.
+
+This backend requires the 034 schema even while SMS flags are off. Apply the migration in the separately approved target environment before deploying this code; there is no fallback for an unmigrated Notification V2 schema.
 
 ## HTML email
 
-`notifications/email_render.py` provides the components EmailShell, Preheader, BrandHeader, ContextLabel, Headline, StatusPill, PrimaryCard, MetricsRow, PrimaryCTA, SecondaryAction, Footer and NotificationSettingsLink. There are 24 templates, each in 4 locales: en, zh-Hant-HK (also used for Cantonese/yue), zh-Hant and zh-Hans. Every message has a plain-text twin.
+`notifications/email_render.py` provides the shared Python components and renderer. Every Notification V2 template is rendered in 4 locales: en, zh-Hant-HK (also used for Cantonese/yue), zh-Hant and zh-Hans, and every message has a plain-text twin. The existing direct account/legacy mailer also uses the branded shell and retains its current English copy. Preview/test coverage is generated from both current renderer catalogues rather than a hard-coded template count.
+
+### Mandatory Rafii email design gate
+
+Every new or modified HTML email must use all design skills on the implementation host that are actually applicable to HTML email, brand composition, static visual hierarchy, accessibility and render QA. On the current Mac this includes `react-email` and `design-partner`, plus `frontend-design`, `redesign-existing-projects`, `brandkit` and `high-end-visual-design` where their guidance remains email-safe. Re-scan installed skills at execution time and record the relevant skills used in the implementation receipt. Do not mechanically invoke unrelated design/video/game skills.
+
+Email-client compatibility wins over web-only design advice. The renderer must remain safe for real email clients: no JavaScript, no motion dependency, no fragile backdrop-filter/glass requirement, no critical web-font dependency, and no runtime migration merely because a React Email skill is available.
+
+Every HTML email must visibly and intentionally contain both:
+- the current approved Rafii logo/wordmark, sourced from `web/src/components/marketing/wordmark.tsx` or an exact email-safe export/translation of that mark;
+- approved Rafii character art from `web/public/raffi/`.
+
+Do not invent a new Rafii logo. Use `web/src/styles/rafii.css` and `docs/design/reference/rafii-v9/` as brand truth. The character should be a restrained brand accent; substantive content and the CTA must remain usable if remote images are blocked.
+
+All current templates/locales must pass the existing light/dark, 600/375, Chromium/WebKit and axe render checks plus brand-presence and image-blocked degradation checks. Browser previews are evidence, not a claim of Gmail/Outlook certification.
 
 The rules:
 - Exactly one primary CTA, with an absolute https deep link built from an `/app…` path. Anything else, including `javascript:` or an external URL, falls back to `/app`.
@@ -104,9 +171,11 @@ The rules:
 - `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` are sent for non-transactional mail. The link carries a signed token (HMAC, 180 days).
 - Dark mode is tolerated through `color-scheme` plus a `prefers-color-scheme` style block.
 - Every rendered email is under 102 KB, so Gmail doesn't clip it.
-- The template version is `rafii-email/1.0.3`.
+- The redesigned renderer declares template version `rafii-email/1.1.0` (previously `rafii-email/1.0.4`).
 
-Previews are in `evidence/email/`. The browser check (`scripts/rafii_email_render_check.cjs`) ran Chromium and WebKit, light and dark, at 600 and 375 px, with axe WCAG 2 A/AA: 768/768 pass. The result is in `evidence/email-render.json`, and the screenshots are in `evidence/email-shots/`.
+The shared header translates the approved 28px inverted R mark and visible Rafii wordmark into table/inline CSS and uses the approved `avatar-128.png` at a restrained 48px. Neutral surfaces, an editorial system-serif headline, generous spacing and one black primary CTA keep the message first. No external font, JavaScript, motion or glass effect is needed. With images and style blocks blocked, the text wordmark, headline, body and CTA remain usable.
+
+Previews are in `evidence/email/`: 25 Notification V2 templates × 4 locales plus 13 current direct English templates (113 previews). `scripts/rafii_email_render_check.cjs` runs every preview in Chromium/WebKit, light/dark, 600/375px, with images enabled and blocked/style-block degradation. It checks all applicable axe WCAG 2 A/AA rules, overflow, visible headline/wordmark, approved character presence, actual local asset resolution, one usable CTA, same-origin HTTPS links, clipping size and plain-text twin. Results and representative screenshots are in `evidence/email-render.json` and `evidence/email-shots/`; the implementation receipt records the actual completed run. This is browser QA, not Gmail/Outlook client verification.
 
 ## Resend setup and deliverability runbook (owner actions; nothing here has been run against production)
 
@@ -145,7 +214,7 @@ Previews are in `evidence/email/`. The browser check (`scripts/rafii_email_rende
 
 **Platform limits.** iOS and iPadOS deliver web push only to a web app added to the Home Screen (16.4+), so the settings page explains that instead of showing a broken button.
 
-**Native later.** APNs and FCM would be new `PushTransport` implementations behind the same `NotificationService` contract.
+**Native scope.** No native APNs/FCM rewrite was introduced; the existing Web Push implementation remains in place.
 
 **Keys.**
 - Generate VAPID keys with `python -c "from postriff_phase2.notifications.push import generate_vapid_keys as g; print(g())"`.
@@ -158,5 +227,5 @@ Previews are in `evidence/email/`. The browser check (`scripts/rafii_email_rende
 
 - Event payloads carry presentation fields only (ids, platform, short reason, link). Addresses are never stored, and bodies are never stored.
 - Deliveries and events belong to their workspace (cascade on workspace deletion).
-- Person-level rows are removed by account deletion (push subscriptions, preferences, deliveries, person-scoped events, product events and experiment assignments).
+- Person-level rows are removed by account deletion (push subscriptions, preferences, deliveries, SMS consent, acknowledgements, delivery-associated provider receipts, person-scoped events, product events and experiment assignments).
 - Product events expire after 400 days; the coworker cron deletes expired rows in bounded batches.

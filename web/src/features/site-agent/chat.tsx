@@ -1,4 +1,5 @@
 'use client';
+import { CallRafii } from '@/features/rafii-phone/call-rafii';
 
 /**
  * The Rafii conversation inside the side panel: one conversation per workspace that follows the person from page to
@@ -377,6 +378,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         </Button>
       </div>
 
+      <CallRafii conversationId={conversationId} onConversation={onVoiceConversation} />
       {agent.status?.flags?.RAFII_VOICE_ENABLED && agent.status?.flags?.RAFII_AGENT_V2_ENABLED && (
         <VoiceMode conversationId={conversationId} pageContext={voicePageContext} onConversation={onVoiceConversation} onAnswer={onVoiceAnswer} timeZone={timeZone} model={choice.model} />
       )}

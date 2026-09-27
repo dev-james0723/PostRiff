@@ -1,0 +1,558 @@
+{
+  "verifiedAtUtc": "2026-09-27T00:21:43.528189+00:00",
+  "status": "LOCALLY_VALIDATED_RELEASE_NOT_STARTED",
+  "root": "/Users/ouxianxing/Documents/James-Au-Studio-live-agent",
+  "branch": "feat/rafii-live-agent",
+  "baselineMergeCommit": "bcb1f458d5b3f486eaede1a7f1a9102acabbc819",
+  "upstream": "9b3c935874f8e555faf6288ca63d71b8aad39a37",
+  "implementationState": "local product commits 811371e and 35b6a47; upstream reconciliation committed; no push or deployment",
+  "providerExecution": "fake/synthetic only; no real PSTN, SMS, provider/model calls or customer messages",
+  "sourceFiles": [
+    {
+      "path": ".env.example",
+      "state": "modified",
+      "sha256": "977f7fd0b74c68549e8981d70a26f9db8e7ce6dda2910c16d243f7ebdbfbe6d7"
+    },
+    {
+      "path": "api/phone.py",
+      "state": "added",
+      "sha256": "81f5ae13decbead57c4cf182b9475b1a07b3269805c17f52bba2dddd6335e54e"
+    },
+    {
+      "path": "docs/postriff-migration-numbering.md",
+      "state": "modified",
+      "sha256": "3bc15390fafa191111805292274ef9ee278a3474c40c7720683373d79cce8595"
+    },
+    {
+      "path": "migrations/postriff/033_phone_mode.sql",
+      "state": "added",
+      "sha256": "1c05526ab7c83660b4890bb978006697cd248fd7f997fdf90966828468662352"
+    },
+    {
+      "path": "requirements.txt",
+      "state": "modified",
+      "sha256": "95c557f68a657429de9e05015b204969f4e2813ed15678b66a78176f6220d756"
+    },
+    {
+      "path": "scripts/check_postriff_hosted_preflight.py",
+      "state": "modified",
+      "sha256": "7196ea095e6ee498e45d2b24fb856bc3f9de03d77ce850bf6a6e12de981c29e7"
+    },
+    {
+      "path": "scripts/postriff_dev_hosted.py",
+      "state": "modified",
+      "sha256": "9fb013a2125eb7ee8f1bd4b6c34d82893aff8789e5b0e049e1155903f993691a"
+    },
+    {
+      "path": "skills/rafii-registry.json",
+      "state": "modified",
+      "sha256": "97a6fa9ce8391fc6d775c83521a9f764fc2d8b4115016f234813b20f157c7044"
+    },
+    {
+      "path": "src/postriff_phase2/account_deletion.py",
+      "state": "modified",
+      "sha256": "65e2dd4d77cba701de59b94a474584941693a0e4ce6fd43feb8fa5688448ce73"
+    },
+    {
+      "path": "src/postriff_phase2/agent_runtime_v2/domain_tools.py",
+      "state": "modified",
+      "sha256": "3ebc2fddba8049dd3713e90ce142d9fb0c51f7f4b706fe869beed0affc79dbba"
+    },
+    {
+      "path": "src/postriff_phase2/agent_runtime_v2/live.py",
+      "state": "modified",
+      "sha256": "8130a9e55e4650725cfbb3126c130123c4d656b7d44ffd7ef13b1f165b680771"
+    },
+    {
+      "path": "src/postriff_phase2/agent_runtime_v2/manager.py",
+      "state": "modified",
+      "sha256": "fbf36123bd5c90c4730814e81518b9aa1672433f55caa421a8bb3ab210574c5a"
+    },
+    {
+      "path": "src/postriff_phase2/agent_runtime_v2/service.py",
+      "state": "modified",
+      "sha256": "16c14cc700427a1c9900cbb00c70de8e0e4169610548309b32de205303617d57"
+    },
+    {
+      "path": "src/postriff_phase2/deployment.py",
+      "state": "modified",
+      "sha256": "6c5dfc65b0f80bfbcf065a29ca009c77cc92947db9065d3ee2ac3c991253e58e"
+    },
+    {
+      "path": "src/postriff_phase2/hosted_app.py",
+      "state": "modified",
+      "sha256": "895c8eaf42ae540f671c706eab0596d6680b0a63daa535c6c9fa460638083a36"
+    },
+    {
+      "path": "src/postriff_phase2/notifications/catalog.py",
+      "state": "modified",
+      "sha256": "1fd9b11a64cb71e157b35d1a203b44f66cbd63b41d38eb40d90c4374d0144108"
+    },
+    {
+      "path": "src/postriff_phase2/notifications/email_locales.json",
+      "state": "modified",
+      "sha256": "f338f079d3c4f7a3ff146ddf9f11f1d07dc28d1842bac526707de3bde59b9a3d"
+    },
+    {
+      "path": "src/postriff_phase2/notifications/email_render.py",
+      "state": "modified",
+      "sha256": "84d122ab582d757c9b39addb15127000a9460842166e1d4be872a078fc697dbb"
+    },
+    {
+      "path": "src/postriff_phase2/notifications/planner.py",
+      "state": "modified",
+      "sha256": "3d820c8328093d53c02446d167be18d4e99f609f09ae33c8399109c635065418"
+    },
+    {
+      "path": "src/postriff_phase2/notifications/service.py",
+      "state": "modified",
+      "sha256": "36635dcafe22e258c1a3f7ae62efb4c9ef5cc93ecb9860a4e6510fd56dc32542"
+    },
+    {
+      "path": "src/postriff_phase2/notifications/store.py",
+      "state": "modified",
+      "sha256": "79a6d503e1d74dea94801e4ce50ece42afae4500b4d87c7980ad97dadcc8479f"
+    },
+    {
+      "path": "src/postriff_phase2/phone/__init__.py",
+      "state": "added",
+      "sha256": "4eeaed6a8104c130927fe7f0acb800fc25c2e8cc30a86bc05034d9376833dbbe"
+    },
+    {
+      "path": "src/postriff_phase2/phone/asgi.py",
+      "state": "added",
+      "sha256": "8237422e3caff1f369c8052f958c27a5f657bc4a9ffc2582ea41947768f3b7f9"
+    },
+    {
+      "path": "src/postriff_phase2/phone/billing.py",
+      "state": "added",
+      "sha256": "35dd62b1e98596256cd1dcc1a121b0bdf40dbcaccc98c04ccfcbc0aac982bdc1"
+    },
+    {
+      "path": "src/postriff_phase2/phone/config.py",
+      "state": "added",
+      "sha256": "aaa3412ce04050a347b22db1310fc415461e3818d2d4a95208537f36070c4fe7"
+    },
+    {
+      "path": "src/postriff_phase2/phone/contracts.py",
+      "state": "added",
+      "sha256": "f3988ed25b0d1a4803a0588634081e2986e8dd64e4969bf4d18f5b5c124eaf94"
+    },
+    {
+      "path": "src/postriff_phase2/phone/delivery.py",
+      "state": "added",
+      "sha256": "8f5ba98c84e16860ae3fe3fb59830107a49a15087245f6317fd0f63cfbad4cb1"
+    },
+    {
+      "path": "src/postriff_phase2/phone/http.py",
+      "state": "added",
+      "sha256": "01b5b70f08566ae17ca1ccb8b29869f6f695406d2962c8194bdc8b49da7b9864"
+    },
+    {
+      "path": "src/postriff_phase2/phone/planner.py",
+      "state": "added",
+      "sha256": "ca232880477efaa7bb13f4307ca9c22f518dc5c3fb35ceb0fc006c25b23a55c8"
+    },
+    {
+      "path": "src/postriff_phase2/phone/providers/__init__.py",
+      "state": "added",
+      "sha256": "4e205fe032e78f4f65fae1f3035b292ac9f2b9aa092435a30ce5b932d4f32ad5"
+    },
+    {
+      "path": "src/postriff_phase2/phone/providers/base.py",
+      "state": "added",
+      "sha256": "6885c2bef28810fd847cdb7efc201b3b5514469ebe75ee771e4eb65b0cde6ca9"
+    },
+    {
+      "path": "src/postriff_phase2/phone/providers/fake.py",
+      "state": "added",
+      "sha256": "e5166746974bd163666b5f88349319bfb3a815e3fc1e3f42668f2ebb42e0a3d0"
+    },
+    {
+      "path": "src/postriff_phase2/phone/providers/twilio.py",
+      "state": "added",
+      "sha256": "7d1aa945b3bccb7d1b813968d782c68cecb2ff5f8aeaa0fc956e22f5c9e7e87b"
+    },
+    {
+      "path": "src/postriff_phase2/phone/runtime.py",
+      "state": "added",
+      "sha256": "ce64d9dd7a7ea90ee48531d1512c4d0c16a79b5526043568a003388546c84341"
+    },
+    {
+      "path": "src/postriff_phase2/phone/service.py",
+      "state": "added",
+      "sha256": "10cba868de238faaaad657e8d4822f30a74342545b7f2f77e0574e0a6a163598"
+    },
+    {
+      "path": "src/postriff_phase2/phone/session.py",
+      "state": "added",
+      "sha256": "2911f81e0f60d463dbb041a3e51a00f7a70aa4d861ab3943220b43f8227cc8ad"
+    },
+    {
+      "path": "src/postriff_phase2/phone/store.py",
+      "state": "added",
+      "sha256": "5ab4fc70630be713eac1688fee599739b43b5215ecc967e3e68f469d400882eb"
+    },
+    {
+      "path": "src/postriff_phase2/phone/webhooks.py",
+      "state": "added",
+      "sha256": "59230026165124b7fc296e078d399992369aa355088d08c4e776a04999bf0fba"
+    },
+    {
+      "path": "src/postriff_phase2/privacy.py",
+      "state": "modified",
+      "sha256": "b41c9263f3859e1ef8fc0071cd0420c918e8382d948d1d006147004f9f7c63b3"
+    },
+    {
+      "path": "src/postriff_phase2/site_agent/tools.py",
+      "state": "modified",
+      "sha256": "0de5d6d1c2a6335d94e20a0f11b5070a216229dec172c36a1248467a45a1bdef"
+    },
+    {
+      "path": "tests/phase2/phone_browser_fixture.py",
+      "state": "added",
+      "sha256": "0a4edc354d317923b9fe1dca583cb4fb785c208102ed49958651e61fa43341ab"
+    },
+    {
+      "path": "tests/phase2/postgres_phone_mode.py",
+      "state": "added",
+      "sha256": "eb090274e0af1a3c8394a6a52187d067cadd8f6b4e0c7f4686de75e5f082f7da"
+    },
+    {
+      "path": "tests/phase2/rls.sql",
+      "state": "modified",
+      "sha256": "32df1b036f87dd2abaa8727214832f7fb0b5ce2fee9ecef8b1089e755b24928d"
+    },
+    {
+      "path": "tests/test_postriff_hosted_deployment.py",
+      "state": "modified",
+      "sha256": "e8edb2fa02bc0a3a22df37eb50676b76733aa23ba857acb03994885abc1a78eb"
+    },
+    {
+      "path": "tests/test_rafii_phone.py",
+      "state": "added",
+      "sha256": "ca94252132b7ebbd7b85b9efa97fc80e7b5273eef63cf0189e38c4558de475cd"
+    },
+    {
+      "path": "vercel.json",
+      "state": "modified",
+      "sha256": "7746247cafcdae5bd02b8b5c09d50c617c1993c250201acc3676e89aebd37e22"
+    },
+    {
+      "path": "web/src/components/layout/notification-bell.tsx",
+      "state": "modified",
+      "sha256": "d68001c170118010c37a4d2fc2f624a2126c489e0745e65569803a42f00a6674"
+    },
+    {
+      "path": "web/src/features/account/notifications-view.tsx",
+      "state": "modified",
+      "sha256": "465f1d42c62bd8f74c2b83eb04c798cbdd5beb8c5aea2cd3cee575da9989ad83"
+    },
+    {
+      "path": "web/src/features/rafii-phone/call-rafii.tsx",
+      "state": "added",
+      "sha256": "5ea026cc388ab4116434123b28dc7e4dd0f96306cb0c06d7d87089bc9166fbd3"
+    },
+    {
+      "path": "web/src/features/rafii-phone/phone-settings.tsx",
+      "state": "added",
+      "sha256": "276953953679422efe97a0f03342d423cc04eeff7a121eb937c3ce6666383a4a"
+    },
+    {
+      "path": "web/src/features/site-agent/chat.tsx",
+      "state": "modified",
+      "sha256": "2ca5b5a09b0845f12470f4bed3a5ee7659211814089abcf09cf5877ed50e699f"
+    },
+    {
+      "path": "web/src/lib/api/client.ts",
+      "state": "modified",
+      "sha256": "6064c20cbad4c21163f190271ff58bd7bd3ab9ab0fb36d22e7493d38944fb5c6"
+    },
+    {
+      "path": "web/src/lib/phone/hooks.ts",
+      "state": "added",
+      "sha256": "dbcb4ade43d6043f62b7dc0e3bfe2de2de0180ea753d7e1c5c8abb359b926aca"
+    },
+    {
+      "path": "web/src/lib/phone/types.ts",
+      "state": "added",
+      "sha256": "5568dd0bdf7cd9c5f094491aa20dc264581369a271d6fdb5eb0e99030fac9a57"
+    },
+    {
+      "path": "web/tests/agent-runtime-browser.cjs",
+      "state": "modified",
+      "sha256": "ca67631ec162add86bf5851e2c9365ca80bb582fd858027561258e6851bf190e"
+    },
+    {
+      "path": "web/tests/phone-mode-browser.cjs",
+      "state": "added",
+      "sha256": "067860515057661a1e78c728089ae6df99e968406d50df84873a56c55260e651"
+    }
+  ],
+  "artifacts": [
+    "docs/design/rafii-live-agent/RAFII_PHONE_MODE_IMPLEMENTATION_RECEIPT_2026-09-26.md",
+    "docs/design/rafii-live-agent/RAFII_PHONE_MODE_VERIFICATION_2026-09-26.json"
+  ],
+  "preservedInputs": [
+    "docs/design/rafii-live-agent/RAFII_PHONE_MODE_ENGINEERING_PLAN_2026-09-26.md",
+    "docs/design/rafii-live-agent/RAFII_PHONE_MODE_AGENT_HANDOFF_2026-09-26.md"
+  ],
+  "localCoordinatorEnrollment": {
+    "manifest": ".token-pilot/install.json",
+    "backupDirectory": ".token-pilot/backups",
+    "symlink": ".claude/skills/token-pilot",
+    "usage": "unknown"
+  },
+  "migration": {
+    "path": "migrations/postriff/033_phone_mode.sql",
+    "numberCollisionAudit": "All relevant refs/worktrees rechecked; 031 chat media and 032 productivity connectors now upstream; separate growth 032 collision is outside this task; only new phone migration is 033, no applied migration renumbered.",
+    "tables": 7,
+    "execution": "disposable local PostgreSQL only; production not applied"
+  },
+  "checks": [
+    {
+      "id": "python-unit",
+      "status": "PASS",
+      "command": "PYTHONPATH=src:tests POSTRIFF_RESEARCH=0 POSTRIFF_LOCAL_CLI=0 /tmp/rafii-phone-env/bin/python -m unittest discover -s tests -p 'test_*.py'",
+      "result": {
+        "passed": 1477,
+        "phoneUnitTests": 18
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/python-unit-release.log",
+      "logSha256": "62ecae4fadc23881f34768c07633de9f5237e52ce48c1fb7e384784a220c76dd"
+    },
+    {
+      "id": "phone-postgres",
+      "status": "PASS",
+      "command": "RAFII_PG_PORT=55752 /tmp/rafii-phone-env/bin/python scripts/rafii_pg_private.py postgres_phone_mode postgres_quick_start_again",
+      "result": {
+        "phonePassedGroups": 10,
+        "realCalls": 0,
+        "passedSuites": 2
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/phone-postgres-credit.log",
+      "logSha256": "4d1b6d4623446f22a0ba5a5800178f4c440cb671b77853b159ad0cbe21a4f367"
+    },
+    {
+      "id": "postgres-regressions",
+      "status": "PASS",
+      "command": "RAFII_PG_PORT=55753 /tmp/rafii-phone-env/bin/python scripts/rafii_pg_private.py postgres_agent_runtime postgres_agent_runtime_references postgres_agent_style postgres_consumer_campaign_worker postgres_consumer_deletion postgres_coworker",
+      "result": {
+        "passedSuites": 6,
+        "agentRuntime": 55,
+        "coworkerNotificationV2": 35
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/postgres-release.log",
+      "logSha256": "7daaeb43ce5cf349278ccafd1a51fd104ba3d0936ffc99415dcdb81a572a1b89"
+    },
+    {
+      "id": "latest-quick-start",
+      "status": "PASS",
+      "command": "RAFII_PG_PORT=55752 /tmp/rafii-phone-env/bin/python scripts/rafii_pg_private.py postgres_quick_start_again",
+      "result": {
+        "passedSuites": 1
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/quick-start-release.log",
+      "logSha256": "e7b0c7305922721beaec5d4dde45af0713c56f4289d488cae822867d18ab31a7",
+      "note": "Repeated this affected PostgreSQL suite after the latest incoming policy-safe source-title fix; other passed checks cover unchanged behavior."
+    },
+    {
+      "id": "web-unit",
+      "status": "PASS",
+      "command": "node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs",
+      "result": {
+        "passed": 387
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/web-unit-release.log",
+      "logSha256": "b7df006ca8d978fbde9f80e691ccb98c42c28485ca5599886f1d60758aab6259"
+    },
+    {
+      "id": "phone-browser",
+      "status": "PASS",
+      "command": "RAFII_WEB_URL=http://localhost:3293 RAFII_HARNESS_PG_PORT=55754 RAFII_PYTHON=/tmp/rafii-phone-env/bin/python node web/tests/phone-mode-browser.cjs",
+      "result": {
+        "passedChecks": 13,
+        "realCalls": 0,
+        "seriousCriticalAxeViolations": 0,
+        "creditMode": true
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/phone-browser-credit.log",
+      "logSha256": "b4ec1c44dc7742d1ad237c35c38d214fd818fec49424f2eded8aa3524c3535b6",
+      "note": "Loopback hosted harness with --credit-fixture --phone-fixture; synthetic wallet grants are test-only; real workspace/runtime/controller/UI."
+    },
+    {
+      "id": "voice-browser",
+      "status": "PASS",
+      "command": "RAFII_WEB_URL=http://localhost:3293 RAFII_HARNESS_PG_PORT=55754 RAFII_PYTHON=/tmp/rafii-phone-env/bin/python node web/tests/agent-runtime-browser.cjs --shots=off --out=/tmp/rafii-browser-voice-release",
+      "result": {
+        "passed": 30
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/voice-browser-release.log",
+      "logSha256": "08840c53c849142fb7f690f52d1efad1d7fa2f2f5e47aa9ffd2d0c9014018fa1",
+      "note": "Existing allowance-mode local Voice harness with explicit synthetic owner media consent; no provider call."
+    },
+    {
+      "id": "typescript",
+      "status": "PASS",
+      "command": "npm --prefix web run typecheck",
+      "result": {
+        "exitCode": 0,
+        "afterTestDistConfigRemoval": true
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/typescript-release.log",
+      "logSha256": "b13539b82e2ccffed1b0c1ad7af2d320b56f47df84b5263771f5bbe8e32dd217"
+    },
+    {
+      "id": "oxlint",
+      "status": "PASS",
+      "command": "npm --prefix web run lint",
+      "result": {
+        "errors": 0,
+        "warnings": 0,
+        "sourceFiles": 804
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/oxlint-release.log",
+      "logSha256": "20d6da03c93dfdd74302b723682a59992b71ca866466671267fda62442cf0152"
+    },
+    {
+      "id": "copy-audit",
+      "status": "PASS",
+      "command": "node web/scripts/copy-audit.mjs --check",
+      "result": {
+        "bannedPhrases": 0
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/copy-audit-release.log",
+      "logSha256": "c8af87dd5d04448fee9d56479d96a541ba1d9ee04537cf3cea357c60114546df"
+    },
+    {
+      "id": "production-build",
+      "status": "PASS",
+      "command": "NEXT_PUBLIC_SENTRY_DISABLED=1 POSTRIFF_DIST_DIR=.next-phone-build-release npm run build (cwd: web)",
+      "result": {
+        "exitCode": 0,
+        "generatedPages": 99,
+        "deployed": false
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/build-release.log",
+      "logSha256": "cbd21654d4e4c785d844a0e217ec615c0a95829edb3813e2d98d123032013154"
+    },
+    {
+      "id": "deployment-structure",
+      "status": "PASS",
+      "command": "/tmp/rafii-phone-env/bin/python scripts/check_postriff_hosted_preflight.py",
+      "result": {
+        "structure": "PASS",
+        "processEnvironment": "PENDING"
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/deployment-structure-release.json",
+      "logSha256": "99b151f9508c01d9e792308b1d66efa3628b83783382ce422a6fa901ffc23289",
+      "note": "No remote environment values are installed. Candidate in-memory configuration was checked separately, not represented as a deployed service."
+    },
+    {
+      "id": "staging-config",
+      "status": "PASS",
+      "command": "In-memory staging environment preflight + runtime_from_environment; no connection or remote write",
+      "result": {
+        "configuration": "PASS",
+        "phoneEgress": "OFF",
+        "remoteValuesInstalled": false
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/staging-config-release.json",
+      "logSha256": "d204da1a756792fe275e81c7c620c5bc829f4e95fe4e3ebae8c31914537ca901"
+    },
+    {
+      "id": "staging-migrations",
+      "status": "PASS",
+      "command": "Guarded SET TRANSACTION READ ONLY + scripts.postriff_migrate.plan on pinned staging database",
+      "result": {
+        "applied": 18,
+        "pending": 10,
+        "checksums": "PASS",
+        "phoneTablesPresent": false,
+        "migrationsAppliedByThisTask": 0
+      },
+      "rawLog": ".token-pilot/evidence/rafii-phone-20260926/staging-migrations-release.json",
+      "logSha256": "a8a97040e02bce58186e0cc516dc14dc338c323f966cf32b2364f84ed38518fb"
+    },
+    {
+      "id": "git-diff-check",
+      "status": "PASS",
+      "command": "git diff --check",
+      "result": {
+        "exitCode": 0
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "path": ".token-pilot/evidence/rafii-phone-20260926/rafii-phone-edited-draft.png",
+      "execution": "actual web app + disposable PostgreSQL; synthetic phone/Live/Manager input",
+      "sha256": "7ce8e0c82d831d418296b6cd567553da366f1593b4cff458555fc22e76bec01b"
+    },
+    {
+      "path": ".token-pilot/evidence/rafii-phone-20260926/rafii-phone-settings-mobile.png",
+      "execution": "actual web app + disposable PostgreSQL; synthetic phone/Live/Manager input",
+      "sha256": "77bd5070776a9e8c4065d43465f28820de4a46ad59187e61ec1dc05e643585f7"
+    },
+    {
+      "path": ".token-pilot/evidence/rafii-phone-20260926/rafii-phone-browser.png",
+      "execution": "actual web app + disposable PostgreSQL; synthetic phone/Live/Manager input",
+      "sha256": "36c3b23a4deb56cb040b54e5cf7413e80354454f6f9f32b3c941ba18953b25fc"
+    }
+  ],
+  "warnings": [
+    "Existing CLI-runtime ResourceWarning in unittest output",
+    "Starlette supported WSGI compatibility middleware is deprecated"
+  ],
+  "externalBlockers": [
+    "Separate scoped authorization for branch push, isolated staging deployment/configuration and exact ten pending staging migrations",
+    "Remote staging environment is empty; phone tables absent until approved migrations",
+    "Server-held test Twilio/Verify and GPT-Live keys are missing from the reviewed staging source; approved country/rate/budget/credits still required",
+    "Preview intentionally disables phone egress; first PSTN test needs a separately authorized egress-capable test deployment and paid-call/SMS permission",
+    "Authenticated test account, verified own number, explicit calling enabled and sufficient reviewed credit limit"
+  ],
+  "liveHostCommand": "PYTHONPATH=src /tmp/rafii-phone-env/bin/python -m uvicorn postriff_phase2.phone.asgi:create_app --factory --host 127.0.0.1 --port 4752 --no-access-log",
+  "liveDialAction": "After separate authorization and prerequisites, press Call Rafii once inside the intended authenticated Rafii conversation. Startup alone does not dial.",
+  "realCalls": 0,
+  "productionMigrations": 0,
+  "deployed": false,
+  "pushed": false,
+  "releaseMerged": false,
+  "testServers": "stopped; disposable database removed",
+  "verifiedImplementationHead": "b581c7b936ff5984c1d164de3e809b3487233041",
+  "preservedUnrelatedWork": [
+    "docs/design/site-agent/adaptive-social-coworker/NOTIFICATIONS.md",
+    "docs/design/rafii-live-agent/RAFII_NOTIFICATION_SYSTEM_ENGINEERING_PLAN_2026-09-26.md",
+    "docs/design/rafii-live-agent/RAFII_NOTIFICATION_SYSTEM_AGENT_HANDOFF_2026-09-26.md",
+    ".claude/skills/token-pilot"
+  ],
+  "releaseTarget": {
+    "project": "rafii-consumer-staging",
+    "projectId": "prj_4bfvSc0AC6am9FdknFWcwNYgmcnN",
+    "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+    "teamPlan": "Pro",
+    "fluidCompute": true,
+    "region": "iad1",
+    "publicOrigin": "https://rafii-consumer-staging.vercel.app",
+    "observedDeployments": 0,
+    "observedRemoteEnvironmentNames": [],
+    "localProjectLink": true,
+    "mediaFunctionSeconds": 660,
+    "phoneMaxSeconds": 600,
+    "metadataExecution": "read-only platform checks plus reversible local link; no deployment"
+  },
+  "stagingPendingMigrations": [
+    "020_credit_quotes.sql",
+    "021_credit_purchases.sql",
+    "022_credit_payment_lifecycle.sql",
+    "023_time_savings.sql",
+    "024_notification_core.sql",
+    "025_coworker_evidence_growth.sql",
+    "030_agent_style.sql",
+    "031_chat_media.sql",
+    "032_productivity_connectors.sql",
+    "033_phone_mode.sql"
+  ],
+  "previewDeployCommand": "cd /Users/ouxianxing/Documents/James-Au-Studio-live-agent && npx --yes vercel@60.1.3 deploy --scope jamesau0723-6572s-projects (only after separate approval, staging environment setup and ten prerequisite migrations; phone egress OFF)",
+  "stagingMigrationsApplied": 0
+}

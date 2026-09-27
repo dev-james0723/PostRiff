@@ -15,9 +15,26 @@
           "excludeFiles": "{.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
         }
       }
+    },
+    "rafii_phone_media": {
+      "root": ".",
+      "runtime": "python",
+      "entrypoint": "api.phone:app",
+      "functions": {
+        "api/phone.py": {
+          "maxDuration": 660,
+          "excludeFiles": "{.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
+        }
+      }
     }
   },
   "rewrites": [
+    {
+      "source": "/api/phone/media/(.*)",
+      "destination": {
+        "service": "rafii_phone_media"
+      }
+    },
     {
       "source": "/api/(.*)",
       "destination": {

@@ -1,0 +1,7 @@
+We couldn’t collect your latest Rafii payment.
+
+Please update your payment method before 15 January 2027 to keep your plan active. Until then your workspace keeps working.
+
+Update payment: https://app.rafii.example/app
+
+You received this because you have a Rafii account. Privacy: https://app.rafii.example/privacy

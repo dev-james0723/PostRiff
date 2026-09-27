@@ -1,0 +1,154 @@
+{
+  "execution": "local synthetic/fake only; no production migration or egress",
+  "requiredChecks": [
+    {
+      "check": "Python full unittest suite",
+      "status": "PASS",
+      "tests": 1496,
+      "command": "PYTHONPATH=src:tests /tmp/rafii-phone-env/bin/python -m unittest discover -s tests",
+      "evidence": "python-final.log"
+    },
+    {
+      "check": "Web tests including shipped locales",
+      "status": "PASS",
+      "tests": 387,
+      "command": "cd web && node --test tests/*.test.cjs tests/*.test.mjs src/lib/locales/core.test.mjs",
+      "evidence": "web-final.log"
+    },
+    {
+      "check": "Notification V2 and coworker PostgreSQL regression",
+      "status": "PASS",
+      "summary": {
+        "PASS": 35,
+        "FAIL": 0
+      },
+      "command": "POSTRIFF_TEST_DSN=\"host=127.0.0.1 port=55438 dbname=postgres\" RAFII_COWORKER_EVIDENCE=docs/design/rafii-live-agent/evidence/notifications/coworker-pg.json PYTHONPATH=src:tests /tmp/rafii-phone-env/bin/python scripts/postriff_pg_suite.py postgres_coworker postgres_unified_notifications",
+      "evidence": "pg-final.log"
+    },
+    {
+      "check": "Unified SMS PostgreSQL acceptance / migration reapplication / RLS / isolation / deletion",
+      "status": "PASS",
+      "groups": 7,
+      "execution": "real disposable SQL; fake SMS or injected Twilio HTTP only",
+      "evidence": "pg-final.log"
+    },
+    {
+      "check": "Phone Mode and Billing PostgreSQL regressions",
+      "status": "PASS",
+      "command": "POSTRIFF_TEST_DSN=\"host=127.0.0.1 port=55438 dbname=postgres\" PYTHONPATH=src:tests /tmp/rafii-phone-env/bin/python scripts/postriff_pg_suite.py postgres_coworker postgres_phone_mode postgres_unified_notifications postgres_billing_stripe",
+      "evidence": "pg-phone-billing.log"
+    },
+    {
+      "check": "Agent runtime, references, style, campaign worker, deletion and quick-start PostgreSQL regressions",
+      "status": "PASS",
+      "evidence": "pg-regressions.log",
+      "note": "Final six groups passed on independent clean clusters (runtime 56 checks; style 7). Earlier shared-fixture diagnostic is retained separately in pg-shared-fixture-diagnostic.log; intermediate digest/configuration failures were repaired and final passing logs supersede them.",
+      "groups": 6,
+      "command": "POSTRIFF_TEST_DSN=\"host=127.0.0.1 port=55438 dbname=postgres\" PYTHONPATH=src:tests /tmp/rafii-phone-env/bin/python scripts/postriff_pg_suite.py postgres_agent_runtime postgres_agent_runtime_references postgres_consumer_campaign_worker postgres_consumer_deletion postgres_quick_start_again postgres_agent_style"
+    },
+    {
+      "check": "Email preview matrix",
+      "status": "PASS",
+      "summary": {
+        "checked": 1808,
+        "passed": 1808,
+        "failed": 0,
+        "browsers": [
+          "chromium",
+          "webkit"
+        ],
+        "errors": []
+      },
+      "command": "PYTHONPATH=src /tmp/rafii-phone-env/bin/python scripts/rafii_email_previews.py && node scripts/rafii_email_render_check.cjs",
+      "evidence": "../../../site-agent/adaptive-social-coworker/evidence/email-render.json"
+    },
+    {
+      "check": "Unified Notifications browser / authenticated Push deep link",
+      "status": "PASS",
+      "browsers": [
+        "chromium",
+        "webkit"
+      ],
+      "command": "cd web && RAFII_WEB_URL=http://localhost:3293 RAFII_HARNESS_PG_PORT=55754 RAFII_PYTHON=/tmp/rafii-phone-env/bin/python node tests/unified-notifications-browser.cjs",
+      "evidence": "browser.json"
+    },
+    {
+      "check": "Existing Phone browser",
+      "status": "PASS",
+      "execution": "actual UI/SQL with fake Phone/Live/Manager",
+      "command": "cd web && RAFII_WEB_URL=http://localhost:3293 RAFII_HARNESS_PG_PORT=55754 node tests/phone-mode-browser.cjs",
+      "evidence": "phone-browser.log"
+    },
+    {
+      "check": "Existing Voice/phone-responsive/weather browser",
+      "status": "PASS",
+      "tests": 55,
+      "execution": "local stand-in for Live/Manager/Open-Meteo; no paid model/weather calls",
+      "command": "cd web && PATH=/tmp/rafii-phone-env/bin:$PATH RAFII_WEB_URL=http://localhost:3293 RAFII_VOICE_WEB_URL=http://localhost:3293 RAFII_VOICE_PG_PORT=55754 node tests/rafii-live-agent-browser.cjs --sections=voice,voice-phone,weather --out=../docs/design/rafii-live-agent/evidence/notifications/voice-regression --shots=off",
+      "evidence": "voice-browser.log"
+    },
+    {
+      "check": "Typecheck",
+      "status": "PASS",
+      "command": "npm --prefix web run typecheck",
+      "evidence": "typecheck.log"
+    },
+    {
+      "check": "Lint",
+      "status": "PASS",
+      "files": 805,
+      "warnings": 0,
+      "errors": 0,
+      "command": "npm --prefix web run lint",
+      "evidence": "lint.log"
+    },
+    {
+      "check": "Next production build",
+      "status": "PASS",
+      "command": "cd web && NEXT_PUBLIC_SENTRY_DISABLED=1 npm run build",
+      "evidence": "build.log"
+    },
+    {
+      "check": "Product capability registry policy/hash lock",
+      "status": "PASS",
+      "registered": 90,
+      "orphans": 0,
+      "command": "PYTHONPATH=src:tests /tmp/rafii-phone-env/bin/python scripts/rafii_skill_registry.py --check",
+      "evidence": "registry.log"
+    },
+    {
+      "check": "Whitespace/preservation/final local server cleanup",
+      "status": "PASS",
+      "command": "git diff --check; original dirty SHA-256 comparison; HEAD/branch check; loopback port inventory",
+      "evidence": "preservation.json"
+    }
+  ],
+  "additionalChecks": [
+    {
+      "check": "Offline source secrets scan",
+      "status": "FAIL_PREEXISTING_FIXTURE_FALSE_POSITIVE",
+      "command": "PYTHONPATH=src:tests /tmp/rafii-phone-env/bin/python scripts/consumer_ready_secrets.py",
+      "files": 1646,
+      "unexpected": 1,
+      "path": "src/postriff_phase2/phone/providers/fake.py:12",
+      "reason": "Unchanged HEAD contains the fixed non-production local-fake-signing-key. No implementation finding, real credential validation or network call. File and existing allowlist preserved.",
+      "evidence": "secrets.log"
+    }
+  ],
+  "unverified": [
+    "Actual Gmail/Outlook clients",
+    "Real Twilio SMS or phone / carrier STOP integration / registration / destination pricing",
+    "Customer email or Push / native APNs/FCM",
+    "Production migration, deployment, release or push"
+  ],
+  "externalEffects": {
+    "realSMS": 0,
+    "customerEmail": 0,
+    "customerPush": 0,
+    "realPSTN": 0,
+    "productionMigrations": 0,
+    "deploy": 0,
+    "merge": 0,
+    "push": 0
+  }
+}

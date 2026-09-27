@@ -4,3 +4,7 @@ cryptography==50.0.1
 # Rafii Agent Runtime (src/postriff_phase2/agent_runtime_v2): the OpenAI Agents SDK and its client, pinned.
 openai-agents==0.22.3
 openai==3.19.2
+# Persistent Phone Mode media host. Egress is disabled unless phone-specific flags are enabled.
+starlette==1.7.0
+uvicorn==0.54.0
+websockets==16.1.1

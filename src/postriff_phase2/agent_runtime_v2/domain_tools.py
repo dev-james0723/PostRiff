@@ -523,6 +523,32 @@ def draft_rewrite(ctx: RafiiRunContext, args: dict) -> dict:
 
 
 # --- layered memory (§14) -------------------------------------------------------------------------------------------------
+@register(contracts.ToolSpec('draft_edit', contracts.MUTATE_REVERSIBLE, 'edit',
+          'Save an explicitly requested text edit to one unscheduled draft through the normal author-edit command. '
+          'Read the draft first and supply its current revision. Leaves it needing review and invalidates prior publishing approval; never publishes.'),
+          {'draftId': {'type':'string','pattern':_ID,'required':True}, 'revision': {'type':'integer','minimum':1,'required':True},
+           'text': {'type':'string','minLength':1,'maxLength':20000,'required':True}, 'stepId':STEP}, 'Saved the draft edit')
+@guarded
+def draft_edit(ctx: RafiiRunContext, args: dict) -> dict:
+    expected = args['text'].strip()
+    def change(state, principal):
+        variant = _variant(state, args['draftId'])
+        committed = [j for j in (state.get('phase2') or {}).get('jobs', []) if (j.get('manifest') or {}).get('variantId')==variant['id'] and j.get('state') not in ('canceled','failed')]
+        if committed:
+            raise AlphaError('This draft is already in the publishing queue. Prepare a new draft instead.',409,code='draft_committed')
+        return ctx.service.commands(state, principal, 'variant_edit', {'variantId':variant['id'],'variantRevision':args['revision'],'text':expected})
+    ctx.check_cancelled()
+    snapshot = ctx.snapshot()
+    ctx.service.repository.command(ctx.workspace_id,ctx.token,snapshot['revision'],change,requirement='edit',
+                                   audit_event=lambda _s:('agent.draft_edited',args['draftId'],{'via':'rafii_agent'}))
+    saved = _variant(ctx.snapshot()['state'],args['draftId'])
+    verified = saved.get('text')==expected and saved.get('revision')==args['revision']+1 and bool(saved.get('needsReview'))
+    ctx.ledger.changed.append({'type':'draft','id':saved['id'],'change':'text edited; needs review','expected':'saved requested text at next revision; needs review','actual':'saved requested text at next revision; needs review' if verified else 'result unconfirmed','verified':verified})
+    ctx.ledger.reference('draft',saved['id'],f"{saved.get('platform')} draft")
+    _step_done(ctx,args,verified=verified,outputs=[{'type':'draft','id':saved['id']}])
+    return {'ok':verified,'verified':verified,'draft':_draft_view(ctx,ctx.snapshot()['state'],saved),'revision':saved['revision'],'needsReview':True}
+
+
 @register(contracts.ToolSpec("memory_context", contracts.READ, "read", "Rafii's layered memory for this workspace, each item with where it came from: account "
                              "and locale, workspace facts, Brand Brain, voice profile, learned preferences (explicit vs inferred, with support/confidence and "
                              "status), active campaigns and the current task. Private boundaries are withheld unless the owner allowed cloud memory."),

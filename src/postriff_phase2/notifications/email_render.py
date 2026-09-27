@@ -22,20 +22,21 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
-TEMPLATE_VERSION = "rafii-email/1.0.3"
+TEMPLATE_VERSION = "rafii-email/1.1.0"
 LOCALES_PATH = Path(__file__).with_name("email_locales.json")
 FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang HK','PingFang TC','Noto Sans CJK TC','Microsoft JhengHei',sans-serif"
 SERIF = "Georgia,'Times New Roman','Songti TC','Noto Serif CJK TC',serif"
 INK, INK_2, INK_3, PAGE, CARD, LINE = "#111111", "#4d4d4d", "#6b6b6b", "#f2f2f2", "#ffffff", "#e5e5e5"
-PILL = {"action": ("#111111", "#ffffff"), "critical": ("#b42318", "#ffffff"), "warning": ("#8a4b00", "#ffffff"), "info": ("#e8e8e8", "#111111"),
-        "security": ("#1f3a8a", "#ffffff"), "success": ("#1d6b3a", "#ffffff")}
+# Calm, monochrome status labels. Severity is written explicitly, never conveyed by colour alone.
+PILL = {kind: ("#e8e8e8", "#111111") for kind in ("action","critical","warning","info","security","success")}
 _SAFE_PATH = re.compile(r"^/app(?:/[A-Za-z0-9._~\-]*)*(?:\?[A-Za-z0-9._~\-=&%]*)?$")
 # The template each event family renders with (catalogue `template`); anything else uses the digest shell.
 TEMPLATES = ("weekly_ready", "drafts_ready", "approval_required", "campaign_blocked", "needs_input", "asset_review", "publish_scheduled",
              "publish_verified", "publish_failed", "publish_uncertain", "channel_reconnect", "automation_completed", "automation_failed", "engagement",
              "opportunity", "weekly_performance", "analytics_anomaly", "preference_proposed", "budget_threshold", "payment_failed", "trial_ending",
-             "subscription_active", "security_alert", "digest")
+             "subscription_active", "security_alert", "digest", "phone_call_failed")
 
 
 @lru_cache(maxsize=1)
@@ -70,10 +71,20 @@ def one_line(value, limit=120):
 
 def deep_link(base_url, path):
     base = str(base_url or "").rstrip("/")
-    if not base.startswith("https://") and not base.startswith("http://127.0.0.1") and not base.startswith("http://localhost"):
-        raise ValueError("email links need an absolute https base URL")
-    path = path if isinstance(path, str) and _SAFE_PATH.match(path) else "/app"
-    return base + path
+    parsed = urlsplit(base)
+    local = parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost")
+    if (parsed.scheme != "https" and not local) or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        raise ValueError("email links need an absolute https origin")
+    return base + safe_app_path(path)
+
+
+def safe_app_path(path):
+    if not isinstance(path, str) or not _SAFE_PATH.fullmatch(path):
+        return "/app"
+    # Browsers normalize dot segments before navigating. Do not permit a payload to escape /app.
+    if any(segment in (".", "..") for segment in path.split("?", 1)[0].split("/")):
+        return "/app"
+    return path
 
 
 e = html.escape
@@ -85,9 +96,20 @@ def Preheader(text):
             f'{e(one_line(text, 140))}{"&#8199;&#847;" * 20}</div>')
 
 
-def BrandHeader(brand="Rafii"):
-    return (f'<tr><td class="rf-pad" style="padding:28px 32px 4px 32px;font-family:{SERIF};font-size:22px;line-height:28px;font-weight:600;color:{INK};">'
-            f'<span class="rf-ink">{e(brand)}</span></td></tr>')
+def BrandHeader(brand="Rafii", base_url="https://rafii.invalid"):
+    """Exact email-safe translation of marketing/wordmark.tsx: inverted R + visible text.
+    The approved face is decorative. Neither meaning nor the CTA depends on images loading."""
+    avatar = deep_link(base_url, "/app").removesuffix("/app") + "/raffi/avatar-128.png"
+    return (f'<tr><td class="rf-pad" style="padding:32px 32px 16px 32px;">'
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+            f'<td valign="middle" data-rafii-wordmark="approved"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
+            f'<td class="rf-mark" width="28" height="28" align="center" valign="middle" style="width:28px;height:28px;background:{INK};border-radius:8px;'
+            f'font-family:{FONT};font-size:14px;line-height:28px;font-weight:700;color:#ffffff;">R</td>'
+            f'<td class="rf-ink" style="padding-left:8px;font-family:{FONT};font-size:18px;line-height:28px;font-weight:600;letter-spacing:-0.3px;color:{INK};">Rafii</td>'
+            '</tr></table></td>'
+            f'<td width="48" align="right" valign="middle"><img data-rafii-character="approved" src="{e(avatar)}" width="48" height="48" alt="" '
+            'style="display:block;width:48px;height:48px;border:0;outline:none;text-decoration:none;"></td>'
+            '</tr></table></td></tr>')
 
 
 def ContextLabel(text):
@@ -103,7 +125,7 @@ def StatusPill(kind, label):
 
 def Headline(text, pill=""):
     return (f'<tr><td class="rf-pad" style="padding:8px 32px 0 32px;">{pill}'
-            f'<h1 class="rf-ink" style="margin:12px 0 0 0;font-family:{SERIF};font-size:28px;line-height:34px;font-weight:600;color:{INK};">{e(one_line(text, 120))}</h1></td></tr>')
+            f'<h1 class="rf-ink" style="margin:12px 0 0 0;font-family:{SERIF};font-size:30px;line-height:37px;font-weight:500;letter-spacing:-0.4px;color:{INK};">{e(one_line(text, 120))}</h1></td></tr>')
 
 
 def PrimaryCard(paragraphs, rows=()):
@@ -112,7 +134,7 @@ def PrimaryCard(paragraphs, rows=()):
                       f'<td style="padding:6px 0;font-family:{FONT};font-size:14px;line-height:20px;color:{INK};" class="rf-ink">{e(one_line(v, 80))}</td></tr>' for k, v in rows)
     table = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid {LINE};margin-top:4px;">{details}</table>'
              if details else "")
-    return f'<tr><td class="rf-pad" style="padding:16px 32px 4px 32px;">{body}{table}</td></tr>'
+    return f'<tr><td class="rf-pad" style="padding:24px 32px 4px 32px;">{body}{table}</td></tr>'
 
 
 def MetricsRow(metrics):
@@ -152,16 +174,17 @@ def EmailShell(*, lang, title, preheader, rows):
              "h1{font-size:24px!important;line-height:30px!important}}"
              "@media (prefers-color-scheme:dark){body,.rf-page{background:#0f0f0f!important}.rf-card{background:#1b1b1b!important;border-color:#2a2a2a!important}"
              ".rf-foot{border-top-color:#333333!important}.rf-ink{color:#f5f5f5!important}.rf-ink2{color:#d6d6d6!important}.rf-ink3,.rf-foot{color:#b3b3b3!important}.rf-link{color:#e0e0e0!important}"
-             ".rf-cta{background:#f5f5f5!important}.rf-cta-a{color:#111111!important}}")
+             ".rf-pill{background:#333333!important;color:#f5f5f5!important}.rf-mark{background:#f5f5f5!important;color:#111111!important}.rf-cta{background:#f5f5f5!important}.rf-cta-a{color:#111111!important}}")
     return ('<!doctype html>'
-            f'<html lang="{e(lang)}" xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8">'
+            f'<html lang="{e(lang)}" dir="ltr" xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting">'
             '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
             f'<title>{e(title)}</title><style>{style}</style></head>'
             f'<body class="rf-page" style="margin:0;padding:0;background:{PAGE};-webkit-text-size-adjust:100%;">{Preheader(preheader)}'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="rf-page" style="background:{PAGE};"><tr><td align="center" style="padding:24px 12px;">'
-            f'<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="rf-card" style="width:600px;max-width:600px;background:{CARD};'
-            f'border:1px solid {LINE};border-radius:20px;">{"".join(rows)}</table></td></tr></table></body></html>')
+            '<!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0"><tr><td><![endif]-->'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="rf-card" style="width:100%;max-width:600px;background:{CARD};'
+            f'border:1px solid {LINE};border-radius:20px;">{"".join(rows)}</table><!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>')
 
 
 # --- rendering ------------------------------------------------------------------------------------------------------------
@@ -186,7 +209,7 @@ def render(template, *, locale="en", values=None, base_url, href=None, workspace
     settings_url = deep_link(base_url, "/app/account/notifications")
     privacy_url = deep_link(base_url, "/app").removesuffix("/app") + "/privacy"
     reason = _fmt(common["reason"], {"workspace": workspace_name}) if workspace_name else common["reasonPerson"]
-    rows = [BrandHeader(common["brand"]), ContextLabel(copy["context"]), Headline(headline, StatusPill(status_kind, common["status"][status_kind]))]
+    rows = [BrandHeader(common["brand"], base_url), ContextLabel(copy["context"]), Headline(headline, StatusPill(status_kind, common["status"][status_kind]))]
     paragraphs = [lead]  # every approval-related lead already says that nothing is published without the person
     rows.append(PrimaryCard(paragraphs, [(str(k), str(v)) for k, v in (details or [])]))
     if metrics:

@@ -629,7 +629,7 @@ class AgentRuntimeService:
         with repo.transaction(token, workspace_id) as (cur, _row, _principal):
             # Its own transaction: closing dead turns must not depend on this turn's reservation being accepted.
             self._reap_stale_turns(cur, workspace_id)
-        with repo.transaction(token, workspace_id) as (cur, _row, principal):
+        with repo.transaction(token, workspace_id) as (cur, row, principal):
             context = {"trace": trace_id, "modality": modality, "attachments": [a["assetId"] for a in attachments]}
             cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key) "
                         "VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text",
@@ -645,10 +645,17 @@ class AgentRuntimeService:
                 estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
                 if estimate is None:
                     raise AlphaError("Configure verified prices for the agent model before using it.", 503, code="price_unknown")
+                authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], estimate, route, run_id)
                 reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent:{run_id}", charge_batch=False,
-                                                          provider=route.provider or "", model=route.model or "", run_id=run_id, meta={"via": "rafii_agent", "traceId": trace_id})
+                                                          provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
+                                                          meta={"via": "rafii_agent", "traceId": trace_id, **extra_meta})
                 reservation = {**reservation, "estimateUsdMicro": estimate}   # the turn's ceiling (follow-up chips fit inside it)
         return run_id, reservation
+
+    def _reservation_approval(self, cur, workspace_id, principal, revision, cost, route, run_id):
+        """Optional authenticated transport authority; text/browser retain their existing credit gates."""
+        approve = getattr(self, 'reservation_approval', None)
+        return approve(cur, workspace_id, principal, revision, cost, route, run_id) if approve else (None, {})
 
     def _finish_simple(self, workspace_id, token, conversation_id, run_id, trace_id, result, blocks, *, pending=None, trace_extra=None, site_extra=None, ask=None) -> dict:
         from ..site_agent import contracts as site_contracts
@@ -994,10 +1001,11 @@ class AgentRuntimeService:
             if estimate is None:
                 return None
             try:
-                with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
+                with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
+                    authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], estimate, route, run_id)
                     reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent-resume:{run_id}", charge_batch=False,
-                                                              provider=route.provider or "", model=route.model or "", run_id=run_id,
-                                                              meta={"via": "rafii_agent_resume", "traceId": trace_id})
+                                                              provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
+                                                              meta={"via": "rafii_agent_resume", "traceId": trace_id, **extra_meta})
                     reservation = {**reservation, "estimateUsdMicro": estimate}
             except AlphaError:
                 return None

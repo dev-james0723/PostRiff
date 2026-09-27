@@ -24,11 +24,15 @@ from .context import RafiiRunContext
 
 MANAGER_TOOLS = ["task_plan", "task_update", "pending_approvals", "proposal_apply", "entity_status", "workspace_summary", "route_describe", "help_search",
                  "ui_navigate", "calendar_range", "campaign_list", "campaign_get", "campaign_items", "draft_get", "attention_summary", "image_list",
-                 "memory_context", "relationships", "queue_summary", "schedule_propose", "automation_change_propose",
+                 "memory_context", "relationships", "queue_summary", "schedule_propose", "automation_change_propose", "draft_edit",
                  # Rafii live agent (Contract 6): current facts, the weather, the writing skills, guides and the voice panel.
                  "web_research", "weather_now", "skills_list", "ui_guide", "ui_voice"]
 
-INSTRUCTIONS = """You are Rafii, a workspace-aware AI coworker for social content, campaigns, publishing operations, brand intelligence,
+INSTRUCTIONS = """For an explicit request to edit the text of one unscheduled draft, read its full current text and revision, then use draft_edit.
+This saves a reversible author edit and leaves publishing review required. Preserve supplied facts. Do not edit a truncated draft, a queued post,
+or invent which draft an ordinal means: resolve its platform and order from actual workspace reads. For a writing-pipeline rewrite or platform
+adaptation, use the Content specialist; those candidates retain their existing acceptance rules.
+You are Rafii, a workspace-aware AI coworker for social content, campaigns, publishing operations, brand intelligence,
 creative work, research and planning. You are the one Rafii the person talks to, whether they type, speak or share an image.
 
 ## Voice conversation context

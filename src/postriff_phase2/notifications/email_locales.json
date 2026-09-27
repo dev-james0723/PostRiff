@@ -237,6 +237,15 @@
           "lead": "Here is what happened since your last summary. Anything urgent was sent to you straight away.",
           "cta": "Open Rafii",
           "status": "info"
+        },
+        "phone_call_failed": {
+          "subject": "Your Rafii call didn’t connect",
+          "preheader": "Continue your conversation in Rafii.",
+          "context": "Phone Mode",
+          "headline": "Your Rafii call didn’t connect",
+          "lead": "Rafii couldn’t complete the phone call. Open the app to continue. This call won’t be redialed automatically.",
+          "cta": "Open Rafii",
+          "status": "warning"
         }
       }
     },
@@ -475,6 +484,15 @@
           "lead": "以下是自上次摘要以來的情況。任何緊急事項都已即時通知你。",
           "cta": "開啟 Rafii",
           "status": "info"
+        },
+        "phone_call_failed": {
+          "subject": "Rafii 未能接通電話",
+          "preheader": "你可以在 Rafii 繼續對話。",
+          "context": "電話模式",
+          "headline": "Rafii 未能接通電話",
+          "lead": "Rafii 未能完成電話通話。你可以打開應用程式繼續對話。系統不會自動重撥。",
+          "cta": "打開 Rafii",
+          "status": "warning"
         }
       }
     },
@@ -713,6 +731,15 @@
           "lead": "這個工作區本期的 AI 預算已用掉大部分。達到上限時，付費工作會暫停，不會超額收費。",
           "cta": "查看用量",
           "status": "warning"
+        },
+        "phone_call_failed": {
+          "subject": "Rafii 未能接通電話",
+          "preheader": "你可以在 Rafii 繼續對話。",
+          "context": "電話模式",
+          "headline": "Rafii 未能接通電話",
+          "lead": "Rafii 未能完成電話通話。你可以開啟應用程式繼續對話。系統不會自動重撥。",
+          "cta": "開啟 Rafii",
+          "status": "warning"
         }
       }
     },
@@ -950,6 +977,15 @@
           "headline": "预算即将用完",
           "lead": "这个工作区本期的 AI 预算已用掉大部分。达到上限时，付费工作会暂停，不会超额收费。",
           "cta": "查看用量",
+          "status": "warning"
+        },
+        "phone_call_failed": {
+          "subject": "Rafii 未能接通电话",
+          "preheader": "你可以在 Rafii 继续对话。",
+          "context": "电话模式",
+          "headline": "Rafii 未能接通电话",
+          "lead": "Rafii 未能完成电话通话。你可以打开应用程序继续对话。系统不会自动重拨。",
+          "cta": "打开 Rafii",
           "status": "warning"
         }
       }

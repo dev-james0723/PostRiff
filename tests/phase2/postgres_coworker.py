@@ -12,6 +12,7 @@ import datetime as dt
 import io
 import json
 import os
+import re
 import sys
 import traceback
 import uuid
@@ -293,9 +294,15 @@ def _():
     summary = service.notifications.worker().digest_tick()
     digests = [m for m in email.sent[before:] if any(t["value"] == "digest" for t in m["tags"]) and m["to"] == service._email_for(USERS[OWNER])]
     digest_rows = [d for d in deliveries("publish.verified", "email") if d["user"] == USERS[OWNER]]
+    reference = re.search(r'notification=([0-9a-f-]{36})', digests[0]['html'])
+    assert reference, 'Digest CTA must carry an authenticated acknowledgement reference'
+    service.notifications.acknowledge(wid, OWNER, reference[1])
+    with connection() as db:
+        acknowledged = db.execute("""SELECT count(*) FROM pr_notification_acknowledgements a JOIN pr_notification_events e ON e.id=a.event_id
+                                     WHERE a.user_id=%s AND a.source_channel='email' AND e.dedupe_key LIKE 'publish.verified:digest-%%'""", (USERS[OWNER],)).fetchone()[0]
     service.notifications.set_preference(wid, OWNER, {"scope": "all", "category": "*", "quiet_start": None, "quiet_end": None})
-    return ((local.hour, local.minute) == (11, 0) and len(digests) == 1 and all(d["status"] == "sent" for d in digest_rows) and len(digest_rows) == 3), {
-        "approvalEmailAt": local.isoformat(), "digestEmails": len(digests), "digestTick": summary}
+    return ((local.hour, local.minute) == (11, 0) and len(digests) == 1 and all(d["status"] == "sent" for d in digest_rows) and len(digest_rows) == 3 and acknowledged == 3), {
+        "approvalEmailAt": local.isoformat(), "digestEmails": len(digests), "digestTick": summary, "authenticatedDigestAcknowledgements": acknowledged}
 
 
 @scenario("N08", "notifications", "web push: explicit subscription stored encrypted; minimal encrypted payload; 410 revokes; unlisted endpoints refused")
@@ -330,7 +337,10 @@ def _():
     with connection() as db:
         revoked = db.execute("SELECT revoked_reason FROM pr_push_subscriptions WHERE id::text=%s", (stored["subscriptionId"],)).fetchone()[0]
     recording_push.outcome = "sent"
-    return (stored["verified"] and endpoint not in cipher and ssrf == 400 and payload.get("url") == "/app/queue?job=p" and set(payload) == {"title", "body", "url", "tag", "category"}
+    from urllib.parse import parse_qs, urlsplit
+    link = urlsplit(payload.get('url',''))
+    query = parse_qs(link.query)
+    return (stored["verified"] and endpoint not in cipher and ssrf == 400 and link.path == "/app/queue" and query.get('job')==['p'] and bool(query.get('notification')) and set(payload) == {"title", "body", "url", "tag", "category"}
             and "provider did not answer" not in json.dumps(payload) and revoked == "gone" and decrypted == {}), {"ssrf": ssrf, "payloadKeys": sorted(payload), "revoked": revoked}
 
 

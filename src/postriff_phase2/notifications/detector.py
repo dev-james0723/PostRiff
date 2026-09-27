@@ -17,6 +17,15 @@ import time
 
 RECONNECT_STATES = ("token_expired", "reauthorization_required", "scope_missing")
 QUEUE_HREF = "/app/queue"
+TIMELY_APPROVAL_WINDOW = 24 * 3600
+
+
+def approval_timing(deadline, now):
+    """Only an authoritative scheduled publish timestamp makes an approval time-sensitive.
+    A new timely dedupe suffix lets the hourly scan notice a distant review entering this window."""
+    if isinstance(deadline, (int,float)) and not isinstance(deadline,bool) and now < deadline <= now + TIMELY_APPROVAL_WINDOW:
+        return {"time_sensitive":True,"expires_at":deadline}, f":timely:{int(deadline)}"
+    return {}, ""
 
 
 def _channel(state, channel_id):
@@ -54,7 +63,8 @@ def from_state(workspace_id, state, now=None):
         if review.get("status") == "needs_review":
             manifest = review.get("manifest") or {}
             channel = _channel(state, manifest.get("channelId"))
-            out.append({"event_type": "campaign.approval_required", "dedupe_key": f"approval_required:{review['id']}", "entity_type": "review",
+            timing, suffix = approval_timing((manifest.get("timing") or {}).get("timestamp"),now)
+            out.append({"event_type": "campaign.approval_required", "dedupe_key": f"approval_required:{review['id']}{suffix}", "entity_type": "review", **timing,
                         "entity_id": review["id"], "payload": {"platform": channel.get("platform"), "account": channel.get("account"), "href": QUEUE_HREF}})
     for channel in phase2.get("channels") or []:
         connection = channel.get("connectionState")
@@ -81,13 +91,16 @@ def from_state(workspace_id, state, now=None):
         waiting = [i for i in items if i.get("state") == "ready_for_review"]
         review_sent = (occurrence.get("notices") or {}).get("reviewSentAt")
         if waiting and isinstance(review_sent, (int, float)):   # the worker asks once, at the review time (legacy review_ready)
-            out.append({"event_type": "campaign.approval_required", "dedupe_key": f"automation_review:{oid}:{int(review_sent)}",
+            deadlines = [i['publishAt'] for i in waiting if isinstance(i.get('publishAt'),(int,float)) and not isinstance(i['publishAt'],bool) and i['publishAt']>now]
+            timing, suffix = approval_timing(min(deadlines) if deadlines else None,now)
+            out.append({"event_type": "campaign.approval_required", "dedupe_key": f"automation_review:{oid}:{int(review_sent)}{suffix}", **timing,
                         **{**base, "payload": {**base["payload"], "count": len(waiting), "platform": ", ".join(sorted({str(i.get("platform")) for i in waiting if i.get("platform")})),
                                                "href": QUEUE_HREF}}})
         for item in items:
             if item.get("state") == "ready_for_review" and item.get("reason") and isinstance(item.get("changedAt"), (int, float)):
                 # An approval was voided (the draft changed, or the approver lost the right): a fresh request of its own.
-                out.append({"event_type": "campaign.approval_required", "dedupe_key": f"approval_again:{oid}:{item.get('key')}:{int(item['changedAt'])}",
+                timing, suffix = approval_timing(item.get('publishAt'),now)
+                out.append({"event_type": "campaign.approval_required", "dedupe_key": f"approval_again:{oid}:{item.get('key')}:{int(item['changedAt'])}{suffix}", **timing,
                             **{**base, "payload": {**base["payload"], "platform": item.get("platform"), "reason": (item.get("reason") or "")[:200], "href": QUEUE_HREF}}})
             if item.get("state") == "failed":
                 out.append({"event_type": "publish.failed", "dedupe_key": f"item_failed:{oid}:{item.get('key')}:{int(item.get('changedAt') or 0)}",

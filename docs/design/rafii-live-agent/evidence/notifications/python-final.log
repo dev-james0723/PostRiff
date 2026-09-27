@@ -1,0 +1,18 @@
+............{"event": "weather.unavailable", "reason": "timeout", "traceId": "trace_d8ec61c5f54252a003da18ac7e4baff0"}
+.........................{"event": "weather.unavailable", "reason": "URLError: <urlopen error [Errno 8] nodename>", "traceId": "trace_db7ec12c36d620ac66ac7a765ca71841"}
+{"event": "agent_tool.failed", "tool": "weather_now", "errorClass": "KeyError", "traceId": "trace_586bb1fff7e51690be64e9db1120d430"}
+...............................................................................................................................................................................................................................................................................................................................................................................................................{"event": "cron.completed", "requestId": "e48efc0323464bd3a90314d6729f7640", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}}
+................................................/Users/ouxianxing/Documents/James-Au-Studio-live-agent/src/postriff_phase2/cli_runtime.py:420: ResourceWarning: unclosed file <_io.BufferedReader name=6>
+  sink.fail(str(error))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.......................{"event": "request.completed", "requestId": "1b8471089634458a9baae4a13fd1a7e6", "method": "POST", "status": 503, "durationMs": 0.05, "route": "api"}
+..........................................................................................................................................................................................................................................................{"event": "cron.completed", "requestId": "4417a13f7a4544af83e4ca38ff758d6c", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}}
+.......................................................................................................................................................................................................................{"event": "time_back.write_failed", "exceptionType": "RuntimeError"}
+.{"event": "time_back.publish_failed", "exceptionType": "RuntimeError"}
+................................................................................{"event": "coworker.weekly_recipe_failed", "error": "TypeError"}
+...................................................................................................................................................................................................................................................................................................{"event": "request.completed", "requestId": "f9ee70df83c54244b536678fdeb2aa06", "method": "GET", "status": 503, "durationMs": 0.39, "route": "api"}
+........................................................................................................................................................
+----------------------------------------------------------------------
+Ran 1496 tests in 28.319s
+
+OK

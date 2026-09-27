@@ -1,0 +1,5 @@
+Your automation “Weekly plan” prepared posts that need your approval. Nothing is published unless you approve it before its publish time.
+
+Review and approve: https://app.rafii.example/app
+
+You received this because you have a Rafii account. Privacy: https://app.rafii.example/privacy

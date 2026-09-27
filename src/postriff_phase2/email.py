@@ -10,9 +10,9 @@ Addresses are validated with the same rule as `HostedWorkspaceService.invite`. N
 address, or API key is ever logged or returned to API clients; `pr_notifications.meta` stays free
 of addresses and bodies.
 """
-import html
 import math
 import time
+from urllib.parse import urlsplit
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.providers import http_transport
 
@@ -43,12 +43,18 @@ def _date(epoch):
 # Automation notices (orchestration): subject, first paragraph, button label. Silence never approves, so the review
 # notice says plainly that nothing is published without the person.
 AUTOMATION_NOTICES = {
-    "review_ready": ("Ready for your approval: {name}", "Your automation “{name}” prepared posts that need your approval. Nothing is published unless you approve it before its publish time.", "Review and approve"),
-    "approval_expired": ("Not published: {name}", "A post from your automation “{name}” reached its publish time without an approval, so it was not published. The draft is kept.", "See the draft"),
-    "platform_disconnected": ("Reconnect an account: {name}", "Your automation “{name}” couldn't publish because an account is disconnected. The draft is kept; reconnect the account to publish.", "Open the automation"),
-    "publish_failed": ("Couldn't publish: {name}", "A post from your automation “{name}” couldn't be published. The approved draft is kept.", "Open the automation"),
-    "run_skipped": ("Skipped this time: {name}", "Your automation “{name}” skipped this run.", "Open the automation"),
+    "review_ready": ("Ready for your approval", "Your automation “{name}” prepared posts that need your approval. Nothing is published unless you approve it before its publish time.", "Review and approve"),
+    "approval_expired": ("A post was not published", "A post from your automation “{name}” reached its publish time without an approval, so it was not published. The draft is kept.", "See the draft"),
+    "platform_disconnected": ("Reconnect an account", "Your automation “{name}” couldn't publish because an account is disconnected. The draft is kept; reconnect the account to publish.", "Open the automation"),
+    "publish_failed": ("Couldn't publish", "A post from your automation “{name}” couldn't be published. The approved draft is kept.", "Open the automation"),
+    "run_skipped": ("An automation run was skipped", "Your automation “{name}” skipped this run.", "Open the automation"),
 }
+
+# Existing direct templates, before/alongside Notification V2. This catalogue drives preview coverage.
+DIRECT_TEMPLATES = {**{kind:link for kind,link in (
+    ('invitation','accept_url'),('welcome','app_url'),('trial_ending','pricing_url'),('trial_ended','pricing_url'),
+    ('payment_failed','billing_url'),('subscription_activated','billing_url'),('new_device','profile_url'),('drafts_ready','review_url'))},
+    **{kind:'review_url' for kind in AUTOMATION_NOTICES}}
 
 # Notices the Rafii NotificationService sends when RAFII_NOTIFICATIONS_V2_ENABLED is on (architecture lock N5).
 # Invitations and welcome mail stay here: they are synchronous account operations that report `emailSent`.
@@ -148,7 +154,7 @@ class Mailer:
                     "Update payment", ctx.get("billing_url"))
         if kind == "subscription_activated":
             plan = _clean(ctx.get("plan_label"), 60) or b
-            return (f"Your {plan} plan is active",
+            return (f"Your {b} plan is active",
                     [f"Thanks. Your {plan} plan on {b} is now active.",
                      "You can review invoices, change the plan, or cancel any time from billing."],
                     "Manage billing", ctx.get("billing_url"))
@@ -162,7 +168,7 @@ class Mailer:
             name = _clean(ctx.get("automation_name"), 80) or "Your automation"
             count = max(1, int(ctx.get("count") or 1))
             drafts = f"{count} draft{'' if count == 1 else 's'}"
-            return (f"{drafts} ready for review: {name}",
+            return (f"{drafts} ready for review",
                     [f"Your automation “{name}” prepared {drafts} for your review.",
                      "Nothing was scheduled or published. Open the drafts to edit, approve or discard them."],
                     "Review drafts", ctx.get("review_url"))
@@ -177,28 +183,20 @@ class Mailer:
         """(subject, text, html) for a kind. Text and HTML carry the same link; every string is escaped in HTML."""
         subject, paragraphs, label, url = self._template(kind, ctx)
         url = _clean(url, 2000)
-        if not url.startswith(("https://", "http://")):
+        parsed, base = urlsplit(url), urlsplit(self.public_base_url)
+        if (parsed.scheme not in ('https','http') or parsed.scheme!=base.scheme or parsed.netloc!=base.netloc
+                or parsed.username or parsed.password or (parsed.scheme=='http' and parsed.hostname not in ('localhost','127.0.0.1'))):
             raise AlphaError("Email link must be an absolute http(s) URL.", 500)
         privacy = f"{self.public_base_url}/privacy"
         footer = f"You received this because you have a {self.brand} account. Privacy: {privacy}"
         text = "\n\n".join([*paragraphs, f"{label}: {url}", footer]) + "\n"
-        e = html.escape
-        body = "".join(f'<p style="margin:0 0 16px 0;font-size:16px;line-height:24px;color:#1f2933;">{e(p)}</p>' for p in paragraphs)
-        html_doc = (
-            '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f"<title>{e(subject)}</title></head>"
-            f'<body style="margin:0;padding:0;background:#f5f6f8;font-family:{FONT};">'
-            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f6f8;"><tr><td align="center" style="padding:24px 16px;">'
-            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:8px;">'
-            f'<tr><td style="padding:32px 32px 8px 32px;font-family:{FONT};font-size:20px;font-weight:600;color:#111827;">{e(self.brand)}</td></tr>'
-            f'<tr><td style="padding:8px 32px 0 32px;font-family:{FONT};">{body}</td></tr>'
-            '<tr><td style="padding:8px 32px 32px 32px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
-            f'<td style="background:#111827;border-radius:6px;"><a href="{e(url)}" style="display:inline-block;padding:12px 20px;font-family:{FONT};font-size:16px;color:#ffffff;text-decoration:none;">{e(label)}</a></td>'
-            "</tr></table>"
-            f'<p style="margin:16px 0 0 0;font-family:{FONT};font-size:13px;line-height:20px;color:#6b7280;">If the button doesn’t work, open this link: <a href="{e(url)}" style="color:#374151;">{e(url)}</a></p></td></tr>'
-            f'<tr><td style="padding:0 32px 32px 32px;font-family:{FONT};font-size:12px;line-height:18px;color:#6b7280;">You received this because you have a {e(self.brand)} account. Privacy: <a href="{e(privacy)}" style="color:#6b7280;">{e(privacy)}</a></td></tr>'
-            "</table></td></tr></table></body></html>"
-        )
+        from .notifications import email_render as design
+        # Shared branded HTML shell; keep direct-account copy, plain text and delivery semantics intact.
+        rows = [design.BrandHeader(base_url=self.public_base_url),design.ContextLabel('Account' if kind not in AUTOMATION_NOTICES else 'Automation'),
+                design.Headline(subject),design.PrimaryCard(paragraphs),design.PrimaryCTA(label,url),
+                design.SecondaryAction('If the button doesn’t work, open this link:',url),
+                design.Footer(f'You received this because you have a {self.brand} account.',design.NotificationSettingsLink('Privacy',privacy))]
+        html_doc = design.EmailShell(lang='en',title=subject,preheader=subject,rows=rows)
         return subject, text, html_doc
 
     # ---- delivery --------------------------------------------------------------------------------

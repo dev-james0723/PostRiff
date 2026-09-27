@@ -38,7 +38,7 @@ def load_env_file(path):
 def validate_structure(root=ROOT):
     checks = []
     required = [
-        "api/index.py", "requirements.txt", ".python-version", ".env.example",
+        "api/index.py", "api/phone.py", "requirements.txt", ".python-version", ".env.example",
         ".gitignore", ".vercelignore", "vercel.json", "migrations/postriff/001_phase2.sql",
         "migrations/postriff/002_hosted_account_lifecycle.sql",
         "migrations/postriff/004_consumer_web_tenancy.sql",
@@ -57,19 +57,28 @@ def validate_structure(root=ROOT):
     services = config.get("services", {})
     routes = config.get("rewrites", [])
     api = services.get("postriff_api", {})
+    phone = services.get("rafii_phone_media", {})
     web = services.get("postriff_web", {})
     valid_services = (
         api.get("runtime") == "python"
         and api.get("entrypoint") == "api.index:app"
         and web.get("root") == "web/"
         and web.get("framework") == "nextjs"
-        and len(routes) >= 2
-        and routes[0].get("source") == "/api/(.*)"
-        and routes[0].get("destination", {}).get("service") == "postriff_api"
+        and phone.get("root") == "."
+        and phone.get("runtime") == "python"
+        and phone.get("entrypoint") == "api.phone:app"
+        and routes == [
+            {"source": "/api/phone/media/(.*)", "destination": {"service": "rafii_phone_media"}},
+            {"source": "/api/(.*)", "destination": {"service": "postriff_api"}},
+            {"source": "/(.*)", "destination": {"service": "postriff_web"}},
+        ]
     )
-    checks.append(_result("vercel-services-routing", "pass" if valid_services else "fail", "API route precedes the Next.js web service and preserves the original request path"))
-    exclusions = api.get("functions", {}).get("api/index.py", {}).get("excludeFiles", "")
-    private_exclusions = all(marker in exclusions for marker in (".env*", "broker.key", "*.command", "src/james_au_social/**", ".venv/**", ".phase3-build-venv/**", "desktop/**", "vendor/**", "web/**"))
+    checks.append(_result("vercel-services-routing", "pass" if valid_services else "fail", "signed media routes to ASGI before the existing API and Next.js; request paths are preserved"))
+    phone_function = phone.get("functions", {}).get("api/phone.py", {})
+    duration = phone_function.get("maxDuration", 0)
+    checks.append(_result("phone-media-duration", "pass" if isinstance(duration, int) and 660 <= duration <= 800 else "fail", "media host covers the 600-second call cap plus 60-second shutdown margin; requires Pro/Enterprise Fluid Compute"))
+    exclusions = [api.get("functions", {}).get("api/index.py", {}).get("excludeFiles", ""), phone_function.get("excludeFiles", "")]
+    private_exclusions = all(marker in boundary for boundary in exclusions for marker in (".env*", "broker.key", "*.command", "src/james_au_social/**", ".venv/**", ".phase3-build-venv/**", "desktop/**", "vendor/**", "web/**", "tests/**", "docs/**"))
     checks.append(_result("function-bundle-boundary", "pass" if private_exclusions else "fail", "local credentials, launchers, private social modules, tests and evidence are excluded"))
     upload_rules = (root / ".vercelignore").read_text().splitlines()
     normalized_upload_rules = {rule.removeprefix("/") for rule in upload_rules}
@@ -84,7 +93,7 @@ def validate_structure(root=ROOT):
     secret_safe = ".env.*" in ignored and "!.env.example" in ignored and ".vercel/" in ignored
     checks.append(_result("secret-exclusions", "pass" if secret_safe else "fail", "local environment files and Vercel link metadata are excluded"))
 
-    for relative in ("api/index.py", "src/postriff_phase2/media.py", "src/postriff_phase2/hosted_app.py", "src/postriff_phase2/hosted_identity.py"):
+    for relative in ("api/index.py", "api/phone.py", "src/postriff_phase2/phone/asgi.py", "src/postriff_phase2/media.py", "src/postriff_phase2/hosted_app.py", "src/postriff_phase2/hosted_identity.py"):
         ast.parse((root / relative).read_text(), filename=relative)
     checks.append(_result("python-syntax", "pass", "hosted entrypoint and runtime modules parse"))
 
@@ -107,9 +116,9 @@ def validate_environment(values):
 
     database = urlparse(values["POSTRIFF_DATABASE_URL"])
     query = parse_qs(database.query)
-    pooler = database.scheme in ("postgres", "postgresql") and bool(database.hostname) and database.hostname.endswith(".pooler.supabase.com") and database.port == 6543
+    pooler = database.scheme in ("postgres", "postgresql") and bool(database.hostname) and database.hostname.endswith(".pooler.supabase.com") and database.port in (5432, 6543)
     tls = query.get("sslmode", [""])[0] in ("require", "verify-full")
-    checks.append(_result("database-connection", "pass" if pooler and tls else "fail", "Supabase transaction pooler on port 6543 with enforced TLS"))
+    checks.append(_result("database-connection", "pass" if pooler and tls else "fail", "Supabase session/transaction pooler on port 5432/6543 with enforced TLS"))
 
     project = urlparse(values["POSTRIFF_SUPABASE_URL"])
     exact_project = project.scheme == "https" and bool(project.hostname) and project.hostname.endswith(".supabase.co") and project.path in ("", "/")

@@ -7,6 +7,8 @@ import json
 from postriff_alpha.domain import AlphaError
 
 RETENTION_CLASSES = {
+    "phone_identity": {"retention": "until number revocation or account deletion", "note": "Verified phone numbers encrypted at rest. Notifications and diagnostics never include the full number."},
+    "phone_sessions": {"retention": "until account or workspace deletion", "note": "No audio recording. Call lifecycle, bounded costs and text transcript use the existing Rafii voice conversation policy. Signed provider payloads are normalized and discarded."},
     "drafts": {"retention": "until customer deletion", "note": "Revision history is kept with the draft."},
     "sources": {"retention": "until retraction or deletion", "note": "Retraction blocks future use and dependent drafts; deletion removes text and derived chunks."},
     "generated_media": {"retention": "until customer deletion", "note": "Immutable renditions; provenance kept as hashes."},
@@ -21,6 +23,8 @@ RETENTION_CLASSES = {
 }
 
 SUBPROCESSORS = [
+    {"name": "Twilio", "purpose": "optional phone verification and outbound PSTN transport", "status": "only when Phone Mode is configured and the person explicitly enables calls; no recording"},
+    {"name": "OpenAI GPT-Live", "purpose": "browser and optional telephone voice conversation, delegated to the same Rafii runtime", "status": "only when configured; session storage disabled; text transcript stays in the Rafii conversation"},
     {"name": "Vercel", "purpose": "hosting / API runtime", "status": "configured hosting provider; release environment to be verified"},
     {"name": "Supabase", "purpose": "authentication, PostgreSQL, private object storage", "status": "configured provider; release environment to be verified", "region": "release region to be verified"},
     {"name": "Social providers (LinkedIn, Threads, Instagram)", "purpose": "publishing and metrics for accounts the customer connects", "status": "connected only by the customer's own OAuth grant"},

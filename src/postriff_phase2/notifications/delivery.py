@@ -32,8 +32,9 @@ def backoff(delivery_id, attempts):
 
 class DeliveryWorker:
     def __init__(self, connection_factory, *, email_transport=None, from_address=None, push_transport=None, vault=None, base_url="https://rafii.invalid",
-                 address_for=None, signing_key=None, clock=time.time, worker_id=None):
+                 address_for=None, signing_key=None, clock=time.time, worker_id=None, sms_service=None):
         self.connection_factory = connection_factory
+        self.sms_service = sms_service
         self.email_transport, self.from_address = email_transport, from_address
         self.push_transport, self.vault = push_transport, vault
         self.base_url, self.address_for, self.signing_key = base_url, address_for, signing_key
@@ -43,10 +44,14 @@ class DeliveryWorker:
     # --- claim / complete ----------------------------------------------------------------------------------------------
     def claim(self, limit=25, channel=None, mode="immediate"):
         with self.connection_factory() as db, db.cursor() as cur:
+            # SMS has no safe resend after a committed egress marker, including a worker crash.
+            cur.execute("""UPDATE public.pr_notification_deliveries SET status='uncertain',failure_class='uncertain',
+                           failure_detail='sms_worker_lost_after_dispatch',lease_owner=NULL,lease_until=NULL,updated_at=now()
+                           WHERE channel='sms' AND status='claimed' AND lease_until<now() AND sms_dispatch_started_at IS NOT NULL""")
             cur.execute(f"""UPDATE public.pr_notification_deliveries d SET status='claimed', lease_owner=%s, lease_until=now() + make_interval(secs => %s),
                                    attempts=attempts+1, updated_at=now()
                             WHERE d.id IN (SELECT id FROM public.pr_notification_deliveries
-                                           WHERE channel IN ('email','push') AND mode=%s {"AND channel=%s" if channel else ""}
+                                           WHERE channel IN ('email','push','sms') AND mode=%s {"AND channel=%s" if channel else ""}
                                              AND ((status='pending' AND next_attempt_at <= now()) OR (status='claimed' AND lease_until < now()))
                                            ORDER BY next_attempt_at LIMIT %s FOR UPDATE SKIP LOCKED)
                             RETURNING d.id::text, d.event_id::text, d.workspace_id::text, d.user_id::text, d.channel, d.attempts, d.max_attempts, d.idempotency_key,
@@ -61,11 +66,15 @@ class DeliveryWorker:
         """Fenced on the lease. Returns True when this worker's outcome was recorded."""
         state = outcome["state"]
         with self.connection_factory() as db, db.cursor() as cur:
-            if state == "sent":
+            if state == "defer":
+                sql, params = ("UPDATE public.pr_notification_deliveries SET status='pending',next_attempt_at=to_timestamp(%s),attempts=greatest(0,attempts-1), "
+                               "failure_detail=%s,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='claimed'",
+                               (outcome['nextAt'],outcome.get('detail'),row['id'],self.worker_id))
+            elif state == "sent":
                 sql, params = ("UPDATE public.pr_notification_deliveries SET status='sent', sent_at=now(), provider=%s, provider_ref=%s, template_version=%s, "
                                "lease_owner=NULL, lease_until=NULL, failure_class=NULL, failure_detail=NULL, updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='claimed'",
                                (outcome.get("provider"), (outcome.get("providerRef") or "")[:200] or None, outcome.get("templateVersion"), row["id"], self.worker_id))
-            elif state in ("transient", "uncertain") and row["attempts"] < row["maxAttempts"]:
+            elif state in ("transient", "uncertain") and not (row["channel"]=="sms" and state=="uncertain") and row["attempts"] < row["maxAttempts"]:
                 delay = outcome.get("retryAfter") or backoff(row["id"], row["attempts"])
                 sql, params = ("UPDATE public.pr_notification_deliveries SET status='pending', next_attempt_at=now() + make_interval(secs => %s), failure_class=%s, "
                                "failure_detail=%s, lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='claimed'",
@@ -73,6 +82,7 @@ class DeliveryWorker:
             else:
                 final = {"transient": "dead", "uncertain": "dead", "permanent": "failed", "gone": "failed", "config": "suppressed", "membership": "cancelled",
                          "preference": "suppressed", "expired": "cancelled"}.get(state, "failed")
+                if row["channel"]=="sms" and state=="uncertain": final="uncertain"
                 failure = {"gone": "permanent"}.get(state, state if state in ("transient", "uncertain", "permanent", "config", "membership", "preference", "expired") else "permanent")
                 sql, params = ("UPDATE public.pr_notification_deliveries SET status=%s, failure_class=%s, failure_detail=%s, failed_at=CASE WHEN %s IN ('dead','failed') THEN now() END, "
                                "lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id::text=%s AND lease_owner=%s AND status='claimed'",
@@ -105,6 +115,10 @@ class DeliveryWorker:
         return {"type": event[0], "payload": event[1] or {}, "severity": event[2], "expired": bool(event[3]), "locale": event[4] or "en",
                 "workspaceName": event[5] or None, "grouping": event[6], "member": member, "optedOut": opted_out}
 
+    def _ack_path(self, href, row):
+        from .sms import acknowledgement_path
+        return acknowledgement_path(href,row["id"])
+
     def _unsubscribe_url(self, row, category):
         if not self.signing_key:
             return None
@@ -119,7 +133,7 @@ class DeliveryWorker:
         payload = ctx["payload"]
         values = {**payload, "workspace": ctx["workspaceName"], "recipe": payload.get("recipeName") or "Your automation",
                   "title": payload.get("title") or "", "reason": payload.get("reason") or "", "count": payload.get("count") or 1}
-        return email_render.render(spec["template"], locale=ctx["locale"], values=values, base_url=self.base_url, href=payload.get("href"),
+        return email_render.render(spec["template"], locale=ctx["locale"], values=values, base_url=self.base_url, href=self._ack_path(payload.get("href"), row),
                                    workspace_name=ctx["workspaceName"], unsubscribe_url=self._unsubscribe_url(row, spec["category"]),
                                    transactional=catalog.transactional(ctx["type"]), metrics=payload.get("metrics"))
 
@@ -175,7 +189,7 @@ class DeliveryWorker:
             return {"state": "preference", "detail": "no active push subscription"}
         spec = catalog.spec(ctx["type"])
         message = self.render(row, ctx)
-        body = push_module.payload("Rafii", message["subject"], (ctx["payload"] or {}).get("href"), ctx.get("grouping") or ctx["type"], spec["category"])
+        body = push_module.payload("Rafii", message["subject"], self._ack_path((ctx["payload"] or {}).get("href"), row), ctx.get("grouping") or ctx["type"], spec["category"])
         results = []
         for subscription in subscriptions:
             result = self.push_transport.send(subscription, body, ttl=86400 if spec["severity"] in ("critical", "security") else 43200,
@@ -198,7 +212,7 @@ class DeliveryWorker:
 
     # --- ticks -----------------------------------------------------------------------------------------------------------------
     def tick(self, max_items=50, max_seconds=20):
-        started, summary = time.monotonic(), {"claimed": 0, "sent": 0, "retry": 0, "failed": 0, "suppressed": 0, "cancelled": 0, "lostLease": 0}
+        started, summary = time.monotonic(), {"claimed": 0, "sent": 0, "retry": 0, "failed": 0, "suppressed": 0, "cancelled": 0, "lostLease": 0, "deferred": 0, "uncertain": 0}
         while summary["claimed"] < max_items and time.monotonic() - started < max_seconds:
             rows = self.claim(limit=min(25, max_items - summary["claimed"]))
             if not rows:
@@ -206,7 +220,10 @@ class DeliveryWorker:
             for row in rows:
                 summary["claimed"] += 1
                 ctx = self._context(row, row["channel"], "immediate")
-                if ctx is None:
+                if row["channel"]=="sms":
+                    from .sms_delivery import send
+                    outcome = send(self,row)
+                elif ctx is None:
                     outcome = {"state": "permanent", "detail": "event missing"}
                 elif not ctx["member"]:
                     outcome = {"state": "membership", "detail": "the person no longer belongs to this workspace"}
@@ -223,6 +240,8 @@ class DeliveryWorker:
                     continue
                 key = {"sent": "sent", "transient": "retry", "uncertain": "retry", "config": "suppressed", "preference": "suppressed", "membership": "cancelled",
                        "expired": "cancelled"}.get(outcome["state"], "failed")
+                if outcome["state"]=="defer": key="deferred"
+                if outcome["state"]=="uncertain" and row["channel"]=="sms": key="uncertain"
                 if key == "retry" and row["attempts"] >= row["maxAttempts"]:
                     key = "failed"
                 summary[key] += 1
@@ -277,7 +296,7 @@ class DeliveryWorker:
             outcome = {"state": "empty", "detail": "nothing left to send"}
             if items and first_ctx:
                 base = min((c for *_, c in included if c is not None), default=None)
-                message = email_render.render("digest", locale=first_ctx["locale"], values={"count": len(items)}, base_url=self.base_url, href="/app",
+                message = email_render.render("digest", locale=first_ctx["locale"], values={"count": len(items)}, base_url=self.base_url, href=self._ack_path('/app',{'id':min(r[0] for r in included)}),
                                               workspace_name=None, unsubscribe_url=self._unsubscribe_url({"userId": user_id, "workspaceId": None, "createdAt": base}, "*"), items=items)
                 if self.email_transport is None or not self.from_address:
                     outcome = {"state": "config", "detail": "email is not configured on this deployment"}
@@ -314,6 +333,22 @@ class DeliveryWorker:
         return {"people": len(people), "sent": sent}
 
 
+def sms_signals(cur, now=None):
+    now = time.time() if now is None else now
+    cur.execute("""SELECT count(*) FILTER(WHERE status IN ('pending','claimed') AND next_attempt_at<to_timestamp(%s)),
+                          count(*) FILTER(WHERE status IN ('failed','dead','uncertain') AND updated_at>to_timestamp(%s)),
+                          count(*) FILTER(WHERE status='suppressed' AND updated_at>to_timestamp(%s)),
+                          count(*) FILTER(WHERE status='pending' AND failure_detail='quiet_hours'),
+                          count(*) FILTER(WHERE status='cancelled' AND failure_detail='acknowledged' AND updated_at>to_timestamp(%s)),
+                          count(*) FILTER(WHERE sms_dispatch_started_at>to_timestamp(%s)),
+                          coalesce(sum(sms_segments) FILTER(WHERE sms_dispatch_started_at>to_timestamp(%s)),0),
+                          coalesce(sum(sms_cost_usd_micro) FILTER(WHERE sms_dispatch_started_at>to_timestamp(%s)),0)
+                   FROM public.pr_notification_deliveries WHERE channel='sms'""", [now-600]+[now-86400]*2+[now-86400]*4)
+    due,failed,suppressed,quiet,ack,sends,segments,cost = cur.fetchone()
+    return {"backlogOver10m":due,"failedDeadUncertain24h":failed,"suppressed24h":suppressed,"quietDeferred":quiet,
+            "acknowledgementCancelled24h":ack,"dispatches24h":sends,"segments24h":segments,"knownCostUsdMicro24h":cost}
+
+
 def backlog(cur):
     """Operational health: pending/claimed backlog, oldest due, dead letters in the last day."""
     cur.execute("""SELECT count(*) FILTER (WHERE status IN ('pending','claimed') AND next_attempt_at <= now()),
@@ -322,7 +357,8 @@ def backlog(cur):
                           count(*) FILTER (WHERE status='claimed' AND lease_until < now())
                    FROM public.pr_notification_deliveries WHERE channel IN ('email','push')""")
     due, oldest, dead, expired = cur.fetchone()
-    return {"due": due, "oldestDueSeconds": round(float(oldest), 1) if oldest else 0, "dead24h": dead, "expiredLeases": expired}
+    return {"sms": sms_signals(cur),
+            "due": due, "oldestDueSeconds": round(float(oldest), 1) if oldest else 0, "dead24h": dead, "expiredLeases": expired}
 
 
 def json_safe(value):

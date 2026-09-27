@@ -1,0 +1,5 @@
+Your automation “Weekly plan” skipped this run.
+
+Open the automation: https://app.rafii.example/app
+
+You received this because you have a Rafii account. Privacy: https://app.rafii.example/privacy

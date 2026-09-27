@@ -1,0 +1,23 @@
+{
+  "alias": "https://rafii-consumer-staging.vercel.app",
+  "deploymentId": "dpl_J7LGcpxtqeW7XEvGUxoUoAmUGzaz",
+  "projectId": "prj_4bfvSc0AC6am9FdknFWcwNYgmcnN",
+  "commit": "b09c2181d1392068d2db0b4084b2795870db0566",
+  "checks": [
+    {
+      "path": "/api/health",
+      "status": 200,
+      "bytes": 128
+    },
+    {
+      "path": "/auth/sign-in",
+      "status": 200,
+      "bytes": 44198
+    },
+    {
+      "path": "/raffi/avatar-128.png",
+      "status": 200,
+      "bytes": 27765
+    }
+  ]
+}
