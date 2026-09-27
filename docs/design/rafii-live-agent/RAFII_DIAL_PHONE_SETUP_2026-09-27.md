@@ -45,8 +45,10 @@ it has not been exported or saved to Rafii's server environment. There are no we
 
 Account evidence from the signed-in dashboard:
 
-- Self-Hosted displays **Request Self-Hosted access**. The request below is prepared in the
-  form and awaits user approval before submission to Dial's reviewer.
+- After the user's explicit approval, the Self-Hosted request below was submitted once on
+  2026-09-27. Dial displays **Your request is being reviewed** and says a human usually
+  reviews requests within a business day. It will email the account owner when decided.
+  Access has not been granted and call routing has not been activated.
 - The number is **not registered for 10DLC**. Outbound US SMS/MMS is blocked; voice and inbound
   texts are unaffected. Rafii's new-user SMS verification for US numbers needs registration
   before launch. The dashboard quotes a **one-time $25 fee** and **3–5 business days**;
@@ -63,10 +65,10 @@ The provider readiness check reports `smsReady: false` and the 10DLC registratio
 US carrier registration is incomplete. This diagnostic does not block voice calls to users
 whose Rafii numbers are already verified; all existing consent and spending gates still apply.
 
-No Self-Hosted access request, 10DLC registration, webhook registration, mode activation,
-deployment or live call has been submitted.
+The Self-Hosted access request is submitted and pending provider review. No 10DLC
+registration, webhook registration, mode activation, deployment or live call has been submitted.
 
-Prepared access-request text (review before sending to Dial):
+Submitted access-request text:
 
 > Rafii is our authenticated social-media assistant. We want it to call verified users
 > who request a call, and later users who explicitly opt into scheduled briefings. Our

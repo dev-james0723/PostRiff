@@ -9,8 +9,8 @@
       "call"
     ],
     "callingEnabled": true,
-    "selfHostedAccess": "request_required",
-    "accessRequest": "prepared_awaiting_user_approval",
+    "selfHostedAccess": "pending",
+    "accessRequest": "submitted_pending_review",
     "existingApiKeys": 1,
     "apiKeyExported": false,
     "webhooks": 0,
@@ -49,8 +49,9 @@
     "sourceHashes": {
       "src/postriff_phase2/phone/providers/dial.py": "8dd8da77c7a1542f512d36125c69557748b6401788693a605c63cf6261e71dc1",
       "tests/test_rafii_dial.py": "589c52eba9cd71747bca87164b333803abc67cb941b40a46a6a50c85625cffc2",
-      "docs/design/rafii-live-agent/RAFII_DIAL_PHONE_SETUP_2026-09-27.md": "3740a36f7c061145b10287f8108aaaf5aa48c685eee2a55ef32fae399ede8fd1"
-    }
+      "docs/design/rafii-live-agent/RAFII_DIAL_PHONE_SETUP_2026-09-27.md": "c29d65844ca7cdb35b4534ceb3ff2201dff81cf5cbaa8d5cc76f77e836238a67"
+    },
+    "reuse": "The provider and test source hashes still match the 59 passing unit tests and local PostgreSQL acceptance; only setup receipt documentation changed."
   },
   "externalExecution": {
     "selfHostedActivation": "not_run",
@@ -59,7 +60,8 @@
     "productionMigration": "not_run",
     "deployment": "not_run",
     "liveCall": "not_run",
-    "liveVoiceModel": "not_run"
+    "liveVoiceModel": "not_run",
+    "selfHostedAccessRequest": "submitted_pending_review"
   },
   "sources": [
     "https://getdial.ai/dashboard",
@@ -69,5 +71,17 @@
     "https://getdial.ai/dashboard/billing",
     "https://getdial.ai/dashboard/webhooks",
     "https://docs.getdial.ai/openapi.json"
-  ]
+  ],
+  "selfHostedRequest": {
+    "observedAt": "2026-09-27T17:49:24.631612+00:00",
+    "authorization": "User approved the exact prepared request in the current thread",
+    "submittedOnce": true,
+    "confirmation": "Your request is being reviewed",
+    "providerReviewExpectation": "Usually within a business day; account owner notified by email",
+    "url": "https://getdial.ai/dashboard/self-hosted",
+    "submittedText": "Rafii is our authenticated social-media assistant. We want it to call verified users who request a call, and later users who explicitly opt into scheduled briefings. Our existing Rafii server must drive the call using the same conversation, memory, tools, workspace permissions, publication approvals and spending limits. We need Self-Hosted audio mode to connect that existing agent and voice stack. We do not record call audio.",
+    "companyUrl": null,
+    "accessGranted": false,
+    "routingActivated": false
+  }
 }
