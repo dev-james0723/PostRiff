@@ -56,7 +56,7 @@ export type PlusView =
   | 'connectors';
 
 const ITEMS: {
-  view: PlusView | 'device' | 'text';
+  view: PlusView | 'device' | 'text' | 'recent-posts';
   label: string;
   detail: string;
   icon: keyof typeof Icons;
@@ -69,6 +69,7 @@ const ITEMS: {
     icon: 'media'
   },
   { view: 'posts', label: 'Post', detail: 'Rework a draft or use it for ideas', icon: 'post' },
+  { view: 'recent-posts', label: 'Recent posts', detail: 'Choose from connected Instagram or LinkedIn', icon: 'post' },
   {
     view: 'templates',
     label: 'Template',
@@ -449,6 +450,7 @@ export interface PlusSheetProps {
   creditMode: boolean;
   onPickDevice: () => void;
   onPickText: () => void;
+  onRecentPosts?: () => void;
   onPickItem: (item: PickerItem) => void;
   onRememberConnectorItems: (items: readonly ConnectorItemLike[]) => void;
   onAddAssets: (assets: Asset[]) => void;
@@ -465,6 +467,7 @@ export function PlusSheet({
   creditMode,
   onPickDevice,
   onPickText,
+  onRecentPosts,
   onPickItem,
   onRememberConnectorItems,
   onAddAssets,
@@ -488,13 +491,16 @@ export function PlusSheet({
     setView((current) => (current && current !== 'menu' && !wide ? 'menu' : null))
   );
 
-  function choose(target: PlusView | 'device' | 'text') {
+  function choose(target: PlusView | 'device' | 'text' | 'recent-posts') {
     if (target === 'device') {
       close();
       onPickDevice();
     } else if (target === 'text') {
       close();
       onPickText();
+    } else if (target === 'recent-posts') {
+      close();
+      onRecentPosts?.();
     } else setView(target);
   }
 
@@ -533,7 +539,7 @@ export function PlusSheet({
         <RafiiDialogBody className='flex min-h-0 flex-1 flex-col'>
           {view === 'menu' ? (
             <ul className='flex flex-col gap-1'>
-              {ITEMS.map((item) => {
+              {ITEMS.filter((item) => item.view !== 'recent-posts' || Boolean(onRecentPosts)).map((item) => {
                 const Icon = Icons[item.icon];
                 return (
                   <li key={item.view}>
@@ -584,7 +590,7 @@ export function PlusSheet({
           <DropdownMenuContent align='start' className='w-72'>
             <DropdownMenuGroup>
               <DropdownMenuLabel>Add to this message</DropdownMenuLabel>
-              {ITEMS.map((item) => {
+              {ITEMS.filter((item) => item.view !== 'recent-posts' || Boolean(onRecentPosts)).map((item) => {
                 const Icon = Icons[item.icon];
                 return (
                   <DropdownMenuItem
