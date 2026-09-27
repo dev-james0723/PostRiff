@@ -12,6 +12,7 @@ from postriff_alpha.domain import AlphaError
 from ..agent_runtime_v2 import live, style
 from . import contracts, store
 from .providers.base import TelephonyMediaTransport
+from .diagnostics import MediaFailure, report_failure
 
 FAREWELL = re.compile(
     r'^\s*(?:(?:please|okay|ok|can you|could you|would you)[,\s]+)?'
@@ -130,8 +131,17 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
     """No audio retained. Keep reading audio while delegated work runs; clear provider playback on interruption."""
     pending, finished = set(), asyncio.Event()
     final_usage, final_reason = None, 'failed'
-    await connection.send({'type':'session.start', 'session':controller.configuration()})
+    try:
+        await connection.send({'type':'session.start', 'session':controller.configuration()})
+    except Exception as error:
+        raise MediaFailure('live_start', error) from None
     ready = asyncio.Event()
+
+    async def step(phase, work):
+        try:
+            return await work
+        except Exception as error:
+            raise MediaFailure(phase, error) from None
 
     async def delegation(event):
         try:
@@ -152,14 +162,20 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
         task.add_done_callback(pending.discard)
 
     async def from_live():
+        try:
+            await read_live()
+        except Exception as error:
+            raise MediaFailure('live_receive', error) from None
+
+    async def read_live():
         nonlocal final_usage, final_reason
         async for raw in connection:
             event = raw if isinstance(raw, dict) else raw.model_dump()
             kind = event.get('type')
             if kind == 'session.started':
-                await asyncio.to_thread(controller.started, event['session']['id'])
+                await step('live_started', asyncio.to_thread(controller.started, event['session']['id']))
                 ready.set()
-                await connection.send({'type':'session.instructions.append', 'content':'Greet the caller now: ' + contracts.GREETING})
+                await step('live_greeting', connection.send({'type':'session.instructions.append', 'content':'Greet the caller now: ' + contracts.GREETING}))
                 if controller.call['kind'] == 'scheduled':
                     controller.user_text = 'Give me a short weekly social-media briefing from this workspace: verified publications, performance, approvals and blockers. Do not publish or schedule anything.'
                     dispatch({'delegation':{'id':'scheduled-briefing','target':'client'}})
@@ -167,9 +183,9 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                     controller.user_text = 'Explain the current ' + controller.call['reason_key'].split(':',1)[0] + ' update in this workspace. Read the actual current state. Do not publish or schedule anything.'
                     dispatch({'delegation':{'id':'attention-briefing','target':'client'}})
             elif kind == 'session.output_audio.delta' and not controller.closed:
-                await transport.send_audio(event['delta'])
+                await step('phone_audio_out', transport.send_audio(event['delta']))
             elif kind in ('session.input_transcript.delta','session.output_transcript.delta'):
-                await asyncio.to_thread(controller.transcript, event)
+                await step('phone_transcript', asyncio.to_thread(controller.transcript, event))
                 if kind == 'session.input_transcript.delta':
                     await transport.interrupt()
                     if FAREWELL.fullmatch(controller.user_text):
@@ -184,24 +200,32 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                 finished.set()
                 break
             elif kind == 'error':
+                report_failure(controller.call_id, 'live_event', event=event)
                 finished.set()
                 break
+        if not finished.is_set() and not controller.closed:
+            report_failure(controller.call_id, 'live_receive', event={'error': {'code': 'stream_closed'}})
 
     async def from_phone():
-        await asyncio.wait_for(ready.wait(), 20)
+        try:
+            await asyncio.wait_for(ready.wait(), 20)
+        except Exception as error:
+            raise MediaFailure('phone_input_wait', error) from None
         try:
             while not controller.closed:
-                audio = await transport.receive_audio()
+                audio = await step('phone_audio_in', transport.receive_audio())
                 if audio is None:
                     break
-                await connection.send({'type':'session.input_audio.append','audio':audio})
+                await step('live_audio_in', connection.send({'type':'session.input_audio.append','audio':audio}))
         finally:
             # A stop/disconnect or spoken hang-up must fence tools immediately, then allow final Live usage to arrive.
             controller.closed = True
             try:
                 await connection.send({'type':'session.close'})
                 await asyncio.wait_for(finished.wait(), 5)
-            except Exception:
+            except Exception as error:
+                if not finished.is_set():
+                    report_failure(controller.call_id, 'live_close', error)
                 pass
 
     async def watchdog():
@@ -210,7 +234,8 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
             try:
                 # Recheck identity, membership, switches and expiry even during a quiet call.
                 await asyncio.to_thread(controller.runtime.service.get, controller.call['workspace_id'], controller.capability)
-            except Exception:
+            except Exception as error:
+                report_failure(controller.call_id, 'session_guard', error)
                 controller.closed = True
                 await connection.send({'type':'session.close'})
                 try:

@@ -1,0 +1,49 @@
+{
+  "execution": "local candidate only; production remains PR 41 merge",
+  "productionCommit": "6cdfe8fdf7011ca0ac0f2c8fb281caca3e73e64d",
+  "sourceSha256": {
+    "src/postriff_phase2/phone/asgi.py": "021467b0377241d734181eea9b80d3938dc1804c9761d65a3efeb75bfb1672d0",
+    "src/postriff_phase2/phone/session.py": "c5068aa57a3e65b7e69e9f5ee00b582e11588897c56827bef1f0735d90e1868a",
+    "src/postriff_phase2/phone/diagnostics.py": "4a2183834c1c0c6ee0743c5c042d752fc8e0a7f64a7e28a98e0dcb48354b79ed",
+    "tests/test_rafii_phone_media.py": "f9ca235924a92069d6dc9356cb461279d611da678f029761a7b8111103f0d821"
+  },
+  "localChecks": {
+    "pythonTests": 139,
+    "pythonStatus": "PASS",
+    "installedOpenAISDK": "3.19.2",
+    "sdkTransport": "loopback WebSocket with actual SDK and TwilioMediaTransport; synthetic Live events",
+    "postgresPhoneMode": "PASS; disposable port 55769; actual Rafii runtime; synthetic external services",
+    "noNewRealCalls": true
+  },
+  "approvedFirstRealCall": {
+    "callId": "6fab99a1-b75b-484b-a5b7-df6bc136450c",
+    "recipientLastFour": "0208",
+    "requestedAt": "2026-09-27T20:19:57Z",
+    "providerStartedAt": "2026-09-27T20:20:03Z",
+    "providerEndedAt": "2026-09-27T20:20:11Z",
+    "providerDurationSeconds": 8,
+    "providerLifecycle": "completed",
+    "rafiiState": "failed",
+    "publicFailureClass": null,
+    "userConfirmedAudio": "none",
+    "serverRequestedHangup": true,
+    "twilioVoiceCostUsd": 0.014,
+    "totalProviderCost": "not reconciled"
+  },
+  "productionDiagnosis": "exact media/Live failure cause unknown; existing exceptions and error events were swallowed",
+  "readOnlyLedgerCheck": {
+    "status": "validation_unavailable",
+    "reason": "Supabase connector permission denied; no bypass attempted"
+  },
+  "candidateChanges": [
+    "bounded stage, exception class, HTTP status, allowlisted error code/type/parameter, valid call UUID only",
+    "no exception messages, stack traces, audio, transcripts, credentials, phone numbers or provider bodies logged",
+    "normal session.closed remains silent; existing failed-call hangup and unknown usage retained"
+  ],
+  "authorization": {
+    "firstPaidTest": "consumed",
+    "oneRetry": "approved and unconsumed",
+    "candidateProductionDeploy": "pending scoped approval"
+  },
+  "productionCron": "pre-existing /api/cron/worker TypeError remains unresolved; no cron invoked or modified"
+}
