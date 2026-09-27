@@ -1820,8 +1820,14 @@ class IdeasService:
         fingerprint = hashlib.sha256((kind + clean(text or url, 20000)).encode()).hexdigest()
         source = next((s for s in state.get("sources", []) if s.get("active") and s.get("fingerprint") == fingerprint), None)
         if source is None:
-            self.commands(state, actor, "source", {"kind": kind, "text": text or url, "title": clean(payload.get("title", "Pasted source" if text else "Link"), 200)})
+            explicit_title = clean(payload.get("title", ""), 200)
+            first_line = next((line.strip() for line in text.splitlines() if line.strip()), "") if text else ""
+            title = explicit_title or clean(first_line, 80) or ("Link" if url else "Source")
+            self.commands(state, actor, "source", {"kind": kind, "text": text or url, "title": title})
             source = state["sources"][-1]
+            # A Home prompt needs a durable source for run provenance, but it is not reusable Context
+            # Pocket material unless the person explicitly saves/captures it as a source.
+            source["origin"] = {"kind": "quick_start"}
         stamp(state)
         # Own writing is quotable. A reused source is re-approved only when this changes its policy, so
         # drafts from the earlier run are not marked stale; an existing policy is never downgraded here.

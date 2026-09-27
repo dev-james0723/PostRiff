@@ -12,6 +12,9 @@ import { ApiError } from '@/lib/api/client';
 import type { Snapshot, SnapshotSource } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
+import { pocketSources, pocketSourceTitle } from './context-source';
+
+export { pocketSources } from './context-source';
 
 const POLICY: Record<string, string> = {
   public_quote: 'May be quoted publicly',
@@ -19,11 +22,6 @@ const POLICY: Record<string, string> = {
   internal_reference: 'Internal reference only',
   prohibited: 'Not for drafting'
 };
-
-/** Workspace sources the pocket can offer: active, not writing samples. */
-export function pocketSources(sources: SnapshotSource[] | undefined) {
-  return (sources ?? []).filter((s) => s.active && s.kind !== 'voice_sample');
-}
 
 export interface ContextPocketProps {
   open: boolean;
@@ -93,7 +91,7 @@ export function ContextPocket({ open, onOpenChange, sources, included, onInclude
                     <Checkbox
                       checked={on}
                       onCheckedChange={(checked) => setStaged((ids) => (checked ? Array.from(new Set([...ids, source.id])) : ids.filter((id) => id !== source.id)))}
-                      label={source.title || 'Untitled source'}
+                      label={pocketSourceTitle(source)}
                       className='min-w-0 flex-1 items-start gap-3 [&>button]:mt-0.5 [&>span]:text-sm'
                     />
                     <span className='text-muted-foreground shrink-0 pt-0.5 text-[11px] leading-relaxed' title={source.kind}>
