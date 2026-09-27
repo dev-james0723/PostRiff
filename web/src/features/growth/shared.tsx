@@ -29,7 +29,9 @@ export function GrowthConsent({
   const snapshot = useSnapshot();
   const act = useAct();
   const [confirmed, setConfirmed] = useState(false);
+  const [audience, setAudience] = useState(catalog.audienceConsent ?? false);
   const [error, setError] = useState('');
+  const requiredRoutes = [...new Set([...catalog.routes, catalog.writerRoute, ...(catalog.postmortem || catalog.audienceMiner ? [catalog.summaryRoute] : [])])];
   if (access.role !== 'owner')
     return (
       <p className='text-muted-foreground text-sm'>
@@ -43,14 +45,14 @@ export function GrowthConsent({
       await act.mutateAsync({
         revision: snapshot.data.revision,
         action: 'growth_consent',
-        payload: { routes, confirmed: true }
+        payload: { routes, confirmed: true, audience: audience && routes.length > 0 }
       });
       onChange();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Permission could not be saved.');
     }
   }
-  if (catalog.consented)
+  if (catalog.consented && requiredRoutes.every((r) => catalog.allowedRoutes.includes(r)) && (!catalog.audienceMiner || catalog.audienceConsent))
     return (
       <Button variant='quiet' size='sm' disabled={act.isPending} onClick={() => void decide([])}>
         Revoke growth AI permission
@@ -61,15 +63,17 @@ export function GrowthConsent({
       <p>
         AI analysis sends selected drafts to Jev, with Gemini Flash Lite as a fallback. Rewrites use
         your current writer. Each run uses the configured daily allowance.
+        {(catalog.postmortem || catalog.audienceMiner) && ' Growth reviews and audience topic suggestions also use Claude Haiku.'}
       </p>
       <details>
         <summary className='cursor-pointer text-muted-foreground'>Review AI models</summary>
         <ul className='mt-2 break-words'>
-          {[...catalog.routes, catalog.writerRoute].map((r) => (
+          {requiredRoutes.map((r) => (
             <li key={r}>{r.replace('cloud:vercel-ai-gateway:', '')}</li>
           ))}
         </ul>
       </details>
+      {catalog.audienceMiner && <label className='flex min-h-11 items-start gap-2'><input type='checkbox' aria-label='Allow comment analysis' checked={audience} onChange={(e) => setAudience(e.target.checked)} className='mt-1' />Also allow selected comments on my own posts to be sent for classification and topic suggestions. Author handles are not sent; this never authorizes replies.</label>}
       <label className='flex items-start gap-2'>
         <input
           aria-label='Allow growth AI models'
@@ -78,12 +82,12 @@ export function GrowthConsent({
           onChange={(e) => setConfirmed(e.target.checked)}
           className='mt-1'
         />
-        Allow these models to analyze selected drafts and rewrite using the facts I supply.
+        Allow these models to analyze selected drafts, explain selected readings, and rewrite using the facts I supply.
       </label>
       <Button
         variant='glass'
         disabled={!confirmed || act.isPending}
-        onClick={() => void decide([...new Set([...catalog.routes, catalog.writerRoute])])}
+        onClick={() => void decide(requiredRoutes)}
       >
         Allow growth AI
       </Button>
@@ -113,9 +117,10 @@ export function CheckResult({ result }: { result: PostCheck }) {
       </p>
       <dl className='grid grid-cols-2 gap-2 sm:grid-cols-3'>
         {result.dimensions.map((d) => (
-          <div key={d.id} className='rafii-quiet rounded-xl p-3'>
+          <div key={d.id} className='growth-dimension' data-level={d.level}>
             <dt className='text-muted-foreground text-xs'>{d.label}</dt>
             <dd>{d.levelName}</dd>
+            <div className='growth-level-bars' aria-hidden>{[0,1,2,3].map((i) => <i key={i} className={d.level !== null && i <= d.level ? 'is-on' : ''} />)}</div>
           </div>
         ))}
       </dl>
@@ -147,6 +152,7 @@ export function CheckResult({ result }: { result: PostCheck }) {
           {result.computed.fit_winners.description}
         </p>
       )}
+      {Boolean(result.computed?.creatorFit?.length) && <div><strong>Your approved outcome calibration</strong><ul>{result.computed?.creatorFit?.map((fit) => <li key={fit.dimension + fit.metric}>{fit.dimension}: {fit.level} association with {fit.metric} · {fit.postCount} comparable publications.</li>)}</ul><p className='text-muted-foreground text-xs'>Separate from writing quality. This does not predict reach.</p></div>}
       <p className='text-muted-foreground text-xs'>
         Writing advice. It cannot predict reach or guarantee results.
       </p>

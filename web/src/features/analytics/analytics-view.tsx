@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SectionHeading, StatusChip } from '@/features/workspace/rafii-parts';
 import { TimeBackSection } from '@/features/time-back/time-back-section';
+import { GrowthEntry } from '@/features/growth/studio-parts';
 import { useAnalytics, useChannels, useSnapshot } from '@/lib/api/hooks';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -167,6 +168,7 @@ export function AnalyticsView() {
   return (
     <PageContainer pageTitle='Analytics' infoContent={infoContent} pageHeaderAction={headerAction}>
       <div className='flex min-w-0 flex-col gap-6'>
+        <GrowthEntry />
         <TimeBackSection />
         <SectionHeading id='post-performance-heading' title='Post performance' description='Each platform’s own numbers for your published posts.' className='pt-2' />
         {channels.error ? (

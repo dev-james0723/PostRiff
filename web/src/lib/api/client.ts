@@ -60,7 +60,7 @@ import type {
 import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsights, SiteAgentMessageBody, SiteAgentProposalView, SiteAgentTurnResult } from '@/lib/site-agent/types';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { PhoneCall, PhonePreferences, PhoneSettingsData } from '@/lib/phone/types';
-import type { GrowthCatalog, PostCheck, PostRewrite, GenomeResponse, CreatorGenome, PerformanceFeedback, DraftCheckBody } from '@/lib/growth/types';
+import type { GrowthCatalog, PostCheck, PostRewrite, GenomeResponse, CreatorGenome, PerformanceFeedback, DraftCheckBody, GrowthOverview, Postmortem, AudienceInsights } from '@/lib/growth/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -135,6 +135,10 @@ export function createApi(getToken: TokenSource) {
     creatorGenome: (w: string) => get<GenomeResponse>(`${ws(w)}/growth/genome`),
     analyzeHistory: (w: string, body: { data?: string; account?: string; connectionId?: string; sourceIds?: string[]; ownContent: boolean; retainText: boolean; confirmed: boolean; requestKey: string }) => send<{ genome: CreatorGenome }>('POST', `${ws(w)}/growth/history`, body, 240_000),
     performanceFeedback: (w: string, jobId: string) => get<PerformanceFeedback>(`${ws(w)}/growth/feedback/${encodeURIComponent(jobId)}`),
+    growthOverview: (w: string) => get<GrowthOverview>(`${ws(w)}/growth/postmortems`),
+    postmortem: (w: string, body: { jobId: string; horizon: string; confirmed: boolean; requestKey: string }) => send<Postmortem>('POST', `${ws(w)}/growth/postmortems`, body, 90_000),
+    audienceInsights: (w: string) => get<AudienceInsights>(`${ws(w)}/growth/audience`),
+    analyzeAudience: (w: string, body: { days: number; confirmed: boolean; requestKey: string }) => send<{ clusters: AudienceInsights['clusters']; analyzed: number; available: number; withheld: number; partial: boolean }>('POST', `${ws(w)}/growth/audience`, body, 240_000),
     publicPostDoctor: async (body: { text: string; platform: string; language: string; confirmed: boolean }) => parse<PostCheck>(await fetch('/api/post-doctor', { method: 'POST', headers: await headers(false), body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) })),
     contentDNA: (token: string) => get<{ labels: string[]; description: string }>(`/api/content-dna/${encodeURIComponent(token)}`, false),
     /* public */

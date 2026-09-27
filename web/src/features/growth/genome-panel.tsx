@@ -85,7 +85,7 @@ export function GenomePanel() {
   }
 
   return (
-    <Surface material='quiet' className='flex flex-col gap-4' aria-label='Creator Genome'>
+    <Surface material='quiet' className='growth-genome flex flex-col gap-4' aria-label='Creator Genome'>
       <div>
         <h2 className='text-lg font-medium'>Creator Genome</h2>
         <p className='text-muted-foreground text-sm'>

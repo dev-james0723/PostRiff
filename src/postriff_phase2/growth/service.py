@@ -26,12 +26,16 @@ from .jev import JevService
 from .post_doctor import PostDoctorService, level_names
 from .router import AIModelRouter, RouterError, TASKS, chat_from_runtime
 from .usage import MemoryUsageSink, PostgresUsageSink
+from .closed_loop import ClosedLoop, ACTIONS as CLOSED_LOOP_ACTIONS, SUMMARY_ROUTE
+from . import postmortem, creator_calibration
+from .decision_loop import DecisionLoop
 
 ROUTES = ('cloud:vercel-ai-gateway:typesafe-ai/jev', 'cloud:vercel-ai-gateway:google/gemini-2.5-flash-lite')
-ACTIONS = ('growth_consent','genome_approve','genome_restore','post_doctor_accept','post_doctor_feedback','share_card_create','share_card_revoke')
-FLAGS = {'check':'POSTRIFF_POST_DOCTOR','rewrite':'POSTRIFF_POST_DOCTOR','genome':'POSTRIFF_GENOME','public':'POSTRIFF_PUBLIC_POST_DOCTOR'}
+ACTIONS = ('growth_consent','genome_approve','genome_restore','post_doctor_accept','post_doctor_feedback','share_card_create','share_card_revoke',*CLOSED_LOOP_ACTIONS)
+FLAGS = {'check':'POSTRIFF_POST_DOCTOR','rewrite':'POSTRIFF_POST_DOCTOR','genome':'POSTRIFF_GENOME','public':'POSTRIFF_PUBLIC_POST_DOCTOR',
+         'postmortem':'POSTRIFF_POSTMORTEM','audience':'POSTRIFF_AUDIENCE_MINER'}
 # Bounded input/output/work caps. Reservations are conservative protection, never reported as actual costs.
-RESERVATIONS = {'check':10_000,'rewrite':200_000,'genome':800_000,'public':10_000}
+RESERVATIONS = {'check':10_000,'rewrite':200_000,'genome':800_000,'public':10_000,'postmortem':200_000,'audience':800_000}
 
 
 def context_fingerprint(state):
@@ -50,7 +54,9 @@ def bindings_current(state, bindings):
 
 def current_genome(state):
     saved = (state.get('brandHub') or {}).get('genome')
-    if (not saved or saved.get('status')!='approved' or not saved.get('evidenceBindings') or not bindings_current(state,saved['evidenceBindings'])
+    if (not saved or saved.get('status')!='approved' or not (saved.get('evidenceBindings') or saved.get('outcomeBindings'))
+            or not bindings_current(state,saved.get('evidenceBindings',[]))
+            or not postmortem.bindings_current(state,saved.get('outcomeBindings',[]))
             or saved.get('consentDigest')!=digest(state.get('growthConsent'))):
         return None
     return saved
@@ -89,7 +95,7 @@ def client_result(value):
 
 def prediction(result,run_id,revision,text):
     return {'runId':run_id,'textDigest':digest(text),'revision':revision,'levels':result['dimensions'],
-            'baseline':result['baseline'],'questionSet':result['questionSet'],'evaluation':result.get('_judgment',{})}
+            'baseline':result['baseline'],'questionSet':result['questionSet'],'evaluation':result.get('_judgment',{}),'scores':result.get('_scores',{})}
 
 
 class GrowthService:
@@ -100,6 +106,7 @@ class GrowthService:
         self.clock = clock or hosted.clock
         self.router_factory = router_factory
         self.profile = profile
+        self.closed_loop = ClosedLoop(self)
         self.repository.effects.append(self.invalidate)
 
     def enabled(self,kind):
@@ -195,6 +202,8 @@ class GrowthService:
         saved=self.repository.get(workspace_id,token)
         _runtime,writer,_note=self.hosted.ideas.resolve_writer(saved['state'],None)
         return {'postDoctor':self.enabled('check'),'genome':self.enabled('genome'),
+                'postmortem':self.enabled('postmortem'),'audienceMiner':self.enabled('audience'),
+                'summaryRoute':SUMMARY_ROUTE,'audienceConsent':saved['state'].get('growthConsent',{}).get('audience') is True,
                 'consented':bool(saved['state'].get('growthConsent',{}).get('routes')),
                 'routes':list(ROUTES),'allowedRoutes':saved['state'].get('growthConsent',{}).get('routes',[]),
                 'writer':writer,'writerRoute':'cloud:vercel-ai-gateway:'+writer,
@@ -279,7 +288,7 @@ class GrowthService:
                     amount=max(amount,math.ceil(cost*1_000_000)+20_000)
             self.reserve(cur,'global',amount,self.cap('POSTRIFF_GROWTH_DAILY_USD_CAP'),10000)
             self.reserve(cur,workspace_id,amount,self.cap('POSTRIFF_WORKSPACE_GROWTH_DAILY_USD_CAP'),1000)
-            self.reserve(cur,f'{workspace_id}:{kind}',0,1,{'check':10,'rewrite':1,'genome':1}[kind])
+            self.reserve(cur,f'{workspace_id}:{kind}',0,1,{'check':10,'rewrite':1,'genome':1,'postmortem':10,'audience':2}[kind])
             run_id=str(uuid.uuid4());context=context_fingerprint(state)
             cur.execute('INSERT INTO public.pr_post_doctor_runs(id,workspace_id,request_key,kind,status,fingerprint,context_fingerprint,created_by) VALUES(%s,%s,%s,%s,\'running\',%s,%s,%s)',
                         (run_id,workspace_id,key,kind,fingerprint,context,principal))
@@ -329,6 +338,11 @@ class GrowthService:
         result=serialize(self._doctor(router).check(workspace_id=workspace_id,draft_text=draft['text'],platform=draft['platform'],
                                                   lang=draft['language'],creator=creator,posts_with_metrics=measured),draft['language'])
         result['computed']['fit_winners']=genome.fit_winners(result['_scores'],posts,target)
+        if workspace_id and self.enabled('postmortem'):
+            with self.hosted.connection_factory() as db,db.cursor() as cur:
+                profile=self.closed_loop.active_calibration(cur,workspace_id,state)
+            if profile:
+                result['computed']['creatorFit']=creator_calibration.apply(profile,target,result['_judgment']['model'],result['_judgment']['rubricDigest'],result['_scores'])
         result['draft']={**draft,'digest':digest(draft['text'])}
         result['baseline']={'measuredPosts':measured,'basis':'24h','genomeId':(current_genome(state) or {}).get('id')}
         result['judgment']={'model':result['_judgment']['model'],'questionSet':result['questionSet'],'calibrated':result['_judgment']['calibrated']}
@@ -454,7 +468,9 @@ class GrowthService:
         sink=MemoryUsageSink();result=None;error=None
         try:
             deadline=time.monotonic()+220;posts=[]
-            for post in run['prepared']['posts']:
+            loop=DecisionLoop(genome.MAX_POSTS)
+            while (source_id:=loop.choose([p['sourceId'] for p in run['prepared']['posts']])) is not None:
+                post=next(p for p in run['prepared']['posts'] if p['sourceId']==source_id)
                 if time.monotonic()>deadline:raise AlphaError('History analysis reached its time limit; no partial Genome was approved.',503)
                 source=next(s for s in run['state']['sources'] if s['id']==post['sourceId'])
                 # Exact-route grants may differ across existing samples. Never expand them through fallback.
@@ -469,7 +485,8 @@ class GrowthService:
                 if judgment.status!='ok' or not assigned:
                     raise AlphaError('This history did not have enough AI evidence to propose a Genome.',503,code='genome_evidence_unavailable')
                 posts.append({**post,'labels':assigned,'scores':{d.id:d.score for d in post_result.dimensions if d.score is not None}})
-            result={'posts':posts}
+                loop.finish(source_id,'completed')
+            result={'posts':posts,'decisions':loop.events}
         except Exception as caught:error=caught
         def store(cur,state,principal,result):
             for p in result['posts']:
@@ -477,26 +494,32 @@ class GrowthService:
                             (workspace_id,p['sourceId'],p['sourceRevision'],p['platform'],p['connectionId'],p['providerPostId'],p['language'],p['format'],p['timeBucket'],json.dumps(p['labels']),json.dumps(p['scores']),json.dumps(p['suppliedMetrics'])))
             proposed=genome.proposal(self._history(cur,workspace_id,state));vid=str(uuid.uuid4());proposed.update(id=vid,consentDigest=digest(state.get('growthConsent')))
             cur.execute('INSERT INTO public.pr_genome_versions(id,workspace_id,body,created_by) VALUES(%s,%s,%s::jsonb,%s)',(vid,workspace_id,json.dumps(proposed),principal))
-            return {'genome':proposed}
+            return {'genome':proposed,'decisions':result['decisions']}
         return self._finish(workspace_id,token,run,sink,result,error,store)
 
     def genome(self,workspace_id,token):
         self.session(token);self.gate('genome')
         with self.repository.transaction(token,workspace_id) as (cur,row,_):
             cur.execute('SELECT id::text,status,body FROM public.pr_genome_versions WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 20',(workspace_id,))
-            versions=[{**r[2],'id':r[0],'status':r[1] if bindings_current(row[1],r[2].get('evidenceBindings',[])) and r[2].get('consentDigest')==digest(row[1].get('growthConsent')) else 'stale'} for r in cur.fetchall()]
+            versions=[{**r[2],'id':r[0],'status':r[1] if bindings_current(row[1],r[2].get('evidenceBindings',[])) and postmortem.bindings_current(row[1],r[2].get('outcomeBindings',[])) and r[2].get('consentDigest')==digest(row[1].get('growthConsent')) else 'stale'} for r in cur.fetchall()]
             sources={s['id']:s for s in row[1].get('sources',[]) if s.get('active') and s.get('selected')}
             evidence={p['id']:{'title':sources[p['sourceId']].get('title','Owned post'),'text':sources[p['sourceId']]['text'],
                                 'platform':p['platform'],'providerPostId':p['providerPostId']} for p in self._history(cur,workspace_id,row[1]) if p['sourceId'] in sources}
+            for job in row[1].get('phase2',{}).get('jobs',[]):
+                if job.get('state')=='verified':
+                    payload=job.get('manifest',{}).get('payload',{})
+                    evidence[job['id']]={'title':'Verified publication','text':payload.get('text',''),'platform':job['manifest'].get('platform'),'providerPostId':job.get('providerReference')}
             cur.execute('SELECT id::text,revoked_at FROM public.pr_share_cards WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 20',(workspace_id,))
             return {'versions':versions,'active':current_genome(row[1]),'evidence':evidence,'shares':[{'id':r[0],'revoked':r[1] is not None} for r in cur.fetchall()]}
 
     def action(self,workspace_id,token,revision,action,payload):
         from ..hosted import audit
+        if action in CLOSED_LOOP_ACTIONS:
+            return self.closed_loop.action(workspace_id,token,revision,action,payload)
         self.session(token)
         kind='genome' if action.startswith(('genome_','share_card_')) else 'check'
         if action=='growth_consent':
-            if not (self.enabled('genome') or self.enabled('check')):self.gate('check')
+            if not any(self.enabled(k) for k in ('genome','check','postmortem','audience')):self.gate('check')
         else:self.gate(kind)
         response={}
         def command(state,principal):
@@ -506,15 +529,17 @@ class GrowthService:
                     raise AlphaError('Confirm the exact growth analysis and rewrite routes.')
                 # Rewrite grants can name only offered cloud writer models.
                 models={r['id'] for r in self.hosted.ideas.model_catalog().get('models',[]) if isinstance(r,dict)}
-                if any(r not in ROUTES and r.removeprefix('cloud:vercel-ai-gateway:') not in models for r in routes):
+                if any(r not in (*ROUTES,SUMMARY_ROUTE) and r.removeprefix('cloud:vercel-ai-gateway:') not in models for r in routes):
                     raise AlphaError('Choose currently offered model routes.')
-                state['growthConsent']={'routes':list(dict.fromkeys(routes)),'actor':principal,'at':self.clock()}
+                state['growthConsent']={'routes':list(dict.fromkeys(routes)),'actor':principal,'at':self.clock(),
+                                        'audience':payload.get('audience') is True and bool(routes)}
             return state
         def after(cur,state,principal):
             if action in ('genome_approve','genome_restore'):
                 cur.execute('SELECT body,status FROM public.pr_genome_versions WHERE workspace_id=%s AND id::text=%s FOR UPDATE',(workspace_id,payload.get('genomeId')))
                 row=cur.fetchone()
                 if (not row or row[1]=='stale' or not bindings_current(state,row[0].get('evidenceBindings',[]))
+                        or not postmortem.bindings_current(state,row[0].get('outcomeBindings',[]))
                         or row[0].get('consentDigest')!=digest(state.get('growthConsent'))):
                     raise AlphaError('This Genome is stale or unavailable.',409)
                 if action=='genome_restore' and row[1] not in ('approved','superseded'):
@@ -592,6 +617,11 @@ class GrowthService:
         if changed:cur.execute('DELETE FROM public.pr_post_history WHERE workspace_id=%s AND source_id=ANY(%s)',(workspace_id,changed))
         cur.execute("UPDATE public.pr_genome_versions SET status='stale' WHERE workspace_id=%s",(workspace_id,))
         cur.execute('UPDATE public.pr_share_cards SET revoked_at=coalesce(revoked_at,now()) WHERE workspace_id=%s',(workspace_id,))
+        cur.execute("SELECT to_regclass('public.pr_audience_clusters')")
+        if cur.fetchone()[0] is not None and before.get('growthConsent')!=after.get('growthConsent'):
+            cur.execute('DELETE FROM public.pr_audience_clusters WHERE workspace_id=%s',(workspace_id,))
+            cur.execute('DELETE FROM public.pr_comment_judgments WHERE workspace_id=%s',(workspace_id,))
+            cur.execute("UPDATE public.pr_post_doctor_runs SET body='{}',status='cancelled' WHERE workspace_id=%s AND kind='audience'",(workspace_id,))
 
     def share(self,token):
         self.gate('genome')
@@ -599,7 +629,7 @@ class GrowthService:
         with self.hosted.connection_factory() as db,db.cursor() as cur:
             cur.execute("SELECT c.labels,g.body,w.state FROM public.pr_share_cards c JOIN public.pr_workspaces w ON w.id=c.workspace_id JOIN public.pr_genome_versions g ON g.id=c.genome_id WHERE c.token_hash=%s AND c.revoked_at IS NULL AND g.status<>'stale' AND NOT(w.state ? 'accountDeletion')",(hashlib.sha256(token.encode()).hexdigest(),))
             row=cur.fetchone()
-        if not row or not bindings_current(row[2],row[1].get('evidenceBindings',[])) or row[1].get('consentDigest')!=digest(row[2].get('growthConsent')):
+        if not row or not bindings_current(row[2],row[1].get('evidenceBindings',[])) or not postmortem.bindings_current(row[2],row[1].get('outcomeBindings',[])) or row[1].get('consentDigest')!=digest(row[2].get('growthConsent')):
             raise AlphaError('Content DNA unavailable.',404)
         return {'labels':row[0],'description':'Creator-selected writing labels. No private post text or performance figures.'}
 
@@ -650,4 +680,10 @@ class GrowthService:
             public=cur.rowcount
             cur.execute('DELETE FROM public.pr_post_doctor_runs WHERE id IN (SELECT id FROM public.pr_post_doctor_runs WHERE expires_at<=now() LIMIT 500)')
             cur.execute("DELETE FROM public.pr_growth_budgets WHERE (scope,day) IN (SELECT scope,day FROM public.pr_growth_budgets WHERE day<current_date-interval '30 days' LIMIT 500)")
+            cur.execute("SELECT to_regclass('public.pr_postmortems')")
+            if cur.fetchone()[0] is not None:
+                for table in ('pr_postmortems','pr_audience_clusters'):
+                    cur.execute(f'DELETE FROM public.{table} WHERE id IN (SELECT id FROM public.{table} WHERE expires_at<=now() LIMIT 500)')
+                cur.execute('DELETE FROM public.pr_comment_judgments WHERE (workspace_id,thread_id) IN (SELECT workspace_id,thread_id FROM public.pr_comment_judgments WHERE expires_at<=now() LIMIT 500)')
+                cur.execute("UPDATE public.pr_post_doctor_runs SET body='{}',status='cancelled' WHERE id IN (SELECT id FROM public.pr_post_doctor_runs WHERE kind='audience' AND created_at<now()-interval '90 days' AND body<>'{}'::jsonb LIMIT 500)")
         return {'status':'complete','publicChecksRemoved':public}

@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
+import { GrowthEntry } from '@/features/growth/studio-parts';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { Checkbox } from '@/components/motion/checkbox';
@@ -577,6 +578,7 @@ function HomeWorkspace() {
             </h1>
           </div>
 
+          <GrowthEntry audience />
           {canEdit && <div className='flex flex-wrap items-center gap-2 text-xs'>
             <Button variant='quiet' size='sm' onClick={saveBrief} disabled={preparing || generation.busy || !text.trim() || savedBrief === text}>Save brief</Button>
             {savedBrief !== null && <Button variant='quiet' size='sm' onClick={clearBrief}>Clear saved brief</Button>}

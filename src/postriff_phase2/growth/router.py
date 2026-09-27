@@ -19,6 +19,10 @@ from . import jev as J
 from .usage import UsageEvent
 
 TASKS = {
+    "audience.classify": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 4.0, 1000),
+    "postmortem.judge": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 4.0, 1000),
+    "audience.synthesize": ("chat", "anthropic/claude-haiku-4.5", (), 30.0, 2500),
+    "postmortem.explain": ("chat", "anthropic/claude-haiku-4.5", (), 30.0, 1000),
     # task: (kind, primary model, fallback chain, time budget seconds, max output tokens for chat)
     "postdoctor.judge": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 3.0, 1500),
     "genome.label": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 8.0, 1500),

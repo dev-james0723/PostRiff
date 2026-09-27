@@ -21,6 +21,7 @@
 
 /* Rafii design DNA: monochrome glass tokens, material utilities and motion roles. */
 @import './rafii.css';
+@import './growth.css';
 
 @layer base {
   * {

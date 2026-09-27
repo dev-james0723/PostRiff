@@ -1,0 +1,5 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-v3-phase2/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+== tests/phase2/postgres_growth_phase1.py exit=0
+{"status": "PASS", "execution": "disposable PostgreSQL + zero-network deterministic models", "checks": ["default off, consent, API token and workspace isolation", "check ledger, exact replay, rewrite/recheck, selective edits and stale rejection", "rewrite quota, grounding rejection and full recheck binding", "in-flight revocation fencing and actual-attempt ledger", "memory revocation stops the next model call", "owned history, proposed/approve/restore, voice reuse, label-only sharing and revocation", "workspace route revocation overrides older sample grants", "ten signed checks per day enforced before model dispatch", "anonymous minimization, abuse allowance and retention cleanup", "verified revision prediction and official like-for-like 1h/24h/7d feedback", "RLS privileges and deletion cascades"], "realModelCalls": 0}
+
+{"status": "pass", "execution": "disposable-local-postgres", "failed": []}

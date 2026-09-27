@@ -11,6 +11,7 @@ const apiOrigin = process.env.POSTRIFF_API_ORIGIN;
 const shouldProxyApi = Boolean(apiOrigin) || process.env.NODE_ENV === 'development';
 
 const baseConfig: NextConfig = {
+  allowedDevOrigins: ['127.0.0.1'],
   output: process.env.BUILD_STANDALONE === 'true' ? 'standalone' : undefined,
   // Local only: `next dev` allows one server per dist dir, so a second harness (another API port)
   // runs with POSTRIFF_DIST_DIR=.next-alt. Production builds never set it.
