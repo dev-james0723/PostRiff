@@ -1,11 +1,12 @@
 # Rafii → Dial phone integration
 
-Execution state: **locally implemented and tested; account setup, deployment and real calls are pending**.
-Branch: `feat/rafii-dial-phone`, worktree: `/Users/ouxianxing/Documents/James-Au-Studio-dial`.
+Execution state: **locally implemented and tested; Self-Hosted access reported granted; account configuration, deployment and real calls are pending**.
+Candidate branch: `codex/dial-access-finalization`, based on `feat/rafii-dial-phone` and the current local `origin/consumer-saas`.
 The [verification receipt and evidence](evidence/dial-phone-2026-09-27/verification.json)
 pin the tested files and distinguish local checks from pending external execution.
-Base: current `origin/consumer-saas` at `d5bb9d6`, plus the existing Phone Mode repair
-`eacba35` cherry-picked as `e7ee572`. Other worktrees were preserved.
+The original Dial implementation started from `origin/consumer-saas` at `d5bb9d6`,
+with Phone Mode repair `eacba35` cherry-picked as `e7ee572`. This candidate also merges
+the current local `origin/consumer-saas` at `1afda4a`; other worktrees were preserved.
 
 ## What changed
 
@@ -46,9 +47,11 @@ it has not been exported or saved to Rafii's server environment. There are no we
 Account evidence from the signed-in dashboard:
 
 - After the user's explicit approval, the Self-Hosted request below was submitted once on
-  2026-09-27. Dial displays **Your request is being reviewed** and says a human usually
-  reviews requests within a business day. It will email the account owner when decided.
-  Access has not been granted and call routing has not been activated.
+  2026-09-27. The user subsequently reported that access was granted. In the signed-in
+  dashboard, the Self-Hosted page now exposes the Audio mode WebSocket configuration,
+  Save and Enable controls. Audio mode remains **Disabled**, with no WebSocket URL or
+  signing secret saved. A credential-backed `GET /api/v1/self-hosted` check has not yet
+  confirmed the account's `access` value; that check is still required before activation.
 - The number is **not registered for 10DLC**. Outbound US SMS/MMS is blocked; voice and inbound
   texts are unaffected. Rafii's new-user SMS verification for US numbers needs registration
   before launch. The dashboard quotes a **one-time $25 fee** and **3–5 business days**;
@@ -69,7 +72,12 @@ The provider readiness check reports `smsReady: false` and the 10DLC registratio
 US carrier registration is incomplete. This diagnostic does not block voice calls to users
 whose Rafii numbers are already verified; all existing consent and spending gates still apply.
 
-The Self-Hosted access request is submitted and pending provider review. No 10DLC
+After that local merge, 49 focused Dial, Phone Mode, media and deployment unit tests pass.
+The no-secret local setup check still reports `configuration_pending`: Dial credentials,
+the public origin, encryption key and telephony rate are absent from this worktree.
+It has not made a credential-backed provider GET, activated Audio mode or placed a call.
+
+The Self-Hosted access request was submitted and the user reports approval. No 10DLC
 registration, webhook registration, mode activation, deployment or live call has been submitted.
 
 The [10DLC candidate](RAFII_DIAL_10DLC_CANDIDATE_2026-09-27.json) is **not ready to submit**.
