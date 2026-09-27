@@ -1,0 +1,58 @@
+{
+  "state": "candidate_not_ready_to_submit",
+  "preparedAt": "2026-09-27T18:02:41.847211+00:00",
+  "originatingNumber": "+16055978162",
+  "registrationKind": "sole_proprietor",
+  "kindSource": "User selected Sole proprietor (no EIN) in this thread",
+  "vertical": "TECHNOLOGY",
+  "brandNameProposed": "Rafii",
+  "ownerFieldsPending": [
+    "confirmed trading name",
+    "legal first and last name",
+    "US or Canadian registered street/city/state or province/postal code",
+    "approval to use the selected account email and mobile as carrier contacts"
+  ],
+  "campaignProposal": {
+    "description": "Rafii sends one-time SMS verification codes to authenticated users who request verification of their own phone number in their Rafii account. A verified number is required for user-consented assistant phone calls. This SMS program is limited to requested verification codes.",
+    "messageFlow": "Proposed consent screen: an authenticated user opens Rafii phone settings, enters a phone number with its country code, reads the SMS program notice and links to its privacy policy and terms, and clicks Send verification code to request one verification text. The notice names Rafii, explains that message and data rates may apply, and gives STOP opt-out instructions. This notice and the STOP handling must be implemented and deployed before this description is filed.",
+    "samples": [
+      "Your Rafii verification code is 123456. It expires in 10 minutes. Do not share it. Reply STOP to opt out.",
+      "Your Rafii verification code is 123456. It expires in 10 minutes. Do not share it. Reply STOP to opt out."
+    ],
+    "containsUrls": false,
+    "containsPhones": false
+  },
+  "privacyAndTerms": {
+    "ownerUrls": null,
+    "dialPublishedNoticeAccepted": false,
+    "status": "owner review and explicit publication/agreement approval required"
+  },
+  "submissionBlockers": [
+    "Owner identity/address/contact confirmation is pending; no private identity/address data is stored in this file.",
+    "The current Dial OTP code omits opt-out wording. The proposed samples are future wording, not evidence of deployed messages.",
+    "STOP handling and durable SMS suppression must be implemented or officially verified before representing it to carriers; the current phone endpoint handles call events only.",
+    "The proposed SMS consent notice and program privacy/terms links must be visible on the deployed verification screen before capturing opt-in evidence.",
+    "Credit balance is $2, below the $25 registration fee. Funding and final Submit & pay authorization are pending."
+  ],
+  "carrierMobileVerification": "Carrier will text the approved contact mobile in 1-2 business days; owner must reply YES within 24 hours.",
+  "fee": {
+    "usd": 25,
+    "source": "Dial account credit balance",
+    "currentBalanceUsd": 2,
+    "minimumAdditionalCreditUsd": 23,
+    "payment": "not_authorized_or_executed"
+  },
+  "externalExecution": {
+    "registration": "not_submitted",
+    "noticePublication": "not_run",
+    "payment": "not_run",
+    "sms": "not_sent"
+  },
+  "sources": [
+    "https://getdial.ai/10dlc/cmuk3do10001k0fqgt2yqnvwn",
+    "https://docs.getdial.ai/documentation/platform/manage-phone-numbers",
+    "https://docs.getdial.ai/openapi.json",
+    "src/postriff_phase2/phone/providers/dial.py",
+    "web/src/features/rafii-phone/phone-settings.tsx"
+  ]
+}

@@ -49,7 +49,7 @@
     "sourceHashes": {
       "src/postriff_phase2/phone/providers/dial.py": "8dd8da77c7a1542f512d36125c69557748b6401788693a605c63cf6261e71dc1",
       "tests/test_rafii_dial.py": "589c52eba9cd71747bca87164b333803abc67cb941b40a46a6a50c85625cffc2",
-      "docs/design/rafii-live-agent/RAFII_DIAL_PHONE_SETUP_2026-09-27.md": "c29d65844ca7cdb35b4534ceb3ff2201dff81cf5cbaa8d5cc76f77e836238a67"
+      "docs/design/rafii-live-agent/RAFII_DIAL_PHONE_SETUP_2026-09-27.md": "6b95b0013d2d650eaf8a14e6e972aa23a099ed128e8892e84add5699076c29ab"
     },
     "reuse": "The provider and test source hashes still match the 59 passing unit tests and local PostgreSQL acceptance; only setup receipt documentation changed."
   },
@@ -83,5 +83,17 @@
     "companyUrl": null,
     "accessGranted": false,
     "routingActivated": false
+  },
+  "tenDlcDraft": {
+    "kind": "sole_proprietor",
+    "kindChosenBy": "user",
+    "vertical": "TECHNOLOGY",
+    "browserSelection": "prepared",
+    "status": "not_ready_to_submit",
+    "privateOwnerFields": "pending",
+    "submission": "not_run",
+    "payment": "not_run",
+    "noticePublication": "not_run",
+    "ref": "../../RAFII_DIAL_10DLC_CANDIDATE_2026-09-27.json"
   }
 }

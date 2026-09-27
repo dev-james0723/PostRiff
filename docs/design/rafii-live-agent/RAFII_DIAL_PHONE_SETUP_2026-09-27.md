@@ -55,6 +55,10 @@ Account evidence from the signed-in dashboard:
   registration and payment have not been submitted. The registration flow requires a
   confirmed sole-proprietor or business identity, brand/contact/address details, and the
   campaign's consent flow and sample messages. These details must come from the account owner.
+  The user selected **sole proprietor (no EIN)**. The browser draft selects **Technology**;
+  legal name, trading name, a US/Canadian registered address and carrier contact confirmation
+  are pending. The carrier will text the contact mobile in 1–2 business days and requires a
+  **YES** reply within 24 hours. The $2 balance is below the $25 submission fee.
 - Billing shows **$5 welcome credit**, **$3 deducted for the first month of number ownership**,
   and **$2 remaining**. The line costs **$3/month plus usage**. No payment method is attached,
   auto-reload is off, and new spend pauses at a zero balance.
@@ -67,6 +71,12 @@ whose Rafii numbers are already verified; all existing consent and spending gate
 
 The Self-Hosted access request is submitted and pending provider review. No 10DLC
 registration, webhook registration, mode activation, deployment or live call has been submitted.
+
+The [10DLC candidate](RAFII_DIAL_10DLC_CANDIDATE_2026-09-27.json) is **not ready to submit**.
+Its sample SMS includes proposed opt-out wording that is not yet in the runtime. Before
+filing it, implement or officially verify STOP suppression, deploy the matching SMS consent
+notice, and review the messaging privacy/terms. Dial's checkbox to publish notices in the
+operator's name remains unchecked. Do not present a proposed message/consent flow as deployed.
 
 Submitted access-request text:
 
