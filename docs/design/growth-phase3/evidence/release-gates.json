@@ -1,0 +1,10 @@
+{
+  "execution": "not_run",
+  "result": {
+    "status": "NOT_ESTABLISHED",
+    "precisionAt5": null,
+    "weeklyDraftAdoption": null,
+    "withinQuote": null
+  },
+  "reason": "No real provider or user-adoption dataset was collected."
+}

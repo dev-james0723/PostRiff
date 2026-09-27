@@ -28,10 +28,11 @@ from .router import AIModelRouter, RouterError, TASKS, chat_from_runtime
 from .usage import MemoryUsageSink, PostgresUsageSink
 from .closed_loop import ClosedLoop, ACTIONS as CLOSED_LOOP_ACTIONS, SUMMARY_ROUTE
 from . import postmortem, creator_calibration
+from ..radar.service import ACTIONS as RADAR_ACTIONS
 from .decision_loop import DecisionLoop
 
 ROUTES = ('cloud:vercel-ai-gateway:typesafe-ai/jev', 'cloud:vercel-ai-gateway:google/gemini-2.5-flash-lite')
-ACTIONS = ('growth_consent','genome_approve','genome_restore','post_doctor_accept','post_doctor_feedback','share_card_create','share_card_revoke',*CLOSED_LOOP_ACTIONS)
+ACTIONS = ('growth_consent','genome_approve','genome_restore','post_doctor_accept','post_doctor_feedback','share_card_create','share_card_revoke',*CLOSED_LOOP_ACTIONS,*RADAR_ACTIONS)
 FLAGS = {'check':'POSTRIFF_POST_DOCTOR','rewrite':'POSTRIFF_POST_DOCTOR','genome':'POSTRIFF_GENOME','public':'POSTRIFF_PUBLIC_POST_DOCTOR',
          'postmortem':'POSTRIFF_POSTMORTEM','audience':'POSTRIFF_AUDIENCE_MINER'}
 # Bounded input/output/work caps. Reservations are conservative protection, never reported as actual costs.
@@ -107,6 +108,8 @@ class GrowthService:
         self.router_factory = router_factory
         self.profile = profile
         self.closed_loop = ClosedLoop(self)
+        from ..radar.service import Radar
+        self.radar = Radar(self)
         self.repository.effects.append(self.invalidate)
 
     def enabled(self,kind):
@@ -201,7 +204,7 @@ class GrowthService:
         self.session(token)
         saved=self.repository.get(workspace_id,token)
         _runtime,writer,_note=self.hosted.ideas.resolve_writer(saved['state'],None)
-        return {'postDoctor':self.enabled('check'),'genome':self.enabled('genome'),
+        return {'radar':self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get('POSTRIFF_RADAR')=='1','postDoctor':self.enabled('check'),'genome':self.enabled('genome'),
                 'postmortem':self.enabled('postmortem'),'audienceMiner':self.enabled('audience'),
                 'summaryRoute':SUMMARY_ROUTE,'audienceConsent':saved['state'].get('growthConsent',{}).get('audience') is True,
                 'consented':bool(saved['state'].get('growthConsent',{}).get('routes')),
@@ -514,12 +517,14 @@ class GrowthService:
 
     def action(self,workspace_id,token,revision,action,payload):
         from ..hosted import audit
+        if action in RADAR_ACTIONS:
+            return self.radar.action(workspace_id,token,revision,action,payload)
         if action in CLOSED_LOOP_ACTIONS:
             return self.closed_loop.action(workspace_id,token,revision,action,payload)
         self.session(token)
         kind='genome' if action.startswith(('genome_','share_card_')) else 'check'
         if action=='growth_consent':
-            if not any(self.enabled(k) for k in ('genome','check','postmortem','audience')):self.gate('check')
+            if not (self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get('POSTRIFF_RADAR')=='1') and not any(self.enabled(k) for k in ('genome','check','postmortem','audience')):self.gate('check')
         else:self.gate(kind)
         response={}
         def command(state,principal):
@@ -605,6 +610,7 @@ class GrowthService:
         return {**self.hosted._present(result),**response}
 
     def invalidate(self,cur,workspace_id,before,after,principal):
+        self.radar.invalidate(cur,workspace_id,before,after,principal)
         changed=[]
         for old in before.get('sources',[]):
             if old.get('kind')!='voice_sample':continue

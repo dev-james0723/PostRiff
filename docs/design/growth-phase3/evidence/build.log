@@ -1,0 +1,105 @@
+
+> postriff-web@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.3.5 (webpack)
+✓ Running next.config.ts took 3.5s
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 110s
+  Running TypeScript ...
+
+  We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+  The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+    - include was updated to add '.next-stage3-build/types/**/*.ts'
+    - include was updated to add '.next-stage3-build/dev/types/**/*.ts'
+
+  Finished TypeScript in 56s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/103) ...
+  Generating static pages using 11 workers (25/103)
+  Generating static pages using 11 workers (51/103)
+  Generating static pages using 11 workers (77/103)
+✓ Generating static pages using 11 workers (103/103) in 2.1s
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /app
+├ ƒ /app/account/api
+├ ƒ /app/account/billing
+├ ƒ /app/account/models
+├ ƒ /app/account/notifications
+├ ƒ /app/account/privacy
+├ ƒ /app/account/profile
+├ ƒ /app/agent
+├ ƒ /app/agent/[conversationId]
+├ ƒ /app/analytics
+├ ƒ /app/automations
+├ ƒ /app/calendar
+├ ƒ /app/channels
+├ ƒ /app/channels/connect
+├ ƒ /app/connectors/connect
+├ ƒ /app/growth
+├ ƒ /app/help
+├ ƒ /app/help/[documentId]
+├ ƒ /app/ideas
+├ ƒ /app/inbox
+├ ƒ /app/library
+├ ƒ /app/overview
+├ ƒ /app/pipeline
+├ ƒ /app/queue
+├ ƒ /app/radar
+├ ƒ /app/weekly
+├ ƒ /app/workspace/audit
+├ ƒ /app/workspace/brand
+├ ƒ /app/workspace/members
+├ ƒ /app/workspace/memory
+├ ƒ /app/workspace/personalization
+├ ƒ /app/workspace/roles
+├ ○ /apple-icon
+├ ƒ /auth/callback
+├ ƒ /auth/reset
+├ ƒ /auth/sign-in
+├ ƒ /auth/sign-up
+├ ƒ /auth/verify
+├ ƒ /changelog
+├ ƒ /channels
+├ ƒ /channels/[slug]
+├ ƒ /channels/connect
+├ ƒ /connectors/connect
+├ ƒ /contact
+├ ƒ /data-deletion
+├ ƒ /dev/channel-bloom
+├ ƒ /dev/content-library
+├ ƒ /dev/language-dialog
+├ ƒ /dev/model-dialog
+├ ƒ /dev/post-previews
+├ ƒ /dev/preview-deck
+├ ƒ /dna/[token]
+├ ƒ /docs
+├ ƒ /docs/[slug]
+├ ○ /icon
+├ ƒ /invite/[token]
+├ ○ /manifest.webmanifest
+├ ○ /opengraph-image
+├ ƒ /post-doctor
+├ ƒ /pricing
+├ ƒ /privacy
+├ ○ /robots.txt
+├ ƒ /security
+├ ○ /sitemap.xml
+├ ƒ /status
+├ ƒ /terms
+└ ○ /twitter-image
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

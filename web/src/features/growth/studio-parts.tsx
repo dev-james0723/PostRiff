@@ -50,7 +50,7 @@ export function useGrowthAction() {
     if (!snapshot.data) return null;
     try {
       const result = await act.mutateAsync({ revision: snapshot.data.revision, action, payload });
-      await Promise.all([snapshot.refetch(), client.invalidateQueries({ queryKey: ['growth-overview'] }), client.invalidateQueries({ queryKey: ['growth-audience'] }), client.invalidateQueries({ queryKey: ['creator-genome'] }), client.invalidateQueries({ queryKey: ['growth-catalog'] })]);
+      await Promise.all([snapshot.refetch(), client.invalidateQueries({ queryKey: ['radar-scans'] }), client.invalidateQueries({ queryKey: ['radar-catalog'] }), client.invalidateQueries({ queryKey: ['growth-overview'] }), client.invalidateQueries({ queryKey: ['growth-audience'] }), client.invalidateQueries({ queryKey: ['creator-genome'] }), client.invalidateQueries({ queryKey: ['growth-catalog'] })]);
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'This change could not be saved.');

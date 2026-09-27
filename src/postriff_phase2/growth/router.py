@@ -19,6 +19,8 @@ from . import jev as J
 from .usage import UsageEvent
 
 TASKS = {
+    "radar.triage": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 4.0, 1000),
+    "radar.analysis": ("chat", "anthropic/claude-haiku-4.5", (), 30.0, 1200),
     "audience.classify": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 4.0, 1000),
     "postmortem.judge": ("evaluate", "typesafe-ai/jev", ("google/gemini-2.5-flash-lite",), 4.0, 1000),
     "audience.synthesize": ("chat", "anthropic/claude-haiku-4.5", (), 30.0, 2500),

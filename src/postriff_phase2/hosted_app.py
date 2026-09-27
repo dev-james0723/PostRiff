@@ -591,6 +591,17 @@ class HostedApplication:
                 result['phone'] = phone_cron(service)
                 learning = getattr(service, "learning", None)
                 growth=getattr(service,'growth',None)
+                if growth is None and isinstance(service,HostedWorkspaceService):
+                    from .growth.http import ensure
+                    growth=ensure(service)
+                # Retention remains active after the discovery flag is switched off.
+                if growth:
+                    try:result['radarRetention']=growth.radar.sweep()
+                    except Exception:result['radarRetention']={'status':'unavailable'}
+                if growth and growth.env.get('POSTRIFF_RADAR')=='1':
+                    try:
+                        result['radar']=growth.radar.tick()
+                    except Exception:result['radar']={'status':'unavailable'}
                 if growth and any(growth.enabled(kind) for kind in ('check','genome','public','postmortem','audience')):
                     try:result['growthRetention']=growth.sweep()
                     except Exception:result['growthRetention']={'status':'unavailable'}
