@@ -357,6 +357,8 @@ export interface OverlayItem {
 }
 
 export interface StrategyHypothesis {
+  canAcceptPlanning?: boolean;
+  planningAccepted?: boolean;
   id: string;
   platform: string;
   dimension: string;
@@ -400,6 +402,43 @@ export interface PerformanceView {
 /* ---------- listening + engagement ---------- */
 
 export interface Opportunity {
+  version?: string;
+  trendObjectId?: string;
+  stage?: string;
+  stageBasis?: string;
+  primaryObjective?: string;
+  actionType?: 'act_now' | 'watch' | 'skip';
+  actionReason?: string;
+  growthRationale?: string;
+  independentCreators?: number;
+  sourceCount?: number;
+  saturation?: string;
+  normalizedEvidence?: { provider: string; account: string; window: string; metric: string; value: number; baseline: number; samples: number; lift: number }[];
+  unknowns?: string[];
+  executionPlans?: {
+    id: string;
+    platform: string;
+    account: string;
+    format: string;
+    hookStrategy: string;
+    reason: string;
+    mediaMode: string;
+    rightsState: string;
+    retentionHypothesis?: string | null;
+  }[];
+  outcomes?: {
+    jobId: string;
+    window: string;
+    state: string;
+    executionPlanId: string;
+    nextAction: string;
+    reason: string;
+    samples: number;
+    baseline: number | null;
+    value: number | null;
+    metric: string | null;
+    businessReturn: string;
+  }[];
   id: string;
   title: string;
   url?: string;
@@ -409,7 +448,7 @@ export interface Opportunity {
   freshness: number;
   score: number;
   confidence: 'low' | 'moderate' | 'high' | string;
-  status: 'open' | 'acted' | 'dismissed';
+  status: 'open' | 'acted' | 'dismissed' | 'watching';
   expiresAt: number;
   createdAt?: number;
   ageDays?: number;
@@ -426,6 +465,8 @@ export interface Watchlist {
 }
 
 export interface ListeningView {
+  flipper?: boolean;
+  activeScout?: boolean;
   watchlists: Watchlist[];
   opportunities: Opportunity[];
   coverage: string;

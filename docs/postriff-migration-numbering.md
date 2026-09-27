@@ -11,12 +11,13 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 023 | `023_time_savings` | Time Back (PR #9) | **Taken, against the reservation.** The owner's decision retired 023, but PR #9 merged `023_time_savings.sql` into `consumer-saas` (`b5b7964`, 2026-09-25 17:30 UTC). Renumbering a migration on the shared branch is riskier than keeping it: once any database applies it, the runner refuses a changed ledger. So 023 now means Time Back, unless the owner decides otherwise. ai-routing's old `023_companion_relay` still moves to 029. The release executor confirms whether production has 023. |
 | 024–025 | `024_notification_core`, `025_coworker_evidence_growth` | Rafii Adaptive Social Coworker (`ecb3ff3`) | Local only. Do not renumber them unless a real dependency requires it. |
 | 026–029 | ai-routing's four migrations, renumbered from 020–023 | ai-routing | Reserved. The files still carry 020–023 on `ai-routing` and must be renamed before that branch lands (checklist below). |
-| 030 | `030_agent_style` | Rafii live agent (not yet on any remote branch) | Reserved. The live-agent work carries it; it lands with that work. |
-| 031 | `031_chat_media` | Chat attachments (chat-context SPEC §10) | Taken. Applied in production with a one-off, sha256-pinned run (see `docs/design/chat-context/VERIFICATION.md`). |
-| 032 | `032_productivity_connectors` | Chat productivity connectors | Taken on `consumer-saas`. Growth branches also contain `032_growth_metric_reads`; reconcile that separate branch's collision before integrating it. |
-| 033 | `033_phone_mode` | Rafii Phone Mode | Taken on `feat/rafii-live-agent`; applied only to disposable local PostgreSQL. Staging and production remain unapplied. |
-| 034 | `034_unified_notifications` | Rafii Unified Notifications | Taken on `feat/rafii-live-agent` after the 2026-09-26 inventory of all 44 registered worktrees (highest 033). Disposable local PostgreSQL only. |
-| 035 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 030 | `030_agent_style` | Rafii live agent | Taken on `consumer-saas`. |
+| 031 | `031_chat_media` | Chat attachments | Taken on `consumer-saas`; production application is recorded in the chat-context verification evidence. |
+| 032 | `032_productivity_connectors` | Chat productivity connectors | Taken on `consumer-saas`. |
+| 033 | `033_phone_mode` | Rafii Phone Mode | Taken on `consumer-saas`; verify the deployment ledger before any one-off apply. |
+| 034 | `034_unified_notifications` | Rafii Unified Notifications | Taken on `consumer-saas`; verify the deployment ledger before any one-off apply. |
+| 035 | `035_growth_metric_reads` | Growth Phase 0 / Active Scout | Renumbered from the isolated branch's 032 during the 2026-09-27 production reconciliation to avoid the existing 032 collision. |
+| 036 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
@@ -67,7 +68,7 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read wt; do
 
 ## Test loader (`tests/phase2/rls.sql`)
 
-It loads 001, 002, 004–012, 018, 019, then 023, 024 and 025 (and later 026–029). **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
+It loads 001, 002, 004–012, 018, 019, then 023–025 and the released 030–035 chain. Migration 035 is Growth Phase 0. **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
 
 ## ai-routing renumbering checklist (later, when that stage is authorized)
 

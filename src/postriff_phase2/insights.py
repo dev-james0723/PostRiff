@@ -15,6 +15,67 @@ FAMILIES = {
 }
 INSIGHT_METRICS = {"threads": ("views", "likes", "replies", "reposts", "quotes", "shares"), "instagram": ("reach", "views", "likes", "comments", "saved", "shares")}
 MIN_COMPARABLE = 3
+# Cross-post comparisons (coworker performance, campaign triggers) read every post at the same age: the +24h scheduled
+# reading, or a legacy row with no offset. Values read at t0, +1h, +7d or by a backfill are not like-for-like.
+COMPARISON_BASIS = "24h"
+# Event triggers that must fire within a day of posting (campaign "strong post", withinDays >= 1) compare at +1h.
+TRIGGER_BASIS = "1h"
+_READ_OFFSET = {"present": False, "checked": None}
+READ_OFFSET_RECHECK_SECONDS = 300
+
+
+def read_offset_column(cur, now=None):
+    """SQL for an observation's read offset: the column once migration 035 is applied, else NULL. Presence is cached
+    for the process (a column is never dropped); absence is re-checked at most every five minutes, so databases
+    without 032 do not pay a catalog query per read."""
+    import time as _time
+    now = _time.monotonic() if now is None else now
+    checked = _READ_OFFSET["checked"]
+    if not _READ_OFFSET["present"] and (checked is None or now - checked >= READ_OFFSET_RECHECK_SECONDS):
+        cur.execute("SELECT 1 FROM pg_attribute WHERE attrelid='public.pr_metric_observations'::regclass AND attname='read_offset' AND NOT attisdropped")
+        _READ_OFFSET["present"] = cur.fetchone() is not None
+        _READ_OFFSET["checked"] = now
+    return "o.read_offset" if _READ_OFFSET["present"] else "NULL::text"
+
+
+def insights_endpoint(provider, provider_post_id):
+    base = "https://graph.threads.net" if provider == "threads" else "https://graph.instagram.com"
+    return f"{base}/{GRAPH_VERSION}/{quote(provider_post_id)}/insights"
+
+
+def fetch_post_insights(transport, access_token, provider, provider_post_id):
+    """One insights GET, no database. {"status", "found": {metric: value}, "endpoint"}; transport errors propagate."""
+    metrics = INSIGHT_METRICS[provider]
+    endpoint = insights_endpoint(provider, provider_post_id)
+    response = transport("GET", endpoint + "?" + urlencode({"metric": ",".join(metrics), "access_token": access_token}))
+    found = {}
+    if response.get("status") == 200:
+        for item in (response.get("body") or {}).get("data", []) or []:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            values = item.get("values") or []
+            total = item.get("total_value", {}).get("value") if isinstance(item.get("total_value"), dict) else None
+            value = total if total is not None else (values[0].get("value") if values and isinstance(values[0], dict) else None)
+            if name in metrics and type(value) in (int, float) and value >= 0:
+                found[name] = value
+    return {"status": response.get("status"), "found": found, "endpoint": endpoint}
+
+
+def record_observations(cur, workspace_id, connection_id, provider, provider_post_id, job_id, found, endpoint, now, read_offset=None, period_start=None):
+    """One row per native metric: available with its value, else unavailable (never zero). `read_offset` and
+    `period_start` are written only when given, so callers on databases without migration 035 are unaffected."""
+    recorded = []
+    extra_cols = ",read_offset,period_start" if read_offset is not None else ""
+    extra_vals = ",%s,to_timestamp(%s)" if read_offset is not None else ""
+    for metric in INSIGHT_METRICS[provider]:
+        available = metric in found
+        params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
+        if read_offset is not None:
+            params += [read_offset, period_start]
+        cur.execute(f"INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint{extra_cols}) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'count',%s,to_timestamp(%s),%s{extra_vals})", params)
+        recorded.append({"metric": metric, "availability": "available" if available else "unavailable"})
+    return recorded
 
 
 def ingest_post_insights(cur, transport, oauth, workspace_id, connection_id, provider, provider_post_id, job_id, now):
@@ -24,24 +85,9 @@ def ingest_post_insights(cur, transport, oauth, workspace_id, connection_id, pro
         cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint) VALUES(%s,%s,%s,%s,%s,'all',%s,NULL,'count','not_supported',to_timestamp(%s),'')", (workspace_id, connection_id, provider, provider_post_id, job_id, DEFINITION_VERSION, now))
         return {"provider": provider, "availability": "not_supported"}
     grant = oauth.token_for_worker(workspace_id, connection_id)
-    base = "https://graph.threads.net" if provider == "threads" else "https://graph.instagram.com"
-    endpoint = f"{base}/{GRAPH_VERSION}/{quote(provider_post_id)}/insights"
-    response = transport("GET", endpoint + "?" + urlencode({"metric": ",".join(metrics), "access_token": grant["accessToken"]}))
-    found = {}
-    if response.get("status") == 200:
-        for item in response.get("body", {}).get("data", []) or []:
-            name = item.get("name")
-            values = item.get("values") or []
-            total = item.get("total_value", {}).get("value") if isinstance(item.get("total_value"), dict) else None
-            value = total if total is not None else (values[0].get("value") if values and isinstance(values[0], dict) else None)
-            if name in metrics and type(value) in (int, float) and value >= 0:
-                found[name] = value
-    recorded = []
-    for metric in metrics:
-        available = metric in found
-        cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'count',%s,to_timestamp(%s),%s)", (workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else ("unavailable" if response.get("status") == 200 else "unavailable"), now, endpoint.split("?")[0]))
-        recorded.append({"metric": metric, "availability": "available" if available else "unavailable"})
-    return {"provider": provider, "status": response.get("status"), "recorded": recorded}
+    fetched = fetch_post_insights(transport, grant["accessToken"], provider, provider_post_id)
+    recorded = record_observations(cur, workspace_id, connection_id, provider, provider_post_id, job_id, fetched["found"], fetched["endpoint"], now)
+    return {"provider": provider, "status": fetched["status"], "recorded": recorded}
 
 
 def rate(numerator, denominator):
@@ -52,18 +98,28 @@ def rate(numerator, denominator):
     return {"value": str(Fraction(int(numerator), int(denominator))), "display": f"{numerator}/{denominator}", "numerator": numerator, "denominator": denominator}
 
 
-def latest_observations(cur, workspace_id):
-    cur.execute("SELECT DISTINCT ON (provider,provider_post_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id FROM public.pr_metric_observations WHERE workspace_id=%s ORDER BY provider,provider_post_id,metric,observed_at DESC", (workspace_id,))
+def latest_observations(cur, workspace_id, basis=None):
+    """Per post and metric: the latest available reading, else the latest reading. Scheduled reads (growth Phase 0)
+    take several readings per post; a later reading that lacks a metric must not hide a real earlier value.
+    The last column is the reading's offset (t0/1h/24h/7d/backfill, or None); databases without migration 035
+    return None. With `basis`, only readings taken at that offset (or legacy rows
+    without one) are considered, so every post is read at the same age."""
+    offset = read_offset_column(cur)
+    where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
+    params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
+    cur.execute(f"SELECT DISTINCT ON (provider,provider_post_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,provider_post_id,metric,(availability='available') DESC,observed_at DESC", params)
     return cur.fetchall()
 
 
-def summary(cur, workspace_id, jobs, now):
-    """Per-post rows with native metrics; families only group, never sum across providers."""
-    rows = latest_observations(cur, workspace_id)
+def summary(cur, workspace_id, jobs, now, basis=None):
+    """Per-post rows with native metrics; families only group, never sum across providers. Display uses the
+    latest values (basis None); anything comparing posts passes basis=COMPARISON_BASIS."""
+    rows = latest_observations(cur, workspace_id, basis)
     posts = {}
-    for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id in rows:
+    for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset in rows:
         post = posts.setdefault((provider, post_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
-        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric}
+        # readOffset says how long after publishing this value was read; +1h and +7d values are not like-for-like.
+        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed)}
     job_index = {j.get("providerReference"): j for j in jobs if j.get("providerReference")}
     items = []
     for post in posts.values():
@@ -81,7 +137,7 @@ def summary(cur, workspace_id, jobs, now):
         post["rates"] = {"likesPerView": rate(int(engagement) if engagement is not None else None, int(reach) if reach is not None else None)}
         items.append(post)
     # Connections without any observation are reported explicitly, never as zeros.
-    return {"posts": items, "families": FAMILIES, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same provider, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
+    return {"posts": items, "families": FAMILIES, "basis": basis, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same provider, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
 
 
 def compare(posts, metric):

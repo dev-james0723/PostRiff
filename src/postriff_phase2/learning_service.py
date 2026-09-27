@@ -171,8 +171,12 @@ def events_window(cur, workspace_id, now, days):
 
 
 def latest_metrics_by_job(cur, workspace_id):
-    """The newest available value of each native metric per PostRiff-published job (insights.py definitions)."""
-    cur.execute("SELECT DISTINCT ON (job_id, metric) job_id, metric, value FROM public.pr_metric_observations WHERE workspace_id=%s AND job_id IS NOT NULL AND availability='available' ORDER BY job_id, metric, observed_at DESC", (workspace_id,))
+    """The newest available value of each native metric per PostRiff-published job (insights.py definitions), read at
+    the same age for every job (insights.COMPARISON_BASIS, or legacy rows without an offset): performance notes
+    compare jobs with each other, and +1h and +7d values are not like-for-like."""
+    from .insights import COMPARISON_BASIS, read_offset_column
+    offset = read_offset_column(cur)
+    cur.execute(f"SELECT DISTINCT ON (job_id, metric) job_id, metric, value FROM public.pr_metric_observations o WHERE workspace_id=%s AND job_id IS NOT NULL AND availability='available' AND coalesce({offset}, %s)=%s ORDER BY job_id, metric, observed_at DESC", (workspace_id, COMPARISON_BASIS, COMPARISON_BASIS))
     metrics = {}
     for job_id, metric, value in cur.fetchall():
         metrics.setdefault(job_id, {})[metric] = float(value)

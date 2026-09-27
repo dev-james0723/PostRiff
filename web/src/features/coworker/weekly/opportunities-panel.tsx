@@ -13,6 +13,7 @@ import type { Opportunity } from '@/lib/coworker/types';
 import { cn } from '@/lib/utils';
 import { humanize } from '../present';
 import { QueryProblem, ToneChip } from '../parts';
+import { OpportunityFlipper } from './opportunity-flipper';
 
 function freshness(item: Opportunity, now: number): string {
   const created = item.createdAt ?? null;
@@ -42,6 +43,7 @@ export function OpportunitiesPanel({ canEdit }: { canEdit: boolean }) {
   const follow = useSaveWatchlist();
   const [query, setQuery] = useState('');
   const [goal, setGoal] = useState('');
+  const [objective, setObjective] = useState('reach');
   const [acted, setActed] = useState<string | null>(null);
   const uid = useId();
 
@@ -67,7 +69,7 @@ export function OpportunitiesPanel({ canEdit }: { canEdit: boolean }) {
     event.preventDefault();
     if (query.trim().length < 3) return toast.error('Say what to watch: a topic, product or question.');
     try {
-      const result = await follow.mutateAsync({ query: query.trim(), goal: goal.trim() });
+      const result = await follow.mutateAsync({ query: query.trim(), goal: goal.trim(), ...(data.activeScout ? { primaryObjective: objective } : {}) });
       if (!result.verified) return toast.warning('Rafii could not confirm the topic was saved.');
       setQuery('');
       setGoal('');
@@ -80,7 +82,7 @@ export function OpportunitiesPanel({ canEdit }: { canEdit: boolean }) {
   return (
     <div className='flex flex-col gap-4'>
       <Panel title='Opportunities' titleId='opportunities-heading' description={data.coverage}>
-        {open.length === 0 ? (
+        {data.flipper ? <OpportunityFlipper items={data.opportunities.filter(o => o.version === 'scout.v1.2' && (o.status === 'open' || o.status === 'watching')).slice(0, 3)} canEdit={canEdit} /> : open.length === 0 ? (
           <StateMessage kind='empty' layout='inline' title='No open opportunities.' description={data.watchlists.length ? 'Rafii will list fresh, relevant items from the topics you follow.' : 'Follow a topic below to start.'} />
         ) : (
           <ul className='flex flex-col gap-2' aria-labelledby='opportunities-heading'>
@@ -126,6 +128,7 @@ export function OpportunitiesPanel({ canEdit }: { canEdit: boolean }) {
             })}
           </ul>
         )}
+        {data.flipper && data.opportunities.some(o => o.status === 'acted' && o.outcomes?.length) && <details><summary className='rafii-focus min-h-11 cursor-pointer py-3'>Results from your posts</summary><OpportunityFlipper items={data.opportunities.filter(o => o.status === 'acted' && o.outcomes?.length).slice(0, 3)} canEdit={canEdit} /></details>}
         {acted && (
           <p role='status' className='text-foreground text-sm'>
             Marked to act on.{' '}
@@ -140,6 +143,7 @@ export function OpportunitiesPanel({ canEdit }: { canEdit: boolean }) {
       {canEdit && (
         <Panel title='Follow a topic' titleId='follow-heading' description='Public web results only, with the owner’s research consent. Nothing is posted or replied to.'>
           <form onSubmit={(event) => void onFollow(event)} className='grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end'>
+            {data.activeScout && <div className='flex flex-col gap-2 sm:col-span-3'><label htmlFor={`${uid}-objective`}>Primary objective</label><select id={`${uid}-objective`} value={objective} onChange={e => setObjective(e.target.value)} className='bg-background text-foreground rafii-focus min-h-11 rounded-md border px-3 text-base'><option value='reach'>Reach</option><option value='shareability'>Shares</option><option value='conversation'>Conversation</option><option value='follower_conversion'>Followers</option><option value='authority'>Authority</option></select></div>}
             <div className='flex flex-col gap-2 text-sm'>
               <label htmlFor={`${uid}-topic`} className='text-foreground font-medium'>
                 Topic
@@ -174,4 +178,3 @@ export function OpportunitiesPanel({ canEdit }: { canEdit: boolean }) {
     </div>
   );
 }
-

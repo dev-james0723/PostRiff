@@ -33,9 +33,18 @@ def _view(state):
 
 
 def save_watchlist(state, payload, actor, now, watchlist_id=None):
+    from . import flags
+    from ..growth.scout import OBJECTIVES
+    objective = payload.get("primaryObjective")
+    if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED") and objective is not None and objective not in OBJECTIVES:
+        raise AlphaError("Choose one primary growth objective.", 400)
     listening = root(state)
     query = " ".join(str(payload.get("query") or "").split())[:200]
     goal = " ".join(str(payload.get("goal") or "").split())[:200]
+    if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED") and not watchlist_id:
+        existing = next((w for w in listening["watchlists"] if w["query"].casefold() == query.casefold()), None)
+        if existing:
+            watchlist_id = existing["id"]
     if len(query) < 3:
         raise AlphaError("Say what to watch (a topic, product or question).", 400)
     if watchlist_id:
@@ -43,12 +52,17 @@ def save_watchlist(state, payload, actor, now, watchlist_id=None):
         if item is None:
             raise AlphaError("Watchlist unavailable.", 404)
         item.update({"query": query, "goal": goal, "active": payload.get("active", True) is not False, "updatedAt": now})
+        if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED"):
+            item["primaryObjective"] = objective
+            item["lastRunAt"] = None
         return item
     if len(listening["watchlists"]) >= MAX_WATCHLISTS:
         raise AlphaError(f"A workspace follows at most {MAX_WATCHLISTS} watchlists.", 409)
     item = {"id": "wl_" + hashlib.sha256(f"{query}:{now}".encode()).hexdigest()[:10], "query": query, "goal": goal, "sources": ["public_web"], "active": True,
             "createdBy": actor, "createdAt": now, "updatedAt": now, "lastRunAt": None}
     listening["watchlists"].append(item)
+    if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED"):
+        item["primaryObjective"] = objective
     return item
 
 
@@ -103,20 +117,35 @@ def ingest(state, watchlist, items, now):
 
 
 def decide(state, opportunity_id, decision, actor, now):
-    if decision not in ("act", "dismiss"):
+    from . import flags
+    allowed = ("act", "dismiss", "watch") if flags.enabled("RAFII_OPPORTUNITY_FLIPPER_ENABLED") else ("act", "dismiss")
+    if decision not in allowed:
         raise AlphaError("Choose act or dismiss.", 400)
     opportunity = next((o for o in root(state)["opportunities"] if o["id"] == opportunity_id), None)
     if opportunity is None:
         raise AlphaError("Opportunity unavailable.", 404)
-    opportunity.update({"status": "acted" if decision == "act" else "dismissed", "decidedBy": actor, "decidedAt": now})
+    if opportunity.get("version") == "scout.v1.2" and opportunity["expiresAt"] <= now:
+        raise AlphaError("This opportunity expired.", 409)
+    opportunity.update({"status": {"act": "acted", "dismiss": "dismissed", "watch": "watching"}[decision], "decidedBy": actor, "decidedAt": now})
     return opportunity
 
 
 def view(state, now):
+    from . import flags
     listening = _view(state)
-    return {"watchlists": listening["watchlists"], "opportunities": [o for o in listening["opportunities"] if o["status"] in ("open", "acted", "dismissed")],
+    result = {"watchlists": listening["watchlists"], "opportunities": [o for o in listening["opportunities"] if o["status"] in ("open", "acted", "dismissed")],
             "coverage": "Public web search results through the Research Broker, with the owner's research consent. Social platforms are covered only through a connected, permitted integration.",
             "now": now}
+    if flags.enabled("RAFII_OPPORTUNITY_FLIPPER_ENABLED"):
+        import copy
+        from ..growth.scout import prune_media
+        clean = copy.deepcopy(state)
+        prune_media(clean, now)
+        listening = _view(clean)
+        result["flipper"] = True
+        result["activeScout"] = flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED")
+        result["opportunities"] = [o for o in listening["opportunities"] if (o.get("expiresAt", 0) > now or o.get("outcomes")) and o["status"] in ("open", "acted", "dismissed", "watching")]
+    return result
 
 
 def _due(watchlist, now):
@@ -133,6 +162,9 @@ def cron(service, max_workspaces=20, max_seconds=30, deadline=None):
     import json as _json
     from .. import research
     from .research_broker import ResearchBroker
+    from . import flags
+    if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED"):
+        max_seconds = max(max_seconds, 60)
     if not research.enabled():
         return {"status": "research_disabled", "workspaces": []}
     started, out = time.monotonic(), []
@@ -167,6 +199,11 @@ def cron(service, max_workspaces=20, max_seconds=30, deadline=None):
         due = [w for w in root(state)["watchlists"] if _due(w, now)]
         if not due:
             out.append({"workspaceId": workspace_id, "skipped": "not_due"})
+            continue
+        from . import flags
+        if flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED") and flags.enabled("RAFII_TREND_OBJECTS_ENABLED"):
+            from ..growth.scout_runtime import run_workspace
+            out.append(run_workspace(service, workspace_id, deadline))
             continue
         broker, searched = ResearchBroker(state=state), {}
         for watchlist in due:   # no lock is held while searching
