@@ -63,6 +63,8 @@ import type { TextareaHandlers } from './home/idea-composer';
 import { createSubmissionGate } from './submission-gate';
 import { briefStorageKey, decodeBrief, encodeBrief } from './brief-recovery';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
+import { useAgent } from '@/lib/agent-runtime/use-agent';
+import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 import type { ChatAutomation } from '@/lib/api/types';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
@@ -92,6 +94,12 @@ const DEFAULT_LIBRARY: LibraryValue = { editorialId: 'status_update', nativeId: 
 const DEFAULT_TARGETS: ChannelTarget<DraftPlatform>[] = [{ platform: 'LinkedIn' }, { platform: 'Instagram' }];
 const PLACEHOLDER = 'Launch post for my new course';
 
+async function runClientSlash(command: SlashCommand, args: string): Promise<string | null> {
+  if (!command.execute) return 'That command isn’t available here.';
+  try { return (await command.execute(args)) ?? null; }
+  catch (error) { return error instanceof Error && error.message ? `That didn’t work: ${error.message}` : 'That didn’t work here.'; }
+}
+
 /** Something on Home that is waiting on the writer; built only from the workspace snapshot. */
 interface NeedsYou {
   id: string;
@@ -118,6 +126,7 @@ function HomeWorkspace() {
   const router = useRouter();
   const client = useQueryClient();
   const { api, workspaceId } = useWorkspaceApi();
+  const agent = useAgent();
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const snapshot = useSnapshot();
@@ -339,6 +348,7 @@ function HomeWorkspace() {
       : 'Loading models…'
     : `${choice.label}${showLevel && choice.level ? ` · ${choice.level.label}` : ''}`;
   const destinationCount = languages.destinations.length;
+  const slash = parseSlash(text.trim());
   const accountsSelected = targets.filter((t) => t.channelId).length;
   const channelsLabel = destinations.selected.length > 0 ? destinations.summary : accounts.length === 0 ? 'Platforms only' : 'Channels';
   const channelsDetail = accountsSelected > 0 ? `${destinationCount} draft${destinationCount === 1 ? '' : 's'}` : `${targets.length} platform${targets.length === 1 ? '' : 's'} · no account`;
@@ -375,11 +385,76 @@ function HomeWorkspace() {
     composer.current?.focus();
   }
 
-  const canGenerate = canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length);
+  const commandReady = canEdit && Boolean(slash) && !preparing && Boolean(snapshot.data) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length);
+  const canGenerate = commandReady || (canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length));
 
   async function start() {
     const body = text.trim();
+    const currentSlash = parseSlash(body);
     if (!body || !canGenerate) return;
+    if (currentSlash?.command.kind === 'client') {
+      if (currentSlash.command.name === 'help') {
+        setText('/');
+        requestAnimationFrame(() => {
+          composer.current?.focus();
+          composer.current?.setSelectionRange(1, 1);
+        });
+        return;
+      }
+      const note = await runClientSlash(currentSlash.command, currentSlash.args);
+      setText('');
+      if (note) toast(note);
+      return;
+    }
+    if (currentSlash?.command.kind === 'agent') {
+      if (!submission.enter()) return;
+      setPreparing(true);
+      setAutomationReply(null);
+      try {
+        if (attachmentsOn) await attachments.settleReads();
+        const sent = attachmentsOn ? attachments.sentKeys : [];
+        const references = attachmentsOn
+          ? (chipFields.references ?? []).filter(
+              (reference) =>
+                reference.kind === 'post' ||
+                reference.kind === 'template' ||
+                reference.kind === 'source'
+            )
+          : [];
+        const media = attachmentsOn
+          ? (chipFields.attachments ?? []).map((attachment) => ({
+              assetId: attachment.assetId,
+              role: attachment.role
+            }))
+          : [];
+        const result = await agent.api.turn(workspaceId, {
+          message: body,
+          idempotencyKey: crypto.randomUUID(),
+          modality: 'text',
+          timeZone,
+          ...(references.length ? { references } : {}),
+          ...(media.length ? { attachments: media } : {}),
+          command: commandPayload(currentSlash)
+        });
+        if (!submission.alive()) return;
+        if (sent.length) attachments.clearSent(sent);
+        setText('');
+        setCreditLimit('');
+        await Promise.all([
+          client.invalidateQueries({ queryKey: keys.messages(workspaceId, result.conversationId) }),
+          client.invalidateQueries({ queryKey: keys.conversations(workspaceId) }),
+          client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) }),
+          client.invalidateQueries({ queryKey: keys.usage(workspaceId) })
+        ]);
+        router.push(`/app/agent/${encodeURIComponent(result.conversationId)}`);
+      } catch (error) {
+        if (submission.alive()) toast.error(error instanceof Error ? error.message : 'Rafii couldn’t run that command.');
+      } finally {
+        submission.leave();
+        if (submission.alive()) setPreparing(false);
+      }
+      return;
+    }
     const learningRequest = voiceLearningIntent(body);
     if (learningRequest) {
       setLearning({ ...learningRequest, workspaceId, id: crypto.randomUUID() });
@@ -513,8 +588,9 @@ function HomeWorkspace() {
               value={text}
               onChange={setText}
               placeholder={template ? `${template.title}…` : PLACEHOLDER}
-              disabled={!models.data || !snapshot.data || preparing || generation.busy || generation.running}
+              disabled={!snapshot.data || preparing || generation.busy || generation.running}
               busy={preparing || generation.busy || generation.running}
+              slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
               onExpand={() => setDialog('expand')}
               contextCount={included.length}
               onOpenContext={() => setDialog('context')}
@@ -582,7 +658,7 @@ function HomeWorkspace() {
                 />
               }
               notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} autoModel={choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} /></div> : undefined}
-              generate={{ label: generation.run ? 'Generate again' : 'Generate drafts', count: destinationCount, disabled: !canGenerate, onClick: () => void start(), help: helpText }}
+              generate={{ label: slash ? 'Run command' : generation.run ? 'Generate again' : 'Generate drafts', count: slash ? 0 : destinationCount, disabled: !canGenerate, onClick: () => void start(), help: slash ? 'Runs this Rafii command in a conversation.' : helpText }}
               consent={
                 <div className='mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pt-3'>
                   <Checkbox checked={use} onCheckedChange={setUse} label='Use this text to draft with' className='gap-2 [&>button]:size-4 [&>span]:text-xs' />

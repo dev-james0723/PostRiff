@@ -1,10 +1,12 @@
 'use client';
 
-import { forwardRef, useCallback, useId, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject, type SyntheticEvent } from 'react';
+import { forwardRef, useCallback, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject, type SyntheticEvent } from 'react';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { isImeEvent } from '@/lib/ime';
 import { cn } from '@/lib/utils';
+import { SlashCommandMenu, type SlashPick } from '@/features/rafii-commands/command-menu';
+import type { SlashCommand } from '@/lib/agent-runtime/commands';
 
 export const IDEA_MAX = 20000;
 
@@ -63,6 +65,8 @@ export interface IdeaComposerProps {
   attachmentsRow?: ReactNode;
   addButton?: ReactNode;
   textareaHandlers?: TextareaHandlers;
+  /** Shared `/` command menu; Home decides whether a picked command runs locally or through Agent Runtime V2. */
+  slash?: { onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
 }
 
 /**
@@ -71,12 +75,14 @@ export interface IdeaComposerProps {
  * action → assurance. Every control is wired by the caller; this surface owns only the layout.
  */
 export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(function IdeaComposer(
-  { value, onChange, placeholder, disabled, busy, onExpand, contextCount, onOpenContext, onTryIdea, extras, contentType, channels, settings, generate, consent, notes, className, attachmentsRow, addButton, textareaHandlers },
+  { value, onChange, placeholder, disabled, busy, onExpand, contextCount, onOpenContext, onTryIdea, extras, contentType, channels, settings, generate, consent, notes, className, attachmentsRow, addButton, textareaHandlers, slash },
   ref
 ) {
   const helpId = useId();
   const handlers = textareaHandlers;
   const attachmentsRef = handlers?.ref;
+  const [caret, setCaret] = useState(value.length);
+  const composerBox = useRef<HTMLElement>(null);
   // The forwarded ref and the attachments' ref point at the same textarea.
   const setTextarea = useCallback(
     (element: HTMLTextAreaElement | null) => {
@@ -94,7 +100,8 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
     }
   }
   return (
-    <section aria-label='Create a social draft' data-tour='composer' className={cn('rafii-composer flex flex-col rounded-[var(--rafii-radius-composer)] px-5 pt-5 pb-4 md:px-[26px] md:pt-[27px] md:pb-[18px]', className)}>
+    <section ref={composerBox} aria-label='Create a social draft' data-tour='composer' className={cn('rafii-composer relative flex flex-col rounded-[var(--rafii-radius-composer)] px-5 pt-5 pb-4 md:px-[26px] md:pt-[27px] md:pb-[18px]', className)}>
+      {slash ? <SlashCommandMenu value={value} caret={caret} anchorRef={composerBox} onPick={(command, args, pick) => { setCaret(pick.caret); slash.onPick(command, args, pick); }} onDismiss={slash.onDismiss ?? (() => undefined)} /> : null}
       <div className='text-muted-foreground flex min-h-9 items-center justify-end gap-3'>
         <button type='button' onClick={onExpand} disabled={disabled} aria-label='Expand writing space' className='rafii-focus hover:text-foreground inline-flex min-h-10 items-center gap-1.5 rounded-md text-xs font-medium'>
           Expand
@@ -104,10 +111,10 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
       <textarea
         ref={setTextarea}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => { onChange(event.target.value); setCaret(event.target.selectionStart ?? event.target.value.length); }}
         onKeyDown={onKeyDown}
         onInput={(event) => handlers?.onInput?.(event)}
-        onSelect={(event) => handlers?.onSelect?.(event)}
+        onSelect={(event) => { setCaret(event.currentTarget.selectionStart ?? event.currentTarget.value.length); handlers?.onSelect?.(event); }}
         onCompositionStart={() => handlers?.onCompositionStart?.()}
         onCompositionEnd={() => handlers?.onCompositionEnd?.()}
         onFocus={(event: FocusEvent<HTMLTextAreaElement>) => {

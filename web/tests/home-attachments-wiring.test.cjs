@@ -31,6 +31,17 @@ test('the idea composer takes the chip row, the ＋ button and composed handlers
   assert.ok(composer.indexOf('{addButton}') > context && context > 0, '＋ sits in the Context row');
 });
 
+test('Home mounts the shared slash menu and agent commands open a real Agent Runtime conversation', () => {
+  assert.match(composer, /<SlashCommandMenu/);
+  assert.match(composer, /slash\.onPick\(command, args, pick\)/);
+  assert.match(view, /const slash = parseSlash\(text\.trim\(\)\)/);
+  assert.match(view, /currentSlash\?\.command\.kind === 'agent'/);
+  assert.match(view, /await agent\.api\.turn\(workspaceId/);
+  assert.match(view, /command: commandPayload\(currentSlash\)/);
+  assert.match(view, /label: slash \? 'Run command'/);
+  assert.match(view, /router\.push\(`\/app\/agent\/\$\{encodeURIComponent\(result\.conversationId\)\}`\)/);
+});
+
 test('estimate, quote and submit carry the same chip fields; answerAutomation is unchanged', () => {
   assert.match(generation, /\.\.\.\(request\.references\?\.length \? \{ references: request\.references \} : \{\}\)/);
   assert.match(generation, /\.\.\.\(request\.attachments\?\.length \? \{ attachments: request\.attachments \} : \{\}\)/);
