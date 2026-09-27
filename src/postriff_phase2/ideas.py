@@ -1389,10 +1389,12 @@ class IdeasService:
             known = {source.get("id") for source in state.get("sources") or [] if isinstance(source, dict)}
             state.setdefault("sources", []).extend(source for source in connector_sources if source.get("id") not in known)
         handed_in = (isinstance(payload.get("material"), str) and bool(payload["material"].strip())) or isinstance(payload.get("materialRef"), dict)
-        # The thought typed for this turn is the idea; quick-start passes it as intentText. Only a turn
-        # without any text falls back to the workspace's saved brief.
+        # The thought typed for this turn is the idea; quick-start passes it as intentText.
+        # An explicit sourceIds field is authoritative context for this request, so an empty follow-up must not
+        # silently re-introduce an older workspace brief (which may now be private/internal-only material).
         # The writer's `idea` field is bounded (IDEA_LIMIT); long text still reaches it whole as the message or source.
-        raw_idea = text or str(payload.get("intentText") or "") or state.get("brief", {}).get("idea", "")
+        saved_brief = "" if isinstance(payload.get("sourceIds"), list) else state.get("brief", {}).get("idea", "")
+        raw_idea = text or str(payload.get("intentText") or "") or saved_brief
         idea = clean(raw_idea[:IDEA_LIMIT], IDEA_LIMIT)
         resolved = None
         if turn_references.present(refs) or handed_in:
