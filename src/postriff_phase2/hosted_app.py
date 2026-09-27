@@ -591,7 +591,7 @@ class HostedApplication:
                 result['phone'] = phone_cron(service)
                 learning = getattr(service, "learning", None)
                 growth=getattr(service,'growth',None)
-                if growth and any(growth.enabled(kind) for kind in ('check','genome','public')):
+                if growth and any(growth.enabled(kind) for kind in ('check','genome','public','postmortem','audience')):
                     try:result['growthRetention']=growth.sweep()
                     except Exception:result['growthRetention']={'status':'unavailable'}
                 if learning is not None:

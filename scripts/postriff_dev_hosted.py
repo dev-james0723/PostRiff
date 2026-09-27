@@ -268,9 +268,11 @@ def main():
     parser.add_argument("--inbound-phone-fixture", action="store_true", help="local one-time inbound codes with a synthetic Dial transport; no network calls")
     parser.add_argument("--notification-fixture", action="store_true", help="unified notifications with fake SMS/Push/Email only")
     parser.add_argument('--growth-fixture',action='store_true',help='Phase 1 models are deterministic and zero-network; disposable database only')
+    parser.add_argument('--growth-phase2-fixture',action='store_true',help='Phase 2 deterministic models, disposable database only')
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
+    if args.growth_phase2_fixture:args.growth_fixture=True
     import psycopg
     dsn, data = start_postgres(args.pg_port)
     connection = lambda: psycopg.connect(dsn, client_encoding="utf8", autocommit=False)
@@ -291,6 +293,8 @@ def main():
     if args.growth_fixture:
         sys.path.insert(0,str(ROOT/'tests'))
         from growth_phase1_fixtures import Writer, Models, ENV
+        if args.growth_phase2_fixture:
+            from growth_phase2_fixtures import Models, ENV
         growth_writer=Writer()
     service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media,ideas_runtime=growth_writer)
     if args.growth_fixture:

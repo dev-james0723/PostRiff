@@ -39,6 +39,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/035_growth_metric_reads.sql
 \ir ../../migrations/postriff/036_dial_phone_provider.sql
 \ir ../../migrations/postriff/037_growth_phase1.sql
+\ir ../../migrations/postriff/038_growth_closed_loop.sql
 \ir ../../migrations/postriff/041_context_navigation.sql
 \ir ../../migrations/postriff/042_phone_inbound.sql
 \ir ../../migrations/postriff/043_phone_duration.sql

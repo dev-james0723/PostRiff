@@ -34,6 +34,7 @@ import type { ComposerState } from './reply-composer';
 import { NoThreadSelected, ThreadDetail, ThreadHeading, threadHeadline } from './thread-detail';
 import { ThreadList } from './thread-list';
 import { useTwoPane } from './use-two-pane';
+import { GrowthEntry } from '@/features/growth/studio-parts';
 
 const infoContent = {
   title: 'Inbox',
@@ -238,6 +239,7 @@ function InboxPage() {
   return (
     <PageContainer pageTitle='Inbox' infoContent={infoContent}>
       <div className='flex min-w-0 flex-col gap-5'>
+        <GrowthEntry audience />
         <CoverageStrip
           channels={channels}
           providers={providers}

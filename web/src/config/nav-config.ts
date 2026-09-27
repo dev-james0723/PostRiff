@@ -79,6 +79,12 @@ export const navGroups: NavGroup[] = [
     label: 'Grow',
     items: [
       {
+        title: 'Growth Studio',
+        url: '/app/growth',
+        icon: 'sparkles',
+        items: []
+      },
+      {
         title: 'Analytics',
         url: '/app/analytics',
         icon: 'trendingUp',

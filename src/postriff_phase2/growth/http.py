@@ -36,6 +36,14 @@ def handle(app,environ,start_response,hosted,token,method,parts):
         value=service.rewrite(workspace_id,token,app._body(environ))
     elif method=='POST' and rest==['history']:
         value=service.imports(workspace_id,token,app._body(environ))
+    elif method=='GET' and rest==['postmortems']:
+        value=service.closed_loop.overview(workspace_id,token)
+    elif method=='POST' and rest==['postmortems']:
+        value=service.closed_loop.report(workspace_id,token,app._body(environ))
+    elif method=='GET' and rest==['audience']:
+        value=service.closed_loop.audience(workspace_id,token)
+    elif method=='POST' and rest==['audience']:
+        value=service.closed_loop.mine(workspace_id,token,app._body(environ))
     else:
         raise AlphaError('Growth route unavailable.',404)
     return app._json(start_response,200,value)

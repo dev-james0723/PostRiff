@@ -116,7 +116,7 @@ export function PostDoctorPanel({
   }
 
   return (
-    <Surface material='quiet' padding='sm' className='flex flex-col gap-4' aria-label='Post Doctor'>
+    <Surface material='quiet' padding='sm' className='growth-doctor flex flex-col gap-4' aria-label='Post Doctor'>
       <div>
         <h3 className='font-medium'>Post Doctor</h3>
         <p className='text-muted-foreground text-sm'>
