@@ -2,7 +2,7 @@
 from postriff_alpha.domain import AlphaError
 
 from ..permissions import Membership
-from . import contracts, planner, store
+from . import billing, contracts, planner, store
 
 
 def deliver(service, call_id):
@@ -18,7 +18,7 @@ def deliver(service, call_id):
         member = cur.fetchone()
         route = service.agent().cfg.route('voice_front_end', reason='phone delivery')
         start = planner.day_start(service.clock(), prefs['timeZone'])
-        cur.execute('SELECT count(*) FILTER(WHERE kind<>\'explicit\'),count(*),coalesce(sum(reserved_usd_micro),0) FROM public.pr_phone_calls WHERE user_id=%s '
+        cur.execute(f'SELECT count(*) FILTER(WHERE kind<>\'explicit\'),count(*),coalesce(sum({billing.DAILY_COST_SQL}),0) FROM public.pr_phone_calls WHERE user_id=%s '
                     'AND requested_at>=to_timestamp(%s) AND id<>%s', (value['user_id'], start, call_id))
         automatic, count, reserved = cur.fetchone()
         blocker = planner.eligibility(value['kind'], prefs, now=service.clock(), verified=bool(identity and identity['verified'] and identity['hash']==value['number_hash']),
@@ -56,6 +56,8 @@ def deliver(service, call_id):
             if receipt.call_ref:
                 service.provider.end_call(receipt.call_ref)
             return
+        if receipt.failure in contracts.PROVIDER_FAILURES:
+            cur.execute('UPDATE public.pr_phone_calls SET failure_class=%s WHERE id=%s', (receipt.failure, call_id))
         if receipt.call_ref:
             if current['provider_call_ref'] and current['provider_call_ref'] != receipt.call_ref:
                 raise AlphaError('Provider call binding changed.', 409)

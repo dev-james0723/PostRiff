@@ -33,6 +33,7 @@ export function CallRafii({ conversationId, onConversation }: { conversationId?:
       const call = await api.phoneCall(workspaceId, { idempotencyKey: key.current, conversationId,
         ...(spending?.usesCredits && maximum !== null ? { maxMilliCredits: maximum } : {}) });
       key.current = null;
+      if (call.state === 'failed' || call.state === 'cancelled') setError(call.failureMessage || 'The call did not connect. Check recent calls before trying again.');
       onConversation?.(call.conversationId);
       await settings.refetch();
     } catch (err) {
