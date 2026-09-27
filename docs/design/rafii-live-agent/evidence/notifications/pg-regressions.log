@@ -1,0 +1,119 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_agent_runtime.py
+PASS    VS01 Start Voice Mode in a conversation (GPT-Live WebRTC broker)
+PASS    VS02 Ask what is missing, by voice, from the campaign (Manager → Campaign specialist)
+PASS    VS03 Attach a reference image during voice; the backend vision model reads it (MM01, MM02)
+PASS    MMC1 With photo reading off, Rafii doesn't look at the image: no vision call, a typed consent_required result and a warning
+PASS    VS04 Compound request by voice: generate a matching asset, write the copy, link both, schedule Thursday 18:00 (X04)
+PASS    VS05 The proposal is shown on screen and said aloud; nothing changes before the person decides
+PASS    VS06 Spoken “yes” binds to exactly that proposal; server re-checks; applied through the normal path; re-read; verified (§7.4)
+PASS    VS07 End Voice Mode; continue the same task by text with everything intact (V-A09)
+PASS    V-A08 Two open proposals: a generic “yes” applies neither and asks which
+PASS    V-A08b …“the second one” then binds exactly the second (and the stale one is refused by the app)
+PASS    V-A08c After Rafii asks which proposal, an unrelated follow-up applies nothing (no fuzzy binding)
+PASS    V-A07b A “yes” to a proposal that is not the latest answer is not bound; Rafii restates it
+PASS    V-A07c Cantonese / Mandarin confirmations and a rejection
+PASS    S-MOD1 Text proposal → voice approval, and a viewer can't approve by voice
+PASS    MM04 Edit the generated image: a NEW asset linked to its original; the original is unchanged; “the second image” resolves
+PASS    MM05 Edit an uploaded image: a new version linked to the upload; the upload itself is untouched
+PASS    MM06 Fast variants on Flare
+PASS    MM12 Text inside an image tries to instruct Rafii; policy is unchanged
+PASS    MM13 Image generation fails: no asset id, no success claim, spend held as unknown
+PASS    MM14 Another workspace's image is unreachable
+PASS    R01 Runtime off → the verified site agent answers, unchanged (safe fallback)
+PASS    R02 A viewer gets grounded answers with no model spend
+PASS    R03 Forbidden effects never reach the Manager
+PASS    R04 Idempotent turns: the same key returns the same run
+PASS    R05 “Cancel that”: running work stops in the backend and it is confirmed before Rafii says so (V-A06)
+PASS    R06 Refining a request while it runs supersedes the earlier spoken one — never a typed turn (V-A05)
+PASS    R07 The Manager's false claim is replaced by what the ledger confirms (§23)
+PASS    R08 SDK human-in-the-loop: proposal_apply pauses; the person's yes applies via the app; the run resumes and verifies (ADR-H1)
+PASS    R09 Correlation id across browser → delegation → Manager → tool → audit → asset (§30)
+PASS    R10 Voice Mode refuses cleanly: flag off, no OpenAI key, viewer, Live busy (V-A14/V-A15)
+PASS    R11 Voice transcripts are text only and live on the voice session (no raw audio)
+PASS    GAP-V04 “Does this sound like me?” — Brand Intelligence uses the deterministic voice check with evidence; no “exactly your voice”
+PASS    GAP-D04 Shorten a draft through the writing pipeline: a proposed update on that exact draft; its text unchanged until accepted
+PASS    GAP-H05 Who linked the draft to the campaign? — attribution only from stored evidence; an unknown person is not guessed
+PASS    A01-agent “What should I pay attention to?” — stored facts and derived observations with their rules, shown under the answer (§22)
+PASS    MM15 Image publishing checks stay enforced: an image without alt text can't be attached to a scheduled post
+PASS    MEM01 Layered memory with provenance: explicit vs inferred, confidence, and cloud consent respected (§14)
+PASS    S-MOD2 Voice request → text approval: a proposal made by voice is approved by typing “yes” (same proposal store, same checks)
+PASS    S-MOD3 A stale approval (presented more than 10 minutes ago) is re-stated, not applied, after a reconnect or a pause
+PASS    S-MOD5 Text starts a task; voice continues it (V-A10)
+PASS    S-MOD4 The panel's Apply (agent decide) applies the same proposal, re-reads it and closes the task step
+PASS    R12 Voice sessions belong to the person who started them; at most two live sessions per member
+PASS    HTTP01 The agent routes over HTTP: session, request guard, JSON, status, a turn, a decision, voice start — and no API-token access
+PASS    R13 A voice session the tab never ended is reaped: closed and billed to its last activity (never free, never held forever)
+PASS    R08b After a paused run, the person's “yes” binds to the proposal it named; the app applies it; the paused Manager resumes (ADR-H1)
+PASS    R14 A “yes” the application refuses leaves the waiting step waiting; the owner can still apply it
+PASS    R15 Cancelling needs edit and reaches only your own requests
+PASS    R16 Voice is billed on the server's clock: a client reporting 0 seconds doesn't make a call free
+PASS    R17 The writing-recovery cron leaves the runtime's rows alone; the runtime closes its own dead turn and books its reservation
+{"event": "agent_turn.aborted", "errorClass": "RuntimeError", "traceId": "trace_bbd78e25b331083694fb84bc4eedf570"}
+PASS    R18 Whatever fails after a turn opens, the run ends closed with a truthful answer (never stuck “running”)
+PASS    MM16 Images on the OpenAI route are booked at the configured price; the same image asked twice in a turn is made once
+PASS    LA01 Live agent: “How do I connect Instagram?” answers with a guide card that starts by itself; the screen's labels reach the Manager as data
+PASS    LA02 Live agent by voice: a style change reaches the panel (saved when migration 030 is applied, never a failed turn without it); goodbye ends the call
+PASS    LA03 Slash commands: /weather is answered without a model through the gate; /search reaches the Manager with its fixed instruction and the input fenced
+PASS    R19 What a spoken “yes” would apply is said in the application's words; model text is trimmed, never turned into an error
+PASS    R20 After a Rafii answer, 2–3 follow-up suggestions from the light model; never a decision; tapping one only sends it as a message (E2)
+{"PASS": 56, "PARTIAL": 0, "FAIL": 0}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_agent_runtime_references.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "manager turn answered",
+    "one writing run from draft_create",
+    "the writing run carries the chips and reports them",
+    "no client label reaches the report",
+    "chip ids are not listed as things Rafii read",
+    "malformed chips refused (400)",
+    "nothing stored for a refused turn",
+    "fallback: answered by the site agent",
+    "fallback: the chip is reported unused, not dropped"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_agent_style.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "the default: an empty object on the profile, read on /api/me as the complete default style",
+    "a preset and single fields merge into the saved style, read back on /api/me, beside the other preferences",
+    "unknown fields, values and presets are refused with 400 and nothing is written",
+    "each person's style is their own: saving one never touches another profile",
+    "the browser role sees only its own style and cannot write it; anon cannot read it",
+    "the database refuses a non-object, an oversized value and NULL",
+    "before 030 /api/me reads the default and keeps its session, other preferences save, style changes return 503 and write nothing; applying 030 (twice) restores saving"
+  ]
+}
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_consumer_campaign_worker.py
+PASS: relational persistence, real worker/runtime call, restart/lease, idempotency, pause/cancel, legacy authority and no publish side effects
+PASS: explicit occurrence cost cap, in-flight cancellation, crash after provider completion reconciled without repeat charge
+PASS: automation drafts every activated account with its own content type, brief text stays data, disconnected accounts skipped then paused
+PASS: countdown and recap context reach the writer, costs and draft counts recorded, batched cron, one deduplicated drafts-ready email, countdown finishes
+PASS: new idea triggers exactly one run that reads it, strong-post scan reads real insights without side effects, evergreen without candidates still drafts
+PASS: an automation in your voice without an allowed writing sample drafts in a neutral voice and says so
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_consumer_deletion.py
+PASS deletion fence committed before storage; concurrent mutations denied; final identity result verified
+PASS storage retry, worker fences, unknown cost, subscription, other ownership, identity partial and bounded recovery
+PASS video objects, posters, frames, pending/aborted uploads, a deletionPending asset and the prefix are deleted before the workspace; no storage, no deletion
+psql:/Users/ouxianxing/Documents/James-Au-Studio-live-agent/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_quick_start_again.py
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "the same own idea drafted again reuses one run-only source (new conversation, no re-approval); its stored title stays generic so source text cannot bypass policy",
+    "pasted third-party text drafted again reuses its run-only source, keeps a non-content title and keeps rewrite_approval with nothing auto-approved",
+    "a different long idea still becomes its own run-only source without exposing the text through its stored title",
+    "Context Pocket: a chosen usable source is read with the idea; an unknown id is refused (409) before any source is stored",
+    "chips on a quick start reach the turn (the report is on the run, labels dropped), automation wording still drafts with the reminder, and a chip-less quick start carries no chip keys"
+  ]
+}
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_agent_runtime.py", "exitCode": 0, "seconds": 9.21}, {"script": "tests/phase2/postgres_agent_runtime_references.py", "exitCode": 0, "seconds": 2.34}, {"script": "tests/phase2/postgres_agent_style.py", "exitCode": 0, "seconds": 0.46}, {"script": "tests/phase2/postgres_consumer_campaign_worker.py", "exitCode": 0, "seconds": 3.21}, {"script": "tests/phase2/postgres_consumer_deletion.py", "exitCode": 0, "seconds": 0.85}, {"script": "tests/phase2/postgres_quick_start_again.py", "exitCode": 0, "seconds": 0.91}]}

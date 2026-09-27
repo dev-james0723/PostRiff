@@ -127,7 +127,7 @@ checks.append("active terms + price open checkout with workspace metadata and id
 sig, body = signed("checkout.session.completed", {"mode": "subscription", "client_reference_id": wid, "customer": "cus_1", "subscription": "sub_1", "metadata": {"workspace_id": wid, "plan_terms_id": "studio-v1"}}, "evt_1")
 result = service.billing_webhook(sig, body)
 assert result["outcome"] == "applied" and result["status"] == "active" and result["notification"]["sent"] is True, result
-assert any(m["subject"] == "Your Studio plan is active" for m in mail.sent)
+assert any(m["subject"] == "Your Rafii plan is active" for m in mail.sent)
 dup = service.billing_webhook(sig, body)
 assert dup["outcome"] == "duplicate" and "notification" not in dup, dup
 denied(lambda: service.billing_webhook("t=1,v1=bad", body), 401)

@@ -151,7 +151,7 @@ class PlannerTest(unittest.TestCase):
 
 
 class EmailTest(unittest.TestCase):
-    LOCALES = ("en", "zh-Hant-HK", "zh-Hant", "zh-Hans", "yue-Hant-HK")
+    LOCALES = (*email_render.catalogue()['locales'], "yue-Hant-HK")
 
     def test_every_template_renders_in_every_locale_with_one_cta_and_a_text_twin(self):
         for template in email_render.TEMPLATES:
@@ -174,7 +174,9 @@ class EmailTest(unittest.TestCase):
         out = email_render.render("publish_failed", values={"platform": "<script>alert(1)</script>", "reason": "\"><img src=x onerror=alert(1)>"},
                                   base_url=BASE, href="javascript:alert(1)")
         self.assertNotIn("<script>", out["html"])
-        self.assertNotIn("<img", out["html"])
+        self.assertNotIn("<img src=x", out["html"])
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;", out["html"])
+        self.assertEqual(out["html"].count("<img "), 1)  # approved decorative Rafii character
         self.assertEqual(out["url"], BASE + "/app")
         external = email_render.render("publish_failed", base_url=BASE, href="https://evil.example/app")
         self.assertEqual(external["url"], BASE + "/app")

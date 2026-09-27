@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import catalog
 
-FIELDS = ("in_app", "email_mode", "push_mode", "digest_frequency", "quiet_start", "quiet_end", "time_zone", "muted_until", "email_unsubscribed")
+FIELDS = ("in_app", "email_mode", "push_mode", "digest_frequency", "quiet_start", "quiet_end", "time_zone", "muted_until", "email_unsubscribed", "sms_mode", "smart_escalation")
 
 
 def zone(name):
@@ -104,7 +104,7 @@ def audience(members, event, actor=None):
     return [m for m in members if m.get("active", True) and m["membership"].allows(who)]
 
 
-def plan(event, recipient, prefs_rows, now, *, push_available=False, email_available=True, recent=None, phone_context=None):
+def plan(event, recipient, prefs_rows, now, *, push_available=False, email_available=True, recent=None, phone_context=None, sms_context=None):
     """Planned deliveries for one person: [{channel, mode, status, next_attempt_at, reason}]. Suppressed rows are
     kept (status 'suppressed', with the reason) so the audit shows why nothing was sent."""
     spec = catalog.spec(event["event_type"])
@@ -169,4 +169,7 @@ def plan(event, recipient, prefs_rows, now, *, push_available=False, email_avail
         reason = eligibility('proactive',phone_prefs,now=now,event_type=event['event_type'],**context)
         if reason is None:
             out.append({'channel':'phone','mode':'immediate','status':'pending','next_attempt_at':now,'reason':None})
+    if sms_context is not None and spec['sms'] != 'off':
+        from . import sms
+        out.append(sms.plan(event, prefs, sms_context, now, push_delivery=next((d for d in out if d['channel']=='push'), None), recent=recent))
     return out

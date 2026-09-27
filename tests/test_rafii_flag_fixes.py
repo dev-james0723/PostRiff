@@ -162,8 +162,11 @@ class RecordingCursor:
 class MarkAllReadTest(unittest.TestCase):
     def test_every_unread_notification_in_the_workspace_is_marked_in_one_statement(self):
         ids = [f"d{i}" for i in range(37)]
-        cur = RecordingCursor(results=[(0,)], rowcount=37, rows=[(i,) for i in ids])
-        result = store.mark_all_read(cur, "user-1", "w1")
+        cur = RecordingCursor(results=[(0,)], rowcount=37, rows=[(i, f"e{n}") for n,i in enumerate(ids)])
+        with mock.patch.object(store, "acknowledge", return_value=1) as acknowledged:
+            result = store.mark_all_read(cur, "user-1", "w1")
+        self.assertEqual(acknowledged.call_count,37)
+        acknowledged.assert_any_call(cur,"e0","user-1","in_app","opened")
         self.assertEqual(result, {"changed": 37, "unread": 0, "verified": True})
         select, update, recount = cur.sql
         self.assertIn("status='delivered'", select[0])

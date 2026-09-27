@@ -17,6 +17,7 @@ import { ShortcutsDialog } from './shortcuts-dialog';
 import { SiteAgentAbove, SiteAgentDock, SiteAgentHotkeys, SiteAgentOverlay } from '@/features/site-agent/panel';
 import { GuideMount } from '@/features/rafii-guide/guide-mount';
 import { PostApprovalCalibration } from '@/features/time-back/post-approval-calibration';
+import { DeepLinkAcknowledgement } from '@/features/coworker/notifications/deep-link-acknowledgement';
 
 /**
  * Client shell for /app/*: session → workspace → gate → sidebar + Cmd+K +
@@ -58,6 +59,7 @@ export function AppShell({ defaultOpen, children, initial }: { defaultOpen: bool
                 <ShortcutsDialog />
                 {/* Time back: the optional, rate-limited calibration question after a post approval, on any page. */}
                 <PostApprovalCalibration />
+                <DeepLinkAcknowledgement />
               </SidebarProvider>
             </KBar>
             </PreferencesProvider>

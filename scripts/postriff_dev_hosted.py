@@ -265,6 +265,7 @@ def main():
     parser.add_argument("--port", type=int, default=4331)
     parser.add_argument("--credit-fixture", action="store_true", help="synthetic credit funding and model, disposable database only")
     parser.add_argument("--phone-fixture", action="store_true", help="local fake phone identity/calls; no SMS or PSTN egress")
+    parser.add_argument("--notification-fixture", action="store_true", help="unified notifications with fake SMS/Push/Email only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
     args = parser.parse_args()
@@ -292,6 +293,20 @@ def main():
         from postriff_phase2.phone.runtime import attach
         attach(service,{'RAFII_PHONE_ENABLED':'1','RAFII_PHONE_OUTBOUND_ENABLED':'1','RAFII_PHONE_SCHEDULED_ENABLED':'1',
                         'RAFII_PHONE_PROACTIVE_ENABLED':'1','RAFII_PHONE_PROVIDER':'fake'})
+    if args.notification_fixture:
+        from postriff_phase2.coworker.runtime import attach as attach_notifications
+        from postriff_phase2.notifications import sms, push
+        fixture_values = {'RAFII_NOTIFICATIONS_V2_ENABLED':'1','RAFII_SMS_ENABLED':'1','RAFII_SMS_ESCALATION_ENABLED':'1','RAFII_WEB_PUSH_ENABLED':'1',
+                          'POSTRIFF_PUBLIC_BASE_URL':'https://dev.postriff.invalid','POSTRIFF_VAPID_SUBJECT':'https://dev.postriff.invalid'}
+        keys = push.generate_vapid_keys()
+        fixture_values.update(POSTRIFF_VAPID_PUBLIC_KEY=keys['publicKey'],POSTRIFF_VAPID_PRIVATE_KEY=keys['privateKey'])
+        attach_notifications(service,fixture_values)
+        service.notifications.sms_transport = sms.FakeSMSTransport()
+        class FakePush:
+            name = 'fake_push'
+            def send(self,*_args,**_kwargs): return {'state':'sent','providerRef':'local-push'}
+        service.notifications.push_transport = FakePush()
+        # The existing NullTransport remains in place for email. No customer address is contacted.
     social = HostedSocial(service.oauth, providers, dev_assets, transport=transport)
 
     def on_verified(cur, workspace_id, job):

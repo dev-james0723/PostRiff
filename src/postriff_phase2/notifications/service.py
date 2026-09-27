@@ -18,18 +18,18 @@ import time
 from postriff_alpha.domain import AlphaError
 
 from ..coworker import flags
-from . import catalog, delivery, detector, push as push_module, store, webhooks
+from . import catalog, delivery, detector, push as push_module, sms, store, webhooks
 
 log = logging.getLogger("postriff.notifications")
 ZONE = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+\-]+){0,2}$")
-MODES = {"email_mode": ("immediate", "digest", "off"), "push_mode": ("immediate", "off"), "digest_frequency": ("daily", "weekly", "off")}
+MODES = {"email_mode": ("immediate", "digest", "off"), "push_mode": ("immediate", "off"), "digest_frequency": ("daily", "weekly", "off"), "sms_mode": ("important_only", "off")}
 
 
 RESCAN_SECONDS = 3600          # an unchanged workspace is re-checked hourly (billing, trials, token expiry)
 NEW_WORKSPACE_SECONDS = 600    # a workspace created this recently has no past to baseline
 
 class NotificationService:
-    def __init__(self, hosted, values=None, *, email_transport=None, push_transport=None, clock=time.time):
+    def __init__(self, hosted, values=None, *, email_transport=None, push_transport=None, sms_transport=None, clock=time.time):
         self.hosted, self.values, self.clock = hosted, dict(values or {}), clock
         mailer = getattr(hosted, "mailer", None)
         self.email_transport = email_transport if email_transport is not None else getattr(mailer, "transport", None)
@@ -42,6 +42,7 @@ class NotificationService:
             log.warning(json.dumps({"event": "notifications.vapid_invalid", "error": str(error)[:120]}))
         self.push_transport = push_transport if push_transport is not None else (push_module.WebPushTransport(self.vapid) if self.vapid else None)
         self.signing_key = webhooks.signing_key(self.values)
+        self.sms_transport = sms_transport if sms_transport is not None else sms.TwilioSMSTransport(self.values)
 
     # --- switches ---------------------------------------------------------------------------------------------------------
     def enabled(self):
@@ -49,6 +50,12 @@ class NotificationService:
 
     def push_enabled(self):
         return self.enabled() and flags.enabled("RAFII_WEB_PUSH_ENABLED") and self.vapid is not None
+
+    def sms_enabled(self):
+        return self.enabled() and flags.enabled("RAFII_SMS_ENABLED")
+
+    def sms_context(self, cur, recipient, _event):
+        return store.sms_context(cur,recipient["userId"],enabled=self.sms_enabled(),escalation_enabled=flags.enabled("RAFII_SMS_ESCALATION_ENABLED"))
 
     def email_available(self):
         return self.email_transport is not None and not type(self.email_transport).__name__.startswith("Null")
@@ -63,7 +70,8 @@ class NotificationService:
             return {"eventId": None, "created": False, "deliveries": [], "disabled": True}
         phone = getattr(self.hosted,'phone',None)
         return store.emit(cur, **event, now=self.clock(), email_available=self.email_available(), push_enabled=self.push_enabled(),
-                          phone_context_for=phone.notification_context if phone and phone.config.enabled('RAFII_PHONE_ENABLED') and phone.config.enabled('RAFII_PHONE_PROACTIVE_ENABLED') else None)
+                          phone_context_for=phone.notification_context if phone and phone.config.enabled('RAFII_PHONE_ENABLED') and phone.config.enabled('RAFII_PHONE_PROACTIVE_ENABLED') else None,
+                          sms_context_for=self.sms_context if self.sms_enabled() else None)
 
     def scan(self, cur, workspace_id, state, include_database=True, baseline=False):
         """Emit every event the workspace's authoritative state implies (idempotent). With `baseline` (the first scan of
@@ -71,6 +79,7 @@ class NotificationService:
         so turning the feature on never mails people about months-old failures."""
         if not self.enabled() or not state or (state.get("workspace") or {}).get("sample"):
             return {"events": 0, "created": 0}
+        store.resolve_pending(cur,workspace_id,state,self.clock())
         events = detector.from_state(workspace_id, state, self.clock())
         if include_database:
             events += detector.from_database(cur, workspace_id, self.clock())
@@ -93,6 +102,7 @@ class NotificationService:
         if not self.enabled() or not after or (after.get("workspace") or {}).get("sample"):
             return
         now = self.clock()
+        store.resolve_pending(cur,workspace_id,after,now)
         known = {e["dedupe_key"] for e in detector.from_state(workspace_id, before or {}, now)}
         for event in detector.from_state(workspace_id, after, now):
             if event["dedupe_key"] in known:
@@ -180,7 +190,7 @@ class NotificationService:
         return delivery.DeliveryWorker(self.hosted.repository.connection_factory, email_transport=self.email_transport if self.email_available() else None,
                                        from_address=self.from_address, push_transport=self.push_transport if self.push_enabled() else None,
                                        vault=getattr(getattr(self.hosted, "oauth", None), "vault", None), base_url=self.base_url,
-                                       address_for=getattr(self.hosted, "_email_for", None), signing_key=self.signing_key, clock=self.clock)
+                                       address_for=getattr(self.hosted, "_email_for", None), signing_key=self.signing_key, clock=self.clock, sms_service=self)
 
     # --- person-facing API -----------------------------------------------------------------------------------------------------
     def _principal(self, token, workspace_id=None):
@@ -211,16 +221,74 @@ class NotificationService:
         with self.hosted.repository.transaction(token, workspace_id) as (cur, _row, principal):
             return store.mark_all_read(cur, principal, workspace_id)
 
+    def acknowledge(self, workspace_id, token, delivery_id):
+        self._require()
+        if not isinstance(delivery_id,str) or not re.fullmatch(r'[0-9a-fA-F-]{36}',delivery_id):
+            raise AlphaError('Notification unavailable.',404)
+        with self.hosted.repository.transaction(token,workspace_id) as (cur,_row,principal):
+            cur.execute("""SELECT d.event_id::text,d.channel,d.digest_id FROM public.pr_notification_deliveries d
+                           WHERE d.id::text=%s AND d.user_id=%s AND d.channel IN ('email','push','sms','in_app')
+                           AND (d.workspace_id IS NULL OR EXISTS(SELECT 1 FROM public.pr_memberships m
+                             WHERE m.workspace_id=d.workspace_id AND m.user_id=d.user_id AND m.status='active'))""", (delivery_id,principal))
+            row = cur.fetchone()
+            if not row: raise AlphaError('Notification unavailable.',404)
+            cancelled = store.acknowledge(cur,row[0],principal,row[1],'opened')
+            if row[1]=='email' and row[2]:
+                cur.execute("""SELECT d.event_id::text FROM public.pr_notification_deliveries d WHERE d.digest_id=%s AND d.user_id=%s AND d.channel='email'
+                               AND (d.workspace_id IS NULL OR EXISTS(SELECT 1 FROM public.pr_memberships m WHERE m.workspace_id=d.workspace_id AND m.user_id=d.user_id AND m.status='active'))""", (row[2],principal))
+                for event_id, in cur.fetchall(): cancelled += store.acknowledge(cur,event_id,principal,'email','opened')
+            return {'acknowledged': True, 'cancelled': cancelled, 'verified': True}
+
+    def set_sms(self, workspace_id, token, payload):
+        """Explicit, versioned text consent. The Phone Mode identity/verification flow owns the number."""
+        self._require()
+        mode = payload.get('mode')
+        if mode not in ('off','important_only') or type(payload.get('securitySMS',False)) is not bool:
+            raise AlphaError('Choose Off or Important only.',400)
+        if mode=='important_only' and (payload.get('consent') is not True or payload.get('consentVersion')!=sms.CONSENT_VERSION):
+            raise AlphaError('Confirm the text-message opt-in.',400)
+        if mode=='important_only' and not self.sms_enabled():
+            raise AlphaError('Text messages are unavailable on this deployment.',404,code='feature_disabled')
+        with self.hosted.repository.transaction(token,workspace_id) as (cur,_row,principal):
+            cur.execute('SELECT phone_hash,verified_at IS NOT NULL FROM public.pr_phone_numbers WHERE user_id=%s FOR UPDATE', (principal,))
+            number = cur.fetchone()
+            if mode=='important_only' and not (number and number[1]):
+                raise AlphaError('Verify your number in Phone Mode first.',409,code='phone_unverified')
+            cur.execute('SELECT provider_blocked FROM public.pr_sms_consents WHERE user_id=%s FOR UPDATE', (principal,))
+            blocked = cur.fetchone()
+            if mode=='important_only' and blocked and blocked[0]:
+                raise AlphaError('Your provider has stopped texts. Restore messaging with your provider before opting in again.',409,code='sms_provider_stop')
+            if number:
+                cur.execute("""INSERT INTO public.pr_sms_consents(user_id,phone_hash,status,version,source,security_sms,consented_at,opted_out_at)
+                               VALUES(%s,%s,%s,%s,'settings',%s,CASE WHEN %s THEN now() END,CASE WHEN %s THEN now() END)
+                               ON CONFLICT(user_id) DO UPDATE SET phone_hash=excluded.phone_hash,status=excluded.status,version=excluded.version,
+                               source='settings',security_sms=excluded.security_sms,consented_at=excluded.consented_at,
+                               opted_out_at=excluded.opted_out_at,updated_at=now()""",
+                            (principal,number[0],'opted_in' if mode=='important_only' else 'opted_out',sms.CONSENT_VERSION,
+                             payload.get('securitySMS',False) if mode=='important_only' else False,mode=='important_only',mode=='off'))
+            cur.execute("""INSERT INTO public.pr_notification_preferences(user_id,scope_key,category,sms_mode)
+                           VALUES(%s,'*','*',%s) ON CONFLICT(user_id,scope_key,category) DO UPDATE SET sms_mode=excluded.sms_mode,updated_at=now()""", (principal,mode))
+            if mode=='off': store.cancel_sms(cur,user_id=principal,reason='sms_off')
+            from ..hosted import audit
+            audit(cur,workspace_id,principal,'notification.sms_consent','sms',{'mode':mode,'version':sms.CONSENT_VERSION,'securitySMS':payload.get('securitySMS',False)})
+            return {'mode': mode,'sms': store.sms_context(cur,principal,enabled=self.sms_enabled()),'verified':True}
+
+    def sms_webhook(self, path, parameters, signature):
+        # Opt-out still works when sending flags are off. No outbound operation happens here.
+        from .sms_delivery import webhook
+        return webhook(self,path,parameters,signature)
+
     def preferences(self, workspace_id, token):
         self._require()
         with self.hosted.repository.transaction(token, workspace_id) as (cur, _row, principal):
             rows = store.preference_rows(cur, principal)
             cur.execute("SELECT count(*) FROM public.pr_push_subscriptions WHERE user_id=%s AND revoked_at IS NULL", (principal,))
             devices = cur.fetchone()[0]
+            texts = store.sms_context(cur,principal,enabled=self.sms_enabled(),escalation_enabled=flags.enabled("RAFII_SMS_ESCALATION_ENABLED"))
         effective = {cat: store.planner.effective_preferences(rows, workspace_id, cat) for cat in catalog.CATEGORIES}
         return {"catalog": catalog.public(), "rows": [{"scope": k[0], "category": k[1], **v} for k, v in rows.items()], "effective": effective,
                 "push": {"available": self.push_enabled(), "vapidPublicKey": self.vapid.public_key if self.push_enabled() else None, "devices": devices},
-                "email": {"available": self.email_available()}}
+                "email": {"available": self.email_available()}, "sms": texts}
 
     def set_preference(self, workspace_id, token, payload):
         """Upsert one preference row for the caller only. Scope: 'workspace' (this workspace) or 'all' (the person's
@@ -236,6 +304,10 @@ class NotificationService:
                 if payload[key] is not None and payload[key] not in allowed:
                     raise AlphaError(f"{key} must be one of {', '.join(allowed)}.", 400)
                 fields[key] = payload[key]
+        if "smart_escalation" in payload:
+            if payload["smart_escalation"] is not None and not isinstance(payload["smart_escalation"],bool):
+                raise AlphaError("smart_escalation must be true or false.",400)
+            fields["smart_escalation"] = payload["smart_escalation"]
         if "in_app" in payload:
             if not isinstance(payload["in_app"], bool):
                 raise AlphaError("in_app must be true or false.", 400)
@@ -269,6 +341,8 @@ class NotificationService:
         if not fields:
             raise AlphaError("Nothing to change.", 400)
         with self.hosted.repository.transaction(token, workspace_id) as (cur, _row, principal):
+            if fields.get("sms_mode")=="important_only" and not store.sms_context(cur,principal)["consented"]:
+                raise AlphaError("Explicit text-message consent is required.",409)
             scope_key = workspace_id if scope == "workspace" else "*"
             columns = list(fields)
             values = [fields[c] if c != "muted_until" or fields[c] is None else store._ts(fields[c]) for c in columns]

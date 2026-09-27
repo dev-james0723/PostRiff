@@ -132,6 +132,7 @@ def _delete(service, workspace_id, principal):
         # Person-keyed notification data (migration 024) has no FK to pr_profiles by design; remove it explicitly.
         cur.execute('DELETE FROM public.pr_push_subscriptions WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_notification_preferences WHERE user_id=%s', (principal,))
+        cur.execute('DELETE FROM public.pr_notification_provider_events WHERE delivery_id IN (SELECT id FROM public.pr_notification_deliveries WHERE user_id=%s)', (principal,))
         cur.execute('DELETE FROM public.pr_notification_deliveries WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_notification_events WHERE scope_key=%s', (f'user:{principal}',))
         # Migration 033 has cascading profile FKs: identity, preferences, calls, events, delegation and schedules.

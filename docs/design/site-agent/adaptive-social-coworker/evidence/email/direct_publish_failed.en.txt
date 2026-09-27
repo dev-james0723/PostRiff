@@ -1,0 +1,5 @@
+A post from your automation “Weekly plan” couldn't be published. The approved draft is kept.
+
+Open the automation: https://app.rafii.example/app
+
+You received this because you have a Rafii account. Privacy: https://app.rafii.example/privacy

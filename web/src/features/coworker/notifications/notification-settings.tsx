@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { SettingsSection } from '@/features/account/settings-section';
 import { FIELD_CLASS, SelectField } from '@/features/workspace/rafii-parts';
 import { errorMessage, isFeatureDisabled } from '@/lib/coworker/api';
-import { useCoworkerApi, useCoworkerFlag, useNotificationPreferences, useSetPreference } from '@/lib/coworker/hooks';
+import { coworkerKeys, useCoworkerApi, useCoworkerFlag, useNotificationPreferences, useSetPreference } from '@/lib/coworker/hooks';
 import type { NotificationPreferences, PreferenceFields, PreferencePatch } from '@/lib/coworker/types';
 import { CATEGORY_LABELS } from './labels';
 import { PushOptIn } from './push-opt-in';
@@ -93,11 +94,54 @@ export function NotificationSettings() {
       <SettingsSection id='notifications-push' title='Push notifications' description='Optional, per browser. Only what needs you: approvals, failed or uncertain posts, reconnects and a ready week.'>
         <PushOptIn available={data.push.available} vapidPublicKey={data.push.vapidPublicKey} />
       </SettingsSection>
-      <CategoryTable prefs={data} workspaceId={w} busy={set.isPending} onSave={save} />
+      <SettingsSection id='notifications-email-mode' title='Email' description='Security and billing emails always reach you. Other updates follow this choice.'>
+        <SelectField label='Email delivery' aria-label='Email delivery' value={row(data,w,'*').email_mode ?? 'default'} disabled={set.isPending || !data.email.available}
+          onChange={(e) => void save({scope:'workspace',category:'*',email_mode:e.target.value === 'default' ? null : e.target.value as 'immediate' | 'digest' | 'off'}, 'Email preference saved.')}>
+          <option value='default'>Important now, routine updates in a digest</option><option value='immediate'>Immediate</option><option value='digest'>Digest</option><option value='off'>Off</option>
+        </SelectField>
+      </SettingsSection>
+      <TextMessages prefs={data} />
+      <SettingsSection id='notifications-escalation' title='Smart escalation' description='If you miss an important push, Rafii can text you after 10 minutes for critical issues or 30 minutes for timely approvals. Reading or resolving the issue cancels the text.'>
+        <div className='flex min-h-11 items-center justify-between gap-4'><span className='text-sm'>If I miss an important push, text me</span><Switch aria-label='Smart escalation' checked={data.effective.publishing?.smart_escalation !== false}
+          disabled={set.isPending || !data.sms?.enabled || !data.sms.consented} onCheckedChange={(smart_escalation) => void save({scope:'all',category:'*',smart_escalation}, 'Smart escalation preference saved.')} /></div>
+      </SettingsSection>
       <QuietHours prefs={data} busy={set.isPending} onSave={save} />
       <MuteAndDigest prefs={data} workspaceId={w} busy={set.isPending} onSave={save} />
+      <details className='rounded-[var(--rafii-radius-card)]'><summary className='rafii-focus cursor-pointer rounded-md px-2 py-3 text-sm font-medium'>Advanced category choices</summary><CategoryTable prefs={data} workspaceId={w} busy={set.isPending} onSave={save} /></details>
     </>
   );
+}
+
+function TextMessages({ prefs }: { prefs: NotificationPreferences }) {
+  const { api, w } = useCoworkerApi();
+  const client = useQueryClient();
+  const [busy,setBusy] = useState(false);
+  const [error,setError] = useState<string | null>(null);
+  const texts = prefs.sms;
+  const mode = texts?.consented && texts.verified && !texts.provider_blocked ? 'important_only' : 'off';
+  async function save(next: 'off' | 'important_only', security = texts?.security_sms ?? false) {
+    setBusy(true); setError(null);
+    try {
+      const result = await api.setSMS(w,next,security);
+      if (!result.verified) throw new Error('Text-message consent could not be confirmed.');
+      await client.invalidateQueries({queryKey:coworkerKeys.preferences(w)});
+    } catch (e) { setError(errorMessage(e)); }
+    finally { setBusy(false); }
+  }
+  return <SettingsSection id='notifications-texts' title='Text messages' description='Optional important texts. Turning on Phone Mode never opts you in. Provider messaging rates may apply. Reply STOP to stop texts.'>
+    <div className='flex flex-col gap-4'>
+      <p className='text-muted-foreground text-sm'>{texts?.verified ? `Verified number: •••• ${texts.lastFour}` : 'Verify a number in Phone Mode to receive texts.'}</p>
+      {!texts?.verified && <a href='#phone-mode' className='rafii-focus min-h-11 self-start rounded-md py-3 text-sm underline underline-offset-4'>Verify a number</a>}
+      {texts?.provider_blocked && <p role='status' className='text-sm'>Your provider stopped text messages. Reply START to restore messaging, then opt in here again.</p>}
+      {texts && !texts.enabled && <p className='text-muted-foreground text-sm'>Text messages are currently unavailable.</p>}
+      <SelectField label='Text message delivery' aria-label='Text message delivery' value={mode} disabled={busy}
+        onChange={(e) => void save(e.target.value as 'off' | 'important_only')}>
+        <option value='off'>Off</option><option value='important_only' disabled={!texts?.enabled || !texts.verified || texts.provider_blocked}>Important only — I opt in to important texts</option>
+      </SelectField>
+      {mode==='important_only' && <div className='flex min-h-11 items-center justify-between gap-4'><span className='text-sm'>Include account-change texts</span><Switch aria-label='Include account-change texts' checked={texts?.security_sms ?? false} disabled={busy} onCheckedChange={(on) => void save('important_only',on)} /></div>}
+      {error && <p role='alert' className='text-destructive text-sm'>{error}</p>}
+    </div>
+  </SettingsSection>;
 }
 
 type Save = (patch: PreferencePatch, done: string) => Promise<void>;
@@ -201,11 +245,9 @@ function QuietHours({ prefs, busy, onSave }: { prefs: NotificationPreferences; b
       id='notifications-quiet'
       title='Quiet hours'
       description={
-        !prefs.push.available
-          ? 'Quiet hours hold push notifications, which aren’t set up yet. In-app notifications are never held.'
-          : active
-            ? `On: ${toClock(global.quiet_start)}–${toClock(global.quiet_end)} (${global.time_zone ?? 'UTC'}). Push waits until they end; security alerts still come through.`
-            : 'Off. Push can arrive at any time.'
+        active
+          ? `On: ${toClock(global.quiet_start)}–${toClock(global.quiet_end)} (${global.time_zone ?? 'UTC'}). Push and texts wait until they end. Security email and push can still arrive; security texts wait too.`
+          : 'Off. Enabled push and texts can arrive at any time. In-app notifications are never held.'
       }
     >
       <div className='grid gap-3 sm:grid-cols-3'>
@@ -250,7 +292,7 @@ function QuietHours({ prefs, busy, onSave }: { prefs: NotificationPreferences; b
 
 /** What muting actually pauses: only the channels that are set up. */
 function muteToast(prefs: NotificationPreferences): string {
-  const paused = [prefs.email.available && 'Email', prefs.push.available && (prefs.email.available ? 'push' : 'Push')].filter(Boolean);
+  const paused = [prefs.email.available && 'Email', prefs.push.available && 'push', prefs.sms?.enabled && prefs.sms.consented && 'texts'].filter(Boolean);
   if (paused.length === 0) return 'Muted. The app still collects notifications.';
   return `Muted. ${paused.join(' and ')} ${paused.length === 1 ? 'pauses' : 'pause'}; the app still collects notifications.`;
 }

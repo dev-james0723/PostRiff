@@ -91,6 +91,8 @@ export type PushMode = 'immediate' | 'off';
 export type DigestFrequency = 'daily' | 'weekly' | 'off';
 
 export interface PreferenceFields {
+  sms_mode?: "off" | "important_only" | null;
+  smart_escalation?: boolean | null;
   in_app?: boolean | null;
   email_mode?: EmailMode | null;
   push_mode?: PushMode | null;
@@ -117,6 +119,7 @@ export interface NotificationPreferences {
   /** `devices` is a count here; the list is `GET push-subscriptions`. */
   push: { available: boolean; vapidPublicKey: string | null; devices: number };
   email: { available: boolean };
+  sms?: { enabled: boolean; verified: boolean; consented: boolean; lastFour: string | null; security_sms: boolean; provider_blocked: boolean; consentStatus: string };
 }
 
 export type PreferencePatch = Omit<PreferenceFields, 'muted_until'> & {

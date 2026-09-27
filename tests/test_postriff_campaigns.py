@@ -326,7 +326,7 @@ class ScheduleKindTests(unittest.TestCase):
                 return {"id": "message-1"}
         mailer = Mailer(Transport(), "PostRiff <no-reply@postriff.invalid>", "https://postriff.example")
         self.assertTrue(mailer.drafts_ready("owner@example.com", "Weekly tip", 3, "https://postriff.example/app/agent/c1")["sent"])
-        self.assertEqual(sent[0]["subject"], "3 drafts ready for review: Weekly tip")
+        self.assertEqual(sent[0]["subject"], "3 drafts ready for review")
         self.assertIn("https://postriff.example/app/agent/c1", sent[0]["text"])
         self.assertIn("Nothing was scheduled or published", sent[0]["text"])
 

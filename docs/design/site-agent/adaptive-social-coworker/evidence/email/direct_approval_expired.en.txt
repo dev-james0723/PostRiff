@@ -1,0 +1,5 @@
+A post from your automation “Weekly plan” reached its publish time without an approval, so it was not published. The draft is kept.
+
+See the draft: https://app.rafii.example/app
+
+You received this because you have a Rafii account. Privacy: https://app.rafii.example/privacy

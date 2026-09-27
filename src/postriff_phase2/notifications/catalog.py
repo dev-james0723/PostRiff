@@ -9,7 +9,7 @@ preference proposals are digest or in-app only.
 """
 from __future__ import annotations
 
-CATALOG_VERSION = "2026-09-26.1"
+CATALOG_VERSION = "2026-09-26.2"
 CATEGORIES = ("approvals", "publishing", "weekly", "automation", "channels", "engagement", "opportunities", "analytics", "learning",
               "budget", "billing", "security", "research", "assets", "campaigns")
 # Who receives an event, by the permission class a member must hold (permissions.CLASSES). "actor" = the person the
@@ -44,12 +44,18 @@ EVENTS = {
     "security.new_device": {"category": "security", "severity": "security", "audience": "actor", "email": "immediate", "push": "off", "template": "security_alert", "transactional": True},
     "security.account_change": {"category": "security", "severity": "security", "audience": "actor", "email": "immediate", "push": "off", "template": "security_alert", "transactional": True},
 }
+# Explicit SMS eligibility is never inferred from severity. Security also requires separate consent.
+_SMS = {'publish.failed', 'publish.uncertain', 'channel.reconnect_required', 'campaign.approval_required',
+        'billing.payment_failed', 'security.account_change'}
+for _event, _item in EVENTS.items():
+    _item['sms'] = 'escalate' if _event in _SMS else 'off'
+
 # Severity that may interrupt through quiet hours (push is deferred for everything else; email too for info/action).
 BREAKS_QUIET_HOURS = ("security",)
 # Per person per hour: beyond this an interrupting channel is downgraded to the digest (never dropped).
 RATE_LIMITS = {"push": 6, "email": 12}
 DIGEST_HOUR = 9  # local time of the daily digest; the weekly digest is Monday at this hour
-MAX_ATTEMPTS = {"email": 6, "push": 5, "in_app": 1, "phone": 1}
+MAX_ATTEMPTS = {"email": 6, "push": 5, "in_app": 1, "phone": 1, "sms": 3}
 PUBLISH_STATE_EVENTS = {"verified": "publish.verified", "failed": "publish.failed", "uncertain": "publish.uncertain", "scheduled": "publish.scheduled"}
 
 
@@ -67,4 +73,4 @@ def transactional(event_type):
 def public():
     """The catalogue the settings page shows: categories, events and defaults (no recipients or internals)."""
     return {"version": CATALOG_VERSION, "categories": list(CATEGORIES),
-            "events": {name: {k: v for k, v in item.items() if k in ("category", "severity", "email", "push", "transactional")} for name, item in EVENTS.items()}}
+            "events": {name: {k: v for k, v in item.items() if k in ("category", "severity", "email", "push", "sms", "transactional")} for name, item in EVENTS.items()}}

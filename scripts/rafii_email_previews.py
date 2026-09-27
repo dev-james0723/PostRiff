@@ -13,8 +13,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from postriff_phase2.notifications import catalog, email_render  # noqa: E402
+from postriff_phase2.email import DIRECT_TEMPLATES, Mailer, NullTransport
 
-LOCALES = ("en", "zh-Hant-HK", "zh-Hant", "zh-Hans")
+LOCALES = tuple(email_render.catalogue()["locales"])
 BASE = "https://app.rafii.example"
 VALUES = {"platform": "LinkedIn", "count": 5, "weekOf": "2026-09-28", "recipe": "Weekly plan", "recipeName": "Weekly plan", "title": "A new device signed in",
           "reason": "LinkedIn rejected the post: the text is longer than allowed.", "endsAt": "1 October 2026", "planName": "Pro", "why": "It matches your goal “Fill autumn preorders”."}
@@ -42,10 +43,21 @@ def main():
             (out / f"{stem}.txt").write_text(rendered["text"])
             index.append({"template": template, "event": event, "locale": locale, "subject": rendered["subject"], "preheader": rendered["preheader"],
                           "htmlBytes": len(rendered["html"].encode()), "ctaCount": rendered["html"].count('class="rf-cta-a"'), "transactional": transactional,
-                          "listUnsubscribe": bool(rendered["headers"]), "templateVersion": rendered["templateVersion"], "file": f"{stem}.html"})
+                          "listUnsubscribe": bool(rendered["headers"]), "templateVersion": rendered["templateVersion"], "file": f"{stem}.html","primaryURL":rendered['url']})
+    mailer = Mailer(NullTransport(),'Rafii <local@rafii.example>',BASE)
+    for kind, link in DIRECT_TEMPLATES.items():
+        href=BASE + ('/invite/synthetic-preview' if kind=='invitation' else '/pricing' if link=='pricing_url' else '/app/account/notifications' if kind=='new_device' else '/app')
+        subject,text,html_doc=mailer.render(kind,**{link:href},inviter_label='A teammate',role='editor',days_left=3,expires_at=1800000000,
+                                           grace_until=1800000000,plan_label='Studio',automation_name='Weekly plan',count=3,device_label='A new device')
+        stem=f'direct_{kind}.en'
+        (out/f'{stem}.html').write_text(html_doc)
+        (out/f'{stem}.txt').write_text(text)
+        index.append({'template':f'direct_{kind}','event':None,'locale':'en','subject':subject,'preheader':subject,'htmlBytes':len(html_doc.encode()),
+                      'ctaCount':html_doc.count('class="rf-cta-a"'),'transactional':True,'listUnsubscribe':False,'templateVersion':email_render.TEMPLATE_VERSION,
+                      'file':f'{stem}.html','primaryURL':href})
     (out / "index.json").write_text(json.dumps({"templateVersion": email_render.TEMPLATE_VERSION, "catalogVersion": catalog.CATALOG_VERSION, "previews": index},
                                                ensure_ascii=False, indent=2) + "\n")
-    print(json.dumps({"previews": len(index), "templates": len(email_render.TEMPLATES), "locales": len(LOCALES), "out": str(out)}))
+    print(json.dumps({"previews": len(index), "notificationTemplates": len(email_render.TEMPLATES),"directEnglishTemplates":len(DIRECT_TEMPLATES), "locales": len(LOCALES), "out": str(out)}))
 
 
 if __name__ == "__main__":

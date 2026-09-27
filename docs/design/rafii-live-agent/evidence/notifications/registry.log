@@ -1,0 +1,6 @@
+release reg_1e3b147bfbf69d6f633106a6 · registered 90 · default 82 · private 5
+by kind: knowledge 46, workflow 5, tool 21, policy 10, evaluator 8
+orphans 0 · deprecated 1 · dormant 2 · James-leak findings 0
+  exception rafii-listening-opportunity (dormant): No production path applies this method yet: listening scores and records opportunities deterministically, and 'Act on it' records a decision without drafting. Kept for when an opportunity drafts through the writer; not bound, not advertised.
+  exception postriff-conversation-director (deprecated): Duplicates runtime intake (intent.py, onboarding_chat, the Rafii Manager's instructions). Its one-blocking-question rule is implemented by coworker.weekly_operator needs_input questions. Not bound, not advertised.
+  exception postriff-hyperframes-motion (dormant): No hosted motion renderer exists (HyperFrames rendering is local-only). Kept for the local studio; not bound, not advertised, not counted as a hosted capability.

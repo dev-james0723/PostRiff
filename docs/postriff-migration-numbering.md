@@ -15,7 +15,8 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 031 | `031_chat_media` | Chat attachments (chat-context SPEC §10) | Taken. Applied in production with a one-off, sha256-pinned run (see `docs/design/chat-context/VERIFICATION.md`). |
 | 032 | `032_productivity_connectors` | Chat productivity connectors | Taken on `consumer-saas`. Growth branches also contain `032_growth_metric_reads`; reconcile that separate branch's collision before integrating it. |
 | 033 | `033_phone_mode` | Rafii Phone Mode | Taken on `feat/rafii-live-agent`; applied only to disposable local PostgreSQL. Staging and production remain unapplied. |
-| 034 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 034 | `034_unified_notifications` | Rafii Unified Notifications | Taken on `feat/rafii-live-agent` after the 2026-09-26 inventory of all 44 registered worktrees (highest 033). Disposable local PostgreSQL only. |
+| 035 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 

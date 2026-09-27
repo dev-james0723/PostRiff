@@ -36,16 +36,20 @@ def snapshot(connection_factory, now=None):
                     (now-600, sorted(V2_KINDS) if v2 else []))
         notifications = cur.fetchone()[0]
         delivery_backlog = delivery_dead = 0
+        sms_counts = {}
         if v2:
             cur.execute("""SELECT count(*) FILTER (WHERE status IN ('pending','claimed') AND next_attempt_at < to_timestamp(%s)),
                                   count(*) FILTER (WHERE status='dead' AND updated_at > to_timestamp(%s))
                            FROM public.pr_notification_deliveries WHERE channel IN ('email','push')""", (now-600, now-86400))
             delivery_backlog, delivery_dead = cur.fetchone()
+            from .notifications.delivery import sms_signals
+            sms_counts = sms_signals(cur,now)
         cur.execute("SELECT count(*) FROM public.pr_data_requests WHERE kind='deletion' AND status='requested'")
         deletions = cur.fetchone()[0]
     counts = dict(publicationUncertain=stuck, queueDelayed=delayed, publicationFailed=failed, publicationHeld=held,
                   modelStuck=model_stuck, researchStuck=research_stuck, costUnsettled=unsettled,
                   budgetStops=budgets, budgetWarnings=budget_warnings, billingRejected24h=billing, notificationsUnsent=notifications, deletionPending=deletions,
                   notificationBacklog=delivery_backlog, notificationDead24h=delivery_dead)
-    return {'status':'attention' if any(counts.values()) else 'ok', 'observedAt':now, 'counts':counts,
+    return {'status':'attention' if any(counts.values()) or sms_counts.get('backlogOver10m') or sms_counts.get('failedDeadUncertain24h') else 'ok', 'observedAt':now, 'counts':counts,
+            'sms':sms_counts,
             'notificationDelivery':'rafii_v2' if v2 else 'not_configured'}

@@ -38,8 +38,9 @@ class Templates(unittest.TestCase):
             self.assertNotIn("<script>", html, kind)
             if "<script>" in str(ctx):
                 self.assertIn("&lt;script&gt;", html, kind)
-            self.assertIn('style="max-width:560px', html)
-            self.assertNotIn("<img", html)
+            self.assertIn('data-rafii-wordmark="approved"', html)
+            self.assertIn('data-rafii-character="approved"', html)
+            self.assertEqual(html.count('class="rf-cta-a"'),1)
             self.assertNotIn("\n", subject)
 
     def test_subject_lines(self):
@@ -49,7 +50,20 @@ class Templates(unittest.TestCase):
         self.assertEqual(m.render("trial_ending", **CONTEXTS["trial_ending"])[0], "Your Rafii trial ends in 3 days")
         self.assertEqual(m.render("trial_ended", **CONTEXTS["trial_ended"])[0], "Your Rafii trial has ended")
         self.assertEqual(m.render("payment_failed", **CONTEXTS["payment_failed"])[0], "Action needed: payment failed")
-        self.assertEqual(m.render("subscription_activated", plan_label="Studio", billing_url=f"{BASE}/b")[0], "Your Studio plan is active")
+        self.assertEqual(m.render("subscription_activated", plan_label="Studio", billing_url=f"{BASE}/b")[0], "Your Rafii plan is active")
+
+    def test_private_context_never_enters_subject_or_preheader(self):
+        from postriff_phase2.email import AUTOMATION_NOTICES
+        m = mailer()
+        private = 'private@example.test secret automation\ncontent'
+        for kind in (*AUTOMATION_NOTICES, 'drafts_ready', 'subscription_activated'):
+            subject, text, html = m.render(kind, automation_name=private, plan_label=private,
+                                          count=3, review_url=f'{BASE}/app', billing_url=f'{BASE}/app')
+            self.assertNotIn('private@example.test', subject)
+            self.assertNotIn('\n', subject)
+            self.assertIn('private@example.test', text)
+            preheader = html.split('mso-hide:all;', 1)[1].split('</div>', 1)[0]
+            self.assertNotIn('private@example.test', preheader)
 
     def test_render_rejects_unknown_kind_and_relative_links(self):
         m = mailer()
@@ -59,6 +73,8 @@ class Templates(unittest.TestCase):
             m.render("welcome", app_url="/app")
         with self.assertRaises(AlphaError):
             m.render("welcome", app_url="javascript:alert(1)")
+        with self.assertRaises(AlphaError):
+            m.render("welcome", app_url="https://foreign.test/app")
 
 
 class Transports(unittest.TestCase):

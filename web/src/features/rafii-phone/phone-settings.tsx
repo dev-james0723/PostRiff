@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { SettingsSection } from '@/features/account/settings-section';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
+import { coworkerKeys } from '@/lib/coworker/hooks';
 import type { PhonePreferences } from '@/lib/phone/types';
 import { CallRafii } from './call-rafii';
 import { parseCreditLimit } from '@/features/agent/credit-limit';
@@ -19,6 +21,7 @@ const minutes = (value: string) => Number(value.split(':')[0]) * 60 + Number(val
 export function PhoneSettings() {
   const { api, workspaceId } = useWorkspace();
   const settings = usePhoneSettings();
+  const client = useQueryClient();
   const [number, setNumber] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -29,7 +32,7 @@ export function PhoneSettings() {
   const data = settings.data;
   async function run(action: () => Promise<unknown>) {
     setBusy(true); setError('');
-    try { await action(); await settings.refetch(); }
+    try { await action(); await settings.refetch(); if (workspaceId) await client.invalidateQueries({queryKey:coworkerKeys.preferences(workspaceId)}); }
     catch (err) { setError(err instanceof Error ? err.message : 'Couldn’t save phone settings.'); }
     finally { setBusy(false); }
   }

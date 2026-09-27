@@ -1,0 +1,9 @@
+Rafii 未能接通電話
+
+Rafii 未能完成電話通話。你可以打開應用程式繼續對話。系統不會自動重撥。
+
+打開 Rafii: https://app.rafii.example/app/queue
+
+你收到這封電郵，是因為你在 Harbour Bakery 使用 Rafii。
+通知設定: https://app.rafii.example/app/account/notifications
+取消訂閱這類電郵: https://app.rafii.example/api/notifications/unsubscribe?token=preview

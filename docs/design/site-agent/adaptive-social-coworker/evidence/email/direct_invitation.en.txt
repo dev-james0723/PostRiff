@@ -1,0 +1,7 @@
+A teammate invited you to join their Rafii workspace as editor.
+
+This invitation expires on 15 January 2027. If you weren’t expecting it, you can ignore this email.
+
+Accept invitation: https://app.rafii.example/invite/synthetic-preview
+
+You received this because you have a Rafii account. Privacy: https://app.rafii.example/privacy

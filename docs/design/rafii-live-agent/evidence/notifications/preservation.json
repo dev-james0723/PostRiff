@@ -1,0 +1,14 @@
+{
+  "head": "d0c68e16457317cbd4950c24fea3e6d7d0a51462",
+  "branch": "feat/rafii-live-agent",
+  "baselineHead": "d0c68e16457317cbd4950c24fea3e6d7d0a51462",
+  "existingDirtyDocumentsUnchanged": {
+    "docs/design/rafii-live-agent/RAFII_NOTIFICATION_SYSTEM_AGENT_HANDOFF_2026-09-26.md": true,
+    "docs/design/rafii-live-agent/RAFII_NOTIFICATION_SYSTEM_ENGINEERING_PLAN_2026-09-26.md": true,
+    "docs/design/rafii-live-agent/RAFII_PHONE_MODE_AGENT_HANDOFF_2026-09-26.md": true,
+    "docs/design/rafii-live-agent/RAFII_PHONE_MODE_ENGINEERING_PLAN_2026-09-26.md": true
+  },
+  "phoneBackendUnchanged": true,
+  "phoneSettingsChange": "Only invalidates notification preferences after existing verification/settings operations; no phone storage, provider or call behavior modified.",
+  "originalUntrackedClaudeSkills": "untouched"
+}

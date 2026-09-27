@@ -4640,10 +4640,10 @@
   },
   {
    "id": "rafii.policy.notification-planning",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "kind": "policy",
-   "sha256": "sha256:6f2f6c277583e2505103efa4715f686e63357d35cc28c0ee13f043642a2b0381",
-   "description": "Deterministic notification planning: recipients by permission class, urgency, transactional status, quiet hours, digest, mute, unsubscribe, rate limits and dedupe. A model never decides these.",
+   "sha256": "sha256:e05d996bb8692b6fabe0266f72bc95d1a67f4bd3c2a371a9cfe751cd77b0c885",
+   "description": "Deterministic unified attention planning: recipients by permission class, urgency, consent, separate SMS/phone channels, durable escalation, acknowledgement, quiet hours, digest, mute, unsubscribe, rate limits and dedupe. A model never decides these.",
    "intents": [
     "*"
    ],
@@ -4675,7 +4675,9 @@
    "risk": "high",
    "tests": [
     "tests/test_rafii_notifications.py",
-    "tests/phase2/postgres_coworker.py"
+    "tests/phase2/postgres_coworker.py",
+    "tests/test_rafii_sms.py",
+    "tests/phase2/postgres_unified_notifications.py"
    ],
    "deprecation": "active",
    "private": false,
@@ -4691,9 +4693,17 @@
     {
      "type": "object",
      "ref": "postriff_phase2.notifications.catalog:BREAKS_QUIET_HOURS"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.notifications.sms:SMS_HOURLY_LIMIT"
+    },
+    {
+     "type": "object",
+     "ref": "postriff_phase2.notifications.sms:SMS_DAILY_LIMIT"
     }
    ],
-   "lockedVersion": "1.1.0"
+   "lockedVersion": "1.2.0"
   },
   {
    "id": "rafii.evaluator.claim-evidence",

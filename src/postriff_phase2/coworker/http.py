@@ -46,6 +46,18 @@ def _page(start_response, status, title, message, form_token=None):
 
 
 def public(app, environ, start_response, method, path):
+    if path.startswith('/api/notifications/sms/') and method=='POST':
+        service = runtime.ensure(app._runtime())
+        try: length=int(environ.get('CONTENT_LENGTH') or '0')
+        except ValueError: raise AlphaError('Webhook body size invalid.',400) from None
+        if not 0<length<=MAX_WEBHOOK: raise AlphaError('Webhook body size invalid.',413)
+        try: parameters=parse_qs(environ['wsgi.input'].read(length).decode('utf-8'),keep_blank_values=True,max_num_fields=50)
+        except (ValueError,UnicodeError): raise AlphaError('Invalid SMS body.',400) from None
+        result=service.notifications.sms_webhook(path,parameters,environ.get('HTTP_X_TWILIO_SIGNATURE',''))
+        if path=='/api/notifications/sms/inbound':
+            start_response('200 OK',[('Content-Type','application/xml'),('Cache-Control','no-store')])
+            return [b'<Response/>']
+        return app._json(start_response,200,result)
     if path == "/api/notifications/email/webhook" and method == "POST":
         service = runtime.ensure(app._runtime())
         # Off means off before anything is read; then a size that is not a number is the caller's error, not a 500.
@@ -90,12 +102,16 @@ def handle(app, environ, start_response, service, token, method, parts):
             before = _query(environ, "before")
             return json_(200, notifications.center(workspace_id, token, before=float(before) if before and before.replace(".", "", 1).isdigit() else None,
                                                    unread_only=_query(environ, "unread") == "1"))
+        if rest == ["acknowledge"] and method=="POST":
+            return json_(200,notifications.acknowledge(workspace_id,token,body().get("deliveryId")))
         if rest == ["read-all"] and method == "POST":
             body()
             return json_(200, notifications.mark_all_read(workspace_id, token))
         if len(rest) == 2 and method == "POST":
             body()
             return json_(200, notifications.mark(workspace_id, token, rest[0], rest[1]))
+    if resource == "notification-preferences" and rest==["sms"] and method=="POST":
+        return json_(200,notifications.set_sms(workspace_id,token,body()))
     if resource == "notification-preferences" and not rest:
         if method == "GET":
             return json_(200, notifications.preferences(workspace_id, token))

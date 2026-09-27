@@ -98,6 +98,8 @@ export function createCoworkerApi(getToken: TokenSource) {
     },
     markNotification: (w: string, deliveryId: string, action: 'read' | 'acted' | 'dismissed') =>
       send<MarkResult>('POST', `${ws(w)}/notifications/${seg(deliveryId)}/${action}`),
+    acknowledgeNotification: (w: string, deliveryId: string) => send<Verified & { acknowledged: boolean }>('POST', `${ws(w)}/notifications/acknowledge`, { deliveryId }),
+    setSMS: (w: string, mode: 'off' | 'important_only', securitySMS = false) => send<Verified>('POST', `${ws(w)}/notification-preferences/sms`, { mode, securitySMS, consent: mode === 'important_only', consentVersion: 'rafii-sms/1' }),
     markAllNotificationsRead: (w: string) => send<MarkAllResult>('POST', `${ws(w)}/notifications/read-all`),
     preferences: (w: string) => get<NotificationPreferences>(`${ws(w)}/notification-preferences`),
     setPreference: (w: string, patch: PreferencePatch) => send<PreferenceSaved>('PATCH', `${ws(w)}/notification-preferences`, patch),
