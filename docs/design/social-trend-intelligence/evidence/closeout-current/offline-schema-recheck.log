@@ -1,0 +1,9 @@
+test_connection_must_name_exact_project_and_session_port (test_trend_release.MigrationRelease.test_connection_must_name_exact_project_and_session_port) ... ok
+test_merged_phone_dependency_must_match_reviewed_digest (test_trend_release.MigrationRelease.test_merged_phone_dependency_must_match_reviewed_digest) ... ok
+test_plan_digest_binds_complete_ledger_and_target (test_trend_release.MigrationRelease.test_plan_digest_binds_complete_ledger_and_target) ... ok
+test_plan_refuses_extra_unreviewed_dependency (test_trend_release.MigrationRelease.test_plan_refuses_extra_unreviewed_dependency) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK

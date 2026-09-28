@@ -1,53 +1,35 @@
-# Audited requirement-ledger candidate
+# Current requirement evidence reconciliation
 
-Candidate: `/private/tmp/rafii-trend-ledger/requirements.json`
-Execution: offline ledger audit only. No repository writes, network requests, provider/model calls, product implementation or deployment. The managed baseline was still byte-identical at final validation. All 1,771 record IDs, order, source sections, exact line spans and exact requirement text are preserved.
+Source HEAD: `56fffbf8ec2fb28bf6284780b888b15a2bfbe9a3`. Ledger integrity passed; release completion is not claimed.
 
-## Counts and interpretation
+All 1,771 stable IDs, exact requirement text, source spans and source-text hashes are preserved. The old 1,607 NOT_STARTED value was a pre-implementation snapshot. Current IN_PROGRESS records often contain implemented code plus unqualified compound acceptance; they are not a count of missing engineering tasks.
 
-- Total stable baseline records: 1771.
-- Meaningful baseline records: 1617 (1549 mandatory; 68 recommendations/planning options).
-- Meaningful obligations including four header-only API supplements: 1621. These four are indexed under an existing parent ID; they do not replace or add stable record IDs.
-- States: 1,607 NOT_STARTED; 10 BLOCKED_EXTERNAL; 154 NOT_APPLICABLE with rationale.
-- 129 proposal contexts need qualification; no numerical candidate or method is approved by this audit.
-- T01–T32 and O01–O22: all 54 exact rows retained, individually mapped.
-- WP00–WP18: all 19 package deliverable, prerequisite and acceptance rows retained in `work_package_catalog`.
-- 540 records have selected `tests` arrays: 1,503 links to the 54 acceptance definitions. All are SELECTED_NOT_IMPLEMENTED / NOT_RUN, with no command/result/file/pass evidence claimed.
-- Section 25: 29 immutable records plus full verbatim text with headings and blank lines. `section_25_verbatim` includes line 2893; the original baseline coverage string remains available unchanged in `baseline_coverage`.
-- Supplemental index: 87 items; 4 header-only API contracts plus 83 finer fields already contained inside existing fenced records. Do not add all 87 to the meaningful count.
+Current counts: NOT_APPLICABLE=154, IN_PROGRESS=1460, IMPLEMENTED_UNVERIFIED=106, VERIFIED=31, BLOCKED_EXTERNAL=9, NOT_STARTED=11.
 
-## Delta rationale
+| Work package | Records | Current states | Complete |
+|---|---:|---|---|
+| WP00 | 181 | NOT_APPLICABLE 76, IN_PROGRESS 102, IMPLEMENTED_UNVERIFIED 3 | No |
+| WP01 | 164 | IN_PROGRESS 142, NOT_APPLICABLE 10, IMPLEMENTED_UNVERIFIED 11, VERIFIED 1 | No |
+| WP02 | 75 | IN_PROGRESS 68, IMPLEMENTED_UNVERIFIED 6, NOT_APPLICABLE 1 | No |
+| WP03 | 56 | IN_PROGRESS 52, IMPLEMENTED_UNVERIFIED 2, BLOCKED_EXTERNAL 1, VERIFIED 1 | No |
+| WP04 | 415 | IN_PROGRESS 363, IMPLEMENTED_UNVERIFIED 29, NOT_APPLICABLE 15, VERIFIED 8 | No |
+| WP05 | 43 | IN_PROGRESS 40, IMPLEMENTED_UNVERIFIED 2, VERIFIED 1 | No |
+| WP06 | 136 | IN_PROGRESS 126, IMPLEMENTED_UNVERIFIED 5, NOT_APPLICABLE 4, VERIFIED 1 | No |
+| WP07 | 127 | NOT_APPLICABLE 9, IN_PROGRESS 111, IMPLEMENTED_UNVERIFIED 6, VERIFIED 1 | No |
+| WP08 | 124 | IN_PROGRESS 115, IMPLEMENTED_UNVERIFIED 7, NOT_APPLICABLE 2 | No |
+| WP09 | 259 | IMPLEMENTED_UNVERIFIED 26, IN_PROGRESS 206, NOT_APPLICABLE 27 | No |
+| WP10 | 27 | IN_PROGRESS 23, NOT_APPLICABLE 4 | No |
+| WP11 | 16 | IN_PROGRESS 12, IMPLEMENTED_UNVERIFIED 3, VERIFIED 1 | No |
+| WP12 | 20 | BLOCKED_EXTERNAL 7, NOT_STARTED 11, IN_PROGRESS 2 | No |
+| WP13 | 27 | IN_PROGRESS 22, NOT_APPLICABLE 2, VERIFIED 2, BLOCKED_EXTERNAL 1 | No |
+| WP14 | 46 | IN_PROGRESS 34, NOT_APPLICABLE 4, IMPLEMENTED_UNVERIFIED 4, VERIFIED 4 | No |
+| WP15 | 22 | IN_PROGRESS 17, IMPLEMENTED_UNVERIFIED 1, VERIFIED 4 | No |
+| WP16 | 17 | IN_PROGRESS 12, VERIFIED 5 | No |
+| WP17 | 6 | IN_PROGRESS 5, VERIFIED 1 | No |
+| WP18 | 10 | IN_PROGRESS 8, IMPLEMENTED_UNVERIFIED 1, VERIFIED 1 | No |
 
-1. Reclassified table headers, structural labels, pure historical capability/gap inventories and illustrative numerical copy as NOT_APPLICABLE. Mixed historical rows with continuing obligations (e.g. Reddit deletion, YouTube approval, TikTok route exclusion) remain meaningful. Prohibited product-copy examples remain binding, rather than being discarded as examples.
-2. Corrected WP routing by section, entity/file context and explicit T/O scenario. Advanced narrative/graph/genome maps to WP14, saturation/whitespace to WP15, Lab to WP16, media to WP17 and forecasts to WP18. Multi-package/milestone fields retain shared obligations; assignments are disclosed editorial routing, not completion evidence.
-3. Populated package prerequisites with stable record references. Dependency notes preserve WP10's early deletion primitives versus later completion; WP12 is optional expansion; WP13 offline public-method work is independent of competitor access. Do not interpret these staged dependencies as a strict package-completion DAG.
-4. Marked only ten pure external access/procurement/approval records BLOCKED_EXTERNAL, each with exact source dependency. Mixed engineering requirements stay NOT_STARTED. The 21-entry external-gate catalog is operation-scoped, and no current account availability is asserted. Native-language review, paid smoke, provider policy and modality dependencies remain explicit without blocking deterministic offline implementation globally.
-5. Replaced baseline's uppercase-only six-line trigger accounting with case-insensitive occurrence accounting: 77 MUST and 1 SHALL, plus SHOULD, requirement, prohibition, gate and imperative patterns. All 2,953 source lines are accounted for; no source-content gap is hidden by a trigger percentage.
-6. Recovered API contracts that the baseline omitted because they are headings: lines 1575, 1577, 1579 and 1581. Added exact-text supplemental entries under `STI-S12-L1573` and linked the admin-only boundary at line 1582. Their SHOULD strength is retained.
-7. Kept source schema/example values distinct from production measurements. The normative v2 receipt field shape remains tracked; synthetic IDs/counts/timestamps are not adopted as defaults.
+Evidence is under `evidence/closeout-current/`. Local SQL and browser tests use real local services with synthetic users/data, not live-provider qualification. M1/M2 remain open; M3 has no global completion state.
 
-Changed existing fields: {"dependencies": 1590, "external_blocker": 10, "mandatory": 222, "milestone": 70, "qualification_candidate": 213, "state": 164, "tests": 540, "work_package": 1033}. `delta.json` contains the per-ID before/after changes and rationale. New metadata includes classification, source context, multiple WP/milestone ownership, planned test selection, proposal and external-gate indexes. No stable records were added or removed.
+Remaining gates include exact deployment candidate, live authorization/allowlist/signing-key setup, provider operation rights, bounded spend, native language and forecast cohorts, real creator outcome studies, competitor authorization and manual device/assistive-technology review. Incomplete compound acceptance is explicitly retained; this report does not turn an unverified assertion into an external blocker.
 
-## Validation and recovery
-
-Validation: PASS (23 checks). SHA256 of the full 2,953-line canonical source:
-
-`5664a50d744c95734d21dade7baf95145aa8ef14992d6ad11871c8a08828a328`
-
-Revalidate without re-extraction:
-
-```sh
-python3 /private/tmp/rafii-trend-ledger/audit_ledger.py validate
-```
-
-Reproduce this audit from the immutable local baseline snapshot:
-
-```sh
-python3 /private/tmp/rafii-trend-ledger/audit_ledger.py audit
-```
-
-The script is standard-library-only, enforces the original source/baseline hashes, writes only this temporary directory, and never dispatches external calls. It refuses source drift. The unused extractor was repurposed into this auditor; no second extraction ran.
-
-`requirements.baseline.json` is the exact user baseline snapshot. `canonical-spec.snapshot.md` binds source bytes. `coverage.json` contains every line/span and trigger occurrence; `coverage.md` is its compact section summary. `validation.json` reports invariant checks; `proposals.json` separates unratified contexts; `section-25.verbatim.md` is the exact full section.
-
-Limits: meaningful counts are conservative source-record counts, not deduplicated atomic business requirements. Semantic classifications, selected test relevance and implementation ownership are editorial judgments. Literal coverage does not prove product implementation, semantic accuracy, external entitlement, test execution or release acceptance. Existing evidence arrays remain empty. This candidate has not been imported into the managed repository.
+The adjacent closeout chat owns Weekly/Campaign/chat/angles and release integration. Commit56fffbf supplies independently verified current-rights filtering and owner adoption in the existing strategy store. No shared worktree was overwritten.

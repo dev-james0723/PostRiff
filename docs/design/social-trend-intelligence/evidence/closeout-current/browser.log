@@ -1,0 +1,47 @@
+psql:/Users/ouxianxing/Documents/Codex/2026-09-28/take-ownership-of-the-rafii-social/work/repo/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+PASS 1440 missing token denied
+PASS 1440 invalid token denied
+PASS 1440 foreign tenant list denied
+PASS 1440 foreign tenant receipt denied
+PASS 1440 foreign acceptance denied
+PASS 1440 real stored list validates canonical Zod contract
+PASS 1440 real database receipt is currently verified
+PASS 1440 Radar opens real stored trust drawer
+PASS 1440 acceptance persists source and server lineage into existing Ideas after reload
+PASS 1440 actual acceptance replay retains one source
+PASS 1440 zero browser egress and runtime errors
+PASS 390 missing token denied
+PASS 390 invalid token denied
+PASS 390 foreign tenant list denied
+PASS 390 foreign tenant receipt denied
+PASS 390 foreign acceptance denied
+PASS 390 real stored list validates canonical Zod contract
+PASS 390 real database receipt is currently verified
+PASS 390 Radar opens real stored trust drawer
+PASS 390 acceptance persists source and server lineage into existing Ideas after reload
+PASS 390 actual acceptance replay retains one source
+PASS 390 zero browser egress and runtime errors
+PASS 1440 real Lab rejects unauthorized, unlinked and stale review inputs
+PASS 1440 server resolves accepted source and current saved draft into Lab without automatic evaluation
+PASS 1440 real durable Lab review freezes current inputs, returns exact diagnostic and replays one run
+PASS 1440 real Lab evidence and selective action are accessible in the existing editor
+PASS 1440 unsaved text invalidates a real Lab result without mutating the saved draft
+PASS 1440 Lab selectively saves via existing variant_edit, rechecks evidence, preserves lineage and persists revision 2 after reload
+PASS 1440 real concurrent variant_edit makes the old Lab apply fail 409 without overwriting revision 4, including after reload
+PASS 1440 real Lab zero browser egress and runtime errors
+PASS 390 real Lab rejects unauthorized, unlinked and stale review inputs
+PASS 390 server resolves accepted source and current saved draft into Lab without automatic evaluation
+PASS 390 real durable Lab review freezes current inputs, returns exact diagnostic and replays one run
+PASS 390 real Lab evidence and selective action are accessible in the existing editor
+PASS 390 unsaved text invalidates a real Lab result without mutating the saved draft
+PASS 390 Lab selectively saves via existing variant_edit, rechecks evidence, preserves lineage and persists revision 2 after reload
+PASS 390 real concurrent variant_edit makes the old Lab apply fail 409 without overwriting revision 4, including after reload
+PASS 390 real Lab zero browser egress and runtime errors
+PASS 1440 real visible exposure validates signed returned-page subset and replays one event
+PASS 1440 real exposure and dismissal reject foreign actor, invented candidates, text and stale revision
+PASS 1440 real keyboard dismissal links exposure, persists after reload and creates no source or draft
+PASS 1440 real dismissal has zero browser egress and runtime errors
+PASS 390 real visible exposure validates signed returned-page subset and replays one event
+PASS 390 real exposure and dismissal reject foreign actor, invented candidates, text and stale revision
+PASS 390 real keyboard dismissal links exposure, persists after reload and creates no source or draft
+PASS 390 real dismissal has zero browser egress and runtime errors
