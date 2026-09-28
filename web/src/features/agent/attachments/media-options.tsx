@@ -7,7 +7,8 @@
  * the post role and Remove. Every string is from SPEC §13.
  */
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import Image from 'next/image';
+import { toast } from 'sonner';
 
 import { Icons } from '@/components/icons';
 import { SegmentedControl } from '@/components/rafii/segmented-control';
@@ -16,6 +17,7 @@ import { useAct, useInvalidate, useMemory, useSnapshot } from '@/lib/api/hooks';
 import type { Asset, AttachmentsCatalog } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useAssetImage } from '@/features/library/asset-card';
+import { useNowPlaying } from '@/lib/media/now-playing';
 import { MediaConsentConfirm } from '@/features/memory/access-card';
 
 import type { Chip, MediaRole, PostRole } from './chips';
@@ -53,35 +55,31 @@ export function readBlocker(opts: {
   return null;
 }
 
-function InlineVideo({ assetId }: { assetId: string }) {
+function InlineVideo({ assetId, title, conversationId }: { assetId: string; title: string; conversationId?: string }) {
   const { api, workspaceId } = useWorkspaceApi();
   const poster = useAssetImage(assetId);
-  const playback = useQuery({
-    queryKey: ['media-url', workspaceId, assetId],
-    queryFn: async () => (await api.mediaUrl(workspaceId, assetId)).url,
-    enabled: Boolean(workspaceId),
-    staleTime: 5 * 60 * 1000
-  });
-  if (!playback.data) return null;
+  const [loading, setLoading] = useState(false);
+  async function play() {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const { url } = await api.mediaUrl(workspaceId, assetId);
+      useNowPlaying.getState().open({ workspaceId, conversationId, assetId, title, url });
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Video unavailable'); }
+    finally { setLoading(false); }
+  }
   return (
-    <div className='rafii-quiet flex max-h-56 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)]'>
-      {/* The person's own upload: no caption file exists for it, and an empty <track> would claim one. */}
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <video
-        src={playback.data}
-        poster={poster.data}
-        controls
-        playsInline
-        preload='metadata'
-        aria-label='Play video'
-        className='h-auto max-h-56 w-auto max-w-full'
-      />
-    </div>
+    <button type='button' onClick={() => void play()} disabled={loading}
+      className='rafii-quiet rafii-focus relative flex max-h-56 w-full items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)]'>
+      {poster.data ? <Image src={poster.data} alt='' width={480} height={270} unoptimized className='max-h-56 w-auto max-w-full' /> : <span className='h-40 w-full' />}
+      <span className='rafii-glass absolute rounded-full px-4 py-2 text-sm'>{loading ? 'Opening…' : `Play ${title}`}</span>
+    </button>
   );
 }
 
 export interface MediaOptionsProps {
   chip: Chip;
+  conversationId?: string;
   asset?: Asset | null;
   catalog: AttachmentsCatalog | null | undefined;
   creditMode: boolean;
@@ -95,6 +93,7 @@ export interface MediaOptionsProps {
 
 export function MediaOptions({
   chip,
+  conversationId,
   asset,
   catalog,
   creditMode,
@@ -204,7 +203,7 @@ export function MediaOptions({
           ) : null}
         </div>
       )}
-      {video ? <InlineVideo assetId={chip.id} /> : null}
+      {video ? <InlineVideo assetId={chip.id} title={chip.label} conversationId={conversationId} /> : null}
       {asset?.verified?.locationCleared ? (
         <p className='text-muted-foreground'>Location tags removed.</p>
       ) : null}

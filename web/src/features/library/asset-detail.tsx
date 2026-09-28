@@ -19,8 +19,9 @@ import { cn } from '@/lib/utils';
 import { badgeClass, copyHash, dimensionsOf, useAssetImage } from './asset-card';
 import { imageRuleChecks } from './image-rules';
 import type { AssetUse, LibraryAsset } from './use-library';
-import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { kindOf } from '@/lib/media/asset-kinds';
+import { useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 interface AssetDetailProps {
@@ -95,19 +96,14 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
   const image = useAssetImage(asset.id);
   const { api, workspaceId } = useWorkspaceApi();
   const isVideo = kindOf(asset) === 'video';
-  // A short-lived signed playback URL for videos only (chat-context SPEC §5.8); the poster comes from the media route.
-  const playback = useQuery({
-    queryKey: ['media-url', workspaceId, asset.id],
-    queryFn: async () => (await api.mediaUrl(workspaceId, asset.id)).url,
-    enabled: isVideo && Boolean(workspaceId),
-    staleTime: 5 * 60 * 1000
-  });
-  if (isVideo && playback.data) {
+  if (isVideo) {
     return (
       <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
-        {/* The person's own upload: no caption file exists for it, and an empty <track> would claim one. */}
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video src={playback.data} poster={image.data} controls playsInline preload='metadata' aria-label='Play video' className='h-auto max-h-[40vh] w-auto max-w-full md:max-h-[50vh]' />
+        <button type='button' className='rafii-focus relative flex w-full items-center justify-center'
+          onClick={() => void api.mediaUrl(workspaceId, asset.id).then(({ url }) => useNowPlaying.getState().open({ workspaceId, assetId: asset.id, title: `Video ${asset.id.slice(0, 8)}`, url })).catch((error) => toast.error(error instanceof Error ? error.message : 'Video unavailable'))}>
+          {image.data ? <Image src={image.data} alt='' width={asset.width ?? 480} height={asset.height ?? 270} unoptimized className='h-auto max-h-[40vh] w-auto max-w-full md:max-h-[50vh]' /> : <span className='h-40 w-full' />}
+          <span className='rafii-glass absolute rounded-full px-4 py-2 text-sm'>Play video in Now Playing</span>
+        </button>
       </div>
     );
   }

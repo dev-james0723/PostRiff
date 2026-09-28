@@ -17,7 +17,10 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 033 | `033_phone_mode` | Rafii Phone Mode | Taken on `consumer-saas`; verify the deployment ledger before any one-off apply. |
 | 034 | `034_unified_notifications` | Rafii Unified Notifications | Taken on `consumer-saas`; verify the deployment ledger before any one-off apply. |
 | 035 | `035_growth_metric_reads` | Growth Phase 0 / Active Scout | Renumbered from the isolated branch's 032 during the 2026-09-27 production reconciliation to avoid the existing 032 collision. |
-| 036 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 036 | `036_dial_phone_provider` | Rafii Dial Phone | Taken on `consumer-saas`; adds Dial to the existing phone provider constraint. |
+| 037–040 | `037_growth_phase1`, `038_growth_closed_loop`, `039_radar`, `040_social_trend_intelligence` | active Rafii release worktrees | Reserved to avoid colliding with in-flight Growth / Radar / Social Trend Intelligence work. They are not implied applied merely by this reservation; re-check before release. |
+| 041 | `041_context_navigation` | Rafii Context Navigation | Additive search indexes and workspace-scoped Moments; apply before the corresponding API release. |
+| 042 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
@@ -68,7 +71,7 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read wt; do
 
 ## Test loader (`tests/phase2/rls.sql`)
 
-It loads 001, 002, 004–012, 018, 019, then 023–025 and the released 030–035 chain. Migration 035 is Growth Phase 0. **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
+It loads 001, 002, 004–012, 018, 019, then 023–025 and the released 030–036 chain, followed by 041 Context Navigation. **Never** add 020–022: the credit PostgreSQL tests and `scripts/launch_credit_fixture.py` apply those themselves.
 
 ## ai-routing renumbering checklist (later, when that stage is authorized)
 

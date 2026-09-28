@@ -298,6 +298,11 @@ class HostedApplication:
             raise AlphaError(f"Invalid {key}.", 400)
         return int(value)
 
+    @staticmethod
+    def _query_str(environ, key):
+        from urllib.parse import parse_qs
+        return parse_qs(environ.get("QUERY_STRING", "")).get(key, [None])[0]
+
     def _ideas(self, environ, start_response, service, token, method, parts):
         """Architecture §21 Ideas routes. Events are cursor-replayable; SSE replays stored events then closes."""
         workspace_id, resource = parts[2], parts[4]
@@ -314,6 +319,11 @@ class HostedApplication:
         if resource == "conversations":
             if len(parts) == 5 and method == "GET":
                 return self._json(start_response, 200, ideas.conversations(workspace_id, token))
+            if len(parts) == 6 and parts[5] == "navigation" and method == "GET":
+                return self._json(start_response, 200, ideas.navigation_conversations(
+                    workspace_id, token, self._query_str(environ, "cursor"), self._query_int(environ, "limit", 40)))
+            if len(parts) == 6 and parts[5] == "search" and method == "GET":
+                return self._json(start_response, 200, ideas.navigation_search(workspace_id, token, self._query_str(environ, "q")))
             if len(parts) == 5 and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 201, ideas.create_conversation(workspace_id, token, body.get("title", "")))
@@ -325,6 +335,15 @@ class HostedApplication:
                 return self._json(start_response, 201, ideas.turn(workspace_id, token, parts[5], body))
             if len(parts) == 7 and parts[6] == "messages" and method == "GET":
                 return self._json(start_response, 200, ideas.messages(workspace_id, token, parts[5], self._query_int(environ, "cursor")))
+            if len(parts) == 7 and parts[6] == "navigation" and method == "GET":
+                return self._json(start_response, 200, ideas.navigation(workspace_id, token, parts[5],
+                    self._query_int(environ, "cursor"), self._query_int(environ, "limit", 100)))
+            if len(parts) == 7 and parts[6] == "window" and method == "GET":
+                before = self._query_str(environ, "before")
+                return self._json(start_response, 200, ideas.message_window(workspace_id, token, parts[5],
+                    self._query_str(environ, "anchor"), int(before) if before and before.isdigit() else (None if before is None else -1)))
+            if len(parts) == 7 and parts[6] == "moments" and method == "POST":
+                return self._json(start_response, 201, ideas.save_moment(workspace_id, token, parts[5], self._body(environ)))
             if len(parts) == 7 and parts[6] == "attachments" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 201, ideas.attach(workspace_id, token, parts[5], body))

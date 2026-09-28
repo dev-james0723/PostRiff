@@ -18,6 +18,7 @@ import { SiteAgentAbove, SiteAgentDock, SiteAgentHotkeys, SiteAgentOverlay } fro
 import { GuideMount } from '@/features/rafii-guide/guide-mount';
 import { PostApprovalCalibration } from '@/features/time-back/post-approval-calibration';
 import { DeepLinkAcknowledgement } from '@/features/coworker/notifications/deep-link-acknowledgement';
+import { NowPlayingBar } from '@/features/now-playing/now-playing-bar';
 
 /**
  * Client shell for /app/*: session → workspace → gate → sidebar + Cmd+K +
@@ -60,6 +61,7 @@ export function AppShell({ defaultOpen, children, initial }: { defaultOpen: bool
                 {/* Time back: the optional, rate-limited calibration question after a post approval, on any page. */}
                 <PostApprovalCalibration />
                 <DeepLinkAcknowledgement />
+                <NowPlayingBar />
               </SidebarProvider>
             </KBar>
             </PreferencesProvider>
