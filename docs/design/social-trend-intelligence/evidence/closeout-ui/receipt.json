@@ -1,5 +1,5 @@
 {
-  "status": "LOCAL_CLOSEOUT_VERIFIED_PENDING_INDEPENDENT_LEARNING_INTEGRATION_AND_RELEASE",
+  "status": "LOCAL_UI_ACTION_SLICE_VERIFIED_PENDING_REMOTE_GATES_AND_DEPLOYMENT",
   "base_commit": "a5671ebb66d054bed6fe5c0518eeb9dea714b708",
   "source_files": {
     "scripts/trend_browser.py": "bdfcea2b13464ba4c0c874df46f1f540ce8bcb7c2689940fbb42bb0e0642b58b",
@@ -24,14 +24,17 @@
     "web/tests/visual-intelligence-browser.cjs": "9fb5783deb07e80242b5a55a0de6e35f54656e583b353dc6337cb1a1c018326a",
     "web/src/features/trends/angle-generation.tsx": "0396670d8e7917944a96c971cf8837bf3eba41e933cdfff3348b875f65f8d83e",
     "tests/test_trend_closeout.py": "5727e303c794727e5c6230c476e045b2aabc886ce257116b7627906e2befe194",
-    "scripts/trend_release_migrate.py": "0853af3fd7e2b6cd1fc0115a00a95e2f3b481b502d2f6d27aa259f006cddddd8"
+    "scripts/trend_release_migrate.py": "0853af3fd7e2b6cd1fc0115a00a95e2f3b481b502d2f6d27aa259f006cddddd8",
+    "src/postriff_phase2/coworker/performance.py": "d6d2cad765cbe8f116214c22f263e6edcc1ab0fa8b64bf5820bbaf5a6bd9591a",
+    "src/postriff_phase2/coworker/service.py": "87485842d2d30cdab44b800a9a01fbb2f803773889193c3bad8057a832ecb1df",
+    "src/postriff_phase2/growth/trends/learning.py": "77fd6335a8274455ddbcfbe0af853af8982a693da0e67a659e986096c828f1d4"
   },
   "python": {
-    "tests": 2720,
-    "skipped_db_cases": 240,
+    "tests": 2722,
+    "skipped_db_cases": 242,
     "failures": 0,
     "errors": 0,
-    "log": "/tmp/trend-closeout-python-final.log"
+    "log": "/tmp/trend-closeout-merged-python.log"
   },
   "web_unit_tests": 429,
   "database_groups": {
@@ -64,5 +67,24 @@
     "physical_device_or_voiceover": false
   },
   "generation_ui": "Explicit intercepted synthetic response, not a real model execution. Missing-facts and queued/completed refresh paths verified.",
-  "production": "Not yet pushed or deployed at this receipt. Read-only production check confirms040 checksum applied, no trend projections. All trend flags absent; rollout/key/rights/budget gates remain."
+  "production": "Pushed PR57; production deploy and scoped signing-key/rollout approval pending. No provider/model activation or paid calls.",
+  "qualified_runtime_commit": "c9384e87a1a69e8430ca600ab63718b0e63f5e48",
+  "integrated_head": "c6ad891123df5aec74b891b447adf71f6fdf877e",
+  "merged_qualification": {
+    "python": "PASS",
+    "web_unit_tests": 429,
+    "postgres_affected_groups": [
+      "postgres_coworker",
+      "postgres_scout",
+      "postgres_trend_services"
+    ],
+    "real_api_4_viewports": "PASS; see real-api-merged.json",
+    "typecheck_lint_build_copy": "PASS",
+    "python_artifact": "PASS; Vercel Python3.12 Linux x86_64 isolated archive",
+    "secrets": "PASS; 436 reviewed findings, zero unexpected",
+    "independent_strategy": "16 assertion groups, 4 widths; see ../closeout-strategy/receipt.json",
+    "portability_fix": "Media38; forecast15; whitespace suite passed using platform temp paths. Source safety still rejects symlinks.",
+    "reuse_boundary": "Strategy proof runtime matches except the subsequently merged independent folder-editor update beab2f7. Test harness source-drift reporting guard documented in strategy README. Current merged web build/typecheck/lint pass; no trend runtime changes after c9384e8."
+  },
+  "master_qualification": "M1/M2 remain open; M3 per-capability only. Compound IN_PROGRESS records are unresolved acceptance obligations, not a count of missing implementation tasks."
 }
