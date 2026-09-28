@@ -171,6 +171,12 @@ test('asset kinds mirror the server predicates', () => {
   assert.equal(KINDS.isReady({ ...video, deletionPending: true }), false);
   assert.equal(KINDS.isPostableImage(image), true);
   assert.equal(KINDS.isPostableImage(video), false);
+  const inspected = { ...video, duration: 30, durationSource: 'container', bytes: 10_000,
+    verified: { container: true, locationChecked: true } };
+  assert.equal(KINDS.isPostableVideo(inspected), true);
+  assert.equal(KINDS.isPostableVideo({ ...inspected, verified: { container: true, locationChecked: false } }), false);
+  assert.equal(KINDS.isPostableVideo({ ...inspected, durationSource: 'client' }), false);
+  assert.equal(KINDS.isPostableVideo({ ...inspected, bytes: 100_000_001 }), false);
   assert.equal(KINDS.isLibraryAsset({ ...video, processing: 'uploading' }), true);
   assert.equal(KINDS.isLibraryAsset({ ...image, deleted: true }), false);
 });
@@ -233,13 +239,8 @@ test('firstPostImageId: the draft first post-role photo that can still go out', 
   assert.equal(KINDS.firstPostImageId(undefined, assets), null);
 });
 
-test('scheduling surfaces offer postable photos only (SPEC §7.6)', () => {
+test('other media surfaces keep their image default while video approval is explicit', () => {
   const read = (...parts) => fs.readFileSync(path.join(__dirname, '..', 'src', ...parts), 'utf8');
   assert.match(read('features', 'agent', 'plan-card.tsx'), /\.filter\(isPostableImage\)/);
-  assert.match(read('features', 'queue', 'schedule-dialog.tsx'), /\.filter\(isPostableImage\)/);
-  assert.match(
-    read('features', 'queue', 'queue-view.tsx'),
-    /asset\.id === assetId && isPostableImage\(asset\)/
-  );
   assert.match(read('components', 'application', 'asset-picker.tsx'), /kinds = \['image'\]/);
 });

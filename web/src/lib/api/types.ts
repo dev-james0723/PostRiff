@@ -52,12 +52,13 @@ export interface Asset {
   width?: number;
   height?: number;
   bytes?: number;
+  /** Seconds, for video; 0 for images. */
+  duration?: number;
   deleted: boolean;
   storagePath?: string;
   /** Chat-context SPEC §5.13. `kind` is always derived from `mime` (`lib/media/asset-kinds.ts`), never trusted. */
   kind?: 'image' | 'video';
   category?: 'media' | 'video' | string;
-  duration?: number;
   durationSource?: 'container' | 'client';
   poster?: AssetImagePart;
   frames?: (AssetImagePart & { at: number })[];
@@ -1389,6 +1390,22 @@ export interface ProviderView {
   productionReviewed: boolean;
   executionPaused?: boolean;
   capabilities: Record<string, boolean>;
+  /** 'oauth' redirects to the platform; 'bot_code' means posting a one-time code where Rafii's bot sees it (Telegram). */
+  connectKind?: 'oauth' | 'bot_code';
+  /** One value to ask before connecting: a Bluesky handle or a Mastodon server. */
+  startInput?: { name: string; label: string; placeholder?: string } | null;
+  /** Posting needs a destination: once per connection (a Discord channel, a Facebook Page) or per post (a Pinterest board). */
+  hasDestinations?: boolean;
+  destinationScope?: 'connection' | 'post';
+  /** What the destination is called on screen: Channel, Page, Board. */
+  destinationLabel?: string;
+}
+
+export interface ChannelDestination {
+  id: string;
+  name: string;
+  kind: 'text' | 'announcement' | 'page' | 'board';
+  selected: boolean;
 }
 
 export interface OwnedPost {
@@ -1425,13 +1442,21 @@ export interface OAuthStart {
   capability: string;
   scopes: string[];
   permissionExplanation: string;
-  authorizeUrl: string;
+  /** Null for a bot-code connection (Telegram), which never leaves Rafii. */
+  authorizeUrl: string | null;
   expiresAt: number;
+  connectKind?: 'oauth' | 'bot_code';
+  /** Bot-code connections: the code to post, the bot to add and the steps. */
+  code?: string;
+  botUsername?: string;
+  instructions?: string[];
 }
 
 export interface OAuthComplete {
   connectionId?: string;
   connected: boolean;
+  /** Bot-code connections before the code has been seen in a channel. */
+  pending?: boolean;
   reason?: string;
   account?: string;
   providerAccountId?: string;

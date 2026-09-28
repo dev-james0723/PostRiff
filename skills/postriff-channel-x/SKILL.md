@@ -2,7 +2,7 @@
 name: postriff-channel-x
 description: Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # x adapter
@@ -28,7 +28,7 @@ The following are implemented **local draft schemas**, not current API capabilit
 
 ## 4. Caption/title/description rules
 
-A PostRiff writing run returns one `x.post` per destination in `text`: a single post, not a thread. It must fit 280 characters by X's own count, the `characterLimit` the run sends: a CJK character or an emoji counts as two, a link as 23. Put the claim in the first line and cut everything that does not carry it: warm-up sentences, restated context, sign-offs and filler. At most one hashtag, and only when the person uses them. Do not invent personal experience or product facts. If the approved facts cannot be stated honestly within the limit, keep the strongest supported point, list what was left out in `unknowns`, and say so in `warnings`; never silently truncate. PostRiff drafts X posts for review, copy and export; it has no hosted X publisher, so a draft here is never a publishing promise.
+A PostRiff writing run returns one `x.post` per destination in `text`: a single post, not a thread. It must fit 280 characters by X's own count, the `characterLimit` the run sends: a CJK character or an emoji counts as two, a link as 23. Put the claim in the first line and cut everything that does not carry it: warm-up sentences, restated context, sign-offs and filler. At most one hashtag, and only when the person uses them. Do not invent personal experience or product facts. If the approved facts cannot be stated honestly within the limit, keep the strongest supported point, list what was left out in `unknowns`, and say so in `warnings`; never silently truncate. PostRiff drafts X posts for review, copy and export. It publishes to X only through its hosted X connector, after an operator has configured and approved it, so a draft here is never a publishing promise.
 
 ## 6. API setup requirements
 

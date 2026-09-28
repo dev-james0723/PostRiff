@@ -156,6 +156,62 @@ class ObjectInfoTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, 502)
 
 
+class ApprovedVideoReadTests(unittest.TestCase):
+    HEADERS = {"Content-Length": "5", "Content-Type": "video/mp4", "ETag": '"e1"'}
+
+    def read(self, storage):
+        return storage.get_verified_video(WS, f"{VID}.mp4", expected_bytes=5,
+                                          expected_mime="video/mp4", expected_etag='"e1"')
+
+    def test_reads_exact_private_object_for_publishing(self):
+        storage, handler = storage_with([(200, self.HEADERS, b""), (200, self.HEADERS, b"video")])
+        self.assertEqual(self.read(storage), b"video")
+        self.assertEqual([request[0] for request in handler.requests], ["HEAD", "GET"])
+        self.assertTrue(handler.requests[1][1].startswith(PROJECT + "/storage/v1/object/postriff-video/"))
+        self.assertTrue(handler.bodies[1].closed)
+
+    def test_changed_head_or_get_response_never_returns_bytes(self):
+        storage, handler = storage_with([(200, {**self.HEADERS, "ETag": '"changed"'}, b"")])
+        with self.assertRaises(AlphaError):
+            self.read(storage)
+        self.assertEqual(len(handler.requests), 1)
+        storage, handler = storage_with([(200, self.HEADERS, b""), (200, {**self.HEADERS, "ETag": '"changed"'}, b"video")])
+        with self.assertRaises(AlphaError):
+            self.read(storage)
+        self.assertTrue(handler.bodies[1].closed)
+
+    def test_bounded_read_and_redirect_fail_closed(self):
+        storage, handler = storage_with([(200, self.HEADERS, b""), (200, self.HEADERS, b"videoextra")])
+        with self.assertRaises(AlphaError):
+            self.read(storage)
+        self.assertEqual(handler.bodies[1].requested, [6])
+        storage, handler = storage_with([(200, self.HEADERS, b""), (302, {"Location": "https://evil.example/"}, b""), (200, {}, b"never")])
+        with self.assertRaises(AlphaError):
+            self.read(storage)
+        self.assertEqual(len(handler.requests), 2)
+        with self.assertRaises(AlphaError):
+            storage.get_verified_video(WS, f"{VID}.mp4", expected_bytes=100_000_001,
+                                       expected_mime="video/mp4", expected_etag='"e1"')
+
+    def test_failed_body_read_is_a_storage_hold_before_publishing(self):
+        storage, handler = storage_with([(200, self.HEADERS, b""), (200, self.HEADERS, b"video")])
+        original_open = storage._open
+
+        def fail_get_read(method, url, headers, body, **kwargs):
+            response = original_open(method, url, headers, body, **kwargs)
+            if method == "GET":
+                def fail_read(_size):
+                    raise TimeoutError("read timed out")
+                response.read = fail_read
+            return response
+
+        storage._open = fail_get_read
+        with self.assertRaises(AlphaError) as caught:
+            self.read(storage)
+        self.assertEqual(caught.exception.status, 503)
+        self.assertTrue(handler.bodies[1].closed)
+
+
 class RangeTests(unittest.TestCase):
     def test_206(self):
         storage, handler = storage_with([(206, {}, b"0123456789")])

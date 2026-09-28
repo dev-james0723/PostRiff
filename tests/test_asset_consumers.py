@@ -1,5 +1,5 @@
-"""Server consumers of Library assets (chat-context SPEC §7.6): only postable images can go out with a post, count as
-unused-image suggestions or be linked to a campaign; a video gets the honest "can't be scheduled yet" answer."""
+"""Server consumers of Library assets: image channels, unused-image suggestions and campaign links
+accept postable images; verified videos are reserved for supported video channels."""
 import copy
 import sys
 import unittest
@@ -33,10 +33,14 @@ class ManifestMediaTest(unittest.TestCase):
         manifest = self.manifest(IMAGE)
         self.assertEqual([m["id"] for m in manifest["media"]], [IMAGE["id"]])
 
-    def test_a_video_is_refused_with_the_honest_reason(self):
+    def test_a_verified_video_is_refused_on_an_image_channel(self):
+        verified_video = {**VIDEO, "durationSource": "container", "bucket": "private-videos",
+                          "objectName": "b" * 32 + ".mp4", "etag": "etag-1",
+                          "verified": {"container": True, "locationChecked": True}}
         with self.assertRaises(AlphaError) as refused:
-            self.manifest(VIDEO)
-        self.assertEqual((refused.exception.status, str(refused.exception)), (400, "Video posts can't be scheduled from Rafii yet."))
+            self.manifest(verified_video)
+        self.assertEqual((refused.exception.status, str(refused.exception)),
+                         (409, "This channel doesn't support video posts from Rafii."))
 
     def test_undecoded_or_deleted_images_are_refused(self):
         variant = self.draft()

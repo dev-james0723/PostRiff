@@ -12,6 +12,14 @@ def valid_receipt_url(url, platform):
             'Instagram': ({'instagram.com', 'www.instagram.com'}, r'/(p|reel|tv)/[A-Za-z0-9_-]+/?'),
             'Threads': ({'threads.net', 'www.threads.net', 'threads.com', 'www.threads.com'}, r'/@[A-Za-z0-9_.]+/post/[A-Za-z0-9_-]+/?'),
             'LinkedIn': ({'linkedin.com', 'www.linkedin.com'}, r'/feed/update/urn:li:(share|ugcPost):[0-9]+/?'),
+            'X': ({'x.com', 'twitter.com'}, r'/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}/?'),
+            'Bluesky': ({'bsky.app'}, r'/profile/[A-Za-z0-9.:_-]{3,253}/post/[a-z2-7]{13}/?'),
+            'Discord': ({'discord.com'}, r'/channels/[0-9]{5,25}/[0-9]{5,25}/[0-9]{5,25}/?'),
+            'Telegram': ({'t.me'}, r'/[A-Za-z0-9_]{4,32}/[0-9]{1,15}/?'),
+            'Facebook': ({'www.facebook.com', 'facebook.com'}, r'/[A-Za-z0-9.]{1,100}/posts/[A-Za-z0-9_]{1,100}/?'),
+            'YouTube': ({'youtu.be'}, r'/[A-Za-z0-9_-]{11}'),
+            'TikTok': ({'www.tiktok.com'}, r'/@[A-Za-z0-9_.]{1,24}/video/[0-9]{5,25}/?'),
+            'Pinterest': ({'www.pinterest.com'}, r'/pin/[0-9]{5,30}/?'),
         }.get(platform, (set(), r'(?!)'))
         return bool(parsed.scheme == 'https' and parsed.hostname in hosts and parsed.port is None
                     and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
@@ -33,7 +41,10 @@ def normalize_result(result, job, reconciliation=False):
     reference = result.get("reference", job.get("providerReference"))
     if reference is not None and (not isinstance(reference, str) or not 1 <= len(reference) <= 500):
         return unknown("Invalid provider reference; reconcile before retry")
-    if reconciliation and result["state"] in ("processing", "scheduled", "held", "failed"):
+    # The provider's own record of the submission saying it failed (a TikTok publish FAILED, a YouTube upload
+    # rejected) is proof, not a lookup failure, so it may end the job as failed.
+    provider_failure = result.get("state") == "failed" and result.get("verification") == "provider_lookup"
+    if reconciliation and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure:
         # A lookup failure or retry suggestion cannot prove that a prior POST did not run.
         return unknown("Reconciliation did not resolve the prior submission; manual review required")
     if result["state"] in ("published", "verified") and not reference:
@@ -43,7 +54,9 @@ def normalize_result(result, job, reconciliation=False):
         return unknown("Publication receipt is missing verification evidence")
     if job.get("cancelRequested") and result["state"] == "scheduled":
         return {"state": "canceled", "confirmed": "Canceled after the adapter confirmed rejection before acceptance"}
-    if result['state'] == 'verified' and result.get('verification') not in ('provider_lookup', 'fixture_lookup', 'disposable_lookup'):
+    # provider_receipt: the provider's own response returned the created object (id, destination, exact text) and it
+    # offers no read-back to bots (Telegram). It is still provider evidence, never a manual claim.
+    if result['state'] == 'verified' and result.get('verification') not in ('provider_lookup', 'provider_receipt', 'fixture_lookup', 'disposable_lookup'):
         return unknown('Receipt is not independently verified; manual evidence is not API verification')
     container = result.get('container', job.get('container'))
     if container is not None and (not isinstance(container, str) or not re.fullmatch(r'[A-Za-z0-9_:-]{1,500}', container)):

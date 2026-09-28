@@ -25,8 +25,9 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { AssetPicker } from '@/components/application/asset-picker';
 import { languageLabel } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
+import { NEEDS_OPTIONS, PublishOptions, type PublishOptionsValue } from './publish-options';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
-import { firstPostImageId, isPostableImage } from '@/lib/media/asset-kinds';
+import { firstPostImageId, isPostableImage, isPostableVideo, kindOf } from '@/lib/media/asset-kinds';
 
 interface ScheduleDialogProps {
   open: boolean;
@@ -144,7 +145,7 @@ function editSteps(variant: SnapshotVariant | undefined, activeVoice: number | n
 }
 
 /**
- * Prepares an exact review (`p2_review`): draft + channel + time (+ optional image).
+ * Prepares an exact review (`p2_review`): draft + channel + time + supported media.
  * The result is a review waiting in the Queue; approving it is a separate, explicit step.
  */
 export function ScheduleDialog({ open, onOpenChange, variantId: preselected, assetId: preselectedAsset, onPrepared }: ScheduleDialogProps) {
@@ -165,8 +166,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const usable = (v: SnapshotVariant) => v.voiceRevision === activeVoice || v.proposedUpdate?.voiceRevision === activeVoice;
   const drafts = useMemo(() => (state?.variants ?? []).filter((v) => !v.blockedByRetraction && usable(v)), [state?.variants, activeVoice]); // eslint-disable-line react-hooks/exhaustive-deps
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
-  // Only photos that can go out with a post; a video can't be scheduled from Rafii yet (chat-context SPEC §7.6).
-  const assets = useMemo(() => (state?.phase2?.assets ?? []).filter(isPostableImage), [state?.phase2?.assets]);
+  const libraryAssets = state?.phase2?.assets;
   const voiceActive = Boolean(state?.speaker?.activeRevision);
   const staleDrafts = (state?.variants ?? []).filter((v) => !v.blockedByRetraction && !usable(v)).length;
 
@@ -178,6 +178,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const [alt, setAlt] = useState('');
   const [rights, setRights] = useState(false);
   const [acknowledge, setAcknowledge] = useState(false);
+  // TikTok, YouTube and Pinterest need per-post choices; null until every one is made.
+  const [publishOptions, setPublishOptions] = useState<PublishOptionsValue>(null);
   const [resolveUnknowns, setResolveUnknowns] = useState(true);
   const timeZone = useTimeZone();
   const [localTime, setLocalTime] = useState(() => defaultLocalTime(timeZone));
@@ -190,26 +192,34 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const timePassed = chosenAt !== null && chosenAt <= Date.now();
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
+  const needsVideo = variant?.platform === 'YouTube' || variant?.platform === 'TikTok';
+  const assets = useMemo(() => (libraryAssets ?? []).filter(needsVideo ? isPostableVideo : isPostableImage), [libraryAssets, needsVideo]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
-  // The draft's own post-role photo is the default image, unless the dialog was opened for a specific one.
-  const defaultAsset = preselectedAsset ? null : firstPostImageId(variant?.media, assets);
+  // The draft's own post-role media is the default, unless the dialog was opened for a specific asset.
+  const defaultAsset = preselectedAsset ? null : needsVideo
+    ? variant?.media?.find((item) => item.role === 'post' && item.kind === 'video' && assets.some((candidate) => candidate.id === item.assetId))?.assetId ?? null
+    : firstPostImageId(variant?.media, assets);
   useEffect(() => {
     if (defaultAsset) setAssetId(defaultAsset);
   }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
+  const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
       channel &&
       localTime &&
       rights &&
+      (!assetId || Boolean(asset)) &&
+      (!needsVideo || Boolean(asset)) &&
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
-      (!asset || alt.trim()) &&
-      (!steps.confirmUnknowns || resolveUnknowns)
+      (!asset || kindOf(asset) === 'video' || alt.trim()) &&
+      (!steps.confirmUnknowns || resolveUnknowns) &&
+      (!needsOptions || publishOptions !== null)
   );
 
   async function submit() {
@@ -242,13 +252,14 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         payload: {
           variantId: current.id,
           channelId,
-          assetId: assetId || undefined,
+          assetId: asset?.id,
           alt: alt.trim(),
           rightsConfirmed: rights,
           localTime,
           timeZone,
           acknowledgedWarnings: acknowledge ? current.warnings : [],
-          fold: askFold ? fold : undefined
+          fold: askFold ? fold : undefined,
+          publishOptions: needsOptions ? publishOptions : undefined
         }
       });
       // The Queue (or the Calendar) shows the new review; a short toast says where it went.
@@ -310,7 +321,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           )}
           <div className='flex flex-col gap-1.5' data-tour='schedule-draft'>
             <Label htmlFor='schedule-draft'>Draft</Label>
-            <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); }}>
+            <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); setAssetId(''); setPublishOptions(null); }}>
               <SelectTrigger id='schedule-draft' className='h-12 w-full text-base'>
                 {/* The draft's language exactly as stored, never folded into a two-language label. One line, cut to the field's width. */}
                 <SelectValue className='min-w-0'>
@@ -402,8 +413,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-asset'>Image (optional)</Label>
-              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} />
+              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
+              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
             </div>
           </div>
 
@@ -428,16 +439,21 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </div>
           )}
 
-          {asset && (
+          {asset && kindOf(asset) === 'image' && (
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-alt'>Alt text</Label>
               <Input id='schedule-alt' className='text-base md:text-sm' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Hands on piano keys under a warm light' />
             </div>
           )}
 
+          {channel && needsOptions && (
+            // Keyed by account: switching accounts starts the choices again instead of carrying them over.
+            <PublishOptions key={channel.id} platform={channel.platform} channelId={channel.id} asset={asset} text={variant?.text ?? ''} onChange={setPublishOptions} />
+          )}
+
           <Label className='flex items-start gap-2 text-sm font-normal'>
             <Checkbox checked={rights} onCheckedChange={(v) => setRights(v === true)} />
-            <span>I have the rights to publish this text{asset ? ' and image' : ''} on this account.</span>
+            <span>I have the rights to publish this text{asset ? ` and ${kindOf(asset)}` : ''} on this account.</span>
           </Label>
           {variant && steps.warnings.length > 0 && (
             <Label className='flex items-start gap-2 text-sm font-normal'>

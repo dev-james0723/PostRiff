@@ -38,7 +38,8 @@ export function ConnectReturn() {
       return;
     }
     api
-      .oauthComplete(workspaceId, provider, state, params.get('code') ?? undefined, params.get('error') ?? undefined)
+      // `iss` names the authorization server that answered (Bluesky); the API checks it against the one it started with.
+      .oauthComplete(workspaceId, provider, state, params.get('code') ?? undefined, params.get('error') ?? undefined, params.get('iss') ?? undefined)
       .then(async (value) => {
         // A reconnect parked the account it was meant for; read it once whatever the outcome.
         const expected = takeExpectedReconnect();

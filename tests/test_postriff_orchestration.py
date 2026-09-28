@@ -298,7 +298,7 @@ class CapabilityTests(unittest.TestCase):
         providers = {"linkedin": self.Adapter()}
         route = lambda destination, **kw: capabilities.publish_route(state, destination, **{"providers": providers, "live": True, **kw})
         self.assertTrue(route({"platform": "LinkedIn", "channelId": "li"})["publish"])
-        self.assertEqual(route({"platform": "X"})["code"], "no_route")
+        self.assertEqual(route({"platform": "X"})["code"], "not_configured")  # hosted X connector exists; no adapter mounted here
         self.assertEqual(route({"platform": "Xiaohongshu"})["code"], "no_route")
         self.assertEqual(route({"platform": "LinkedIn", "channelId": "li"}, live=False)["code"], "not_live")
         self.assertEqual(route({"platform": "LinkedIn", "channelId": "li"}, can_publish=False)["code"], "plan")
@@ -412,7 +412,7 @@ class ChatPlanTests(unittest.TestCase):
         text = automation_plan.reply(view)
         for forbidden in ("{", "cron", "anthropic", "claude", "haiku", "sonnet", saved["taskId"]):
             self.assertNotIn(forbidden, text.lower())
-        self.assertIn("can't publish to X", text)
+        self.assertIn("Publishing to X isn't available yet", text)  # hosted X route exists; no X adapter is mounted here
         self.assertIn("Nothing publishes without your approval", text)
 
 

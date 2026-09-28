@@ -6,6 +6,8 @@ mirrors these predicates.
 """
 from __future__ import annotations
 
+import re
+
 VIDEO_MIMES = ("video/mp4", "video/quicktime")
 READY = {"image": "decoded", "video": "ready"}
 
@@ -38,8 +40,24 @@ def is_ready(asset):
 
 
 def is_postable_image(asset):
-    """Images a post can be scheduled with: decoded and not deleted. Videos never are in Phase 1."""
+    """Images a post can be scheduled with: decoded and not deleted."""
     return kind_of(asset) == "image" and is_ready(asset)
+
+
+def is_postable_video(asset):
+    """Only a fully inspected, immutable private upload may enter a video approval."""
+    if kind_of(asset) != "video" or not is_ready(asset) or asset.get("mime") not in VIDEO_MIMES:
+        return False
+    verified = asset.get("verified") if isinstance(asset.get("verified"), dict) else {}
+    duration = asset.get("duration")
+    size = asset.get("bytes")
+    extension = "mp4" if asset["mime"] == "video/mp4" else "mov"
+    return (verified.get("container") is True and verified.get("locationChecked") is True
+            and asset.get("durationSource") == "container" and type(duration) in (int, float) and 0 < duration <= 180
+            and type(size) is int and 0 < size <= 100_000_000
+            and isinstance(asset.get("etag"), str) and bool(asset["etag"])
+            and isinstance(asset.get("bucket"), str) and bool(asset["bucket"])
+            and re.fullmatch(r"[0-9a-f]{32}\." + extension, str(asset.get("objectName") or "")) is not None)
 
 
 def is_library_asset(asset):
