@@ -59,7 +59,9 @@ def isolated_environment(values):
               'RAFII_PHONE_OUTBOUND_ENABLED', 'RAFII_PHONE_SCHEDULED_ENABLED', 'RAFII_PHONE_PROACTIVE_ENABLED', 'RAFII_PHONE_VERIFICATION_ENABLED',
               'RAFII_SMS_ENABLED', 'RAFII_SMS_ESCALATION_ENABLED',
               'RAFII_ACTIVE_SCOUT_ENABLED', 'RAFII_JEV_SCOUT_ENABLED', 'RAFII_SCOUT_STRONG_MODEL_ESCALATION_ENABLED',
-              'RAFII_MULTIMODAL_ENRICHMENT_ENABLED', 'RAFII_WATCH_IT_LOCAL_ADAPTER_ENABLED')
+              'RAFII_MULTIMODAL_ENRICHMENT_ENABLED', 'RAFII_WATCH_IT_LOCAL_ADAPTER_ENABLED',
+              'RAFII_TREND_PROVIDER_OPERATIONS_ENABLED', 'RAFII_TREND_MODEL_ENRICHMENT_ENABLED',
+              'RAFII_TREND_NOTIFICATIONS_ENABLED', 'RAFII_TREND_MULTIMODAL_ENABLED')
     if any(str(result.get(name, '')).strip().lower() in ('1', 'true', 'yes', 'on') for name in egress):
         raise ValueError('Preview Rafii notifications, web push, research and listening must remain disabled.')
     for name in egress:
