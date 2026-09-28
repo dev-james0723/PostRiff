@@ -81,7 +81,8 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
   const mountRef = useRef<HTMLDivElement | null>(null);
   const kickRef = useRef<() => void>(() => {});
   const latest = useRef<LiveState>({ mode, level, outputMuted, reducedMotion });
-  const [fallback, setFallback] = useState(false);
+  const [renderState, setRenderState] = useState<'loading' | 'ready' | 'fallback'>('loading');
+  const fallback = renderState === 'fallback';
 
   // Keep the animation loop on current Voice Mode data without rebuilding WebGL.
   latest.current = { mode, level: finiteLevel(level), outputMuted, reducedMotion };
@@ -232,7 +233,7 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
       if (cancelled) return;
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = null;
-      setFallback(true);
+      setRenderState('fallback');
     };
 
     void (async () => {
@@ -313,6 +314,7 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
 
             for (const name of ['Body', 'Head', 'EarL', 'EarR', 'EyeL', 'EyeR', 'Mouth', 'ArmL', 'ArmR', 'Tail01', 'Tail02', 'Tail03', 'Tail04']) remember(name);
             modelReady = true;
+            setRenderState('ready');
             resize();
             ensureLoop();
           },
@@ -369,6 +371,7 @@ export function RafiiLiveAvatar({ mode, level, outputMuted, reducedMotion }: Liv
       data-rafii-3d={fallback ? 'fallback' : 'live'}
       data-rafii-avatar-mode={mode}
       data-rafii-mouth-open='0.000'
+      data-rafii-model-ready={renderState}
       data-rafii-continuous-motion={reducedMotion ? 'off' : 'on'}
     >
       {fallback ? (
