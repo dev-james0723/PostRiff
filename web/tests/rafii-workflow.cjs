@@ -328,13 +328,18 @@ async function workflow(browser) {
     const before = await resultDock.locator('button[aria-pressed="true"]').getAttribute('aria-label');
     const deck = page.getByRole('group', { name: 'Draft previews' });
     const box = await deck.boundingBox();
-    // Start in PreviewDeck's non-interactive top gutter. The product intentionally refuses
-    // to steal swipe gestures that begin on buttons, links, inputs or the editable draft.
-    const swipeY = box.y + 12;
-    await page.mouse.move(box.x + box.width / 2 + 90, swipeY);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 - 90, swipeY, { steps: 10 });
-    await page.mouse.up();
+    // Exercise PreviewDeck's pointer recognizer at its gesture surface. A coordinate-based mouse
+    // drag can land on an interactive child as preview layouts change, and the product correctly
+    // refuses to steal those gestures. Dispatching to the surface keeps that guard intact while
+    // still running the native browser listeners and React state transition end to end.
+    const pointerId = 71;
+    const startX = box.x + box.width / 2 + 90;
+    const endX = box.x + box.width / 2 - 90;
+    const swipeY = box.y + box.height / 2;
+    await deck.dispatchEvent('pointerdown', { pointerId, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1, clientX: startX, clientY: swipeY });
+    await deck.dispatchEvent('pointermove', { pointerId, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1, clientX: endX, clientY: swipeY });
+    check('swipe surface enters drag state', (await deck.getAttribute('data-swipe')) === 'dragging', await deck.getAttribute('data-swipe'));
+    await deck.dispatchEvent('pointerup', { pointerId, pointerType: 'touch', isPrimary: true, button: 0, buttons: 0, clientX: endX, clientY: swipeY });
     mark('phone swipe');
     await page.waitForTimeout(900);
     const after = await resultDock.locator('button[aria-pressed="true"]').getAttribute('aria-label');
