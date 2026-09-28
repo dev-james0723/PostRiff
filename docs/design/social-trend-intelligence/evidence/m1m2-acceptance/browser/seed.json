@@ -1,0 +1,173 @@
+{
+  "execution": "real_api_postgresql_synthetic_identity_and_seed",
+  "seeds": [
+    {
+      "scenario": "radar",
+      "width": 1440,
+      "platform": "Threads",
+      "principal": "65e67d73-7955-40ef-9ff2-78bddd2ce136",
+      "workspace_id": "b69393f6-843c-4ba0-9702-1484543b5318",
+      "trend_id": "8dee1101-a2e5-4298-b453-3732ec7ff326",
+      "receipt_id": "a9a72d37-6b02-4e73-a13c-5a21d62b3089",
+      "opportunity_id": "8eaf3f14-ebda-4fa0-91a9-6ba8e23c9282",
+      "channel_id": "e2a2a66f-8343-4af7-bdb0-31313ab75991",
+      "title": "Synthetic Tier C radar practice 1440"
+    },
+    {
+      "scenario": "radar",
+      "width": 768,
+      "platform": "Threads",
+      "principal": "77e67f8d-4464-4338-a796-268c53e1bbbc",
+      "workspace_id": "4149d453-02f0-471e-808f-994c0447f27c",
+      "trend_id": "1cc90faa-c29a-4099-b34d-3ba34c654bed",
+      "receipt_id": "4022c674-8f53-4f75-8d1b-35890ce51b15",
+      "opportunity_id": "f896ecff-5d02-45d0-b35c-97346a4afd81",
+      "channel_id": "09296a70-0558-4779-b107-fade1836d07c",
+      "title": "Synthetic Tier C radar practice 768"
+    },
+    {
+      "scenario": "radar",
+      "width": 390,
+      "platform": "Threads",
+      "principal": "80e56aa1-9127-49e2-8319-56f66057d969",
+      "workspace_id": "04d62045-31f9-4b2d-9487-c1b444388c68",
+      "trend_id": "4a23ef7d-3591-423f-b642-6e09f8142ae4",
+      "receipt_id": "e9d96358-e2d4-4e0f-966e-e4caf8401b19",
+      "opportunity_id": "5977e1d3-d784-4937-b983-60a640fa2168",
+      "channel_id": "39bd9505-22d8-4794-a2ec-0a9c82cc2809",
+      "title": "Synthetic Tier C radar practice 390"
+    },
+    {
+      "scenario": "radar",
+      "width": 430,
+      "platform": "Threads",
+      "principal": "91482187-6771-45c0-9908-e6b57786c7dc",
+      "workspace_id": "06cc08a1-a610-4e82-b5d4-fa0693c6a44c",
+      "trend_id": "9d697cae-3e7b-4593-8177-3c033b42bd48",
+      "receipt_id": "ff2dfda4-17ad-446a-bcbe-7f6f0a541960",
+      "opportunity_id": "a715d174-a79a-4ae8-b504-cb416a24dc33",
+      "channel_id": "13186e7e-34be-4437-8413-ffb0adcfcbde",
+      "title": "Synthetic Tier C radar practice 430"
+    }
+  ],
+  "lab_seeds": [
+    {
+      "scenario": "lab",
+      "width": 1440,
+      "platform": "Bluesky",
+      "principal": "cbc30001-62fc-42d1-bed1-3911d588e886",
+      "workspace_id": "cb5c9f7b-eb65-4a11-a310-ba04d4170c47",
+      "trend_id": "f3905e1e-4ec4-401f-861f-b2a2cb9c4d8d",
+      "receipt_id": "44ee59ec-ab8b-4dca-8e25-ae3e60e43467",
+      "opportunity_id": "c5b1979e-bdb3-4fba-ad2e-3e174d74d202",
+      "channel_id": "a0e9d000-7deb-4e60-8fcf-b7db4f994f81",
+      "title": "Synthetic Tier C lab practice 1440",
+      "source_id": "1adde5fecb4e4411b338c6def0a2b9a9",
+      "draft_id": "1f454990-00f3-4fc7-8f86-8cfe0571b3c6",
+      "original_text": "Demo data: My independently supplied practice observation. Synthetic Tier C source: compare your own two practice speeds.",
+      "repeated_phrase": "Synthetic Tier C source: compare your own two practice speeds.",
+      "seed_kind": "explicit_synthetic_saved_draft_with_server_accepted_source_lineage"
+    },
+    {
+      "scenario": "lab",
+      "width": 768,
+      "platform": "Bluesky",
+      "principal": "992e9fea-f62c-4324-a057-7c4e1f34f348",
+      "workspace_id": "af73cf00-3db2-43e2-92dc-2016b81d38b5",
+      "trend_id": "6093d5e0-927c-4fb3-b036-b4b654cb9879",
+      "receipt_id": "966a9f19-f6ed-43ae-a41e-9978cad5d385",
+      "opportunity_id": "aae9f390-d29e-4d4a-b718-ac304c1396bf",
+      "channel_id": "053ecf55-21be-42b2-ba0a-fc16195349e1",
+      "title": "Synthetic Tier C lab practice 768",
+      "source_id": "78fda1986b40428aa60d425f049fe55b",
+      "draft_id": "ef79cc5e-9319-4c8b-8fd3-49da31be8a8a",
+      "original_text": "Demo data: My independently supplied practice observation. Synthetic Tier C source: compare your own two practice speeds.",
+      "repeated_phrase": "Synthetic Tier C source: compare your own two practice speeds.",
+      "seed_kind": "explicit_synthetic_saved_draft_with_server_accepted_source_lineage"
+    },
+    {
+      "scenario": "lab",
+      "width": 390,
+      "platform": "Bluesky",
+      "principal": "4f96e845-800f-4522-88e0-0454f66318bb",
+      "workspace_id": "3f23fb39-bab6-44e8-94db-73b3799cb184",
+      "trend_id": "84685e7b-1107-4b9e-a212-0e267f99a4f2",
+      "receipt_id": "657b11f9-0bf1-4d2e-bec8-cb98d77728e0",
+      "opportunity_id": "086b39bb-4a76-4172-9472-9bf723961e31",
+      "channel_id": "d000a725-6b0b-49aa-9309-5e8d5a6ae4ee",
+      "title": "Synthetic Tier C lab practice 390",
+      "source_id": "8f0cd759d3a247e7b931b1dd257bedf6",
+      "draft_id": "34e0539a-7175-48a2-99e6-531879c00547",
+      "original_text": "Demo data: My independently supplied practice observation. Synthetic Tier C source: compare your own two practice speeds.",
+      "repeated_phrase": "Synthetic Tier C source: compare your own two practice speeds.",
+      "seed_kind": "explicit_synthetic_saved_draft_with_server_accepted_source_lineage"
+    },
+    {
+      "scenario": "lab",
+      "width": 430,
+      "platform": "Bluesky",
+      "principal": "b38f138c-fa31-466c-84a7-764be1e607e8",
+      "workspace_id": "93a84d92-43c6-4730-ad92-7116e338fab8",
+      "trend_id": "00f6575b-4a33-426e-8198-decb0f3b1078",
+      "receipt_id": "06c456d3-32be-4a81-bcac-e539e8d15569",
+      "opportunity_id": "e7b73210-927e-425f-8a58-df11234ce27e",
+      "channel_id": "2e838d53-9827-4d5c-a37a-badef06ca799",
+      "title": "Synthetic Tier C lab practice 430",
+      "source_id": "1841ae7e31e942dea5151aea398e7276",
+      "draft_id": "13df754c-d0a5-4ceb-9d7d-fa9e167a2536",
+      "original_text": "Demo data: My independently supplied practice observation. Synthetic Tier C source: compare your own two practice speeds.",
+      "repeated_phrase": "Synthetic Tier C source: compare your own two practice speeds.",
+      "seed_kind": "explicit_synthetic_saved_draft_with_server_accepted_source_lineage"
+    }
+  ],
+  "dismiss_seeds": [
+    {
+      "scenario": "dismiss",
+      "width": 1440,
+      "platform": "Bluesky",
+      "principal": "96780c73-cafb-466d-b2aa-36e28ab3af9c",
+      "workspace_id": "222d95b6-060b-48e8-ab6b-cfe8c83a6d8c",
+      "trend_id": "effe1aeb-2964-42ce-b908-37acebb74ec0",
+      "receipt_id": "3e6adac3-8417-47ca-af9b-421bdfee9538",
+      "opportunity_id": "12312f46-341f-4fff-9c4c-47aa87d37e59",
+      "channel_id": "a45e1372-7382-4b05-9e08-4cb6af84bc97",
+      "title": "Synthetic Tier C dismiss practice 1440"
+    },
+    {
+      "scenario": "dismiss",
+      "width": 768,
+      "platform": "Bluesky",
+      "principal": "99a6e6e1-d599-40d4-a412-0ae1b5fa8347",
+      "workspace_id": "661c1df3-f6cf-40d3-89fa-3468691887c1",
+      "trend_id": "08c5741e-413e-48e4-99db-f3efd03432b5",
+      "receipt_id": "bed2014d-55f9-43fb-aa08-8ba93a404773",
+      "opportunity_id": "07042d5b-a328-4bdd-9b6a-4f1fbb39081a",
+      "channel_id": "8d931870-372a-464d-b49c-6d24d7fc8bf3",
+      "title": "Synthetic Tier C dismiss practice 768"
+    },
+    {
+      "scenario": "dismiss",
+      "width": 390,
+      "platform": "Bluesky",
+      "principal": "67b1daa3-a24e-475c-86c4-3570b800aedd",
+      "workspace_id": "622f43f3-371e-4116-9a55-d0c98c7d65ce",
+      "trend_id": "4c6555a5-bb80-4ca6-8c66-a3d6102d6688",
+      "receipt_id": "0a67ceb8-aa08-4ff1-8260-cd53debe618d",
+      "opportunity_id": "2ba6256e-6074-498d-8089-c94303db00e3",
+      "channel_id": "9b64511e-9065-4ecd-bd02-d0849ab42f26",
+      "title": "Synthetic Tier C dismiss practice 390"
+    },
+    {
+      "scenario": "dismiss",
+      "width": 430,
+      "platform": "Bluesky",
+      "principal": "58842e61-c91f-4f8e-a79b-86bcca0b16b5",
+      "workspace_id": "654c97ee-9b1c-4d39-ae63-812f35eebde6",
+      "trend_id": "3e33699d-ecea-4269-89f5-2c61287f2455",
+      "receipt_id": "a74a0aea-95a0-4734-af20-6e6c72c24f6a",
+      "opportunity_id": "5862a627-ab0b-4c24-a34a-6b12a4611388",
+      "channel_id": "9233eea4-e119-4063-abff-76b54338c623",
+      "title": "Synthetic Tier C dismiss practice 430"
+    }
+  ]
+}
