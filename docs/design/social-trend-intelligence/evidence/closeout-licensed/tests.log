@@ -1,0 +1,10 @@
+test_aggregate_capability_rejects_posts_and_cross_domain_or_revision_rows (test_trend_licensed.LicensedAggregateImport.test_aggregate_capability_rejects_posts_and_cross_domain_or_revision_rows) ... ok
+test_aggregate_only_import_preserves_zero_and_unknown_without_post_records (test_trend_licensed.LicensedAggregateImport.test_aggregate_only_import_preserves_zero_and_unknown_without_post_records) ... ok
+test_empty_terminal_export_does_not_invent_zero_measurement (test_trend_licensed.LicensedAggregateImport.test_empty_terminal_export_does_not_invent_zero_measurement) ... ok
+test_item_byte_and_paid_reservation_limits_apply_before_import (test_trend_licensed.LicensedAggregateImport.test_item_byte_and_paid_reservation_limits_apply_before_import) ... ok
+test_unknown_revoked_expired_or_unentitled_access_fails_closed (test_trend_licensed.LicensedAggregateImport.test_unknown_revoked_expired_or_unentitled_access_fails_closed) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.007s
+
+OK

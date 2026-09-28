@@ -11,10 +11,10 @@
     "states": {
       "NOT_APPLICABLE": 154,
       "IN_PROGRESS": 1460,
-      "IMPLEMENTED_UNVERIFIED": 106,
+      "IMPLEMENTED_UNVERIFIED": 107,
       "VERIFIED": 31,
       "BLOCKED_EXTERNAL": 9,
-      "NOT_STARTED": 11
+      "NOT_STARTED": 10
     },
     "record_types": {
       "provenance_or_example": 65,
@@ -58,7 +58,7 @@
     "acceptance_O": 22,
     "work_packages": 19,
     "selected_test_entries": 540,
-    "selected_test_links": 1149,
+    "selected_test_links": 1162,
     "supplemental_contract_items": 87,
     "supplemental_header_obligations": 4,
     "section_25_records": 29,
@@ -63318,5 +63318,5 @@
   "unaccounted_lines": [],
   "limitation": "Literal coverage and independently checked IDs/text; semantic classification and routing are disclosed editorial judgments, not implementation acceptance.",
   "execution_state": "RECONCILED_PARTIAL_EVIDENCE_NOT_RELEASE_COMPLETE",
-  "source_head": "56fffbf8ec2fb28bf6284780b888b15a2bfbe9a3"
+  "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb"
 }

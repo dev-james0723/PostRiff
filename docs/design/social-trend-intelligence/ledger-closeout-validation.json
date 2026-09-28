@@ -1,18 +1,18 @@
 {
   "status": "PASS",
-  "recorded_at": "2026-09-28T07:48:43.893803+00:00",
-  "source_head": "56fffbf8ec2fb28bf6284780b888b15a2bfbe9a3",
+  "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+  "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb",
   "records": 1771,
   "stable_ids_and_exact_source_preserved": true,
   "source_sha256": "5664a50d744c95734d21dade7baf95145aa8ef14992d6ad11871c8a08828a328",
-  "requirements_sha256": "9d3bcf085a66e0ffede5a4986278e0ad43e5e4f638ffa32d6ec247035d4750c1",
+  "requirements_sha256": "577a69c628b3dcd4b974bd1317885bd7175c5e04e54b149db86d78200867888b",
   "counts": {
     "NOT_APPLICABLE": 154,
     "IN_PROGRESS": 1460,
-    "IMPLEMENTED_UNVERIFIED": 106,
+    "IMPLEMENTED_UNVERIFIED": 107,
     "VERIFIED": 31,
     "BLOCKED_EXTERNAL": 9,
-    "NOT_STARTED": 11
+    "NOT_STARTED": 10
   },
   "work_packages": {
     "WP00": {
@@ -186,13 +186,15 @@
       "records": 20,
       "counts": {
         "BLOCKED_EXTERNAL": 7,
-        "NOT_STARTED": 11,
-        "IN_PROGRESS": 2
+        "NOT_STARTED": 10,
+        "IN_PROGRESS": 2,
+        "IMPLEMENTED_UNVERIFIED": 1
       },
       "mandatory_counts": {
         "BLOCKED_EXTERNAL": 7,
-        "NOT_STARTED": 10,
-        "IN_PROGRESS": 2
+        "NOT_STARTED": 9,
+        "IN_PROGRESS": 2,
+        "IMPLEMENTED_UNVERIFIED": 1
       },
       "complete": false
     },
@@ -285,17 +287,17 @@
       "counts": {
         "NOT_APPLICABLE": 150,
         "IN_PROGRESS": 1384,
-        "IMPLEMENTED_UNVERIFIED": 100,
-        "VERIFIED": 16,
-        "BLOCKED_EXTERNAL": 9,
-        "NOT_STARTED": 11
-      },
-      "mandatory_counts": {
-        "IN_PROGRESS": 1318,
-        "IMPLEMENTED_UNVERIFIED": 100,
+        "IMPLEMENTED_UNVERIFIED": 101,
         "VERIFIED": 16,
         "BLOCKED_EXTERNAL": 9,
         "NOT_STARTED": 10
+      },
+      "mandatory_counts": {
+        "IN_PROGRESS": 1318,
+        "IMPLEMENTED_UNVERIFIED": 101,
+        "VERIFIED": 16,
+        "BLOCKED_EXTERNAL": 9,
+        "NOT_STARTED": 9
       },
       "complete": false
     },

@@ -4,7 +4,7 @@ Source HEAD: `56fffbf8ec2fb28bf6284780b888b15a2bfbe9a3`. Ledger integrity passed
 
 All 1,771 stable IDs, exact requirement text, source spans and source-text hashes are preserved. The old 1,607 NOT_STARTED value was a pre-implementation snapshot. Current IN_PROGRESS records often contain implemented code plus unqualified compound acceptance; they are not a count of missing engineering tasks.
 
-Current counts: NOT_APPLICABLE=154, IN_PROGRESS=1460, IMPLEMENTED_UNVERIFIED=106, VERIFIED=31, BLOCKED_EXTERNAL=9, NOT_STARTED=11.
+Current counts: NOT_APPLICABLE=154, IN_PROGRESS=1460, IMPLEMENTED_UNVERIFIED=107, VERIFIED=31, BLOCKED_EXTERNAL=9, NOT_STARTED=10.
 
 | Work package | Records | Current states | Complete |
 |---|---:|---|---|
@@ -20,7 +20,7 @@ Current counts: NOT_APPLICABLE=154, IN_PROGRESS=1460, IMPLEMENTED_UNVERIFIED=106
 | WP09 | 259 | IMPLEMENTED_UNVERIFIED 26, IN_PROGRESS 206, NOT_APPLICABLE 27 | No |
 | WP10 | 27 | IN_PROGRESS 23, NOT_APPLICABLE 4 | No |
 | WP11 | 16 | IN_PROGRESS 12, IMPLEMENTED_UNVERIFIED 3, VERIFIED 1 | No |
-| WP12 | 20 | BLOCKED_EXTERNAL 7, NOT_STARTED 11, IN_PROGRESS 2 | No |
+| WP12 | 20 | BLOCKED_EXTERNAL 7, NOT_STARTED 10, IN_PROGRESS 2, IMPLEMENTED_UNVERIFIED 1 | No |
 | WP13 | 27 | IN_PROGRESS 22, NOT_APPLICABLE 2, VERIFIED 2, BLOCKED_EXTERNAL 1 | No |
 | WP14 | 46 | IN_PROGRESS 34, NOT_APPLICABLE 4, IMPLEMENTED_UNVERIFIED 4, VERIFIED 4 | No |
 | WP15 | 22 | IN_PROGRESS 17, IMPLEMENTED_UNVERIFIED 1, VERIFIED 4 | No |
@@ -33,3 +33,5 @@ Evidence is under `evidence/closeout-current/`. Local SQL and browser tests use 
 Remaining gates include exact deployment candidate, live authorization/allowlist/signing-key setup, provider operation rights, bounded spend, native language and forecast cohorts, real creator outcome studies, competitor authorization and manual device/assistive-technology review. Incomplete compound acceptance is explicitly retained; this report does not turn an unverified assertion into an external blocker.
 
 The adjacent closeout chat owns Weekly/Campaign/chat/angles and release integration. Commit56fffbf supplies independently verified current-rights filtering and owner adoption in the existing strategy store. No shared worktree was overwritten.
+
+Supplemental review: `STI-S20-L2200` now has five passing direct offline adapter tests; commercial/data review remains open. Current Weekly/Campaign/chat and strategy browser receipts are bound to their requirement subcontracts. The historical `closeout-current/receipt.json` remains an immutable snapshot; current ledger counts above supersede its counts.

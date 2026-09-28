@@ -157481,6 +157481,12 @@
           "matches_guarded_test_snapshot": false,
           "prior_sha256": "c54e1d8d04f3499f29eef8d06e12de5fb8136f3002231475428da94eb53223dc",
           "changed_since_prior_review": false
+        },
+        {
+          "path": "web/src/features/trends/opportunity-card.tsx",
+          "exists": true,
+          "sha256": "2fd21b3b9d192399f1dd62721939e59ae35b00bfc63b85406688239077fb8d6e",
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "tests": [
@@ -157551,6 +157557,14 @@
           "selection_basis": "shared behavioral terms; partial linkage requires human verification",
           "prior_evidence_id": "E-OFFLINE-REFRESH",
           "line": 287
+        },
+        {
+          "test_id": "browser:trend-live-api-browser.cjs:chat opens with bound source and receipt without sending",
+          "file": "web/tests/trend-live-api-browser.cjs",
+          "sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "verification_evidence": [],
@@ -157633,6 +157647,15 @@
           "outcome": "PASS",
           "test_source_sha256": "f52d9963a45b9e7bd57fde0a696cbfc4eff7766bfc154f026540892ecae4814e",
           "test_id": "test_trend_integration.TrendIntegrationTests.test_existing_scout_yields_to_durable_worker_without_egress"
+        },
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-UI",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "sha256": "51969388ace2b464643103e5394eeccefaba1ec9f9f41f5ee5f6c6ec421544c0",
+          "test_id": "browser:trend-live-api-browser.cjs:chat opens with bound source and receipt without sending",
+          "outcome": "PASS",
+          "execution": "real_api_postgresql_synthetic_identity_and_seed",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
         }
       ],
       "planned_artifact_mentions": [],
@@ -157645,7 +157668,13 @@
         "remaining_gate": "Individual acceptance review and applicable database/browser/live qualification remain open.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 2,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -157740,6 +157769,14 @@
           "observed_outcome": "PASS",
           "evidence_id": "E-CLOSEOUT-LEARNING-RIGHTS",
           "relationship": "actual_SQL_lineage_and_adoption_subcontract"
+        },
+        {
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "file": "web/tests/trend-strategy-live-api-browser.cjs",
+          "sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "verification_evidence": [],
@@ -157822,6 +157859,15 @@
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
           "test_id": "test_trend_learning.LearningSQL.test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment"
+        },
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-STRATEGY",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "sha256": "ea6ff22ba2e83f8c5429808a7e93c8551cf0ebc7aeb9eeb138a4c73eb77744f6",
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "outcome": "PASS",
+          "execution": "real_browser_API_PostgreSQL_synthetic_publication_and_metric_history",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
         }
       ],
       "planned_artifact_mentions": [],
@@ -157834,7 +157880,13 @@
         "remaining_gate": "Real provider publication/metric collection, matched creator cohorts and merged-release browser/production qualification remain open. Retained-analytics-only strategy adoption is fail-closed.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 3,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -159128,6 +159180,14 @@
           "observed_outcome": "PASS",
           "evidence_id": "E-CLOSEOUT-LEARNING-RIGHTS",
           "relationship": "actual_SQL_lineage_and_adoption_subcontract"
+        },
+        {
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "file": "web/tests/trend-strategy-live-api-browser.cjs",
+          "sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "verification_evidence": [],
@@ -159214,6 +159274,15 @@
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
           "test_id": "test_trend_learning.LearningSQL.test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment"
+        },
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-STRATEGY",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "sha256": "ea6ff22ba2e83f8c5429808a7e93c8551cf0ebc7aeb9eeb138a4c73eb77744f6",
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "outcome": "PASS",
+          "execution": "real_browser_API_PostgreSQL_synthetic_publication_and_metric_history",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
         }
       ],
       "planned_artifact_mentions": [],
@@ -159226,7 +159295,13 @@
         "remaining_gate": "Real provider publication/metric collection, matched creator cohorts and merged-release browser/production qualification remain open. Retained-analytics-only strategy adoption is fail-closed.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 4,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -160043,6 +160118,14 @@
           "observed_outcome": "PASS",
           "evidence_id": "E-CLOSEOUT-LEARNING-RIGHTS",
           "relationship": "actual_SQL_lineage_and_adoption_subcontract"
+        },
+        {
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "file": "web/tests/trend-strategy-live-api-browser.cjs",
+          "sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "verification_evidence": [],
@@ -160129,6 +160212,15 @@
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
           "test_id": "test_trend_learning.LearningSQL.test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment"
+        },
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-STRATEGY",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "sha256": "ea6ff22ba2e83f8c5429808a7e93c8551cf0ebc7aeb9eeb138a4c73eb77744f6",
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "outcome": "PASS",
+          "execution": "real_browser_API_PostgreSQL_synthetic_publication_and_metric_history",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
         }
       ],
       "planned_artifact_mentions": [],
@@ -160141,7 +160233,13 @@
         "remaining_gate": "Real provider publication/metric collection, matched creator cohorts and merged-release browser/production qualification remain open. Retained-analytics-only strategy adoption is fail-closed.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 3,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -197178,6 +197276,12 @@
           "matches_guarded_test_snapshot": false,
           "prior_sha256": "af0e59f34b6d2ff2527a1ee9fcfeb70c2a50d1b246154de6679a1bf392a8b4b6",
           "changed_since_prior_review": true
+        },
+        {
+          "path": "web/src/features/ideas/use-draft.ts",
+          "exists": true,
+          "sha256": "0a74c833d2be322d328a170b21837501896ff960c844955c5a69f4265921c651",
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "tests": [
@@ -197197,6 +197301,14 @@
           "selection_basis": "shared behavioral terms; partial linkage requires human verification",
           "prior_evidence_id": "E-OFFLINE-REFRESH",
           "line": 224
+        },
+        {
+          "test_id": "browser:trend-live-api-browser.cjs:acceptance persists source and server lineage into existing Ideas after reload",
+          "file": "web/tests/trend-live-api-browser.cjs",
+          "sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "verification_evidence": [],
@@ -197252,6 +197364,15 @@
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
           "test_id": "test_trend_service.TrendServiceTests.test_actual_schema_trend_list_receipt_opportunity"
+        },
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-UI",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "sha256": "51969388ace2b464643103e5394eeccefaba1ec9f9f41f5ee5f6c6ec421544c0",
+          "test_id": "browser:trend-live-api-browser.cjs:acceptance persists source and server lineage into existing Ideas after reload",
+          "outcome": "PASS",
+          "execution": "real_api_postgresql_synthetic_identity_and_seed",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
         }
       ],
       "planned_artifact_mentions": [],
@@ -197264,7 +197385,13 @@
         "remaining_gate": "Individual acceptance review and applicable database/browser/live qualification remain open.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 1,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -205936,9 +206063,24 @@
           "matches_guarded_test_snapshot": false,
           "prior_sha256": "c54e1d8d04f3499f29eef8d06e12de5fb8136f3002231475428da94eb53223dc",
           "changed_since_prior_review": false
+        },
+        {
+          "path": "web/src/features/coworker/weekly/recipe-form.tsx",
+          "exists": true,
+          "sha256": "899e9624b762e872e269f309a0cc4bcc60ae31f826f0df79763d742fd686cf4c",
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
-      "tests": [],
+      "tests": [
+        {
+          "test_id": "browser:trend-live-api-browser.cjs:Weekly saves and preserves the explicit source on edit without drafting",
+          "file": "web/tests/trend-live-api-browser.cjs",
+          "sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
+        }
+      ],
       "verification_evidence": [],
       "production_verification": [],
       "external_blocker": null,
@@ -205983,7 +206125,17 @@
       "qualification": null,
       "acceptance_id": null,
       "test_selection_state": "NO_DIRECT_ASSERTION_SELECTED",
-      "evidence": [],
+      "evidence": [
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-UI",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "sha256": "51969388ace2b464643103e5394eeccefaba1ec9f9f41f5ee5f6c6ec421544c0",
+          "test_id": "browser:trend-live-api-browser.cjs:Weekly saves and preserves the explicit source on edit without drafting",
+          "outcome": "PASS",
+          "execution": "real_api_postgresql_synthetic_identity_and_seed",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
+        }
+      ],
       "planned_artifact_mentions": [],
       "implementation_assessment": {
         "reviewed_at": "2026-09-28T07:22:54.365309+00:00",
@@ -205994,7 +206146,13 @@
         "remaining_gate": "Individual acceptance review and applicable database/browser/live qualification remain open.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 0,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -206063,9 +206221,30 @@
           "matches_guarded_test_snapshot": false,
           "prior_sha256": "c54e1d8d04f3499f29eef8d06e12de5fb8136f3002231475428da94eb53223dc",
           "changed_since_prior_review": false
+        },
+        {
+          "path": "src/postriff_phase2/campaigns.py",
+          "exists": true,
+          "sha256": "d9b4c1eb2881c8c8de2621c26b66e2f7bd5494cf8303640c5d7bab735497304d",
+          "relationship": "reviewed_local_browser_subcontract"
+        },
+        {
+          "path": "web/src/features/automations/automations-view.tsx",
+          "exists": true,
+          "sha256": "8980fe65a67e64d7fef424c740e9b952aad5dc2b9676a5f62c8a435e9219cb2b",
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
-      "tests": [],
+      "tests": [
+        {
+          "test_id": "browser:trend-live-api-browser.cjs:campaign builder receives the saved goal and destination for review",
+          "file": "web/tests/trend-live-api-browser.cjs",
+          "sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
+        }
+      ],
       "verification_evidence": [],
       "production_verification": [],
       "external_blocker": null,
@@ -206110,7 +206289,17 @@
       "qualification": null,
       "acceptance_id": null,
       "test_selection_state": "NO_DIRECT_ASSERTION_SELECTED",
-      "evidence": [],
+      "evidence": [
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-UI",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "sha256": "51969388ace2b464643103e5394eeccefaba1ec9f9f41f5ee5f6c6ec421544c0",
+          "test_id": "browser:trend-live-api-browser.cjs:campaign builder receives the saved goal and destination for review",
+          "outcome": "PASS",
+          "execution": "real_api_postgresql_synthetic_identity_and_seed",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
+        }
+      ],
       "planned_artifact_mentions": [],
       "implementation_assessment": {
         "reviewed_at": "2026-09-28T07:22:54.365309+00:00",
@@ -206121,7 +206310,13 @@
         "remaining_gate": "Individual acceptance review and applicable database/browser/live qualification remain open.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 0,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -206979,7 +207174,7 @@
       "milestone": "M1",
       "mandatory": true,
       "qualification_candidate": false,
-      "state": "NOT_STARTED",
+      "state": "IMPLEMENTED_UNVERIFIED",
       "dependencies": [
         {
           "type": "work_package",
@@ -207079,7 +207274,58 @@
           "changed_since_prior_review": false
         }
       ],
-      "tests": [],
+      "tests": [
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_aggregate_only_import_preserves_zero_and_unknown_without_post_records",
+          "file": "tests/test_trend_licensed.py",
+          "line": 27,
+          "sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "direct_offline_aggregate_adapter_assertion",
+          "evidence_id": "E-CLOSEOUT-LICENSED"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_empty_terminal_export_does_not_invent_zero_measurement",
+          "file": "tests/test_trend_licensed.py",
+          "line": 44,
+          "sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "direct_offline_aggregate_adapter_assertion",
+          "evidence_id": "E-CLOSEOUT-LICENSED"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_aggregate_capability_rejects_posts_and_cross_domain_or_revision_rows",
+          "file": "tests/test_trend_licensed.py",
+          "line": 50,
+          "sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "direct_offline_aggregate_adapter_assertion",
+          "evidence_id": "E-CLOSEOUT-LICENSED"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_unknown_revoked_expired_or_unentitled_access_fails_closed",
+          "file": "tests/test_trend_licensed.py",
+          "line": 58,
+          "sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "direct_offline_aggregate_adapter_assertion",
+          "evidence_id": "E-CLOSEOUT-LICENSED"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_item_byte_and_paid_reservation_limits_apply_before_import",
+          "file": "tests/test_trend_licensed.py",
+          "line": 69,
+          "sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "direct_offline_aggregate_adapter_assertion",
+          "evidence_id": "E-CLOSEOUT-LICENSED"
+        }
+      ],
       "verification_evidence": [],
       "production_verification": [],
       "external_blocker": null,
@@ -207132,18 +207378,59 @@
       "external_dependencies": [],
       "qualification": null,
       "acceptance_id": null,
-      "test_selection_state": "NO_DIRECT_ASSERTION_SELECTED",
-      "evidence": [],
+      "test_selection_state": "DIRECT_ASSERTIONS_EXECUTED",
+      "evidence": [
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_aggregate_only_import_preserves_zero_and_unknown_without_post_records",
+          "evidence_id": "E-CLOSEOUT-LICENSED",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-licensed/receipt.json",
+          "sha256": "c4967f4c499b6826656dbdf1d02ec01d1d40bc320580fee418c137b725b798ee",
+          "outcome": "PASS",
+          "execution": "offline_synthetic_not_vendor_qualification"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_empty_terminal_export_does_not_invent_zero_measurement",
+          "evidence_id": "E-CLOSEOUT-LICENSED",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-licensed/receipt.json",
+          "sha256": "c4967f4c499b6826656dbdf1d02ec01d1d40bc320580fee418c137b725b798ee",
+          "outcome": "PASS",
+          "execution": "offline_synthetic_not_vendor_qualification"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_aggregate_capability_rejects_posts_and_cross_domain_or_revision_rows",
+          "evidence_id": "E-CLOSEOUT-LICENSED",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-licensed/receipt.json",
+          "sha256": "c4967f4c499b6826656dbdf1d02ec01d1d40bc320580fee418c137b725b798ee",
+          "outcome": "PASS",
+          "execution": "offline_synthetic_not_vendor_qualification"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_unknown_revoked_expired_or_unentitled_access_fails_closed",
+          "evidence_id": "E-CLOSEOUT-LICENSED",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-licensed/receipt.json",
+          "sha256": "c4967f4c499b6826656dbdf1d02ec01d1d40bc320580fee418c137b725b798ee",
+          "outcome": "PASS",
+          "execution": "offline_synthetic_not_vendor_qualification"
+        },
+        {
+          "test_id": "test_trend_licensed.LicensedAggregateImport.test_item_byte_and_paid_reservation_limits_apply_before_import",
+          "evidence_id": "E-CLOSEOUT-LICENSED",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-licensed/receipt.json",
+          "sha256": "c4967f4c499b6826656dbdf1d02ec01d1d40bc320580fee418c137b725b798ee",
+          "outcome": "PASS",
+          "execution": "offline_synthetic_not_vendor_qualification"
+        }
+      ],
       "planned_artifact_mentions": [],
       "implementation_assessment": {
-        "reviewed_at": "2026-09-28T07:22:54.365309+00:00",
-        "source_head": "814913209bdb77021b40615d22443eaa6cb2d1f0",
+        "reviewed_at": "2026-09-28T08:09:28.129325+00:00",
+        "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb",
         "prior_state": "NOT_STARTED",
-        "assessment": "EXISTING_PARTIAL_BINDINGS_REVALIDATED",
-        "verification_scope": "NOT_VERIFIED",
-        "remaining_gate": "Individual acceptance review and applicable database/browser/live qualification remain open.",
+        "assessment": "EXISTING_AGGREGATE_ADAPTER_DIRECTLY_TESTED",
+        "verification_scope": "LOCAL_OFFLINE_SYNTHETIC",
+        "remaining_gate": "Actual vendor-specific commercial/data review, entitlement, scope and export contract approval; adapter support alone does not qualify licensed coverage.",
         "prior_owner_notes_are_historical": true,
-        "direct_current_passing_test_count": 0,
+        "direct_current_passing_test_count": 5,
         "file_presence_does_not_establish_implementation_or_verification": true
       }
     },
@@ -279078,6 +279365,14 @@
           "observed_outcome": "PASS",
           "evidence_id": "E-CLOSEOUT-LEARNING-RIGHTS",
           "relationship": "actual_SQL_lineage_and_adoption_subcontract"
+        },
+        {
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "file": "web/tests/trend-strategy-live-api-browser.cjs",
+          "sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
+          "observed_outcome": "PASS",
+          "current_source_bound": true,
+          "relationship": "reviewed_local_browser_subcontract"
         }
       ],
       "verification_evidence": [],
@@ -279166,6 +279461,15 @@
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
           "test_id": "test_trend_learning.LearningSQL.test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment"
+        },
+        {
+          "evidence_id": "E-CLOSEOUT-BROWSER-STRATEGY",
+          "path": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "sha256": "ea6ff22ba2e83f8c5429808a7e93c8551cf0ebc7aeb9eeb138a4c73eb77744f6",
+          "test_id": "browser:trend-strategy-live-api-browser.cjs:adoption persists and rights revocation rejects stale strategy support",
+          "outcome": "PASS",
+          "execution": "real_browser_API_PostgreSQL_synthetic_publication_and_metric_history",
+          "scope": "real_local_browser_API_SQL_with_synthetic_inputs; no_live_provider_or_model_qualification"
         }
       ],
       "planned_artifact_mentions": [],
@@ -279178,7 +279482,13 @@
         "remaining_gate": "Real provider publication/metric collection, matched creator cohorts and merged-release browser/production qualification remain open. Retained-analytics-only strategy adoption is fail-closed.",
         "prior_owner_notes_are_historical": true,
         "direct_current_passing_test_count": 0,
-        "file_presence_does_not_establish_implementation_or_verification": true
+        "file_presence_does_not_establish_implementation_or_verification": true,
+        "additional_browser_evidence": {
+          "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+          "receipt": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+          "qualification": "local_synthetic_only",
+          "remaining_gate": "Compound requirement and actual live provider/model/production qualification remain open."
+        }
       }
     },
     {
@@ -289809,10 +290119,10 @@
       "states": {
         "NOT_APPLICABLE": 154,
         "IN_PROGRESS": 1460,
-        "IMPLEMENTED_UNVERIFIED": 106,
+        "IMPLEMENTED_UNVERIFIED": 107,
         "VERIFIED": 31,
         "BLOCKED_EXTERNAL": 9,
-        "NOT_STARTED": 11
+        "NOT_STARTED": 10
       },
       "record_types": {
         "provenance_or_example": 65,
@@ -289938,10 +290248,10 @@
     "counts": {
       "NOT_APPLICABLE": 154,
       "IN_PROGRESS": 1460,
-      "IMPLEMENTED_UNVERIFIED": 106,
+      "IMPLEMENTED_UNVERIFIED": 107,
       "VERIFIED": 31,
       "BLOCKED_EXTERNAL": 9,
-      "NOT_STARTED": 11
+      "NOT_STARTED": 10
     },
     "implementation_refresh": {
       "created_at": "2026-09-28T00:20:39.647140+00:00",
@@ -290420,13 +290730,15 @@
         "records": 20,
         "counts": {
           "BLOCKED_EXTERNAL": 7,
-          "NOT_STARTED": 11,
-          "IN_PROGRESS": 2
+          "NOT_STARTED": 10,
+          "IN_PROGRESS": 2,
+          "IMPLEMENTED_UNVERIFIED": 1
         },
         "mandatory_counts": {
           "BLOCKED_EXTERNAL": 7,
-          "NOT_STARTED": 10,
-          "IN_PROGRESS": 2
+          "NOT_STARTED": 9,
+          "IN_PROGRESS": 2,
+          "IMPLEMENTED_UNVERIFIED": 1
         },
         "complete": false,
         "scope": "Evidence reconciliation; no package completion claimed"
@@ -294787,6 +295099,24 @@
       "path": "docs/design/social-trend-intelligence/evidence/closeout-current/web-unit.log",
       "sha256": "05a99625a69468b95a0d99acc6f26cb0e0d6a3b95b4bbf67df497b7492807a78",
       "state": "LOCAL_SYNTHETIC_NOT_PRODUCTION"
+    },
+    {
+      "evidence_id": "E-CLOSEOUT-closeout-licensed",
+      "path": "docs/design/social-trend-intelligence/evidence/closeout-licensed/receipt.json",
+      "sha256": "c4967f4c499b6826656dbdf1d02ec01d1d40bc320580fee418c137b725b798ee",
+      "state": "LOCAL_SYNTHETIC_NOT_PRODUCTION"
+    },
+    {
+      "evidence_id": "E-CLOSEOUT-closeout-ui",
+      "path": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+      "sha256": "51969388ace2b464643103e5394eeccefaba1ec9f9f41f5ee5f6c6ec421544c0",
+      "state": "LOCAL_SYNTHETIC_NOT_PRODUCTION"
+    },
+    {
+      "evidence_id": "E-CLOSEOUT-closeout-strategy",
+      "path": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+      "sha256": "ea6ff22ba2e83f8c5429808a7e93c8551cf0ebc7aeb9eeb138a4c73eb77744f6",
+      "state": "LOCAL_SYNTHETIC_NOT_PRODUCTION"
     }
   ],
   "milestone_implementation_status": {
@@ -294795,17 +295125,17 @@
       "counts": {
         "NOT_APPLICABLE": 150,
         "IN_PROGRESS": 1384,
-        "IMPLEMENTED_UNVERIFIED": 100,
-        "VERIFIED": 16,
-        "BLOCKED_EXTERNAL": 9,
-        "NOT_STARTED": 11
-      },
-      "mandatory_counts": {
-        "IN_PROGRESS": 1318,
-        "IMPLEMENTED_UNVERIFIED": 100,
+        "IMPLEMENTED_UNVERIFIED": 101,
         "VERIFIED": 16,
         "BLOCKED_EXTERNAL": 9,
         "NOT_STARTED": 10
+      },
+      "mandatory_counts": {
+        "IN_PROGRESS": 1318,
+        "IMPLEMENTED_UNVERIFIED": 101,
+        "VERIFIED": 16,
+        "BLOCKED_EXTERNAL": 9,
+        "NOT_STARTED": 9
       },
       "complete": false
     },
@@ -294840,8 +295170,8 @@
     }
   },
   "closeout": {
-    "recorded_at": "2026-09-28T07:48:43.893803+00:00",
-    "source_head": "56fffbf8ec2fb28bf6284780b888b15a2bfbe9a3",
+    "recorded_at": "2026-09-28T08:09:28.129325+00:00",
+    "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb",
     "release_base": "84165f1c33b170b7d4b81d2010471fa3feacacc7",
     "prior_ledger_sha256": "6f72d380fad5aa1c1bbf2d58ae041b92775e2eeef8fb7b0b4024c96e8c51fe5d",
     "stable_ids_and_exact_source_preserved": true,
@@ -294856,10 +295186,10 @@
     "counts": {
       "NOT_APPLICABLE": 154,
       "IN_PROGRESS": 1460,
-      "IMPLEMENTED_UNVERIFIED": 106,
+      "IMPLEMENTED_UNVERIFIED": 107,
       "VERIFIED": 31,
       "BLOCKED_EXTERNAL": 9,
-      "NOT_STARTED": 11
+      "NOT_STARTED": 10
     },
     "work_packages": {
       "WP00": {
@@ -295033,13 +295363,15 @@
         "records": 20,
         "counts": {
           "BLOCKED_EXTERNAL": 7,
-          "NOT_STARTED": 11,
-          "IN_PROGRESS": 2
+          "NOT_STARTED": 10,
+          "IN_PROGRESS": 2,
+          "IMPLEMENTED_UNVERIFIED": 1
         },
         "mandatory_counts": {
           "BLOCKED_EXTERNAL": 7,
-          "NOT_STARTED": 10,
-          "IN_PROGRESS": 2
+          "NOT_STARTED": 9,
+          "IN_PROGRESS": 2,
+          "IMPLEMENTED_UNVERIFIED": 1
         },
         "complete": false
       },
@@ -295132,17 +295464,17 @@
         "counts": {
           "NOT_APPLICABLE": 150,
           "IN_PROGRESS": 1384,
-          "IMPLEMENTED_UNVERIFIED": 100,
-          "VERIFIED": 16,
-          "BLOCKED_EXTERNAL": 9,
-          "NOT_STARTED": 11
-        },
-        "mandatory_counts": {
-          "IN_PROGRESS": 1318,
-          "IMPLEMENTED_UNVERIFIED": 100,
+          "IMPLEMENTED_UNVERIFIED": 101,
           "VERIFIED": 16,
           "BLOCKED_EXTERNAL": 9,
           "NOT_STARTED": 10
+        },
+        "mandatory_counts": {
+          "IN_PROGRESS": 1318,
+          "IMPLEMENTED_UNVERIFIED": 101,
+          "VERIFIED": 16,
+          "BLOCKED_EXTERNAL": 9,
+          "NOT_STARTED": 9
         },
         "complete": false
       },
@@ -295178,6 +295510,21 @@
     },
     "M3": "Never globally complete; per-modality and per-target/horizon qualification required.",
     "full_suite": "2712 Python tests;242 skips separately addressed by PostgreSQL runs. 429 web tests, typecheck and lint pass. Final integrated release HEAD must be separately bound.",
-    "reconciliation_scope": "All1771 original IDs/text retained; current implementation and actual executed partial assertions bound.54 acceptance scenarios curated conservatively; unsupported compound requirements stay open. This is not a release completion certificate."
+    "reconciliation_scope": "All1771 original IDs/text retained; current implementation and actual executed partial assertions bound.54 acceptance scenarios curated conservatively; unsupported compound requirements stay open. This is not a release completion certificate.",
+    "supplemental_receipts": [
+      {
+        "path": "docs/design/social-trend-intelligence/evidence/closeout-licensed/receipt.json",
+        "sha256": "c4967f4c499b6826656dbdf1d02ec01d1d40bc320580fee418c137b725b798ee"
+      },
+      {
+        "path": "docs/design/social-trend-intelligence/evidence/closeout-ui/real-api.json",
+        "sha256": "51969388ace2b464643103e5394eeccefaba1ec9f9f41f5ee5f6c6ec421544c0"
+      },
+      {
+        "path": "docs/design/social-trend-intelligence/evidence/closeout-strategy/receipt.json",
+        "sha256": "ea6ff22ba2e83f8c5429808a7e93c8551cf0ebc7aeb9eeb138a4c73eb77744f6"
+      }
+    ],
+    "supplemental_scope": "Aggregate-only import directly tested, vendor review open. Weekly/Campaign/chat and strategy browser subcontracts bound; no compound or production acceptance promoted."
   }
 }

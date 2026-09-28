@@ -1,13 +1,13 @@
 {
   "baseline": "595eab6",
-  "source_head": "56fffbf8ec2fb28bf6284780b888b15a2bfbe9a3",
+  "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb",
   "counts": {
     "NOT_APPLICABLE": 154,
     "IN_PROGRESS": 1460,
-    "IMPLEMENTED_UNVERIFIED": 106,
+    "IMPLEMENTED_UNVERIFIED": 107,
     "VERIFIED": 31,
     "BLOCKED_EXTERNAL": 9,
-    "NOT_STARTED": 11
+    "NOT_STARTED": 10
   },
   "changes": [
     {
@@ -10595,6 +10595,14 @@
       "to": "IN_PROGRESS",
       "evidence_ids": [
         "E-CLOSEOUT-offline-tests.json"
+      ]
+    },
+    {
+      "requirement_id": "STI-S20-L2200",
+      "from": "NOT_STARTED",
+      "to": "IMPLEMENTED_UNVERIFIED",
+      "evidence_ids": [
+        "E-CLOSEOUT-LICENSED"
       ]
     }
   ]
