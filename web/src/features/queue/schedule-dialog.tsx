@@ -192,8 +192,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const timePassed = chosenAt !== null && chosenAt <= Date.now();
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
-  const needsVideo = variant?.platform === 'YouTube' || variant?.platform === 'TikTok';
-  const assets = useMemo(() => (libraryAssets ?? []).filter(needsVideo ? isPostableVideo : isPostableImage), [libraryAssets, needsVideo]);
+  const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
+  const needsImage = variant?.platform === 'Pixelfed';
+  const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
+    (needsVideo ? isPostableVideo(candidate) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
+      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate))), [libraryAssets, needsVideo, variant?.platform]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
@@ -215,6 +218,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       rights &&
       (!assetId || Boolean(asset)) &&
       (!needsVideo || Boolean(asset)) &&
+      (!needsImage || Boolean(asset)) &&
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
       (!asset || kindOf(asset) === 'video' || alt.trim()) &&

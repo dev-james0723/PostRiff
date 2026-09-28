@@ -30,17 +30,17 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           "YouTube": {"version": "hosted-2026-09-25", "characters": 5000, "operation": "video_upload"},
           "TikTok": {"version": "hosted-2026-09-25", "characters": 2200, "operation": "video_post"},
           "Pinterest": {"version": "hosted-2026-09-25", "characters": 800, "operation": "image_pin"},
-          # Wave 4A is identity/readiness-only until the independent provider gates pass. These conservative draft
-          # bounds keep scheduling and export deterministic; they are not publishing permission or live API evidence.
+          # Wave 4 hosted operations remain independently gated by provider approval, grant scopes and live evidence.
+          # Conservative text bounds are input limits, never evidence of publishing permission.
           "Weibo": {"version": "wave4a-draft-2026-09-28", "characters": 2000, "operation": "draft_post"},
           "Bilibili": {"version": "wave4a-draft-2026-09-28", "characters": 2000, "operation": "draft_video_or_article"},
-          "Douyin": {"version": "wave4a-draft-2026-09-28", "characters": 1000, "operation": "draft_video"},
-          "Kuaishou": {"version": "wave4a-draft-2026-09-28", "characters": 500, "operation": "draft_video"},
-          "Google Business Profile": {"version": "wave4a-draft-2026-09-28", "characters": 1500, "operation": "draft_local_post"},
+          "Douyin": {"version": "wave4a-hosted-2026-09-28", "characters": 1000, "operation": "video_post"},
+          "Kuaishou": {"version": "wave4a-hosted-2026-09-28", "characters": 500, "operation": "video_post"},
+          "Google Business Profile": {"version": "wave4a-hosted-2026-09-28", "characters": 1500, "operation": "local_post"},
           "LINE Official Account": {"version": "wave4b-draft-2026-09-28", "characters": 2000, "operation": "draft_message"},
           "Reddit": {"version": "wave4b-draft-2026-09-28", "characters": 40000, "operation": "draft_post"},
           "Zhihu": {"version": "wave4b-draft-2026-09-28", "characters": 20000, "operation": "draft_answer_or_article"},
-          "Pixelfed": {"version": "wave4c-draft-2026-09-28", "characters": 500, "operation": "draft_status"}}
+          "Pixelfed": {"version": "wave4c-hosted-2026-09-28", "characters": 500, "operation": "image_status"}}
 SCENARIOS = ("success", "denied", "expired", "accepted", "delayed", "failed", "rate_limited", "timeout", "duplicate", "uncertain", "malformed", "capability_loss")
 
 def digest(value):

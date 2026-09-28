@@ -250,6 +250,10 @@ def registry_from_environment(values, transport=None):
         if adapter is None:
             continue
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
+        adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true"
+        adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true"
+        if provider_id == "pixelfed":
+            adapter.qualified_instances = frozenset(re.split(r"[\s,]+", str(values.get(prefix + "QUALIFIED_INSTANCES", "")).strip())) - {""}
         webhook_configured = True
         if provider_id == "xiaohongshu":
             webhook_secret = values.get(prefix + "WEBHOOK_SECRET")
@@ -272,7 +276,8 @@ def registry_from_environment(values, transport=None):
             "tokenRefreshLiveTest": str(values.get(prefix + "REFRESH_LIVE_TESTED", "")).lower() == "true",
             "webhookVerified": (str(values.get(prefix + "WEBHOOK_VERIFIED", "")).lower() == "true"
                                 and webhook_configured),
-            "publishingPermission": str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true",
+            "publishingPermission": adapter.publishing_permission,
+            "publishLiveTest": adapter.publish_live_tested,
             "analyticsPermission": str(values.get(prefix + "ANALYTICS_APPROVED", "")).lower() == "true",
             "commentsPermission": str(values.get(prefix + "COMMENTS_APPROVED", "")).lower() == "true",
             "productionEnabled": enabled and adapter.production_reviewed and (provider_verified or not getattr(cls, "provider_approval_required", False)),

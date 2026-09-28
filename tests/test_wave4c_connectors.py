@@ -112,11 +112,14 @@ class Wave4CContracts(unittest.TestCase):
                 self.assertEqual(tuple(matrix), NORMALIZED_CAPABILITY_KEYS)
                 self.assertTrue(set(matrix.values()) <= NORMALIZED_CAPABILITY_VALUES)
 
-    def test_content_actions_stay_out_of_the_connect_ui(self):
-        for provider in (PixelfedProvider, XiaohongshuProvider):
-            matrix = provider.normalized_capabilities()
-            self.assertNotEqual(matrix["publish_image"], "supported")
-            self.assertEqual(provider.SCOPES, {"identity": ["read"]} if provider is PixelfedProvider else {"identity": ["basic_info"]})
+    def test_content_actions_require_a_distinct_publish_grant(self):
+        self.assertEqual(PixelfedProvider.SCOPES["identity"], ["read"])
+        self.assertEqual(PixelfedProvider.SCOPES["publish"], ["read", "write"])
+        self.assertEqual(PixelfedProvider.publish_required, frozenset({"write"}))
+        self.assertFalse(PixelfedProvider("https://rafii.example", transport=Wire([]), resolver=public_address)
+                         .write_qualified(json.dumps({"v": 1, "at": "fixture", "instance": "photos.example.org"})))
+        self.assertEqual(XiaohongshuProvider.SCOPES, {"identity": ["basic_info"]})
+        self.assertNotEqual(XiaohongshuProvider.normalized_capabilities()["publish_image"], "supported")
 
     def test_independent_flags_and_xiaohongshu_provider_approval_fail_closed(self):
         values = {

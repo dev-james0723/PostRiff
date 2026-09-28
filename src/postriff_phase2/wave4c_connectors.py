@@ -13,22 +13,46 @@ from urllib.parse import urlparse
 from postriff_alpha.domain import AlphaError
 from .provider_base import OAuthProvider, _credential_shape, default_transport
 from .social_connectors import MastodonProvider, _https_origin
+from .net_guard import assert_public, pinned_public_json_transport, public_host
+from .wave4_publishers import PixelfedPosts
 
 
 class PixelfedProvider(MastodonProvider):
     id, platform, capability_version = "pixelfed", "Pixelfed", 1
     wave, feature_flag_required = "4C", True
-    SCOPES = {"identity": ["read"]}
+    SCOPES = {"identity": ["read"], "publish": ["read", "write"]}
     EXPLAIN = {"identity": "Connect your identity on this Pixelfed instance. Rafii probes the instance first and requests read-only access."}
     account_requirement = "An account on a Pixelfed instance that exposes its OAuth and compatible identity endpoints."
     normalized = {
         "identity": "supported", "account_discovery": "supported",
-        "publish_image": "account_type_limited", "publish_video": "account_type_limited",
+        "publish_image": "supported", "publish_video": "account_type_limited",
         "owned_content_read": "requires_review", "owned_analytics": "unsupported",
         "comments_read": "requires_review", "comments_reply": "requires_review",
         "refresh_token": "account_type_limited", "revoke": "supported", "scheduled_publish": "unsupported",
         "public_search": "account_type_limited",
     }
+    publish_scope = "write"
+    publish_required = frozenset({"write"})
+    publisher = PixelfedPosts()
+
+    def __init__(self, website, transport=None, production_reviewed=False, resolver=None):
+        import socket
+        self.resolver = resolver or socket.getaddrinfo
+        safe_transport = transport or (lambda method, url, **kw: pinned_public_json_transport(
+            method, url, resolver=self.resolver, **kw))
+        super().__init__(website, transport=safe_transport, production_reviewed=production_reviewed,
+                         resolver=self.resolver)
+
+    def _server(self, value):
+        raw = value.strip() if isinstance(value, str) else ""
+        parsed = urlparse(raw) if raw.startswith("https://") else None
+        if ("@" in raw or "#" in raw or "?" in raw or (parsed and
+            (parsed.username or parsed.password or parsed.path not in ("", "/") or parsed.port not in (None, 443)))):
+            raise AlphaError("Enter only the public Pixelfed instance name.", 400)
+        return assert_public(public_host(raw), self.resolver)
+
+    def write_qualified(self, token):
+        return self.session(token)["instance"] in getattr(self, "qualified_instances", frozenset())
 
     @classmethod
     def mount(cls, values, transport=None):

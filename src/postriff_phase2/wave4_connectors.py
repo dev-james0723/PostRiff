@@ -10,6 +10,7 @@ from urllib.parse import quote, urlencode
 
 from postriff_alpha.domain import AlphaError
 from .provider_base import OAuthProvider
+from .wave4_publishers import DouyinVideos, GoogleBusinessPosts, KuaishouVideos
 
 
 def _scopes(value):
@@ -79,18 +80,21 @@ class DouyinProvider(OAuthProvider):
     TOKEN = "https://open.douyin.com/oauth/access_token/"
     REFRESH = "https://open.douyin.com/oauth/refresh_token/"
     USERINFO = "https://open.douyin.com/oauth/userinfo/"
-    SCOPES = {"identity": ["user_info"]}
+    SCOPES = {"identity": ["user_info"], "publish": ["user_info", "video.create.bind", "posting.behavior"]}
     EXPLAIN = {"identity": "Connect your Douyin identity. Rafii reads only your public account name and avatar. Video publishing, analytics and comments remain separate platform-review permissions."}
     account_requirement = "A Douyin account; publishing and comments additionally require approved Open Platform permissions."
     read_scope = "video.list"
+    publish_scope = "video.create.bind"
+    publish_required = frozenset({"video.create.bind", "posting.behavior"})
+    publisher = DouyinVideos()
     refresh_margin = 3600
     normalized = {
-        "identity": "supported", "publish_video": "requires_review", "owned_content_read": "requires_review",
+        "identity": "supported", "publish_video": "supported", "owned_content_read": "requires_review",
         "owned_analytics": "requires_review", "comments_read": "account_type_limited",
         "comments_reply": "account_type_limited", "comments_moderate": "account_type_limited",
         "refresh_token": "supported", "revoke": "requires_review", "public_search": "requires_review",
     }
-    documented_scopes = ("user_info", "video.create.bind", "video.list", "video.comment")
+    documented_scopes = ("user_info", "video.create.bind", "posting.behavior", "video.list", "video.comment")
 
     def authorize_url(self, redirect, state, challenge, scopes):
         return self.AUTH + "?" + urlencode({"client_key": self.client_id, "response_type": "code", "scope": ",".join(scopes), "redirect_uri": redirect, "state": state})
@@ -117,6 +121,10 @@ class DouyinProvider(OAuthProvider):
         session = _session(access_token)
         return list(session.get("scope") or []) if not expected_account_id or session.get("openId") == expected_account_id else None
 
+    @staticmethod
+    def session(access_token):
+        return _session(access_token)
+
     def refresh(self, refresh_token):
         response = self.transport("POST", self.REFRESH, form={"client_key": self.client_id, "refresh_token": refresh_token, "grant_type": "refresh_token"})
         body = _data(response)
@@ -134,13 +142,16 @@ class KuaishouProvider(OAuthProvider):
     TOKEN = "https://open.kuaishou.com/oauth2/access_token"
     REFRESH = "https://open.kuaishou.com/oauth2/refresh_token"
     USERINFO = "https://open.kuaishou.com/openapi/user_info"
-    SCOPES = {"identity": ["user_info"]}
+    SCOPES = {"identity": ["user_info"], "publish": ["user_info", "user_video_publish", "user_video_info"]}
     EXPLAIN = {"identity": "Connect your Kuaishou account and read its public profile. Video upload is a separate permission and will not be requested here."}
     account_requirement = "A Kuaishou account. The website flow may ask you to scan a QR code or verify sign-in yourself."
     read_scope = "user_video_info"
+    publish_scope = "user_video_publish"
+    publish_required = frozenset({"user_video_publish", "user_video_info"})
+    publisher = KuaishouVideos()
     refresh_margin = 3600
     normalized = {
-        "identity": "supported", "publish_video": "requires_review", "owned_content_read": "requires_review",
+        "identity": "supported", "publish_video": "supported", "owned_content_read": "requires_review",
         "owned_analytics": "requires_review", "comments_read": "requires_review", "comments_reply": "unsupported",
         "refresh_token": "supported", "revoke": "unsupported",
     }
@@ -177,6 +188,10 @@ class KuaishouProvider(OAuthProvider):
         session = _session(access_token)
         return list(session.get("scope") or []) if not expected_account_id or session.get("openId") == expected_account_id else None
 
+    @staticmethod
+    def session(access_token):
+        return _session(access_token)
+
     def refresh(self, refresh_token):
         return self._grant(self.transport("POST", self.REFRESH, form={"app_id": self.client_id, "app_secret": self.client_secret,
                                                                        "refresh_token": refresh_token, "grant_type": "refresh_token"}), refresh_token)
@@ -193,15 +208,19 @@ class GoogleBusinessProfileProvider(OAuthProvider):
     ACCOUNTS = "https://mybusinessaccountmanagement.googleapis.com/v1/accounts"
     LOCATIONS = "https://mybusinessbusinessinformation.googleapis.com/v1"
     BUSINESS_SCOPE = "https://www.googleapis.com/auth/business.manage"
-    SCOPES = {"identity": ["openid", "profile", BUSINESS_SCOPE]}
+    SCOPES = {"identity": ["openid", "profile", BUSINESS_SCOPE],
+              "publish": ["openid", "profile", BUSINESS_SCOPE]}
     EXPLAIN = {"identity": "Google uses one Business Profile management permission for account discovery, posts, performance and review replies. Rafii initially lists only accounts and locations; write actions remain unavailable until the project and each feature are verified."}
     account_requirement = "A Google account that manages at least one Business Profile location; Google must approve Rafii's Cloud project."
     has_destinations = True
     destination_scope, destination_label = "connection", "Location"
+    publish_scope = BUSINESS_SCOPE
+    publish_required = frozenset({BUSINESS_SCOPE})
+    publisher = GoogleBusinessPosts()
     refresh_margin = 300
     normalized = {
-        "identity": "supported", "account_discovery": "supported", "publish_text": "requires_review",
-        "publish_image": "requires_review", "owned_content_read": "requires_review", "owned_analytics": "requires_review",
+        "identity": "supported", "account_discovery": "supported", "publish_text": "supported",
+        "publish_image": "supported", "owned_content_read": "requires_review", "owned_analytics": "requires_review",
         "comments_read": "requires_review", "comments_reply": "requires_review", "comments_moderate": "unsupported",
         "refresh_token": "supported", "revoke": "supported", "scheduled_publish": "unsupported",
     }
@@ -231,6 +250,18 @@ class GoogleBusinessProfileProvider(OAuthProvider):
     def _get(self, token, url):
         return self.transport("GET", url, headers={"Authorization": "Bearer " + _session(token)["at"]})
 
+    @staticmethod
+    def _session_for_publish(token):
+        return _session(token)
+
+    def write_qualified(self, token):
+        return self.valid_destination_id(_session(token).get("location"))
+
+    def _request_for_publish(self, token, method, url, **kwargs):
+        if not url.startswith("https://mybusiness.googleapis.com/v4/"):
+            raise AlphaError("Business Profile request destination changed.", 502)
+        return self.transport(method, url, headers={"Authorization": "Bearer " + _session(token)["at"]}, **kwargs)
+
     def identity(self, access_token):
         body = self._ok(self._get(access_token, self.USERINFO), "sub")
         return {"providerAccountId": str(body["sub"]), "handle": str(body.get("name") or body["sub"]), "accountType": "business_manager",
@@ -245,23 +276,41 @@ class GoogleBusinessProfileProvider(OAuthProvider):
 
     def destinations(self, access_token):
         session = _session(access_token)
-        accounts_body = self._ok(self._get(access_token, self.ACCOUNTS), "accounts")
-        accounts = accounts_body["accounts"][:20] if isinstance(accounts_body.get("accounts"), list) else []
+        accounts = []
+        next_token = None
+        for _ in range(10):
+            url = self.ACCOUNTS + ("?" + urlencode({"pageToken": next_token}) if next_token else "")
+            accounts_body = self._ok(self._get(access_token, url))
+            accounts.extend(accounts_body.get("accounts") or [])
+            next_token = accounts_body.get("nextPageToken")
+            if not next_token:
+                break
+        if next_token:
+            raise AlphaError("Too many Business Profile accounts to list safely.", 409)
         locations = []
         for account in accounts:
             name = account.get("name") if isinstance(account, dict) else None
             if not isinstance(name, str) or not re.fullmatch(r"accounts/[0-9]+", name):
                 continue
-            url = self.LOCATIONS + "/" + quote(name, safe="/") + "/locations?" + urlencode({"readMask": "name,title,storeCode,metadata", "pageSize": "100"})
-            response = self._get(access_token, url)
-            body = response.get("body") if response.get("status") == 200 and isinstance(response.get("body"), dict) else {}
-            for location in body.get("locations") or []:
-                resource = location.get("name") if isinstance(location, dict) else None
-                if isinstance(resource, str) and re.fullmatch(r"locations/[0-9]+", resource):
-                    full = name + "/" + resource
-                    locations.append({"id": full, "name": str(location.get("title") or location.get("storeCode") or full),
-                                      "kind": "location", "selected": full == session.get("location")})
-        return locations[:500]
+            next_token = None
+            for _ in range(10):
+                params = {"readMask": "name,title,storeCode,metadata", "pageSize": "100"}
+                if next_token:
+                    params["pageToken"] = next_token
+                url = self.LOCATIONS + "/" + quote(name, safe="/") + "/locations?" + urlencode(params)
+                body = self._ok(self._get(access_token, url))
+                for location in body.get("locations") or []:
+                    resource = location.get("name") if isinstance(location, dict) else None
+                    if isinstance(resource, str) and re.fullmatch(r"locations/[0-9]+", resource):
+                        full = name + "/" + resource
+                        locations.append({"id": full, "name": str(location.get("title") or location.get("storeCode") or full),
+                                          "kind": "location", "selected": full == session.get("location")})
+                next_token = body.get("nextPageToken")
+                if not next_token:
+                    break
+            if next_token or len(locations) > 500:
+                raise AlphaError("Too many Business Profile locations to list safely.", 409)
+        return locations
 
     @staticmethod
     def valid_destination_id(value):
@@ -270,9 +319,19 @@ class GoogleBusinessProfileProvider(OAuthProvider):
     def with_destination(self, access_token, destination_id):
         if not self.valid_destination_id(destination_id):
             raise AlphaError("Choose a Business Profile location.", 400)
-        if destination_id not in {item["id"] for item in self.destinations(access_token)}:
+        selected = next((item for item in self.destinations(access_token) if item["id"] == destination_id), None)
+        if selected is None:
             raise AlphaError("Choose a Business Profile location you can manage.", 409)
-        return json.dumps({**_session(access_token), "location": destination_id})
+        return json.dumps({**_session(access_token), "location": destination_id, "locationName": selected["name"]})
+
+    def preserve_destination(self, previous_token, refreshed_token):
+        """A Google access-token refresh must not erase the member's explicit location choice."""
+        previous, refreshed = _session(previous_token), _session(refreshed_token)
+        location = previous.get("location")
+        if location is not None and not self.valid_destination_id(location):
+            raise AlphaError("The Business Profile location needs a fresh connection.", 409)
+        return json.dumps({**refreshed, "location": location,
+                           "locationName": previous.get("locationName") if location else None})
 
     def revoke(self, token):
         response = self.transport("POST", self.REVOKE, form={"token": _session(token)["at"]})

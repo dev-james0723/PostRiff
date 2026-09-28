@@ -401,7 +401,7 @@ export const channels: Channel[] = [
   wave4(
     'pixelfed',
     'Pixelfed',
-    'Read-only identity connection probes each instance before dynamic OAuth registration; publishing varies by instance and stays unavailable.',
+    'Identity and image publishing use the official API on compatible instances; each instance needs a verified write test before direct publishing opens.',
     ['Image'],
     'Direct',
     { reviewStatus: 'identity connection only' }

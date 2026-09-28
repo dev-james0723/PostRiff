@@ -69,6 +69,9 @@ class HostedSocial:
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         if provider is None or not provider.production_reviewed or not getattr(provider, "execution_enabled", True):
             return None
+        if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
+                or not getattr(provider, "publishing_permission", False)):
+            return None
         return provider
 
     def _image_url(self, manifest):
@@ -90,7 +93,12 @@ class HostedSocial:
         if not required or not required.issubset(grant.get("scopes", [])):
             return {"state": "held", "confirmed": "Publishing permissions changed or are unverified; reconnect and review again."}
         token = grant["accessToken"]
+        if getattr(provider, "publisher", None) is not None and not getattr(provider, "write_qualified", lambda _token: True)(token):
+            return {"state": "held", "confirmed": "This exact account or destination is not qualified for hosted publishing."}
         try:
+            publisher = getattr(provider, "publisher", None)
+            if publisher is not None:
+                return publisher.submit(manifest, provider, token, self)
             if manifest["platform"] == "LinkedIn":
                 return self._submit_linkedin(manifest, token)
             if manifest["platform"] == "Threads":
@@ -458,6 +466,23 @@ class HostedSocial:
             return None, {"state": "held", "confirmed": "Approved video bytes are unavailable or changed. Nothing was posted; review the video again."}
         return (raw, asset), None
 
+    def _video_stream(self, manifest):
+        """Wave 4 video route: verify the immutable object and return a bounded iterator."""
+        media = manifest.get("media") or []
+        if len(media) != 1 or media[0].get("mime") != "video/mp4" or self.assets is None:
+            raise AlphaError("This post needs one approved MP4 video.", 409)
+        asset = media[0]
+        storage = self.assets.storage
+        verified = asset.get("verified") if isinstance(asset.get("verified"), dict) else {}
+        duration = asset.get("duration")
+        if (asset.get("bucket") != storage.video_bucket or verified.get("container") is not True
+                or verified.get("locationChecked") is not True or asset.get("durationSource") != "container"
+                or type(duration) not in (int, float) or not 0 < duration <= 180):
+            raise AlphaError("This video needs fresh storage and duration verification.", 409)
+        return storage.iter_verified_video(manifest["workspaceId"], asset.get("objectName"),
+                                           expected_bytes=asset.get("bytes"), expected_mime="video/mp4",
+                                           expected_etag=asset.get("etag")), asset
+
     def _submit_youtube(self, manifest, provider, token):
         options = manifest.get("publishOptions") or {}
         if not options.get("title") or options.get("privacyStatus") not in ("private", "unlisted", "public"):
@@ -796,6 +821,9 @@ class HostedSocial:
             return _uncertain(f"Cannot reconcile without a valid grant: {error}")
         token, reference = grant["accessToken"], job.get("providerReference")
         try:
+            publisher = getattr(provider, "publisher", None)
+            if publisher is not None:
+                return publisher.reconcile(manifest, job, provider, token, self)
             if manifest["platform"] in WAVE1:
                 return self._reconcile_wave1(manifest, provider, token, reference, job)
             if manifest["platform"] in WAVE3:

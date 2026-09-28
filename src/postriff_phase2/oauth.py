@@ -114,7 +114,9 @@ class OAuthService:
                 legacy = {
                     'identity': bool(adapter and normalized['identity'] == 'supported' and adapter.capability_scopes('identity')),
                     'posts_read': bool(adapter and normalized['owned_content_read'] == 'supported' and adapter.capability_scopes('posts_read')),
-                    'publish': bool(adapter and any(normalized[key] == 'supported' for key in ('publish_text','publish_image','publish_video')) and adapter.capability_scopes('publish')),
+                    'publish': bool(adapter and (getattr(adapter, 'publisher', None) is None or diagnostic.get('publishingPermission'))
+                                    and any(normalized[key] == 'supported' for key in ('publish_text','publish_image','publish_video'))
+                                    and adapter.capability_scopes('publish')),
                     'analytics': bool(adapter and normalized['owned_analytics'] == 'supported' and adapter.capability_scopes('analytics')),
                     'comments_read': bool(adapter and normalized['comments_read'] == 'supported' and adapter.capability_scopes('comments_read')),
                     'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
@@ -360,7 +362,7 @@ class OAuthService:
             expires = self.clock() + float(grant.get("expiresIn") or 0) if grant.get("expiresIn") else None
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL,rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
             now = self.clock()
-            matrix = self._capabilities(adapter, capability, granted, missing, now)
+            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
@@ -455,6 +457,23 @@ class OAuthService:
             cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, key_id, workspace_id, connection_id, stored[1]))
             if cur.rowcount != 1:
                 raise AlphaError("This account changed meanwhile. Reload and choose again.", 409)
+            if adapter.id == "google_business_profile":
+                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                channel = next((item for item in state["phase2"]["channels"] if item["id"] == connection_id), None)
+                location_name = json.loads(updated).get("locationName")
+                if channel is None or not isinstance(location_name, str) or not location_name:
+                    raise AlphaError("This Business Profile location needs a fresh connection.", 409)
+                channel["account"] = location_name
+                now = self.clock()
+                matrix = self._capabilities(adapter, "publish", grant["scopes"],
+                                            sorted(set(adapter.capability_scopes("publish")) - set(grant["scopes"])), now, updated)
+                channel["capabilityVerified"] = matrix["publish"]["level"] == "Direct"
+                for name in ("publish", "schedule"):
+                    value = matrix[name]
+                    cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()",
+                                (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
+                cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s",
+                            (json.dumps(state), workspace_id))
             audit(cur, workspace_id, principal, "channel.destination_chosen", connection_id, {"provider": stored[0]})
         return {"connectionId": connection_id, "destinationId": destination_id}
 
@@ -601,13 +620,17 @@ class OAuthService:
         return adapter.client_metadata() if name == "client-metadata.json" else adapter.jwks()
 
     @staticmethod
-    def _capabilities(adapter, requested, granted, missing, now):
+    def _capabilities(adapter, requested, granted, missing, now, access_token=None):
         matrix = assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
         if requested in PUBLISH_CAPABILITIES:
             if missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
-            elif not adapter.production_reviewed:
+            elif (not adapter.production_reviewed or
+                  (getattr(adapter, "publisher", None) is not None and
+                   (not getattr(adapter, "publish_live_tested", False) or
+                    not getattr(adapter, "publishing_permission", False) or
+                    not getattr(adapter, "write_qualified", lambda _token: True)(access_token)))):
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
             else:
                 set_level(matrix, "publish", "Direct", "You approve each post; Rafii publishes it.", now, adapter.capability_version)
@@ -662,7 +685,11 @@ class OAuthService:
                 if expired or renew_instagram or renew_soon:
                     if not (refresh_supported and refresh_ct):
                         raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409)
-                    grant = self._provider(provider).refresh(self.vault.decrypt(refresh_ct, key_id))
+                    adapter = self._provider(provider)
+                    grant = adapter.refresh(self.vault.decrypt(refresh_ct, key_id))
+                    preserve = getattr(adapter, "preserve_destination", None)
+                    if preserve is not None:
+                        grant["accessToken"] = preserve(self.vault.decrypt(access_ct, key_id), grant["accessToken"])
                     access_ct, key_id = self.vault.encrypt(grant["accessToken"])
                     new_refresh = self.vault.encrypt(grant["refreshToken"])[0] if grant.get("refreshToken") else refresh_ct
                     expires = self.clock() + float(grant.get("expiresIn") or 3600)

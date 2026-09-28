@@ -156,6 +156,50 @@ class SupabaseStorage:
         finally:
             response.close()
 
+    def iter_verified_video(self, workspace_id, object_name, *, expected_bytes, expected_mime, expected_etag,
+                            chunk_size=5 * 1024 * 1024):
+        """Stream an immutable approved video with fixed memory use and exact metadata checks."""
+        if (type(expected_bytes) is not int or not 0 < expected_bytes <= MAX_VIDEO_BODY
+                or expected_mime not in ("video/mp4", "video/quicktime")
+                or not isinstance(expected_etag, str) or not expected_etag or len(expected_etag) > 200
+                or type(chunk_size) is not int or not 1 <= chunk_size <= 5 * 1024 * 1024):
+            raise AlphaError("Approved video metadata is invalid.", 409, code="video_manifest_invalid")
+        path = self._path(workspace_id, "video", object_name)
+        info = self.object_info(workspace_id, "video", object_name)
+        if (info["bytes"], info["mime"], info["etag"]) != (expected_bytes, expected_mime, expected_etag):
+            raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+
+        def chunks():
+            try:
+                response = self._open("GET", self._object_url("video", path), self._headers(), None, timeout=120)
+            except HTTPError as error:
+                error.close()
+                raise AlphaError("Private storage could not read the approved video.", 502) from None
+            except (URLError, TimeoutError, OSError) as error:
+                raise AlphaError("Private storage is temporarily unavailable.", 503) from error
+            try:
+                headers = {k.lower(): v for k, v in response.headers.items()}
+                mime = (headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+                if (response.status != 200 or mime != expected_mime
+                        or (headers.get("content-length") is not None and headers["content-length"] != str(expected_bytes))
+                        or (headers.get("etag") is not None and headers["etag"] != expected_etag)):
+                    raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+                remaining = expected_bytes
+                while remaining:
+                    piece = response.read(min(chunk_size, remaining))
+                    if not piece:
+                        raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+                    remaining -= len(piece)
+                    yield piece
+                if response.read(1):
+                    raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+            except (URLError, TimeoutError, OSError) as error:
+                raise AlphaError("Private storage is temporarily unavailable.", 503) from error
+            finally:
+                response.close()
+
+        return chunks()
+
     def delete(self, workspace_id, category, object_name):
         path = self._path(workspace_id, category, object_name)
         url = self._object_url(category, path)

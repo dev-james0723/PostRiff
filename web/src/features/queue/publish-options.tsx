@@ -28,7 +28,7 @@ import {
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 /** Platforms whose review carries per-post choices; the server refuses a review without them. */
-export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest']);
+export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
 
 export type PublishOptionsValue = Record<string, unknown> | null;
 
@@ -54,7 +54,75 @@ export function PublishOptions(props: Props) {
   if (props.platform === 'TikTok') return <TikTokFields {...props} />;
   if (props.platform === 'YouTube') return <YouTubeFields {...props} />;
   if (props.platform === 'Pinterest') return <PinterestFields {...props} />;
+  if (props.platform === 'Google Business Profile') return <BusinessProfileFields {...props} />;
   return null;
+}
+
+function businessDateTime(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hours, minutes] = match.map(Number);
+  return { date: { year, month, day }, time: { hours, minutes } };
+}
+
+function BusinessProfileFields({ asset, onChange }: Props) {
+  const [topic, setTopic] = useState<'STANDARD' | 'EVENT' | 'OFFER'>('STANDARD');
+  const [title, setTitle] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [code, setCode] = useState('');
+  const [url, setUrl] = useState('');
+  const [terms, setTerms] = useState('');
+  const startValue = businessDateTime(start);
+  const endValue = businessDateTime(end);
+  const eventValid = Boolean(title.trim() && title.trim().length <= 58 && startValue && endValue && end > start);
+  const offerValid = Boolean(code.trim() || terms.trim() || /^https:\/\/[^\s]+$/i.test(url));
+  const imageValid = !asset || asset.mime === 'image/jpeg';
+
+  useEffect(() => {
+    if (!imageValid || (topic !== 'STANDARD' && !eventValid) || (topic === 'OFFER' && !offerValid)) {
+      onChange(null);
+      return;
+    }
+    const gbp: Record<string, unknown> = { topicType: topic };
+    const selectedStart = businessDateTime(start);
+    const selectedEnd = businessDateTime(end);
+    if (topic !== 'STANDARD' && selectedStart && selectedEnd) {
+      gbp.event = { title: title.trim(), schedule: { startDate: selectedStart.date, startTime: selectedStart.time, endDate: selectedEnd.date, endTime: selectedEnd.time } };
+    }
+    if (topic === 'OFFER') gbp.offer = { couponCode: code.trim(), redeemOnlineUrl: url.trim(), termsConditions: terms.trim() };
+    onChange({ gbp });
+  }, [topic, title, start, end, code, url, terms, eventValid, offerValid, imageValid, onChange]);
+
+  return (
+    <section className='flex flex-col gap-3 rounded-[var(--rafii-radius-control)] border p-3' aria-labelledby='gbp-options-title'>
+      <h3 id='gbp-options-title' className='text-sm font-medium'>Google Business Profile</h3>
+      {!imageValid && <Caution>Business Profile accepts one JPEG image. Choose a JPEG or remove the image.</Caution>}
+      <div className='flex flex-col gap-1.5'>
+        <Label htmlFor='gbp-topic'>Post type</Label>
+        <Select value={topic} onValueChange={(value) => setTopic(value as typeof topic)}>
+          <SelectTrigger id='gbp-topic' className='w-full'><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value='STANDARD'>Update</SelectItem>
+            <SelectItem value='EVENT'>Event</SelectItem>
+            <SelectItem value='OFFER'>Offer</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {topic !== 'STANDARD' && <>
+        <div className='flex flex-col gap-1.5'><Label htmlFor='gbp-event-title'>Event or offer title</Label><Input id='gbp-event-title' value={title} maxLength={58} onChange={(e) => setTitle(e.target.value)} /></div>
+        <div className='flex flex-col gap-1.5'><Label htmlFor='gbp-start'>Starts at the location</Label><Input id='gbp-start' type='datetime-local' value={start} onChange={(e) => setStart(e.target.value)} /></div>
+        <div className='flex flex-col gap-1.5'><Label htmlFor='gbp-end'>Ends at the location</Label><Input id='gbp-end' type='datetime-local' value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+        {!eventValid && <Caution>Add a title and an end time after the start time.</Caution>}
+      </>}
+      {topic === 'OFFER' && <>
+        <div className='flex flex-col gap-1.5'><Label htmlFor='gbp-code'>Offer code (optional)</Label><Input id='gbp-code' value={code} onChange={(e) => setCode(e.target.value)} /></div>
+        <div className='flex flex-col gap-1.5'><Label htmlFor='gbp-url'>HTTPS redemption link (optional)</Label><Input id='gbp-url' inputMode='url' value={url} onChange={(e) => setUrl(e.target.value)} /></div>
+        <div className='flex flex-col gap-1.5'><Label htmlFor='gbp-terms'>Offer terms (optional)</Label><Input id='gbp-terms' value={terms} onChange={(e) => setTerms(e.target.value)} /></div>
+        {!offerValid && <Caution>Add an offer code, HTTPS redemption link or terms.</Caution>}
+      </>}
+    </section>
+  );
 }
 
 const isVideo = (asset: Asset | undefined) => Boolean(asset && asset.mime.startsWith('video/'));

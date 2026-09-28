@@ -13,7 +13,9 @@ from __future__ import annotations
 # Platforms with a hosted publisher (hosted_social.HostedSocial) and their provider ids.
 HOSTED_PUBLISHERS = {"LinkedIn": "linkedin", "Threads": "threads", "Instagram": "instagram",
                      "Bluesky": "bluesky", "Mastodon": "mastodon", "Telegram": "telegram", "Discord": "discord", "X": "x",
-                     "Facebook": "facebook", "YouTube": "youtube", "TikTok": "tiktok", "Pinterest": "pinterest"}
+                     "Facebook": "facebook", "YouTube": "youtube", "TikTok": "tiktok", "Pinterest": "pinterest",
+                     "Douyin": "douyin", "Kuaishou": "kuaishou",
+                     "Google Business Profile": "google_business_profile", "Pixelfed": "pixelfed"}
 NO_ROUTE = {
     "Xiaohongshu": "Xiaohongshu has no publishing connection in Rafii, so the Xiaohongshu version is prepared as a draft for you to post.",
 }

@@ -389,23 +389,31 @@ class Phase2Store(Store):
         if p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
-                if c["platform"] not in ("YouTube", "TikTok"):
+                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
                     raise AlphaError("This channel doesn't support video posts from Rafii.", 409)
                 if not asset_kinds.is_postable_video(a) or p.get("rightsConfirmed") is not True:
                     raise AlphaError("This post needs a verified video and rights confirmation.", 409)
+                if c["platform"] in ("Douyin", "Kuaishou") and a["mime"] != "video/mp4":
+                    raise AlphaError("This channel needs an approved MP4 video.", 409)
+                if c["platform"] == "Kuaishou" and not isinstance(a.get("poster"), dict):
+                    raise AlphaError("Kuaishou needs an approved JPEG cover from this video.", 409)
                 media = [{key: a[key] for key in ("id", "hash", "mime", "bytes", "width", "height", "duration", "durationSource", "bucket", "objectName", "etag", "verified")}
-                         | {"alt": "", "rightsConfirmed": True}]
+                         | {"alt": "", "rightsConfirmed": True}
+                         | ({"poster": {key: a["poster"][key] for key in ("objectName", "hash", "width", "height", "bytes")}}
+                            if c["platform"] == "Kuaishou" else {})]
             else:
-                if c["platform"] in ("YouTube", "TikTok"):
+                if c["platform"] in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
                     raise AlphaError("This post needs a verified video.", 409)
                 if not asset_kinds.is_postable_image(a) or not p.get("rightsConfirmed") or not clean(p.get("alt", ""), 1000):
                     raise AlphaError("Decoded media, alt text and rights confirmation are required.")
                 if c["platform"] == "Instagram" and not 0.8 <= a["width"]/a["height"] <= 1.91:
                     raise AlphaError("Instagram images must have an aspect ratio between 4:5 and 1.91:1.")
-                media = [{key: a[key] for key in ("id", "hash", "sourceHash", "mime", "bytes", "width", "height", "duration")} | {"alt": clean(p["alt"], 1000), "rightsConfirmed": True}]
-        if c["platform"] == "Instagram" and not media:
-            raise AlphaError("Instagram requires a decoded image. Upload one and confirm its rights.")
-        # TikTok, YouTube and Pinterest need per-post choices; they are frozen into the manifest (and its key).
+                media = [{key: a[key] for key in ("id", "hash", "sourceHash", "mime", "bytes", "width", "height", "duration")}
+                         | ({"objectName": a["objectName"]} if isinstance(a.get("objectName"), str) else {})
+                         | {"alt": clean(p["alt"], 1000), "rightsConfirmed": True}]
+        if c["platform"] in ("Instagram", "Pixelfed") and not media:
+            raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
+        # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
         options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
         timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":
