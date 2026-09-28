@@ -595,13 +595,13 @@ function TwoFactor() {
         onOpenChange={(open) => !open && setEnrolling(null)}
         friendlyName={friendlyName}
         onVerified={afterEnrol}
-        onUseAuthenticator={() => setEnrolling('totp')}
       />
       <PasskeyDialog
         open={enrolling === 'webauthn'}
         onOpenChange={(open) => !open && setEnrolling(null)}
         friendlyName={friendlyName}
         onVerified={afterEnrol}
+        onUseAuthenticator={() => setEnrolling('totp')}
       />
       <StepUpDialog
         open={turningOff}
