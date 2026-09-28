@@ -75,10 +75,14 @@ class GrowthLoopTests(unittest.TestCase):
 
     def test_account_language_window_and_source_controls(self):
         data = rows()
+        for row in data:
+            row["cohort"].update({"account": "channel-one", "window": "24h"})
         foreign = copy.deepcopy(data[0]); foreign["jobId"] = "foreign"; foreign["cohort"]["connectionId"] = "other"
+        misbound = copy.deepcopy(data[0]); misbound["jobId"] = "misbound"; misbound["cohort"]["account"] = "other"
+        wrong_window = copy.deepcopy(data[0]); wrong_window["jobId"] = "wrong-window"; wrong_window["cohort"]["window"] = "7d"
         old = copy.deepcopy(data[0]); old["jobId"] = "old"; old["publishedAt"] = NOW - 50 * 86400
         source = copy.deepcopy(data[0]); source["jobId"] = "source"
-        state, result = loop.measure(experiment(), data + [foreign, old, source, data[0]], NOW)
+        state, result = loop.measure(experiment(), data + [foreign, misbound, wrong_window, old, source, data[0]], NOW)
         self.assertEqual(result["samples"], {"variant": 5, "control": 5})
         self.assertEqual(len(result["observations"]), 10)
 

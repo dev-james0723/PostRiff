@@ -200,7 +200,13 @@ def transition(experiment, target, actor, now):
 def measure(experiment, rows, now):
     if now < experiment["endAt"]:
         raise AlphaError("Wait until the observation window ends; no early winner is claimed.", 409)
-    eligible = [r for r in rows if r.get("cohort") == experiment["cohort"] and r.get("metric") == experiment["metric"]
+    def same_cohort(row):
+        observed = row.get("cohort") or {}
+        return (all(observed.get(key) == value for key, value in experiment["cohort"].items())
+                and observed.get("account", observed.get("connectionId")) == observed.get("connectionId")
+                and observed.get("window", insights.COMPARISON_BASIS) == insights.COMPARISON_BASIS)
+
+    eligible = [r for r in rows if same_cohort(r) and r.get("metric") == experiment["metric"]
                 and experiment["startedAt"] <= (r.get("publishedAt") or 0) < experiment["endAt"]
                 and r.get("jobId") not in experiment["sourcePostIds"] and r.get("observedAt", now + 1) <= now]
     # Avoid duplicate receipts and explicitly retain asymmetric/missing samples.
