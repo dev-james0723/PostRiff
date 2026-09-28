@@ -285,12 +285,13 @@ export const channels: Channel[] = [
   },
 
   /* ---- Desktop companion (signs in on your own machine) ---- */
-  local(
+  wave4(
     'xiaohongshu',
     'Xiaohongshu',
-    'Notes with images or video for China’s discovery-first community.',
+    'Official device authorization can expose identity/basic_info after app approval; notes, analytics and comments remain disabled.',
     ['Image note', 'Video note'],
-    { nameZh: '小紅書', region: 'cn' }
+    'Direct',
+    { nameZh: '小紅書', region: 'cn', reviewStatus: 'identity approval required' }
   ),
   wave4(
     'bilibili',
@@ -300,11 +301,12 @@ export const channels: Channel[] = [
     'Unsupported',
     { nameZh: '哔哩哔哩', region: 'cn' }
   ),
-  local(
+  wave4(
     'zhihu',
     'Zhihu',
-    'Long-form answers and articles for a knowledge-seeking readership.',
+    'Identity and owned-content access await a current approved Zhihu API contract; publishing stays unsupported.',
     ['Article', 'Answer'],
+    'Unsupported',
     { nameZh: '知乎', region: 'cn' }
   ),
   wave4(
@@ -356,11 +358,12 @@ export const channels: Channel[] = [
     ['Text', 'Image'],
     { region: 'tw' }
   ),
-  local(
+  wave4(
     'line-official-account',
     'LINE Official Account',
-    'Broadcasts to followers of your LINE Official Account.',
+    'Official Account channel onboarding needs a confidential token handoff and verified webhook before messaging opens.',
     ['Text', 'Image'],
+    'Unsupported',
     { region: 'jp' }
   ),
   local('note-jp', 'note', 'Articles for Japan’s creator publishing platform.', ['Article'], {
@@ -388,12 +391,21 @@ export const channels: Channel[] = [
     { region: 'in' }
   ),
   local('moj', 'Moj', 'Short vertical video for India.', ['Video'], { region: 'in' }),
-  local('reddit', 'Reddit', 'Text and link posts to subreddits you belong to.', [
-    'Text',
-    'Link',
-    'Image'
-  ]),
-  local('pixelfed', 'Pixelfed', 'Photo posts on the fediverse.', ['Image']),
+  wave4(
+    'reddit',
+    'Reddit',
+    'Identity-only OAuth is behind Reddit approval; every future post or comment remains a separate explicit user action.',
+    ['Text', 'Link', 'Image'],
+    'Direct'
+  ),
+  wave4(
+    'pixelfed',
+    'Pixelfed',
+    'Read-only identity connection probes each instance before dynamic OAuth registration; publishing varies by instance and stays unavailable.',
+    ['Image'],
+    'Direct',
+    { reviewStatus: 'identity connection only' }
+  ),
   local('whatsapp-channels', 'WhatsApp Channels', 'Broadcast updates to channel followers.', [
     'Text',
     'Image'

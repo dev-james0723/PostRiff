@@ -12,9 +12,9 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           "Instagram": {"version": "local-conservative-2026-09-14", "characters": 2200, "operation": "professional_image"},
           # Threads text limit per the connector audit (500 chars, 250 posts/24h); hosted OAuth connector.
           "Threads": {"version": "hosted-2026-09-16", "characters": 500, "operation": "text_post"},
-          # Xiaohongshu note body; the title is the draft's first line, at most 20 characters (`title`). Drafting and
-          # preview only, no publishing route.
-          "Xiaohongshu": {"version": "local-conservative-2026-09-16", "characters": 1000, "operation": "note", "title": 20},
+          # Xiaohongshu note body; the title is the draft's first line, at most 20 characters (`title`). Wave 4C
+          # connects identity/basic_info only; this draft limit does not imply publishing permission.
+          "Xiaohongshu": {"version": "wave4c-draft-2026-09-28", "characters": 1000, "operation": "draft_note", "title": 20},
           # X: one post of 280 weighted characters (text_measure counts CJK and emoji as 2). Hosted OAuth connector
           # (social_connectors.XProvider); it publishes only once the operator declares it reviewed.
           "X": {"version": "local-conservative-2026-09-24", "characters": 280, "operation": "post"},
@@ -36,7 +36,11 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           "Bilibili": {"version": "wave4a-draft-2026-09-28", "characters": 2000, "operation": "draft_video_or_article"},
           "Douyin": {"version": "wave4a-draft-2026-09-28", "characters": 1000, "operation": "draft_video"},
           "Kuaishou": {"version": "wave4a-draft-2026-09-28", "characters": 500, "operation": "draft_video"},
-          "Google Business Profile": {"version": "wave4a-draft-2026-09-28", "characters": 1500, "operation": "draft_local_post"}}
+          "Google Business Profile": {"version": "wave4a-draft-2026-09-28", "characters": 1500, "operation": "draft_local_post"},
+          "LINE Official Account": {"version": "wave4b-draft-2026-09-28", "characters": 2000, "operation": "draft_message"},
+          "Reddit": {"version": "wave4b-draft-2026-09-28", "characters": 40000, "operation": "draft_post"},
+          "Zhihu": {"version": "wave4b-draft-2026-09-28", "characters": 20000, "operation": "draft_answer_or_article"},
+          "Pixelfed": {"version": "wave4c-draft-2026-09-28", "characters": 500, "operation": "draft_status"}}
 SCENARIOS = ("success", "denied", "expired", "accepted", "delayed", "failed", "rate_limited", "timeout", "duplicate", "uncertain", "malformed", "capability_loss")
 
 def digest(value):
