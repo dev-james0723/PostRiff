@@ -31,6 +31,8 @@ export interface LiveTransport {
   send(event: Record<string, unknown>): void;
   onEvent(handler: (event: LiveEvent) => void): () => void;
   onState(handler: (state: TransportState) => void): () => void;
+  /** Optional observer of the exact remote WebRTC audio track; never participates in speaker playback. */
+  onAssistantAudio?(handler: (samples: Float32Array, sampleRate: number, at: number) => void): () => void;
   /** True while events can reach the voice service (the data channel is open). */
   connected(): boolean;
   setMicEnabled(on: boolean): void;
@@ -61,6 +63,11 @@ export class WebRtcLiveTransport implements LiveTransport {
   private context: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private samples: Uint8Array<ArrayBuffer> | null = null;
+  private audioSource: MediaStreamAudioSourceNode | null = null;
+  private audioTap: AudioWorkletNode | null = null;
+  private tapSink: GainNode | null = null;
+  private tapStarting = false;
+  private tapHandlers = new Set<(samples: Float32Array, sampleRate: number, at: number) => void>();
   private queue: string[] = [];
   private events = new Emitter<LiveEvent>();
   private states = new Emitter<TransportState>();
@@ -107,10 +114,12 @@ export class WebRtcLiveTransport implements LiveTransport {
         this.context ??= new AudioContext();
         void this.context.resume().catch(() => undefined);
         const source = this.context.createMediaStreamSource(stream);
+        this.audioSource = source;
         this.analyser = this.context.createAnalyser();
         this.analyser.fftSize = 512;
         this.samples = new Uint8Array(new ArrayBuffer(this.analyser.fftSize));
         source.connect(this.analyser);
+        if (this.tapHandlers.size) void this.startAudioTap();
       } catch {
         /* the level meter is optional; speech still plays */
       }
@@ -166,6 +175,55 @@ export class WebRtcLiveTransport implements LiveTransport {
     return this.states.on(handler);
   }
 
+  onAssistantAudio(handler: (samples: Float32Array, sampleRate: number, at: number) => void) {
+    this.tapHandlers.add(handler);
+    if (this.audioSource) void this.startAudioTap();
+    return () => {
+      this.tapHandlers.delete(handler);
+      if (!this.tapHandlers.size) this.stopAudioTap();
+    };
+  }
+
+  private async startAudioTap() {
+    const context = this.context;
+    const source = this.audioSource;
+    if (!context || !source || this.audioTap || this.tapStarting || !this.tapHandlers.size || this.closed) return;
+    this.tapStarting = true;
+    try {
+      await context.audioWorklet.addModule('/raffi/avatar-audio-tap.js');
+      if (this.closed || !this.tapHandlers.size || this.audioTap || source !== this.audioSource) return;
+      const node = new AudioWorkletNode(context, 'rafii-avatar-audio-tap');
+      const sink = context.createGain();
+      sink.gain.value = 0;
+      node.port.addEventListener('message', (event: MessageEvent<Float32Array>) => {
+        if (this.closed || !this.tapHandlers.size || this.audio?.muted) return;
+        const samples = event.data;
+        if (!(samples instanceof Float32Array)) return;
+        const at = performance.now();
+        for (const listener of this.tapHandlers) {
+          try { listener(samples, context.sampleRate, at); } catch { /* avatar observer cannot affect playback */ }
+        }
+      });
+      node.port.start();
+      source.connect(node);
+      node.connect(sink);
+      sink.connect(context.destination); // zero gain keeps the worklet scheduled; the audio element still owns playback.
+      this.audioTap = node;
+      this.tapSink = sink;
+    } catch {
+      // Avatar capture is optional. A missing AudioWorklet must never stop the Live call.
+    } finally {
+      this.tapStarting = false;
+    }
+  }
+
+  private stopAudioTap() {
+    this.audioTap?.disconnect();
+    this.tapSink?.disconnect();
+    this.audioTap = null;
+    this.tapSink = null;
+  }
+
   setMicEnabled(on: boolean) {
     for (const track of this.mic?.getAudioTracks() ?? []) track.enabled = on;
   }
@@ -184,6 +242,8 @@ export class WebRtcLiveTransport implements LiveTransport {
 
   close() {
     this.closed = true;
+    this.stopAudioTap();
+    this.tapHandlers.clear();
     try {
       this.channel?.close();
     } catch {

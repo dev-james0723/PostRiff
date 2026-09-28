@@ -37,6 +37,8 @@ for (const name of ['voice-session', 'voice-opening', 'voice-transcript']) {
         if(id === 'react') return {useSyncExternalStore: () => {}};
         if(id === '@/lib/api/client') return {ApiError: class extends Error {}};
         if(id === './live-transport') return {createTransport, VoiceTransportError: class extends Error {}};
+        if(id === './avatar-bridge') return {avatarSession: {end() {}, interrupt() {}, resume() {}, listening() {}, get: () => ({status:'idle'})}};
+        if(id === './soulx-renderer') return {SoulXRenderer: class {}};
         if(id === './panel-actions') return {panelActions:{}};
         if(id === './panel-commands') return {isFarewell: () => false};
         if(cache[id]) return cache[id];

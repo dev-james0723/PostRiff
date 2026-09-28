@@ -27,6 +27,7 @@ import { useVoice, voiceSession, type VoiceSnapshot } from '@/lib/agent-runtime/
 import { cn } from '@/lib/utils';
 import { resolveRafiiAvatarMode } from './avatar-state';
 import { RafiiLiveAvatar } from './rafii-live-avatar';
+import { SoulXAvatarLayer } from './soulx-avatar-layer';
 import { StyleButton, StyleSheet } from './style-sheet';
 
 const MANIFEST = manifestJson as RouteManifest;
@@ -172,7 +173,10 @@ export function VoiceMode({
   return (
     <section className='mx-4 mb-2 flex min-w-0 flex-col gap-2 overflow-hidden rounded-[var(--rafii-radius-control)] border border-[color-mix(in_oklch,var(--foreground)_10%,transparent)] p-2.5' aria-label='Voice Mode' data-rafii-voice={state}>
       {active && (
-        <RafiiLiveAvatar mode={avatarMode} level={snapshot.level} outputMuted={snapshot.outputMuted} reducedMotion={reduced} />
+        <div className='relative'>
+          <RafiiLiveAvatar mode={avatarMode} level={snapshot.level} outputMuted={snapshot.outputMuted} reducedMotion={reduced} />
+          <SoulXAvatarLayer />
+        </div>
       )}
       <div className='flex min-w-0 items-center gap-2'>
         <span aria-hidden className={cn('inline-block size-2.5 shrink-0 rounded-full', dotColor(snapshot))} data-rafii-voice-dot={muted ? 'muted' : state} />

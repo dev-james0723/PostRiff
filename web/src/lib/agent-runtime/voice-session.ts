@@ -25,6 +25,8 @@ import { ApiError } from '@/lib/api/client';
 import type { SiteAgentPageContext } from '@/lib/site-agent/types';
 import type { AgentApi } from './client';
 import { createTransport, VoiceTransportError, type LiveEvent, type LiveTransport } from './live-transport';
+import { avatarSession } from './avatar-bridge';
+import { SoulXRenderer } from './soulx-renderer';
 import { panelActions } from './panel-actions';
 import { confirmation, isFarewell, matchPanelCommand, styleInstructions, voiceCommandsIn, type PanelCommand, type VoiceCommand } from './panel-commands';
 import type { AgentStylePatch } from './style';
@@ -184,6 +186,7 @@ function think(content: string, delegationId: string | null = null) {
 /** A result GPT-Live says aloud, paraphrased. A reply the person stopped stays stopped until this. */
 function say(content: string, delegationId: string | null) {
   if (snapshot.outputMuted) applyLine({ type: 'resume' });
+  if (avatarSession.get().status === 'interrupted') avatarSession.resume();
   send({ type: 'session.commentary.append', delegation_id: delegationId, content: content.slice(0, commentaryLimit(content)) });
 }
 
@@ -432,6 +435,8 @@ function onLiveEvent(event: LiveEvent) {
     case 'session.input_transcript.delta': {
       const delta = String(event.delta ?? '');
       if (SPOKEN.test(delta)) opening?.cancel();
+      if (SPOKEN.test(delta) && avatarSession.get().status === 'speaking') avatarSession.interrupt();
+      else if (SPOKEN.test(delta)) avatarSession.listening();
       lastInputAt = Date.now();
       // Speaking again after a goodbye keeps the call on.
       if (hangUp && SPOKEN.test(delta)) cancelHangUp();
@@ -439,6 +444,7 @@ function onLiveEvent(event: LiveEvent) {
       break;
     }
     case 'session.output_transcript.delta':
+      if (avatarSession.get().status === 'interrupted' && !snapshot.outputMuted) avatarSession.resume();
       if (appendTranscript('assistant', String(event.delta ?? ''), Number(event.start_ms ?? 0), Number(event.end_ms ?? 0))) {
         lastOutputAt = Date.now();
         if (hangUp) {
@@ -511,6 +517,7 @@ async function flushTranscript(includeOpen = false) {
 
 async function finish(reason: string, usageSeconds: number | null) {
   opening?.cancel();
+  avatarSession.end();
   const current = host;
   const sessionId = snapshot.voiceSessionId;
   if (levelTimer) clearInterval(levelTimer);
@@ -554,11 +561,19 @@ export const voiceSession = {
     set({ ...IDLE, state: 'connecting', workspaceId: next.workspaceId, conversationId: next.conversationId, locale: next.locale ?? 'auto' });
     const live = createTransport();
     transport = live;
+    avatarSession.end();
+    // Configuration and model startup run beside Live connection setup; neither delays the microphone nor playback.
+    void fetch('/api/rafii/avatar/config', { cache: 'no-store' }).then(async (response) => {
+      if (!response.ok || transport !== live) return;
+      const config = await response.json() as { mode?: string; url?: string };
+      if (config.mode === 'soulx' && config.url && transport === live) void avatarSession.start(live, new SoulXRenderer(config.url));
+    }).catch(() => undefined);
     opening = voiceOpening(send, resuming);
     unsubscribe = [
       live.onEvent(onLiveEvent),
       live.onState((state) => {
         if ((state === 'disconnected' || state === 'failed') && snapshot.state === 'live') {
+          avatarSession.interrupt();
           set({ state: 'reconnecting', error: { code: 'connection_lost', message: 'The voice connection dropped. Reconnect, or keep typing.' } });
         } else if (state === 'connected' && snapshot.state === 'reconnecting') {
           // A brief network drop that WebRTC recovered by itself: the call is live again.
@@ -601,6 +616,7 @@ export const voiceSession = {
     } catch (error) {
       const abandoned = transport !== live;
       live.close();
+      avatarSession.end();
       if (abandoned) return; // ended on purpose while connecting: not an error (finish already reset the state)
       for (const off of unsubscribe.splice(0)) off();
       transport = null;
@@ -645,6 +661,7 @@ export const voiceSession = {
     const oldLines = [...unsent.splice(0), ...(last && !last.final ? [{ ...last, final: true }] : [])];
     if (oldSession && oldLines.length) void sendLines(previous.api, previous.workspaceId, oldSession, oldLines);
     if (transport) {
+      avatarSession.end();
       for (const off of unsubscribe.splice(0)) off();
       transport.close();
       transport = null;
@@ -670,6 +687,7 @@ export const voiceSession = {
     const now = Date.now();
     const inFlight = snapshot.speaker === 'rafii' || now - lastLoudAt < SPEAKING_HOLD_MS || now - lastOutputAt < UTTERANCE_GAP_MS;
     transport.setOutputMuted(true);
+    avatarSession.interrupt();
     send({ type: 'session.instructions.append', delegation_id: null, content: 'Stop speaking now and listen to the user.' });
     lastLoudAt = 0;
     applyLine({ type: 'stop', inFlight }, { speaker: null, level: 0 });
