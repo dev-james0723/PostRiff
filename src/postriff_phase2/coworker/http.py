@@ -189,7 +189,8 @@ def handle(app, environ, start_response, service, token, method, parts):
             if not tail and method == "GET":
                 return json_(200, coworker.performance_view(workspace_id, token))
             if len(tail) == 3 and tail[0] == "hypotheses" and tail[2] == "decide" and method == "POST":
-                return json_(200, coworker.hypothesis_decide(workspace_id, token, tail[1], body().get("decision")))
+                payload = body()
+                return json_(200, coworker.hypothesis_decide(workspace_id, token, tail[1], payload.get("decision"), expected_support=payload.get("expectedSupport")))
         if area == "listening":
             if not tail and method == "GET":
                 return json_(200, coworker.listening_view(workspace_id, token))

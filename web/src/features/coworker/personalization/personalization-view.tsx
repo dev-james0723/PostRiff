@@ -370,9 +370,9 @@ function StrategySection({ hypotheses, isOwner, performanceNote, measured }: { h
 
   async function onDecide(h: StrategyHypothesis, decision: 'experiment' | 'dismissed' | 'accepted') {
     try {
-      const result = await decide.mutateAsync({ id: h.id, decision });
+      const result = await decide.mutateAsync({ id: h.id, decision, expectedSupport: h.supportDigest });
       if (!result.verified) return toast.warning('Rafii could not confirm that decision. Refresh to see its state.');
-      toast.success(decision === 'accepted' ? 'Accepted for planning in this account and objective. Your voice is unchanged.' : decision === 'experiment' ? 'Running as an experiment: the next comparable posts alternate both ways. Nothing about your voice changes.' : 'Dismissed.');
+      toast.success(decision === 'accepted' ? (h.supportDigest ? 'Adopted as an observed strategy for this account. It does not automatically change your plans or voice.' : 'Accepted for planning in this account and objective. Your voice is unchanged.') : decision === 'experiment' ? 'Marked for an experiment. Review the two approaches before planning comparable posts.' : 'Dismissed.');
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -403,7 +403,7 @@ function StrategySection({ hypotheses, isOwner, performanceNote, measured }: { h
                 <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
                   <p className='text-foreground text-sm'>{hedged(h.statement)}</p>
                   <ToneChip tone='neutral' icon={h.status === 'experiment' ? 'hourglass' : 'trendingUp'} className='self-start'>
-                    {h.status === 'experiment' ? 'Running as experiment' : h.status === 'supported' ? 'Supported so far' : 'Not proven'}
+                    {h.planningAccepted && h.supportDigest ? 'Adopted strategy' : h.status === 'experiment' ? 'Marked for experiment' : h.status === 'supported' ? 'Supported so far' : 'Not proven'}
                   </ToneChip>
                 </div>
                 <div className='flex flex-wrap items-center gap-2'>
@@ -416,14 +416,14 @@ function StrategySection({ hypotheses, isOwner, performanceNote, measured }: { h
                   {h.expiresAt ? ` · re-checked by ${formatDate(h.expiresAt)}` : ''} · correlation, not cause
                 </p>
                 {h.why && <p className='text-muted-foreground text-xs leading-relaxed'>{h.why}</p>}
-                {isOwner && (h.status === 'candidate' || h.status === 'experiment' || h.planningAccepted) && (
+                {isOwner && (h.status === 'candidate' || h.status === 'experiment' || h.planningAccepted || h.canAcceptPlanning) && (
                   <div className='flex flex-wrap gap-2 pt-1'>
                     {h.status === 'candidate' && (
                       <Button variant='glass' size='control' disabled={decide.isPending} onClick={() => void onDecide(h, 'experiment')}>
                         Run as experiment
                       </Button>
                     )}
-                    {h.canAcceptPlanning && !h.planningAccepted && <Button variant='glass' size='control' disabled={decide.isPending} onClick={() => void onDecide(h, 'accepted')}>Use in planning</Button>}
+                    {h.canAcceptPlanning && !h.planningAccepted && <Button variant='glass' size='control' disabled={decide.isPending} onClick={() => void onDecide(h, 'accepted')}>{h.supportDigest ? 'Adopt strategy' : 'Use in planning'}</Button>}
                     <Button variant='quiet' size='control' disabled={decide.isPending} onClick={() => void onDecide(h, 'dismissed')}>
                       Dismiss
                     </Button>

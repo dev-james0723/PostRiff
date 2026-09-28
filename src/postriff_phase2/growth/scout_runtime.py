@@ -100,7 +100,7 @@ def run_workspace(service, workspace_id, deadline, *, broker=None, judge=None):
     with service.hosted.connection_factory() as db, db.cursor() as cur:
         cur.execute("""SELECT id::text,statement,cohort,evidence_ids,counter_evidence_ids,extract(epoch from expires_at)
                        FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND status='supported' AND causal=false
-                         AND experiment->'planningAccepted'='true'::jsonb AND expires_at>to_timestamp(%s) LIMIT 20""", (workspace_id, now))
+                         AND left(dimension,6)='scout_' AND experiment->'planningAccepted'='true'::jsonb AND expires_at>to_timestamp(%s) LIMIT 20""", (workspace_id, now))
         state["_scoutPlanningPreferences"] = [{"id": r[0], "statement": r[1], "cohort": r[2], "evidenceIds": r[3], "counterEvidenceIds": r[4], "expiresAt": float(r[5])} for r in cur.fetchall()]
     sink = MemoryUsageSink()
     if judge is None and flags.enabled("RAFII_JEV_SCOUT_ENABLED") and service.values.get("AI_GATEWAY_API_KEY"):

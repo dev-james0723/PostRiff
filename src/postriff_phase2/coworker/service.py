@@ -699,6 +699,10 @@ class CoworkerService:
                            WHERE workspace_id=%s AND status IN ('candidate','experiment','supported') ORDER BY created_at DESC LIMIT 20""", (workspace_id,))
             hypotheses = [{"id": r[0], "platform": r[1], "dimension": r[2], "statement": r[3], "confidence": r[4], "status": r[5], "samples": [r[6], r[7]],
                            "expiresAt": float(r[8]) if r[8] else None, "memoryType": "strategy", "causal": False} for r in cur.fetchall()]
+            if any(h['dimension'].startswith('trend_') for h in hypotheses):
+                from ..growth.trends import learning
+                current = learning.current_hypotheses(cur, workspace_id, self._trend_learning_report(cur, workspace_id, _p), self.clock())
+                hypotheses = [h for h in hypotheses if not h['dimension'].startswith('trend_') or h['id'] in current]
         return {"voice": [i for i in items if i["memoryType"] == "voice"], "brand": [i for i in items if i["memoryType"] == "brand"], "strategy": hypotheses,
                 "revisions": overlays.revisions(state), "history": (overlays._view(state).get("history") or [])[-30:]}
 
@@ -826,39 +830,73 @@ class CoworkerService:
             out.append({"workspaceId": workspace_id, **result})
         return {"workspaces": out}
 
+    def _trend_learning_report(self, cur, workspace_id, principal):
+        from ..growth.trends import config as trend_config, learning
+        from ..growth.trends.store import TrendStore
+        if trend_config.workspace_allowed(workspace_id,self.values) and trend_config.enabled('TRUST_RECEIPTS',self.values):
+            return learning.report(cur,workspace_id,principal,self.clock(),store=TrendStore(self.hosted.connection_factory))
+        return None
+
     def performance_view(self, workspace_id, token):
         self._require("RAFII_PERFORMANCE_LEARNING_ENABLED")
         from . import performance
         with self.repository.transaction(token, workspace_id) as (cur, row, _p):
             state = self.hosted.ideas._state(row)
-            result = performance.view(cur, workspace_id, state, self.clock())
-            from ..growth.trends import config as trend_config
-            if trend_config.workspace_allowed(workspace_id,self.values) and trend_config.enabled('TRUST_RECEIPTS',self.values):
-                from ..growth.trends import learning, learning_options
+            trend_report = self._trend_learning_report(cur, workspace_id, _p)
+            result = performance.view(cur, workspace_id, state, self.clock(), trend_report=trend_report)
+            if trend_report is not None:
+                from ..growth.trends import learning_options
                 from ..growth.trends.store import TrendStore
-                result['trend_learning'] = learning.report(cur,workspace_id,_p,self.clock(),store=TrendStore(self.hosted.connection_factory))
+                result['trend_learning'] = trend_report
                 result['trend_learning']['choice_options'] = learning_options.choices(TrendStore(self.hosted.connection_factory),cur,
                     workspace_id,_p,state,self.clock())
             return result
 
-    def hypothesis_decide(self, workspace_id, token, hypothesis_id, decision):
-        """Owner review of observed hypotheses; Scout planning acceptance never changes voice."""
+    def hypothesis_decide(self, workspace_id, token, hypothesis_id, decision, *, expected_support=None):
+        """Owner review in the existing strategy store; no automatic voice change."""
         self._require("RAFII_PERFORMANCE_LEARNING_ENABLED")
-        accept = decision == "accepted" and flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED")
+        accept = decision == "accepted"
         if decision not in ("experiment", "dismissed", "rejected") and not accept:
             raise AlphaError("Choose experiment, dismissed or rejected.", 400)
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.hosted.ideas._member(row), "owner")
+            trend_support = None
+            if decision in ('experiment', 'accepted'):
+                cur.execute("SELECT dimension FROM public.pr_strategy_hypotheses WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (hypothesis_id, workspace_id))
+                target = cur.fetchone()
+                if target and target[0].startswith('trend_'):
+                    from ..growth.trends import learning
+                    from ..growth.trends.store import TrendStore
+                    descriptor = self._trend_learning_report(cur, workspace_id, principal)
+                    if descriptor is not None:
+                        # Reviewed analytics retention does not itself authorize
+                        # strategy adoption after the original source has expired.
+                        descriptor['exposures'] = [e for e in descriptor['exposures'] if e.get('retention_basis') == 'current_source_dependencies']
+                        bindings = {e['opportunity_id']: {'kind':'opportunity', 'object_id':e['opportunity_id'], 'revision':e['opportunity_revision']}
+                                    for e in descriptor['exposures'] if any(o.get('state') == 'measured' for o in e['outcomes'])}
+                        if bindings:
+                            TrendStore(self.hosted.connection_factory).lock_dependencies(workspace_id, principal, list(bindings.values()), cursor=cur)
+                    current = learning.current_hypotheses(cur, workspace_id, descriptor, self.clock())
+                    if hypothesis_id not in current:
+                        raise AlphaError("This trend hypothesis no longer has current permitted evidence.", 409)
+                    trend_support = current[hypothesis_id]
+                    if accept and expected_support != trend_support:
+                        raise AlphaError("Review the current evidence before adopting this trend strategy.", 409)
             if accept:
+                if trend_support is None and not flags.enabled("RAFII_ACTIVE_SCOUT_ENABLED"):
+                    raise AlphaError("Planning adoption is unavailable.", 403)
                 cur.execute("""UPDATE public.pr_strategy_hypotheses SET status='supported',decided_by=%s,decided_at=now(),
-                               experiment=coalesce(experiment,'{}'::jsonb) || jsonb_build_object('planningAccepted',true,'acceptedAt',extract(epoch from now()))
-                               WHERE id::text=%s AND workspace_id=%s AND left(dimension,6)='scout_' AND causal=false
+                               experiment=coalesce(experiment,'{}'::jsonb) || jsonb_build_object('planningAccepted',true,'acceptedAt',extract(epoch from now())) || %s::jsonb
+                               WHERE id::text=%s AND workspace_id=%s AND left(dimension,6)=%s AND causal=false
                                  AND sample_a >= 5 AND sample_b >= 5 AND expires_at>now() AND status IN ('candidate','experiment','supported')
-                               RETURNING status""", (principal, hypothesis_id, workspace_id))
+                               RETURNING status""", (principal, json.dumps({'supportDigest':trend_support} if trend_support else {}),
+                                                       hypothesis_id, workspace_id, 'trend_' if trend_support else 'scout_'))
                 changed = cur.fetchone()
                 from ..hosted import audit
-                audit(cur, workspace_id, principal, "hypothesis.planning_accepted", hypothesis_id, {})
+                if changed:
+                    audit(cur, workspace_id, principal, "hypothesis.planning_accepted", hypothesis_id,
+                          {'supportDigest':trend_support} if trend_support else {})
                 cur.execute("SELECT status,experiment FROM public.pr_strategy_hypotheses WHERE id::text=%s AND workspace_id=%s", (hypothesis_id, workspace_id))
                 stored = cur.fetchone()
                 return {"id": hypothesis_id, "status": stored[0] if stored else None, "causal": False,
@@ -941,7 +979,7 @@ class CoworkerService:
                 return {"sourceId": prior["id"], "planId": plan["id"]}
             if plan.get("planningPreferences"):
                 with self.hosted.connection_factory() as db, db.cursor() as cur:
-                    cur.execute("""SELECT id::text FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND status='supported'
+                    cur.execute("""SELECT id::text FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND status='supported' AND left(dimension,6)='scout_'
                                    AND experiment->'planningAccepted'='true'::jsonb AND expires_at>to_timestamp(%s)""", (workspace_id, now))
                     accepted_ids = {r[0] for r in cur.fetchall()}
                 plan["planningPreferences"] = [p for p in plan["planningPreferences"] if p["id"] in accepted_ids]

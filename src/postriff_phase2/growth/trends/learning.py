@@ -334,3 +334,32 @@ def hypotheses(descriptor, now):
         h["statement"] = (f"The {dimension} pattern may be associated with {h['metric']} in this account's adopted trend posts "
                           f"({h['sample_a']} and {h['sample_b']} posts). Selection-limited descriptive evidence, not causal uplift.")
     return found
+
+
+def current_hypotheses(cur, workspace_id, descriptor, now):
+    """Revalidate saved trend interpretations against today's permitted evidence.
+
+    A persisted candidate is not permission to retain or display its conclusion.
+    Reuse the existing learner and require the stored support to match the current
+    report; cohort changes, revoked sources, missing metrics and flag-off reads
+    therefore fail closed without changing owner decisions or learning history.
+    """
+    if descriptor is None:
+        return {}
+    fields = ('platform', 'dimension', 'cohort', 'statement', 'metric', 'arm_a',
+              'arm_b', 'sample_a', 'sample_b', 'effect', 'evidence_ids', 'counter_evidence_ids')
+    def signature(h):
+        value = {key: h[key] for key in fields}
+        value['effect'] = float(value['effect']) if value['effect'] is not None else None
+        for key in ('evidence_ids', 'counter_evidence_ids'):
+            value[key] = sorted(value[key] or [])
+        return contracts.digest(value)
+    supported = {signature(h) for h in hypotheses(descriptor, now)}
+    if not supported:
+        return {}
+    cur.execute("""SELECT id::text, platform, dimension, cohort, statement, metric, arm_a, arm_b,
+                          sample_a, sample_b, effect, evidence_ids, counter_evidence_ids
+                   FROM pr_strategy_hypotheses WHERE workspace_id=%s AND left(dimension,6)='trend_'
+                     AND causal=false AND expires_at>to_timestamp(%s)""", (workspace_id, now))
+    return {r[0]: digest for r in cur.fetchall()
+            if (digest := signature(dict(zip(fields, r[1:])))) in supported}

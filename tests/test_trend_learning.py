@@ -190,6 +190,72 @@ class LearningSQL(unittest.TestCase):
         recent = min((o for e in result["exposures"] for o in e["outcomes"]), key=lambda o: self.now-o["publication"]["published_at"])
         self.assertGreater(recent["baseline"]["count"], 0)
 
+    def test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment(self):
+        from postriff_phase2.coworker import performance
+        from postriff_alpha.domain import AlphaError
+        for n in range(12):
+            self.publication(self.event("accept", days=40), days=n+2,
+                text="Why this?" if n%2 else "Observed statement", value=900 if n%2 else 400)
+        report = self.view()
+        with self.connect() as db, db.cursor() as cur:
+            performance.refresh(cur, self.wid, self.state, self.now, trend_report=report)
+            saved = cur.execute("SELECT id::text FROM pr_strategy_hypotheses WHERE workspace_id=%s AND dimension LIKE 'trend_%%'", (self.wid,)).fetchall()
+        self.assertTrue(saved)
+        cw = self.svc.coworker
+        with patch.object(cw, "_require"):
+            before = cw.performance_view(self.wid, "fixture-session")
+            self.assertTrue(any(h['dimension'].startswith('trend_') for h in before['hypotheses']))
+            self.assertTrue(any(h['dimension'].startswith('trend_') for h in cw.overlays_view(self.wid, "fixture-session")['strategy']))
+            with self.connect() as db:
+                db.execute("UPDATE pr_trend_source_policies SET revoked_at=now() WHERE scope_key=%s", (self.scope,))
+            after = cw.performance_view(self.wid, "fixture-session")
+            self.assertFalse(any(h['dimension'].startswith('trend_') for h in after['hypotheses']))
+            self.assertFalse(any(h['dimension'].startswith('trend_') for h in cw.overlays_view(self.wid, "fixture-session")['strategy']))
+            with self.assertRaises(AlphaError) as denied:
+                cw.hypothesis_decide(self.wid, "fixture-session", saved[0][0], "experiment")
+            self.assertEqual(denied.exception.status, 409)
+        with self.connect() as db:
+            self.assertEqual(db.execute("SELECT status FROM pr_strategy_hypotheses WHERE id::text=%s", (saved[0][0],)).fetchone()[0], 'candidate')
+
+    def test_owner_adoption_is_bound_to_reviewed_support_and_existing_strategy_store(self):
+        from postriff_phase2.coworker import performance
+        from postriff_alpha.domain import AlphaError
+        for n in range(12):
+            self.publication(self.event("accept", days=40), days=n+2,
+                text="Why this?" if n%2 else "Observed statement", value=900 if n%2 else 400)
+        report = self.view()
+        with self.connect() as db, db.cursor() as cur:
+            performance.refresh(cur, self.wid, self.state, self.now, trend_report=report)
+        cw = self.svc.coworker
+        before = copy.deepcopy(self.state)
+        with patch.object(cw, '_require'):
+            h = next(h for h in cw.performance_view(self.wid, 'fixture-session')['hypotheses'] if h['dimension'].startswith('trend_'))
+            self.assertTrue(h['canAcceptPlanning']); self.assertFalse(h['planningAccepted'])
+            for digest in (None, 'stale-support'):
+                with self.assertRaises(AlphaError) as stale:
+                    cw.hypothesis_decide(self.wid, 'fixture-session', h['id'], 'accepted', expected_support=digest)
+                self.assertEqual(stale.exception.status, 409)
+            with self.connect() as db:
+                db.execute("UPDATE pr_memberships SET role='editor' WHERE workspace_id=%s AND user_id=%s", (self.wid, self.actor))
+            try:
+                with self.assertRaises(AlphaError) as forbidden:
+                    cw.hypothesis_decide(self.wid, 'fixture-session', h['id'], 'accepted', expected_support=h['supportDigest'])
+                self.assertEqual(forbidden.exception.status, 403)
+            finally:
+                with self.connect() as db:
+                    db.execute("UPDATE pr_memberships SET role='owner' WHERE workspace_id=%s AND user_id=%s", (self.wid, self.actor))
+            result = cw.hypothesis_decide(self.wid, 'fixture-session', h['id'], 'accepted', expected_support=h['supportDigest'])
+            self.assertTrue(result['verified']); self.assertFalse(result['causal'])
+            saved = next(x for x in cw.performance_view(self.wid, 'fixture-session')['hypotheses'] if x['id']==h['id'])
+            self.assertTrue(saved['planningAccepted'])
+            self.assertEqual(saved['experiment']['supportDigest'], h['supportDigest'])
+            with patch.dict(cw.values, {'RAFII_TREND_WORKSPACE_ALLOWLIST':''}):
+                self.assertFalse(any(x['dimension'].startswith('trend_') for x in cw.performance_view(self.wid, 'fixture-session')['hypotheses']))
+                with self.assertRaises(AlphaError):
+                    cw.hypothesis_decide(self.wid, 'fixture-session', h['id'], 'accepted', expected_support=h['supportDigest'])
+            self.assertTrue(cw.hypothesis_decide(self.wid, 'fixture-session', h['id'], 'dismissed')['verified'])
+        self.assertEqual(cw.repository.get(self.wid, 'fixture-session')['state'], before)
+
     def test_baseline_excludes_future_availability_and_unknown_promotion(self):
         self.publication(self.event("accept"), days=2)
         old = self.publication(self.event("accept"), days=4, paid=None)

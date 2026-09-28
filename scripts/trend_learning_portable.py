@@ -19,7 +19,8 @@ PORT = "56447"
 
 
 def hashes():
-    paths = ["src/postriff_phase2/growth/trends/learning.py", "tests/test_trend_learning.py",
+    paths = ["src/postriff_phase2/coworker/service.py", "src/postriff_phase2/coworker/http.py",
+             "src/postriff_phase2/growth/scout_runtime.py", "src/postriff_phase2/growth/trends/learning.py", "tests/test_trend_learning.py",
              "tests/test_trend_integration.py", "src/postriff_phase2/growth/trends/store.py",
              "src/postriff_phase2/growth/trends/exposures.py", "src/postriff_phase2/coworker/performance.py",
              "migrations/postriff/040_social_trend_intelligence.sql", "scripts/trend_learning_portable.py"]
@@ -67,7 +68,8 @@ sys.exit(0 if result.wasSuccessful() and not result.skipped else 1)
     drift = [p for p in before if before[p] != after[p]]
     print(json.dumps({"execution": "actual_socket_only_disposable_PostgreSQL_synthetic_history", "port": PORT,
         "exit_code": result.returncode, "before": before, "after": after, "source_drift": drift,
-        "provider_calls": 0, "model_calls": 0, "strategy_adopted": False}), flush=True)
+        "provider_calls": 0, "model_calls": 0, "production_strategy_adopted": False,
+        "synthetic_strategy_adoption_tested": True}), flush=True)
     return int(bool(result.returncode or drift))
 
 

@@ -359,6 +359,7 @@ export interface OverlayItem {
 }
 
 export interface StrategyHypothesis {
+  supportDigest?: string;
   canAcceptPlanning?: boolean;
   planningAccepted?: boolean;
   id: string;
