@@ -1,6 +1,6 @@
 # Rafii inbound phone v1 — local implementation
 
-Status: implemented and locally verified; **not deployed or enabled on the production number**.
+Initial implementation status: locally verified. The user subsequently authorized push and production deployment; see `docs/releases/RAFII_INBOUND_RELEASE_2026-09-28.md` for the release state.
 
 Branch: `codex/rafii-inbound-v1`, based on `origin/consumer-saas` at `4f686a7`.
 Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-inbound-v1/James-Au-Studio`.
@@ -39,7 +39,7 @@ No new external phone service, deployment, credential change or account setting 
 
 `RAFII_PHONE_INBOUND_ENABLED` defaults off and is rejected in preview environments. Enabling incoming calls requires the existing phone switch, configured Dial provider, reviewed positive telephony rate, and the existing Rafii voice/agent runtime. Outbound, scheduled, proactive and SMS switches are independent.
 
-Code issuance is limited to six/hour/person, at least 30 seconds apart, with one outstanding code per person. Call admission keeps the existing active-call exclusion, six explicit calls/day/person, per-person cost/credit limits and duration cap. Incoming phone estimates include up to 45 seconds of authentication time.
+Code issuance is limited to six/hour/person, at least 30 seconds apart, with one outstanding code per person. Call admission keeps the existing active-call exclusion, per-person cost/credit limits and duration cap. Incoming phone estimates include up to 45 seconds of authentication time.
 
 Before authentication, the operator bears the greeting cost. V1 allows at most twelve admitted connections/hour globally and three/ten minutes per caller digest. `RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO` defaults to 1,000,000 (one USD estimated per rolling 24 hours), bounded at five USD. It reserves a whole configured-rate minute per admitted greeting. This is an **application admission estimate**, not a carrier/account billing guarantee: refused connections and provider billing terms need live verification. Choose a reviewed rate ceiling before enabling it.
 

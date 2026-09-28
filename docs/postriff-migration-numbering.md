@@ -17,7 +17,9 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 033 | `033_phone_mode` | Rafii Phone Mode | Taken on `consumer-saas`; verify the deployment ledger before any one-off apply. |
 | 034 | `034_unified_notifications` | Rafii Unified Notifications | Taken on `consumer-saas`; verify the deployment ledger before any one-off apply. |
 | 035 | `035_growth_metric_reads` | Growth Phase 0 / Active Scout | Renumbered from the isolated branch's 032 during the 2026-09-27 production reconciliation to avoid the existing 032 collision. |
-| 036 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 036–041 | Dial and concurrent feature work | existing reservations | Inspect current refs before reuse. |
+| 042 | `042_phone_inbound` | Shared inbound Rafii phone v1 | Reserved on `codex/rafii-inbound-v1`; additive, apply before releasing the direction-column reader. |
+| 043 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 

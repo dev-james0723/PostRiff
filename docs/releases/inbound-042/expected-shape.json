@@ -1,0 +1,281 @@
+{
+  "pr_phone_inbound_codes": {
+    "columns": [
+      [
+        "call_id",
+        "uuid",
+        "YES",
+        null
+      ],
+      [
+        "code_hash",
+        "text",
+        "NO",
+        null
+      ],
+      [
+        "consumed_at",
+        "timestamp with time zone",
+        "YES",
+        null
+      ],
+      [
+        "conversation_id",
+        "uuid",
+        "YES",
+        null
+      ],
+      [
+        "created_at",
+        "timestamp with time zone",
+        "NO",
+        "now()"
+      ],
+      [
+        "expires_at",
+        "timestamp with time zone",
+        "NO",
+        null
+      ],
+      [
+        "id",
+        "uuid",
+        "NO",
+        "gen_random_uuid()"
+      ],
+      [
+        "maximum_millicredits",
+        "bigint",
+        "YES",
+        null
+      ],
+      [
+        "revoked_at",
+        "timestamp with time zone",
+        "YES",
+        null
+      ],
+      [
+        "user_id",
+        "uuid",
+        "NO",
+        null
+      ],
+      [
+        "workspace_id",
+        "uuid",
+        "NO",
+        null
+      ]
+    ],
+    "constraints": [
+      [
+        "c",
+        "CHECK (((maximum_millicredits >= 0) AND (maximum_millicredits <= 100000000)))"
+      ],
+      [
+        "c",
+        "CHECK ((code_hash ~ '^[0-9a-f]{64}$'::text))"
+      ],
+      [
+        "f",
+        "FOREIGN KEY (call_id) REFERENCES pr_phone_calls(id) ON DELETE CASCADE"
+      ],
+      [
+        "f",
+        "FOREIGN KEY (conversation_id) REFERENCES pr_conversations(id) ON DELETE CASCADE"
+      ],
+      [
+        "f",
+        "FOREIGN KEY (user_id) REFERENCES pr_profiles(user_id) ON DELETE CASCADE"
+      ],
+      [
+        "f",
+        "FOREIGN KEY (workspace_id) REFERENCES pr_workspaces(id) ON DELETE CASCADE"
+      ],
+      [
+        "p",
+        "PRIMARY KEY (id)"
+      ],
+      [
+        "u",
+        "UNIQUE (call_id)"
+      ],
+      [
+        "u",
+        "UNIQUE (code_hash)"
+      ]
+    ],
+    "policies": [
+      [
+        "service_only",
+        "{service_role}",
+        "ALL",
+        "true",
+        "true"
+      ]
+    ],
+    "flags": [
+      true,
+      true,
+      true
+    ],
+    "grants": {
+      "anon": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "authenticated": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "service_role": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "indexes": [
+      [
+        "CREATE UNIQUE INDEX pr_phone_inbound_codes_call_id_key ON public.pr_phone_inbound_codes USING btree (call_id)"
+      ],
+      [
+        "CREATE UNIQUE INDEX pr_phone_inbound_codes_code_hash_key ON public.pr_phone_inbound_codes USING btree (code_hash)"
+      ],
+      [
+        "CREATE UNIQUE INDEX pr_phone_inbound_codes_pkey ON public.pr_phone_inbound_codes USING btree (id)"
+      ],
+      [
+        "CREATE INDEX pr_phone_inbound_codes_user ON public.pr_phone_inbound_codes USING btree (user_id, created_at DESC)"
+      ]
+    ]
+  },
+  "pr_phone_inbound_sessions": {
+    "columns": [
+      [
+        "attempts",
+        "integer",
+        "NO",
+        "0"
+      ],
+      [
+        "call_id",
+        "uuid",
+        "YES",
+        null
+      ],
+      [
+        "caller_hash",
+        "text",
+        "NO",
+        null
+      ],
+      [
+        "ended_at",
+        "timestamp with time zone",
+        "YES",
+        null
+      ],
+      [
+        "provider_call_ref",
+        "text",
+        "NO",
+        null
+      ],
+      [
+        "started_at",
+        "timestamp with time zone",
+        "NO",
+        "now()"
+      ]
+    ],
+    "constraints": [
+      [
+        "c",
+        "CHECK (((attempts >= 0) AND (attempts <= 3)))"
+      ],
+      [
+        "c",
+        "CHECK (((length(provider_call_ref) >= 1) AND (length(provider_call_ref) <= 100)))"
+      ],
+      [
+        "c",
+        "CHECK ((caller_hash ~ '^[0-9a-f]{64}$'::text))"
+      ],
+      [
+        "f",
+        "FOREIGN KEY (call_id) REFERENCES pr_phone_calls(id) ON DELETE SET NULL"
+      ],
+      [
+        "p",
+        "PRIMARY KEY (provider_call_ref)"
+      ],
+      [
+        "u",
+        "UNIQUE (call_id)"
+      ]
+    ],
+    "policies": [
+      [
+        "service_only",
+        "{service_role}",
+        "ALL",
+        "true",
+        "true"
+      ]
+    ],
+    "flags": [
+      true,
+      true,
+      true
+    ],
+    "grants": {
+      "anon": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "authenticated": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "service_role": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "indexes": [
+      [
+        "CREATE UNIQUE INDEX pr_phone_inbound_sessions_call_id_key ON public.pr_phone_inbound_sessions USING btree (call_id)"
+      ],
+      [
+        "CREATE UNIQUE INDEX pr_phone_inbound_sessions_pkey ON public.pr_phone_inbound_sessions USING btree (provider_call_ref)"
+      ],
+      [
+        "CREATE INDEX pr_phone_inbound_sessions_started ON public.pr_phone_inbound_sessions USING btree (started_at)"
+      ]
+    ]
+  },
+  "direction": [
+    [
+      "text",
+      "NO",
+      "'outbound'::text"
+    ]
+  ],
+  "direction_check": [
+    [
+      "CHECK ((direction = ANY (ARRAY['outbound'::text, 'inbound'::text])))"
+    ]
+  ]
+}

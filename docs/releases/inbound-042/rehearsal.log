@@ -1,0 +1,12 @@
+INBOUND-042: {"ledger": false, "objects": [false, false, false], "step": "before"}
+INBOUND-042: {"pending": ["042_phone_inbound.sql"], "step": "plan"}
+INBOUND-042: {"ledger": false, "objects": [false, false, false], "step": "before"}
+INBOUND-042: {"ledger": false, "objects": [false, false, false], "step": "before"}
+INBOUND-042: {"already_present": false, "applied": true, "step": "verified"}
+INBOUND-042: {"migration": "042_phone_inbound.sql", "sha256": "78a23c99f1b876426fa4aa5193da67f2e9941901baee89502004ae84f9131554", "step": "committed"}
+INBOUND-042: {"ledger": false, "objects": [true, true, true], "step": "before"}
+INBOUND-042: {"already_present": true, "applied": false, "step": "verified"}
+INBOUND-042: {"ledger": false, "objects": [true, true, true], "step": "before"}
+INBOUND-042: {"already_present": true, "applied": false, "step": "verified"}
+INBOUND-042: {"ledger": false, "objects": [true, false, true], "step": "before"}
+PASS: read-only plan, rollback on shape mismatch, apply/verify, idempotent rerun, partial-state refusal; disposable database only
