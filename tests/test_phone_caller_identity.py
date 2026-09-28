@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.hosted_identity import SupabaseIdentityAdmin, verified_webauthn_time
+from postriff_phase2.hosted_identity import SupabaseIdentityAdmin, verified_passkey_time, verified_webauthn_time
 from postriff_phase2.phone import prompt_assets
 from postriff_phase2.notifications.store import _clean_payload
 from postriff_phase2.hosted_identity import _NoAuthRedirect
@@ -33,12 +33,28 @@ class CallerIdentityTests(unittest.TestCase):
             (root/'prompts.json').write_text(json.dumps(spec))
             with patch.object(prompt_assets,'ASSETS',root),self.assertRaises(ValueError): prompt_assets.read('dial-inbound')
 
-    def test_jwt_refresh_or_sign_in_passkey_is_not_fresh_mfa(self):
+    def test_jwt_distinguishes_passkey_sign_in_from_webauthn_mfa(self):
         def token(amr): return 'x.'+base64.urlsafe_b64encode(json.dumps({'sub':'user','iat':9999,'amr':amr}).encode()).decode().rstrip('=')+'.x'
         for methods in ([],[{'method':'passkey','timestamp':9999}],[{'method':'webauthn','timestamp':9999}],[{'method':'mfa/webauthn','timestamp':'9999'}],['mfa/webauthn']):
             self.assertEqual(verified_webauthn_time(token(methods),'user'),0)
         self.assertEqual(verified_webauthn_time(token([{'method':'mfa/webauthn','timestamp':5}]),'user'),5)
-        with self.assertRaises(AlphaError): verified_webauthn_time(token([]),'wrong-user')
+        for methods in ([],[{'method':'mfa/webauthn','timestamp':9999}],[{'method':'webauthn','timestamp':9999}],[{'method':'passkey','timestamp':'9999'}],['passkey']):
+            self.assertEqual(verified_passkey_time(token(methods),'user'),0)
+        self.assertEqual(verified_passkey_time(token([{'method':'passkey','timestamp':7}]),'user'),7)
+        with self.assertRaises(AlphaError): verified_passkey_time(token([]),'wrong-user')
+
+    def test_admin_passkey_list_is_server_only_and_content_bounded(self):
+        user='00000000-0000-0000-0000-000000000001'
+        passkey='00000000-0000-0000-0000-000000000002'
+        calls=[]
+        def fetch(method,url,headers):
+            calls.append((method,url,headers))
+            return 200,[{'id':passkey,'friendly_name':'Phone','last_used_at':'2026-09-28T12:00:00Z'},
+                        {'id':'not-a-uuid','friendly_name':'ignored'}]
+        identity=SupabaseIdentityAdmin('https://auth.test','publishable','server-only',fetch=fetch)
+        self.assertEqual(identity.registered_passkeys(user),[{'id':passkey,'name':'Phone','last_used_at':'2026-09-28T12:00:00Z'}])
+        self.assertEqual(calls[0][0:2],('GET','https://auth.test/auth/v1/admin/users/'+user+'/passkeys'))
+        self.assertEqual(calls[0][2]['Authorization'],'Bearer server-only')
 
     def test_adapter_uses_server_bound_nonce_factor_origin_and_requires_uv(self):
         identity=SupabaseIdentityAdmin('https://auth.test','publishable','server-only')

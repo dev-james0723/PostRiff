@@ -24,9 +24,9 @@ const headers={Authorization:`Bearer dev:${principal}`,'Content-Type':'applicati
      await route.fulfill({status:200,contentType:'application/json',headers:{'Cache-Control':'no-store'},body:JSON.stringify({state,startedAt:Date.now()/1000,expiresAt:Date.now()/1000+90,workspaceId:workspace,spending:{usesCredits:false,ceilingMilliCredits:100,availableMilliCredits:10000}})});
     });
     const page=await ctx.newPage();await page.goto(base+'/app/phone/verify-call?challenge='+challenge,{waitUntil:'domcontentloaded',timeout:120000});
-    await page.getByRole('button',{name:'Confirm with Face ID / Touch ID',exact:true}).waitFor({timeout:90000});
+    await page.getByRole('button',{name:'Verify this agent call with Face ID / Touch ID',exact:true}).waitFor({timeout:90000});
     assert.deepEqual(posts,[],'Opening notification never approves/dials');
-    assert.ok(await page.getByRole('button',{name:'Confirm with Face ID / Touch ID',exact:true}).isDisabled(),'Synthetic dev identity cannot invoke production passkey');
+    assert.ok(await page.getByRole('button',{name:'Verify this agent call with Face ID / Touch ID',exact:true}).isDisabled(),'Synthetic dev identity cannot invoke production passkey');
     await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
     const axe=await page.evaluate(async()=>window.axe.run(document.querySelector('main[aria-labelledby="verify-call-title"]'),{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}}));
     assert.deepEqual(axe.violations.map(v=>v.id),[]);
@@ -39,7 +39,7 @@ const headers={Authorization:`Bearer dev:${principal}`,'Content-Type':'applicati
     await page.getByRole('button',{name:'This wasn’t me',exact:true}).click();
     await page.getByText('This verification is no longer active. Your call has no private access.',{exact:true}).waitFor();assert.deepEqual(posts,['fallback','deny']);
     state='consumed';await page.reload({waitUntil:'domcontentloaded'});await page.getByText('Call verified. Return to your call.',{exact:true}).waitFor();
-    assert.equal(await page.getByRole('button',{name:'Confirm with Face ID / Touch ID',exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'Verify this agent call with Face ID / Touch ID',exact:true}).count(),0);
     await ctx.close();console.log(`PASS ${name} ${width}: real page, no navigation approval, keyboard fallback/deny, consumed state, reduced motion, axe, overflow`);
    }
   }finally{await browser.close();}

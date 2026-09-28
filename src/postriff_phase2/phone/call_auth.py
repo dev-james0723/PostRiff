@@ -1,15 +1,15 @@
-"""Call-bound WebAuthn admission. Caller hashes select a route; they never authorize it."""
+"""Call-bound passkey admission. Caller hashes select a route; they never authorize it."""
 import hashlib
 import re
 from contextlib import contextmanager
-from urllib.parse import urlparse
 
 from postriff_alpha.domain import AlphaError
 from ..permissions import require
-from ..hosted_identity import verified_aal, verified_session_id, verified_webauthn_time
+from ..hosted_identity import verified_passkey_time, verified_session_id
 from . import inbound, billing
 
 CHALLENGE_SECONDS = 90
+PROOF_TOKEN_MAX_BYTES = 8192
 UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}')
 
 
@@ -142,67 +142,75 @@ def status(phone, token, challenge):
                 'workspaceId': str(item['workspace_id']), 'spending': spending}
 
 
-def origin(phone):
-    value = str(getattr(phone.hosted, 'public_base_url', '') or '').rstrip('/')
-    parsed = urlparse(value)
-    if parsed.scheme != 'https' or not parsed.hostname or parsed.path or parsed.username or parsed.query or parsed.fragment:
-        raise unavailable()
-    return value, parsed.hostname
-
-
 def factor_exists(phone, user, factor):
     identity = getattr(phone.hosted, 'identity', None)
     return bool(identity and any(f['id'] == factor and f['type'] == 'webauthn' for f in identity.verified_factors(user)))
 
 
-def prepare(phone, token, challenge, payload):
-    factor = payload.get('factorId')
-    if not isinstance(factor, str) or not UUID.fullmatch(factor):
+def passkey_exists(phone, user):
+    identity = getattr(phone.hosted, 'identity', None)
+    registered = getattr(identity, 'registered_passkeys', None)
+    return bool(callable(registered) and registered(user))
+
+
+def proof_token_shape_valid(proof_token):
+    return (isinstance(proof_token, str)
+            and 100 <= len(proof_token.encode()) <= PROOF_TOKEN_MAX_BYTES
+            and proof_token.count('.') == 2)
+
+
+def verify_passkey_proof(phone, proof_token, user, not_before):
+    """Verify a separate Supabase passkey session without replacing the app's authorized session."""
+    if not proof_token_shape_valid(proof_token):
         raise unavailable()
-    with user_challenge(phone, token, challenge) as (cur, item, user):
-        item = valid(cur, phone, item)
-        if item['ceremony_attempts'] >= 3 or not factor_exists(phone, user, factor):
-            raise unavailable()
-        session = phone.hosted.repository.verify_session.session_id(token, user)
-        attempt = item['ceremony_attempts'] + 1
-        cur.execute('UPDATE public.pr_phone_auth_challenges SET factor_id=%s,factor_challenge_id=NULL,ceremony_session_id=%s,'
-                    'ceremony_started_at=to_timestamp(%s),ceremony_attempts=%s,verification_used=false WHERE id=%s',
-                    (factor, session, phone.clock(), attempt, item['id']))
-    # Commit the attempt before network I/O: failures cannot undo the attempt cap.
-    site, rp = origin(phone)
-    result = phone.hosted.identity.phone_mfa_challenge(token, factor, rp, site)
-    if not UUID.fullmatch(str(result.get('id', ''))) or result.get('type') != 'webauthn' or (result.get('webauthn') or {}).get('type') != 'request':
+    verifier = phone.hosted.repository.verify_session
+    proof_verifier = getattr(verifier, 'proof', None)
+    if not callable(proof_verifier):
         raise unavailable()
-    with user_challenge(phone, token, challenge) as (cur, item, user):
-        item = valid(cur, phone, item)
-        if item['ceremony_attempts'] != attempt or item['ceremony_session_id'] != session:
+    try:
+        if proof_verifier(proof_token) != user:
             raise unavailable()
-        cur.execute('UPDATE public.pr_phone_auth_challenges SET factor_challenge_id=%s WHERE id=%s', (result['id'], item['id']))
-        return {'publicKey': result['webauthn']['credential_options']['publicKey']}
+        session = verified_session_id(proof_token, user)
+        step_time = verified_passkey_time(proof_token, user)
+    except AlphaError:
+        raise unavailable() from None
+    if not int(not_before) <= step_time <= phone.clock() + 1:
+        raise unavailable()
+    return session
 
 
 def approve(phone, token, challenge, payload):
+    proof_token = payload.get('passkeyToken')
+    with user_challenge(phone, token, challenge) as (cur, item, user):
+        # Resolve the exact owner first, then reject obviously malformed bodies without consuming
+        # one of the three remote-ceremony attempts. Valid but failed/uncertain proofs do consume it.
+        if not proof_token_shape_valid(proof_token):
+            raise unavailable()
+        item = valid(cur, phone, item)
+        if item['ceremony_attempts'] >= 3:
+            raise unavailable()
+        authorization_session = phone.hosted.repository.verify_session.session_id(token, user)
+        attempt = item['ceremony_attempts'] + 1
+        cur.execute('UPDATE public.pr_phone_auth_challenges SET factor_id=NULL,factor_challenge_id=NULL,ceremony_session_id=%s,'
+                    'ceremony_started_at=to_timestamp(%s),ceremony_attempts=%s,verification_used=false WHERE id=%s',
+                    (authorization_session, phone.clock(), attempt, item['id']))
+        not_before = float(item['created_seconds'])
+    # Commit the attempt before Supabase token verification. A failed/uncertain proof never gets an
+    # automatic replay; the person may perform a new passkey ceremony, up to the existing cap.
+    proof_session = verify_passkey_proof(phone, proof_token, user, not_before)
+    if proof_session == authorization_session:
+        raise unavailable()
     with user_challenge(phone, token, challenge) as (cur, item, user):
         item = valid(cur, phone, item)
-        session = phone.hosted.repository.verify_session.session_id(token, user)
-        if item['verification_used'] or not item['factor_challenge_id'] or item['ceremony_session_id'] != session or not factor_exists(phone, user, str(item['factor_id'])):
+        if item['ceremony_attempts'] != attempt or item['ceremony_session_id'] != authorization_session:
             raise unavailable()
-        bound_nonce = item['factor_challenge_id']
-        step_started = float(item['ceremony_seconds'])
-        cur.execute('UPDATE public.pr_phone_auth_challenges SET verification_used=true WHERE id=%s', (item['id'],))
-    # At most one verify request for each provider nonce, including uncertain/error outcomes.
-    # No domain locks across provider I/O: hang-up, deny and revoke can invalidate this approval.
-    site, rp = origin(phone)
-    result = phone.hosted.identity.phone_mfa_verify(token, str(item['factor_id']), str(bound_nonce), rp, site, payload.get('credential'))
-    fresh_token = result.get('access_token', '')
-    verified = phone.hosted.repository.verify_session(fresh_token)
-    step_time = verified_webauthn_time(fresh_token, user)
-    if (verified != user or verified_aal(fresh_token, user) != 'aal2' or verified_session_id(fresh_token, user) != session
-            or not int(step_started) <= step_time <= phone.clock() + 1):
-        raise unavailable()
-    with user_challenge(phone, fresh_token, challenge) as (cur, item, user):
-        item = valid(cur, phone, item)
-        if item['factor_challenge_id'] != bound_nonce or not factor_exists(phone, user, str(item['factor_id'])):
+        # One passkey-created Supabase session can authorize exactly one protected action. The
+        # advisory lock closes races across phone approvals and trusted-caller revocations.
+        cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (proof_session,))
+        cur.execute("INSERT INTO public.pr_phone_passkey_proof_uses(session_id,user_id,purpose,subject_id,used_at) "
+                    "VALUES(%s,%s,'call_approve',%s,to_timestamp(%s)) ON CONFLICT DO NOTHING",
+                    (proof_session, user, item['id'], phone.clock()))
+        if cur.rowcount != 1:
             raise unavailable()
         maximum, available = payload.get('maxMilliCredits'), payload.get('useAvailableCredits') is True
         if maximum is not None and (type(maximum) is not int or not 0 <= maximum <= 100_000_000):
@@ -211,9 +219,9 @@ def approve(phone, token, challenge, payload):
         if spending['usesCredits'] and not available and (maximum is None or maximum < spending['ceilingMilliCredits']):
             raise AlphaError('Confirm the phone and voice credit limit.', 402)
         cur.execute("UPDATE public.pr_phone_auth_challenges SET state='approved',approved_at=to_timestamp(%s),approved_session_id=%s,"
-                    "approved_factor_kind='webauthn',maximum_millicredits=%s,use_available_credits=%s WHERE id=%s",
-                    (phone.clock(), session, maximum, available, item['id']))
-        return {'state': 'approved', 'session': {'access_token': fresh_token, 'refresh_token': result['refresh_token']}}
+                    "approved_factor_kind='passkey',verification_used=true,maximum_millicredits=%s,use_available_credits=%s WHERE id=%s",
+                    (phone.clock(), proof_session, maximum, available, item['id']))
+        return {'state': 'approved'}
 
 
 def dismiss(phone, token, challenge, action):
@@ -257,8 +265,11 @@ def consume(phone, call_ref, challenge):
         item = load(cur, challenge)
         if not item or item['provider_call_ref'] != call_ref or item['state'] != 'approved':
             return None
-    # Verify still-enrolled factor immediately before the atomic domain transaction.
-    if not factor_exists(phone, str(item['user_id']), str(item['factor_id'])):
+    # Verify the credential class still exists immediately before the atomic domain transaction.
+    if ((item['approved_factor_kind'] == 'webauthn'
+         and not factor_exists(phone, str(item['user_id']), str(item['factor_id'])))
+            or (item['approved_factor_kind'] == 'passkey'
+                and not passkey_exists(phone, str(item['user_id'])))):
         return None
     from .runtime import principal_phone
     scoped, capability = principal_phone(phone, str(item['workspace_id']), str(item['user_id']))
@@ -277,22 +288,38 @@ def claim(cur, phone, user, workspace, call_ref, challenge):
         raise unavailable()
     item = valid(cur, phone, item, states=('approved',))
     cur.execute('SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s', (user, item['approved_session_id']))
-    if cur.fetchone() or item['approved_factor_kind'] != 'webauthn':
+    if cur.fetchone() or item['approved_factor_kind'] not in ('webauthn', 'passkey'):
         raise unavailable()
     cur.execute("UPDATE public.pr_phone_auth_challenges SET state='consumed',consumed_at=to_timestamp(%s) WHERE id=%s", (phone.clock(), item['id']))
     cur.execute('UPDATE public.pr_phone_trusted_callers SET last_used_at=to_timestamp(%s) WHERE id=%s', (phone.clock(), item['trusted_caller_id']))
     return item['id']
 
 
-def trusted(phone, workspace, token, revoke=None):
+def trusted(phone, workspace, token, revoke=None, proof_token=None):
+    if revoke:
+        # Authorize and resolve the exact owner before checking the separate passkey proof.  No
+        # database transaction or route lock is held across the Supabase verification request.
+        with phone.hosted.repository.transaction(token, workspace) as (cur, row, user):
+            require(phone.hosted.ideas._member(row), 'edit')
+            cur.execute('SELECT 1 FROM public.pr_phone_trusted_callers WHERE id::text=%s AND user_id=%s AND workspace_id=%s AND revoked_at IS NULL', (revoke, user, workspace))
+            if not cur.fetchone():
+                raise unavailable()
+        proof_session = verify_passkey_proof(phone, proof_token, user, phone.clock() - CHALLENGE_SECONDS)
+        with phone.hosted.repository.transaction(token, workspace) as (cur, row, principal):
+            require(phone.hosted.ideas._member(row), 'edit')
+            phone._lock(cur, principal)
+            cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (proof_session,))
+            cur.execute("INSERT INTO public.pr_phone_passkey_proof_uses(session_id,user_id,purpose,subject_id,used_at) "
+                        "VALUES(%s,%s,'trusted_caller_revoke',%s,to_timestamp(%s)) ON CONFLICT DO NOTHING",
+                        (proof_session, principal, revoke, phone.clock()))
+            if cur.rowcount != 1:
+                raise unavailable()
+            cur.execute('UPDATE public.pr_phone_trusted_callers SET revoked_at=to_timestamp(%s),updated_at=now() WHERE id::text=%s AND user_id=%s AND workspace_id=%s AND revoked_at IS NULL', (phone.clock(), revoke, principal, workspace))
+            if cur.rowcount != 1:
+                raise unavailable()
+            return {'revoked': True}
     with phone.hosted.repository.transaction(token, workspace) as (cur, row, user):
         require(phone.hosted.ideas._member(row), 'edit')
         phone._lock(cur, user)
-        if revoke:
-            phone.hosted.repository.assert_fresh(token, user)
-            if phone.hosted.repository.verify_session.aal(token, user) != 'aal2':
-                raise AlphaError('Confirm your passkey in Security settings first.', 403)
-            cur.execute('UPDATE public.pr_phone_trusted_callers SET revoked_at=to_timestamp(%s),updated_at=now() WHERE id::text=%s AND user_id=%s AND workspace_id=%s', (phone.clock(), revoke, user, workspace))
-            return {'revoked': True}
         cur.execute('SELECT id::text,extract(epoch from verified_at),extract(epoch from last_used_at) FROM public.pr_phone_trusted_callers WHERE user_id=%s AND workspace_id=%s AND revoked_at IS NULL ORDER BY verified_at DESC', (user, workspace))
         return {'callers': [{'id': r[0], 'pairedAt': float(r[1]), 'lastUsedAt': float(r[2]) if r[2] else None} for r in cur.fetchall()]}

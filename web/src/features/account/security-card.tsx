@@ -32,7 +32,6 @@ import {
   enrollTotp,
   listFactors,
   passkeysSupported,
-  registerPasskey,
   unenrollFactor,
   verifyPasskey,
   verifyTotp,
@@ -305,67 +304,7 @@ function AuthenticatorDialog({
   );
 }
 
-/** Register a passkey. The device prompt (Face ID, Touch ID, Windows Hello, a key) is the whole flow. */
-function PasskeyDialog({
-  open,
-  onOpenChange,
-  friendlyName,
-  onVerified
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  friendlyName: string;
-  onVerified: () => Promise<void>;
-}) {
-  const auth = useAuth();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function close() {
-    setError(null);
-    onOpenChange(false);
-  }
-
-  async function start() {
-    if (!auth.supabase) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await registerPasskey(auth.supabase, friendlyName);
-      await onVerified();
-      close();
-    } catch (err) {
-      setError(message(err, 'Your device did not complete the passkey setup.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && !busy && close()}>
-      <DialogContent className={cn(rafiiDialog, 'gap-5')}>
-        <DialogHeader className='gap-1.5 pr-8'>
-          <DialogTitle className={DIALOG_TITLE}>Set up Face ID / Touch ID</DialogTitle>
-          <DialogDescription className='leading-relaxed'>
-            Confirm with Face ID, Touch ID, Windows Hello or a security key. Your biometric never leaves your device.
-          </DialogDescription>
-        </DialogHeader>
-        {error && <StateMessage kind='error' layout='inline' title={error} />}
-        <DialogFooter className={rafiiDialogFooter}>
-          <Button type='button' variant='quiet' size='control' disabled={busy} onClick={close}>
-            Cancel
-          </Button>
-          <Button type='button' variant='action' size='control' disabled={busy} onClick={() => void start()}>
-            <Icons.key className='size-4' aria-hidden />
-            {busy ? 'Waiting for your device…' : 'Continue'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** "How do you want to confirm sign-ins?" — one row per method; a passkey needs WebAuthn in this browser. */
+/** Hosted Supabase currently rejects WebAuthn MFA enrollment, so TOTP is the supported second factor. */
 function MethodChooser({
   open,
   onOpenChange,
@@ -377,15 +316,7 @@ function MethodChooser({
   onChoose: (kind: FactorKind) => void;
   backup: boolean;
 }) {
-  const passkeys = passkeysSupported();
   const options: { kind: FactorKind; title: string; note: string; icon: React.ReactNode; disabled?: boolean }[] = [
-    {
-      kind: 'webauthn',
-      title: 'Face ID / Touch ID',
-      note: passkeys ? 'A passkey on this device. Fastest and phishing-resistant.' : 'This browser can’t create passkeys.',
-      icon: <Icons.key className='size-5' aria-hidden />,
-      disabled: !passkeys
-    },
     {
       kind: 'totp',
       title: 'Authenticator app',
@@ -449,14 +380,7 @@ function TwoFactor() {
   const enforced = me.data?.mfa.enforced ?? false;
   const verified = (factors.data ?? []).filter((factor) => factor.verified);
   const count = (kind: FactorKind) => verified.filter((factor) => factor.kind === kind).length;
-  const friendlyName =
-    enrolling === 'webauthn'
-      ? count('webauthn') === 0
-        ? 'Passkey'
-        : `Passkey ${count('webauthn') + 1}`
-      : count('totp') === 0
-        ? 'Authenticator app'
-        : `Authenticator ${count('totp') + 1}`;
+  const friendlyName = count('totp') === 0 ? 'Authenticator app' : `Authenticator ${count('totp') + 1}`;
 
   async function refresh() {
     await Promise.all([client.invalidateQueries({ queryKey: keys.me }), client.invalidateQueries({ queryKey: FACTORS_KEY })]);
@@ -489,7 +413,7 @@ function TwoFactor() {
     ? 'Not available with a dev identity.'
     : enforced
       ? `Every sign-in needs ${methods || 'a second factor'}.`
-      : 'Confirm every sign-in with Face ID / Touch ID or an authenticator app.';
+      : 'Confirm every sign-in with an authenticator app. Face ID / Touch ID account unlock is managed separately under Passkeys.';
 
   return (
     <SettingsGroup
@@ -570,12 +494,6 @@ function TwoFactor() {
       />
       <AuthenticatorDialog
         open={enrolling === 'totp'}
-        onOpenChange={(open) => !open && setEnrolling(null)}
-        friendlyName={friendlyName}
-        onVerified={afterEnrol}
-      />
-      <PasskeyDialog
-        open={enrolling === 'webauthn'}
         onOpenChange={(open) => !open && setEnrolling(null)}
         friendlyName={friendlyName}
         onVerified={afterEnrol}

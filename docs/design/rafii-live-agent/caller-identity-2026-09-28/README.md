@@ -1,5 +1,11 @@
 # Rafii Phone caller identity — local implementation receipt
 
+> **Superseded authentication design:** hosted Supabase rejected the WebAuthn-MFA enrollment used by
+> this historical candidate. The supported passkey-sign-in repair and current activation boundary
+> are recorded in [the passkey identity receipt](../passkey-identity-2026-09-28/README.md). The
+> evidence below remains a record of the original caller-routing candidate, not approval to release
+> its WebAuthn-MFA flow.
+
 Status: **release candidate committed and initial branch push completed; automated regression and human audio audition passed. Production migration/deployment and real-device gates remain pending.**
 
 Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio`.
