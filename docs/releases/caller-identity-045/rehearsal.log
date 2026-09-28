@@ -1,0 +1,11 @@
+CALLER-IDENTITY-045: {"ledger": false, "objects": [true, true, true], "step": "before"}
+CALLER-IDENTITY-045: {"already_present": true, "applied": false, "step": "verified"}
+CALLER-IDENTITY-045: {"ledger": false, "objects": [true, false, true], "step": "before"}
+CALLER-IDENTITY-045: {"ledger": false, "objects": [false, false, false], "step": "before"}
+CALLER-IDENTITY-045: {"pending": ["045_phone_caller_identity.sql"], "step": "plan"}
+CALLER-IDENTITY-045: {"ledger": false, "objects": [false, false, false], "step": "before"}
+CALLER-IDENTITY-045: {"already_present": false, "applied": true, "step": "verified"}
+CALLER-IDENTITY-045: {"migration": "045_phone_caller_identity.sql", "sha256": "1d672f5df62ae9209671d1b8505fe3729a6e6713e22a840b8db8edb0f76e1014", "step": "committed"}
+CALLER-IDENTITY-045: {"ledger": false, "objects": [true, true, true], "step": "before"}
+CALLER-IDENTITY-045: {"already_present": true, "applied": false, "step": "verified"}
+PASS migration 045 plan, apply, shape/RLS/grants, idempotency and partial-state refusal

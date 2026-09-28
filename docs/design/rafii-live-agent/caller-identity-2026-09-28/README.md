@@ -1,9 +1,9 @@
 # Rafii Phone caller identity — local implementation receipt
 
-Status: **local implementation, automated regression and human audio audition passed; real-device gate pending. Not yet released or production verified.**
+Status: **release candidate committed and initial branch push completed; automated regression and human audio audition passed. Production migration/deployment and real-device gates remain pending.**
 
 Worktree: `/Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio`.
-Base: `eefff65844f7556276b5c3b13b7cb16907e0ed6f`. Changes remain uncommitted here. The requested voice-opening worktree was clean at this newer commit, not the historical dirty `84165f1`. It was rechecked at closeout and remains untouched. See [source reconciliation](source-state.md).
+Current integration base: `822f25d21138be18dbcd0eb7d3d2bcb1baff87cc`. The release branch is `codex/rafii-phone-caller-identity`. The requested voice-opening worktree was clean at `eefff65`, not the historical dirty `84165f1`, and remains untouched. See [source reconciliation](source-state.md).
 
 ## Plan execution
 
@@ -21,7 +21,7 @@ Base: `eefff65844f7556276b5c3b13b7cb16907e0ed6f`. Changes remain uncommitted her
 | 9 Recordings | Exactly 3 freshly approved requests completed and installed; old assets preserved. Format/content checks and the user’s human audition passed. |
 | 10 Security regression | Local SQL/HTTP/signed ASGI, forced RLS/browser grants denied/deletion cascades, replay/races, fresh nonce and secret isolation passed. |
 | 11 Full validation | Local regression below passed; **real supported-device end-to-end gate unavailable** until approved environment and user enrollment/operation. |
-| 12 Release | Not authorized/executed: no push, merge, production migration, deployment or paid call. |
+| 12 Release | Audio approval, commit and initial branch push complete. Deployment is authorized, but its required production migration 045 remains separately gated. No merge, production migration, deployment or paid call has been executed yet. |
 
 ## Security details and review
 
@@ -47,6 +47,7 @@ Full outputs are in [logs](logs/) and checksummed by [validation.json](validatio
 - New verify-call page: Chromium/WebKit at 1280/390/320, keyboard fallback/deny, no navigation approval, consumed state, reduced motion, no overflow, axe WCAG checks. Desktop/mobile screenshots visually inspected. Local dev identity has no Supabase client; the approval button is intentionally disabled there.
 - Actual `navigator.credentials.get` + existing verifyPasskey helper under a Chromium **virtual** authenticator: signature, exact fresh nonce, RP, UV and abort/no-approval passed. This is not physical-device evidence.
 - TypeScript, lint (0 warnings/errors), production build, diff whitespace and offline secret scan passed. Seven exact public manifest hashes were reviewed in the existing secret allowlist; no broad exemption. Copy audit had 18 pre-existing flags, zero introduced flags (see copy-review.json).
+- After rebase onto the latest production source: 49 focused Phone tests and 94 hosted/notification tests passed; the seven-suite disposable PostgreSQL regression passed; spoken/no-star was rerun separately; TypeScript, lint and production build passed. Migration 045's pinned release runner also passed local plan/apply/idempotency/partial-state-refusal rehearsal.
 
 Representative commands (from this worktree; external transports injected):
 

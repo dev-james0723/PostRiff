@@ -1,10 +1,10 @@
 # Caller identity source reconciliation
 
-Local implementation, not released. Source inspected on 2026-09-28.
+Release candidate source reconciled on 2026-09-28; production is not yet migrated or deployed.
 
-The voice-greeting worktree was clean at eefff65 on codex/rafii-voice-opening (also origin/codex/rafii-voice-opening), superseding the handoff observation of dirty 84165f1. Its owning session remains active on its separately authorized voice release. This task uses an isolated managed worktree at eefff65: /Users/ouxianxing/.codex/worktrees/rafii-caller-identity/James-Au-Studio. No edits to the owner worktree.
+The voice-greeting worktree was clean at eefff65 on codex/rafii-voice-opening (also origin/codex/rafii-voice-opening), superseding the handoff observation of dirty 84165f1. This task used an isolated managed worktree, then rebased its release commit without conflicts onto origin/consumer-saas at 822f25d. No edits were made to the owner worktree.
 
-All local heads/remotes and SQL filenames in every worktree were inspected; 044_youtube_coach was the highest claimed number. This task reserves 045_phone_caller_identity.sql. Recheck before integration. No root AGENTS.md or CLAUDE.md exists in the source snapshot; current user-supplied rules apply.
+All local heads/remotes and SQL filenames in every worktree were inspected; only this release branch claims 045_phone_caller_identity.sql. The scan was repeated after fetching and rebasing. Current user-supplied project rules apply.
 
 Initial reconciliation (before fresh authorization): original installed audio was unchanged and regeneration was not yet authorized. The user subsequently approved exactly three replacement requests, ceiling US$0.25; these completed without retries. Originals below remain preserved under original-assets; tts-authorization.json and recordings/generation.json record the update. Original asset hashes:
 
