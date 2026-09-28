@@ -1,0 +1,275 @@
+{
+  "browser": "webkit",
+  "execution": "local synthetic providers, emulated viewports",
+  "checks": [
+    {
+      "name": "seed has two connected LinkedIn accounts",
+      "passed": true,
+      "detail": [
+        "Dev Member",
+        "Dev Member Two"
+      ]
+    },
+    {
+      "name": "initial summary counts two accounts plus Threads as 3 destinations and 2 languages",
+      "passed": true
+    },
+    {
+      "name": "390 composer has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "390 compact tools do not require horizontal scrolling",
+      "passed": true
+    },
+    {
+      "name": "390 page has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "reduced-motion preference is active",
+      "passed": true
+    },
+    {
+      "name": "390 compact composer is materially shorter than the 238px baseline",
+      "passed": true,
+      "detail": {
+        "composerHeight": 152,
+        "textareaHeight": 48,
+        "chromeHeight": 104
+      }
+    },
+    {
+      "name": "390 non-textarea chrome stays inside the 104–136px target",
+      "passed": true,
+      "detail": {
+        "composerHeight": 152,
+        "textareaHeight": 48,
+        "chromeHeight": 104
+      }
+    },
+    {
+      "name": "430 default composer has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "430 default planner stays in the visual viewport",
+      "passed": true,
+      "detail": {
+        "x": 8,
+        "y": 8,
+        "width": 414,
+        "height": 916
+      }
+    },
+    {
+      "name": "planner has one vertical row per selected destination",
+      "passed": true
+    },
+    {
+      "name": "planner exposes the live staged channel/language count",
+      "passed": true
+    },
+    {
+      "name": "first Escape closes only the language catalogue",
+      "passed": true
+    },
+    {
+      "name": "dialog close restores focus to Delivery Summary",
+      "passed": true
+    },
+    {
+      "name": "Cancel leaves the applied destination count untouched",
+      "passed": true
+    },
+    {
+      "name": "shared-language ON previews Japanese on every destination",
+      "passed": true
+    },
+    {
+      "name": "shared-language ON then OFF restores every staged individual value",
+      "passed": true
+    },
+    {
+      "name": "long locale name stays inside its destination row",
+      "passed": true
+    },
+    {
+      "name": "multi-language Apply changes the effective unique-language count",
+      "passed": true
+    },
+    {
+      "name": "one-channel Apply produces the human-readable single-destination summary",
+      "passed": true
+    },
+    {
+      "name": "single-destination summary keeps its visible multi-language count",
+      "passed": true
+    },
+    {
+      "name": "5+ destinations stay as vertical planner rows",
+      "passed": true
+    },
+    {
+      "name": "5+ applied destinations reduce to one compact summary",
+      "passed": true
+    },
+    {
+      "name": "message-provided language replaces the effective count without rewriting destinations",
+      "passed": true
+    },
+    {
+      "name": "every affected destination exposes a textual From message indicator",
+      "passed": true
+    },
+    {
+      "name": "390 planner stays inside the visual viewport",
+      "passed": true,
+      "detail": {
+        "x": 8,
+        "y": 8.015625,
+        "width": 374,
+        "height": 827.984375
+      }
+    },
+    {
+      "name": "planner controls retain practical 44px touch targets",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "open planner: axe has no serious or critical findings",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "empty message keeps Send disabled",
+      "passed": true
+    },
+    {
+      "name": "valid local-fixture turn enables Send",
+      "passed": true
+    },
+    {
+      "name": "busy turn disables Send",
+      "passed": true
+    },
+    {
+      "name": "local deterministic turn returns successfully",
+      "passed": true
+    },
+    {
+      "name": "attachment is visible without hiding Delivery Summary",
+      "passed": true
+    },
+    {
+      "name": "attachment state preserves phone-width overflow safety",
+      "passed": true
+    },
+    {
+      "name": "compact composer with attachment: axe has no serious or critical findings",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "390x844 functional flow: no console, page or same-origin network errors",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "430: composer has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "430: page has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "430: planner stays in viewport",
+      "passed": true,
+      "detail": {
+        "x": 8,
+        "y": 8,
+        "width": 414,
+        "height": 916
+      }
+    },
+    {
+      "name": "430: planner restores focus to summary",
+      "passed": true
+    },
+    {
+      "name": "430x932 visual: no console, page or same-origin network errors",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "768: composer has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "768: page has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "768: planner stays in viewport",
+      "passed": true,
+      "detail": {
+        "x": 40,
+        "y": 96,
+        "width": 688,
+        "height": 832
+      }
+    },
+    {
+      "name": "768: planner restores focus to summary",
+      "passed": true
+    },
+    {
+      "name": "768x1024 visual: no console, page or same-origin network errors",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "1440: composer has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "1440: page has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "1440: planner stays in viewport",
+      "passed": true,
+      "detail": {
+        "x": 376,
+        "y": 36,
+        "width": 688,
+        "height": 828
+      }
+    },
+    {
+      "name": "1440: planner restores focus to summary",
+      "passed": true
+    },
+    {
+      "name": "1440x900 visual: no console, page or same-origin network errors",
+      "passed": true,
+      "detail": []
+    }
+  ],
+  "screenshots": [
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/composer-390x844.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/composer-430x932.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/planner-430x932.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/planner-message-390x844.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/composer-attachment-390x844.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/composer-restored-430x932.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/planner-restored-430x932.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/composer-768x1024.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/planner-768x1024.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/composer-1440x900.png",
+    "docs/design/rafii-composer-delivery-planner/evidence/after/webkit/planner-1440x900.png"
+  ],
+  "errors": []
+}

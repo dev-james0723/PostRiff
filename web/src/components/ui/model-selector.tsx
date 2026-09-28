@@ -182,7 +182,7 @@ export function ModelSelector({
         title={current?.detail}
         className={cn(
           'rafii-glass hover:rafii-glass-selected data-popup-open:rafii-glass-selected rafii-focus flex shrink-0 items-center gap-2 font-medium disabled:opacity-50',
-          compact ? 'h-10 max-w-44 rounded-full px-3.5 text-xs sm:h-9' : 'h-11 max-w-64 rounded-[var(--rafii-radius-control)] px-3.5 text-sm'
+          compact ? 'h-10 max-w-44 rounded-full px-3.5 text-xs @max-xl/composer:max-w-32 sm:h-9' : 'h-11 max-w-64 rounded-[var(--rafii-radius-control)] px-3.5 text-sm'
         )}
       >
         <ProviderIcon model={current} className='size-4' />
