@@ -23,8 +23,6 @@ def eligibility(kind, prefs, *, now, verified, membership, configured, live_conf
     if kind != 'explicit':
         checks += [(not in_quiet_hours(now, {'quiet_start': prefs['quietStart'], 'quiet_end': prefs['quietEnd'], 'time_zone': prefs['timeZone']}), 'quiet_hours'),
                    (daily_calls < prefs['maxCallsPerDay'], 'daily_limit')]
-    else:
-        checks += [(daily_calls < 6, 'explicit_daily_limit')]
     if kind == 'scheduled':
         checks += [(flags.get('RAFII_PHONE_SCHEDULED_ENABLED') and prefs['scheduledCalls'], 'scheduled_off')]
     elif kind == 'proactive':

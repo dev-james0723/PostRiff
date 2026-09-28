@@ -118,6 +118,19 @@ async function api(method,path,body) {
     await page.unroute(`**/api/workspaces/${wid}/phone/calls`);
     await page.unroute(`**/api/workspaces/${wid}/phone`);
     await page.reload({waitUntil:'domcontentloaded'});
+    // Curated infrastructure errors are shown by the real owner settings UI.
+    const diagnosticSettings={...(await api('GET',`/api/workspaces/${wid}/phone`)),execution:'provider'};
+    await page.route(`**/api/workspaces/${wid}/phone`,route=>route.fulfill({json:diagnosticSettings}));
+    await page.route(`**/api/workspaces/${wid}/phone/provider-readiness`,route=>route.fulfill({json:{ready:false,reason:'provider_transport',stage:'provider_transport',httpStatus:403}}));
+    await page.reload({waitUntil:'domcontentloaded'});
+    const beforeCheck=dialRequests;
+    await section.getByRole('button',{name:'Check calling setup',exact:true}).click();
+    await section.getByText(/Dial’s network blocked Rafii’s API request/).waitFor();
+    assert.equal(dialRequests,beforeCheck,'Setup diagnostic must never create a call');
+    await page.screenshot({path:'/tmp/dial-root-cause-diagnostic-ui.png',fullPage:true});
+    await page.unroute(`**/api/workspaces/${wid}/phone/provider-readiness`);
+    await page.unroute(`**/api/workspaces/${wid}/phone`);
+    await page.reload({waitUntil:'domcontentloaded'});
     await section.getByRole('switch',{name:'Allow scheduled briefings',exact:true}).click();
     await section.getByRole('button',{name:'Add briefing',exact:true}).click();
     await section.getByRole('button',{name:'Remove briefing',exact:true}).waitFor();

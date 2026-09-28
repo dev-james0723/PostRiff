@@ -67,7 +67,8 @@ class DialProvider:
             raise ValueError('Dial endpoint refused')
         request = Request(API + path, method=method,
             data=json.dumps(fields).encode() if fields is not None else None,
-            headers={'Authorization': 'Bearer ' + self.api_key, 'Content-Type': 'application/json', **(headers or {})})
+            headers={'Authorization': 'Bearer ' + self.api_key, 'Content-Type': 'application/json',
+                     'Accept': 'application/json', 'User-Agent': 'Rafii/1.0', **(headers or {})})
         try:
             with build_opener(_NoRedirect(), HTTPSHandler(context=ssl.create_default_context())).open(request, timeout=15) as response:
                 raw = response.read(200_001)
@@ -76,12 +77,26 @@ class DialProvider:
                 result = json.loads(raw)
                 return response.status, result if isinstance(result, dict) else {}
         except HTTPError as error:
-            # Non-2xx call creation guarantees no live call per Dial's contract. Discard PII/error bodies.
-            status = error.code
-            error.close()
-            return status, {}
+            # Preserve only this exact infrastructure error, never arbitrary provider text/PII.
+            # Non-2xx call creation guarantees no live call per Dial's contract. No retry.
+            status, diagnostic = error.code, {}
+            try:
+                if status == 403 and error.read(257).strip() == b'error code: 1010':
+                    diagnostic = {'code': 'cloudflare_1010'}
+            except (OSError, ValueError):
+                pass
+            finally:
+                error.close()
+            return status, diagnostic
         except (URLError, TimeoutError, OSError, ValueError):
             return 0, {}
+
+    @staticmethod
+    def _http_failure(status, result, stage, fallback):
+        if status == 403 and result.get('code') == 'cloudflare_1010':
+            return {'ready': False, 'reason': 'provider_transport', 'stage': 'provider_transport', 'httpStatus': status}
+        reason = 'provider_auth' if status == 401 else 'provider_unavailable' if status == 0 or status >= 500 else fallback
+        return {'ready': False, 'reason': reason, 'stage': stage, 'httpStatus': status}
 
     @staticmethod
     def instruction(call_id):
@@ -101,8 +116,7 @@ class DialProvider:
             return {'ready': False, 'reason': 'provider_auth', 'stage': 'local_configuration'}
         status, hosted = self.transport('GET', '/self-hosted')
         if status != 200:
-            reason = 'provider_auth' if status == 401 else 'provider_unavailable' if status == 0 or status >= 500 else 'provider_account'
-            return {'ready': False, 'reason': reason, 'stage': 'self_hosted_http', 'httpStatus': status}
+            return self._http_failure(status, hosted, 'self_hosted_http', 'provider_account')
         audio = hosted.get('audio') or {}
         for matches, stage in (
             (hosted.get('access') == 'granted', 'self_hosted_access'),
@@ -115,16 +129,14 @@ class DialProvider:
                 return {'ready': False, 'reason': 'provider_account', 'stage': stage}
         status, result = self.transport('GET', '/numbers')
         if status != 200:
-            reason = 'provider_auth' if status == 401 else 'provider_unavailable' if status == 0 or status >= 500 else 'provider_caller'
-            return {'ready': False, 'reason': reason, 'stage': 'numbers_http', 'httpStatus': status}
+            return self._http_failure(status, result, 'numbers_http', 'provider_caller')
         lines = [n for n in result.get('numbers', []) if isinstance(n, dict) and n.get('number') == self.originating_number]
         if not (len(lines) == 1 and 'call' in lines[0].get('capabilities', []) and
                 lines[0].get('setupStatus') == 'ready' and lines[0].get('callingEnabled') is True):
             return {'ready': False, 'reason': 'provider_caller', 'stage': 'outgoing_line'}
         status, account = self.transport('GET', '/account')
         if status != 200:
-            reason = 'provider_auth' if status == 401 else 'provider_unavailable' if status == 0 or status >= 500 else 'provider_account'
-            return {'ready': False, 'reason': reason, 'stage': 'account_http', 'httpStatus': status}
+            return self._http_failure(status, account, 'account_http', 'provider_account')
         limit = (account.get('limits') or {}).get('maxCallDurationSeconds', 600)
         if type(limit) is not int or not 60 <= limit <= 3600:
             return {'ready': False, 'reason': 'provider_account', 'stage': 'account_limit'}
@@ -166,6 +178,8 @@ class DialProvider:
             'maxCallDurationSeconds': min(max_seconds, ready['maxSeconds'])}, {'Idempotency-Key': 'rafii-phone:' + call_id})
         if status in (200, 201):
             return self._receipt(result.get('call') or {}, number=number, call_id=call_id)
+        if status == 403 and result.get('code') == 'cloudflare_1010':
+            return CallReceipt('failed', failure='provider_transport')
         if status >= 300:
             reason = {401: 'provider_auth', 403: 'provider_account', 404: 'provider_caller',
                       429: 'provider_rate_limit'}.get(status, 'provider_rejected')
