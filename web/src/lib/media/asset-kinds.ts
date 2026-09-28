@@ -9,6 +9,10 @@ export interface AssetLike {
   mime?: string | null;
   category?: string | null;
   processing?: string | null;
+  duration?: number | null;
+  durationSource?: string | null;
+  bytes?: number | null;
+  verified?: { container?: boolean; locationChecked?: boolean } | null;
   deleted?: boolean | null;
   deletionPending?: boolean | null;
 }
@@ -38,9 +42,19 @@ export function isReady(asset: AssetLike | null | undefined): boolean {
   return live(asset) && kind !== null && asset.processing === READY[kind];
 }
 
-/** Images a post can be scheduled with. Videos never are in Phase 1. */
+/** Images a post can be scheduled with. */
 export function isPostableImage(asset: AssetLike | null | undefined): boolean {
   return kindOf(asset) === 'image' && isReady(asset);
+}
+
+/** Preliminary browser check. The server also verifies the storage object and its immutable identity. */
+export function isPostableVideo(asset: AssetLike | null | undefined): boolean {
+  return kindOf(asset) === 'video' && isReady(asset) &&
+    (asset?.mime === 'video/mp4' || asset?.mime === 'video/quicktime') &&
+    asset?.durationSource === 'container' && typeof asset.duration === 'number' &&
+    asset.duration > 0 && asset.duration <= 180 &&
+    typeof asset.bytes === 'number' && asset.bytes > 0 && asset.bytes <= 100_000_000 &&
+    asset.verified?.container === true && asset.verified.locationChecked === true;
 }
 
 /** Photos and videos the Library lists; posters and frames live inside their video record. */

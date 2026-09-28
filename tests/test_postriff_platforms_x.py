@@ -217,7 +217,7 @@ class NeverPublishable(unittest.TestCase):
             self.skipTest("no repo skill library")
         x = skills.SkillLibrary(root).load("postriff-channel-x")["body"]
         self.assertIn("280", x)
-        self.assertIn("no hosted X publisher", x)
+        self.assertIn("never a publishing promise", x)  # X publishes only through the approved hosted connector
         xhs = skills.SkillLibrary(root).load("postriff-channel-xiaohongshu")["body"]
         self.assertIn("at most 20 characters", xhs)
         self.assertIn("`#tag`", xhs)

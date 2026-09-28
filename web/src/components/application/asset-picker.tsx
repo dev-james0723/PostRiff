@@ -16,9 +16,9 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { isPostableImage, isReady, kindOf, type AssetKind } from '@/lib/media/asset-kinds';
 
 /**
- * Choose a Library image by its thumbnail instead of its hash. The thumbnails use the Library's query key
+ * Choose a Library image or verified video by its thumbnail instead of its hash. The thumbnails use the Library's query key
  * (`['media', workspaceId, assetId]`, also used by the post previews), so an image already seen elsewhere is not
- * downloaded again. `value` is an asset id, or '' for no image.
+ * downloaded again. `value` is an asset id, or '' for no media.
  */
 
 function describe(asset: Asset) {
@@ -64,7 +64,7 @@ export interface AssetPickerProps {
   'aria-label'?: string;
   /** Label for the empty choice. */
   noneLabel?: string;
-  /** Which kinds to offer (chat-context SPEC §7.6); scheduling uses the default, photos only. */
+  /** Which kinds to offer; the schedule dialog selects the kind supported by the destination. */
   kinds?: readonly AssetKind[];
 }
 
@@ -77,8 +77,11 @@ function SelectedMark() {
   );
 }
 
-export function AssetPicker({ assets, value, onValueChange, id, disabled, className, noneLabel = 'No image', kinds = ['image'], ...props }: AssetPickerProps) {
+export function AssetPicker({ assets, value, onValueChange, id, disabled, className, noneLabel, kinds = ['image'], ...props }: AssetPickerProps) {
   const [open, setOpen] = useState(false);
+  const videoOnly = kinds.length === 1 && kinds[0] === 'video';
+  const emptyLabel = noneLabel ?? (videoOnly ? 'Choose a video' : 'No image');
+  const noun = videoOnly ? 'video' : 'image';
   const live = assets.filter((asset) => {
     const kind = kindOf(asset);
     return kind !== null && kinds.includes(kind) && (kind === 'image' ? isPostableImage(asset) : isReady(asset));
@@ -101,7 +104,7 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
         {selected ? (
           <>
             <Thumb asset={selected} className='size-8 shrink-0 rounded-[var(--rafii-radius-micro)]' />
-            <span className='min-w-0 flex-1 truncate text-left'>{describe(selected) || 'Image'}</span>
+            <span className='min-w-0 flex-1 truncate text-left'>{describe(selected) || (videoOnly ? 'Video' : 'Image')}</span>
             <code className='text-muted-foreground hidden font-mono text-xs sm:inline'>{selected.hash.slice(0, 8)}</code>
           </>
         ) : (
@@ -109,16 +112,16 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
             <span className='rafii-quiet text-muted-foreground grid size-8 shrink-0 place-items-center rounded-[var(--rafii-radius-micro)]'>
               <Icons.media className='size-4' aria-hidden />
             </span>
-            <span className='text-muted-foreground min-w-0 flex-1 truncate text-left'>{noneLabel}</span>
+            <span className='text-muted-foreground min-w-0 flex-1 truncate text-left'>{emptyLabel}</span>
           </>
         )}
         <Icons.chevronDown className='text-muted-foreground size-4 shrink-0' aria-hidden />
       </PopoverTrigger>
       <PopoverContent align='start' className='rafii-elevated w-[min(22rem,calc(100vw-1.5rem))] gap-3 rounded-[1.375rem] p-4 ring-0'>
         <PopoverHeader>
-          <PopoverTitle>Choose an image</PopoverTitle>
+          <PopoverTitle>Choose a {noun}</PopoverTitle>
           <PopoverDescription>
-            {live.length === 0 ? 'No images yet' : `${live.length} ${live.length === 1 ? 'image' : 'images'}`}
+            {live.length === 0 ? `No ${noun}s yet` : `${live.length} ${live.length === 1 ? noun : `${noun}s`}`}
           </PopoverDescription>
         </PopoverHeader>
         <div className='-mx-1 grid max-h-72 grid-cols-3 gap-2 overflow-y-auto px-1 py-1'>
@@ -132,7 +135,7 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
             )}
           >
             <Icons.circleX className='size-4' aria-hidden />
-            {noneLabel}
+            {emptyLabel}
             {value === '' && <SelectedMark />}
           </button>
           {live.map((asset) => {
@@ -143,7 +146,7 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
                 key={asset.id}
                 type='button'
                 aria-pressed={active}
-                aria-label={`Image${details ? ` ${details}` : ''}, hash starts with ${asset.hash.slice(0, 8)}`}
+                aria-label={`${videoOnly ? 'Video' : 'Image'}${details ? ` ${details}` : ''}, hash starts with ${asset.hash.slice(0, 8)}`}
                 title={details || undefined}
                 onClick={() => choose(asset.id)}
                 className={cn(
@@ -158,8 +161,8 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
           })}
         </div>
         {live.length === 0 && (
-          <Link href='/app/library' className='rafii-focus text-foreground inline-flex min-h-9 w-fit items-center rounded-md text-xs underline underline-offset-4'>
-            Upload images in the Library
+          <Link href={videoOnly ? '/app/agent' : '/app/library'} className='rafii-focus text-foreground inline-flex min-h-9 w-fit items-center rounded-md text-xs underline underline-offset-4'>
+            {videoOnly ? 'Add a video from Rafii chat' : 'Upload images in the Library'}
           </Link>
         )}
       </PopoverContent>

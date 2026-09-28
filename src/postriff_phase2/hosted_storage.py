@@ -3,8 +3,9 @@
 The service key is held by this server-side adapter and is never returned in a
 descriptor, state snapshot, object URL, or error. Every request goes to the
 configured project host through an opener that never follows a redirect, because
-CPython's redirect handler would forward the key (chat-context SPEC §7.4). The only
-browser upload is a video PUT to a signed, single-object URL minted here.
+CPython's redirect handler would forward the key (chat-context SPEC §7.4). Browser
+video uploads use a signed URL; approved video publishing reads the exact object
+through a separately bounded server-side path.
 """
 import base64
 import json
@@ -22,6 +23,7 @@ UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-
 OBJECT = re.compile(r"[0-9a-f]{32}-[0-9a-f]{64}\.jpg")
 VIDEO_OBJECT = re.compile(r"[0-9a-f]{32}\.(mp4|mov)")
 MAX_BODY = 8 * 1024 * 1024
+MAX_VIDEO_BODY = 100_000_000
 LIST_PAGE = 100
 LIST_PAGES = 200
 
@@ -109,7 +111,7 @@ class SupabaseStorage:
 
     def get(self, workspace_id, category, object_name):
         if category == "video":
-            raise AlphaError("Invalid private object location.")   # video bytes never pass through a function
+            raise AlphaError("Invalid private object location.")   # the generic image route stays capped at 8 MB
         path = self._path(workspace_id, category, object_name)
         url = self._object_url(category, path)
         status, _, body = self.send("GET", url, self._headers(), None)
@@ -118,6 +120,39 @@ class SupabaseStorage:
         if status != 200:
             raise AlphaError("Private storage could not read this object.", 502)
         return body
+
+    def get_verified_video(self, workspace_id, object_name, *, expected_bytes, expected_mime, expected_etag):
+        """Read one approved video for a publisher, with an exact HEAD/GET identity and a hard 100 MB cap."""
+        if (type(expected_bytes) is not int or not 0 < expected_bytes <= MAX_VIDEO_BODY
+                or expected_mime not in ("video/mp4", "video/quicktime")
+                or not isinstance(expected_etag, str) or not expected_etag or len(expected_etag) > 200):
+            raise AlphaError("Approved video metadata is invalid.", 409, code="video_manifest_invalid")
+        path = self._path(workspace_id, "video", object_name)
+        info = self.object_info(workspace_id, "video", object_name)
+        if (info["bytes"], info["mime"], info["etag"]) != (expected_bytes, expected_mime, expected_etag):
+            raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+        url = self._object_url("video", path)
+        try:
+            response = self._open("GET", url, self._headers(), None, timeout=120)
+        except HTTPError as error:
+            error.close()
+            raise AlphaError("Private storage could not read the approved video.", 502) from None
+        except (URLError, TimeoutError, OSError) as error:
+            raise AlphaError("Private storage is temporarily unavailable.", 503) from error
+        try:
+            headers = {k.lower(): v for k, v in response.headers.items()}
+            content_type = (headers.get("content-type") or "").split(";")[0].strip().lower()
+            length = headers.get("content-length")
+            if (response.status != 200 or content_type != expected_mime
+                    or (length is not None and length != str(expected_bytes))
+                    or (headers.get("etag") is not None and headers["etag"] != expected_etag)):
+                raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+            raw = response.read(expected_bytes + 1)
+            if len(raw) != expected_bytes:
+                raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+            return raw
+        finally:
+            response.close()
 
     def delete(self, workspace_id, category, object_name):
         path = self._path(workspace_id, category, object_name)

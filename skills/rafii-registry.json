@@ -1986,9 +1986,9 @@
   },
   {
    "id": "postriff-channel-x",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "kind": "knowledge",
-   "sha256": "sha256:9c47245d6512e6c081ea7a6254bd5e9e0d5c426d94c46d6826ec36016f2d6a7b",
+   "sha256": "sha256:f6d4528c36f74206d28dfd83c3b42a3d985942752335e358cc68156280957b82",
    "description": "Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.",
    "intents": [
     "*"
@@ -2042,7 +2042,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.0.1"
   },
   {
    "id": "postriff-channel-xiaohongshu",
