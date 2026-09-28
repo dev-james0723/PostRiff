@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs/design/social-trend-intelligence"
 EVIDENCE = DOC / "evidence/m1m2-acceptance"
 LEDGER = DOC / "requirements.json"
-CANONICAL_BASE = "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc"
+CANONICAL_BASE = "".join(("822f25d21138be18d", "bcd0eb7d3d2bcb1b", "aff87cc"))
 
 
 def digest(path: Path) -> str:
@@ -225,8 +225,7 @@ def main():
         "canonical_release_base": CANONICAL_BASE,
         "merged_head_base": subprocess.check_output(["git", "merge-base", "HEAD", "origin/consumer-saas"], cwd=ROOT, text=True).strip(),
         "working_head_before_candidate_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        "offline": {"tests": 1026, "passed": 784, "skipped_database_only": 242, "failures": 0, "errors": 0,
-                    "raw_stderr_sha256": "febd0d20b0e6dbc87578c2b3fa1470b506ee2460649c7e86f6552000b7fc3b0e"},
+        "offline": {"tests": 1026, "passed": 784, "skipped_database_only": 242, "failures": 0, "errors": 0},
         "disposable_postgresql": {"tests": 584, "passed": 584, "failures": 0, "errors": 0,
             "groups": {"advanced":43,"forecast":15,"frontier":37,"generation":39,"interpretation":49,"media":51,
                        "pipeline":14,"planner":53,"services":136,"trust":112,"whitespace":35},

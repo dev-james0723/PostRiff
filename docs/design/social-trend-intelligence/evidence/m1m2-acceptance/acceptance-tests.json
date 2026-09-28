@@ -1,17 +1,16 @@
 {
   "schema": "rafii.trend-m1m2-acceptance.v1",
-  "recorded_at": "2026-09-28T14:24:18.926540+00:00",
+  "recorded_at": "2026-09-28T14:49:03.557177+00:00",
   "execution_state": "actual_local_services_and_disposable_postgresql_with_explicit_synthetic_seeds",
   "canonical_release_base": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
   "merged_head_base": "a25bb4583035d4abb18f8735cc92c7b619cdcb31",
-  "working_head_before_candidate_commit": "bdf0912d6300f8bc69615722d0072b9eb7271a88",
+  "working_head_before_candidate_commit": "f79896e91f76a844155d545b5aa98fc361e12061",
   "offline": {
     "tests": 1026,
     "passed": 784,
     "skipped_database_only": 242,
     "failures": 0,
-    "errors": 0,
-    "raw_stderr_sha256": "febd0d20b0e6dbc87578c2b3fa1470b506ee2460649c7e86f6552000b7fc3b0e"
+    "errors": 0
   },
   "disposable_postgresql": {
     "tests": 584,

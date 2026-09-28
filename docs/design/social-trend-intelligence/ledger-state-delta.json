@@ -1,6 +1,6 @@
 {
   "schema": "rafii.ledger-state-delta.v2",
-  "recorded_at": "2026-09-28T14:24:18.926540+00:00",
+  "recorded_at": "2026-09-28T14:49:03.557177+00:00",
   "baseline_counts": {
     "NOT_APPLICABLE": 154,
     "IN_PROGRESS": 1460,
