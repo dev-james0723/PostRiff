@@ -49,3 +49,27 @@ Final candidate migration shape is:
 ## Safety boundary
 
 No dirty worktree was reset, cleaned, stashed, or merged directly. Newly landed PR #66 was reconciled only through the new canonical branch commit, after its own required checks were green.
+
+
+## Second canonical advance — PR #68 and late-created refs
+
+While the final consolidated candidate was being validated, `consumer-saas` advanced again:
+
+- new canonical: `a6033925bd8c94b8f8b98efea48741fb57f110da`
+- PR #68: **Add read-only calendar answer card**
+- PR #68 required checks: Rafii browser scenes PASS; Rafii local release gates PASS
+- no migration, auth/MFA/OAuth, billing/credits, phone, provider-permission or production-config change
+- the PR #68 file set merged into the consolidation candidate without conflicts; focused Site Agent / Agent Runtime / Calendar tests, typecheck and lint passed before committing the merge
+- `codex/calendar-card-guardrails-20260928` is therefore reclassified **A — already landed / absorbed**. Its worktree still has an untracked `.claude/skills/` path, which this consolidation leaves untouched.
+
+Three local refs were created after the prior delta:
+
+| Category | Ref | Final audit finding |
+|---|---|---|
+| A | `codex/rafii-universal-library` | Points at an already-landed canonical commit and has no unique committed release delta. |
+| E | `codex/trend-growth-beta-readiness-20260928` | Superseded by the later Growth Beta release-candidate branch. |
+| C | `codex/trend-growth-beta-release-20260928` | Clean, locally validated Growth Beta candidate based on the then-current canonical, but its own release gate explicitly blocks merge/deploy until production Supabase migration/RLS access is available, one cohort and signing key are verified, and provider/analytics rights plus cost controls are approved. It remains intentionally unmerged. |
+
+The Growth Beta release candidate adds no authorization to turn on provider acquisition, model enrichment, notifications, publishing, analytics reads or follower-conversion claims. Its release receipt explicitly requires those production preconditions first.
+
+At this refresh the repository has 127 local refs, 75 origin refs excluding `origin/HEAD`, and 75 worktrees. The initial machine inventory plus the two delta sections accounts for refs/worktrees that appeared while consolidation was in progress.

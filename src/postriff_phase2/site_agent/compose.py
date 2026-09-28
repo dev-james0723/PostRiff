@@ -403,6 +403,14 @@ def read_facts(read: dict) -> list[dict]:
                 out.append(" · ".join(x for x in (block["title"], item.get("title"), item.get("excerpt"), item.get("meta")) if x))
         elif block.get("type") == "diagnostic_card":
             out.append(" · ".join([block["title"], block["status"], block.get("cause") or ""] + block.get("steps", [])))
+        elif block.get("type") == "calendar_card":
+            label = (block.get("range") or {}).get("label") or "requested range"
+            for status in block.get("statuses") or []:
+                count = status.get("count")
+                value = str(count) if isinstance(count, int) and not isinstance(count, bool) else "count unavailable"
+                out.append(f"Calendar {label} · {status.get('label') or status.get('key')} · {value}")
+            for item in block.get("entries") or []:
+                out.append(" · ".join(str(value) for value in (item.get("status"), item.get("platform"), item.get("account"), item.get("when"), item.get("title")) if value))
     out = [line for line in read["lines"] if line] + out
     return [{"ref": f"R{i + 1}", "tool": "read", "text": line[:400]} for i, line in enumerate(out[:30])]
 

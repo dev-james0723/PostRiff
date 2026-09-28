@@ -218,6 +218,9 @@ def select(classification: dict, page: dict, text: str, *, automation_count: int
         if classification["entities"]["platforms"]:
             args["platform"] = classification["entities"]["platforms"][0]
         add("calendar.range", args)
+        # The typed calendar card shows range state and a separately labelled queue-now snapshot.
+        # Both are authoritative reads; the browser never derives either one from the answer text.
+        add("queue.summary")
     elif intent == "brand":
         procedures.append("brand_guidance")
         add("brand.summary")

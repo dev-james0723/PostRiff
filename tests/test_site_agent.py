@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from postriff_alpha.domain import AlphaError, initial_state  # noqa: E402
 from postriff_phase2 import campaigns  # noqa: E402
 from postriff_phase2.permissions import Membership  # noqa: E402
-from postriff_phase2.site_agent import classifier, compose, contracts, knowledge, policy, procedures, prompts, proposals, routes, tools  # noqa: E402
+from postriff_phase2.site_agent import classifier, compose, compose_reads, contracts, knowledge, policy, procedures, prompts, proposals, routes, tools  # noqa: E402
 
 HK = "Asia/Hong_Kong"
 NOW = 1_790_000_000.0
@@ -234,6 +234,10 @@ class ProcedureTest(unittest.TestCase):
         search = dict(plan["tools"])["help.search"]
         self.assertIn("help_calendar", search["documents"])
 
+    def test_calendar_card_reads_range_and_queue_state(self):
+        plan = self.plan("What is scheduled this week?", "/app/calendar")
+        self.assertEqual([tool for tool, _args in plan["tools"]], ["calendar.range", "queue.summary"])
+
     def test_no_write_tool_in_any_plan(self):
         for text, route, _, _ in GOLDEN:
             p = page(route)
@@ -283,6 +287,23 @@ class ToolTest(unittest.TestCase):
         _, result = tools.run("job.get", {"jobId": "rev-1"}, ctx())
         self.assertEqual((result["data"]["kind"], result["data"]["state"]), ("review", "needs_review"))
         self.assertIn("approve", result["data"]["meaning"])
+
+    def test_calendar_and_queue_expose_exact_distinct_status_counts(self):
+        state = workspace_state()
+        state["phase2"]["jobs"].extend([
+            {"id": "job-flight", "state": "processing", "manifest": {"platform": "Threads", "account": "@studio", "timing": {"timestamp": NOW + 10800, "local": "2026-09-26T19:30", "timeZone": HK}}, "events": [], "attempts": []},
+            {"id": "job-published", "state": "published", "manifest": {"platform": "X", "account": "@studio", "timing": {"timestamp": NOW + 14400, "local": "2026-09-26T20:30", "timeZone": HK}}, "events": [], "attempts": []},
+            {"id": "job-verified", "state": "verified", "manifest": {"platform": "Bluesky", "account": "@studio", "timing": {"timestamp": NOW + 18000, "local": "2026-09-26T21:30", "timeZone": HK}}, "events": [], "attempts": []},
+            {"id": "job-new-state", "state": "provider_future_state", "manifest": {"platform": "LinkedIn", "account": "Studio page", "timing": {"timestamp": NOW + 21600, "local": "2026-09-26T22:30", "timeZone": HK}}, "events": [], "attempts": []},
+        ])
+        calendar = tools.EXECUTORS["calendar.range"](ctx(state), start=NOW, end=NOW + 86400, label="today")["data"]
+        self.assertEqual(calendar["statusCounts"], {"scheduled": 1, "awaiting_approval": 1, "in_flight": 1, "failed_held_uncertain": 1,
+                                                     "published": 1, "verified": 1, "unknown": 1})
+        self.assertEqual(calendar["unknownStates"], ["provider_future_state"])
+        self.assertEqual({entry["id"]: entry["status"] for entry in calendar["entries"]}["job-published"], "published")
+        queue = tools.EXECUTORS["queue.summary"](ctx(state))["data"]
+        self.assertEqual(queue["statusCounts"], calendar["statusCounts"])
+        self.assertEqual(queue["unknownStates"], ["provider_future_state"])
 
     def test_foreign_ids_are_not_found(self):
         record, result = tools.run("job.get", {"jobId": "job-of-another-workspace"}, ctx())
@@ -353,6 +374,31 @@ class ComposeTest(unittest.TestCase):
     def test_cantonese_framing(self):
         _, out = self.answer("刪除我個帳戶", "/app")
         self.assertIn("刪除", out["text"])
+
+    def test_calendar_answer_is_a_typed_read_only_card(self):
+        _, out = self.answer("What is scheduled this week?", "/app/calendar")
+        card = next(block for block in out["blocks"] if block["type"] == "calendar_card")
+        self.assertEqual(card["sources"], {"calendarRange": "verified", "queueSummary": "verified"})
+        self.assertEqual([status["key"] for status in card["statuses"][:6]],
+                         ["scheduled", "awaiting_approval", "in_flight", "failed_held_uncertain", "published", "verified"])
+        self.assertEqual(card["queue"]["awaitingApproval"], 1)
+        self.assertNotIn("action", card)
+        self.assertNotIn("proposal", card)
+        self.assertTrue(all(entry["status"] in tools.CALENDAR_STATUS_KEYS for entry in card["entries"]))
+
+    def test_missing_or_unverified_queue_counts_stay_unavailable_not_zero(self):
+        result = tools.EXECUTORS["calendar.range"](ctx(), start=NOW, end=NOW + 86400, label="today")
+        read = compose_reads.compose("calendar", {"intent": "calendar", "entities": {"platforms": []}}, {"calendar.range": result}, "What is scheduled today?")
+        card = next(block for block in read["blocks"] if block["type"] == "calendar_card")
+        self.assertEqual(card["sources"]["queueSummary"], "unavailable")
+        self.assertTrue(all(value is None for value in card["queue"].values()))
+        self.assertTrue(any(block.get("code") == "queue_state_unavailable" for block in read["blocks"]))
+        unverified = contracts.result({"statusCounts": {key: 0 for key in tools.CALENDAR_STATUS_KEYS}}, now=NOW, verified=False)
+        read = compose_reads.compose("calendar", {"intent": "calendar", "entities": {"platforms": []}},
+                                     {"calendar.range": result, "queue.summary": unverified}, "What is scheduled today?")
+        card = next(block for block in read["blocks"] if block["type"] == "calendar_card")
+        self.assertEqual(card["sources"]["queueSummary"], "unverified")
+        self.assertTrue(all(value is None for value in card["queue"].values()))
 
 
 class PolicyTest(unittest.TestCase):
@@ -828,6 +874,7 @@ class LiveAgentBlocksTest(unittest.TestCase):
     def test_block_builders(self):
         self.assertIn("guide_card", contracts.BLOCK_TYPES)
         self.assertIn("voice_command", contracts.BLOCK_TYPES)
+        self.assertIn("calendar_card", contracts.BLOCK_TYPES)
         self.assertEqual(contracts.guide_card("connect_account", "channels", "/app/channels", "Connect a social account", "Opens Connect account.", auto=True),
                          {"type": "guide_card", "guideId": "connect_account", "routeId": "channels", "href": "/app/channels", "title": "Connect a social account",
                           "summary": "Opens Connect account.", "auto": True})
@@ -837,6 +884,10 @@ class LiveAgentBlocksTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             contracts.voice_command("self_destruct")
         self.assertEqual(contracts.navigation("Open Queue", "/app/queue", "queue", auto=True)["auto"], True)
+        card = contracts.calendar_card(range_view={"label": "today"}, statuses=[], entries=[], total=None, queue={},
+                                       sources={"calendarRange": "verified", "queueSummary": "unavailable"}, href="/app/calendar")
+        self.assertEqual(card["type"], "calendar_card")
+        self.assertNotIn("action", card)
 
 
 if __name__ == "__main__":

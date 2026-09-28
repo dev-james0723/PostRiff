@@ -16,7 +16,7 @@ from postriff_alpha.domain import AlphaError
 
 from .. import automation_edit, automation_plan, campaigns, lifecycle, memory
 from . import contracts, routes, timeframe
-from .tools import IN_FLIGHT, JOB_STATES, WAITING, _account, _job_view, _review_expired, redact
+from .tools import IN_FLIGHT, JOB_STATES, WAITING, _account, _job_view, _review_expired, calendar_status, calendar_status_counts, redact
 
 PRIVATE = ("private", "local-only", "local_only", "excluded")
 CLOSE_SECONDS = 2 * 3600
@@ -329,9 +329,11 @@ def calendar_range(ctx, start=None, end=None, label=None, platform=None):
     platforms = {}
     for e in entries:
         platforms[e["platform"]] = platforms.get(e["platform"], 0) + 1
-    shown = [{k: e[k] for k in ("kind", "id", "state", "title", "platform", "account", "when", "href")} for e in entries][:30]
+    status_counts, unknown_states = calendar_status_counts(entries)
+    shown = [{**{k: e[k] for k in ("kind", "id", "state", "title", "platform", "account", "when", "href")},
+              "status": calendar_status(e.get("kind"), e.get("state"))} for e in entries][:30]
     return contracts.result({"range": {"label": label, "start": contracts.iso(start), "end": contracts.iso(end), "timeZone": zone}, "entries": shown, "total": len(entries),
-                             "perPlatform": platforms, "days": days,
+                             "statusCounts": status_counts, "unknownStates": unknown_states, "perPlatform": platforms, "days": days,
                              "derived": {"emptyDays": {"rule": "days from today in this range with nothing scheduled, waiting or planned", "days": [f"{d['weekday']} {d['date']}" for d in gaps]},
                                          "closeTogether": {"rule": f"two posts on the same account less than {CLOSE_SECONDS // 3600} hours apart", "pairs": close[:6]},
                                          "similarText": {"rule": f"two posts sharing at least {int(REPEAT_THRESHOLD * 100)}% of their words", "pairs": repeats[:6]}},

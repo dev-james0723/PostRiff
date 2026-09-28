@@ -1175,10 +1175,13 @@ def evidence_blocks(ledger, text: str, language: str | None) -> list[dict]:
         if not result:
             continue
         try:
-            composed = compose_reads.compose(intent, {"intent": intent, "language": language or "en", "entities": {"platforms": [], "days": []}}, {tool_id: result}, text or "")
+            selected = {tool_id: result}
+            if intent == "calendar" and ledger.site_results.get("queue.summary"):
+                selected["queue.summary"] = ledger.site_results["queue.summary"]
+            composed = compose_reads.compose(intent, {"intent": intent, "language": language or "en", "entities": {"platforms": [], "days": []}}, selected, text or "")
         except Exception:  # noqa: BLE001 — evidence is additive; a composer that needs more context is skipped
             composed = None
-        kept = [b for b in (composed or {}).get("blocks") or [] if b.get("type") in ("result_list", "diagnostic_card")]
+        kept = [b for b in (composed or {}).get("blocks") or [] if b.get("type") in ("result_list", "diagnostic_card", "calendar_card")]
         if not kept and (composed or {}).get("lines") and len(out) < MAX_EVIDENCE_BLOCKS:
             # Nothing to list, but the grounded reading still says something true ("no profile to compare with").
             from ..site_agent import contracts as site_contracts

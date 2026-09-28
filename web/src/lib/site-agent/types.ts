@@ -88,6 +88,45 @@ export interface SiteAgentPlanView {
   nextPublish?: string | null;
 }
 
+export type CalendarCardStatus =
+  | 'scheduled'
+  | 'awaiting_approval'
+  | 'in_flight'
+  | 'failed_held_uncertain'
+  | 'published'
+  | 'verified'
+  | 'unknown';
+
+export type CalendarCardSourceState = 'verified' | 'unverified' | 'unavailable';
+
+export interface SiteAgentCalendarCard {
+  type: 'calendar_card';
+  range: { label?: string | null; start?: number | string | null; end?: number | string | null; timeZone?: string | null };
+  statuses: { key: CalendarCardStatus; label: string; count: number | null }[];
+  entries: {
+    kind?: string | null;
+    id?: string | null;
+    state?: string | null;
+    status: CalendarCardStatus;
+    title?: string | null;
+    platform?: string | null;
+    account?: string | null;
+    when?: string | null;
+    href?: string | null;
+  }[];
+  total: number | null;
+  truncated: boolean;
+  queue: {
+    awaitingApproval: number | null;
+    needsAttention: number | null;
+    inFlight: number | null;
+    published: number | null;
+    verified: number | null;
+  };
+  sources: { calendarRange: CalendarCardSourceState; queueSummary: CalendarCardSourceState };
+  href?: string | null;
+}
+
 export type SiteAgentBlock =
   | { type: 'text'; text: string }
   | { type: 'citation_list'; citations: SiteAgentCitation[] }
@@ -111,7 +150,8 @@ export type SiteAgentBlock =
   | { type: 'warning'; message: string; code: string }
   | { type: 'handoff_card'; traceId: string; summary: string[]; href: string }
   | { type: 'error'; message: string; code: string }
-  | { type: 'result_list'; title: string; items: { kind: string; title: string; excerpt?: string | null; meta?: string | null; href?: string | null }[]; empty?: string | null };
+  | { type: 'result_list'; title: string; items: { kind: string; title: string; excerpt?: string | null; meta?: string | null; href?: string | null }[]; empty?: string | null }
+  | SiteAgentCalendarCard;
 
 export type NavigationCardBlock = Extract<SiteAgentBlock, { type: 'navigation_card' }>;
 export type GuideCardBlock = Extract<SiteAgentBlock, { type: 'guide_card' }>;
