@@ -94,9 +94,35 @@ class OAuthService:
             paused = adapter is not None and not getattr(adapter, 'execution_enabled', True)
             if paused:
                 issues.append('This connector is paused by the operator.')
+            contract_verified = bool(getattr(cls, 'oauth_contract_verified', True))
+            if not contract_verified:
+                issues.append('Current OAuth endpoint details remain behind the provider approval portal; connection stays unavailable until they are independently verified.')
             history = pid == 'instagram' or (pid == 'linkedin' and bool(getattr(adapter, 'history_approved', False)))
-            connect_ready = adapter is not None and not issues
+            connect_ready = adapter is not None and not issues and contract_verified
             reviewed = bool(adapter and adapter.production_reviewed)
+            normalized = cls.normalized_capabilities() if getattr(cls, 'wave', None) else None
+            if normalized is None:
+                legacy = {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}
+            else:
+                legacy = {
+                    'identity': bool(adapter and normalized['identity'] == 'supported' and adapter.capability_scopes('identity')),
+                    'posts_read': bool(adapter and normalized['owned_content_read'] == 'supported' and adapter.capability_scopes('posts_read')),
+                    'publish': bool(adapter and any(normalized[key] == 'supported' for key in ('publish_text','publish_image','publish_video')) and adapter.capability_scopes('publish')),
+                    'analytics': bool(adapter and normalized['owned_analytics'] == 'supported' and adapter.capability_scopes('analytics')),
+                    'comments_read': bool(adapter and normalized['comments_read'] == 'supported' and adapter.capability_scopes('comments_read')),
+                    'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
+                }
+            requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
+            checklist = {
+                'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
+                'redirectUriConfigured': callback is not None,
+                'providerAppCreated': bool(diagnostic.get('providerAppCreated')), 'providerVerificationStatus': 'verified' if diagnostic.get('providerVerified') else 'not_verified',
+                'requestedScopes': requested, 'approvedScopes': list(diagnostic.get('approvedScopes') or []),
+                'oauthLiveTest': bool(diagnostic.get('oauthLiveTest')), 'tokenRefreshLiveTest': bool(diagnostic.get('tokenRefreshLiveTest')),
+                'webhookVerified': bool(diagnostic.get('webhookVerified')), 'publishingPermission': bool(diagnostic.get('publishingPermission')),
+                'analyticsPermission': bool(diagnostic.get('analyticsPermission')), 'commentsPermission': bool(diagnostic.get('commentsPermission')),
+                'productionEnabled': bool(diagnostic.get('productionEnabled')) and not paused,
+            }
             readiness = configuration if adapter is None else 'paused' if paused else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if reviewed else 'configured_awaiting_provider_review'
             entries.append({'id': pid, 'platform': cls.platform, 'configured': adapter is not None,
                             'connectReady': connect_ready, 'configurationState': configuration, 'credentialPresence': presence,
@@ -107,9 +133,11 @@ class OAuthService:
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
                             'accountRequirement': cls.account_requirement,
+                            'wave': getattr(cls, 'wave', None), 'featureFlagEnabled': bool(diagnostic.get('featureFlagEnabled', True)),
+                            'normalizedCapabilities': normalized, 'readinessChecklist': checklist,
                             'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
                             'destinationScope': getattr(cls, 'destination_scope', 'connection'), 'destinationLabel': getattr(cls, 'destination_label', 'Channel'),
-                            'capabilities': {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}})
+                            'capabilities': legacy})
         # Keep explicitly injected/test providers visible without changing their authority.
         for pid, adapter in self.providers.items():
             if pid not in ADAPTERS:
@@ -356,10 +384,15 @@ class OAuthService:
                 "destinations": adapter.destinations(grant["accessToken"])}
 
     def choose_destination(self, workspace_id, token, connection_id, destination_id):
-        # Connection-level destinations (Discord channels, Facebook Pages) are numeric ids; refuse anything else before any request.
-        if not isinstance(destination_id, str) or not re.fullmatch(r"\d{5,30}", destination_id):
+        # Reject malformed identifiers before decrypting a grant or contacting a provider. Existing hosted
+        # destinations are numeric; Google Business Profile uses its documented resource-name shape.
+        if not isinstance(destination_id, str) or not (re.fullmatch(r"\d{5,30}", destination_id) or re.fullmatch(r"accounts/[0-9]+/locations/[0-9]+", destination_id)):
             raise AlphaError("Choose where Rafii posts.", 400)
         adapter, grant = self._member_grant(workspace_id, token, connection_id, "manage_connections")
+        validator = getattr(adapter, 'valid_destination_id', None)
+        valid = validator(destination_id) if callable(validator) else isinstance(destination_id, str) and re.fullmatch(r"\d{5,30}", destination_id)
+        if not valid:
+            raise AlphaError("Choose where Rafii posts.", 400)
         if not getattr(adapter, "has_destinations", False) or getattr(type(adapter), "destination_scope", "connection") != "connection":
             raise AlphaError("This account's destination is chosen for each post.", 409)
         updated = adapter.with_destination(grant["accessToken"], destination_id)

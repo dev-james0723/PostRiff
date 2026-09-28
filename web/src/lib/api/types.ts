@@ -1390,6 +1390,25 @@ export interface ProviderView {
   productionReviewed: boolean;
   executionPaused?: boolean;
   capabilities: Record<string, boolean>;
+  wave?: string | null;
+  featureFlagEnabled?: boolean;
+  normalizedCapabilities?: Record<string, 'supported' | 'unsupported' | 'requires_review' | 'account_type_limited'> | null;
+  readinessChecklist?: {
+    clientIdConfigured: boolean;
+    clientSecretConfigured: boolean;
+    redirectUriConfigured: boolean;
+    providerAppCreated: boolean;
+    providerVerificationStatus: 'verified' | 'not_verified';
+    requestedScopes: string[];
+    approvedScopes: string[];
+    oauthLiveTest: boolean;
+    tokenRefreshLiveTest: boolean;
+    webhookVerified: boolean;
+    publishingPermission: boolean;
+    analyticsPermission: boolean;
+    commentsPermission: boolean;
+    productionEnabled: boolean;
+  };
   /** 'oauth' redirects to the platform; 'bot_code' means posting a one-time code where Rafii's bot sees it (Telegram). */
   connectKind?: 'oauth' | 'bot_code';
   /** One value to ask before connecting: a Bluesky handle or a Mastodon server. */
