@@ -1,0 +1,608 @@
+{
+  "schema_version": "1.0",
+  "baseline": "790e0d436306e428e11034cc69594d16843bae7d",
+  "historical_manifest": "web/src/features/trends/feature-preservation.json",
+  "historical_manifest_sha256": "67647d5f179fe71bddefaf2c97a333567aee975465252e4622879ec4c1b7230b",
+  "historical_results_are_not_current_evidence": true,
+  "current_results": [
+    "visual-validation/light/results.json",
+    "visual-validation/dark-long/results.json"
+  ],
+  "execution": "local_production_ui_with_synthetic_intercepted_apis",
+  "features": [
+    {
+      "id": "navigation",
+      "preserved_data_source": "status.flags; no new engine",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "sections",
+      "preserved_data_source": "for_you,rising,breaking,hot,niche,platforms,language,watchlist",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "search",
+      "preserved_data_source": "query, cursor reset",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "filter_platform",
+      "preserved_data_source": "platform",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "filter_language",
+      "preserved_data_source": "language",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "filter_niche",
+      "preserved_data_source": "niche",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "filter_since",
+      "preserved_data_source": "since",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "pagination",
+      "preserved_data_source": "next_cursor,cursor",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "freshness",
+      "preserved_data_source": "envelope.as_of,execution_state",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "coverage",
+      "preserved_data_source": "coverage.*,limitations",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "topic",
+      "preserved_data_source": "canonical_topic,observed.summary",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "stage",
+      "preserved_data_source": "inferred,verification_state,expires_at,flags",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "relevance",
+      "preserved_data_source": "workspace_fit.reason",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "momentum",
+      "preserved_data_source": "calculated.velocity; observed.timeline",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "platform_states",
+      "preserved_data_source": "platform_states[].inferred,coverage",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "first_latest",
+      "preserved_data_source": "observed.first_detected,latest_observed",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "confidence",
+      "preserved_data_source": "inferred.confidence,calibration_state",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "timeline",
+      "preserved_data_source": "observed.timeline[].at,value,unit,state,reason",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "evidence",
+      "preserved_data_source": "evidence union,expires_at",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "trust",
+      "preserved_data_source": "receipt GET or detail GET",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "trust_observed",
+      "preserved_data_source": "observed.summary,metrics,evidence",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "trust_measured",
+      "preserved_data_source": "calculated.*",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "trust_inferences",
+      "preserved_data_source": "inferred.*,platform_states",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "trust_interpretation",
+      "preserved_data_source": "interpretation.summary,language,phrases,alternatives",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "unknowns",
+      "preserved_data_source": "unverified_claims[]",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "method",
+      "preserved_data_source": "receipt_id,method.*,metric.definition_id/version,baseline_ref,window,denominator",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "quality",
+      "preserved_data_source": "methodology.*,calibration.*",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "genome",
+      "preserved_data_source": "genome.version,dimensions[],narrative_variants[]",
+      "entry_points": [
+        "trust-drawer.tsx",
+        "visual-intelligence.tsx"
+      ],
+      "representation": "Existing graph/list, genome/narrative and five independent crowding projections retained under their existing feature flags.",
+      "verification": "Browser Trust projection tabs and exact sample/denominator checks"
+    },
+    {
+      "id": "propagation",
+      "preserved_data_source": "propagation.nodes[],edges[],scope,truncated",
+      "entry_points": [
+        "trust-drawer.tsx",
+        "visual-intelligence.tsx"
+      ],
+      "representation": "Existing graph/list, genome/narrative and five independent crowding projections retained under their existing feature flags.",
+      "verification": "Browser Trust projection tabs and exact sample/denominator checks"
+    },
+    {
+      "id": "saturation",
+      "preserved_data_source": "saturation.dimensions[].assessment,frame,classified,eligible,metric,interval,method,uncertainty",
+      "entry_points": [
+        "trust-drawer.tsx",
+        "visual-intelligence.tsx"
+      ],
+      "representation": "Existing graph/list, genome/narrative and five independent crowding projections retained under their existing feature flags.",
+      "verification": "Browser Trust projection tabs and exact sample/denominator checks"
+    },
+    {
+      "id": "language_patterns",
+      "preserved_data_source": "languagePattern.expression,language,context,meaning,uncertainty,evidence",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Native expressions, languages, meanings, uncertainty, multilingual source text and emoji remain unchanged.",
+      "verification": "Browser Language & Slang and native evidence checks"
+    },
+    {
+      "id": "opportunity",
+      "preserved_data_source": "opportunity.title,contribution,uncertainty,expires_at",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "opportunity-card.tsx"
+      ],
+      "representation": "Choose one current supported opportunity; retain every opportunity via selector and at most three supplied angles at once. Existing strict accept payload and verified Ideas handoff remain unchanged.",
+      "verification": "Browser original angle facts/format, account/goal and existing Ideas acceptance assertions; offline eligibility test"
+    },
+    {
+      "id": "angles",
+      "preserved_data_source": "angles[].id,title,contribution,format_reason,factual_requirements",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "opportunity-card.tsx"
+      ],
+      "representation": "Choose one current supported opportunity; retain every opportunity via selector and at most three supplied angles at once. Existing strict accept payload and verified Ideas handoff remain unchanged.",
+      "verification": "Browser original angle facts/format, account/goal and existing Ideas acceptance assertions; offline eligibility test"
+    },
+    {
+      "id": "accept",
+      "preserved_data_source": "revision,angle_id,channel_id,goal,idempotency_key",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "opportunity-card.tsx"
+      ],
+      "representation": "Choose one current supported opportunity; retain every opportunity via selector and at most three supplied angles at once. Existing strict accept payload and verified Ideas handoff remain unchanged.",
+      "verification": "Browser original angle facts/format, account/goal and existing Ideas acceptance assertions; offline eligibility test"
+    },
+    {
+      "id": "fit",
+      "preserved_data_source": "trend_relevance,brand,audience,timing,originality,risk,confidence",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "visual-model.ts",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Selected-conversation composition with independent dimensions and coverage. Exact native evidence, all metrics, first/latest timestamps and all four layers remain in the unchanged Trust drawer. Generic confidence summary is replaced by decomposed evidence/coverage; raw categorical support remains in methodology.",
+      "verification": "Browser DNA/platform/table/trust/focus checks and offline qualification/timeline/comparison tests"
+    },
+    {
+      "id": "watch_create",
+      "preserved_data_source": "trend_id,platforms,threshold,notification_policy,idempotency_key",
+      "entry_points": [
+        "watches.tsx",
+        "visual-intelligence.tsx"
+      ],
+      "representation": "Existing explicit in-app watch creation and revision-safe disable retained.",
+      "verification": "Browser watch create/list/disable contract assertions"
+    },
+    {
+      "id": "watch_list",
+      "preserved_data_source": "watches[].active,platforms,threshold,id,revision",
+      "entry_points": [
+        "watches.tsx",
+        "visual-intelligence.tsx"
+      ],
+      "representation": "Existing explicit in-app watch creation and revision-safe disable retained.",
+      "verification": "Browser watch create/list/disable contract assertions"
+    },
+    {
+      "id": "lab_context",
+      "preserved_data_source": "draft id/revision,text,dirty; opportunity id/revision/context digest",
+      "entry_points": [
+        "lab-panel.tsx"
+      ],
+      "representation": "Existing editor-linked Lab is unchanged. No parallel composer, generation engine or editor normalization introduced.",
+      "verification": "Original offline Lab tests; browser editor diagnostics, user-fact guard, selective edit, stale race and absent linkage checks"
+    },
+    {
+      "id": "lab_run",
+      "preserved_data_source": "labInputSchema; run state/deadlines",
+      "entry_points": [
+        "lab-panel.tsx"
+      ],
+      "representation": "Existing editor-linked Lab is unchanged. No parallel composer, generation engine or editor normalization introduced.",
+      "verification": "Original offline Lab tests; browser editor diagnostics, user-fact guard, selective edit, stale race and absent linkage checks"
+    },
+    {
+      "id": "lab_diagnostics",
+      "preserved_data_source": "diagnostics[].dimension,assessment,claim,comparison_frame,evidence_refs,uncertainty",
+      "entry_points": [
+        "lab-panel.tsx"
+      ],
+      "representation": "Existing editor-linked Lab is unchanged. No parallel composer, generation engine or editor normalization introduced.",
+      "verification": "Original offline Lab tests; browser editor diagnostics, user-fact guard, selective edit, stale race and absent linkage checks"
+    },
+    {
+      "id": "lab_apply",
+      "preserved_data_source": "before,after,reason,requires_user_fact; receipt/opportunity recheck",
+      "entry_points": [
+        "lab-panel.tsx"
+      ],
+      "representation": "Existing editor-linked Lab is unchanged. No parallel composer, generation engine or editor normalization introduced.",
+      "verification": "Original offline Lab tests; browser editor diagnostics, user-fact guard, selective edit, stale race and absent linkage checks"
+    },
+    {
+      "id": "state_loading",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_empty",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_error",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_unavailable",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_partial",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_collecting",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_invalid",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_expired",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Expired/revoked claims are removed; Trust drawer remains mounted so its error, Escape and focus restoration are preserved.",
+      "verification": "Browser expiry/deletion/410 regression and offline evidence validity checks"
+    },
+    {
+      "id": "state_deleted",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Expired/revoked claims are removed; Trust drawer remains mounted so its error, Escape and focus restoration are preserved.",
+      "verification": "Browser expiry/deletion/410 regression and offline evidence validity checks"
+    },
+    {
+      "id": "state_revoked",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "visual-intelligence.tsx",
+        "trust-drawer.tsx"
+      ],
+      "representation": "Expired/revoked claims are removed; Trust drawer remains mounted so its error, Escape and focus restoration are preserved.",
+      "verification": "Browser expiry/deletion/410 regression and offline evidence validity checks"
+    },
+    {
+      "id": "state_calibration_unknown",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "state_disabled",
+      "preserved_data_source": "HTTP/envelope/flags/current validity",
+      "entry_points": [
+        "trends-view.tsx"
+      ],
+      "representation": "Existing status gate, eight views, stored reads, filters, pagination and query states retained.",
+      "verification": "Browser flags, view/filter/cursor, calibration and state assertions"
+    },
+    {
+      "id": "demo_provenance",
+      "preserved_data_source": "Explicit supplied limitation beginning Demo data: only",
+      "entry_points": [
+        "present.tsx",
+        "visual-intelligence.tsx"
+      ],
+      "representation": "Demo notices are derived only from explicit supplied provenance. Fixtures remain tests-only, never a production fallback.",
+      "verification": "Browser explicit Demo checks and canonical restricted-evidence schema test"
+    },
+    {
+      "id": "motion",
+      "preserved_data_source": "user action,prefers-reduced-motion",
+      "entry_points": [
+        "visual-intelligence.css",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "disclosure.tsx"
+      ],
+      "representation": "Existing Rafii motion and reduced-motion preference, keyboard disclosures, semantic tables and focus semantics retained. Small-screen SVG labels enlarged after visual inspection.",
+      "verification": "Browser all four exact viewports, light/dark long content, keyboard, axe, focus trap/Escape/restore and 200% reflow"
+    },
+    {
+      "id": "accessibility",
+      "preserved_data_source": "native controls,BaseUI Sheet,Rafii tokens",
+      "entry_points": [
+        "visual-intelligence.css",
+        "trend-dna.tsx",
+        "momentum-curve.tsx",
+        "disclosure.tsx"
+      ],
+      "representation": "Existing Rafii motion and reduced-motion preference, keyboard disclosures, semantic tables and focus semantics retained. Small-screen SVG labels enlarged after visual inspection.",
+      "verification": "Browser all four exact viewports, light/dark long content, keyboard, axe, focus trap/Escape/restore and 200% reflow"
+    }
+  ]
+}

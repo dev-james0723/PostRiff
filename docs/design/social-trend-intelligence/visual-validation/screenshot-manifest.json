@@ -1,0 +1,674 @@
+[
+  {
+    "configuration": "light",
+    "file": "creative-1440.png",
+    "sha256": "60c0990cba76a2446aa1c1fb8bdf3fbc2596b0e339bb7723f4d09158b16476a3",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/creative-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "creative-390.png",
+    "sha256": "3cd56eaaf3721994eb4645bd48e931bb048ee1249478d62cfd51f342004d0bb1",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/creative-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "creative-430.png",
+    "sha256": "1265a61fdb096387dba4b1e1718086026e0ba4448b7c787fe1b69def94b7f556",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/creative-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "creative-768.png",
+    "sha256": "c7eeb6cb7a3a9e01ecac9cc47af1e77c259d487a425b42c715e88dcb613592aa",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/creative-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "dna-1440.png",
+    "sha256": "98e56c612ea314ace7adb0e0a622e94590db28ad187cff1f8c94ae393fa0fad6",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/dna-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "dna-390.png",
+    "sha256": "17562e79e0d1dbb3300fa02df47307c02156c5db0b702ac453bb9b6d3ff9a2f0",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/dna-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "dna-430.png",
+    "sha256": "68d04ba5a8be2b7566a804ad46dd3350b2d1d83a7cb9151c6e96ca34bb8d58ab",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/dna-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "dna-768.png",
+    "sha256": "90399f35ef9ea202ca9313265087e40efaefe2138a6eeb3a5bbf0e492a0e2d1a",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/dna-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "empty-1440.png",
+    "sha256": "e5b41a6f326bf328d072e07ba3cb086efbc34ef5d52bf0624c9728438d6f5508",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/empty-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "lab-1440.png",
+    "sha256": "516a17809ce306ab5752ae153a257f6e3aa2c81424f7a42010aec154d92b38ec",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/lab-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "lab-diagnostics-1440.png",
+    "sha256": "40880ac9ebf8f40a034cc320475f0a255828ad5e838d209990f931a2871ea3b0",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/lab-diagnostics-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "lab-diagnostics-390.png",
+    "sha256": "a164299cb0d1861cdab1babd12c9dbbfd48c2d50a5a718a5591a72c64931cfa0",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/lab-diagnostics-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "lab-diagnostics-430.png",
+    "sha256": "6047dbb3aaf3a55ed104df30a98d125249c96b2b306d9683359ec2efacaf5f16",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/lab-diagnostics-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "lab-diagnostics-768.png",
+    "sha256": "81828fbabf96ec9978f8099c1fcf61db8faaa19a0424697ad323a00ce76e8d26",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/lab-diagnostics-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "landing-1440.png",
+    "sha256": "dfa8746259500569a62585bea775284a03f9973c39c6ee030e4145afc011f99b",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/landing-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "landing-390.png",
+    "sha256": "cd977716cd9c50eb03871aee17c33d10b1773ab46b79b40239f15a505ef2690f",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/landing-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "landing-430.png",
+    "sha256": "ea26ad0c329e534d953b6434cbf74d18a050e075cf20aaa3702b93b24feb7b1d",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/landing-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "landing-768.png",
+    "sha256": "a85d781627488b48fbb8f359bfb0958c3d4d581b376f32a608f198fb388fe670",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/landing-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "loading-1440.png",
+    "sha256": "7a0f9faddaff92948d57114a8aa461fac4b942cff2f89ae39d8e864d2fed9cc4",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/loading-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "momentum-1440.png",
+    "sha256": "0d63f293f0a3a2385465241625761c6eb106f231d316251a572e9840bdf08494",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/momentum-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "momentum-390.png",
+    "sha256": "f3be20213e46fa097c366402e4d6aa5affe0595a92f758cf086bbdf543784454",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/momentum-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "momentum-430.png",
+    "sha256": "f86160964536c65fbe0b2e4cd0abd4b25266da0aeee38109167197b0a952c598",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/momentum-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "momentum-768.png",
+    "sha256": "0ae5f9bb413a8c2ee8d904bbb14e724f2e8d28cb541a6ec1fbcefb42037a6000",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/momentum-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "radar-1440.png",
+    "sha256": "9c9adbed90b1346604824d9f690565574aad37605e79ff94c2b83091a43dd8ad",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/radar-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "radar-390.png",
+    "sha256": "d9b7372660a5b278de7adc39928af5adc4fdabb4dd3f8817f3b0e5b2392de130",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/radar-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "radar-430.png",
+    "sha256": "cf1f9fba7829e495297ae0a5e60b02d6898dd67aa8cfbef108598179c5619c06",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/radar-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "radar-768.png",
+    "sha256": "a66c434cd17c394ab9d7111742022e1e6b0505aac8ae0ed4fa9df8c5da3960a3",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/radar-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-aggregate-1440.png",
+    "sha256": "55ba2b97d777dc7e3149b8fa5fa215c15d8fd523a9c62bb9f79d69496daf01c3",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-aggregate-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-collecting-1440.png",
+    "sha256": "c532e6081d385f360c69b0f4be59888085dd645bb828d9f549104b8c5f358f59",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-collecting-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-deleted-1440.png",
+    "sha256": "abcc0f0646d38f4abd82c8acf223297c229e9cf25bd8d81b127da68f8053700f",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-deleted-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-error-1440.png",
+    "sha256": "89b0158cec907fde7cfcb6bd17352d740996942486c7cfab87c38410751e5965",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-error-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-expired-1440.png",
+    "sha256": "abcc0f0646d38f4abd82c8acf223297c229e9cf25bd8d81b127da68f8053700f",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-expired-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-invalid-1440.png",
+    "sha256": "89b0158cec907fde7cfcb6bd17352d740996942486c7cfab87c38410751e5965",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-invalid-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-loading-1440.png",
+    "sha256": "8306aea261a71b23831b0aa44919c16d4f09a74653bc262b5fba2e7f85acee36",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-loading-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-low_confidence-1440.png",
+    "sha256": "413e1d0485c9a46279489171c672bfc3cae34a76b35d53f86254a775edf71671",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-low_confidence-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-opportunity_expired-1440.png",
+    "sha256": "bdd7bca2d137fddffbb0988d2d2d959ebb27e5f4440adcd36ad3a59c93aa5bb6",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-opportunity_expired-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-partial-1440.png",
+    "sha256": "7e0d2c2ffd3b165ae1841c0d5ae89f2b58e236cb0748f4e36f371abb380622d8",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-partial-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-pending-1440.png",
+    "sha256": "ac04dada90f170f149a87470ff8033b88963c23b1606f06e8ebd7eb02eda0cea",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-pending-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "state-unavailable-1440.png",
+    "sha256": "8836794f6b510293902fafc8613244aea6b424aa4e2d55997b59a2a5f45fe03f",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/state-unavailable-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "trust-1440.png",
+    "sha256": "c764eef518baa56fece3b2ac9f08a9fd90ea026843ef15878fc7cac8d4cd3c8f",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/trust-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "trust-390.png",
+    "sha256": "60dd2a047d33c658f52e9bfe20f25d0249962b7b02bcb76e74dc5e41a4c87c37",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/trust-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "trust-430.png",
+    "sha256": "7b6d90e0efbc7190e18b88fed50848a3dc0b9e8e1d44e29e7c343c754659251d",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/trust-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "trust-768.png",
+    "sha256": "6b338bc6044145c8063aa9d506d7acb90f6cfddbe5cdfbab1c8a8fe976188eb0",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/trust-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "viewport-1440.png",
+    "sha256": "9a01160a11ec8bb98105d580ce9769516f9b79188ac79fea6e1d13f256fef10e",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/viewport-1440.png"
+  },
+  {
+    "configuration": "light",
+    "file": "viewport-390.png",
+    "sha256": "d8e83e327591d41bcb9ac8201cdd65dfdad34353d8bf0047b68b1229c964b9d9",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/viewport-390.png"
+  },
+  {
+    "configuration": "light",
+    "file": "viewport-430.png",
+    "sha256": "581c53ccb6657024bd699702732299131c2fa3f2637c196508c2a85d37cbb058",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/viewport-430.png"
+  },
+  {
+    "configuration": "light",
+    "file": "viewport-768.png",
+    "sha256": "36f6dd868b920e073a6c860124ff1af6711c75d42c50e37934b1570be1a84f5c",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/viewport-768.png"
+  },
+  {
+    "configuration": "light",
+    "file": "zoom-200.png",
+    "sha256": "c9dd30ec5058980707a8c243fe5addb10df2940e73463226e67a22aebb0c9e9b",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-light/zoom-200.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "creative-1440.png",
+    "sha256": "347623c1fb5f6462118cfe98e3d48c5463622cdef0857a71bee3175fac623ca6",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/creative-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "creative-390.png",
+    "sha256": "3ad18da34019c1bbbf7d994b6aab0c9419c1c947e5005c3fb01f4add82ceb943",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/creative-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "creative-430.png",
+    "sha256": "70e32c9bc613d174ff030a6ad316dc248e0e2ba74ebd8632fdce7f8859f2103b",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/creative-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "creative-768.png",
+    "sha256": "9181c7e00cfe69baabb035219ffe3ac1ed7a927f580be33ecb708286d188997f",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/creative-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "dna-1440.png",
+    "sha256": "1ce1d0f2c20ee019f806e6c5c520ad6ac32bcc3e91cbca29e452c4b56e88b2fd",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/dna-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "dna-390.png",
+    "sha256": "c831c834134307c44129dc7e2a53a1ddc28c2659cf956cce2e2b4e92ba2bcbe2",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/dna-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "dna-430.png",
+    "sha256": "d25ae79093657a83a7c30ee9842e0dd30ac7d69b2a0ce1616728e604ac89fba8",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/dna-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "dna-768.png",
+    "sha256": "c73391b0f2beb476fa69594fdbff98877ae233da4e21d996c9258eff5a834878",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/dna-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "empty-1440.png",
+    "sha256": "6ea7384c42c441000ed765c9e4d4bec5e1c8683aee368e86bdab1acf5c3bd960",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/empty-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "lab-1440.png",
+    "sha256": "485e419db89bdd69f83f66fa289c902d8b4d2cf8f9ed1ddf8a866514b6fdf3ce",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/lab-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "lab-diagnostics-1440.png",
+    "sha256": "2d35ac20c07aa1ba353ce185900983f79c24ede25c5a442194e298eff5a706e3",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/lab-diagnostics-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "lab-diagnostics-390.png",
+    "sha256": "74cf2477551d5e7241c88b12cb484fc938cee69ed73c6a49065e793aca8af10b",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/lab-diagnostics-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "lab-diagnostics-430.png",
+    "sha256": "555a2d5a929a58df21f6063e1529a39affa1808365cc4b0aecdf909bef983838",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/lab-diagnostics-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "lab-diagnostics-768.png",
+    "sha256": "86ae458883a46a44e027293dddbf841041dc5c28f102ad1a7a4ac4fcaa548d56",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/lab-diagnostics-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "landing-1440.png",
+    "sha256": "bed9f0f9aa3bc05599933c564e51a791718094c4c5e830f08577e299b61b08f5",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/landing-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "landing-390.png",
+    "sha256": "72493295880e0619e66bef941dc0a50c654da9cfc364661a12222cd8ea0add08",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/landing-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "landing-430.png",
+    "sha256": "5bfa8851593c0e42b683717b320d50b10f805b0159d76fc146bad83d220413ea",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/landing-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "landing-768.png",
+    "sha256": "0d633068a20fcf0693272dbe6bfd0fb78739411a007acfa5640bfefe54203926",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/landing-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "loading-1440.png",
+    "sha256": "9d8b7da0d5ad76f14b96201cb284225d95aaa5682aa1d522c46b0a383e762dee",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/loading-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "momentum-1440.png",
+    "sha256": "2b015b60f746d736a7f5b5cdf0acaea0b0c90738c4aad87d23324cf74ce6dd2d",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/momentum-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "momentum-390.png",
+    "sha256": "71d48c610d75f6802b09120fe9a46768a600345ca5b1433e7c106677178f1dac",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/momentum-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "momentum-430.png",
+    "sha256": "4f3a72635ad4aa51041259d9fa178757c906d5751caf8ec7aec7d5a1882f4ab6",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/momentum-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "momentum-768.png",
+    "sha256": "06f437812a50c3b3f69afbf4233c65372204935d32742724a0f6672396559dc4",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/momentum-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "radar-1440.png",
+    "sha256": "a4fd4f7d3bf5211e75fe0f4a91c94f21c18de5aaa5a68416935537bd0c669131",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/radar-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "radar-390.png",
+    "sha256": "31f3bcf83c7685c3b6fe24d97f84b52952818e44287a910b25148124739a2a1c",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/radar-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "radar-430.png",
+    "sha256": "ce01452dd167be0857b028644764a9d3026e8400936de06b8da3ecf78d050073",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/radar-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "radar-768.png",
+    "sha256": "96f9721b754f53f3c5b38960e4c4bdf00942993ca84f6140518cec499ecde876",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/radar-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-aggregate-1440.png",
+    "sha256": "8fa5fb9184642a70d5fe177250b8896f154a68da963a9629cfda776f034022d8",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-aggregate-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-collecting-1440.png",
+    "sha256": "5543f69f98602bcdf5ad199d5966787de48e748e0948e0499d81264224f7d712",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-collecting-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-deleted-1440.png",
+    "sha256": "318fa2ecf4452948801ee03d75173571495860b73e730336327ef74e3ae2db93",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-deleted-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-error-1440.png",
+    "sha256": "8189df8251d26922ee8103746e730818b8f4576f2afa76ea416a1d3e65f05324",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-error-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-expired-1440.png",
+    "sha256": "fdc8dd2b54d03e91be5d198a7d611aa04c255fd984e2ec3442ebba89dacad82d",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-expired-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-invalid-1440.png",
+    "sha256": "8189df8251d26922ee8103746e730818b8f4576f2afa76ea416a1d3e65f05324",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-invalid-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-loading-1440.png",
+    "sha256": "bed9f0f9aa3bc05599933c564e51a791718094c4c5e830f08577e299b61b08f5",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-loading-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-low_confidence-1440.png",
+    "sha256": "bed9f0f9aa3bc05599933c564e51a791718094c4c5e830f08577e299b61b08f5",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-low_confidence-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-opportunity_expired-1440.png",
+    "sha256": "bed9f0f9aa3bc05599933c564e51a791718094c4c5e830f08577e299b61b08f5",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-opportunity_expired-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-partial-1440.png",
+    "sha256": "071f6f7301a5ade79442f856758661455dd1227096fd11ed0581dc5b858cbc47",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-partial-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-pending-1440.png",
+    "sha256": "d1bdcec5ba45cf6ef2108413b4b667e834df784afbd938ff6625f59785d9d165",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-pending-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "state-unavailable-1440.png",
+    "sha256": "459e1cceebff8196cd99ede1a0d2db35466b1965d6ce974e871bd50611476085",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/state-unavailable-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "trust-1440.png",
+    "sha256": "386d8d62166e2ff43ecc865f7b1bcb398da86caa013639c7e353cd5a9a6358ba",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/trust-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "trust-390.png",
+    "sha256": "7feb5b29633d4029cd12747ff84e1d0c4c93701bd68c225586d0bd6dfccb9763",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/trust-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "trust-430.png",
+    "sha256": "8fbb3ebb83b70850e98bb5e51df4c80a53adf3a47890c6dacb847fb121f77c1f",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/trust-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "trust-768.png",
+    "sha256": "5ca03d78de1ca8e3a140e2c907dd187fe812fb3924fd577bd7d47f9c549c9cf3",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/trust-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "viewport-1440.png",
+    "sha256": "26079123d1e8d8d42528cab044544ff4e0cfe83db3d4b75c9c9953dc253be3b8",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/viewport-1440.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "viewport-390.png",
+    "sha256": "2ebfe8ebc20d148d78e73f448857e06fc49ba8555b7c4b288d7906906eb5fbe1",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/viewport-390.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "viewport-430.png",
+    "sha256": "78e731ad257cf7a7059f4b8ca0b98174cb0e72c83588fce64fc72589a20f34ee",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/viewport-430.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "viewport-768.png",
+    "sha256": "080a8ddf1fa6e6262bc097125841b3dcf4fcd7aca29171f7edc7e998b4cc6b86",
+    "retained": false,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/viewport-768.png"
+  },
+  {
+    "configuration": "dark-long",
+    "file": "zoom-200.png",
+    "sha256": "49f1313f239a5004989dd799f35622c3c3024ba2f8a7214c2bf7bd55670a2a55",
+    "retained": true,
+    "raw_local_path": "/private/tmp/trend-visual-evidence/verified-dark-long/zoom-200.png"
+  }
+]

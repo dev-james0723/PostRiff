@@ -1,10 +1,9 @@
 'use client';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import PageContainer from '@/components/layout/page-container';
 import { StateMessage, SegmentedControl, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
-import type { Trend, TrendOpportunity } from '@/lib/coworker/trend-types';
-import { useTrendContext, useTrendQuery, useExpired } from './hooks';
+import { useTrendContext, useTrendQuery } from './hooks';
 import {
   CoverageDetails,
   DemoNotice,
@@ -13,15 +12,12 @@ import {
   QueryContent,
   TrendError,
   date,
-  fieldClass,
-  words
+  fieldClass
 } from './present';
-import { TrustDrawer, blockedVerification, TrendTimeline } from './trust-drawer';
-import { OpportunityCard } from './opportunity-card';
-import { WatchForm, Watchlist } from './watches';
+import { Watchlist } from './watches';
+import { VisualCollection } from './visual-intelligence';
 import { Disclosure } from './disclosure';
-import { creatorStage } from './creator-language';
-import { SignalSummary, SourcesSummary } from './signal-summary';
+import { SourcesSummary } from './signal-summary';
 import './trends.css';
 const tabs = [
   { value: 'for_you', label: 'For You' },
@@ -33,86 +29,6 @@ const tabs = [
   { value: 'language', label: 'Language & Slang' },
   { value: 'watchlist', label: 'Watchlist' }
 ];
-function TrendCard({ trend, opportunities }: { trend: Trend; opportunities: TrendOpportunity[] }) {
-  const { flags } = useTrendContext();
-  const expired = useExpired(trend.expires_at);
-  const [revoked, setRevoked] = useState(false);
-  const revoke = useCallback(() => setRevoked(true), []);
-  const blocked = expired || revoked || blockedVerification(trend.verification_state);
-  const stage = creatorStage(trend, flags);
-  return (
-    <Surface
-      as='article'
-      data-trend-card
-      material='glass'
-      padding='none'
-      className='trend-conversation'
-      aria-label={blocked ? 'Trend evidence unavailable' : trend.canonical_topic}
-    >
-      <div className='trend-conversation-main'>
-        <header className='space-y-3'>
-          <p className='trend-state-line'>
-            {blocked ? 'This conversation needs another look' : stage}
-          </p>
-          <h2 className='trend-topic'>
-            {blocked ? 'Trend evidence unavailable' : trend.canonical_topic}
-          </h2>
-        </header>
-        {blocked ? (
-          <StateMessage
-            kind='stale'
-            title='Evidence revoked or expired'
-            description='Claims and examples have been removed. Recheck before using this conversation.'
-          />
-        ) : (
-          <>
-            <DemoNotice limitations={trend.limitations} />
-            <p className='trend-summary' dir='auto'>
-              {trend.observed.summary}
-            </p>
-            <section className='trend-relevance' aria-label='Why it may fit'>
-              <h3>Why it may fit</h3>
-              <p>{trend.workspace_fit?.reason ?? 'How this fits your work is still unclear.'}</p>
-            </section>
-            <SignalSummary trend={trend} />
-            <SourcesSummary coverage={trend.coverage} />
-          </>
-        )}
-      </div>
-      {!blocked && (
-        <div className='trend-conversation-action'>
-          {opportunities.map((op) => (
-            <OpportunityCard key={op.id} opportunity={op} />
-          ))}
-          <WatchForm trend={trend} />
-        </div>
-      )}
-      <div className='trend-conversation-evidence'>
-        <div className='trend-evidence-action'>
-          <TrustDrawer trend={trend} onRevoked={revoke} />
-          <span className='text-muted-foreground text-xs'>See what’s behind this conversation</span>
-        </div>
-        {!blocked && (
-          <Disclosure title='Timeline and original conversations'>
-            <TrendTimeline trend={trend} />
-            <EvidenceList evidence={trend.evidence} />
-            <Disclosure title='Source details and limits'>
-              <p>
-                First detected {date(trend.observed.first_detected)} · Latest observed{' '}
-                {date(trend.observed.latest_observed)}
-              </p>
-              <p>
-                Measurement support: {words(trend.inferred.confidence)} · Calibration:{' '}
-                {words(trend.inferred.calibration_state)}
-              </p>
-              <CoverageDetails coverage={trend.coverage} limitations={trend.limitations} />
-            </Disclosure>
-          </Disclosure>
-        )}
-      </div>
-    </Surface>
-  );
-}
 function Quality() {
   const { flags } = useTrendContext();
   const method = useTrendQuery(['methodology'], (a, w, s) => a.methodology(w, s));
@@ -422,20 +338,10 @@ function RadarResults() {
                       </Disclosure>
                     </Disclosure>
                     {data.length ? (
-                      <div className='trend-conversation-list'>
-                        {data.map((t) => (
-                          <TrendCard
-                            key={`${t.id}:${t.trust_receipt_id}`}
-                            trend={t}
-                            opportunities={
-                              tab === 'for_you' && !opportunities.isError
-                                ? (opportunities.data?.data.filter((o) => o.trend_id === t.id) ??
-                                  [])
-                                : []
-                            }
-                          />
-                        ))}
-                      </div>
+                      <VisualCollection
+                        trends={data}
+                        opportunities={tab === 'for_you' && !opportunities.isError ? opportunities.data?.data ?? [] : []}
+                      />
                     ) : (
                       <StateMessage
                         kind='empty'
@@ -480,8 +386,8 @@ export function TrendsView() {
   const { w, status, enabled } = useTrendContext();
   return (
     <PageContainer
-      pageTitle='What’s moving'
-      pageDescription='Explore conversations, find your next idea, and see what backs it up.'
+      pageTitle='Social Trends Intel'
+      pageDescription='Understand what is rising, where it is spreading, and what to do next.'
       className='trend-radar'
     >
       {status.isError ? (
