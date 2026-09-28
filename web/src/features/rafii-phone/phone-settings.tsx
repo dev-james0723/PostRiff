@@ -10,16 +10,34 @@ import { SettingsSection } from '@/features/account/settings-section';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import { coworkerKeys } from '@/lib/coworker/hooks';
-import type { PhonePreferences } from '@/lib/phone/types';
+import type { PhonePreferences, PhoneProviderReadiness } from '@/lib/phone/types';
 import { CallRafii } from './call-rafii';
 import { parseCreditLimit } from '@/features/agent/credit-limit';
 
 const EVENTS = [['publish.failed', 'Publication failed'], ['publish.uncertain', 'Publication outcome uncertain'], ['campaign.approval_required', 'Approval blocking a deadline'], ['campaign.blocked', 'Campaign blocked'], ['channel.reconnect_required', 'Account connection needs attention']] as const;
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const minutes = (value: string) => Number(value.split(':')[0]) * 60 + Number(value.split(':')[1]);
+const CHECK_STAGE: Record<string, string> = {
+  local_configuration: 'Rafii’s Dial settings are incomplete.',
+  self_hosted_http: 'Dial did not accept the Self-Hosted status check.',
+  self_hosted_access: 'Dial Self-Hosted access is not granted for this API key.',
+  self_hosted_disabled: 'Dial Self-Hosted mode is off.',
+  self_hosted_mode: 'Dial is using a different Self-Hosted mode.',
+  self_hosted_url: 'Dial’s audio WebSocket URL does not match Rafii’s server setting.',
+  self_hosted_format: 'Dial’s audio format does not match Rafii’s server setting.',
+  numbers_http: 'Dial did not return the outgoing line.',
+  outgoing_line: 'Dial’s outgoing line is unavailable for calls.',
+  account_http: 'Dial did not return the account settings.',
+  account_limit: 'Dial returned an unsupported call duration limit.',
+};
+function readinessMessage(result: PhoneProviderReadiness) {
+  if (result.ready) return 'Dial is ready to create a call. This check did not place one.';
+  const detail = result.stage ? CHECK_STAGE[result.stage] : undefined;
+  return `${detail || 'Dial calling setup needs attention.'}${result.httpStatus ? ` HTTP ${result.httpStatus}.` : ''} This check did not place a call.`;
+}
 
 export function PhoneSettings() {
-  const { api, workspaceId } = useWorkspace();
+  const { api, workspaceId, membership } = useWorkspace();
   const settings = usePhoneSettings();
   const client = useQueryClient();
   const [number, setNumber] = useState('');
@@ -27,6 +45,9 @@ export function PhoneSettings() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [readiness, setReadiness] = useState<PhoneProviderReadiness | null>(null);
+  const [checkError, setCheckError] = useState('');
   const [day, setDay] = useState('Monday');
   const [time, setTime] = useState('09:00');
   const data = settings.data;
@@ -35,6 +56,13 @@ export function PhoneSettings() {
     try { await action(); await settings.refetch(); if (workspaceId) await client.invalidateQueries({queryKey:coworkerKeys.preferences(workspaceId)}); }
     catch (err) { setError(err instanceof Error ? err.message : 'Couldn’t save phone settings.'); }
     finally { setBusy(false); }
+  }
+  async function checkCallingSetup() {
+    if (!workspaceId) return;
+    setChecking(true); setCheckError(''); setReadiness(null);
+    try { setReadiness(await api.phoneProviderReadiness(workspaceId)); }
+    catch (err) { setCheckError(err instanceof Error ? err.message : 'Couldn’t check calling setup.'); }
+    finally { setChecking(false); }
   }
   if (settings.isError) return <SettingsSection id='phone-mode' title='Call Rafii'><p role='alert'>Phone settings could not load.</p><Button variant='glass' onClick={() => void settings.refetch()}>Retry</Button></SettingsSection>;
   if (!data?.available || !workspaceId) return null;
@@ -46,6 +74,12 @@ export function PhoneSettings() {
     <div className='flex flex-col gap-4 text-sm'>
       {data.execution === 'fake' && <p>Local phone test. No telephone call or verification SMS is sent.</p>}
       <p>{data.number ? `Phone ending ${data.number.lastFour} · ${data.number.verified ? 'Verified' : 'Not verified'}` : 'No phone number saved.'}</p>
+      {membership?.role === 'owner' && data.execution === 'provider' && <div className='flex flex-col items-start gap-2'>
+        <Button variant='glass' size='control' disabled={checking} onClick={() => void checkCallingSetup()}>{checking ? 'Checking…' : 'Check calling setup'}</Button>
+        <p className='text-muted-foreground text-xs'>Checks Dial’s settings without placing a call or sending a text.</p>
+        {readiness && <p role='status'>{readinessMessage(readiness)}</p>}
+        {checkError && <p role='alert' className='text-destructive'>{checkError}</p>}
+      </div>}
       {!data.number?.verified && <form className='flex flex-col gap-2' onSubmit={(event) => { event.preventDefault(); void run(async () => { await api.phoneVerify(workspaceId, number); setNumber(''); setSent(true); }); }}>
         <Label htmlFor='rafii-phone-number'>Phone number with country code</Label>
         <Input id='rafii-phone-number' type='tel' autoComplete='tel' placeholder='+12025550123' value={number} onChange={(event) => setNumber(event.target.value)} required disabled={busy} />
