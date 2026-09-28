@@ -56,7 +56,7 @@ function CallApproval({ id }: { id: string }) {
         {item.spending.usesCredits && <p className='text-sm text-muted-foreground'>Approving uses your available credits for phone time, voice and Rafii’s reasoning, reserved a minute at a time. Calls end when credits run out or after one hour. Paid tasks still need their own approval.</p>}
         <Button className='min-h-12 w-full whitespace-normal' disabled={busy || !auth.supabase || !passkeysEnabled || !passkeysSupported()} onClick={() => void confirm()}>{busy ? 'Waiting for your passkey…' : 'Verify this agent call with Face ID / Touch ID'}</Button>
         <p className='text-xs text-muted-foreground'>Windows Hello and security keys work too. This creates a one-action proof without replacing your signed-in session.</p>
-        {!passkeysEnabled && <p role='alert' className='text-sm'>Passkey account unlock is not enabled for this deployment. Use a new Agent Pairing Code.</p>}
+        {!passkeysEnabled && <p role='alert' className='text-sm'>Passkey account unlock is not available right now. Use a new Agent Pairing Code.</p>}
         <Button variant='quiet' className='min-h-12 w-full whitespace-normal' onClick={() => void dismiss('fallback')} disabled={busy}>Use a new 12-digit Agent Pairing Code instead</Button>
         <Button variant='quiet' className='min-h-12 w-full' onClick={() => void dismiss('deny')} disabled={busy}>This wasn’t me</Button>
         {busy && <Button variant='quiet' className='min-h-12 w-full' onClick={() => void dismiss('cancel')}>Cancel verification</Button>}

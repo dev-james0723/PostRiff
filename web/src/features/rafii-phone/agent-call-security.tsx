@@ -28,7 +28,7 @@ export function AgentCallSecurity() {
     <h3 id='agent-call-security' className='font-medium'>Agent call security</h3>
     <p>Passkey ready: {!enabled ? 'Not enabled' : passkeys.isLoading ? 'Checking…' : ready ? 'Yes' : 'No'}</p>
     <p className='text-muted-foreground text-xs'>The Agent Pairing Code binds a caller route to this account. Caller ID only finds the pending route; it never authorizes access. Each returning AI-agent call pauses until you complete a fresh, one-action passkey proof. First-time or recovery code: expires in 5 minutes and works once.</p>
-    {enabled ? <Link href='/app/account/profile#profile-passkeys' className='rafii-focus inline-flex min-h-11 items-center underline'>Add Face ID / Touch ID account unlock</Link> : <p className='text-muted-foreground text-xs'>Passkey account unlock must be enabled for this deployment before it can be added.</p>}
+    {enabled ? <Link href='/app/account/profile#profile-passkeys' className='rafii-focus inline-flex min-h-11 items-center underline'>Add Face ID / Touch ID account unlock</Link> : <p className='text-muted-foreground text-xs'>Passkey account unlock is not available yet.</p>}
     <p className='font-medium'>Trusted callers</p>
     {routes.isError && <p role='alert'>Trusted callers could not be loaded.</p>}
     {routes.data?.callers.length === 0 && <p className='text-muted-foreground'>No trusted callers yet. Your first successful Agent Pairing Code creates one.</p>}
