@@ -30,6 +30,7 @@ import { ApiError } from '@/lib/api/client';
 import { describeSecurityEvent } from './profile-model';
 import {
   enrollTotp,
+  isPasskeyEnrollmentUnavailable,
   listFactors,
   passkeysSupported,
   registerPasskey,
@@ -310,19 +311,23 @@ function PasskeyDialog({
   open,
   onOpenChange,
   friendlyName,
-  onVerified
+  onVerified,
+  onUseAuthenticator
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   friendlyName: string;
   onVerified: () => Promise<void>;
+  onUseAuthenticator: () => void;
 }) {
   const auth = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fallbackAvailable, setFallbackAvailable] = useState(false);
 
   function close() {
     setError(null);
+    setFallbackAvailable(false);
     onOpenChange(false);
   }
 
@@ -335,6 +340,7 @@ function PasskeyDialog({
       await onVerified();
       close();
     } catch (err) {
+      setFallbackAvailable(isPasskeyEnrollmentUnavailable(err));
       setError(message(err, 'Your device did not complete the passkey setup.'));
     } finally {
       setBusy(false);
@@ -355,10 +361,26 @@ function PasskeyDialog({
           <Button type='button' variant='quiet' size='control' disabled={busy} onClick={close}>
             Cancel
           </Button>
-          <Button type='button' variant='action' size='control' disabled={busy} onClick={() => void start()}>
-            <Icons.key className='size-4' aria-hidden />
-            {busy ? 'Waiting for your device…' : 'Continue'}
-          </Button>
+          {fallbackAvailable ? (
+            <Button
+              type='button'
+              variant='action'
+              size='control'
+              disabled={busy}
+              onClick={() => {
+                close();
+                onUseAuthenticator();
+              }}
+            >
+              <Icons.phone className='size-4' aria-hidden />
+              Use authenticator app
+            </Button>
+          ) : (
+            <Button type='button' variant='action' size='control' disabled={busy} onClick={() => void start()}>
+              <Icons.key className='size-4' aria-hidden />
+              {busy ? 'Waiting for your device…' : 'Continue'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -573,6 +595,7 @@ function TwoFactor() {
         onOpenChange={(open) => !open && setEnrolling(null)}
         friendlyName={friendlyName}
         onVerified={afterEnrol}
+        onUseAuthenticator={() => setEnrolling('totp')}
       />
       <PasskeyDialog
         open={enrolling === 'webauthn'}
