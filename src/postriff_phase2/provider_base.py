@@ -57,6 +57,7 @@ class OAuthProvider:
     normalized = {}
     wave = None
     feature_flag_required = False
+    provider_approval_required = False
     oauth_contract_verified = True
 
     def __init__(self, client_id, client_secret, transport=None, production_reviewed=False):

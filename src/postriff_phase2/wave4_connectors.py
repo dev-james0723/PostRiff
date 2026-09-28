@@ -40,7 +40,7 @@ def _session(value):
 
 class _ReviewGatedProvider(OAuthProvider):
     """Catalogue entry for an official platform whose current OAuth endpoint contract is still behind its human gate."""
-    wave, feature_flag_required = "4A", True
+    wave, feature_flag_required, provider_approval_required = "4A", True, True
     SCOPES = {}
     normalized = {"identity": "requires_review"}
     assisted_fallback = False
@@ -74,7 +74,7 @@ class BilibiliProvider(_ReviewGatedProvider):
 
 class DouyinProvider(OAuthProvider):
     id, platform, capability_version = "douyin", "Douyin", 1
-    wave, feature_flag_required = "4A", True
+    wave, feature_flag_required, provider_approval_required = "4A", True, True
     AUTH = "https://open.douyin.com/platform/oauth/connect/"
     TOKEN = "https://open.douyin.com/oauth/access_token/"
     REFRESH = "https://open.douyin.com/oauth/refresh_token/"
@@ -129,7 +129,7 @@ class DouyinProvider(OAuthProvider):
 
 class KuaishouProvider(OAuthProvider):
     id, platform, capability_version = "kuaishou", "Kuaishou", 1
-    wave, feature_flag_required = "4A", True
+    wave, feature_flag_required, provider_approval_required = "4A", True, True
     AUTH = "https://open.kuaishou.com/oauth2/authorize"
     TOKEN = "https://open.kuaishou.com/oauth2/access_token"
     REFRESH = "https://open.kuaishou.com/oauth2/refresh_token"
@@ -184,7 +184,7 @@ class KuaishouProvider(OAuthProvider):
 
 class GoogleBusinessProfileProvider(OAuthProvider):
     id, platform, capability_version = "google_business_profile", "Google Business Profile", 1
-    wave, feature_flag_required = "4A", True
+    wave, feature_flag_required, provider_approval_required = "4A", True, True
     AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
     TOKEN = "https://oauth2.googleapis.com/token"
     REVOKE = "https://oauth2.googleapis.com/revoke"

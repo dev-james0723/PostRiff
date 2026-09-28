@@ -69,8 +69,15 @@ class CapabilityContract(unittest.TestCase):
         self.assertTrue(item["readinessChecklist"]["oauthLiveTest"])
         self.assertFalse(item["readinessChecklist"]["tokenRefreshLiveTest"])
         self.assertFalse(item["readinessChecklist"]["productionEnabled"])
+        self.assertFalse(item["connectReady"])
         self.assertEqual(item["capabilities"]["identity"], True)
         self.assertEqual(item["capabilities"]["publish"], False)
+
+        values["POSTRIFF_OAUTH_DOUYIN_VERIFIED"] = "true"
+        verified_registry = registry_from_environment(values, transport=Wire([]))
+        verified_service = OAuthService(None, None, CredentialVault(CredentialVault.generate_key()), verified_registry, "https://rafii.example")
+        verified = next(entry for entry in verified_service.provider_catalog() if entry["id"] == "douyin")
+        self.assertTrue(verified["connectReady"])
 
 
 class DouyinOAuth(unittest.TestCase):

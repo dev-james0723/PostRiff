@@ -97,6 +97,9 @@ class OAuthService:
             contract_verified = bool(getattr(cls, 'oauth_contract_verified', True))
             if not contract_verified:
                 issues.append('Current OAuth endpoint details remain behind the provider approval portal; connection stays unavailable until they are independently verified.')
+            provider_verified = bool(diagnostic.get('providerVerified'))
+            if getattr(cls, 'provider_approval_required', False) and not provider_verified:
+                issues.append('Provider application verification is not recorded; connection stays unavailable until the provider approves it.')
             history = pid == 'instagram' or (pid == 'linkedin' and bool(getattr(adapter, 'history_approved', False)))
             connect_ready = adapter is not None and not issues and contract_verified
             reviewed = bool(adapter and adapter.production_reviewed)
@@ -116,7 +119,7 @@ class OAuthService:
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
                 'redirectUriConfigured': callback is not None,
-                'providerAppCreated': bool(diagnostic.get('providerAppCreated')), 'providerVerificationStatus': 'verified' if diagnostic.get('providerVerified') else 'not_verified',
+                'providerAppCreated': bool(diagnostic.get('providerAppCreated')), 'providerVerificationStatus': 'verified' if provider_verified else 'not_verified',
                 'requestedScopes': requested, 'approvedScopes': list(diagnostic.get('approvedScopes') or []),
                 'oauthLiveTest': bool(diagnostic.get('oauthLiveTest')), 'tokenRefreshLiveTest': bool(diagnostic.get('tokenRefreshLiveTest')),
                 'webhookVerified': bool(diagnostic.get('webhookVerified')), 'publishingPermission': bool(diagnostic.get('publishingPermission')),
