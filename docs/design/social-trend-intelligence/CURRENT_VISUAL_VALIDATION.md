@@ -1,6 +1,8 @@
 # Rafii Visual Intelligence — local implementation receipt
 
-Status: **locally implemented and verified, with the explicitly deferred capabilities below.** This is not M1/M2/M3 qualification, a production release, or live social intelligence verification.
+Historical baseline receipt. See [the current closeout](RELEASE_CLOSEOUT_2026-09-28.md) for the completed handoff controls and new validation.
+
+Status at this original snapshot: **locally implemented and verified, with the explicitly deferred capabilities below.** This is not M1/M2/M3 qualification, a production release, or live social intelligence verification.
 
 ## BASELINE
 

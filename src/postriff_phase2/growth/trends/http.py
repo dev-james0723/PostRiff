@@ -73,6 +73,12 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
             if environ.get('QUERY_STRING') or environ.get('CONTENT_LENGTH','0') not in ('','0') or environ.get('HTTP_TRANSFER_ENCODING'):
                 raise error('invalid_request',400)
             data=service.media(workspace_id,token,result_id=tail[2])
+        elif len(tail) == 3 and tail[0] == "opportunities" and tail[2] == "angles" and method == "POST":
+            if q: raise error("invalid_request", 400)
+            data = service.generate_angles(workspace_id, token, tail[1], body())
+        elif len(tail) == 2 and tail[0] == "generation-jobs" and method == "GET":
+            if q: raise error("invalid_request", 400)
+            data = service.generation_status(workspace_id, token, tail[1])
         elif len(tail) == 3 and tail[0] == "opportunities" and tail[2] == "dismiss" and method == "POST":
             if q:
                 raise error("invalid_request", 400)
@@ -92,7 +98,7 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
         elif tail == ["refreshes"] and method == "POST":
             body()
             data = service.gated_mutation(workspace_id, token, "PROVIDER_OPERATIONS")
-        elif tail and tail[0] in {"methodology", "calibration", "language-patterns", "watches", "opportunities", "opportunity-lab", "refreshes", "exposures", "learning", "media", "forecasts"}:
+        elif tail and tail[0] in {"generation-jobs", "methodology", "calibration", "language-patterns", "watches", "opportunities", "opportunity-lab", "refreshes", "exposures", "learning", "media", "forecasts"}:
             raise error("not_found", 404)
         elif len(tail) == 1 and method == "GET":
             data = service.get(workspace_id, token, tail[0])

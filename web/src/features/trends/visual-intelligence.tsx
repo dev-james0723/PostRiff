@@ -498,25 +498,7 @@ export function VisualIntelligence({
                   description='A current receipt, supported workspace fit and an eligible original contribution are needed. No replacement angles have been invented.'
                 />
               )}
-              <Disclosure title='More ways to use this opportunity'>
-                <div className='vi-secondary-actions'>
-                  {[
-                    'Add to weekly plan',
-                    'Turn into campaign',
-                    'Ask Rafii about this trend',
-                    'Give me 3 original angles'
-                  ].map((label) => (
-                    <Button key={label} disabled variant='quiet'>
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-                <p>
-                  These actions need a verified context handoff in the existing workflow. They are
-                  unavailable here until that connection is ready. Saving to Ideas above preserves
-                  the current creation and approval path.
-                </p>
-              </Disclosure>
+
             </Surface>
           </>
         )}

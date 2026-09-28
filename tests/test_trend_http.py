@@ -122,3 +122,14 @@ class TrendHTTPTests(unittest.TestCase):
             forecast.assert_called_once_with(WID,'session',object_id=RID,revision=1)
             self.assertEqual(self.request(['forecasts','evaluate'],method='POST',payload={'candidates':[]})[0],200)
             self.assertEqual(self.request(['forecasts','admit'],method='POST',query='override=true')[0],400)
+
+    def test_angle_generation_http_is_explicit_strict_and_private(self):
+        self.svc.values["RAFII_TREND_MODEL_ENRICHMENT_ENABLED"] = "0"
+        payload = {"revision":1,"idempotency_key":"angles"}
+        self.assertEqual(self.request(["opportunities",OID,"angles"],method="POST",payload=payload)[1]["data"]["status"],"disabled")
+        self.assertEqual(self.request(["opportunities",OID,"angles"])[0],404)
+        self.assertEqual(self.request(["opportunities",OID,"angles"],method="POST",payload=payload,query="extra=1")[0],400)
+        with patch.object(self.svc,"generation_status",return_value={"data":{"status":"queued"}}) as read:
+            self.assertEqual(self.request(["generation-jobs",RID])[0],200)
+            read.assert_called_once_with(WID,"session",RID)
+            self.assertEqual(self.request(["generation-jobs",RID],method="POST")[0],404)

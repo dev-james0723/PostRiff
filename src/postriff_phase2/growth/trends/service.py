@@ -742,7 +742,14 @@ class TrendService:
                 "uncertainty": p.get("uncertainty", "Workspace fit is a hypothesis, not a measured social outcome."),
                 "workspace_fit": fit, "source_id": source["id"] if source else None, "draft_id": draft["id"] if draft else None,
                 "angles": [{"id": a["id"], "title": a.get("title", ""), "contribution": a.get("contribution", ""),
-                            "factual_requirements": a.get("factual_requirements", []), "format_reason": a.get("format_reason", "")} for a in p.get("angles", [])[:3]]}
+                            "factual_requirements": a.get("factual_requirements", []), "format_reason": a.get("format_reason", ""),
+                            "evidence_refs": a.get("evidence_refs", []),
+                            "relevance": a.get("fit", {"assessment": "unknown", "reason": "Angle-specific relevance has not been evaluated."}),
+                            "risk": a.get("risk", {"assessment": "unknown", "reason": "Angle-specific risk has not been evaluated."}),
+                            "uncertainties": a.get("uncertainties", ["Originality and audience response are not qualified."]),
+                            "platform_targets": p.get("platform_targets", []),
+                            "recheck_at": opportunities.iso(min(opportunities.epoch(row["expires_at"]), opportunities.epoch(trend["expires_at"])))
+                           } for a in p.get("angles", [])[:3]]}
         return data, trend
 
     def opportunity(self, workspace_id, token, opportunity_id, *, model_visible=False):
@@ -751,6 +758,49 @@ class TrendService:
             row = self._get(store, cur, workspace_id, actor, "opportunity", opportunity_id, now)
             p, trend = self._opportunity_read(store, cur, workspace_id, actor, row, state, now, model_visible=model_visible)
             return envelope(p, now, cov=trend["coverage"], limitations=trend["limitations"])
+
+    def generate_angles(self, workspace_id, token, opportunity_id, payload):
+        """Explicit bounded enqueue on the existing writer. No model call in HTTP."""
+        if (not isinstance(payload, dict) or set(payload) != {"revision", "idempotency_key"}
+                or type(payload["revision"]) is not int or payload["revision"] < 1
+                or not isinstance(payload["idempotency_key"], str) or not 1 <= len(payload["idempotency_key"]) <= 200):
+            raise error("invalid_request", 400)
+        from .generation import TrendGeneration
+        now = self.clock()
+        with self.transaction(workspace_id, token, "edit") as (store, cur, _row, actor, state, _scopes):
+            exposure_events.require_flags(self)
+            current = self._get(store, cur, workspace_id, actor, "opportunity", opportunity_id, now)
+            op, trend = self._opportunity_read(store, cur, workspace_id, actor, current, state, now)
+            if op["revision"] != payload["revision"] or op["state"] not in ("candidate", "ready") or op["source_id"]:
+                raise error("revision_conflict", 409)
+            if trend["verification_state"] != "verified":
+                raise error("evidence_unavailable", 410)
+            generator = TrendGeneration(self.hosted, store=store, values=self.values)
+            if not generator.enabled(workspace_id):
+                return envelope({"status": "disabled", "provider_attempts": 0}, now)
+            try:
+                loaded = generator._load(cur, workspace_id, actor, op["trust_receipt_id"], "angle_generate", state)
+            except contracts.ContractError as exc:
+                reason = getattr(exc, "code", "")
+                status = "needs_facts" if reason == "generation_approved_facts_required" else "needs_review"
+                return envelope({"status": status, "provider_attempts": 0}, now)
+            bound = loaded["opportunity"]
+            if bound["object_id"] != opportunity_id or bound["revision"] != payload["revision"]:
+                raise error("revision_conflict", 409)
+            if generator._cached(cur, workspace_id, actor, loaded):
+                return envelope({"status": "cached", "provider_attempts": 0}, now)
+            result = generator._enqueue_loaded(cur, workspace_id, actor, op["trust_receipt_id"], "angle_generate", loaded, payload["idempotency_key"])
+            return envelope(result, now)
+
+    def generation_status(self, workspace_id, token, job_id):
+        ident(job_id)
+        with self.transaction(workspace_id, token) as (_store, cur, _row, _actor, _state, _scopes):
+            cur.execute("SELECT state FROM pr_trend_jobs WHERE scope_key=%s AND kind=%s AND job_id=%s",
+                        ("workspace:" + workspace_id, "trend.model_generation", job_id))
+            job = cur.fetchone()
+            if not job:
+                raise error("not_found", 404)
+            return envelope({"status": job[0], "job_id": job_id}, self.clock())
 
     def accept(self, workspace_id, token, opportunity_id, payload):
         required = {"revision", "angle_id", "channel_id", "goal", "idempotency_key"}

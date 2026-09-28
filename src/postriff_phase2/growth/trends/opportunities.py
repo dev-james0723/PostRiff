@@ -97,6 +97,8 @@ def accept_source(state, actor, opportunity, trend, payload, now, commands):
                "expires_at": iso(min(epoch(opportunity["expires_at"]), epoch(trend["expires_at"]))),
                "angle_id": angle["id"], "angle": copy.deepcopy(angle), "goal": payload["goal"],
                "channel_id": channel["id"], "platform": channel["platform"], "language": channel.get("language") or "en",
+               "platform_states": copy.deepcopy(trend.get("platform_states", [])),
+               "do_not_copy": "Do not copy observed wording, hooks or personal experiences. Supply your own approved facts.",
                "receipt_revision": trend.get("receipt_revision", 1), "evidence_ids": [e["id"] for e in trend.get("evidence", []) if e.get("id")],
                "accepted_at": iso(now), "accepted_by": actor, "selection_digest": choice_hash}
     if opportunity.get("generation_context") is not None:
@@ -129,6 +131,25 @@ def accept_source(state, actor, opportunity, trend, payload, now, commands):
     source["origin"] = {"kind": "trend_opportunity", "trendLineage": binding, "factPack": pack, "canonicalBrief": brief}
     source["unknowns"] = list(pack["unknowns"])
     return {"source_id": source["id"], "href": f"/app/ideas?source={source['id']}", "verified": True, "existing": False}
+
+
+def bind_campaign_handoff(state, campaign, source_ids, now):
+    """Preserve a source when its exact accepted brief is copied into a new draft.
+
+    Changed goals, audiences or added facts are new hard context and need the
+    normal fresh opportunity review. This grants no scheduling/publication rights.
+    """
+    if len(source_ids) != 1 or campaign.get("facts"):
+        return
+    source = next((s for s in state.get("sources", []) if s.get("id") == source_ids[0] and s.get("active")), None)
+    binding = (source.get("origin") or {}).get("trendLineage") if source else None
+    if (not binding or campaign.get("goal") != binding.get("goal")
+            or campaign.get("audience") != (state.get("brandHub") or {}).get("audience")):
+        return
+    validate_lineage(state, lineage(state, source_ids), now)
+    from .relevance import campaign_context
+    campaign["trendHandoff"] = {"source_id": source["id"], "campaign_digest": digest(campaign_context(campaign)),
+                              "source_digest": digest({"text": source.get("text"), "lineage": binding})}
 
 
 def lineage(state, source_ids):

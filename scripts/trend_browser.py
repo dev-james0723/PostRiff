@@ -122,14 +122,14 @@ def main():
         with connect() as db:
             db.execute((ROOT/'migrations/postriff/040_social_trend_intelligence.sql').read_text())
         service = HostedWorkspaceService(connect, DevVerifier(connect))
-        seeds = seed.seed_browser(service, connect, scenario='learning' if args.learning_only else 'pool_accept' if args.pool_only else 'radar')
+        seeds = seed.seed_browser(service, connect, scenario='learning' if args.learning_only else 'pool_accept' if args.pool_only else 'radar', platform_override='Threads' if not args.pool_only and not args.learning_only else None)
         lab_seeds = [] if args.pool_only or args.learning_only else seed.seed_browser(service, connect, scenario='lab')
         dismiss_seeds = [] if args.learning_only else seed.seed_browser(service, connect, scenario='pool_dismiss' if args.pool_only else 'dismiss')
         flags = {name: '0' for name in FLAG_NAMES}
         flags.update({f'RAFII_TREND_{name}_ENABLED': '1' for name in ('INTELLIGENCE','RADAR','TRUST_RECEIPTS','OPPORTUNITY_LAB')})
         flags.update(RAFII_TREND_WORKSPACE_ALLOWLIST=','.join(row['workspace_id'] for row in seeds + lab_seeds + dismiss_seeds),
             RAFII_TREND_CURSOR_SIGNING_KEY='synthetic-browser-cursor-key-not-a-production-secret')
-        if args.pool_only: flags['RAFII_WEEKLY_OPERATOR_ENABLED'] = '1'
+        flags['RAFII_WEEKLY_OPERATOR_ENABLED'] = '1'
         if args.learning_only: flags.update(RAFII_PERFORMANCE_LEARNING_ENABLED='1', RAFII_ADAPTIVE_SKILLS_ENABLED='1')
         attach(service, flags)
         if args.learning_only: seed.seed_learning_sources(service, connect, seeds)
@@ -244,7 +244,7 @@ def main():
             completions = db.execute("SELECT meta FROM pr_audit_events WHERE kind='trend.lab_completed'").fetchall()
             assert all(r[0].get('modelCalls') == 0 for r in completions)
             if code == 0:
-                assert len(completions) == (0 if args.pool_only or args.learning_only else 4), 'Two genuine local completions per Lab workspace; replay is not a new run'
+                assert len(completions) == (len(lab_seeds) * 2), 'Two genuine local completions per Lab workspace; replay is not a new run'
         if args.learning_only:
             saved_choices=[]
             with connect() as db:

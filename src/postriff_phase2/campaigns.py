@@ -588,6 +588,8 @@ def _save_automation(state: dict, root: dict, payload: dict, actor: str, now: fl
                 "items": [], "status": "needs_input" if missing else "draft", "missingFacts": missing,
                 "createdBy": actor, "createdAt": now, "updatedAt": now,
             }
+            from .growth.trends.opportunities import bind_campaign_handoff
+            bind_campaign_handoff(state, campaign, sources, now)
             root["campaigns"].append(campaign)
         task = {"id": uid(), "campaignId": campaign["id"], "version": 1, "status": "draft", "createdBy": actor, "createdAt": now}
         root["recurringTasks"].append(task)

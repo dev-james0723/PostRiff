@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApiError, APP_GUARD_HEADER, type TokenSource } from '@/lib/api/client';
 import {
   envelopeSchema,
+  angleGenerationSchema,
   trendMetricChoiceInputSchema,
   trendMetricChoiceResponseSchema,
   type TrendMetricChoiceInput,
@@ -90,6 +91,10 @@ export function createTrendApi(getToken: TokenSource) {
   }
   const seg = encodeURIComponent;
   return {
+    generateAngles: (w: string, id: string, revision: number, key: string) =>
+      request(w, `/opportunities/${seg(id)}/angles`, envelopeSchema(angleGenerationSchema), undefined, 'POST', { revision, idempotency_key: key }),
+    generationStatus: (w: string, job: string, signal?: AbortSignal) =>
+      request(w, `/generation-jobs/${seg(job)}`, envelopeSchema(angleGenerationSchema), signal),
     recordMetricChoice: (w: string, input: TrendMetricChoiceInput) =>
       request(w, '/learning/metric-choices', trendMetricChoiceResponseSchema, undefined, 'POST', trendMetricChoiceInputSchema.parse(input)),
     list: (w: string, filters: TrendFilters, signal?: AbortSignal) => {

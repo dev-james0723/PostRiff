@@ -214,6 +214,8 @@ export interface Recipe {
 }
 
 export interface RecipeInput {
+  sourceIds?: string[];
+  campaignIds?: string[];
   name: string;
   goals: string[];
   destinations: { channelId: string; postsPerWeek: number; language: string }[];

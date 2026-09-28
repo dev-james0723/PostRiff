@@ -713,6 +713,13 @@ async function main() {
           .envelopeSchema(t.exposureSchema)
           .parse(await (await exposureSeen).json()).data;
         assert.equal(actualExposure.opportunity_id, row.opportunity_id);
+        const generationResponse = page.waitForResponse(r => r.url().endsWith(`/opportunities/${row.opportunity_id}/angles`) && r.request().method() === 'POST');
+        await page.getByRole('button', { name: 'Give me 3 original angles', exact: true }).click();
+        const generation = await generationResponse;
+        assert.equal(generation.status(), 200);
+        assert.equal((await generation.json()).data.status, 'disabled');
+        await page.getByText('Angle generation is not enabled for this workspace. Your saved evidence is unchanged.', { exact: true }).waitFor();
+        pass(`${row.width} explicit angle request respects disabled model gate without provider calls`);
         await page.getByText('Develop this idea', { exact: true }).click();
         await page
           .getByRole('combobox', { name: /^Destination account/ })
@@ -752,7 +759,7 @@ async function main() {
         await page.getByRole('link', { name: 'Review source and create original post' }).click();
         await page.waitForURL(base + '/app/ideas?source=' + encodeURIComponent(sourceId));
         const inspector =
-          row.width === 390
+          row.width < 1024
             ? page.getByRole('dialog')
             : page.getByRole('complementary', { name: 'Source inspector' });
         await inspector.getByText(row.title, { exact: true }).first().waitFor();
@@ -783,6 +790,50 @@ async function main() {
         assert.equal(replayBody.data.source_id, sourceId);
         assert.equal(replayBody.data.existing, true);
         pass(`${row.width} actual acceptance replay retains one source`);
+        await page.goto(base + '/app/trends');
+        await page.getByText('More ways to use this opportunity', { exact: true }).click();
+        assert.equal(await page.getByRole('link', { name: 'Add to weekly plan', exact: true }).getAttribute('href'), `/app/weekly?tab=setup&source=${encodeURIComponent(sourceId)}`);
+        assert.equal(await page.getByRole('link', { name: 'Turn into campaign', exact: true }).getAttribute('href'), `/app/automations?source=${encodeURIComponent(sourceId)}`);
+        await page.getByRole('button', { name: 'Ask Rafii about this trend', exact: true }).click();
+        await page.waitForFunction(id => [...document.querySelectorAll('textarea')].some(n => n.value.includes('Ideas source ' + id)), sourceId);
+        pass(`${row.width} chat opens with bound source and receipt without sending`);
+        // Navigation closes the staged handoff; no send, model or scheduling action.
+        await page.goto(base + `/app/weekly?tab=setup&source=${encodeURIComponent(sourceId)}`);
+        const sources = page.getByRole('group', { name: 'Sources for this plan', exact: true });
+        await sources.waitFor();
+        const choice = sources.getByRole('checkbox');
+        assert.equal(await choice.isChecked(), false);
+        await choice.check();
+        await page.getByLabel('Goals', { exact: true }).fill('Explain my own practice comparison');
+        await page.getByRole('checkbox', { name: /^Include / }).first().check();
+        await page.getByLabel('Weekly drafting limit (USD)', { exact: true }).fill('0');
+        const weeklySaved = page.waitForResponse(r => r.url().includes('/coworker/weekly/recipes') && r.request().method() === 'POST');
+        await page.getByRole('button', { name: 'Save weekly plan', exact: true }).click();
+        const weeklyResult = await weeklySaved;
+        assert.equal(weeklyResult.status(), 201, await weeklyResult.text());
+        const current = await (await api('GET', `/api/workspaces/${row.workspace_id}`)).json();
+        const recipe = current.state.coworker.weekly.recipes.find(r => r.sourceIds.includes(sourceId));
+        assert.ok(recipe);
+        assert.equal(recipe.maxCostUsdMicroPerWeek, 0);
+        await page.reload();
+        await page.getByRole('group', { name: 'Sources for this plan', exact: true }).getByRole('checkbox', { checked: true }).waitFor();
+        const weeklyEdited = page.waitForResponse(r => r.url().includes('/coworker/weekly/recipes/') && r.request().method() === 'PATCH');
+        await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+        assert.equal((await weeklyEdited).status(), 200);
+        const edited = await (await api('GET', `/api/workspaces/${row.workspace_id}`)).json();
+        assert.deepEqual(edited.state.coworker.weekly.recipes.find(r => r.id === recipe.id).sourceIds, [sourceId]);
+        assert.deepEqual(edited.state.variants, []);
+        pass(`${row.width} Weekly saves and preserves the explicit source on edit without drafting`);
+        await page.goto(base + `/app/automations?source=${encodeURIComponent(sourceId)}`);
+        const campaignDialog = page.getByRole('dialog');
+        await campaignDialog.waitFor();
+        assert.equal(await campaignDialog.locator('#automation-goal').inputValue(), 'Explain my own practice comparison');
+        await campaignDialog.getByRole('button', { name: 'Next', exact: true }).click();
+        await campaignDialog.getByRole('button', { name: 'Next', exact: true }).click();
+        assert.ok((await campaignDialog.innerText()).toLowerCase().includes(row.platform.toLowerCase()));
+        await page.screenshot({ path: path.join(out, `real-campaign-handoff-${row.width}.png`), fullPage: false });
+        pass(`${row.width} campaign builder receives the saved goal and destination for review`);
+
         assert.deepEqual(external, [], 'No browser egress attempts');
         assert.deepEqual(errors, [], 'No browser runtime errors');
         pass(`${row.width} zero browser egress and runtime errors`);

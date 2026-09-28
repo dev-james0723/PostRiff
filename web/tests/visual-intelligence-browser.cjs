@@ -72,6 +72,8 @@ async function run() {
         wid = snapshot.state.workspace.id;
       const analysis = analysisFixtures({ workspace: wid, trend: f.trend });
       let analysisState = 'supported';
+      let generationState = 'needs_facts';
+      const generationJob = '00000000-0000-4000-8000-000000000099';
       snapshot.state.phase2.jobs = [];
       snapshot.state.phase2.reviews = [];
       snapshot.state.variants = snapshot.state.variants.slice(0, 1);
@@ -194,6 +196,21 @@ async function run() {
                   ? 'synthetic-next'
                   : null
             });
+          }
+          if (endpoint === '/opportunities/synthetic-opportunity/angles' && req.method() === 'POST') {
+            assert.deepEqual(Object.keys(body).sort(), ['idempotency_key', 'revision']);
+            assert.equal(body.revision, f.opportunity.revision);
+            assert.ok(body.idempotency_key);
+            return send(f.envelope({ status: generationState, provider_attempts: 0, ...(generationState === 'queued' ? { job_id: generationJob } : {}) }));
+          }
+          if (endpoint === '/generation-jobs/' + generationJob && req.method() === 'GET') {
+            f.opportunity.revision = 2;
+            f.opportunity.angles = [1, 2, 3].map(n => ({ ...f.opportunity.angles[0], id: 'generated-' + n,
+              title: 'Synthetic generated contribution ' + n, evidence_refs: ['observation-fixture'],
+              relevance: { assessment: 'unknown', reason: 'Synthetic unqualified fit.' },
+              risk: { assessment: 'unknown', reason: 'Synthetic unmeasured risk.' },
+              uncertainties: ['Synthetic output; not a real model response.'] }));
+            return send(f.envelope({ status: 'succeeded', job_id: generationJob }));
           }
           if (endpoint === '/opportunities')
             return send(
@@ -841,6 +858,22 @@ async function run() {
           await page.getByRole('button', { name: 'Disable watch' }).click();
           await visibleText(page, /Disabled · bluesky/);
           record('watch persisted create + revision-safe disable');
+          await page.getByRole('tab', { name: 'For You', exact: true }).click();
+          const originalAngles = structuredClone(f.opportunity.angles);
+          await page.getByRole('button', { name: 'Give me 3 original angles', exact: true }).click();
+          await visibleText(page, 'Add and approve your own factual material in Ideas before requesting original angles.');
+          generationState = 'queued';
+          await page.getByRole('button', { name: 'Give me 3 original angles', exact: true }).click();
+          await visibleText(page, 'Synthetic generated contribution 3');
+          await page.getByText('Synthetic generated contribution 1', { exact: true }).first().click();
+          await visibleText(page, 'Evidence references: observation-fixture');
+          await visibleText(page, 'Uncertainty: Synthetic output; not a real model response.');
+          assert.equal(calls.filter(c => c.path.endsWith('/angles') && c.method === 'POST').length, 2);
+          record('explicit synthetic generation: missing facts, bounded enqueue, stored-job polling and refreshed angle evidence');
+          f.opportunity.angles = originalAngles;
+          f.opportunity.revision = 1;
+          await page.reload({ waitUntil: 'domcontentloaded' });
+
           await page.getByRole('tab', { name: 'For You', exact: true }).click();
           await page.getByText(f.opportunity.angles[0].title, { exact: true }).first().click();
           await visibleText(

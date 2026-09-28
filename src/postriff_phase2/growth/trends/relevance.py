@@ -9,6 +9,22 @@ DIMENSIONS = ("trend_relevance", "audience_relevance", "brand_fit", "timing_oppo
               "originality_opportunity", "risk", "confidence")
 
 
+def campaign_context(campaign):
+    return {k: campaign.get(k) for k in ("id", "version", "goal", "audience", "facts")}
+
+
+def unchanged_handoff(campaign, state):
+    """A server-bound copy of an accepted goal adds no new fit context.
+
+    Any brief edit, source withdrawal/text/lineage edit removes this exception.
+    No client-supplied marker is accepted by the campaign commands.
+    """
+    marker = campaign.get("trendHandoff") or {}
+    source = next((s for s in state.get("sources", []) if s.get("id") == marker.get("source_id") and s.get("active")), None)
+    return bool(source and marker.get("campaign_digest") == digest(campaign_context(campaign))
+                and marker.get("source_digest") == digest({"text": source.get("text"), "lineage": (source.get("origin") or {}).get("trendLineage")}))
+
+
 def context_revision(state):
     """Hard context only. Adding this opportunity's source/draft cannot invalidate itself."""
     hub = state.get("brandHub") or {}
@@ -18,7 +34,7 @@ def context_revision(state):
     return digest({"brand": hub, "voice": speaker.get("activeRevision"),
                    "learning": (state.get("learning") or {}).get("revision"),
                    "overlays": ((state.get("coworker") or {}).get("overlays") or {}).get("revision"),
-                   "campaigns": [{k: c.get(k) for k in ("id", "version", "goal", "audience", "facts")} for c in campaigns],
+                   "campaigns": [campaign_context(c) for c in campaigns if not unchanged_handoff(c, state)],
                    "channels": [{k: c.get(k) for k in ("id", "platform", "language", "revoked", "capabilityVersion")} for c in channels]})
 
 

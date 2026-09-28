@@ -12,13 +12,13 @@ from postriff_phase2.growth.trends.service import coverage
 from postriff_phase2.growth.trends.store import TrendStore
 
 
-def seed_browser(service, connection, *, scenario='radar'):
+def seed_browser(service, connection, *, scenario='radar', platform_override=None):
     assert scenario in ('radar', 'lab', 'dismiss', 'pool_accept', 'pool_dismiss', 'learning')
-    platform = 'Threads' if scenario == 'learning' else 'Bluesky'
+    platform = platform_override or ('Threads' if scenario == 'learning' else 'Bluesky')
     native_platform = platform.lower()
     store = TrendStore(connection)
     rows = []
-    for width in (1440, 390):
+    for width in (1440, 768, 390, 430):
         actor = str(uuid.uuid4())
         token = 'dev:' + actor
         wid = service.bootstrap(token)['workspaceId']
@@ -107,7 +107,7 @@ def seed_browser(service, connection, *, scenario='radar'):
                 uncertainty='Demo data: Unqualified interpretation; audience response is unknown.')
         store.put_projection({**common, 'kind': 'opportunity', 'object_id': opportunity['id'], 'receipt_id': rid,
             'payload': opportunity, 'context_digest': opportunity['context_digest']})
-        rows.append({'scenario': scenario, 'width': width, 'principal': actor, 'workspace_id': wid, 'trend_id': tid, 'receipt_id': rid,
+        rows.append({'scenario': scenario, 'width': width, 'platform': platform, 'principal': actor, 'workspace_id': wid, 'trend_id': tid, 'receipt_id': rid,
             'opportunity_id': opportunity['id'], 'channel_id': channel, 'title': title})
     for row in rows:
         service.get(row['workspace_id'], 'dev:'+row['principal'])  # Real presenter must accept the fixture before a browser starts.

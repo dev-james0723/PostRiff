@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { panelStore } from '@/features/site-agent/store';
+import { AngleGeneration } from './angle-generation';
 import { Button } from '@/components/ui/button';
 import { Surface, StateMessage } from '@/components/rafii';
 import { useSnapshot } from '@/lib/api/hooks';
@@ -31,6 +33,13 @@ export function OpportunityCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [source, setSource] = useState(op.source_id);
+  const chatKey = `trend-source:${w}:${op.id}`;
+  useEffect(() => () => panelStore.register(chatKey, null), [chatKey]);
+  function ask() {
+    if (!source) return;
+    panelStore.register(chatKey, { selectedEntity: { type: 'source', id: source }, visibleState: { trendId: op.trend_id, opportunityRevision: op.revision, receiptId: op.trust_receipt_id } });
+    panelStore.ask(`Help me develop the selected original angle from Ideas source ${source}. Check its current trend receipt ${op.trust_receipt_id}, my goal, destination and required facts. Explain uncertainty; do not copy examples or invent personal experience.`);
+  }
   const request = useRef<{
     fingerprint: string;
     key: string;
@@ -175,6 +184,12 @@ export function OpportunityCard({
             <Disclosure key={a.id} title={a.title}>
               <p>{a.contribution}</p>
               <p>Format: {a.format_reason}</p>
+              <p>Destination: {(a.platform_targets ?? op.platform_targets).join(', ') || 'Not specified'}</p>
+              <p>Why it fits you: {a.relevance?.reason ?? 'Angle-specific relevance has not been evaluated.'}</p>
+              <p>Evidence references: {a.evidence_refs?.join(', ') || 'No angle-specific references supplied; review the opportunity receipt.'}</p>
+              <p>Risk: {a.risk?.reason ?? 'Angle-specific risk has not been evaluated.'}</p>
+              <p>Uncertainty: {a.uncertainties?.join('; ') || op.uncertainty}</p>
+              <p>Recheck: {date(a.recheck_at ?? op.expires_at)}</p>
               <p>
                 Facts you need:{' '}
                 {a.factual_requirements.join('; ') || 'No additional facts specified'}
@@ -182,6 +197,7 @@ export function OpportunityCard({
             </Disclosure>
           ))}
           {source ? (
+            <div className='space-y-3'>
             <p role='status'>
               Saved to Ideas.{' '}
               <Link
@@ -191,6 +207,15 @@ export function OpportunityCard({
                 Review source and create original post
               </Link>
             </p>
+            <Disclosure title='More ways to use this opportunity'>
+              <div className='vi-secondary-actions'>
+                <Link className='rafii-focus min-h-11 underline' href={`/app/weekly?tab=setup&source=${encodeURIComponent(source)}`}>Add to weekly plan</Link>
+                <Link className='rafii-focus min-h-11 underline' href={`/app/automations?source=${encodeURIComponent(source)}`}>Turn into campaign</Link>
+                <Button variant='quiet' type='button' disabled={!actionsOn} onClick={ask}>Ask Rafii about this trend</Button>
+              </div>
+              <p className='text-sm'>Carries your saved angle, goal, destination and evidence receipt. Review and save the plan or campaign, or send your question in chat.</p>
+            </Disclosure>
+            </div>
           ) : (
             <Disclosure className='trend-action-disclosure' title='Develop this idea'>
               <form
@@ -273,6 +298,7 @@ export function OpportunityCard({
           {dismissing ? 'Saving choice…' : 'Not relevant'}
         </Button>
       )}
+      {!source && candidate && <AngleGeneration key={`${op.id}:${op.revision}`} id={op.id} revision={op.revision} allowed={actionsOn && !busy} />}
       <FitDetails fit={op.workspace_fit} />
       {error !== null && <TrendError error={error} />}
     </Surface>

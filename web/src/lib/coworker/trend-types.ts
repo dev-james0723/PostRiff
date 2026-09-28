@@ -322,10 +322,24 @@ export const opportunitySchema = z.object({
         title: text,
         contribution: text,
         factual_requirements: strings,
-        format_reason: text
+        format_reason: text,
+        evidence_refs: strings.optional(),
+        relevance: z.object({ assessment: text, reason: text }).optional(),
+        risk: z.object({ assessment: text, reason: text }).optional(),
+        uncertainties: strings.optional(),
+        platform_targets: strings.optional(),
+        recheck_at: iso.optional()
       })
     )
     .max(3)
+});
+export const angleGenerationSchema = z.object({
+  status: z.enum(['disabled', 'needs_facts', 'needs_review', 'cached', 'queue_full', 'budget_unavailable',
+    'queued', 'leased', 'running', 'retry_wait', 'succeeded', 'failed_terminal', 'cancelled', 'outcome_unknown']),
+  job_id: z.uuid().optional(),
+  result_id: z.uuid().optional(),
+  provider_attempts: z.number().int().nonnegative().optional(),
+  existing: z.boolean().optional()
 });
 export type TrendOpportunity = z.infer<typeof opportunitySchema>;
 /** A signed page subset authorizes reported views; delivery itself is never a view. */
