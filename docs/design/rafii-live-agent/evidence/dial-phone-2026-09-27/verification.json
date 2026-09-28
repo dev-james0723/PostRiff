@@ -1,0 +1,47 @@
+{
+  "execution": "real local database and agent commands; synthetic Dial/SMS/Live transports",
+  "branch": "feat/rafii-dial-phone",
+  "baseWithPhoneRepair": "e7ee572",
+  "checks": {
+    "focusedUnit": {
+      "status": "pass",
+      "tests": 58,
+      "ref": "unit.log"
+    },
+    "dialPostgres": "pass",
+    "existingPhonePostgres": "pass",
+    "officialApiAndVercelSchemas": "pass",
+    "hostedStructure": "pass",
+    "setupReportRedactionAndGetOnly": "pass",
+    "stockAudioFormatAndDecode": "pass"
+  },
+  "accountSetup": "pending_sign_in",
+  "selfHostedAccess": "unknown",
+  "deployment": "not_run",
+  "productionMigration": "not_run",
+  "realDialCalls": 0,
+  "realVoiceModelCalls": 0,
+  "fullReleaseCI": "not_run",
+  "testedSourceSha256": {
+    ".env.example": "4807e0775dd4a71d5de9d44d14434b33071256841aa87aae625cd5edfab0100f",
+    "docs/design/rafii-live-agent/RAFII_DIAL_PHONE_SETUP_2026-09-27.md": "90d8716ee0954cde355333882f33a22ae9c24128ec71f30238a0c39e0267b245",
+    "migrations/postriff/036_dial_phone_provider.sql": "d0c9ccd280c96e33b2ff75d52a3746fdb523b364547f4b51c377b5a5d2b7f554",
+    "scripts/check_postriff_hosted_preflight.py": "33faa497b3760c673d2b65b7c2525dba6cb1330fb7fb8d86d87f7df29ce645b1",
+    "scripts/check_rafii_dial.py": "ed5bd7d42fe94d04dc43f72032122b700a1bc0c1943e234c7b3a52c13b042841",
+    "src/postriff_phase2/deployment.py": "84b832f1b8693db7ce7606c1e56251a1cd782adad5bda501116ec9c303daa07a",
+    "src/postriff_phase2/phone/asgi.py": "9a9d53906fb7674c04168b7a06c3a6989b18aadb4b894cd0a59a5f70b28fb88b",
+    "src/postriff_phase2/phone/assets/README.md": "36fd1938001ef9047d87afa4d7a0bb71c7807ed519410b46467839181839e5ce",
+    "src/postriff_phase2/phone/assets/dial-acceptance.mulaw": "efaa12fcc80036b74e08f844af51d23901df72b2f5238d3cb6f3c07f08de95de",
+    "src/postriff_phase2/phone/http.py": "b7eb1421a1f3ec862199d67308ee3374b2cc9a90833560e440e4cd3edf6a55d4",
+    "src/postriff_phase2/phone/providers/dial.py": "bfa5158f92700faa1e3562b9fe009a0c8ff2a04f9ff6dcae87e7fdbf1bedf58b",
+    "src/postriff_phase2/phone/runtime.py": "8970ae747976b85fbdb2101a9edf0731b5a564ced40924a959c1578e2a894cfc",
+    "src/postriff_phase2/phone/service.py": "5179cda65172b1821739efc6e2f4346835c1950c4758d6503c07333df7fb8c9e",
+    "src/postriff_phase2/phone/session.py": "ff656ffbfc5cea875e82b9c0723a9c5b9bd084d4b7f1f9172c57685b5606a296",
+    "src/postriff_phase2/phone/store.py": "bc60c411aa7131f3bc3dee8c7861009c9b65d029e53a3fc3fd438402b2e46109",
+    "tests/phase2/postgres_dial_phone.py": "c0e58fb55f10a52bf4bc994bf9fdd4e930558a517d3f93318079cbdb1e1db664",
+    "tests/phase2/rls.sql": "c501d2ffae7f1246fae199f1a3224cbbffc5d430b8bdedea0d682b530be6ca53",
+    "tests/test_consumer_deployment.py": "01899b0a1e7266bd6107f0b80d6c6100210b988b149079dcdd39e0fd70458974",
+    "tests/test_rafii_dial.py": "f80a44883e7e871398b791ca5e05189bf4847596b0b27768605bc4b780369a6b",
+    "vercel.json": "9f4bb8ccfc4aa07243490658df481264807df6829e74d040360be16ea155cffa"
+  }
+}

@@ -68,6 +68,7 @@ def validate_structure(root=ROOT):
         and phone.get("runtime") == "python"
         and phone.get("entrypoint") == "api.phone:app"
         and routes == [
+            {"source": "/api/phone/dial/media/(.*)", "destination": {"service": "rafii_phone_media"}},
             {"source": "/api/phone/media/(.*)", "destination": {"service": "rafii_phone_media"}},
             {"source": "/api/(.*)", "destination": {"service": "postriff_api"}},
             {"source": "/(.*)", "destination": {"service": "postriff_web"}},

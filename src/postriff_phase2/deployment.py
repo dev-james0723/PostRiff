@@ -43,7 +43,8 @@ def isolated_environment(values):
         raise ValueError('Staging secret fingerprints must be a JSON object.')
     names = {'POSTRIFF_SUPABASE_SECRET_KEY', 'POSTRIFF_CREDENTIAL_KEY', 'CRON_SECRET', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AI_GATEWAY_API_KEY', 'RESEND_API_KEY',
              'RESEND_WEBHOOK_SECRET', 'POSTRIFF_VAPID_PRIVATE_KEY', 'POSTRIFF_NOTIFICATION_SIGNING_KEY',
-             'RAFII_PHONE_ENCRYPTION_KEY','TWILIO_AUTH_TOKEN'}
+             'RAFII_PHONE_ENCRYPTION_KEY','TWILIO_AUTH_TOKEN', 'DIAL_API_KEY', 'DIAL_AUDIO_SIGNING_SECRET',
+             'DIAL_WEBHOOK_SIGNING_SECRET', 'DIAL_VERIFICATION_SECRET'}
     names.update(key for key in result if key.startswith('POSTRIFF_OAUTH_') and key.endswith(('CLIENT_ID', 'CLIENT_SECRET')))
     for name in names:
         value = result.get(name)

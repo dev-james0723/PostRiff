@@ -29,3 +29,8 @@ class PreviewIsolation(unittest.TestCase):
         self.assertEqual(isolated_environment(values)['AI_GATEWAY_API_KEY'],values['AI_GATEWAY_API_KEY'])
         values['AI_GATEWAY_API_KEY']='changed-synthetic-key'
         with self.assertRaises(ValueError):isolated_environment(values)
+
+    def test_dial_credentials_cannot_be_inherited_by_preview(self):
+        for name in ('DIAL_API_KEY','DIAL_AUDIO_SIGNING_SECRET','DIAL_WEBHOOK_SIGNING_SECRET','DIAL_VERIFICATION_SECRET'):
+            with self.subTest(name=name),self.assertRaises(ValueError):
+                isolated_environment({**self.env(),name:'unreviewed-production-secret'})

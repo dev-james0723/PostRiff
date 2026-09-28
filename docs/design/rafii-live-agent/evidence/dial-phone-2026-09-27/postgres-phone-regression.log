@@ -1,0 +1,16 @@
+psql:/Users/ouxianxing/Documents/James-Au-Studio-dial/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+== tests/phase2/postgres_phone_mode.py exit=0
+PASS verified encrypted identity, verification rate/attempts, cross-account disclosure
+PASS text/browser/phone continuity; real second-draft edit; verified speakable result; publish approval; closed-call capability
+PASS ambiguous create reconciliation, single dial, duplicate and out-of-order signed events
+PASS membership/opt-out fencing, weekly schedule parser and exactly-once cron slot
+PASS Notification V2 phone outbox opt-in/single delivery/daily cap; routine and non-deadline approvals never call; fallback; phone payload redaction
+PASS signed ASGI audio roundtrip → actual draft visible through web API → verified spoken result; interruption; publish approval; uncertain hangup fences redial; signed final duration and usage reconciliation
+PASS hangup during backend work: next mutation denied, exact phone-owned run cancelled, saved draft preserved
+PASS confirmed provider errors masked; cooldown/idempotency; zero-cost failures release daily capacity at request and delivery; unknown/partial holds retained; actual costs shared with notification policy
+PASS credit-mode call approval, exact component holds, bounded shared Manager spend/unknown holds/releases, retry idempotency, release and standing automatic-call limit
+PASS PostgreSQL grants and RLS: client roles cannot read identity/call/delegation tables
+PASS number revocation and account-deletion cascades with global egress disabled
+{"execution": "local fake transport + actual Rafii runtime and PostgreSQL", "status": "PASS", "realCalls": 0}
+
+{"status": "pass", "execution": "disposable-local-postgres", "failed": []}

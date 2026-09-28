@@ -1,0 +1,99 @@
+{
+  "observedAt": "2026-09-27T17:38:50.402760+00:00",
+  "state": "external_setup_pending",
+  "account": {
+    "dashboardSignIn": "verified",
+    "originatingNumber": "+16055978162",
+    "capabilities": [
+      "sms",
+      "call"
+    ],
+    "callingEnabled": true,
+    "selfHostedAccess": "pending",
+    "accessRequest": "submitted_pending_review",
+    "existingApiKeys": 1,
+    "apiKeyExported": false,
+    "webhooks": 0,
+    "freeCallMaxSeconds": 300,
+    "freeConcurrentCalls": 2
+  },
+  "billing": {
+    "welcomeCreditUsd": 5,
+    "automaticInitialNumberOwnershipDebitUsd": 3,
+    "remainingCreditUsd": 2,
+    "numberMonthlyRateUsd": 3,
+    "paymentMethods": 0,
+    "autoReload": false,
+    "topup": "not_run"
+  },
+  "sms": {
+    "usOutbound": "blocked",
+    "tenDlc": "not_registered",
+    "registrationFeeUsd": 25,
+    "estimatedBusinessDays": "3-5",
+    "registration": "not_submitted",
+    "verifiedUserVoiceCalls": "unaffected_by_10dlc"
+  },
+  "validation": {
+    "unitTests": {
+      "status": "pass",
+      "count": 59,
+      "ref": "account-unit.log"
+    },
+    "postgresDial": {
+      "status": "pass",
+      "execution": "synthetic_providers_and_model_real_local_database_and_agent_commands",
+      "ref": "account-postgres.log"
+    },
+    "recoveredCheckFailure": "Initial local DSN used port 55448 while the disposable runner binds 55438; corrected to its documented fixed port and passed.",
+    "sourceHashes": {
+      "src/postriff_phase2/phone/providers/dial.py": "8dd8da77c7a1542f512d36125c69557748b6401788693a605c63cf6261e71dc1",
+      "tests/test_rafii_dial.py": "589c52eba9cd71747bca87164b333803abc67cb941b40a46a6a50c85625cffc2",
+      "docs/design/rafii-live-agent/RAFII_DIAL_PHONE_SETUP_2026-09-27.md": "6b95b0013d2d650eaf8a14e6e972aa23a099ed128e8892e84add5699076c29ab"
+    },
+    "reuse": "The provider and test source hashes still match the 59 passing unit tests and local PostgreSQL acceptance; only setup receipt documentation changed."
+  },
+  "externalExecution": {
+    "selfHostedActivation": "not_run",
+    "tenDlcRegistration": "not_run",
+    "webhookCreation": "not_run",
+    "productionMigration": "not_run",
+    "deployment": "not_run",
+    "liveCall": "not_run",
+    "liveVoiceModel": "not_run",
+    "selfHostedAccessRequest": "submitted_pending_review"
+  },
+  "sources": [
+    "https://getdial.ai/dashboard",
+    "https://getdial.ai/dashboard/self-hosted",
+    "https://getdial.ai/dashboard/numbers",
+    "https://getdial.ai/dashboard/settings",
+    "https://getdial.ai/dashboard/billing",
+    "https://getdial.ai/dashboard/webhooks",
+    "https://docs.getdial.ai/openapi.json"
+  ],
+  "selfHostedRequest": {
+    "observedAt": "2026-09-27T17:49:24.631612+00:00",
+    "authorization": "User approved the exact prepared request in the current thread",
+    "submittedOnce": true,
+    "confirmation": "Your request is being reviewed",
+    "providerReviewExpectation": "Usually within a business day; account owner notified by email",
+    "url": "https://getdial.ai/dashboard/self-hosted",
+    "submittedText": "Rafii is our authenticated social-media assistant. We want it to call verified users who request a call, and later users who explicitly opt into scheduled briefings. Our existing Rafii server must drive the call using the same conversation, memory, tools, workspace permissions, publication approvals and spending limits. We need Self-Hosted audio mode to connect that existing agent and voice stack. We do not record call audio.",
+    "companyUrl": null,
+    "accessGranted": false,
+    "routingActivated": false
+  },
+  "tenDlcDraft": {
+    "kind": "sole_proprietor",
+    "kindChosenBy": "user",
+    "vertical": "TECHNOLOGY",
+    "browserSelection": "prepared",
+    "status": "not_ready_to_submit",
+    "privateOwnerFields": "pending",
+    "submission": "not_run",
+    "payment": "not_run",
+    "noticePublication": "not_run",
+    "ref": "../../RAFII_DIAL_10DLC_CANDIDATE_2026-09-27.json"
+  }
+}

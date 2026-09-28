@@ -120,13 +120,14 @@ class PhoneService:
                 raise AlphaError('Request a new verification code.', 409, code='verification_expired')
             number = self.vault.decrypt(identity['ciphertext'], identity['key_id'])
         try:
-            verified = self.provider.check_verification(number, code)
+            verified = (self.provider.check_verification(number, code, reference=identity['verification_ref'])
+                        if self.provider.name == 'dial' else self.provider.check_verification(number, code))
         except Exception:
             raise AlphaError('Phone verification is temporarily unavailable.', 503) from None
         if not verified:
             raise AlphaError('That code wasn’t accepted.', 400, code='verification_invalid')
         with self.hosted.repository.transaction(token, workspace_id) as (cur, _row, principal):
-            cur.execute('UPDATE public.pr_phone_numbers SET verified_at=now(),verification_ref=NULL WHERE user_id=%s AND phone_hash=%s RETURNING user_id', (principal, identity['hash']))
+            cur.execute('UPDATE public.pr_phone_numbers SET verified_at=now(),verification_ref=NULL WHERE user_id=%s AND phone_hash=%s AND verification_ref=%s RETURNING user_id', (principal, identity['hash'], identity['verification_ref']))
             if not cur.fetchone():
                 raise AlphaError('The phone number changed. Verify it again.', 409)
         return {'verified': True, 'lastFour': number[-4:]}

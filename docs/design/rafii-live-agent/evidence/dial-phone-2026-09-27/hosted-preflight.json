@@ -1,0 +1,66 @@
+{
+  "status": "pending",
+  "execution": "local-preflight-only",
+  "checks": [
+    {
+      "name": "deployment-files",
+      "status": "pass",
+      "detail": "complete"
+    },
+    {
+      "name": "vercel-services-routing",
+      "status": "pass",
+      "detail": "signed media routes to ASGI before the existing API and Next.js; request paths are preserved"
+    },
+    {
+      "name": "phone-media-duration",
+      "status": "pass",
+      "detail": "media host covers the 600-second call cap plus 60-second shutdown margin; requires Pro/Enterprise Fluid Compute"
+    },
+    {
+      "name": "function-bundle-boundary",
+      "status": "pass",
+      "detail": "local credentials, launchers, private social modules, tests and evidence are excluded"
+    },
+    {
+      "name": "source-upload-boundary",
+      "status": "pass",
+      "detail": "explicit blocklist excludes credentials, hidden broker state, caches, private modules, tests and evidence from source upload"
+    },
+    {
+      "name": "python-runtime",
+      "status": "pass",
+      "detail": "Python 3.12 with pinned Pillow and psycopg binary wheels"
+    },
+    {
+      "name": "secret-exclusions",
+      "status": "pass",
+      "detail": "local environment files and Vercel link metadata are excluded"
+    },
+    {
+      "name": "python-syntax",
+      "status": "pass",
+      "detail": "hosted entrypoint and runtime modules parse"
+    },
+    {
+      "name": "environment-template",
+      "status": "pass",
+      "detail": "placeholder-only contract; no secret-shaped literal found"
+    },
+    {
+      "name": "production-cron-candidate",
+      "status": "pass",
+      "detail": "one-minute authenticated worker candidate"
+    },
+    {
+      "name": "vercel-project-link",
+      "status": "pending",
+      "detail": "no Vercel project selected"
+    },
+    {
+      "name": "required-environment",
+      "status": "pending",
+      "detail": "missing or placeholder: POSTRIFF_DATABASE_URL, POSTRIFF_SUPABASE_URL, POSTRIFF_SUPABASE_PUBLISHABLE_KEY, POSTRIFF_SUPABASE_SECRET_KEY, CRON_SECRET"
+    }
+  ]
+}

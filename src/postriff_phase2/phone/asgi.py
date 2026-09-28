@@ -43,7 +43,8 @@ def create_lazy_app(*, values=None, application_factory=None):
                     return
         await delegate(socket.scope, socket.receive, socket.send)
 
-    return Starlette(routes=[WebSocketRoute('/api/phone/media/{call_id}', media)])
+    return Starlette(routes=[WebSocketRoute('/api/phone/media/{call_id}', media),
+                             WebSocketRoute('/api/phone/dial/media/{call_id}', media)])
 
 
 def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
@@ -111,7 +112,84 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             except RuntimeError:
                 pass
 
-    routes = [WebSocketRoute('/api/phone/media/{call_id}',media)]
+    def claim_dial_stream(provider, call_ref, meta, *, accepted=False):
+        call_id = provider.local_call_id(meta.get('instruction'))
+        with hosted.connection_factory() as db, db.cursor() as cur:
+            value = store.call(cur, call_id, lock=True)
+            identity = store.number(cur, value['user_id']) if value else None
+            if not (value and value['provider'] == 'dial' and value['state'] in ('dialing','ambiguous','ringing','answered') and
+                    value['provider_call_ref'] in (None, call_ref) and not value['media_claimed_at'] and identity and
+                    identity['verified'] and identity['hash'] == value['number_hash'] and
+                    phone.vault.decrypt(identity['ciphertext'], identity['key_id']) == meta.get('to')):
+                raise AlphaError('Phone stream unavailable.', 403)
+            store.set_state(cur, value, 'answered')
+            cur.execute('UPDATE public.pr_phone_calls SET provider_call_ref=%s,media_claimed_at=CASE WHEN %s THEN now() ELSE NULL END WHERE id=%s', (call_ref,accepted,call_id))
+            db.commit()
+        return call_id
+
+    async def dial_media(socket):
+        from .providers.dial import DialMediaTransport
+        provider, call_ref = phone.provider, socket.path_params['call_id']
+        if not (provider and provider.name == 'dial' and provider.configured and
+                phone.config.enabled('RAFII_PHONE_ENABLED') and
+                provider.verify_media(call_ref, socket.headers.get('x-dial-signature', ''))):
+            await socket.close(code=1008)
+            return
+        await socket.accept()
+        controller, transport, call_id = None, None, None
+        try:
+            import json
+            async with asyncio.timeout(10):
+                raw = await socket.receive_text()
+            if len(raw) > 65536:
+                raise ValueError('Dial frame too large')
+            meta = json.loads(raw)
+            if not (meta.get('type') == 'call_connected' and meta.get('call_id') == call_ref and
+                    meta.get('direction') == 'outbound' and meta.get('from') == provider.originating_number and
+                    meta.get('formats') == {'inbound':'mulaw_8000','outbound':'mulaw_8000'} and not meta.get('reconnect')):
+                raise AlphaError('Invalid Dial phone stream.', 403)
+            # Starts keepalive before DB/model initialization; never reinitialize a claimed call on reconnect.
+            transport = DialMediaTransport(socket)
+            call_id = await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta)
+            if not await transport.accept_call():
+                await transport.end_call()
+                await asyncio.to_thread(phone.hangup, call_id, live_seconds=0, reason='declined')
+                await asyncio.to_thread(phone.record_live_usage, call_id, 0)
+                return
+            await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta, accepted=True)
+            controller = await asyncio.to_thread(PhoneSessionController, phone, call_id)
+            if live_connect:
+                async with live_connect() as connection:
+                    await bridge(controller, transport, connection)
+            else:
+                from openai import AsyncOpenAI
+                async with AsyncOpenAI(api_key=controller.runtime.cfg.credential('openai'),max_retries=0) as client:
+                    async with client.live.connect() as connection:
+                        await bridge(controller, transport, connection)
+        except Exception:
+            if controller:
+                controller.closed = True
+            try:
+                if transport:
+                    await transport.end_call()
+                else:
+                    await socket.send_json({'type':'end_call'})
+            except Exception:
+                pass
+            if call_id:
+                await asyncio.to_thread(phone.hangup, call_id, reason='failed', live_seconds=0 if controller is None else None)
+                if controller is None:
+                    await asyncio.to_thread(phone.record_live_usage, call_id, 0)
+        finally:
+            if transport:
+                await transport.close()
+            try:
+                await socket.close()
+            except RuntimeError:
+                pass
+
+    routes = [WebSocketRoute('/api/phone/media/{call_id}',media),
+              WebSocketRoute('/api/phone/dial/media/{call_id}',dial_media)]
     if not media_only:
         routes.append(Mount('/',app=WSGIMiddleware(wsgi)))
     return Starlette(routes=routes)
