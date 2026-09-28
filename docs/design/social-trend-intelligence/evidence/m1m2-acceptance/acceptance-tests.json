@@ -1,9 +1,10 @@
 {
   "schema": "rafii.trend-m1m2-acceptance.v1",
-  "recorded_at": "2026-09-28T13:58:02.329553+00:00",
+  "recorded_at": "2026-09-28T14:24:18.926540+00:00",
   "execution_state": "actual_local_services_and_disposable_postgresql_with_explicit_synthetic_seeds",
   "canonical_release_base": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
-  "working_head_before_candidate_commit": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
+  "merged_head_base": "a25bb4583035d4abb18f8735cc92c7b619cdcb31",
+  "working_head_before_candidate_commit": "bdf0912d6300f8bc69615722d0072b9eb7271a88",
   "offline": {
     "tests": 1026,
     "passed": 784,
@@ -30,7 +31,7 @@
       "trust": 112,
       "whitespace": 35
     },
-    "repair": "frontier_control added to bounded dependency-authorized physical purge; affected frontier37 and trust112 rerun PASS"
+    "repair": "frontier_control physical purge is dependency-authorized and defers while a linked job still holds payload; affected frontier37 and trust112 rerun PASS"
   },
   "browser_to_database": {
     "assertions": 108,
@@ -56,12 +57,23 @@
     "result": "strategy/browser-results.json",
     "synthetic_history_is_not_empirical_qualification": true
   },
+  "web": {
+    "tests": 435,
+    "passed": 435,
+    "failures": 0,
+    "errors": 0,
+    "checks": {
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "production_build": "PASS"
+    }
+  },
   "provider_calls": 0,
   "model_calls": 0,
   "paid_external_spend_usd": 0,
   "production_verified": false,
   "source_hashes": {
-    "src/postriff_phase2/growth/trends/retention.py": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+    "src/postriff_phase2/growth/trends/retention.py": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
     "tests/test_trend_frontier.py": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
     "tests/test_trend_metrics.py": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
     "tests/test_trend_http.py": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",

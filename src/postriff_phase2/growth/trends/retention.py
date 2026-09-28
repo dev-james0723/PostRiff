@@ -90,7 +90,11 @@ def sweep(store, *, limit=100, cursor=None):
             AND NOT postriff_private.trend_node_valid(candidate.scope_key,candidate.node_id)
             AND (retention_until<=clock_timestamp() OR validity IN ('revoked','stale') OR EXISTS(
                 SELECT 1 FROM public.pr_trend_observations o WHERE(o.scope_key,o.observation_id)=(n.scope_key,n.node_id))
-                OR node_kind IN ('manifest','receipt','projection','frontier_control'))
+                OR node_kind IN ('manifest','receipt','projection')
+                OR (node_kind='frontier_control' AND NOT EXISTS(
+                    SELECT 1 FROM public.pr_trend_outbox e JOIN public.pr_trend_jobs j
+                    ON(j.scope_key,j.job_id::text)=(e.scope_key,e.payload->>'job_id')
+                    WHERE(e.scope_key,e.node_id)=(n.scope_key,n.node_id) AND j.payload<>'{}'::jsonb)))
             ORDER BY n.retention_until,n.node_id FOR UPDATE OF n SKIP LOCKED""",(limit,))
         candidates = rows(cur)
         for n in candidates:

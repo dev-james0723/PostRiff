@@ -137,7 +137,7 @@
     "src/postriff_phase2/growth/trends/quarantine.py": "9b3a46db4a45d3a9a5f2dae66fd3c9e50821777c2dc7aadb12911d8ac454f3a0",
     "src/postriff_phase2/growth/trends/receipts.py": "899ec1ef813e591569fb2d8c88a9343ec85a05fd35b241a6f7e5de79db76c8bc",
     "src/postriff_phase2/growth/trends/relevance.py": "50d50b5bb3e78e8606304e4b24256069101b2892323162bb9fe29d8421e5b7b1",
-    "src/postriff_phase2/growth/trends/retention.py": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+    "src/postriff_phase2/growth/trends/retention.py": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
     "src/postriff_phase2/growth/trends/retry.py": "b28f2dbba5177f6cc46c425bbf380e7d25e646d490e9a8df8770d3d3166e0ab5",
     "src/postriff_phase2/growth/trends/revocation.py": "0b8e1f6b9469b54d2b673b0dcdcf6cdc91c94c441e2551f9cb83be20c3428c11",
     "src/postriff_phase2/growth/trends/semantic_admission.py": "e8b417c53baae1d6751c7800e6d373c6d1c990a6437c2ccccc4b302b85d7311b",
@@ -192,8 +192,8 @@
   "ui_runtime_matches_frozen_receipt": false,
   "frontend_build": {
     "dist": ".next-trend-live",
-    "reused": true,
-    "build_id": "9RGbQGB6Zca0AVe8f9QTl",
+    "reused": false,
+    "build_id": "kmvY62KxA91mfdRTsCi8h",
     "api_origin": "http://127.0.0.1:4558"
   },
   "model_usage_events": 0,
@@ -435,7 +435,7 @@
     "src/postriff_phase2/growth/trends/quarantine.py": "9b3a46db4a45d3a9a5f2dae66fd3c9e50821777c2dc7aadb12911d8ac454f3a0",
     "src/postriff_phase2/growth/trends/receipts.py": "899ec1ef813e591569fb2d8c88a9343ec85a05fd35b241a6f7e5de79db76c8bc",
     "src/postriff_phase2/growth/trends/relevance.py": "50d50b5bb3e78e8606304e4b24256069101b2892323162bb9fe29d8421e5b7b1",
-    "src/postriff_phase2/growth/trends/retention.py": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+    "src/postriff_phase2/growth/trends/retention.py": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
     "src/postriff_phase2/growth/trends/retry.py": "b28f2dbba5177f6cc46c425bbf380e7d25e646d490e9a8df8770d3d3166e0ab5",
     "src/postriff_phase2/growth/trends/revocation.py": "0b8e1f6b9469b54d2b673b0dcdcf6cdc91c94c441e2551f9cb83be20c3428c11",
     "src/postriff_phase2/growth/trends/semantic_admission.py": "e8b417c53baae1d6751c7800e6d373c6d1c990a6437c2ccccc4b302b85d7311b",

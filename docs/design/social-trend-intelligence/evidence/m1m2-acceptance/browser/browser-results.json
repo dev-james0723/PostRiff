@@ -515,721 +515,728 @@
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/1b01f757-8fc5-4048-b719-11bf11d6d015/receipts/3571d76f-c700-4ac9-a4b6-c7b79d7a35cb",
-      "status": 200,
-      "cache": "private, no-store"
-    },
-    {
-      "width": 1440,
-      "method": "POST",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/exposures",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends/8dee1101-a2e5-4298-b453-3732ec7ff326/receipts/a9a72d37-6b02-4e73-a13c-5a21d62b3089",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities/ee9f0b5b-bc27-485b-bf7f-2bbd62b26cc9/angles",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends/exposures",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities/ee9f0b5b-bc27-485b-bf7f-2bbd62b26cc9/accept",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends/opportunities/8eaf3f14-ebda-4fa0-91a9-6ba8e23c9282/angles",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends/opportunities/8eaf3f14-ebda-4fa0-91a9-6ba8e23c9282/accept",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities",
+      "path": "/api/workspaces/b69393f6-843c-4ba0-9702-1484543b5318/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/a2e3fb09-66cc-4999-bd23-1591b5288a3d/receipts/b5cb910e-7114-4bea-9ea4-52e3658211b8",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends/1cc90faa-c29a-4099-b34d-3ba34c654bed/receipts/4022c674-8f53-4f75-8d1b-35890ce51b15",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/exposures",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends/exposures",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities/17541b9a-e1a2-4b78-a17c-2d72481c51b1/angles",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends/opportunities/f896ecff-5d02-45d0-b35c-97346a4afd81/angles",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities/17541b9a-e1a2-4b78-a17c-2d72481c51b1/accept",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends/opportunities/f896ecff-5d02-45d0-b35c-97346a4afd81/accept",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends",
+      "path": "/api/workspaces/4149d453-02f0-471e-808f-994c0447f27c/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/28791ae7-0d36-4c96-9973-c8b7aa4be21e/receipts/716d7bee-238f-40b1-9416-94f3fd91c903",
-      "status": 200,
-      "cache": "private, no-store"
-    },
-    {
-      "width": 390,
-      "method": "POST",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/exposures",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends/4a23ef7d-3591-423f-b642-6e09f8142ae4/receipts/e9d96358-e2d4-4e0f-966e-e4caf8401b19",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "POST",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities/0f116b2e-fbff-44b0-85b8-589df7327e2d/angles",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends/exposures",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "POST",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities/0f116b2e-fbff-44b0-85b8-589df7327e2d/accept",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends/opportunities/5977e1d3-d784-4937-b983-60a640fa2168/angles",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends/opportunities/5977e1d3-d784-4937-b983-60a640fa2168/accept",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/04d62045-31f9-4b2d-9487-c1b444388c68/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/0970d272-1242-4e8a-b95f-fa87d7fe374e/receipts/9b83058c-4cea-4918-823b-3561c44e4efc",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends/9d697cae-3e7b-4593-8177-3c033b42bd48/receipts/ff2dfda4-17ad-446a-bcbe-7f6f0a541960",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/exposures",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends/exposures",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities/7a48131b-7b84-43ae-81ba-65195029ff3d/angles",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends/opportunities/a715d174-a79a-4ae8-b504-cb416a24dc33/angles",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities/7a48131b-7b84-43ae-81ba-65195029ff3d/accept",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends/opportunities/a715d174-a79a-4ae8-b504-cb416a24dc33/accept",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends",
+      "path": "/api/workspaces/06cc08a1-a610-4e82-b5d4-fa0693c6a44c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/d35d2c4d-3f6d-4c77-bb13-6f07547a67b8/receipts/ca8ec69c-6b31-4dd0-bb55-a0e7d89c4ed1",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/f3905e1e-4ec4-401f-861f-b2a2cb9c4d8d/receipts/44ee59ec-ab8b-4dca-8e25-ae3e60e43467",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/actions",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/actions",
       "status": 200,
       "cache": "no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/f3905e1e-4ec4-401f-861f-b2a2cb9c4d8d/receipts/44ee59ec-ab8b-4dca-8e25-ae3e60e43467",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/d35d2c4d-3f6d-4c77-bb13-6f07547a67b8/receipts/ca8ec69c-6b31-4dd0-bb55-a0e7d89c4ed1",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/actions",
+      "path": "/api/workspaces/cb5c9f7b-eb65-4a11-a310-ba04d4170c47/actions",
       "status": 409,
       "cache": "no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/11ee32b6-e3a2-45de-a854-c035d8cd7504/receipts/d08ef115-1522-46c0-a898-2b8198ca70bc",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/6093d5e0-927c-4fb3-b036-b4b654cb9879/receipts/966a9f19-f6ed-43ae-a41e-9978cad5d385",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/actions",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/actions",
       "status": 200,
       "cache": "no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/11ee32b6-e3a2-45de-a854-c035d8cd7504/receipts/d08ef115-1522-46c0-a898-2b8198ca70bc",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/coworker/trends/6093d5e0-927c-4fb3-b036-b4b654cb9879/receipts/966a9f19-f6ed-43ae-a41e-9978cad5d385",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/actions",
+      "path": "/api/workspaces/af73cf00-3db2-43e2-92dc-2016b81d38b5/actions",
       "status": 409,
       "cache": "no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "POST",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/84685e7b-1107-4b9e-a212-0e267f99a4f2/receipts/657b11f9-0bf1-4d2e-bec8-cb98d77728e0",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/f43e22bf-5ef6-42e1-9fdd-9957140f4835/receipts/9d472c83-9c95-4f39-887d-28859905c1d9",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "POST",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/actions",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/actions",
       "status": 200,
       "cache": "no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "POST",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/f43e22bf-5ef6-42e1-9fdd-9957140f4835/receipts/9d472c83-9c95-4f39-887d-28859905c1d9",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/coworker/trends/84685e7b-1107-4b9e-a212-0e267f99a4f2/receipts/657b11f9-0bf1-4d2e-bec8-cb98d77728e0",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "POST",
-      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/actions",
+      "path": "/api/workspaces/3f23fb39-bab6-44e8-94db-73b3799cb184/actions",
       "status": 409,
       "cache": "no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/6eadc1ea-59d1-4c8c-ac69-85c411292e01/receipts/131badda-bf70-40e3-8217-7c471fcb3c00",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/00f6575b-4a33-426e-8198-decb0f3b1078/receipts/06c456d3-32be-4a81-bcac-e539e8d15569",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/actions",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/actions",
       "status": 200,
       "cache": "no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunity-lab/runs",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/opportunity-lab/runs",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/6eadc1ea-59d1-4c8c-ac69-85c411292e01/receipts/131badda-bf70-40e3-8217-7c471fcb3c00",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/00f6575b-4a33-426e-8198-decb0f3b1078/receipts/06c456d3-32be-4a81-bcac-e539e8d15569",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/actions",
+      "path": "/api/workspaces/93a84d92-43c6-4730-ad92-7116e338fab8/actions",
       "status": 409,
       "cache": "no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities",
+      "path": "/api/workspaces/222d95b6-060b-48e8-ab6b-cfe8c83a6d8c/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends",
+      "path": "/api/workspaces/222d95b6-060b-48e8-ab6b-cfe8c83a6d8c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/exposures",
+      "path": "/api/workspaces/222d95b6-060b-48e8-ab6b-cfe8c83a6d8c/coworker/trends/exposures",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "POST",
-      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities/312d87a0-df3b-4900-a2da-619fdad1c06f/dismiss",
+      "path": "/api/workspaces/222d95b6-060b-48e8-ab6b-cfe8c83a6d8c/coworker/trends/opportunities/12312f46-341f-4fff-9c4c-47aa87d37e59/dismiss",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities",
+      "path": "/api/workspaces/222d95b6-060b-48e8-ab6b-cfe8c83a6d8c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities",
+      "path": "/api/workspaces/222d95b6-060b-48e8-ab6b-cfe8c83a6d8c/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 1440,
       "method": "GET",
-      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends",
+      "path": "/api/workspaces/222d95b6-060b-48e8-ab6b-cfe8c83a6d8c/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends",
+      "path": "/api/workspaces/661c1df3-f6cf-40d3-89fa-3468691887c1/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities",
-      "status": 200,
-      "cache": "private, no-store"
-    },
-    {
-      "width": 768,
-      "method": "POST",
-      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/exposures",
+      "path": "/api/workspaces/661c1df3-f6cf-40d3-89fa-3468691887c1/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "POST",
-      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities/815220d8-0569-42f1-9d78-8f55a06db9e1/dismiss",
+      "path": "/api/workspaces/661c1df3-f6cf-40d3-89fa-3468691887c1/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/661c1df3-f6cf-40d3-89fa-3468691887c1/coworker/trends/opportunities/07042d5b-a328-4bdd-9b6a-4f1fbb39081a/dismiss",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities",
+      "path": "/api/workspaces/661c1df3-f6cf-40d3-89fa-3468691887c1/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends",
+      "path": "/api/workspaces/661c1df3-f6cf-40d3-89fa-3468691887c1/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 768,
       "method": "GET",
-      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities",
+      "path": "/api/workspaces/661c1df3-f6cf-40d3-89fa-3468691887c1/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities",
+      "path": "/api/workspaces/622f43f3-371e-4116-9a55-d0c98c7d65ce/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends",
-      "status": 200,
-      "cache": "private, no-store"
-    },
-    {
-      "width": 390,
-      "method": "POST",
-      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/exposures",
+      "path": "/api/workspaces/622f43f3-371e-4116-9a55-d0c98c7d65ce/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "POST",
-      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities/7b1099d5-551b-4c85-979e-c21367ce5fec/dismiss",
+      "path": "/api/workspaces/622f43f3-371e-4116-9a55-d0c98c7d65ce/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/622f43f3-371e-4116-9a55-d0c98c7d65ce/coworker/trends/opportunities/2ba6256e-6074-498d-8089-c94303db00e3/dismiss",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities",
+      "path": "/api/workspaces/622f43f3-371e-4116-9a55-d0c98c7d65ce/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends",
+      "path": "/api/workspaces/622f43f3-371e-4116-9a55-d0c98c7d65ce/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 390,
       "method": "GET",
-      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities",
+      "path": "/api/workspaces/622f43f3-371e-4116-9a55-d0c98c7d65ce/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends",
+      "path": "/api/workspaces/654c97ee-9b1c-4d39-ae63-812f35eebde6/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities",
+      "path": "/api/workspaces/654c97ee-9b1c-4d39-ae63-812f35eebde6/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/exposures",
+      "path": "/api/workspaces/654c97ee-9b1c-4d39-ae63-812f35eebde6/coworker/trends/exposures",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "POST",
-      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities/b9208fe4-1577-4873-9584-2417d4a253be/dismiss",
+      "path": "/api/workspaces/654c97ee-9b1c-4d39-ae63-812f35eebde6/coworker/trends/opportunities/5862a627-ab0b-4c24-a34a-6b12a4611388/dismiss",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities",
+      "path": "/api/workspaces/654c97ee-9b1c-4d39-ae63-812f35eebde6/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends",
+      "path": "/api/workspaces/654c97ee-9b1c-4d39-ae63-812f35eebde6/coworker/trends",
       "status": 200,
       "cache": "private, no-store"
     },
     {
       "width": 430,
       "method": "GET",
-      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities",
+      "path": "/api/workspaces/654c97ee-9b1c-4d39-ae63-812f35eebde6/coworker/trends/opportunities",
       "status": 200,
       "cache": "private, no-store"
     }

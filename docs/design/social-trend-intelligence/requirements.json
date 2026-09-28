@@ -5717,7 +5717,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "09c298629b3b6d88aaf8efe6c0abe4a98dbae665b6ff787b49e5ad53b21b7827",
@@ -5727,7 +5727,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -5737,7 +5737,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -7735,7 +7735,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -7745,7 +7745,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -23759,7 +23759,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -29684,7 +29684,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
@@ -29898,7 +29898,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d71e9d128542e65c6632336e305c806872293b49a118624f0d621a94839aee48",
@@ -30120,7 +30120,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -30676,7 +30676,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -30686,7 +30686,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -30696,7 +30696,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f54f1dc426e98e6af035001dfd4955723fc6b614b2541f8387beb7b9099b61fb",
@@ -30706,7 +30706,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "fb46ef44d1b982e76f1f1e1278799dd8a31572b89e8a5545f926b06951240fbd",
@@ -36253,7 +36253,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "fb46ef44d1b982e76f1f1e1278799dd8a31572b89e8a5545f926b06951240fbd",
@@ -39394,7 +39394,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -39785,7 +39785,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -41270,7 +41270,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0eeb60b925580d48176091ae381a0e3fecffe4cfb9ea4acc1dcc023c4e95a066",
@@ -41477,7 +41477,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -41674,7 +41674,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -41873,7 +41873,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -42133,7 +42133,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -42143,7 +42143,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -42153,7 +42153,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0eeb60b925580d48176091ae381a0e3fecffe4cfb9ea4acc1dcc023c4e95a066",
@@ -42163,7 +42163,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -42401,7 +42401,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -42661,7 +42661,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -42671,7 +42671,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -42681,7 +42681,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -42691,7 +42691,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43428,7 +43428,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43438,7 +43438,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43448,7 +43448,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43458,7 +43458,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43707,7 +43707,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43717,7 +43717,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43727,7 +43727,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43737,7 +43737,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43984,7 +43984,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -43994,7 +43994,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44004,7 +44004,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44014,7 +44014,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44263,7 +44263,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44273,7 +44273,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44283,7 +44283,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44293,7 +44293,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44542,7 +44542,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44552,7 +44552,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44562,7 +44562,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44572,7 +44572,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44821,7 +44821,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44831,7 +44831,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44841,7 +44841,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -44851,7 +44851,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45100,7 +45100,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45110,7 +45110,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45120,7 +45120,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45130,7 +45130,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45368,7 +45368,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45577,7 +45577,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45774,7 +45774,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -45971,7 +45971,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -46485,7 +46485,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -47030,7 +47030,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -48498,7 +48498,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -48508,7 +48508,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -48518,7 +48518,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -48528,7 +48528,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -59597,7 +59597,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -59607,7 +59607,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -59787,7 +59787,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "real_next_api_disposable_postgresql_synthetic_seed",
           "outcome": "PASS",
           "test_source_sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
@@ -60073,7 +60073,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "real_next_api_disposable_postgresql_synthetic_seed",
           "outcome": "PASS",
           "test_source_sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
@@ -64204,7 +64204,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -64417,7 +64417,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -64630,7 +64630,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -64845,7 +64845,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "09c298629b3b6d88aaf8efe6c0abe4a98dbae665b6ff787b49e5ad53b21b7827",
@@ -65336,7 +65336,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "09c298629b3b6d88aaf8efe6c0abe4a98dbae665b6ff787b49e5ad53b21b7827",
@@ -74730,7 +74730,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "09c298629b3b6d88aaf8efe6c0abe4a98dbae665b6ff787b49e5ad53b21b7827",
@@ -74740,7 +74740,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "3d77dfcf88b6315ab51ae8ab1cd8ec3f2f91d98aac6a9315d3e9ecf768f85a37",
@@ -74750,7 +74750,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "09c298629b3b6d88aaf8efe6c0abe4a98dbae665b6ff787b49e5ad53b21b7827",
@@ -78301,7 +78301,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -80804,7 +80804,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "028fd44a370b49e918c89e1adff56029f7df0a5b174db961689155560aa9f738",
@@ -80814,7 +80814,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -80824,7 +80824,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -80834,7 +80834,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0eeb60b925580d48176091ae381a0e3fecffe4cfb9ea4acc1dcc023c4e95a066",
@@ -81671,7 +81671,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -81681,7 +81681,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -81691,7 +81691,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -81701,7 +81701,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -93592,7 +93592,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "4a3fec7f921cc63367039cd7b71714616475a2a3c53961f99de32b62f52ff525",
@@ -94965,7 +94965,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -94975,7 +94975,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -94985,7 +94985,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "4a3fec7f921cc63367039cd7b71714616475a2a3c53961f99de32b62f52ff525",
@@ -94995,7 +94995,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "4a3fec7f921cc63367039cd7b71714616475a2a3c53961f99de32b62f52ff525",
@@ -97482,7 +97482,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -97701,7 +97701,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -97711,7 +97711,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -97721,7 +97721,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -98126,7 +98126,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -100881,7 +100881,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -100891,7 +100891,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -100901,7 +100901,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -104766,7 +104766,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -104776,7 +104776,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130635,7 +130635,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130645,7 +130645,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130655,7 +130655,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130665,7 +130665,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130928,7 +130928,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130938,7 +130938,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130948,7 +130948,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -130958,7 +130958,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -131170,7 +131170,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -131353,7 +131353,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -131526,7 +131526,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -131752,7 +131752,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -131762,7 +131762,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -131772,7 +131772,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -131782,7 +131782,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132037,7 +132037,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f52b04a6abc65c194930bff309427b8075e571159175dcd5285c073ef1591f8a",
@@ -132047,7 +132047,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -132057,7 +132057,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132067,7 +132067,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132598,7 +132598,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132608,7 +132608,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132618,7 +132618,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132628,7 +132628,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132917,7 +132917,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132927,7 +132927,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -132937,7 +132937,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f54f1dc426e98e6af035001dfd4955723fc6b614b2541f8387beb7b9099b61fb",
@@ -134938,7 +134938,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -135461,7 +135461,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -135740,7 +135740,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -135750,7 +135750,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -135760,7 +135760,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -135770,7 +135770,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -136914,7 +136914,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -136924,7 +136924,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0eeb60b925580d48176091ae381a0e3fecffe4cfb9ea4acc1dcc023c4e95a066",
@@ -140076,7 +140076,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -140086,7 +140086,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "028fd44a370b49e918c89e1adff56029f7df0a5b174db961689155560aa9f738",
@@ -140096,7 +140096,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "028fd44a370b49e918c89e1adff56029f7df0a5b174db961689155560aa9f738",
@@ -140106,7 +140106,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -143597,7 +143597,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -145629,7 +145629,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -145811,7 +145811,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -145993,7 +145993,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -146175,7 +146175,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -146357,7 +146357,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -146539,7 +146539,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -146864,7 +146864,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -148916,7 +148916,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -149080,7 +149080,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -149278,7 +149278,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -149288,7 +149288,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "4dba9bebdbe58d65a225c6d1a319a7d1e968ae33434fd4bab798c4e9bf53a377",
@@ -149298,7 +149298,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "4dba9bebdbe58d65a225c6d1a319a7d1e968ae33434fd4bab798c4e9bf53a377",
@@ -149509,7 +149509,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -149519,7 +149519,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -149774,7 +149774,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -149935,7 +149935,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -150096,7 +150096,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -150257,7 +150257,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -150418,7 +150418,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -150579,7 +150579,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -150740,7 +150740,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -150901,7 +150901,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -151062,7 +151062,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -151534,7 +151534,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -151544,7 +151544,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -152616,7 +152616,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -152626,7 +152626,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -152636,7 +152636,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -153435,7 +153435,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92",
@@ -153445,7 +153445,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92",
@@ -153455,7 +153455,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92",
@@ -153725,7 +153725,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -153735,7 +153735,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -153745,7 +153745,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -153755,7 +153755,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -154016,7 +154016,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f52d9963a45b9e7bd57fde0a696cbfc4eff7766bfc154f026540892ecae4814e",
@@ -154026,7 +154026,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f52d9963a45b9e7bd57fde0a696cbfc4eff7766bfc154f026540892ecae4814e",
@@ -154036,7 +154036,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -154046,7 +154046,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -154243,7 +154243,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -159116,7 +159116,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f52d9963a45b9e7bd57fde0a696cbfc4eff7766bfc154f026540892ecae4814e",
@@ -159126,7 +159126,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f52d9963a45b9e7bd57fde0a696cbfc4eff7766bfc154f026540892ecae4814e",
@@ -159328,7 +159328,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -159338,7 +159338,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -160027,7 +160027,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -160037,7 +160037,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -160047,7 +160047,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -160057,7 +160057,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -160067,7 +160067,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
@@ -161493,7 +161493,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -161503,7 +161503,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -161513,7 +161513,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -161523,7 +161523,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -161533,7 +161533,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
@@ -162486,7 +162486,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -162496,7 +162496,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -162506,7 +162506,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -162516,7 +162516,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -162526,7 +162526,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
@@ -167020,7 +167020,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -167030,7 +167030,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -167240,7 +167240,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "f52b04a6abc65c194930bff309427b8075e571159175dcd5285c073ef1591f8a",
@@ -167728,7 +167728,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -167738,7 +167738,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -167748,7 +167748,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -167758,7 +167758,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -169140,7 +169140,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -169150,7 +169150,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -169160,7 +169160,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -169170,7 +169170,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -169461,7 +169461,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -169471,7 +169471,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -169481,7 +169481,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -169491,7 +169491,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -170583,7 +170583,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -170803,7 +170803,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -170966,7 +170966,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -171157,7 +171157,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -171320,7 +171320,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -171483,7 +171483,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -171646,7 +171646,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -171915,7 +171915,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -171978,7 +171978,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
@@ -172105,7 +172105,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -172268,7 +172268,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -172529,7 +172529,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -173074,7 +173074,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -175138,7 +175138,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -177223,7 +177223,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -177233,7 +177233,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -177243,7 +177243,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -177253,7 +177253,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -210012,7 +210012,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
@@ -210022,7 +210022,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
@@ -210032,7 +210032,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
@@ -210042,7 +210042,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
@@ -210052,7 +210052,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "08813fd6e26173ef7aecbe933cc711a6a1df7dcf0390f513f7d4e730e306191b",
@@ -214243,7 +214243,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -217011,7 +217011,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -222479,7 +222479,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -222489,7 +222489,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "4a3fec7f921cc63367039cd7b71714616475a2a3c53961f99de32b62f52ff525",
@@ -222499,7 +222499,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -222509,7 +222509,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -229437,7 +229437,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -229447,7 +229447,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -229457,7 +229457,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "fb46ef44d1b982e76f1f1e1278799dd8a31572b89e8a5545f926b06951240fbd",
@@ -236337,7 +236337,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "real_next_api_disposable_postgresql_synthetic_seed",
           "outcome": "PASS",
           "test_source_sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
@@ -253368,7 +253368,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -253378,7 +253378,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -253388,7 +253388,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -253398,7 +253398,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -253829,7 +253829,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -259954,7 +259954,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -260726,7 +260726,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -260906,7 +260906,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -261647,7 +261647,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -262016,7 +262016,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -263389,7 +263389,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -264208,7 +264208,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -264776,7 +264776,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "4a3fec7f921cc63367039cd7b71714616475a2a3c53961f99de32b62f52ff525",
@@ -265214,7 +265214,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -265785,7 +265785,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "09c298629b3b6d88aaf8efe6c0abe4a98dbae665b6ff787b49e5ad53b21b7827",
@@ -266724,7 +266724,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -267086,7 +267086,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -267278,7 +267278,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -267478,7 +267478,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -267688,7 +267688,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -267896,7 +267896,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -268111,7 +268111,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -268326,7 +268326,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -268336,7 +268336,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -268795,7 +268795,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -268805,7 +268805,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -268815,7 +268815,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f52d9963a45b9e7bd57fde0a696cbfc4eff7766bfc154f026540892ecae4814e",
@@ -268825,7 +268825,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "f52d9963a45b9e7bd57fde0a696cbfc4eff7766bfc154f026540892ecae4814e",
@@ -269029,7 +269029,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -269274,7 +269274,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -269446,7 +269446,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -269597,7 +269597,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d00652f4ae7225780693ab65160c261f66fe5d08eee2fe2d4e41bfc9e65e957d",
@@ -269886,7 +269886,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d00652f4ae7225780693ab65160c261f66fe5d08eee2fe2d4e41bfc9e65e957d",
@@ -270048,7 +270048,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "a8fbf6d9e0e20156165ae82539fe2c4276a7633612f160db221d2bbb0a2e1e92",
@@ -270232,7 +270232,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -270404,7 +270404,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "2f7a036f110ee23ef50daeadc0c18aebad7247f6da05cf154e7387e5e09f5a3e",
@@ -270640,7 +270640,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "d64eafce9a7fef925d59b960fc870bbd3201a3b851b9d1351c754aee34d2a0b4",
@@ -271034,7 +271034,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -271198,7 +271198,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -271388,7 +271388,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -271502,7 +271502,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "919e65a35250179718a969173be1342a5ee1feea7f6f6fa82fef13e288491164",
@@ -271512,7 +271512,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -271522,7 +271522,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -271532,7 +271532,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
@@ -271660,7 +271660,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -271796,7 +271796,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -271988,7 +271988,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -272124,7 +272124,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -275779,7 +275779,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -280925,7 +280925,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
@@ -281077,7 +281077,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -281270,7 +281270,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -281428,7 +281428,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "4a3fec7f921cc63367039cd7b71714616475a2a3c53961f99de32b62f52ff525",
@@ -281577,7 +281577,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "2e98f58a1eae6e39310a00584e31934fd7c3228bd6d5239894a8d22fc12fea8c",
@@ -281742,7 +281742,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "4a3fec7f921cc63367039cd7b71714616475a2a3c53961f99de32b62f52ff525",
@@ -281903,7 +281903,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "63bbfe540e8310284043c719238e4703cd5a7c4c8dda247b8ea75cd74153ed73",
@@ -282089,7 +282089,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "dfa624f0680a1dc0a75de5efd7b21fffa35bc762ceaf47bcaed6dd01ad1f6b0d",
@@ -282245,7 +282245,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -282403,7 +282403,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "real_next_api_disposable_postgresql_synthetic_seed",
           "outcome": "PASS",
           "test_source_sha256": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
@@ -282610,7 +282610,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -282620,7 +282620,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -282630,7 +282630,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -282640,7 +282640,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "bcbc89bf3d5f4f73343d0157d6a68f63b43e66ce4de43fe41425f20713f768cd",
@@ -282650,7 +282650,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_acceptance",
           "outcome": "PASS",
           "test_source_sha256": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
@@ -282808,7 +282808,7 @@
           "path": "src/postriff_phase2/growth/trends/retention.py",
           "exists": true,
           "relationship": "component_candidate_not_individual_requirement_verification",
-          "sha256": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+          "sha256": "473d5ee975fd9995e65e28d5a7aee9ba01cb9690f08b072787c0fc26d26665f1",
           "matches_guarded_test_snapshot": true,
           "prior_sha256": "3a5e20e024d97c03b7f6f027c62708b1831157a486321e5000b2592141453cd0",
           "changed_since_prior_review": true
@@ -282871,7 +282871,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
@@ -283058,7 +283058,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -283257,7 +283257,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -283682,7 +283682,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "b01f7af52c23d4c01a5a50c2cd9774f883b899acbb259db35605358c76c401e7",
@@ -283894,7 +283894,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -284106,7 +284106,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -284268,7 +284268,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -284479,7 +284479,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -284691,7 +284691,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -284853,7 +284853,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "09c298629b3b6d88aaf8efe6c0abe4a98dbae665b6ff787b49e5ad53b21b7827",
@@ -285051,7 +285051,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -285212,7 +285212,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -285424,7 +285424,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "1edf67fa822e78d585fce749bdaffdaebb70c7323e22291fbd52492b42294bb0",
@@ -286314,7 +286314,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -286324,7 +286324,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -286334,7 +286334,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -286344,7 +286344,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "5e1b3bc7a642dcce235dd608a414f75f107acadd3bfb6a8e00f5eaf33f47151a",
@@ -286354,7 +286354,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "0d3adbcce51d26c3ffb945e2e41a33f2a9394e5c1555a84ae2e69c1f03eb3206",
@@ -286751,7 +286751,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -286761,7 +286761,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "pure_offline_guarded_synthetic",
           "outcome": "PASS",
           "test_source_sha256": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
@@ -286771,7 +286771,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "e8d35d1fb9a5e9147bc8267666d8b697e602320e260680737be2f2c17226482c",
@@ -286991,7 +286991,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
@@ -287148,7 +287148,7 @@
         {
           "evidence_id": "E-M1M2-ACCEPTANCE",
           "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-          "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+          "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
           "execution": "source_bound_local_synthetic_offline_or_disposable_postgresql",
           "outcome": "PASS",
           "test_source_sha256": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
@@ -298896,7 +298896,7 @@
     {
       "evidence_id": "E-M1M2-ACCEPTANCE",
       "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-      "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525",
+      "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc",
       "state": "LOCAL_SYNTHETIC_AND_DISPOSABLE_POSTGRESQL_NOT_PRODUCTION"
     }
   ],
@@ -298943,7 +298943,7 @@
     }
   },
   "closeout": {
-    "recorded_at": "2026-09-28T13:58:02.329553+00:00",
+    "recorded_at": "2026-09-28T14:24:18.926540+00:00",
     "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb",
     "release_base": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
     "prior_ledger_sha256": "6f72d380fad5aa1c1bbf2d58ae041b92775e2eeef8fb7b0b4024c96e8c51fe5d",
@@ -299257,7 +299257,7 @@
     "supplemental_receipts": [
       {
         "path": "docs/design/social-trend-intelligence/evidence/m1m2-acceptance/acceptance-tests.json",
-        "sha256": "a088490a4e31efb54b85c2abc59eba48cdc416e8984b040002652e3325521525"
+        "sha256": "ae456df1b5c76abcb470474fb34f4cb1f25be15af268939423cf4a9974a025bc"
       }
     ],
     "supplemental_scope": "Local synthetic/disposable acceptance only; no provider/model/notification/competitor activation or production qualification."

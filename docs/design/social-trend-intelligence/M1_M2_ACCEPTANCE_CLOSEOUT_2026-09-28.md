@@ -1,6 +1,6 @@
 # Social Trend Intelligence M1/M2 acceptance closeout candidate
 
-Recorded on 2026-09-28 from canonical release base `822f25d21138be18dbcd0eb7d3d2bcb1baff87cc` on branch `codex/trend-acceptance-m1-m2`. This is a source-bound local release-candidate receipt. Production remains the canonical release until the candidate passes the normal PR, merge, deployment and live-revision checks.
+Recorded on 2026-09-28 from the requested release baseline `822f25d21138be18dbcd0eb7d3d2bcb1baff87cc`, then rebased onto merged-head base `a25bb4583035d4abb18f8735cc92c7b619cdcb31` to preserve the concurrent hosted-social release, on branch `codex/trend-acceptance-m1-m2`. This is a source-bound local release-candidate receipt. Production remains the canonical release until the candidate passes the normal PR, merge, deployment and live-revision checks.
 
 ## Outcome
 
@@ -18,14 +18,14 @@ The source-bound receipt is `evidence/m1m2-acceptance/acceptance-tests.json`; pa
 - 584 disposable-PostgreSQL tests passed across advanced 43, forecast 15, frontier 37, generation 39, interpretation 49, media 51, pipeline 14, planner 53, services 136, trust 112 and whitespace 35.
 - 108 browser→real API→PostgreSQL assertions passed at 1440, 768, 390 and 430 px with API interception disabled.
 - 16 strategy adoption/revocation browser→real API→PostgreSQL assertions passed at the same four widths.
-- 335 web tests passed; production build, TypeScript and lint passed.
+- 435 web tests passed; production build, TypeScript and lint passed.
 - Provider calls: 0. Model calls: 0. Paid external spend: USD 0. No activation, collection, notification, competitor observation, publication or external rollout occurred.
 
 The compound scenarios cover evidence→opportunity, opportunity→Ideas, explicit three-angle authorization boundary, Ideas→Weekly, Ideas→Campaign, Rafii chat handoff, strategy adoption, rights revocation, exposure/outcome lineage, performance learning, deleted/expired/revoked evidence, tenant isolation, recomputation, retention/deletion, local language preservation, and cost/model accounting boundaries.
 
 ## Defect found and repaired
 
-The expanded PostgreSQL acceptance caught a real reverse-dependency deletion defect: a revoked source invalidated its `frontier_control` request, but bounded physical purge did not include that invalidated node kind. `retention.py` now permits `frontier_control` purge only after the existing dependency-validity predicate authorizes it. The affected frontier 37 and trust 112 groups were rerun and passed.
+The expanded PostgreSQL acceptance caught a real reverse-dependency deletion defect: a revoked source invalidated its `frontier_control` request, but bounded physical purge did not include that invalidated node kind. The merged-head rerun then caught an ordering edge: physical purge could erase the request before paged frontier maintenance scrubbed its linked job. `retention.py` now permits the control-node purge only after the dependency-validity predicate authorizes it and no linked job retains payload. The affected frontier 37 and trust 112 groups were rerun and passed.
 
 ## Milestone status
 
