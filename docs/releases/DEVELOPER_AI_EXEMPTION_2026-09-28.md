@@ -1,6 +1,6 @@
 # JamesAU0723 developer AI quota exemption
 
-Status: LOCAL CANDIDATE, not activated or deployed. No paid AI calls or phone calls were made for validation.
+Status: APPROVED FOR RELEASE; production UUID setting added, deployment pending. No paid AI calls or phone calls were made for validation.
 
 ## Verified target and proposed activation
 
@@ -9,9 +9,9 @@ The user identified JamesAU0723 as their developer/test account and requested re
 - Project: `buoyhkbodnhzngaotoel` (`postriff-phase2-private`).
 - Account name: `jamesau0723`; display name: `Classical Music Life`.
 - Immutable auth user ID: `b167161d-37f4-4bc3-ae22-2482c982e5a0`.
-- Proposed production setting: `RAFII_AI_UNLIMITED_USER_IDS=b167161d-37f4-4bc3-ae22-2482c982e5a0`.
+- Production setting added: `RAFII_AI_UNLIMITED_USER_IDS=b167161d-37f4-4bc3-ae22-2482c982e5a0`.
 - Production application: `postriff-phase2-private.vercel.app`.
-- Candidate base: `62d27932bd48ff61f8c6c91d6a8334689ba0d6b8` on `origin/consumer-saas`, verified against the remote at task start.
+- Candidate rebased onto `9785cc0ebace9153b4b71fd49d13087b9d657d83` on `origin/consumer-saas`, preserving PR #53 minute funding and reconnect support.
 
 Activation requires deploying this candidate and applying the above server-only setting to the web/backend and any separately deployed phone runtime using this ledger. Recheck the release branch before integrating; do not deploy the unrelated dirty primary checkout. No schema migration, historical cost reset, fake subscription or credit grant is required. The setting is empty by default; changing a username/profile/request cannot enroll an account.
 
@@ -39,8 +39,16 @@ Evidence logs: `/private/tmp/rafii-developer-quota-full-unit-fixed.log`, `/priva
 
 ## Remaining action and rollback
 
-Obtain approval for the concrete deployment and UUID-only environment setting, integrate against the current release head, run required release gates, deploy, and read back the authenticated usage response plus ordinary-account controls without making a paid provider call. A live generation test needs separately scoped cost authorization.
+User approved commit, push and deployment on 2026-09-28. Run required release gates, deploy, and read back the authenticated usage response plus ordinary-account controls without making a paid provider call. A live generation test needs separately scoped cost authorization.
 
 Rollback: remove the UUID from the server-only setting and redeploy/restart the affected runtimes. Keep the ledger unchanged.
 
 The attempt to download the entire production environment was rejected by automatic approval review because it would expose unrelated secrets. No such download succeeded. Identity was instead verified through a narrowly scoped read-only dashboard query, so activation does not require downloading those credentials.
+
+## Inbound immediate hangup repair (approved follow-up)
+
+Production media upgraded to WebSocket (101) at 05:28:56 UTC for the reported inbound call, but no admission row was inserted. Read-only SQL found five prior sessions in 24 hours, none in the last hour, and three attached to authenticated calls. Exact nonsecret Vercel config readback: telephony minute ceiling 170,000 microdollars; unauthenticated greeting pool 1,000,000. The sixth greeting computed 1,020,000 and was silently rejected.
+
+Fix: count only sessions without an authenticated call against the unauthenticated pool. Authenticated reservations already include the 45-second greeting, so this removes duplicate allocation without raising the pool or trusting caller ID. Hourly/caller throttles and failed/unknown greeting holds remain. Add bounded rejection diagnostics without codes, numbers or payloads. Pass the verified actor through inbound code issuance and continuation credit checks. No migration or historical data deletion.
+
+Current-source validation: 1,699 Python tests passed; isolated PostgreSQL developer quota, signed inbound admission/agent integration, and phone duration/renewal suites passed. Added regression proves funded greetings release duplicate admission allocation while unfunded calls still stop; developer code issuance and renewal need no credit quote/grant. Logs: `/private/tmp/rafii-developer-release-unit.log`, `/private/tmp/rafii-developer-release-db.log`. All external providers synthetic; real calls 0.

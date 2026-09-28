@@ -142,8 +142,8 @@ def renew(phone, call_id):
         costs = (rates[0] * (math.ceil((target+15)/60)-math.ceil((funded+15)/60)),
                  rates[1] * (math.ceil((target+offset)/60)-math.ceil((funded+offset)/60)))
         book = phone.hosted.ledger.credits
-        credit = bool(book and book.policy(cur,value['workspace_id']))
-        if ('creditLimitMilliCredits' in voice) and not credit:
+        credit = bool(not ai_usage_exempt(value['user_id']) and book and book.policy(cur,value['workspace_id']))
+        if ('creditLimitMilliCredits' in voice) and not credit and not ai_usage_exempt(value['user_id']):
             raise AlphaError('Credit billing is paused.',503)
         if value['kind'] != 'explicit':
             from . import planner

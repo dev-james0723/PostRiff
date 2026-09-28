@@ -48,7 +48,7 @@ def issue(phone, workspace_id, token, payload):
         if conversation:
             phone.hosted.ideas._conversation(cur, workspace_id, conversation)
         maximum = payload.get('maxMilliCredits')
-        spending = billing.spending(phone, cur, workspace_id, direction='inbound')
+        spending = billing.spending(phone, cur, workspace_id, direction='inbound', principal=principal)
         if maximum is not None and (type(maximum) is not int or not 0 <= maximum <= 100_000_000):
             raise AlphaError('Choose a valid call credit limit.', 400)
         if spending['usesCredits'] and payload.get('useAvailableCredits') is not True and (type(maximum) is not int or maximum < spending['ceilingMilliCredits']):
@@ -100,13 +100,18 @@ def begin(phone, call_ref, caller):
     with phone.hosted.connection_factory() as db, db.cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(hashtextextended('phone-inbound-admission',0))")
         cleanup(phone, cur)
-        cur.execute('SELECT count(*) FILTER(WHERE started_at>to_timestamp(%s)),count(*),'
+        cur.execute('SELECT count(*) FILTER(WHERE started_at>to_timestamp(%s)),count(*) FILTER(WHERE call_id IS NULL),'
                     'count(*) FILTER(WHERE caller_hash=%s AND started_at>to_timestamp(%s)) '
                     'FROM public.pr_phone_inbound_sessions WHERE started_at>to_timestamp(%s)',
                     (now - 3600, caller_hash, now - 600, now - 86400))
-        hourly, daily, same_caller = cur.fetchone()
-        # Reserve a full minute for each unauthenticated greeting, including rejected guesses.
-        if hourly >= 12 or same_caller >= 3 or (daily + 1) * phone.config.telephony_rate > phone.config.inbound_auth_budget:
+        hourly, unauthenticated, same_caller = cur.fetchone()
+        # Authenticated calls already reserve their 45s greeting in billing.estimates.
+        # Keep failed/unknown greetings here, but never charge funded greetings twice.
+        reason = ('inbound_hourly_limit' if hourly >= 12 else 'inbound_caller_limit' if same_caller >= 3 else
+                  'inbound_auth_budget' if (unauthenticated + 1) * phone.config.telephony_rate > phone.config.inbound_auth_budget else None)
+        if reason:
+            from .diagnostics import report_failure
+            report_failure(None, 'inbound_admission', AlphaError('Inbound admission unavailable.', 429, code=reason))
             return False
         cur.execute('INSERT INTO public.pr_phone_inbound_sessions(provider_call_ref,caller_hash,started_at) '
                     'VALUES(%s,%s,to_timestamp(%s)) ON CONFLICT DO NOTHING RETURNING provider_call_ref', (call_ref, caller_hash, now))

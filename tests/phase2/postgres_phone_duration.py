@@ -71,6 +71,28 @@ with connection() as db:
     wallet=service.ledger.credits.view(db.cursor(),wid)
 assert wallet['heldMilliCredits']==0 and wallet['usedMilliCredits']<=50000,wallet
 
+# Developer uses no credit limit or grants even with the exhausted credit wallet.
+os.environ['RAFII_AI_UNLIMITED_USER_IDS'] = user
+before_developer = wallet.copy()
+from unittest.mock import patch
+from postriff_phase2.phone import inbound
+phone.provider.originating_number = '+12025550100'
+with patch.object(inbound, 'require_available'):
+    ticket = inbound.issue(phone, wid, user, {})
+assert len(ticket['code']) == 12
+cid=begin('developer-no-credit-limit')
+start=now[0]
+now[0]=start+50
+billing.renew(phone,cid)
+assert read(cid)['funded_seconds']==120
+phone.finish(cid,'completed',65,live_seconds=65)
+with connection() as db:
+    after_developer=service.ledger.credits.view(db.cursor(),wid)
+assert after_developer['usedMilliCredits']==before_developer['usedMilliCredits']
+assert after_developer['heldMilliCredits']==0
+assert sql("SELECT count(*) FROM pr_usage_ledger WHERE meta->>'phoneCallId'=%s AND meta ? 'credits'",cid)==[(0,)]
+os.environ.pop('RAFII_AI_UNLIMITED_USER_IDS')
+
 # A funded call crosses both former 60s/600s cutoffs, without reserving an hour up front.
 with connection() as db:service.ledger.credits.grant(db.cursor(),wid,user,'duration-grant',2_000_000,source='synthetic-only')
 cid=begin('full-hour-credits',useAvailableCredits=True)
