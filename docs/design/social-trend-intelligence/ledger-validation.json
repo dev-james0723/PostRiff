@@ -1,18 +1,16 @@
 {
   "status": "PASS",
-  "recorded_at": "2026-09-28T08:09:28.129325+00:00",
-  "source_head": "10fdc3cf977f1fc217e996748697a36121afccdb",
+  "recorded_at": "2026-09-28T15:34:51.321372+00:00",
+  "source_head": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
   "records": 1771,
   "stable_ids_and_exact_source_preserved": true,
   "source_sha256": "5664a50d744c95734d21dade7baf95145aa8ef14992d6ad11871c8a08828a328",
-  "requirements_sha256": "577a69c628b3dcd4b974bd1317885bd7175c5e04e54b149db86d78200867888b",
+  "requirements_sha256": "b74ba111c70641665ee19be123c653b439855adcf444d2ae364990f52984b229",
   "counts": {
     "NOT_APPLICABLE": 154,
-    "IN_PROGRESS": 1460,
-    "IMPLEMENTED_UNVERIFIED": 107,
-    "VERIFIED": 31,
-    "BLOCKED_EXTERNAL": 9,
-    "NOT_STARTED": 10
+    "IN_PROGRESS": 1431,
+    "VERIFIED": 167,
+    "BLOCKED_EXTERNAL": 19
   },
   "work_packages": {
     "WP00": {
@@ -20,99 +18,89 @@
       "counts": {
         "NOT_APPLICABLE": 76,
         "IN_PROGRESS": 102,
-        "IMPLEMENTED_UNVERIFIED": 3
+        "VERIFIED": 3
       },
       "mandatory_counts": {
         "IN_PROGRESS": 99,
-        "IMPLEMENTED_UNVERIFIED": 3
+        "VERIFIED": 3
       },
       "complete": false
     },
     "WP01": {
       "records": 164,
       "counts": {
-        "IN_PROGRESS": 142,
+        "IN_PROGRESS": 140,
         "NOT_APPLICABLE": 10,
-        "IMPLEMENTED_UNVERIFIED": 11,
-        "VERIFIED": 1
+        "VERIFIED": 14
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 142,
-        "IMPLEMENTED_UNVERIFIED": 11,
-        "VERIFIED": 1
+        "IN_PROGRESS": 140,
+        "VERIFIED": 14
       },
       "complete": false
     },
     "WP02": {
       "records": 75,
       "counts": {
-        "IN_PROGRESS": 68,
-        "IMPLEMENTED_UNVERIFIED": 6,
+        "IN_PROGRESS": 67,
+        "VERIFIED": 7,
         "NOT_APPLICABLE": 1
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 58,
-        "IMPLEMENTED_UNVERIFIED": 6
+        "IN_PROGRESS": 57,
+        "VERIFIED": 7
       },
       "complete": false
     },
     "WP03": {
       "records": 56,
       "counts": {
-        "IN_PROGRESS": 52,
-        "IMPLEMENTED_UNVERIFIED": 2,
-        "BLOCKED_EXTERNAL": 1,
-        "VERIFIED": 1
+        "IN_PROGRESS": 51,
+        "VERIFIED": 4,
+        "BLOCKED_EXTERNAL": 1
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 52,
-        "IMPLEMENTED_UNVERIFIED": 2,
-        "BLOCKED_EXTERNAL": 1,
-        "VERIFIED": 1
+        "IN_PROGRESS": 51,
+        "VERIFIED": 4,
+        "BLOCKED_EXTERNAL": 1
       },
       "complete": false
     },
     "WP04": {
       "records": 415,
       "counts": {
-        "IN_PROGRESS": 363,
-        "IMPLEMENTED_UNVERIFIED": 29,
-        "NOT_APPLICABLE": 15,
-        "VERIFIED": 8
+        "IN_PROGRESS": 353,
+        "VERIFIED": 47,
+        "NOT_APPLICABLE": 15
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 350,
-        "IMPLEMENTED_UNVERIFIED": 29,
-        "VERIFIED": 8
+        "IN_PROGRESS": 340,
+        "VERIFIED": 47
       },
       "complete": false
     },
     "WP05": {
       "records": 43,
       "counts": {
-        "IN_PROGRESS": 40,
-        "IMPLEMENTED_UNVERIFIED": 2,
-        "VERIFIED": 1
+        "IN_PROGRESS": 38,
+        "VERIFIED": 5
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 39,
-        "IMPLEMENTED_UNVERIFIED": 2,
-        "VERIFIED": 1
+        "IN_PROGRESS": 37,
+        "VERIFIED": 5
       },
       "complete": false
     },
     "WP06": {
       "records": 136,
       "counts": {
-        "IN_PROGRESS": 126,
-        "IMPLEMENTED_UNVERIFIED": 5,
-        "NOT_APPLICABLE": 4,
-        "VERIFIED": 1
+        "IN_PROGRESS": 122,
+        "VERIFIED": 10,
+        "NOT_APPLICABLE": 4
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 116,
-        "IMPLEMENTED_UNVERIFIED": 5,
-        "VERIFIED": 1
+        "IN_PROGRESS": 112,
+        "VERIFIED": 10
       },
       "complete": false
     },
@@ -120,51 +108,51 @@
       "records": 127,
       "counts": {
         "NOT_APPLICABLE": 9,
-        "IN_PROGRESS": 111,
-        "IMPLEMENTED_UNVERIFIED": 6,
-        "VERIFIED": 1
+        "IN_PROGRESS": 110,
+        "VERIFIED": 8
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 100,
-        "IMPLEMENTED_UNVERIFIED": 6,
-        "VERIFIED": 1
+        "IN_PROGRESS": 99,
+        "VERIFIED": 8
       },
       "complete": false
     },
     "WP08": {
       "records": 124,
       "counts": {
-        "IN_PROGRESS": 115,
-        "IMPLEMENTED_UNVERIFIED": 7,
+        "IN_PROGRESS": 113,
+        "VERIFIED": 9,
         "NOT_APPLICABLE": 2
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 114,
-        "IMPLEMENTED_UNVERIFIED": 7
+        "IN_PROGRESS": 112,
+        "VERIFIED": 9
       },
       "complete": false
     },
     "WP09": {
       "records": 259,
       "counts": {
-        "IMPLEMENTED_UNVERIFIED": 26,
-        "IN_PROGRESS": 206,
+        "VERIFIED": 29,
+        "IN_PROGRESS": 203,
         "NOT_APPLICABLE": 27
       },
       "mandatory_counts": {
-        "IMPLEMENTED_UNVERIFIED": 26,
-        "IN_PROGRESS": 197
+        "VERIFIED": 29,
+        "IN_PROGRESS": 194
       },
       "complete": false
     },
     "WP10": {
       "records": 27,
       "counts": {
-        "IN_PROGRESS": 23,
-        "NOT_APPLICABLE": 4
+        "IN_PROGRESS": 20,
+        "NOT_APPLICABLE": 4,
+        "VERIFIED": 3
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 20
+        "IN_PROGRESS": 17,
+        "VERIFIED": 3
       },
       "complete": false
     },
@@ -172,29 +160,25 @@
       "records": 16,
       "counts": {
         "IN_PROGRESS": 12,
-        "IMPLEMENTED_UNVERIFIED": 3,
-        "VERIFIED": 1
+        "VERIFIED": 4
       },
       "mandatory_counts": {
         "IN_PROGRESS": 12,
-        "IMPLEMENTED_UNVERIFIED": 3,
-        "VERIFIED": 1
+        "VERIFIED": 4
       },
       "complete": false
     },
     "WP12": {
       "records": 20,
       "counts": {
-        "BLOCKED_EXTERNAL": 7,
-        "NOT_STARTED": 10,
+        "BLOCKED_EXTERNAL": 17,
         "IN_PROGRESS": 2,
-        "IMPLEMENTED_UNVERIFIED": 1
+        "VERIFIED": 1
       },
       "mandatory_counts": {
-        "BLOCKED_EXTERNAL": 7,
-        "NOT_STARTED": 9,
+        "BLOCKED_EXTERNAL": 16,
         "IN_PROGRESS": 2,
-        "IMPLEMENTED_UNVERIFIED": 1
+        "VERIFIED": 1
       },
       "complete": false
     },
@@ -218,13 +202,11 @@
       "counts": {
         "IN_PROGRESS": 34,
         "NOT_APPLICABLE": 4,
-        "IMPLEMENTED_UNVERIFIED": 4,
-        "VERIFIED": 4
+        "VERIFIED": 8
       },
       "mandatory_counts": {
         "IN_PROGRESS": 34,
-        "IMPLEMENTED_UNVERIFIED": 4,
-        "VERIFIED": 4
+        "VERIFIED": 8
       },
       "complete": false
     },
@@ -232,13 +214,11 @@
       "records": 22,
       "counts": {
         "IN_PROGRESS": 17,
-        "IMPLEMENTED_UNVERIFIED": 1,
-        "VERIFIED": 4
+        "VERIFIED": 5
       },
       "mandatory_counts": {
         "IN_PROGRESS": 16,
-        "IMPLEMENTED_UNVERIFIED": 1,
-        "VERIFIED": 4
+        "VERIFIED": 5
       },
       "complete": false
     },
@@ -270,13 +250,11 @@
       "records": 10,
       "counts": {
         "IN_PROGRESS": 8,
-        "IMPLEMENTED_UNVERIFIED": 1,
-        "VERIFIED": 1
+        "VERIFIED": 2
       },
       "mandatory_counts": {
         "IN_PROGRESS": 8,
-        "IMPLEMENTED_UNVERIFIED": 1,
-        "VERIFIED": 1
+        "VERIFIED": 2
       },
       "complete": false
     }
@@ -286,18 +264,14 @@
       "records": 1670,
       "counts": {
         "NOT_APPLICABLE": 150,
-        "IN_PROGRESS": 1384,
-        "IMPLEMENTED_UNVERIFIED": 101,
-        "VERIFIED": 16,
-        "BLOCKED_EXTERNAL": 9,
-        "NOT_STARTED": 10
+        "IN_PROGRESS": 1355,
+        "VERIFIED": 146,
+        "BLOCKED_EXTERNAL": 19
       },
       "mandatory_counts": {
-        "IN_PROGRESS": 1318,
-        "IMPLEMENTED_UNVERIFIED": 101,
-        "VERIFIED": 16,
-        "BLOCKED_EXTERNAL": 9,
-        "NOT_STARTED": 9
+        "IN_PROGRESS": 1289,
+        "VERIFIED": 146,
+        "BLOCKED_EXTERNAL": 18
       },
       "complete": false
     },
@@ -306,13 +280,11 @@
       "counts": {
         "IN_PROGRESS": 63,
         "NOT_APPLICABLE": 4,
-        "IMPLEMENTED_UNVERIFIED": 5,
-        "VERIFIED": 13
+        "VERIFIED": 18
       },
       "mandatory_counts": {
         "IN_PROGRESS": 62,
-        "IMPLEMENTED_UNVERIFIED": 5,
-        "VERIFIED": 13
+        "VERIFIED": 18
       },
       "complete": false
     },
@@ -320,18 +292,16 @@
       "records": 16,
       "counts": {
         "IN_PROGRESS": 13,
-        "IMPLEMENTED_UNVERIFIED": 1,
-        "VERIFIED": 2
+        "VERIFIED": 3
       },
       "mandatory_counts": {
         "IN_PROGRESS": 13,
-        "IMPLEMENTED_UNVERIFIED": 1,
-        "VERIFIED": 2
+        "VERIFIED": 3
       },
       "complete": false
     }
   },
-  "qualification": "ledger_integrity_and_evidence_binding_only",
+  "qualification": "ledger_integrity_and_current_local_acceptance_binding_only",
   "all_milestones_open": true,
   "production_verified": false
 }

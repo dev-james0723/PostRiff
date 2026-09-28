@@ -9,17 +9,20 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Kbd } from '@/components/ui/kbd';
 import { startThemeTransition } from '@/lib/theme-transition';
+import { cn } from '@/lib/utils';
 
 const subscribeToNothing = () => () => {};
 const onClient = () => true;
 const onServer = () => false;
 
-export function ThemeModeToggle() {
+export function ThemeModeToggle({ mobileTab = false }: { mobileTab?: boolean }) {
   const { setTheme, resolvedTheme } = useTheme();
   // The resolved theme only exists in the browser: the server and the hydration pass render the
   // neutral icon, then the sun or moon takes over without a mismatch.
   const mounted = React.useSyncExternalStore(subscribeToNothing, onClient, onServer);
   const mode = resolvedTheme === 'dark' ? 'dark' : 'light';
+  const nextMode = mode === 'dark' ? 'light' : 'dark';
+  const actionLabel = mounted ? `Switch to ${nextMode} mode` : 'Change color mode';
 
   const handleThemeToggle = React.useCallback(
     (e?: React.MouseEvent) => {
@@ -51,30 +54,47 @@ export function ThemeModeToggle() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleThemeToggle]);
 
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant='ghost'
-            size='icon'
-            className='group/toggle size-8'
-            aria-label='Toggle theme'
-            onClick={handleThemeToggle}
-          />
-        }
-      >
+  const control = (
+    <Button
+      variant='ghost'
+      size={mobileTab ? 'default' : 'icon'}
+      className={cn(
+        'group/toggle',
+        mobileTab
+          ? 'rafii-focus relative z-[1] min-h-[3.25rem] min-w-11 w-full flex-col gap-1 rounded-2xl px-0 text-[10px] font-medium text-muted-foreground min-[360px]:text-[11px]'
+          : 'size-8'
+      )}
+      aria-label={actionLabel}
+      onClick={handleThemeToggle}
+    >
+      <span aria-hidden>
         {mounted ? (
           <ActionSwapIcon value={mode} animation='roll'>
-            {mode === 'dark' ? <Icons.moon /> : <Icons.sun />}
+            {mode === 'dark' ? (
+              <Icons.moon className={mobileTab ? 'size-5' : undefined} />
+            ) : (
+              <Icons.sun className={mobileTab ? 'size-5' : undefined} />
+            )}
           </ActionSwapIcon>
         ) : (
-          <Icons.brightness />
+          <Icons.brightness className={mobileTab ? 'size-5' : undefined} />
         )}
-        <span className='sr-only'>Toggle theme</span>
-      </TooltipTrigger>
+      </span>
+      {mobileTab ? (
+        <span aria-hidden>{mounted ? (mode === 'dark' ? 'Dark' : 'Light') : 'Theme'}</span>
+      ) : (
+        <span className='sr-only'>{actionLabel}</span>
+      )}
+    </Button>
+  );
+
+  if (mobileTab) return control;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={control} />
       <TooltipContent>
-        Toggle theme <Kbd>⌘⇧D</Kbd> <Kbd>D D</Kbd>
+        {actionLabel} <Kbd>⌘⇧D</Kbd> <Kbd>D D</Kbd>
       </TooltipContent>
     </Tooltip>
   );
