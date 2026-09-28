@@ -2,7 +2,7 @@
 
 ## Status and commits
 
-Phase 1 implementation: `394c2d484bef045dc44c3d42de9111b7b376dbdd`, pushed on `codex/rafii-soulx-avatar-20260928`. Phase 2 implementation commit: to be recorded after its validation commit. Neither phase has been merged or deployed. The avatar configuration route returns `disabled` in production, and unset `AVATAR_MODE` is disabled. Real GPU/GPT Live acceptance is **NOT RUN**. No provider, GPU, model, API, or cloud cost was incurred by this continuation.
+Phase 1 implementation: `394c2d484bef045dc44c3d42de9111b7b376dbdd`. Phase 2 implementation: `69734ca2e6c6673bddd0ffe672573a547dfb5625`. Both are on `codex/rafii-soulx-avatar-20260928`. Neither phase has been merged or deployed. The avatar configuration route returns `disabled` in production, and unset `AVATAR_MODE` is disabled. Real GPU/GPT Live acceptance is **NOT RUN**. No provider, GPU, model, API, or cloud cost was incurred by this continuation.
 
 ## Architecture and failure boundary
 
