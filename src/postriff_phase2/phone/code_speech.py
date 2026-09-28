@@ -76,5 +76,5 @@ async def transcribe(audio, credential):
     async with AsyncOpenAI(api_key=credential, max_retries=0, timeout=8) as client:
         result = await client.audio.transcriptions.create(
             model='gpt-4o-mini-transcribe', file=('code.wav', wav_bytes(audio), 'audio/wav'),
-            response_format='json', prompt='A phone sign-in code, spoken one digit at a time in English, Cantonese or Mandarin. Transcribe only the digits actually heard. Never add or infer missing digits.')
+            response_format='json', prompt='A Agent Pairing Code, spoken one digit at a time in English, Cantonese or Mandarin. Transcribe only the digits actually heard. Never add or infer missing digits.')
     return parse_code(result.text)

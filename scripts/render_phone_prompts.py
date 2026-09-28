@@ -18,11 +18,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--generate', action='store_true')
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--only', choices=('dial-acceptance', 'dial-inbound', 'dial-inbound-retry'))
+    parser.add_argument('--only', nargs='+', choices=('dial-acceptance', 'dial-inbound', 'dial-inbound-retry', 'dial-repeat'))
     args = parser.parse_args()
     spec = json.loads(MANIFEST.read_text())
     if args.only:
-        spec['prompts'] = {args.only: spec['prompts'][args.only]}
+        spec['prompts'] = {name: spec['prompts'][name] for name in dict.fromkeys(args.only)}
     if not args.generate:
         print(json.dumps({'execution': 'candidate; no API calls', 'requests': len(spec['prompts']), **spec}, indent=2))
         return

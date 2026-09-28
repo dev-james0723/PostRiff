@@ -16,7 +16,7 @@ from ..agent_runtime_v2 import live, style
 from ..agent_runtime_v2.http import runtime_for
 from ..automation_runs import principal_repository
 from ..permissions import require
-from . import billing, contracts, inbound, planner, rules, store
+from . import billing, contracts, inbound, call_auth, planner, rules, store
 from .config import PhoneConfig
 
 
@@ -156,7 +156,7 @@ class PhoneService:
             cur.execute('DELETE FROM public.pr_phone_schedules WHERE user_id=%s', (principal,))
         return {'deleted': True}
 
-    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True, _inbound=None, event_entity_id=None):
+    def request(self, workspace_id, token, payload, *, kind='explicit', reason_key=None, event_type=None, dispatch=True, _inbound=None, event_entity_id=None, _call_challenge=False):
         self._require()
         direction = 'inbound' if _inbound else 'outbound'
         if _inbound:
@@ -173,7 +173,7 @@ class PhoneService:
             member = self.hosted.ideas._member(row)
             require(member, 'edit')
             self._lock(cur, principal)
-            ticket_id = inbound.claim(cur, self, principal, workspace_id, *_inbound) if _inbound else None
+            ticket_id = (call_auth.claim if _call_challenge else inbound.claim)(cur, self, principal, workspace_id, *_inbound) if _inbound else None
             cur.execute('SELECT id::text,workspace_id::text FROM public.pr_phone_calls WHERE user_id=%s AND idempotency_key=%s', (principal, key))
             prior = cur.fetchone()
             if prior:
@@ -250,7 +250,8 @@ class PhoneService:
             if _inbound:
                 cur.execute("UPDATE public.pr_phone_calls SET direction='inbound',state='answered',provider_call_ref=%s,"
                             'answered_at=to_timestamp(%s),media_claimed_at=to_timestamp(%s) WHERE id=%s', (_inbound[0], now, now, call_id))
-                cur.execute('UPDATE public.pr_phone_inbound_codes SET call_id=%s WHERE id=%s', (call_id, ticket_id))
+                table = 'pr_phone_auth_challenges' if _call_challenge else 'pr_phone_inbound_codes'
+                cur.execute(f'UPDATE public.{table} SET call_id=%s WHERE id=%s', (call_id, ticket_id))
                 cur.execute('UPDATE public.pr_phone_inbound_sessions SET call_id=%s WHERE provider_call_ref=%s', (call_id, _inbound[0]))
         if dispatch:
             from .delivery import deliver

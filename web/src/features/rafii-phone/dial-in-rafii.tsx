@@ -61,7 +61,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
     try {
       const result = await api.phoneInboundCode(workspaceId, { conversationId, ...(spending.usesCredits ? { useAvailableCredits: true } : {}) });
       if (mounted.current) { setNow(Date.now() / 1000); setTicket(result); }
-    } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Couldn’t create a phone sign-in code.'); }
+    } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Couldn’t create a Agent Pairing Code.'); }
     finally { if (mounted.current) setBusy(false); }
   }
   async function cancel() {
@@ -74,20 +74,20 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
   return <details aria-live='off' className='w-full rounded-xl border border-border/60 p-3 text-sm'>
     <summary className='rafii-focus min-h-11 cursor-pointer content-center font-medium'>Call Rafii by phone</summary>
     <div className='mt-3 flex flex-col items-start gap-3'>
-      <p>Call {inbound.phoneNumber} and say your 12-digit one-time code, or enter it on the keypad followed by * (star), to reach your Rafii in this workspace. {conversationId ? 'Continue this conversation.' : 'A new conversation will appear here when you connect.'}</p>
+      <p>Call {inbound.phoneNumber} and say your 12-digit Agent Pairing Code, or enter it on the keypad followed by * (star), to reach your Rafii in this workspace. {conversationId ? 'Continue this conversation.' : 'A new conversation will appear here when you connect.'}</p>
       {spending.usesCredits && <>
         <p className='text-muted-foreground text-xs'>Calling uses your available credits for phone time, voice and Rafii’s reasoning, reserved a minute at a time. Calls last up to one hour, or until there aren’t enough credits to continue. Unused credits return after settlement; provider account limits and paid-task approvals still apply.</p>
       </>}
       {usable && ticket ? <div className='w-full space-y-3 rounded-lg bg-muted/40 p-3'>
-        <p className='text-xs'>Your one-time phone sign-in code</p>
-        <output aria-label='Phone sign-in code' className='block break-words font-mono text-2xl tracking-wider'>{ticket.code.match(/.{1,4}/g)?.join(' ')}</output>
-        <p className='text-xs'>Say all 12 digits one at a time, then pause. Or enter all 12 digits on the keypad and press * (star) to connect. Press # (hash) to start over.</p>
+        <p className='text-xs'>Your Agent Pairing Code</p>
+        <output aria-label='Agent Pairing Code' className='block break-words font-mono text-2xl tracking-wider'>{ticket.code.match(/.{1,4}/g)?.join(' ')}</output>
+        <p className='text-xs'>On the call, say all 12 digits, or enter them on the keypad and press *. Pause after speaking. Keypad: press # to start over.</p>
         <p className='text-muted-foreground text-xs'>Expires in {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}. Keep it private: it gives one call access to this workspace.</p>
-        <div className='flex flex-wrap gap-2'><a className='rafii-focus inline-flex min-h-11 items-center rounded-lg border px-3 font-medium' href={`tel:${ticket.phoneNumber}`}>Dial {ticket.phoneNumber}</a><Button size='sm' variant='quiet' className='min-h-11' disabled={busy} onClick={() => void cancel()}>Cancel code</Button></div>
+        <div className='flex flex-wrap gap-2'><Button size='sm' variant='quiet' className='min-h-11' onClick={() => void navigator.clipboard.writeText(ticket.code).catch(() => setError('Couldn’t copy the code.'))}>Copy code</Button><a className='rafii-focus inline-flex min-h-11 items-center rounded-lg border px-3 font-medium' href={`tel:${ticket.phoneNumber}`}>Dial {ticket.phoneNumber}</a><Button size='sm' variant='quiet' className='min-h-11' disabled={busy} onClick={() => void cancel()}>Cancel code</Button></div>
       </div> : <>
         {ticket && <p role='status'>{status.data?.state === 'used' ? 'Code used. Your phone conversation is available in Rafii.' : status.isError ? 'Couldn’t confirm this code. Create a new one before calling.' : 'This code is no longer active. Create a new one to call.'}</p>}
         {status.data?.call && <Link className='rafii-focus min-h-11 content-center underline underline-offset-4' href={`/app/agent/${status.data.call.conversationId}`}>Open phone conversation</Link>}
-        <Button variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady} onClick={() => void generate()}>{busy ? 'Creating code…' : 'Create phone sign-in code'}</Button>
+        <Button variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady} onClick={() => void generate()}>{busy ? 'Creating code…' : 'Generate new Agent Pairing Code'}</Button>
       </>}
       <p className='text-muted-foreground text-xs'>Spoken codes are transcribed by OpenAI to verify this call; use the keypad if you prefer. The code lasts five minutes and works once. Creating a code sends no text and places no call. Your carrier may charge for the call.</p>
       {error && <p className='text-destructive' role='alert'>{error}</p>}

@@ -75,6 +75,7 @@ async function api(method,path,body) {
     customRules=(await api('GET',`/api/workspaces/${wid}/phone`)).preferences.customRules;
     assert.equal(customRules[0].enabled,false,'Editing revokes the prior rule approval');
     await custom.getByRole('button',{name:'Delete rule'}).click();
+    await custom.getByRole('button',{name:'Delete rule'}).waitFor({state:'hidden'});
     assert.deepEqual((await api('GET',`/api/workspaces/${wid}/phone`)).preferences.customRules,[]);
     assert.equal(dialRequests,0,'Creating, reviewing, editing and deleting rules never dials');
     const button=section.getByRole('button',{name:'Have Rafii call me',exact:true});

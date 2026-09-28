@@ -4,7 +4,7 @@ from urllib.parse import parse_qs
 from postriff_alpha.domain import AlphaError
 
 from ..agent_runtime_v2.api_guard import require_session_token
-from . import contracts, inbound, store, webhooks
+from . import contracts, inbound, call_auth, store, webhooks
 
 
 def phone_for(hosted):
@@ -127,6 +127,10 @@ def handle(app, environ, start_response, hosted, token, method, parts):
         result = service.delete_number(workspace_id, token)
     elif rest==['calls'] and method=='POST':
         result, status = service.request(workspace_id, token, app._body(environ)), 201
+    elif rest==['trusted-callers'] and method=='GET':
+        result = call_auth.trusted(service, workspace_id, token)
+    elif len(rest)==3 and rest[0]=='trusted-callers' and rest[2]=='revoke' and method=='POST':
+        result = call_auth.trusted(service, workspace_id, token, revoke=rest[1])
     elif rest==['inbound-codes'] and method=='POST':
         result, status = inbound.issue(service, workspace_id, token, app._body(environ)), 201
     elif len(rest)==2 and rest[0]=='inbound-codes' and method=='GET':
@@ -144,3 +148,25 @@ def handle(app, environ, start_response, hosted, token, method, parts):
     else:
         raise AlphaError('Phone route unavailable.', 404)
     return app._json(start_response, status, result)
+
+
+def verify_call(app, environ, start_response, hosted, token, method, parts):
+    require_session_token(token)
+    service = phone_for(hosted)
+    challenge = parts[3]
+    if len(parts) == 4 and method == 'GET':
+        result = call_auth.status(service, token, challenge)
+    elif len(parts) == 5 and method == 'POST':
+        action = parts[4]
+        body = app._body(environ)
+        if not isinstance(body, dict):
+            raise AlphaError('Send valid call verification options.', 400)
+        if action == 'prepare':
+            result = call_auth.prepare(service, token, challenge, body)
+        elif action == 'approve':
+            result = call_auth.approve(service, token, challenge, body)
+        else:
+            result = call_auth.dismiss(service, token, challenge, action)
+    else:
+        raise AlphaError('Call verification unavailable.', 404)
+    return app._json(start_response, 200, result)

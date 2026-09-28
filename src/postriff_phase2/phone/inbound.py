@@ -32,7 +32,7 @@ def require_available(phone):
 def issue(phone, workspace_id, token, payload):
     require_available(phone)
     if not isinstance(payload, dict) or set(payload) - {'conversationId', 'maxMilliCredits', 'useAvailableCredits'}:
-        raise AlphaError('Send valid phone sign-in options.', 400)
+        raise AlphaError('Send valid Agent Pairing Code options.', 400)
     code = f'{secrets.randbelow(10 ** CODE_DIGITS):0{CODE_DIGITS}d}'
     now = phone.clock()
     with phone.hosted.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -43,7 +43,7 @@ def issue(phone, workspace_id, token, payload):
                     'WHERE user_id=%s AND created_at>to_timestamp(%s)', (principal, now - 3600))
         count, last = cur.fetchone()
         if count >= 6 or (last is not None and now - float(last) < 30):
-            raise AlphaError('Wait before creating another phone sign-in code.', 429, code='inbound_code_limit')
+            raise AlphaError('Wait before creating another Agent Pairing Code.', 429, code='inbound_code_limit')
         conversation = payload.get('conversationId')
         if conversation:
             phone.hosted.ideas._conversation(cur, workspace_id, conversation)
@@ -85,7 +85,7 @@ def status(phone, workspace_id, token, code_id):
                     (code_id, principal, workspace_id))
         ticket = cur.fetchone()
         if not ticket:
-            raise AlphaError('Phone sign-in unavailable.', 404)
+            raise AlphaError('Agent Pairing Code unavailable.', 404)
         used, revoked, expiry, call_id = ticket
         state = 'used' if used else 'revoked' if revoked else 'expired' if phone.clock() >= float(expiry) else 'ready'
         call = store.call(cur, call_id) if call_id else None
@@ -106,11 +106,13 @@ def begin(phone, call_ref, caller):
                     'FROM public.pr_phone_inbound_sessions WHERE started_at>to_timestamp(%s)',
                     (now - 3600, caller_hash, now - 600, now - 86400))
         hourly, unauthenticated, same_caller, total = cur.fetchone()
+        cur.execute('SELECT count(*) FROM public.pr_phone_auth_challenges WHERE created_at>to_timestamp(%s)', (now - 86400,))
+        repeat_exposure = cur.fetchone()[0] * 2 * phone.config.telephony_rate
         # Authenticated calls already reserve their 45s greeting in billing.estimates.
         # Keep failed/unknown greetings here, but never charge funded greetings twice.
         # The operator also reserves bounded STT for every admission, even if it later authenticates.
         reason = ('inbound_hourly_limit' if hourly >= 12 else 'inbound_caller_limit' if same_caller >= 3 else
-                  'inbound_auth_budget' if (unauthenticated + 1) * phone.config.telephony_rate + (total + 1) * RESERVE_USD_MICRO > phone.config.inbound_auth_budget else None)
+                  'inbound_auth_budget' if (unauthenticated + 1) * phone.config.telephony_rate + (total + 1) * RESERVE_USD_MICRO + repeat_exposure > phone.config.inbound_auth_budget else None)
         if reason:
             from .diagnostics import report_failure
             report_failure(None, 'inbound_admission', AlphaError('Inbound admission unavailable.', 429, code=reason))
@@ -132,7 +134,7 @@ def authenticate(phone, call_ref, code):
     now = phone.clock()
     with phone.hosted.connection_factory() as db, db.cursor() as cur:
         cur.execute('UPDATE public.pr_phone_inbound_sessions SET attempts=attempts+1 WHERE provider_call_ref=%s '
-                    'AND call_id IS NULL AND ended_at IS NULL AND attempts<3 AND started_at>to_timestamp(%s) RETURNING attempts',
+                    'AND call_id IS NULL AND ended_at IS NULL AND attempts<3 AND coalesce(pairing_started_at,started_at)>to_timestamp(%s) RETURNING attempts',
                     (call_ref, now - AUTH_SECONDS))
         if not cur.fetchone():
             return None
@@ -158,20 +160,26 @@ def authenticate(phone, call_ref, code):
 
 def claim(cur, phone, principal, workspace, call_ref, fingerprint):
     now = phone.clock()
-    cur.execute('SELECT 1 FROM public.pr_phone_inbound_sessions WHERE provider_call_ref=%s '
+    cur.execute('SELECT caller_hash FROM public.pr_phone_inbound_sessions WHERE provider_call_ref=%s '
                 'AND call_id IS NULL AND ended_at IS NULL AND attempts BETWEEN 1 AND 3 '
-                'AND started_at>to_timestamp(%s) FOR UPDATE', (call_ref, now - AUTH_SECONDS))
+                'AND coalesce(pairing_started_at,started_at)>to_timestamp(%s) FOR UPDATE', (call_ref, now - AUTH_SECONDS))
     session = cur.fetchone()
     cur.execute('SELECT id FROM public.pr_phone_inbound_codes WHERE code_hash=%s AND user_id=%s AND workspace_id=%s '
                 'AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at>to_timestamp(%s) FOR UPDATE',
                 (fingerprint, principal, workspace, now))
     ticket = cur.fetchone()
     if not session or not ticket:
-        raise AlphaError('Phone sign-in unavailable.', 403)
+        raise AlphaError('Agent Pairing Code unavailable.', 403)
+    cur.execute('SELECT 1 FROM public.pr_phone_auth_challenges c JOIN public.pr_phone_inbound_codes p ON p.id=%s WHERE c.provider_call_ref=%s AND (c.state<>\'fallback\' OR p.created_at<c.created_at)', (ticket[0], call_ref))
+    if cur.fetchone():
+        raise AlphaError('Issue a new Agent Pairing Code for recovery.', 403)
     cur.execute('UPDATE public.pr_phone_inbound_codes SET consumed_at=to_timestamp(%s) WHERE id=%s', (now, ticket[0]))
+    from . import call_auth
+    call_auth.enroll(cur, phone, principal, workspace, session[0], ticket[0])
     return ticket[0]
 
 
 def ended(phone, call_ref):
     with phone.hosted.connection_factory() as db:
         db.execute('UPDATE public.pr_phone_inbound_sessions SET ended_at=coalesce(ended_at,now()) WHERE provider_call_ref=%s', (call_ref,))
+        db.execute("UPDATE public.pr_phone_auth_challenges SET state='denied' WHERE provider_call_ref=%s AND state IN ('pending','approved')", (call_ref,))

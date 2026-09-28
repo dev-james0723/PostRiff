@@ -198,10 +198,14 @@ class DeliveryWorker:
             return {"state": "preference", "detail": "no active push subscription"}
         spec = catalog.spec(ctx["type"])
         message = self.render(row, ctx)
-        body = push_module.payload("Rafii", message["subject"], self._ack_path((ctx["payload"] or {}).get("href"), row), ctx.get("grouping") or ctx["type"], spec["category"])
+        if ctx['type'] == 'security.phone_call':
+            body = push_module.payload('Verify your current call', 'Confirm this call with your passkey. If you did not call Rafii, ignore this request.',
+                self._ack_path((ctx['payload'] or {}).get('href'), row), row['eventId'], 'security')
+        else:
+            body = push_module.payload("Rafii", message["subject"], self._ack_path((ctx["payload"] or {}).get("href"), row), ctx.get("grouping") or ctx["type"], spec["category"])
         results = []
         for subscription in subscriptions:
-            result = self.push_transport.send(subscription, body, ttl=86400 if spec["severity"] in ("critical", "security") else 43200,
+            result = self.push_transport.send(subscription, body, ttl=90 if ctx["type"] == "security.phone_call" else 86400 if spec["severity"] in ("critical", "security") else 43200,
                                               urgency=push_module.URGENCY.get(spec["severity"], "normal"), topic=(ctx.get("grouping") or row["eventId"])[:32])
             if result["state"] == "gone":
                 self._revoke(subscription["id"], "gone")

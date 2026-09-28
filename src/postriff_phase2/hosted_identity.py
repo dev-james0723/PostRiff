@@ -5,13 +5,18 @@ import re
 import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import HTTPSHandler, HTTPRedirectHandler, Request, build_opener, urlopen
 
 from postriff_alpha.domain import AlphaError
 
 
 SESSION = re.compile(r"[A-Za-z0-9_-]{16,160}")
 USER_ID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+class _NoAuthRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # Never forward a session token or passkey assertion to another endpoint.
 
 
 def _verified_payload(access_token, principal):
@@ -49,6 +54,15 @@ def verified_aal(access_token, principal):
     factor was verified. Anything missing or unexpected counts as "aal1"."""
     value = _verified_payload(access_token, principal).get("aal")
     return "aal2" if value == "aal2" else "aal1"
+
+
+def verified_webauthn_time(access_token, principal):
+    """MFA method time, never JWT iat (refreshing a token is not fresh MFA)."""
+    methods = _verified_payload(access_token, principal).get('amr') or []
+    if not isinstance(methods, list):
+        return 0
+    return max((float(m['timestamp']) for m in methods if isinstance(m, dict)
+                and m.get('method') == 'mfa/webauthn' and type(m.get('timestamp')) in (int, float)), default=0)
 
 
 class SupabaseIdentityAdmin:
@@ -160,3 +174,41 @@ class SupabaseIdentityAdmin:
         if status not in (200, 204, 404):
             raise AlphaError("Workspace data was removed, but identity deletion needs reconciliation.", 502)
         return status != 404
+
+
+    def _phone_mfa_post(self, access_token, factor, action, payload):
+        if not USER_ID.fullmatch(factor) or action not in ('challenge', 'verify'):
+            raise AlphaError('Call verification unavailable.', 409)
+        request = Request(self.project_url + '/auth/v1/factors/' + factor + '/' + action,
+            method='POST', data=json.dumps(payload).encode(), headers={'apikey': self.publishable_key,
+            'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'})
+        try:
+            opener = build_opener(_NoAuthRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+            with opener.open(request, timeout=8) as response:
+                raw = response.read(65537)
+                if len(raw) > 65536:
+                    raise ValueError('Oversized authentication response')
+                result = json.loads(raw)
+                if not isinstance(result, dict):
+                    raise ValueError('Malformed authentication response')
+                return result
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+            # No response/error body, assertion, token or code is logged. Never retry a ceremony.
+            raise AlphaError('Passkey verification did not complete. Try again or use a new Agent Pairing Code.', 409) from None
+
+    def phone_mfa_challenge(self, token, factor, rp, site):
+        return self._phone_mfa_post(token, factor, 'challenge', {'webauthn': {'rpId': rp, 'rpOrigins': [site]}})
+
+    def phone_mfa_verify(self, token, factor, challenge, rp, site, credential):
+        if not isinstance(credential, dict) or len(json.dumps(credential)) > 16000:
+            raise AlphaError('Call verification unavailable.', 409)
+        try:
+            encoded = credential['response']['authenticatorData']
+            auth_data = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4))
+            if len(auth_data) < 37 or auth_data[32] & 5 != 5:
+                raise ValueError('User verification required')
+        except (KeyError, TypeError, ValueError):
+            raise AlphaError('Passkey user verification is required.', 409) from None
+        # Supabase verifies the signature over these same flags; the browser cannot forge them.
+        return self._phone_mfa_post(token, factor, 'verify', {'challenge_id': challenge,
+            'webauthn': {'type': 'request', 'rpId': rp, 'rpOrigins': [site], 'credential_response': credential}})

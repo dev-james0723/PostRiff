@@ -1,0 +1,36 @@
+✔ credit limits are converted exactly to milli-credits (50.091167ms)
+✔ invalid or excessive limits do not authorize spending (24.613833ms)
+✔ follow-up binds a credit approval to this conversation and exact request (64.381417ms)
+✔ legacy and own-provider follow-ups do not create a cloud-credit approval (14.814041ms)
+✔ a rejected credit approval never dispatches a model turn (7.445875ms)
+✔ leaving the conversation while approving does not submit into the old view (6.691667ms)
+✔ invalid limits and unapproved media/research are rejected before transport (39.765459ms)
+✔ the conversation uses the credit flow and immediate submission guard (0.251042ms)
+✔ the preserved v9 homepage binds its own quote before quick-start (6.130541ms)
+✔ a lost response is resent with the identical keyed request, never re-approved (9.147ms)
+✔ an answer from the application is final: no resend of a refused or failed request (13.85075ms)
+✔ an unkeyed request is never resent (6.184375ms)
+✔ when resends are exhausted the person is told the request may still be running (6.051333ms)
+✔ references and attachments reach the quote and the turn byte-identically (chat-context SPEC §3 S4) (4.521667ms)
+✔ changing writer never transfers exact sample consent to a different cloud model or CLI (1.845542ms)
+✔ one writing grant for every Rafii AI writer model covers exactly the models the server puts in that class (0.117667ms)
+✔ drafts write like the author by default only when this writer may read an approved sample (0.131583ms)
+✔ opening waits for the profile AND session.started, once only: prepared-first (2.105083ms)
+✔ opening waits for the profile AND session.started, once only: started-first (0.088ms)
+✔ reconnect, early caller speech and early hangup cannot deliver a stale greeting (0.075084ms)
+✔ a rolling release with no greeting field still opens naturally without inventing a name (1.311958ms)
+✔ "Stop talking" cuts the reply off: its line ends there, marked stopped, and the rest of it is dropped (2.688875ms)
+✔ the person speaking again ends the stop; spaces alone do not (0.340708ms)
+✔ a new result being said ends the stop, and its words start a new line (0.692333ms)
+✔ stopping when Rafii had already finished marks nothing, but still drops a late reply (0.157458ms)
+✔ words join their line within an utterance gap, a pause starts a new one, and the list is capped (0.214958ms)
+✔ a delegation takes exactly the words said since the last one, and closes the open line (0.163833ms)
+✔ after a goodbye the call ends once Rafii has answered and gone quiet, and at most 10 s later (0.094875ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 495.928708

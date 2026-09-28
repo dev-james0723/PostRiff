@@ -1,0 +1,6 @@
+PASS chromium: api-first, personalized opening exactly once, reconnect quiet, end confirmed
+PASS chromium: event-first, personalized opening exactly once, reconnect quiet, end confirmed
+PASS chromium: caller-first, personalized opening exactly once, reconnect quiet, end confirmed
+PASS webkit: api-first, personalized opening exactly once, reconnect quiet, end confirmed
+PASS webkit: event-first, personalized opening exactly once, reconnect quiet, end confirmed
+PASS webkit: caller-first, personalized opening exactly once, reconnect quiet, end confirmed

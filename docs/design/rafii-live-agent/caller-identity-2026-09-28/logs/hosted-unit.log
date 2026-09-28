@@ -1,0 +1,7 @@
+..............{"event": "cron.completed", "requestId": "16470238b33645128c2162364b038e68", "status": "unavailable", "notificationDelivery": "not_configured", "coworker": {"status": "disabled"}, "phone": {"status": "disabled"}}
+...........rafii.phone.media.failure {"errorClass": "ValueError", "phase": "runtime_init"}
+...
+----------------------------------------------------------------------
+Ran 28 tests in 0.662s
+
+OK
