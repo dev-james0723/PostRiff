@@ -8,4 +8,6 @@ Migration `045_phone_caller_identity.sql` is additive and checksum-pinned at `1d
 
 Deployment ordering is strict: migration 045 must verify and commit before the application is promoted. The application directly reads the new caller-routing and challenge tables, so deploying first would break trusted-caller lookup and Phone Settings.
 
-Pending release evidence: production read-only migration preflight, separately authorized production migration apply, exact-source Vercel deployment and alias verification, authenticated production smoke, and the user-operated supported-device passkey flow. No real paid call is part of this release authorization.
+The production read-only migration preflight passed in intentionally non-promotable Vercel build `dpl_FBQ86bBT5A9ZiSrLVsjc361Q8LQ8`: the exact Supabase target and ledger were verified, all three 045 objects were absent, and no partial schema was found. No database write was requested and no production alias was assigned. See `caller-identity-045/preflight.log`.
+
+Pending release evidence: separately authorized production migration apply, exact-source Vercel deployment and alias verification, authenticated production smoke, and the user-operated supported-device passkey flow. No real paid call is part of this release authorization.

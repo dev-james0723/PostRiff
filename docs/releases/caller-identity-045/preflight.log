@@ -1,0 +1,9 @@
+Vercel deployment: dpl_FBQ86bBT5A9ZiSrLVsjc361Q8LQ8
+Target: production environment, intentionally non-promotable build
+Runner mode: read-only
+Runtime: uv-managed Python 3.12 with psycopg[binary]==3.3.5
+CALLER-IDENTITY-045: {"mode": "read-only", "project": "buoyhkbodnhzngaotoel", "step": "target"}
+CALLER-IDENTITY-045: {"ledger": true, "objects": [false, false, false], "step": "before"}
+CALLER-IDENTITY-045: {"pending": ["045_phone_caller_identity.sql"], "step": "plan"}
+Result: PASS read-only preflight. The final build failure is intentional; no production alias was assigned and no database change was requested.
+Packaging diagnostics: three earlier temporary builds failed before runner execution while resolving the isolated Python build environment. None reached a database connection.
