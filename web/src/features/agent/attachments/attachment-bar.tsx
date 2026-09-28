@@ -53,6 +53,7 @@ function useFinePointer(): boolean {
 
 export interface AttachmentBarProps {
   attachments: ComposerAttachments;
+  conversationId?: string;
   liveMessage: string;
   snapshot: Snapshot | null | undefined;
   owner: string | null | undefined;
@@ -70,6 +71,7 @@ export interface AttachmentBarProps {
 
 export function AttachmentBar({
   attachments,
+  conversationId,
   liveMessage,
   snapshot,
   owner,
@@ -152,6 +154,7 @@ export function AttachmentBar({
     openChip.kind === 'image' || openChip.kind === 'video' ? (
       <MediaOptions
         chip={openChip}
+        conversationId={conversationId}
         asset={snapshot?.state.phase2?.assets.find((asset) => asset.id === openChip.id) ?? null}
         catalog={catalog}
         creditMode={creditMode}

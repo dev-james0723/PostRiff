@@ -24,6 +24,11 @@ import type {
   Membership,
   MemoryProposals,
   Message,
+  MessageWindow,
+  MediaMoment,
+  NavigationItem,
+  NavigationConversation,
+  NavigationSearchResult,
   ModelCatalog,
   MyChannel,
   OAuthComplete,
@@ -233,6 +238,18 @@ export function createApi(getToken: TokenSource) {
 
     /* ideas */
     conversations: (w: string) => get<{ conversations: Conversation[] }>(`${ws(w)}/ideas/conversations`),
+    navigationConversations: (w: string, cursor?: string | null) =>
+      get<{ conversations: NavigationConversation[]; nextCursor: string | null }>(`${ws(w)}/ideas/conversations/navigation${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    searchNavigation: (w: string, query: string) =>
+      get<{ results: NavigationSearchResult[] }>(`${ws(w)}/ideas/conversations/search?q=${encodeURIComponent(query)}`),
+    navigation: (w: string, id: string, cursor = 0) =>
+      get<{ items: NavigationItem[]; nextCursor: number | null; totalMessages: number }>(`${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/navigation?cursor=${cursor}`),
+    messageWindow: (w: string, id: string, options: { anchor?: string | null; before?: number } = {}) => {
+      const query = options.anchor ? `?anchor=${encodeURIComponent(options.anchor)}` : options.before ? `?before=${options.before}` : '';
+      return get<MessageWindow>(`${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/window${query}`);
+    },
+    saveMoment: (w: string, id: string, body: { assetId: string; title: string; seconds: number }) =>
+      send<MediaMoment>('POST', `${ws(w)}/ideas/conversations/${encodeURIComponent(id)}/moments`, body),
     createConversation: (w: string, title: string) =>
       send<Conversation>('POST', `${ws(w)}/ideas/conversations`, { title }),
     onboarding: (w: string, id: string, expectedSeq: number, answer?: string) =>
