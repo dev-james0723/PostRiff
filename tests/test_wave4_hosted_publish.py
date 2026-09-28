@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.net_guard import pinned_public_json_transport
+from postriff_phase2.provider_media import stream_multipart_video
 from postriff_phase2.wave4_connectors import GoogleBusinessProfileProvider
 from postriff_phase2.wave4_publishers import DouyinVideos, GoogleBusinessPosts, KuaishouVideos, PixelfedPosts
 from postriff_phase2.publish_options import normalize
@@ -28,6 +29,10 @@ class Wire:
 
 
 class Security(unittest.TestCase):
+    def test_douyin_video_upload_never_uses_a_provider_supplied_host(self):
+        with self.assertRaises(AlphaError):
+            stream_multipart_video("https://other.example/upload", "TOKEN", iter((b"video",)), 5)
+
     def test_public_transport_rejects_private_dns_and_malformed_ports_before_connect(self):
         for url in ("https://photos.example.org:bad/api/v1/apps", "https://photos.example.org:444/api/v1/apps"):
             with self.subTest(url=url), self.assertRaises(AlphaError):

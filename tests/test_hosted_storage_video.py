@@ -70,6 +70,25 @@ class Recorder:
         return self.responses.pop(0)
 
 
+class ApprovedVideoStreamTests(unittest.TestCase):
+    def test_stream_checks_head_and_get_and_never_reads_more_than_a_chunk(self):
+        headers = {"Content-Length": "6", "Content-Type": "video/mp4", "ETag": '"fixed"'}
+        storage, handler = storage_with([(200, headers, b""), (200, headers, b"abcdef")])
+        pieces = list(storage.iter_verified_video(WS, f"{VID}.mp4", expected_bytes=6,
+                                                  expected_mime="video/mp4", expected_etag='"fixed"', chunk_size=2))
+        self.assertEqual(pieces, [b"ab", b"cd", b"ef"])
+        self.assertEqual([request[0] for request in handler.requests], ["HEAD", "GET"])
+        self.assertTrue(all(size <= 2 for size in handler.bodies[1].requested))
+
+    def test_stream_rejects_changed_object_before_returning_bytes(self):
+        headers = {"Content-Length": "6", "Content-Type": "video/mp4", "ETag": '"fixed"'}
+        changed = {**headers, "ETag": '"changed"'}
+        storage, _ = storage_with([(200, headers, b""), (200, changed, b"abcdef")])
+        with self.assertRaises(AlphaError):
+            list(storage.iter_verified_video(WS, f"{VID}.mp4", expected_bytes=6,
+                                             expected_mime="video/mp4", expected_etag='"fixed"', chunk_size=2))
+
+
 class RedirectTests(unittest.TestCase):
     def test_redirect_is_502_without_follow_up(self):
         storage, handler = storage_with([(302, {"Location": "https://evil.example/steal"}, b""), (200, {}, b"never")])

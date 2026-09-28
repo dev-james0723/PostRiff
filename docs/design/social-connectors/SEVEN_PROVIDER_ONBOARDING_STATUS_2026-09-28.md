@@ -52,3 +52,4 @@ App name: **Rafii**. Purpose: let a person connect their own social account, rev
 - Secret scan: `consumer_ready_secrets.py` passed: 2,132 files, 456 known findings, zero unexpected findings.
 - No provider app was registered, no provider credential was issued or installed, no review was submitted, no runtime approval flag was enabled, no live provider authorization or public post occurred. This branch is a candidate for CI review, not a production release.
 - After reconciling the newer `consumer-saas` head, the full Python suite passed 2,952 tests (261 skipped), Node 24 typecheck and zero-warning lint passed, and focused growth-beta/performance tests passed. Draft PR #70 contains the merge resolution and is pending CI.
+- Additional immutable video stream tests passed after the merge: 26 hosted storage tests and 10 hosted Wave 4 publish tests. They cover exact HEAD/GET metadata, bounded chunks, changed-object refusal and fixed Douyin upload host.
