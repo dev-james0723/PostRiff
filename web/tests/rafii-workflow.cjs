@@ -328,9 +328,12 @@ async function workflow(browser) {
     const before = await resultDock.locator('button[aria-pressed="true"]').getAttribute('aria-label');
     const deck = page.getByRole('group', { name: 'Draft previews' });
     const box = await deck.boundingBox();
-    await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2);
+    // Start in PreviewDeck's non-interactive top gutter. The product intentionally refuses
+    // to steal swipe gestures that begin on buttons, links, inputs or the editable draft.
+    const swipeY = box.y + 12;
+    await page.mouse.move(box.x + box.width / 2 + 90, swipeY);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 - 90, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.move(box.x + box.width / 2 - 90, swipeY, { steps: 10 });
     await page.mouse.up();
     mark('phone swipe');
     await page.waitForTimeout(900);
