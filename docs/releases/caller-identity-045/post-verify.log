@@ -1,0 +1,7 @@
+Vercel deployment: dpl_FGjURJEoB8MCXvukojxjivosfYXh
+Target: production environment, intentionally non-promotable build
+Runner mode: read-only
+CALLER-IDENTITY-045: {"mode": "read-only", "project": "buoyhkbodnhzngaotoel", "step": "target"}
+CALLER-IDENTITY-045: {"ledger": true, "objects": [true, true, true], "step": "before"}
+CALLER-IDENTITY-045: {"already_present": true, "applied": false, "step": "verified"}
+Result: PASS. Independent post-verification found the complete canonical schema and performed no database write. The final build ERROR is intentional, and the bundle received no production alias.

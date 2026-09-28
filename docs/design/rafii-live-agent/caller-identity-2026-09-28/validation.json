@@ -6,13 +6,24 @@
   "paidTTSRequests": 3,
   "ttsBudgetUSD": 0.25,
   "ttsActualUSD": null,
-  "productionMigrated": false,
+  "productionMigrated": true,
   "pushed": true,
   "merged": false,
-  "deployed": false,
+  "deployed": true,
   "realDevice": {
     "status": "validation_unavailable",
-    "reason": "New call-bound flow is local only; no approved HTTPS test deployment/live call. Current signed-in production Security UI shows MFA Off. User is willing; account choice/enrollment remains pending."
+    "reason": "Production is deployed, but the available in-app browser had no authenticated Rafii session and stopped at sign-in. User-operated credential enrollment and Face ID/Touch ID ceremony remain pending; no real paid call was authorized or placed."
+  },
+  "production": {
+    "migrationApplyDeployment": "dpl_85gLw6w9td2aQfnKN8ThuewDYdFW",
+    "migrationPostVerifyDeployment": "dpl_FGjURJEoB8MCXvukojxjivosfYXh",
+    "applicationSource": "c40a6ed2d646a78d11af00bd02e8e31c784a0f43",
+    "applicationDeployment": "dpl_6yakiSj9QEFjF2yeeocD6aPgxGmB",
+    "alias": "https://postriff-phase2-private.vercel.app",
+    "ready": true,
+    "health": 200,
+    "unauthenticatedChallenge": 401,
+    "unauthenticatedTrustedCallers": 401
   },
   "humanAudioAudition": {
     "status": "passed",
