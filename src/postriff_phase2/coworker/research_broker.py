@@ -142,6 +142,8 @@ def parse_search_with_author(text):
             current["published"] = stripped[10:].strip()
         elif current is not None and stripped.startswith("Author:"):
             current["author"] = stripped[7:].strip()[:120]
+        elif current is not None and stripped.startswith("Highlights:"):
+            current["snippet"] = (current["snippet"] + " " + stripped[len("Highlights:"):].strip()).strip()[:600]
         elif current is not None and stripped and not stripped.startswith(("Highlights:", "...")):
             current["snippet"] = (current["snippet"] + " " + stripped).strip()[:600]
     return [r for r in results if r["url"].startswith("http")]
