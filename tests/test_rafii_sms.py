@@ -151,4 +151,21 @@ class SMSTransportTest(unittest.TestCase):
                     self.assertLess(len(r['html'].encode()),102000)
 
 
+class SMSOperationalSignalsTest(unittest.TestCase):
+    def test_postgres_numeric_cost_remains_an_exact_json_integer(self):
+        import json
+        from decimal import Decimal
+        from unittest.mock import Mock
+        from postriff_phase2.notifications.delivery import sms_signals
+        for cost in (0, 170000, 2 ** 60 + 1):
+            with self.subTest(cost=cost):
+                cur = Mock()
+                cur.fetchone.return_value = (1, 2, 3, 4, 5, 6, 7, Decimal(cost))
+                result = sms_signals(cur, NOW)
+                decoded = json.loads(json.dumps(result))
+                self.assertEqual(decoded['knownCostUsdMicro24h'], cost)
+                self.assertEqual(decoded['segments24h'], 7)
+                self.assertTrue(all(type(value) is int for value in decoded.values()))
+
+
 if __name__=='__main__': unittest.main()

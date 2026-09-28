@@ -580,7 +580,7 @@ class HostedApplication:
                 except Exception:
                     coworker_steps = {'status': 'unavailable'}
                 logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' else logging.WARNING,
-                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps}))
+                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone']}))
                 return self._json(start_response, 200, result)
             if not api_bearer:
                 self._origin(environ, mutation)
@@ -836,6 +836,15 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
+            if path == "/api/cron/worker":
+                # Source locations only: never format exception text, source lines, locals or payloads.
+                frame = error.__traceback__
+                while frame is not None:
+                    code = frame.tb_frame.f_code
+                    module = frame.tb_frame.f_globals.get("__name__", "")
+                    if module.startswith("postriff_phase2."):
+                        environ["postriff.failure"]["failureSite"] = f"{module}:{code.co_name}:{frame.tb_lineno}"
+                    frame = frame.tb_next
             return self._json(start_response, 500, {"error": "Something went wrong on our side. Check what was saved before trying again.", "code": "internal_error"})
 
 

@@ -344,7 +344,9 @@ def sms_signals(cur, now=None):
                           coalesce(sum(sms_segments) FILTER(WHERE sms_dispatch_started_at>to_timestamp(%s)),0),
                           coalesce(sum(sms_cost_usd_micro) FILTER(WHERE sms_dispatch_started_at>to_timestamp(%s)),0)
                    FROM public.pr_notification_deliveries WHERE channel='sms'""", [now-600]+[now-86400]*2+[now-86400]*4)
-    due,failed,suppressed,quiet,ack,sends,segments,cost = cur.fetchone()
+    # PostgreSQL SUM(bigint) returns numeric/Decimal, even for the coalesced zero.
+    # These are integral counts and microdollars; keep exact JSON numbers for cron and health responses.
+    due,failed,suppressed,quiet,ack,sends,segments,cost = (int(value) for value in cur.fetchone())
     return {"backlogOver10m":due,"failedDeadUncertain24h":failed,"suppressed24h":suppressed,"quietDeferred":quiet,
             "acknowledgementCancelled24h":ack,"dispatches24h":sends,"segments24h":segments,"knownCostUsdMicro24h":cost}
 
