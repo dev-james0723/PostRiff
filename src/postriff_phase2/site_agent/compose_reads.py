@@ -32,7 +32,11 @@ def compose(intent: str, classification: dict, results: dict, text: str) -> dict
     """{"lines", "blocks", "refs", "grounded"} for a read intent, or None when the intent is not a read."""
     get = lambda tool_id: (results.get(tool_id) or {}).get("data") if (results.get(tool_id) or {}).get("ok") else None  # noqa: E731
     handler = HANDLERS.get(intent)
-    return handler(get, classification, text) if handler else None
+    if handler is None:
+        return None
+    if intent == "calendar":
+        return handler(get, classification, text, results=results)
+    return handler(get, classification, text)
 
 
 def _status(get, classification, text):
@@ -191,41 +195,62 @@ def _campaign(get, classification, text):
     return {"lines": lines, "blocks": blocks, "refs": [r for r in refs if r], "grounded": True}
 
 
-def _calendar(get, classification, text):
-    data = get("calendar.range")
-    if not data:
-        return None
+CALENDAR_STATUS_LABELS = (
+    ("scheduled", "Scheduled"),
+    ("awaiting_approval", "Awaiting approval"),
+    ("in_flight", "In flight"),
+    ("failed_held_uncertain", "Failed / held / uncertain"),
+    ("published", "Published, confirming"),
+    ("verified", "Verified live"),
+)
+
+
+def _source_state(result):
+    if not isinstance(result, dict) or not result.get("ok"):
+        return "unavailable"
+    return "verified" if result.get("verified") is True else "unverified"
+
+
+def _known_count(counts, key):
+    value = (counts or {}).get(key) if isinstance(counts, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _calendar(get, classification, text, *, results=None):
+    results = results or {}
+    calendar_result = results.get("calendar.range") or {}
+    queue_result = results.get("queue.summary") or {}
+    if _source_state(calendar_result) != "verified" or not isinstance(calendar_result.get("data"), dict):
+        return {"lines": ["I couldn't verify the calendar range, so I won't show dates or counts."], "blocks": [], "refs": [], "grounded": False}
+    data = calendar_result["data"]
+    queue = queue_result.get("data") if _source_state(queue_result) == "verified" and isinstance(queue_result.get("data"), dict) else None
     label = data["range"]["label"]
     entries = data["entries"]
-    # Never blur scheduled and published: each entry sits under what actually happened to it.
-    groups = {"waiting": [], "verified": [], "moving": [], "attention": []}
-    for e in entries:
-        if e["kind"] != "job" or e["state"] in ("approved", "scheduled", "claimed"):
-            groups["waiting"].append(e)
-        elif e["state"] == "verified":
-            groups["verified"].append(e)
-        elif e["state"] in ("failed", "held", "uncertain"):
-            groups["attention"].append(e)
-        else:
-            groups["moving"].append(e)
-    row = lambda e: _item(e["kind"], f"{e['platform']} · {e.get('account') or ''}".rstrip(" ·"), meta=f"{e['when']} · {e['title']}", href=e["href"])  # noqa: E731
-    if entries:
-        counts = [f"{len(groups['waiting'])} scheduled or waiting", f"{len(groups['verified'])} published and verified"]
-        counts += [f"{len(groups['moving'])} being published, not confirmed yet"] if groups["moving"] else []
-        counts += [f"{len(groups['attention'])} failed, held or uncertain"] if groups["attention"] else []
-        lines = [f"{label[:1].upper() + label[1:]}: " + ", ".join(counts) + "."]
-        if data["total"] > len(entries):
-            lines.append(f"Showing the first {len(entries)} of {data['total']}.")
-    else:
-        lines = [f"Nothing is scheduled, waiting or planned {label}."]
-    # With nothing at all, the lead line says so; an empty list under it would only repeat it.
-    blocks = [result_list(f"Scheduled or waiting ({label})", [row(e) for e in groups["waiting"]], empty=f"Nothing is scheduled or waiting {label}.")] if entries else []
-    if groups["verified"]:
-        blocks.append(result_list(f"Published and verified ({label})", [row(e) for e in groups["verified"]]))
-    if groups["moving"]:
-        blocks.append(result_list("Being published (not confirmed yet)", [row(e) for e in groups["moving"]]))
-    if groups["attention"]:
-        blocks.append(result_list("Failed, held or uncertain", [row(e) for e in groups["attention"]]))
+    range_counts = data.get("statusCounts")
+    statuses = [{"key": key, "label": title, "count": _known_count(range_counts, key)} for key, title in CALENDAR_STATUS_LABELS]
+    unknown_count = _known_count(range_counts, "unknown")
+    if unknown_count:
+        statuses.append({"key": "unknown", "label": "Unknown state", "count": unknown_count})
+    queue_counts = (queue or {}).get("statusCounts")
+    queue_view = {
+        "awaitingApproval": _known_count(queue_counts, "awaiting_approval"),
+        "needsAttention": _known_count(queue_counts, "failed_held_uncertain"),
+        "inFlight": _known_count(queue_counts, "in_flight"),
+        "published": _known_count(queue_counts, "published"),
+        "verified": _known_count(queue_counts, "verified"),
+    }
+    item_statuses = {key for key, _label in CALENDAR_STATUS_LABELS} | {"unknown"}
+    card_entries = [{"kind": e.get("kind"), "id": e.get("id"), "state": e.get("state"),
+                     "status": e.get("status") if e.get("status") in item_statuses else "unknown", "title": e.get("title"),
+                     "platform": e.get("platform"), "account": e.get("account"), "when": e.get("when"), "href": e.get("href")} for e in entries]
+    total = data.get("total") if isinstance(data.get("total"), int) and not isinstance(data.get("total"), bool) and data.get("total") >= 0 else None
+    blocks = [contracts.calendar_card(range_view={key: data["range"].get(key) for key in ("label", "start", "end", "timeZone")}, statuses=statuses,
+                                      entries=card_entries, total=total, queue=queue_view,
+                                      sources={"calendarRange": _source_state(calendar_result), "queueSummary": _source_state(queue_result)},
+                                      href=data.get("href"))]
+    if _source_state(queue_result) != "verified":
+        blocks.append(contracts.warning("Queue state is unavailable. Its counts are shown as unavailable, not zero.", "queue_state_unavailable"))
+    lines = [f"Here is the confirmed calendar state for {label}."] if entries else [f"Nothing is scheduled, waiting or planned {label}."]
     derived = data["derived"]
     observations = []
     if derived["emptyDays"]["days"]:

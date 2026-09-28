@@ -222,6 +222,49 @@ WAITING = ("approved", "scheduled", "claimed")
 IN_FLIGHT = ("submitting", "processing", "provider_accepted", "published")
 ATTENTION = ("held", "failed", "uncertain")
 
+# The calendar answer card keeps these lifecycle stages separate.  This mapping lives beside the
+# authoritative queue state rather than in the browser, so the UI never infers a status from prose.
+CALENDAR_STATUS_KEYS = ("scheduled", "awaiting_approval", "in_flight", "failed_held_uncertain", "published", "verified", "unknown")
+
+
+def calendar_status(kind, state):
+    """The read-only calendar bucket for one stored review, job or automation item.
+
+    Unknown states stay unknown.  In particular, they never fall through to ``scheduled`` and are
+    never represented as a zero count by the answer layer.
+    """
+    if kind == "review":
+        if state == "needs_review":
+            return "awaiting_approval"
+        if state in ("expired", "stale"):
+            return "failed_held_uncertain"
+        return "unknown"
+    if state in ("approved", "scheduled"):
+        return "scheduled"
+    if state in ("ready_for_review", "needs_revision"):
+        return "awaiting_approval"
+    if state in ("claimed", "submitting", "processing", "provider_accepted", "publishing"):
+        return "in_flight"
+    if state in ("failed", "held", "uncertain", "approval_expired", "platform_disconnected", "rejected", "skipped", "cancelled", "canceled", "expired", "stale"):
+        return "failed_held_uncertain"
+    if state == "published":
+        return "published"
+    if state == "verified":
+        return "verified"
+    return "unknown"
+
+
+def calendar_status_counts(entries):
+    """Exact counts over a complete collection of stored entries, including unknown states."""
+    counts = {key: 0 for key in CALENDAR_STATUS_KEYS}
+    unknown_states = set()
+    for entry in entries:
+        status = calendar_status(entry.get("kind"), entry.get("state"))
+        counts[status] += 1
+        if status == "unknown":
+            unknown_states.add(str(entry.get("state") or "missing"))
+    return counts, sorted(unknown_states)
+
 
 def _phase2(ctx):
     return ctx.state.get("phase2") or {}
@@ -404,8 +447,12 @@ def queue_summary(ctx):
     recent = sorted((j for j in jobs if j.get("state") in ("verified",) + IN_FLIGHT), key=lambda j: -(j.get("approvedAt") or 0))[:3]
     drafts = [v for v in ctx.state.get("variants", []) if isinstance(v, dict) and not v.get("rejected")]
     scheduled = {(j.get("manifest") or {}).get("variantId") for j in jobs if j.get("state") not in ("failed", "canceled")}
+    queue_entries = [{"kind": "review", "state": "expired" if _review_expired(r, ctx.now) else "needs_review"} for r in reviews]
+    queue_entries += [{"kind": "job", "state": j.get("state")} for j in jobs if j.get("state") != "canceled"]
+    status_counts, unknown_states = calendar_status_counts(queue_entries)
     data = {"waitingApproval": waiting, "upcoming": [_job_view(ctx, j) for j in upcoming], "attention": [_job_view(ctx, j) for j in attention],
-            "recent": [_job_view(ctx, j) for j in recent], "draftsUnscheduled": sum(1 for v in drafts if v.get("id") not in scheduled)}
+            "recent": [_job_view(ctx, j) for j in recent], "draftsUnscheduled": sum(1 for v in drafts if v.get("id") not in scheduled),
+            "statusCounts": status_counts, "unknownStates": unknown_states}
     return contracts.result(data, now=ctx.now)
 
 

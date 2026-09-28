@@ -27,6 +27,7 @@ import type { GuideCardBlock, SiteAgentBlock, SiteAgentBody, SiteAgentProposalVi
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { AUTOMATION_CHANGED } from './store';
+import { CalendarCard } from './calendar-card';
 
 const MANIFEST = manifestJson as RouteManifest;
 
@@ -123,6 +124,8 @@ function AnswerBlock({ block, actions }: { block: SiteAgentBlock; actions: Answe
           <span>{block.message}</span>
         </p>
       );
+    case 'calendar_card':
+      return <CalendarCard block={block} onNavigate={actions.onNavigate} />;
     case 'navigation_card':
       return (
         <SafeLink
