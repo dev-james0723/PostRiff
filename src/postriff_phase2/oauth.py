@@ -239,6 +239,11 @@ class OAuthService:
             state = adapter.new_code()
             context = {"kind": adapter.connect_kind}
             extra = {**adapter.connect_instructions(), "code": state}
+        elif adapter.connect_kind == "device_code":
+            state = secrets.token_urlsafe(32)
+            begun = adapter.begin_device(state, scopes)
+            context, authorize_url = begun["context"], begun["authorizeUrl"]
+            extra = {"code": state, "userCode": begun.get("userCode"), "instructions": begun.get("instructions", [])}
         else:
             state = secrets.token_urlsafe(32)
             spec = adapter.start_input or {}
@@ -269,6 +274,7 @@ class OAuthService:
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
         adapter = self._provider(provider_id)
         bot_code = getattr(type(adapter), "connect_kind", "oauth") == "bot_code"
+        device_code = getattr(type(adapter), "connect_kind", "oauth") == "device_code"
         if not getattr(adapter, "execution_enabled", True):
             diagnostic = getattr(self.providers, 'diagnostics', {}).get(provider_id, {})
             if bool(diagnostic.get('operatorDisabled')):
@@ -296,9 +302,27 @@ class OAuthService:
                 raise AlphaError("This connection request expired. Start again.", 409)
             if bot_code and not error:
                 # The code is claimed by Rafii's bot seeing it in a channel (telegram_webhook), not by a redirect.
-                context = json.loads(self.vault.decrypt(verifier_ct, key_id))
+                try:
+                    context = json.loads(self.vault.decrypt(verifier_ct, key_id))
+                except (TypeError, ValueError) as exc:
+                    raise AlphaError("Connection request unavailable.", 404) from exc
                 if not isinstance(context.get("chat"), dict):
                     return {"connected": False, "reason": "waiting", "pending": True}
+            elif device_code and not error:
+                try:
+                    context = json.loads(self.vault.decrypt(verifier_ct, key_id))
+                except (TypeError, ValueError) as exc:
+                    raise AlphaError("Connection request unavailable.", 404) from exc
+                if not isinstance(context, dict) or context.get("kind") != "device_code":
+                    raise AlphaError("Connection request unavailable.", 404)
+                result = adapter.poll_device(context)
+                if not isinstance(result, dict):
+                    raise AlphaError("The provider did not complete this authorization step.", 502)
+                if result.get("pending") is True:
+                    return {"connected": False, "reason": result.get("reason", "waiting"), "pending": True}
+                grant = result.get("grant")
+                if not isinstance(grant, dict):
+                    raise AlphaError("The provider did not complete this authorization step.", 502)
             elif error or not code:
                 cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='denied' WHERE id::text=%s", (transaction_id,))
                 audit(cur, workspace_id, principal, "oauth.denied", transaction_id, {"provider": provider_id})
@@ -307,6 +331,8 @@ class OAuthService:
             verifier = self.vault.decrypt(verifier_ct, key_id)
             if bot_code:
                 grant = adapter.grant_from_context(context)
+            elif device_code:
+                pass
             elif getattr(type(adapter), "requires_issuer", False) is True:
                 grant = adapter.exchange(code, verifier, redirect, iss=iss)
             else:
@@ -470,6 +496,97 @@ class OAuthService:
         if claimed:
             adapter.delete_message(chat["id"], message_id)
         return {"ok": True}
+
+    def xiaohongshu_webhook(self, headers, raw):
+        """Ingest Xiaohongshu authorization events without exposing tokens or trusting parsed-body signatures."""
+        adapter = self.providers.get("xiaohongshu")
+        webhook_secret = getattr(adapter, "webhook_secret", None) if adapter is not None else None
+        if not webhook_secret:
+            raise AlphaError("Webhook unavailable.", 404)
+        timestamp = headers.get("timestamp") if isinstance(headers, dict) else None
+        signature = headers.get("signature") if isinstance(headers, dict) else None
+        event_id = headers.get("eventId") if isinstance(headers, dict) else None
+        event_type = headers.get("eventType") if isinstance(headers, dict) else None
+        if not isinstance(timestamp, str) or not re.fullmatch(r"[0-9]{13}", timestamp):
+            return {"code": 1002, "msg": "timestamp_expired"}
+        now_ms = int(self.clock() * 1000)
+        if abs(now_ms - int(timestamp)) > 300_000:
+            return {"code": 1002, "msg": "timestamp_expired"}
+        from .wave4c_connectors import verify_xiaohongshu_webhook
+        if not verify_xiaohongshu_webhook(webhook_secret, timestamp, raw, signature, now_ms=now_ms):
+            return {"code": 1001, "msg": "invalid_signature"}
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError, UnicodeDecodeError):
+            return {"code": 1003, "msg": "invalid_payload"}
+        if (not isinstance(payload, dict) or not isinstance(event_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event_id)
+                or payload.get("event_id") != event_id or payload.get("event_type") != event_type
+                or payload.get("event_time") != int(timestamp)):
+            return {"code": 1003, "msg": "invalid_payload"}
+        if payload.get("app_id") != adapter.client_id:
+            return {"code": 1005, "msg": "unknown_app"}
+        if event_type not in ("authorization_revoked", "device_authorization_confirmed"):
+            return {"code": 1004, "msg": "unknown_event_type"}
+        open_id = payload.get("open_id")
+        if event_type == "authorization_revoked" and (not isinstance(open_id, str) or not 1 <= len(open_id) <= 200):
+            return {"code": 1003, "msg": "invalid_payload"}
+        if event_type == "device_authorization_confirmed" and not re.fullmatch(r"[A-Z0-9]{4}-[A-Z0-9]{4}", str(payload.get("user_code") or "")):
+            return {"code": 1003, "msg": "invalid_payload"}
+        try:
+            with self.repository.connection_factory() as db:
+                with db.cursor() as cur:
+                    digest = hashlib.sha256(raw).hexdigest()
+                    cur.execute(
+                        "INSERT INTO public.pr_social_provider_events(provider,event_id,event_type,payload_digest) "
+                        "VALUES('xiaohongshu',%s,%s,%s) ON CONFLICT(provider,event_id) DO NOTHING RETURNING event_id",
+                        (event_id, event_type, digest),
+                    )
+                    if not cur.fetchone():
+                        return {"code": 0, "msg": "success"}
+                    affected = []
+                    if event_type == "authorization_revoked":
+                        cur.execute(
+                            "SELECT workspace_id::text,connection_id FROM public.pr_encrypted_credentials "
+                            "WHERE provider='xiaohongshu' AND provider_account_id=%s AND revoked_at IS NULL FOR UPDATE",
+                            (open_id,),
+                        )
+                        affected = cur.fetchall()
+                        for workspace_id, connection_id in affected:
+                            cur.execute(
+                                "UPDATE public.pr_encrypted_credentials SET access_ciphertext='',refresh_ciphertext=NULL,"
+                                "scopes=ARRAY[]::text[],access_expires_at=now(),revoked_at=now(),updated_at=now() "
+                                "WHERE workspace_id=%s AND connection_id=%s",
+                                (workspace_id, connection_id),
+                            )
+                            cur.execute(
+                                "UPDATE public.pr_channel_capabilities SET level='Unsupported',"
+                                "evidence='Xiaohongshu reported that this authorization was revoked.',updated_at=now() "
+                                "WHERE workspace_id=%s AND connection_id=%s",
+                                (workspace_id, connection_id),
+                            )
+                            cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+                            row = cur.fetchone()
+                            state = json.loads(row[0]) if row and isinstance(row[0], str) else row[0] if row else None
+                            if isinstance(state, dict):
+                                channel = next((item for item in state.get("phase2", {}).get("channels", [])
+                                                if item.get("id") == connection_id), None)
+                                if channel is not None:
+                                    channel.update({"revoked": True, "identityVerified": False,
+                                                    "capabilityVerified": False, "expiresAt": self.clock()})
+                                    self.commands.engine.invalidate(state)
+                                    cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s",
+                                                (json.dumps(state), workspace_id))
+                            from .hosted import audit
+                            audit(cur, workspace_id, None, "channel.revoked_by_provider", connection_id,
+                                  {"provider": "xiaohongshu", "eventId": event_id})
+                    cur.execute(
+                        "UPDATE public.pr_social_provider_events SET processed_at=now(),outcome=%s WHERE provider='xiaohongshu' AND event_id=%s",
+                        ("revoked" if affected else "acknowledged", event_id),
+                    )
+            return {"code": 0, "msg": "success"}
+        except Exception:  # provider should retry transient database failures; never echo database details
+            return {"code": 3001, "msg": "internal_error"}
 
     # --- Bluesky: public client documents -------------------------------------------------
     def bluesky_document(self, name):

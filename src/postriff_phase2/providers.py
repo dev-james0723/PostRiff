@@ -217,6 +217,7 @@ from .wave3_connectors import FacebookPagesProvider, PinterestProvider, TikTokPr
 from .wave4_connectors import (BilibiliProvider, DouyinProvider, GoogleBusinessProfileProvider,
                                KuaishouProvider, WeiboProvider)  # noqa: E402
 from .wave4b_connectors import LineOfficialAccountProvider, RedditProvider, ZhihuProvider  # noqa: E402
+from .wave4c_connectors import PixelfedProvider, XiaohongshuProvider  # noqa: E402
 
 ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider,
             "bluesky": BlueskyProvider, "mastodon": MastodonProvider, "telegram": TelegramConnector,
@@ -224,7 +225,8 @@ ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram
             "facebook": FacebookPagesProvider, "youtube": YouTubeProvider, "tiktok": TikTokProvider, "pinterest": PinterestProvider,
             "weibo": WeiboProvider, "bilibili": BilibiliProvider, "douyin": DouyinProvider, "kuaishou": KuaishouProvider,
             "google_business_profile": GoogleBusinessProfileProvider,
-            "line_official_account": LineOfficialAccountProvider, "reddit": RedditProvider, "zhihu": ZhihuProvider}
+            "line_official_account": LineOfficialAccountProvider, "reddit": RedditProvider, "zhihu": ZhihuProvider,
+            "pixelfed": PixelfedProvider, "xiaohongshu": XiaohongshuProvider}
 
 
 def adapter_class_for_platform(platform):
@@ -248,6 +250,11 @@ def registry_from_environment(values, transport=None):
         if adapter is None:
             continue
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
+        webhook_configured = True
+        if provider_id == "xiaohongshu":
+            webhook_secret = values.get(prefix + "WEBHOOK_SECRET")
+            adapter.webhook_secret = webhook_secret if _credential_shape(webhook_secret) and len(webhook_secret) >= 32 else None
+            webhook_configured = bool(adapter.webhook_secret)
         enabled = str(values.get(prefix + "ENABLED", "")).lower() == "true"
         provider_verified = str(values.get(prefix + "VERIFIED", "")).lower() == "true"
         operator_disabled = str(values.get(prefix + "DISABLED", "")).lower() == "true"
@@ -263,7 +270,8 @@ def registry_from_environment(values, transport=None):
             "approvedScopes": sorted(set(approved_scopes)),
             "oauthLiveTest": str(values.get(prefix + "OAUTH_LIVE_TESTED", "")).lower() == "true",
             "tokenRefreshLiveTest": str(values.get(prefix + "REFRESH_LIVE_TESTED", "")).lower() == "true",
-            "webhookVerified": str(values.get(prefix + "WEBHOOK_VERIFIED", "")).lower() == "true",
+            "webhookVerified": (str(values.get(prefix + "WEBHOOK_VERIFIED", "")).lower() == "true"
+                                and webhook_configured),
             "publishingPermission": str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true",
             "analyticsPermission": str(values.get(prefix + "ANALYTICS_APPROVED", "")).lower() == "true",
             "commentsPermission": str(values.get(prefix + "COMMENTS_APPROVED", "")).lower() == "true",

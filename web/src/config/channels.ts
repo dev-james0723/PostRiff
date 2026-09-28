@@ -285,12 +285,13 @@ export const channels: Channel[] = [
   },
 
   /* ---- Desktop companion (signs in on your own machine) ---- */
-  local(
+  wave4(
     'xiaohongshu',
     'Xiaohongshu',
-    'Notes with images or video for China’s discovery-first community.',
+    'Official device authorization can expose identity/basic_info after app approval; notes, analytics and comments remain disabled.',
     ['Image note', 'Video note'],
-    { nameZh: '小紅書', region: 'cn' }
+    'Direct',
+    { nameZh: '小紅書', region: 'cn', reviewStatus: 'identity approval required' }
   ),
   wave4(
     'bilibili',
@@ -397,7 +398,14 @@ export const channels: Channel[] = [
     ['Text', 'Link', 'Image'],
     'Direct'
   ),
-  local('pixelfed', 'Pixelfed', 'Photo posts on the fediverse.', ['Image']),
+  wave4(
+    'pixelfed',
+    'Pixelfed',
+    'Read-only identity connection probes each instance before dynamic OAuth registration; publishing varies by instance and stays unavailable.',
+    ['Image'],
+    'Direct',
+    { reviewStatus: 'identity connection only' }
+  ),
   local('whatsapp-channels', 'WhatsApp Channels', 'Broadcast updates to channel followers.', [
     'Text',
     'Image'

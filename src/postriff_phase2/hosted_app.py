@@ -514,6 +514,21 @@ class HostedApplication:
                     raise AlphaError("Webhook body size invalid.", 413)
                 raw = environ["wsgi.input"].read(length)
                 return self._json(start_response, 200, service.oauth.telegram_webhook(environ.get("HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN", ""), raw))
+            if path == "/api/xiaohongshu/webhook" and method == "POST":
+                # Xiaohongshu signs timestamp + '.' + the exact bytes. The endpoint deliberately stays outside
+                # browser-origin and session checks; its HMAC, replay window and event id are the authorization.
+                service = self._runtime()
+                length = int(environ.get("CONTENT_LENGTH") or "0")
+                if not 0 < length <= 65536:
+                    raise AlphaError("Webhook body size invalid.", 413)
+                raw = environ["wsgi.input"].read(length)
+                headers = {
+                    "eventId": environ.get("HTTP_X_XHS_EVENT_ID"),
+                    "eventType": environ.get("HTTP_X_XHS_EVENT_TYPE"),
+                    "timestamp": environ.get("HTTP_X_XHS_TIMESTAMP"),
+                    "signature": environ.get("HTTP_X_XHS_SIGNATURE"),
+                }
+                return self._json(start_response, 200, service.oauth.xiaohongshu_webhook(headers, raw))
             oauth_parts = path.strip("/").split("/")
             if len(oauth_parts) == 4 and oauth_parts[:2] == ["api", "oauth"] and oauth_parts[3] == "callback" and method == "GET":
                 # Public provider callback: redirect state/code to the signed-in app; never exchange here.

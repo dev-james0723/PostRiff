@@ -92,6 +92,7 @@ class MountRules(unittest.TestCase):
         self.assertTrue(registry["x"].production_reviewed)
         self.assertFalse(registry["bluesky"].production_reviewed)
         self.assertFalse(registry["discord"].execution_enabled)
+        self.assertEqual(registry["telegram"].webhook_secret, HOOK)
         self.assertEqual(registry["bluesky"].client_id, BASE + "/api/oauth/bluesky/client-metadata.json")
 
     def test_partial_and_invalid_configurations_never_mount_or_echo_values(self):
@@ -484,6 +485,34 @@ class ServiceFlows(unittest.TestCase):
         self.assertTrue(result["connected"])
         self.assertEqual(result["missingScopes"], [])
         self.assertEqual(self.repo.state["phase2"]["channels"][-1]["providerAccountId"], "-100123")
+
+    @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
+    def test_device_code_stays_encrypted_while_pending_then_connects_once(self):
+        from postriff_phase2.wave4c_connectors import XiaohongshuProvider
+
+        envelope = lambda data, code=0, success=True: ok({"code": code, "success": success, "msg": "fixture", "data": data})
+        wire = Wire([
+            envelope({"device_code": "DEVICE-CREDENTIAL", "user_code": "ABCD-EFGH",
+                      "verification_uri_complete": "https://openaccount.xiaohongshu.com/device?user_code=ABCD-EFGH",
+                      "expires_in": 600, "interval": 1}),
+            envelope(None, code=37002, success=False),
+            envelope({"access_token": "AT", "refresh_token": "RT", "expire_time": 1_790_003_600,
+                      "refresh_expire_time": 1_790_086_400, "open_id": "open-1", "scope": ["basic_info"]}),
+            envelope({"open_id": "open-1", "nickname": "Creator", "avatar": "https://example.invalid/a.jpg"}),
+        ])
+        service = self.service({"xiaohongshu": XiaohongshuProvider("client", "credential", transport=wire)})
+        started = service.start("workspace", "session", "xiaohongshu", "identity")
+        self.assertEqual((started["connectKind"], started["userCode"]), ("device_code", "ABCD-EFGH"))
+        self.assertNotIn("DEVICE-CREDENTIAL", json.dumps(started))
+        stored_context = next(txn for txn in self.repo.db.txns.values() if txn["state_hash"] == hashlib.sha256(started["code"].encode()).hexdigest())
+        self.assertNotIn("DEVICE-CREDENTIAL", stored_context["ciphertext"])
+        self.assertEqual(service.complete("workspace", "session", "xiaohongshu", started["code"], None),
+                         {"connected": False, "reason": "waiting", "pending": True})
+        connected = service.complete("workspace", "session", "xiaohongshu", started["code"], None)
+        self.assertTrue(connected["connected"])
+        self.assertEqual(connected["providerAccountId"], "open-1")
+        with self.assertRaises(AlphaError):
+            service.complete("workspace", "session", "xiaohongshu", started["code"], None)
 
     def test_issuer_reaches_adapters_that_require_it_and_callbacks_keep_it(self):
         location = OAuthService.callback_redirect(BASE, "bluesky", {"state": "s", "code": "c", "iss": "https://auth.example.com", "other": "x"})

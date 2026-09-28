@@ -3,6 +3,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -93,6 +94,20 @@ class Routes(unittest.TestCase):
         self.assertEqual((status, approved["status"]), (200, "approved"))
         status, _, hook = invoke(app, "POST", "/api/billing/webhook", {"id": "e"}, {"X-PostRiff-Billing-Signature": "ok"})
         self.assertEqual((status, hook["outcome"]), (200, "applied"))
+
+    def test_xiaohongshu_webhook_forwards_exact_bytes_and_provider_headers_without_browser_auth(self):
+        service = FakeService()
+        seen = {}
+        service.oauth = SimpleNamespace(xiaohongshu_webhook=lambda headers, raw: seen.update(headers=headers, raw=raw) or {"code": 0, "msg": "success"})
+        app = HostedApplication(service, FakeWorker(), {"provider": "dev", "flow": "dev"}, "c" * 24)
+        body = {"event_id": "evt_1", "event_type": "authorization_revoked"}
+        headers = {"X-Xhs-Event-Id": "evt_1", "X-Xhs-Event-Type": "authorization_revoked",
+                   "X-Xhs-Timestamp": "1786608000000", "X-Xhs-Signature": "a" * 64}
+        status, _, receipt = invoke(app, "POST", "/api/xiaohongshu/webhook", body, headers)
+        self.assertEqual((status, receipt), (200, {"code": 0, "msg": "success"}))
+        self.assertEqual(seen["headers"], {"eventId": "evt_1", "eventType": "authorization_revoked",
+                                            "timestamp": "1786608000000", "signature": "a" * 64})
+        self.assertEqual(json.loads(seen["raw"]), body)
 
 
 

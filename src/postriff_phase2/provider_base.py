@@ -38,7 +38,8 @@ class OAuthProvider:
     read_scope = None
     publish_scope = None
     publish_required = frozenset()
-    # "oauth": redirect to the provider. "bot_code": the person posts a one-time code where Rafii's bot can see it.
+    # "oauth": redirect to the provider. "bot_code": post a one-time code where Rafii's bot can see it.
+    # "device_code": open the provider verification page while the server keeps and polls the confidential device code.
     connect_kind = "oauth"
     # {"name", "label", "placeholder"} when connecting needs one value first (a Bluesky handle, a Mastodon server).
     start_input = None
