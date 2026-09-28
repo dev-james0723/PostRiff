@@ -8,7 +8,8 @@ import type { ChannelFolder } from '@/lib/api/types';
 import { FOLDER_NAME_MAX, FOLDER_SYMBOLS, cleanSelection, validateFolder, type FolderAccount, type FolderSymbol } from '@/lib/channels/folders';
 import { cn } from '@/lib/utils';
 import { AccountRow } from './account-row';
-import { FolderGlyph, SYMBOL_ICONS } from './folder-glyph';
+import { SYMBOL_ICONS } from './folder-glyph';
+import { FolderPreview } from './folder-preview';
 import { MISSING_REASON, SYMBOL_LABELS, draftReason, plural, type Draftable } from './helpers';
 
 export interface EditorDraft {
@@ -75,11 +76,16 @@ export function FolderEditor({ draft, onChange, folders, accounts, draftable, ke
 
   return (
     <>
-      <RafiiDialogBody className='pt-1'>
-        <div className='my-3 flex min-h-24 items-center justify-start gap-4 md:justify-center'>
-          <FolderGlyph folder={{ symbol: draft.symbol, accountIds: draft.accountIds }} accounts={accounts} />
-          <strong className='text-foreground max-w-60 text-lg font-medium break-words'>{draft.name.trim() || 'Your new folder'}</strong>
+      <div data-folder-preview-panel='' className='rafii-panel z-[1] flex shrink-0 items-center justify-center gap-3 px-5 pb-2 md:gap-5 md:px-7'>
+        <FolderPreview symbol={draft.symbol} accountIds={draft.accountIds} accounts={accounts} />
+        <div className='min-w-0 max-w-60'>
+          <strong className='text-foreground block text-lg font-medium break-words'>{draft.name.trim() || 'Your new folder'}</strong>
+          <span className='text-muted-foreground mt-1 block text-xs' role='status' aria-live='polite' aria-atomic='true'>
+            {connectedMembers > 0 ? `${plural(connectedMembers, 'account')} inside` : 'Add your accounts below'}
+          </span>
         </div>
+      </div>
+      <RafiiDialogBody className='pt-1'>
 
         <div className='mt-3 flex min-h-9 items-center justify-between gap-2.5 text-sm'>
           <label id={`${uid}-name-label`} htmlFor={`${uid}-name`} className='text-foreground'>
