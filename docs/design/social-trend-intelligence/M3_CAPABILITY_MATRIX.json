@@ -1,0 +1,35 @@
+{
+  "schema": "rafii.trend-m3-capability-matrix.v1",
+  "recorded_at": "2026-09-28T15:34:51.321372+00:00",
+  "global_m3_complete": false,
+  "capabilities": [
+    {
+      "capability": "text narrative/context and Trend Genome",
+      "local_status": "verified synthetic contracts and disposable PostgreSQL",
+      "external_status": "empirical language/method qualification open"
+    },
+    {
+      "capability": "visual/keyframe creative patterns",
+      "local_status": "synthetic extraction/storage/rights tests pass",
+      "external_status": "modality rights and real authorized corpus open"
+    },
+    {
+      "capability": "audio/transcript creative patterns",
+      "local_status": "synthetic transcript/timecode boundaries pass",
+      "external_status": "modality rights and real authorized corpus open"
+    },
+    {
+      "capability": "forecast target/horizon",
+      "local_status": "synthetic admission/evaluation PostgreSQL passes",
+      "external_status": "preregistered target plus sufficient creator outcome cohort open"
+    },
+    {
+      "capability": "competitor reconstruction",
+      "local_status": "contracts/harness seams only",
+      "external_status": "competitor account/data observation not authorized and not run"
+    }
+  ],
+  "provider_calls": 0,
+  "model_calls": 0,
+  "production_verified": false
+}

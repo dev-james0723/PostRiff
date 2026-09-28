@@ -25,6 +25,8 @@ import { useAgent } from '@/lib/agent-runtime/use-agent';
 import { useAgentStyle } from '@/lib/agent-runtime/use-agent-style';
 import { useVoice, voiceSession, type VoiceSnapshot } from '@/lib/agent-runtime/voice-session';
 import { cn } from '@/lib/utils';
+import { resolveRafiiAvatarMode } from './avatar-state';
+import { RafiiLiveAvatar } from './rafii-live-avatar';
 import { StyleButton, StyleSheet } from './style-sheet';
 
 const MANIFEST = manifestJson as RouteManifest;
@@ -118,6 +120,12 @@ export function VoiceMode({
   const line = statusLine(snapshot);
   const running = snapshot.delegations.filter((d) => d.status === 'running' || d.status === 'collecting');
   const transcript = snapshot.transcript.slice(-6);
+  const avatarMode = resolveRafiiAvatarMode({
+    state: snapshot.state,
+    speaker: snapshot.speaker,
+    outputMuted: snapshot.outputMuted,
+    hasRunningDelegation: running.length > 0
+  });
   const sheet = firstRun ? (
     <StyleSheet
       firstRun
@@ -162,8 +170,11 @@ export function VoiceMode({
 
   const muted = snapshot.micMuted;
   return (
-    <section className='mx-4 mb-2 flex flex-col gap-2 rounded-[var(--rafii-radius-control)] border border-[color-mix(in_oklch,var(--foreground)_10%,transparent)] p-2.5' aria-label='Voice Mode' data-rafii-voice={state}>
-      <div className='flex items-center gap-2'>
+    <section className='mx-4 mb-2 flex min-w-0 flex-col gap-2 overflow-hidden rounded-[var(--rafii-radius-control)] border border-[color-mix(in_oklch,var(--foreground)_10%,transparent)] p-2.5' aria-label='Voice Mode' data-rafii-voice={state}>
+      {active && (
+        <RafiiLiveAvatar mode={avatarMode} level={snapshot.level} outputMuted={snapshot.outputMuted} reducedMotion={reduced} />
+      )}
+      <div className='flex min-w-0 items-center gap-2'>
         <span aria-hidden className={cn('inline-block size-2.5 shrink-0 rounded-full', dotColor(snapshot))} data-rafii-voice-dot={muted ? 'muted' : state} />
         <p className='min-w-0 flex-1 truncate text-sm font-medium' role='status' aria-live='polite' data-rafii-voice-status>
           {line}

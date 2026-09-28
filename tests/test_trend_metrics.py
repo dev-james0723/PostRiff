@@ -1,6 +1,7 @@
 """Synthetic-only offline arithmetic and trust boundary fixtures."""
 from copy import deepcopy
 import json
+import math
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -102,6 +103,26 @@ class Metrics(OfflineCase):
         self.assertEqual(M.engagement_velocity(old,{**new,'value':None,'missing_reason':'permission_denied'})['reason'],'permission_denied')
         self.assertIsNone(M.engagement_velocity(old,{**new,'platform':'threads'})['value'])
         self.assertIsNone(M.engagement_velocity(old,{**new,'provider_observed_at':new['received_at']})['value'])
+
+    def test_provider_measurement_and_retrieval_times_remain_distinct(self):
+        old={'provider_id':'fixture','platform':'bluesky','source_identity':'x','metric_definition_id':'likes','counter_epoch':'v1',
+             'value':10,'received_at':'2026-09-27T18:00:00Z','provider_observed_at':'2026-09-27T17:00:00Z'}
+        new={**old,'value':16,'received_at':'2026-09-27T20:00:00Z','provider_observed_at':'2026-09-27T18:30:00Z'}
+        result=M.engagement_velocity(old,new)
+        self.assertEqual((result['value'],result['elapsed_hours'],result['time_basis']),(4.0,1.5,'provider_measurement'))
+        self.assertNotEqual(new['provider_observed_at'],new['received_at'])
+
+    def test_creator_entropy_effective_creators_and_largest_share_are_distinct(self):
+        observed=windows()[-1]['observed']
+        self.assertAlmostEqual(observed['effective_creators'],math.exp(observed['creator_entropy']))
+        self.assertAlmostEqual(observed['largest_creator_share'],4/150)
+        self.assertNotEqual(observed['effective_creators'],observed['known_author_post_count'])
+
+    def test_single_creator_entropy_has_canonical_positive_zero(self):
+        observed=M.creator_metrics([{'provider_id':'fixture','payload':{'author_status':'known','author_key':'one'}}])
+        self.assertEqual(observed['creator_entropy'],0.0)
+        self.assertEqual(math.copysign(1.0,observed['creator_entropy']),1.0)
+        self.assertNotIn('-0.0',json.dumps(observed,sort_keys=True))
 
     def test_occupancy_and_redundancy_denominators(self):
         assignments=[{'observation_id':str(i),'dimension':'hook','pattern_id':'chosen' if i<20 else str(i),'copy_group_id':'copy' if i<20 else str(i)} for i in range(80)]

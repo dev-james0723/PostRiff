@@ -237,6 +237,26 @@ const voiceBox = (page) => panel(page).getByRole('region', { name: 'Voice Mode',
 const talkButton = (page) => panel(page).getByRole('button', { name: 'Talk to Rafii', exact: true });
 const voiceStatus = (page) => panel(page).locator('[data-rafii-voice-status]');
 const callIndicator = (page) => page.getByRole('region', { name: 'Rafii Voice Mode', exact: true });
+const avatarStage = (page) => panel(page).locator('[data-rafii-3d]');
+
+async function avatarSnapshot(page) {
+  const stage = avatarStage(page);
+  const count = await stage.count();
+  if (!count) return null;
+  return stage.first().evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    return {
+      count: document.querySelectorAll('#rafii-panel [data-rafii-3d]').length,
+      surface: el.getAttribute('data-rafii-3d'),
+      mode: el.getAttribute('data-rafii-avatar-mode'),
+      mouth: Number(el.getAttribute('data-rafii-mouth-open') ?? '0'),
+      ready: el.getAttribute('data-rafii-model-ready'),
+      continuous: el.getAttribute('data-rafii-continuous-motion'),
+      canvases: el.querySelectorAll('canvas').length,
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    };
+  });
+}
 
 async function ready(page) {
   await launcher(page).waitFor({ state: 'visible', timeout: 400000 });
@@ -267,7 +287,7 @@ async function axe(page, selector) {
 
 /** Requests the checks read: style saves, voice sessions and turns to Rafii (node-side times, for ordering). */
 function watchNetwork(page) {
-  const net = { stylePatches: [], voiceStarts: [], voiceStartResponse: null, voiceEnds: [], turns: [] };
+  const net = { stylePatches: [], voiceStarts: [], voiceStartResponse: null, voiceEnds: [], turns: [], rafii3d: [], rafii3dFailures: [], rafii3dRuntimeErrors: [] };
   page.on('request', (request) => {
     const { pathname } = new URL(request.url());
     const method = request.method();
@@ -278,9 +298,22 @@ function watchNetwork(page) {
     else if (method === 'POST' && /\/(agent|site-agent)\/turns$/.test(pathname)) net.turns.push({ at, pathname, body: json(request.postData()) });
   });
   page.on('response', async (response) => {
-    if (response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/agent/voice/sessions')) {
+    const pathname = new URL(response.url()).pathname;
+    if (response.request().method() === 'POST' && pathname.endsWith('/agent/voice/sessions')) {
       net.voiceStartResponse = await response.json().catch(() => null);
     }
+    if (pathname.endsWith('/raffi/raffi-live-v1.glb')) net.rafii3d.push({ status: response.status(), url: response.url() });
+  });
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/raffi/raffi-live-v1.glb')) net.rafii3dFailures.push(request.failure()?.errorText ?? 'request failed');
+  });
+  page.on('console', (message) => {
+    const text = message.text();
+    if (message.type() === 'error' && /raffi-live-v1|rafii-live-avatar|webgl|three|gltf/i.test(text)) net.rafii3dRuntimeErrors.push(text.slice(0, 400));
+  });
+  page.on('pageerror', (error) => {
+    const text = String(error?.message ?? error);
+    if (/raffi-live-v1|rafii-live-avatar|webgl|three|gltf/i.test(text)) net.rafii3dRuntimeErrors.push(text.slice(0, 400));
   });
   return net;
 }
@@ -756,6 +789,15 @@ async function voiceSection(browser) {
     const box = voiceBox(page);
     const listening = await until(async () => ((await voiceStatus(page).textContent()) ?? '').trim() === 'Listening', { timeout: 10000 });
     check('voice: the call is live and the status reads Listening', Boolean(listening), await voiceStatus(page).textContent().catch(() => null));
+    const avatar = await until(async () => {
+      const value = await avatarSnapshot(page);
+      return value?.ready === 'ready' && value.canvases === 1 ? value : null;
+    }, { timeout: 15000, interval: 100 });
+    check('voice 3D: exactly one live Rafii canvas is ready; no active speaker uses the idle visual pose',
+      Boolean(avatar) && avatar.count === 1 && avatar.surface === 'live' && avatar.mode === 'idle', avatar);
+    check('voice 3D: the canonical local GLB loaded with HTTP 200 and no 3D runtime/request failure',
+      net.rafii3d.some((entry) => entry.status === 200) && net.rafii3dFailures.length === 0 && net.rafii3dRuntimeErrors.length === 0,
+      { responses: net.rafii3d, failures: net.rafii3dFailures, runtime: net.rafii3dRuntimeErrors });
     await shot(page, 'voice-desktop-2-call-live.png');
 
     // Mute: a pressed "Unmute" in the destructive colour, the status dot too; the microphone really is off.
@@ -813,8 +855,18 @@ async function voiceSection(browser) {
       return window.rafiiLiveHarness.speaking() && li && (li.textContent ?? '').trim().split(/\s+/).length >= 6;
     }, null, { timeout: 15000 });
     const speakingStatus = (await voiceStatus(page).textContent()) ?? '';
+    const speakingAvatar = await until(async () => {
+      const value = await avatarSnapshot(page);
+      return value?.mode === 'speaking' && value.mouth > 0.02 ? value : null;
+    }, { timeout: 5000, interval: 40 });
+    check('voice 3D: real outgoing fake-WebRTC level drives Speaking mode and a non-zero mouth shape', Boolean(speakingAvatar), speakingAvatar);
     const linesBefore = (await rafiiLines()).length;
     await box.getByRole('button', { name: 'Stop talking', exact: true }).click();
+    const interruptedAvatar = await until(async () => {
+      const value = await avatarSnapshot(page);
+      return value?.mode === 'interrupted' && value.mouth === 0 ? value : null;
+    }, { timeout: 1200, interval: 20 });
+    check('voice 3D: Stop talking immediately switches to Interrupted and closes the mouth', Boolean(interruptedAvatar), interruptedAvatar);
     await page.waitForFunction(() => document.querySelector('#rafii-panel [data-rafii-voice-transcript] li[data-role="assistant"][data-stopped]'), null, { timeout: 5000 }).catch(() => undefined);
     const stoppedLine = () => page.evaluate(() => [...document.querySelectorAll('#rafii-panel [data-rafii-voice-transcript] li[data-role="assistant"][data-stopped]')].at(-1)?.textContent ?? null);
     const cut = await stoppedLine();
@@ -901,6 +953,14 @@ async function voicePhoneSection(browser) {
       Object.values(controls).every((b) => b && b.x >= 0 && b.y >= 0 && b.x + b.width <= PHONE.width + 1 && b.y + b.height <= PHONE.height + 1), controls);
     check('voice phone: reduced motion drops the level meter; the status stays',
       (await page.locator('[data-rafii-voice-level]').count()) === 0 && Boolean(await until(async () => /Listening/.test((await voiceStatus(page).textContent()) ?? ''), { timeout: 10000 })));
+    const mobileAvatar = await until(async () => {
+      const value = await avatarSnapshot(page);
+      return value?.ready === 'ready' && value.canvases === 1 ? value : null;
+    }, { timeout: 15000, interval: 100 });
+    check('voice phone 3D: the model is ready in the idle visual pose and reduced motion disables continuous character motion',
+      Boolean(mobileAvatar) && mobileAvatar.surface === 'live' && mobileAvatar.mode === 'idle' && mobileAvatar.continuous === 'off', mobileAvatar);
+    check('voice phone 3D: the stage fits the 390px viewport without clipping sideways',
+      Boolean(mobileAvatar) && mobileAvatar.rect.x >= -1 && mobileAvatar.rect.x + mobileAvatar.rect.width <= PHONE.width + 1, mobileAvatar?.rect);
     check('voice phone: nothing scrolls sideways', await noSideScroll(page));
     await shot(page, 'voice-phone-2-call-live.png');
     await box.getByRole('button', { name: 'Mute', exact: true }).click();
@@ -912,6 +972,34 @@ async function voicePhoneSection(browser) {
     check('voice phone: End voice ends the call', ended === 'ended', ended);
   } finally {
     await ctx.close();
+  }
+
+  // A separate uncached context deliberately blocks the GLB. Voice remains live and usable on the existing 2D Rafii.
+  const fallbackCtx = await context(browser, who, PHONE, { fakeLive: true, reducedMotion: 'reduce' });
+  try {
+    await fallbackCtx.route('**/raffi/raffi-live-v1.glb', (route) => route.abort('failed'));
+    const page = await fallbackCtx.newPage();
+    watchNetwork(page);
+    await page.goto(`${voiceBase}/app/calendar`, { waitUntil: 'domcontentloaded', timeout: 400000 });
+    await ready(page);
+    check('voice phone fallback: the Rafii drawer opens', await openPanel(page));
+    const talk = talkButton(page);
+    await talk.waitFor({ timeout: 120000 });
+    await until(() => talk.isEnabled(), { timeout: 60000 });
+    await talk.click();
+    const live = await waitVoice(page, ['live', 'error'], 120000);
+    const fallbackAvatar = await until(async () => {
+      const value = await avatarSnapshot(page);
+      return value?.ready === 'fallback' && value.surface === 'fallback' ? value : null;
+    }, { timeout: 15000, interval: 100 });
+    const fallbackControls = live === 'live'
+      ? await Promise.all(['Mute', 'Stop talking', 'End voice'].map((name) => voiceBox(page).getByRole('button', { name, exact: true }).isEnabled()))
+      : [];
+    check('voice phone fallback: blocking the GLB degrades to the static Rafii without breaking the live call or controls',
+      live === 'live' && Boolean(fallbackAvatar) && fallbackControls.every(Boolean), { live, avatar: fallbackAvatar, controls: fallbackControls });
+    if (live === 'live') await voiceBox(page).getByRole('button', { name: 'End voice', exact: true }).click();
+  } finally {
+    await fallbackCtx.close();
   }
 }
 
