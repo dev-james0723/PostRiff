@@ -963,7 +963,7 @@ class SiteAgentService:
                 return self._response(cur, workspace_id, run_id)
             grounded = pending["grounded"]
             text = prompts.restore(answer["answer"], mapping) if mapping else answer["answer"]
-            structured = [b for b in grounded["blocks"] if b["type"] in ("diagnostic_card", "handoff_card", "question_form", "warning", "error", "result_list")]
+            structured = [b for b in grounded["blocks"] if b["type"] in ("diagnostic_card", "handoff_card", "question_form", "warning", "error", "result_list", "calendar_card")]
             navs = [contracts.navigation(a["label"], a["href"], a["routeId"]) for a in pending["actions"] if a["ref"] in answer["actions"]]
             if not navs:
                 navs = [b for b in grounded["blocks"] if b["type"] == "navigation_card"][:1]

@@ -311,8 +311,9 @@ async function axe(page) {
     });
     check('phone: reduced motion keeps the thinking ring still', ring === 'none', ring);
     await ppage.waitForFunction(() => document.querySelectorAll('#rafii-panel article[aria-label="Rafii\'s answer"]').length > 0, null, { timeout: 180000 });
-    const calendarAnswer = await answers(ppage).last().innerText();
-    check('phone: the calendar question is answered from stored state', /scheduled or waiting|Nothing is scheduled/i.test(calendarAnswer), calendarAnswer.slice(0, 200));
+    const calendarReply = answers(ppage).last();
+    const calendarAnswer = await calendarReply.innerText();
+    check('phone: the calendar question is a structured read-only card from stored state', (await calendarReply.getByTestId('calendar-card').count()) === 1 && /Calendar|Nothing is scheduled/i.test(calendarAnswer), calendarAnswer.slice(0, 300));
     check('phone: nothing scrolls sideways', await noSideScroll(ppage));
     await ppage.waitForTimeout(500);
     const composerBox = await composer(ppage).boundingBox();

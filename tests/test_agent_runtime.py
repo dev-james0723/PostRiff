@@ -479,6 +479,46 @@ class GateTest(unittest.TestCase):
             self.assertEqual(opened["layers"]["preferences"]["items"][0]["statement"], "Never use emoji on LinkedIn")
 
 
+class CalendarEvidenceTest(unittest.TestCase):
+    def test_calendar_evidence_keeps_the_typed_read_only_card(self):
+        from postriff_phase2.agent_runtime_v2 import service as runtime_service
+
+        ledger = rt_context.EffectLedger()
+        ledger.site_results = {
+            "calendar.range": {
+                "ok": True,
+                "verified": True,
+                "data": {
+                    "range": {"label": "this week", "start": NOW, "end": NOW + 604800, "timeZone": HK},
+                    "entries": [{"kind": "job", "id": "job-published", "state": "published", "status": "published",
+                                 "title": "Instagram post", "platform": "Instagram", "account": "@studio",
+                                 "when": "2026-09-27T18:00:00+08:00", "href": "/app/queue?job=job-published"}],
+                    "total": 1,
+                    "statusCounts": {"scheduled": 0, "awaiting_approval": 0, "in_flight": 0,
+                                     "failed_held_uncertain": 0, "published": 1, "verified": 0, "unknown": 0},
+                    "unknownStates": [],
+                    "derived": {"emptyDays": {"days": [], "rule": "calendar range"},
+                                "closeTogether": {"pairs": [], "rule": "same account under two hours"},
+                                "similarText": {"pairs": [], "rule": "shared words"}},
+                    "href": "/app/calendar",
+                },
+            },
+            "queue.summary": {
+                "ok": True,
+                "verified": True,
+                "data": {"statusCounts": {"scheduled": 0, "awaiting_approval": 2, "in_flight": 0,
+                                           "failed_held_uncertain": 0, "published": 1, "verified": 0, "unknown": 0}},
+            },
+        }
+
+        blocks = runtime_service.evidence_blocks(ledger, "What is scheduled this week?", "en")
+        card = next(block for block in blocks if block["type"] == "calendar_card")
+        self.assertEqual(card["queue"]["awaitingApproval"], 2)
+        self.assertEqual(next(status for status in card["statuses"] if status["key"] == "published")["count"], 1)
+        self.assertNotIn("action", card)
+        self.assertNotIn("proposal", card)
+
+
 # --- orchestration on the Agents SDK (§34) -----------------------------------------------------------------------------------------
 @unittest.skipUnless(HAVE_SDK, "openai-agents is not installed")
 class ManagerOrchestrationTest(unittest.TestCase):

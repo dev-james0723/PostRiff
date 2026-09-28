@@ -22,7 +22,7 @@ ENTITY_TYPES = ("conversation", "source", "automation", "automation_run", "job",
                 "memory_proposal", "help_document")
 UI_CAPABILITIES = ("navigate", "show_help", "highlight", "focus_composer", "guide", "voice")
 BLOCK_TYPES = ("text", "citation_list", "navigation_card", "diagnostic_card", "proposal_diff", "question_form", "tool_activity",
-               "warning", "handoff_card", "error", "operate_result", "result_list", "guide_card", "voice_command")
+               "warning", "handoff_card", "error", "operate_result", "result_list", "calendar_card", "guide_card", "voice_command")
 VOICE_COMMANDS = ("end_call", "mute", "stop_speaking", "style")
 MAX_VISIBLE_KEYS = 12
 _KEY = re.compile(r"^[a-zA-Z][a-zA-Z0-9]{0,31}$")
@@ -192,3 +192,14 @@ def handoff(trace_id: str, summary: list[str], href: str) -> dict:
 
 def error(message: str, code: str) -> dict:
     return {"type": "error", "message": message, "code": code}
+
+
+def calendar_card(*, range_view: dict, statuses: list[dict], entries: list[dict], total: int | None, queue: dict, sources: dict, href: str | None) -> dict:
+    """A structured, read-only calendar view.
+
+    It deliberately has no action field.  The only optional destination is an allowlisted page link;
+    scheduling, approval, editing and publishing remain on their existing product surfaces.
+    """
+    shown = entries[:6]
+    return {"type": "calendar_card", "range": range_view, "statuses": statuses, "entries": shown, "total": total,
+            "truncated": isinstance(total, int) and total > len(shown), "queue": queue, "sources": sources, "href": href}

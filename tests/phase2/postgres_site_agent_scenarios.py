@@ -56,8 +56,8 @@ SOURCES = {
     "D04": "writing pipeline with the draft as material → apply (proposed update on that draft) → accept_update", "D05": "writing pipeline, destination Instagram", "D06": "writing pipeline + ideas.apply",
     "D07": "writing pipeline (rework)", "K01": "campaign.get", "K02": "campaign.get + derived coverage", "K03": "campaign.get (derived observations)",
     "K04": "campaign.get (last week's runs)", "K05": "writing pipeline with the campaign brief as material", "S01": "schedule proposal → p2_review (apply_proposal)",
-    "S02": "apply_proposal with the approve permission", "S03": "calendar.range", "S04": "calendar.range (Friday)", "S05": "calendar.range (derived: close together)",
-    "S06": "calendar.range (derived: empty days)", "S07": "reschedule proposal → p2_cancel + p2_review", "S08": "clarifying question (no target)",
+    "S02": "apply_proposal with the approve permission", "S03": "calendar.range + queue.summary", "S04": "calendar.range + queue.summary (Friday)", "S05": "calendar.range + queue.summary (derived: close together)",
+    "S06": "calendar.range + queue.summary (derived: empty days)", "S07": "reschedule proposal → p2_cancel + p2_review", "S08": "clarifying question (no target)",
     "R01": "reviews.list", "R02": "reviews.list (returned)", "R03": "reviews.list (reviewer notes)", "R04": "policy: approving from chat is refused",
     "R05": "schedule intent (needs a time)", "R06": "permission check (approve)", "P01": "entity.status (held job)", "P02": "publishing.summary (today)",
     "P03": "publishing.summary (failed)", "P04": "job.get diagnosis", "P05": "entity.status (uncertain job)", "Q01": "content.search + provenance links",
@@ -325,6 +325,11 @@ def said(result):
                 parts.append(block["empty"])
         elif block["type"] == "diagnostic_card":
             parts += [block["title"], block["status"], block.get("cause") or ""] + block["evidence"] + block["steps"]
+        elif block["type"] == "calendar_card":
+            parts += [str((block.get("range") or {}).get("label") or "Calendar")]
+            parts += [f"{status['label']} {status['count'] if status.get('count') is not None else 'unavailable'}" for status in block.get("statuses") or []]
+            parts += [" ".join(str(x) for x in (entry.get("platform"), entry.get("account"), entry.get("when"), entry.get("title"), entry.get("status")) if x)
+                      for entry in block.get("entries") or []]
         elif block["type"] in ("warning", "error"):
             parts.append(block["message"])
         elif block["type"] == "question_form":
@@ -354,6 +359,8 @@ def hrefs(result):
             out += [i["href"] for i in block["items"] if i.get("href")]
         if block["type"] == "diagnostic_card":
             out += [link["href"] for link in block["links"]]
+        if block["type"] == "calendar_card" and block.get("href"):
+            out.append(block["href"])
         if block["type"] == "citation_list":
             out += [c["href"] for c in block["citations"]]
     return out
@@ -563,11 +570,14 @@ review2 = next(x for x in state()["phase2"]["reviews"] if x["id"] == applied2["p
 act("p2_approve", {"reviewId": review2["id"], "digest": review2["digest"], "confirmed": True})
 record("S02", "permissions", "Approver applies a schedule proposal", r2, "approve-class action allowed for an approver who cannot edit", review2["status"] == "needs_review", state_checked="review created by approver")
 r = ask("What is scheduled this week?", "/app/calendar")
-waiting = next(b for b in r["message"]["siteAgent"]["blocks"] if b["type"] == "result_list" and b["title"].startswith("Scheduled or waiting"))
-waiting_text = json.dumps(waiting)
-record("S03", "calendar", "What is scheduled this week?", r, "the two approved Friday posts under 'Scheduled or waiting'; verified and failed posts in their own groups, never counted as scheduled",
-       waiting_text.count("Approved and waiting") >= 2 and "Fri 2026-09-25 16:30" in waiting_text and "Failed" not in waiting_text and "verified" not in waiting_text.lower()
-       and "Published and verified (this week)" in said(r) and "Failed, held or uncertain" in said(r) and "2 scheduled or waiting" not in said(r))
+calendar = next(b for b in r["message"]["siteAgent"]["blocks"] if b["type"] == "calendar_card")
+counts = {status["key"]: status["count"] for status in calendar["statuses"]}
+record("S03", "calendar", "What is scheduled this week?", r, "a typed read-only calendar card keeps scheduled, approval, in-flight, attention, published and verified state distinct",
+       counts == {"scheduled": 2, "awaiting_approval": 1, "in_flight": 0, "failed_held_uncertain": 3, "published": 0, "verified": 1}
+       and any(entry["status"] == "scheduled" and entry["when"] == "Fri 2026-09-25 16:30" for entry in calendar["entries"])
+       and calendar["sources"] == {"calendarRange": "verified", "queueSummary": "verified"}
+       and "action" not in calendar and "proposal" not in calendar
+       and ("calendar.range", "verified") in tools_ran(r) and ("queue.summary", "verified") in tools_ran(r))
 r = ask("What is scheduled Friday?", "/app/calendar")
 record("S04", "calendar", "What is scheduled Friday?", r, "Friday entries only", "Fri 2026-09-25" in said(r) and "Thu 2026-09-24" not in said(r))
 friday_conv = r["conversationId"]
