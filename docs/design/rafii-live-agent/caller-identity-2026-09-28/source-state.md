@@ -2,7 +2,7 @@
 
 Release candidate source reconciled on 2026-09-28; production is not yet migrated or deployed.
 
-The voice-greeting worktree was clean at eefff65 on codex/rafii-voice-opening (also origin/codex/rafii-voice-opening), superseding the handoff observation of dirty 84165f1. This task used an isolated managed worktree, then rebased its release commit without conflicts onto origin/consumer-saas at 822f25d. No edits were made to the owner worktree.
+The voice-greeting worktree was clean at eefff65 on codex/rafii-voice-opening (also origin/codex/rafii-voice-opening), superseding the handoff observation of dirty 84165f1. This task used an isolated managed worktree. After production advanced concurrently, all release commits were rebased without conflicts onto origin/consumer-saas at a25bb45, the exact source of production deployment dpl_6jiaa4cqvdYwkhehXuTMXVNMouxb. No edits were made to the owner worktree.
 
 All local heads/remotes and SQL filenames in every worktree were inspected; only this release branch claims 045_phone_caller_identity.sql. The scan was repeated after fetching and rebasing. Current user-supplied project rules apply.
 
