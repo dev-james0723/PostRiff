@@ -63,7 +63,9 @@ class PhonePolicyTest(unittest.TestCase):
             self.assertEqual(planner.eligibility('proactive',self.prefs,**{**self.args,'event_type':event}),'event_not_allowed')
 
     def test_no_duplicate_or_concurrent_calls(self):
-        self.assertEqual(planner.eligibility('explicit',self.prefs,**{**self.args,'recent_equivalent':True}),'recent_equivalent')
+        self.assertIsNone(planner.eligibility('explicit',self.prefs,**{**self.args,'recent_equivalent':True}))
+        self.assertEqual(planner.eligibility('proactive',self.prefs,**{**self.args,'recent_equivalent':True}),'recent_equivalent')
+        self.assertEqual(planner.eligibility('scheduled',self.prefs,**{**self.args,'recent_equivalent':True}),'recent_equivalent')
         self.assertEqual(planner.eligibility('explicit',self.prefs,**{**self.args,'active':True}),'call_active')
 
     def test_preferences_validation(self):

@@ -17,7 +17,7 @@ def eligibility(kind, prefs, *, now, verified, membership, configured, live_conf
               (flags.get('RAFII_PHONE_OUTBOUND_ENABLED'), 'outbound_disabled'),
               (verified, 'phone_unverified'), (prefs['enabled'], 'calling_off'), (membership, 'membership'),
               (configured, 'provider_unavailable'), (live_configured, 'live_unavailable'),
-              (not active, 'call_active'), (not recent_equivalent, 'recent_equivalent'),
+              (not active, 'call_active'), (kind == 'explicit' or not recent_equivalent, 'recent_equivalent'),
               (estimate > 0 and reserved_cost + estimate <= daily_budget, 'phone_budget')]
     if kind != 'explicit':
         checks += [(not in_quiet_hours(now, {'quiet_start': prefs['quietStart'], 'quiet_end': prefs['quietEnd'], 'time_zone': prefs['timeZone']}), 'quiet_hours'),

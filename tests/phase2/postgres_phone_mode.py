@@ -359,15 +359,11 @@ assert failed['state']=='failed' and failed['failure']=='provider_auth' and 'ver
 assert '+12025550123' not in json.dumps(failed)
 assert sql('SELECT provider_call_ref,live_cost_usd_micro,telephony_cost_usd_micro,reserved_usd_micro FROM pr_phone_calls WHERE id=%s',failed['id'])[0]==(None,0,0,2250000)
 assert request('confirmed-provider-rejection')['id']==failed['id'] and attempts==['POST']
-cooldown=denied(lambda:request('too-soon-after-failed-call'),409)
-assert cooldown.code=='recent_equivalent' and 'five minutes' in str(cooldown) and attempts==['POST']
-sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE requested_at>=to_timestamp(%s)",planner.day_start(clock[0],fixture_zone))
 outcome[0]=(403,{'code':21216})
-second=phone.request(wid,ONE,{'idempotencyKey':'confirmed-provider-rejection-two'},dispatch=False)
+second=phone.request(wid,ONE,{'idempotencyKey':'too-soon-after-failed-call'},dispatch=False)
 delivery.deliver(phone,second['id'])  # Delivery must use settled costs too.
 assert read_call(second['id'])['state']=='failed' and read_call(second['id'])['failure_class']=='provider_destination'
 assert attempts==['POST','POST']
-sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE requested_at>=to_timestamp(%s)",planner.day_start(clock[0],fixture_zone))
 outcome[0]=(201,{'sid':'CA'+'d'*32,'status':'ringing'})
 held=request('real-provider-usage-unknown')
 sql("UPDATE pr_phone_calls SET state='answered',answered_at=now(),media_claimed_at=now() WHERE id=%s",held['id'])
@@ -390,7 +386,7 @@ assert after_settlement['state']=='failed' and after_settlement['failure']=='pro
 assert attempts==['POST','POST','POST','POST']
 phone.config.values.clear(); phone.config.values.update(saved_values)
 phone.provider=provider
-print('PASS confirmed provider errors masked; cooldown/idempotency; zero-cost failures release daily capacity at request and delivery; unknown/partial holds retained; actual costs shared with notification policy')
+print('PASS confirmed provider errors masked; immediate explicit retry/idempotency; zero-cost failures release daily capacity at request and delivery; unknown/partial holds retained; actual costs shared with notification policy')
 
 # Credit-mode calls use the existing wallet/quote/reservation path, never an implicit spend.
 import sys
