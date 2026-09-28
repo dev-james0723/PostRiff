@@ -91,7 +91,8 @@ class OAuthService:
             except AlphaError:
                 callback = None
                 issues.append('Set POSTRIFF_PUBLIC_BASE_URL to the fixed HTTPS app origin and register its callback with the provider.')
-            paused = adapter is not None and bool(diagnostic.get('operatorDisabled'))
+            wave = getattr(cls, 'wave', None)
+            paused = adapter is not None and (bool(diagnostic.get('operatorDisabled')) if wave else not getattr(adapter, 'execution_enabled', True))
             if paused:
                 issues.append('This connector is paused by the operator.')
             feature_enabled = bool(diagnostic.get('featureFlagEnabled', not getattr(cls, 'feature_flag_required', False)))
@@ -199,6 +200,8 @@ class OAuthService:
     def start(self, workspace_id, token, provider_id, capability, inputs=None):
         adapter = self._provider(provider_id)
         if not getattr(adapter, "execution_enabled", True):
+            if not getattr(type(adapter), 'wave', None):
+                raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
             diagnostic = getattr(self.providers, 'diagnostics', {}).get(provider_id, {})
             if bool(diagnostic.get('operatorDisabled')):
                 raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
@@ -276,6 +279,8 @@ class OAuthService:
         bot_code = getattr(type(adapter), "connect_kind", "oauth") == "bot_code"
         device_code = getattr(type(adapter), "connect_kind", "oauth") == "device_code"
         if not getattr(adapter, "execution_enabled", True):
+            if not getattr(type(adapter), 'wave', None):
+                raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
             diagnostic = getattr(self.providers, 'diagnostics', {}).get(provider_id, {})
             if bool(diagnostic.get('operatorDisabled')):
                 raise AlphaError("This platform is paused for now. Connect again when it's back.", 503)
