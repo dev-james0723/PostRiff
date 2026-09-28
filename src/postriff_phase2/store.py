@@ -402,6 +402,11 @@ class Phase2Store(Store):
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
+        if v.get("trendLineage") or v.get("scoutLineage"):
+            from .growth.trends.opportunities import freeze_manifest
+            freeze_manifest(s, v, manifest, self.clock())
+        if v.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, v["trendLineage"]):
+            raise AlphaError("Trend evidence changed or is unavailable. Review current evidence before publication.", 410, code="evidence_unavailable")
         root_key = digest(manifest)
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
         # key all duplicate reviews for this retry to the same preceding job, never a random nonce.
@@ -449,6 +454,12 @@ class Phase2Store(Store):
                     or m.get("sourceDigest") != self.source_digest(s, v)
                     or m.get("providerAccountId") != c.get("providerAccountId", c["account"])
                     or m["capability"]["scopes"] != c["scopes"]):
+                return False
+            if m.get("trendLineage") or v.get("trendLineage") or m.get("scoutLineage"):
+                from .growth.trends.opportunities import manifest_current
+                if not manifest_current(s, v, m, self.clock()):
+                    return False
+            if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
             media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"])
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}

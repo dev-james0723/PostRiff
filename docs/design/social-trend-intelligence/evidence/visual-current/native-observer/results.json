@@ -1,0 +1,218 @@
+{
+  "execution": "explicit_synthetic_API_signed_page_and_visibility_fixtures",
+  "native_intersection_observer": true,
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 430,
+      "height": 932
+    }
+  ],
+  "results": [
+    {
+      "width": 1440,
+      "name": "defaultOFF makes no trend reads, exposure or decision calls",
+      "pass": true
+    },
+    {
+      "width": 1440,
+      "name": "delivery, hidden/occluded, sub500ms and unmounted cards never become views",
+      "pass": true
+    },
+    {
+      "width": 1440,
+      "name": "native visible observer reports the full signed ordered page, including off-trend/platform candidates",
+      "pass": true
+    },
+    {
+      "width": 1440,
+      "name": "accept binds measured exposure; Ideas waits for canonical snapshot, refetches opportunities and survives navigation/reload",
+      "pass": true
+    },
+    {
+      "width": 1440,
+      "name": "insufficient candidate remains visible with creation disabled and dismissal usable; viewport and axe",
+      "pass": true,
+      "details": {
+        "axe": []
+      }
+    },
+    {
+      "width": 1440,
+      "name": "canonical keyboard dismissal keeps status/focus through refetch and preserves trend/evidence",
+      "pass": true
+    },
+    {
+      "width": 1440,
+      "name": "server-removed dismissed row falls back to the creative-section heading anchor focus",
+      "pass": true
+    },
+    {
+      "width": 1440,
+      "name": "cursor/filter reset, empty search and opportunity-error retain original query semantics",
+      "pass": true
+    },
+    {
+      "width": 1440,
+      "name": "no runtime failures, unexpected egress/mutations, generation or publication",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "defaultOFF makes no trend reads, exposure or decision calls",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "delivery, hidden/occluded, sub500ms and unmounted cards never become views",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "native visible observer reports the full signed ordered page, including off-trend/platform candidates",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "accept binds measured exposure; Ideas waits for canonical snapshot, refetches opportunities and survives navigation/reload",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "insufficient candidate remains visible with creation disabled and dismissal usable; viewport and axe",
+      "pass": true,
+      "details": {
+        "axe": []
+      }
+    },
+    {
+      "width": 768,
+      "name": "canonical keyboard dismissal keeps status/focus through refetch and preserves trend/evidence",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "server-removed dismissed row falls back to the creative-section heading anchor focus",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "cursor/filter reset, empty search and opportunity-error retain original query semantics",
+      "pass": true
+    },
+    {
+      "width": 768,
+      "name": "no runtime failures, unexpected egress/mutations, generation or publication",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "defaultOFF makes no trend reads, exposure or decision calls",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "delivery, hidden/occluded, sub500ms and unmounted cards never become views",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "native visible observer reports the full signed ordered page, including off-trend/platform candidates",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "accept binds measured exposure; Ideas waits for canonical snapshot, refetches opportunities and survives navigation/reload",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "insufficient candidate remains visible with creation disabled and dismissal usable; viewport and axe",
+      "pass": true,
+      "details": {
+        "axe": []
+      }
+    },
+    {
+      "width": 390,
+      "name": "canonical keyboard dismissal keeps status/focus through refetch and preserves trend/evidence",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "server-removed dismissed row falls back to the creative-section heading anchor focus",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "cursor/filter reset, empty search and opportunity-error retain original query semantics",
+      "pass": true
+    },
+    {
+      "width": 390,
+      "name": "no runtime failures, unexpected egress/mutations, generation or publication",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "defaultOFF makes no trend reads, exposure or decision calls",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "delivery, hidden/occluded, sub500ms and unmounted cards never become views",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "native visible observer reports the full signed ordered page, including off-trend/platform candidates",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "accept binds measured exposure; Ideas waits for canonical snapshot, refetches opportunities and survives navigation/reload",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "insufficient candidate remains visible with creation disabled and dismissal usable; viewport and axe",
+      "pass": true,
+      "details": {
+        "axe": []
+      }
+    },
+    {
+      "width": 430,
+      "name": "canonical keyboard dismissal keeps status/focus through refetch and preserves trend/evidence",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "server-removed dismissed row falls back to the creative-section heading anchor focus",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "cursor/filter reset, empty search and opportunity-error retain original query semantics",
+      "pass": true
+    },
+    {
+      "width": 430,
+      "name": "no runtime failures, unexpected egress/mutations, generation or publication",
+      "pass": true
+    }
+  ],
+  "real_API_DB": false,
+  "builds_started": 0
+}

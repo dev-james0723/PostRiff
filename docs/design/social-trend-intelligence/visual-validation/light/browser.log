@@ -1,0 +1,90 @@
+PASS 1440 flags off: zero trend requests
+PASS 1440 browse stored data only, authenticated contract
+PASS 1440 radar fits viewport
+PASS 1440 radar axe
+PASS 1440 expanded DNA and comparison fits viewport
+PASS 1440 expanded DNA and comparison axe
+PASS 1440 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path
+PASS meaningful 200ms motion; reduced motion removes it
+PASS 1440 exact method windows units snapshots and seven independent fit dimensions
+PASS 1440 trust drawer axe
+PASS 1440 reduced motion removes drawer transitions
+PASS 1440 trust layers, native language, graph equivalent, focus trap/Escape/restore
+PASS 1440 insufficient calibration hides percentage
+PASS 1440 native language interpretation and evidence retained
+PASS all section and filter queries preserved across navigation
+PASS pagination and filter cursor reset preserve server contract
+PASS watch persisted create + revision-safe disable
+PASS accept opportunity into existing Ideas source, no generation
+PASS empty exact filters and interval
+PASS state loading
+PASS state partial
+PASS state collecting
+PASS state unavailable
+PASS state error
+PASS state invalid
+PASS state pending
+PASS state expired
+PASS state deleted
+PASS state aggregate
+PASS state low_confidence
+PASS state opportunity_expired
+PASS receipt 410 removes card claims
+PASS Lab populated diagnostics axe
+PASS Lab explicit check, user-fact guard, selective existing revision edit
+PASS Lab existing editor axe
+PASS Lab stale-result race leaves changed draft untouched
+PASS Lab absent server linkage stays unavailable
+PASS 1440 zero unexpected mutations/runtime errors
+PASS 768 flags off: zero trend requests
+PASS 768 browse stored data only, authenticated contract
+PASS 768 radar fits viewport
+PASS 768 radar axe
+PASS 768 expanded DNA and comparison fits viewport
+PASS 768 expanded DNA and comparison axe
+PASS 768 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path
+PASS 768 exact method windows units snapshots and seven independent fit dimensions
+PASS 768 trust drawer axe
+PASS 768 reduced motion removes drawer transitions
+PASS 768 trust layers, native language, graph equivalent, focus trap/Escape/restore
+PASS 768 insufficient calibration hides percentage
+PASS 768 native language interpretation and evidence retained
+PASS 768 Lab fits viewport
+PASS 768 Lab populated diagnostics axe
+PASS 200% browser-zoom-equivalent reflow: 768 physical pixels / 384 CSS pixels
+PASS 768 at 200% zoom fits viewport
+PASS drawer at 200% zoom fits viewport
+PASS 200% zoom axe
+PASS 768 zero unexpected mutations/runtime errors
+PASS 390 flags off: zero trend requests
+PASS 390 browse stored data only, authenticated contract
+PASS 390 radar fits viewport
+PASS 390 radar axe
+PASS 390 expanded DNA and comparison fits viewport
+PASS 390 expanded DNA and comparison axe
+PASS 390 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path
+PASS 390 exact method windows units snapshots and seven independent fit dimensions
+PASS 390 trust drawer axe
+PASS 390 reduced motion removes drawer transitions
+PASS 390 trust layers, native language, graph equivalent, focus trap/Escape/restore
+PASS 390 insufficient calibration hides percentage
+PASS 390 native language interpretation and evidence retained
+PASS 390 Lab fits viewport
+PASS 390 Lab populated diagnostics axe
+PASS 390 zero unexpected mutations/runtime errors
+PASS 430 flags off: zero trend requests
+PASS 430 browse stored data only, authenticated contract
+PASS 430 radar fits viewport
+PASS 430 radar axe
+PASS 430 expanded DNA and comparison fits viewport
+PASS 430 expanded DNA and comparison axe
+PASS 430 DNA keyboard evidence, Unknown comparison, platform honesty, creator focus path
+PASS 430 exact method windows units snapshots and seven independent fit dimensions
+PASS 430 trust drawer axe
+PASS 430 reduced motion removes drawer transitions
+PASS 430 trust layers, native language, graph equivalent, focus trap/Escape/restore
+PASS 430 insufficient calibration hides percentage
+PASS 430 native language interpretation and evidence retained
+PASS 430 Lab fits viewport
+PASS 430 Lab populated diagnostics axe
+PASS 430 zero unexpected mutations/runtime errors

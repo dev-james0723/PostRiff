@@ -1,0 +1,228 @@
+{
+  "execution": "byte-exact archival; historical source bindings preserved",
+  "recorded_at": "2026-09-28T05:48:51.707528+00:00",
+  "artifacts": [
+    {
+      "source": "/private/tmp/trend-visual-copycheck/build.log",
+      "artifact": "final/build.log",
+      "bytes": 2263,
+      "sha256": "dba24409abf550da5fa57a64c0e2823684ab8ac512b8db0e8bbd1a62b9d37741"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/build-receipt.json",
+      "artifact": "final/build-receipt.json",
+      "bytes": 166,
+      "sha256": "ed397306ff55a720b210ff805a1da1c4eb9b5ec0681606e96664be6c21ee149b"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/source-before.json",
+      "artifact": "final/source-before.json",
+      "bytes": 107881,
+      "sha256": "2dc9409b65632178e0e38f806a04cf9194902d18791efd1d0217d8baa74c7d7f"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/source-after.json",
+      "artifact": "final/source-after.json",
+      "bytes": 107881,
+      "sha256": "2dc9409b65632178e0e38f806a04cf9194902d18791efd1d0217d8baa74c7d7f"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/copy-delta.json",
+      "artifact": "final/copy-delta.json",
+      "bytes": 457,
+      "sha256": "d91fce144228fa118337df1b4ba96341e459585951a2f967e07f3fb45a0c8392"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/browser.log",
+      "artifact": "final/browser.log",
+      "bytes": 2435,
+      "sha256": "58c88067bba15facaedfdc9070181ffa4b4646020d4dcd535527e6a73a06aac0"
+    },
+    {
+      "source": "/private/tmp/trend-visual-releasecheck/build.log",
+      "artifact": "matrix-build/build.log",
+      "bytes": 2618,
+      "sha256": "80576fee2369ef60991b4dd853bcbfd71f06d9272bb4c6695ae61f8be5106f1d"
+    },
+    {
+      "source": "/private/tmp/trend-visual-releasecheck/build-receipt.json",
+      "artifact": "matrix-build/build-receipt.json",
+      "bytes": 192,
+      "sha256": "dfc9a905d6f8648d3a1bc7cf56a882fdc6fe6c33e7579ee926cbd3c271b60679"
+    },
+    {
+      "source": "/private/tmp/trend-visual-releasecheck/css-only-delta.json",
+      "artifact": "matrix-build/css-only-delta.json",
+      "bytes": 225,
+      "sha256": "e963f6628b0a23027966e0db4f7b1f0620c90c458694946e314d289ff8f6cb8a"
+    },
+    {
+      "source": "/private/tmp/trend-visual-final-build/typecheck.log",
+      "artifact": "code-checks/typecheck.log",
+      "bytes": 48,
+      "sha256": "b13539b82e2ccffed1b0c1ad7af2d320b56f47df84b5263771f5bbe8e32dd217"
+    },
+    {
+      "source": "/private/tmp/trend-visual-final-build/lint.log",
+      "artifact": "code-checks/lint.log",
+      "bytes": 136,
+      "sha256": "a71c1769eb0cd59c893dab33aa6bfda4b3bc2038e13e12e114671bc6ba3b7da3"
+    },
+    {
+      "source": "/private/tmp/trend-visual-final-build/visual-tests.log",
+      "artifact": "code-checks/visual-tests.log",
+      "bytes": 3266,
+      "sha256": "198b01ded3c09e471eda1b6c672ca7fcd0ff626ecf683b565815dd8c642acdc3"
+    },
+    {
+      "source": "/private/tmp/trend-visual-current-build/web-tests.log",
+      "artifact": "historical-web-checks/web-tests.log",
+      "bytes": 43322,
+      "sha256": "32ed1ca1f836c4e4144f5610cc17f1016f2e2e093e5d608525fbe08e999ad2ef"
+    },
+    {
+      "source": "/private/tmp/trend-visual-final-real/harness-result.json",
+      "artifact": "real-api/harness-result.json",
+      "bytes": 36659,
+      "sha256": "91ed2e7543e52495720ae66c42329f85c3c612e8f36bc548efaf1d79588286de"
+    },
+    {
+      "source": "/private/tmp/trend-visual-final-real/browser-results.json",
+      "artifact": "real-api/browser-results.json",
+      "bytes": 16151,
+      "sha256": "53a67542ceef62d59951c15b031423f0cf6ae790e9006bcd92938a4babf4f934"
+    },
+    {
+      "source": "/private/tmp/visual-current-integration-r5/receipt.json",
+      "artifact": "native-observer/receipt.json",
+      "bytes": 4482,
+      "sha256": "89ab69dbce0ee4432e05c15e1284812886e47aedf3bf135e4f7d1e4c06303054"
+    },
+    {
+      "source": "/private/tmp/visual-current-integration-r5/results.json",
+      "artifact": "native-observer/results.json",
+      "bytes": 6310,
+      "sha256": "f3e9ab7f15cc7234538a06d1540c60f765438df07108db3ee43ecac1e966f4ae"
+    },
+    {
+      "source": "/private/tmp/visual-current-integration-r5/source-before.json",
+      "artifact": "native-observer/source-before.json",
+      "bytes": 102944,
+      "sha256": "f1f88cb0b79560a71d6569228e2e8d3a167cedd86effb7c1589beae27a3382a3"
+    },
+    {
+      "source": "/private/tmp/visual-current-integration-r5/source-after.json",
+      "artifact": "native-observer/source-after.json",
+      "bytes": 102810,
+      "sha256": "2bee36995afa5243781027ae54a67049f01d4a1911a9a0b347672634f1b6c678"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-light/results.json",
+      "artifact": "light/results.json",
+      "bytes": 151738,
+      "sha256": "37d27c84f3ac2e7d0de4b735ff8f87f0ecdc342189ed18694a69757f2c01a03e"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-dark-long/results.json",
+      "artifact": "dark-long/results.json",
+      "bytes": 141332,
+      "sha256": "fa56305b596d42f19c912c9e87e92efea3656d7193be726b1721e445f170d4fe"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copy-browser/results.json",
+      "artifact": "caption-regression/results.json",
+      "bytes": 20145,
+      "sha256": "7e2f77830dd744267ff4ea9bb92a1c07b0368d383bb1493360620ea73967d38e"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-light/landing-1440.png",
+      "artifact": "screens/light/landing-1440.png",
+      "bytes": 312794,
+      "sha256": "63ee4d61df1b0370fcc672e600951dd8d5b4afcadadb8157157095874e1ea388"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-light/landing-768.png",
+      "artifact": "screens/light/landing-768.png",
+      "bytes": 174712,
+      "sha256": "d4084d48f83901cd4f5ab36c94516982170a6f015c512534aa88e9dd3f76c019"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-light/landing-390.png",
+      "artifact": "screens/light/landing-390.png",
+      "bytes": 101505,
+      "sha256": "7e38f91fbbc484cd3ee2a7dac4be853997dbea5779096ab221c37d4525040b04"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-light/landing-430.png",
+      "artifact": "screens/light/landing-430.png",
+      "bytes": 114515,
+      "sha256": "31cf32049a6608961dca1a1b29556876b79421cf3d7e3321abf8cae8b9c10506"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-light/dna-1440.png",
+      "artifact": "screens/light/dna-1440.png",
+      "bytes": 421070,
+      "sha256": "8697c465a5631a52c5b7265ce3bbb9aa0c5177842d33cb494c679eb09b97b049"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-light/zoom-200-390.png",
+      "artifact": "screens/light/zoom-200-390.png",
+      "bytes": 21351,
+      "sha256": "ffdb12380b8007a36facf678c28b0e7a7ba27674f9f632428659a23fb516f654"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-dark-long/creative-1440.png",
+      "artifact": "screens/dark-long/creative-1440.png",
+      "bytes": 216157,
+      "sha256": "3826bfb1d933e9c2a6ec2fd5a2053b3990bdcb9ab314292d0d557ef3739d936c"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-dark-long/dna-390.png",
+      "artifact": "screens/dark-long/dna-390.png",
+      "bytes": 136656,
+      "sha256": "762e4cfe6e7df287caf466c633869aece8c7ab75361c12505102e0479c1ee682"
+    },
+    {
+      "source": "/private/tmp/trend-visual-release-dark-long/trust-390.png",
+      "artifact": "screens/dark-long/trust-390.png",
+      "bytes": 82954,
+      "sha256": "29c2dc7754dbe44bf98e3ad54d38278c74435963f12014312684731b1836ab76"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copy-browser/momentum-390.png",
+      "artifact": "screens/final/momentum-390.png",
+      "bytes": 75986,
+      "sha256": "d709ed845162d32d908d7a8c6aa2e3a5af0638e40ad794722b26a692b7bb1f59"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copy-browser/forecast-430.png",
+      "artifact": "screens/final/forecast-430.png",
+      "bytes": 88139,
+      "sha256": "89da568d5b38f87be0d2390f07e848ba84a06513d22bbc8b827bc13528f5bf42"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/secret-scan.json",
+      "artifact": "security/secret-scan.json",
+      "bytes": 82500,
+      "sha256": "86bc210b137ae0df35e76b602070661794168e6a3f3fb6eca86ff5357485a981"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/secret-scan-initial.json",
+      "artifact": "security/secret-scan-initial.json",
+      "bytes": 86639,
+      "sha256": "6dd843482cf01abc7ed3db827ed389b7ee95ba00caf79053d5232eed3e1e38d6"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/secret-review.json",
+      "artifact": "security/secret-review.json",
+      "bytes": 158,
+      "sha256": "65d1dbe258ef223c0abf576d0816a53b7dd0ea2328a824e06cd3cd3625db6413"
+    },
+    {
+      "source": "/private/tmp/trend-visual-copycheck/final-scoped-lint.log",
+      "artifact": "final/scoped-lint.log",
+      "bytes": 1959,
+      "sha256": "c80acea7efb0afac1132bba2ea13df598359edb7df1e6083c76e68784fa88651"
+    }
+  ]
+}

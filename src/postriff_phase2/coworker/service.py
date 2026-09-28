@@ -47,11 +47,34 @@ class CoworkerService:
         self.hosted = hosted
         self.values = dict(values or {})
         self.clock = clock or getattr(hosted, "clock", None) or time.time
+        from ..growth.trends.service import validate_changed_variants
+        self._trend_edit_effect = lambda cur, wid, before, after, actor: validate_changed_variants(hosted.connection_factory, cur, wid, before, after, actor, self.clock())
+        # Effects are an optional repository protocol. The durable PostgreSQL
+        # repository owns this list; lightweight read-only hosts need neither it
+        # nor trend storage when attaching the coworker service.
+        effects = getattr(getattr(hosted, "repository", None), "effects", None)
+        if effects is not None:
+            effects.append(self._trend_edit_effect)
+            from ..growth.trends.media_jobs import capture_asset_changes
+            if capture_asset_changes not in effects:
+                effects.append(capture_asset_changes)
+        engine = getattr(getattr(hosted, "commands", None), "engine", None)
+        if engine is not None:
+            from ..growth.trends.service import queue_bindings_current
+            engine.trend_bindings_current = lambda state, bindings: queue_bindings_current(hosted.connection_factory, state, bindings, self.clock())
 
     # --- plumbing ----------------------------------------------------------------------------------------------------------
     @property
     def repository(self):
         return self.hosted.repository
+
+    @property
+    def trends(self):
+        # No storage access at attachment time; flags-off hosts need no trend tables.
+        if not hasattr(self, "_trends"):
+            from ..growth.trends.service import TrendService
+            self._trends = TrendService(self)
+        return self._trends
 
     def _require(self, flag):
         flags.require(flag)
@@ -186,6 +209,9 @@ class CoworkerService:
         if recipe is None:
             raise AlphaError("This weekly recipe is not active.", 409)
         planned = weekly_operator.plan_week(state, recipe, now, week_of)
+        if any((source.get("origin") or {}).get("trendLineage") and source.get("id") in recipe.get("sourceIds", []) for source in state.get("sources", [])):
+            from ..growth.trends.opportunities import attach_weekly_intent
+            attach_weekly_intent(state, recipe, planned, now)
         existing = next((w for w in weekly_operator.view(state)["weeks"] if w["id"] == planned["id"]), None)
         if existing is None:
             def add(state_, principal):
@@ -783,7 +809,19 @@ class CoworkerService:
                 row = cur.fetchone()
                 if row is None:
                     continue
-                result = performance.refresh(cur, workspace_id, row[0], self.clock(), getattr(self.hosted, "notifications", None))
+                trend_report = None
+                from ..growth.trends import config as trend_config
+                if trend_config.workspace_allowed(workspace_id,self.values) and trend_config.enabled('TRUST_RECEIPTS',self.values):
+                    cur.execute("""SELECT m.user_id::text FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id
+                        WHERE m.workspace_id=%s AND m.status='active' AND m.role IN ('owner','editor') AND p.deleted_at IS NULL
+                        ORDER BY (m.role='owner') DESC,m.user_id LIMIT 1""",(workspace_id,))
+                    actor = cur.fetchone()
+                    if actor:
+                        from ..growth.trends import learning
+                        from ..growth.trends.store import TrendStore
+                        trend_report = learning.report(cur,workspace_id,actor[0],self.clock(),store=TrendStore(self.hosted.connection_factory))
+                result = performance.refresh(cur, workspace_id, row[0], self.clock(), getattr(self.hosted, "notifications", None),
+                                             trend_report=trend_report)
                 db.commit()
             out.append({"workspaceId": workspace_id, **result})
         return {"workspaces": out}
@@ -793,7 +831,15 @@ class CoworkerService:
         from . import performance
         with self.repository.transaction(token, workspace_id) as (cur, row, _p):
             state = self.hosted.ideas._state(row)
-            return performance.view(cur, workspace_id, state, self.clock())
+            result = performance.view(cur, workspace_id, state, self.clock())
+            from ..growth.trends import config as trend_config
+            if trend_config.workspace_allowed(workspace_id,self.values) and trend_config.enabled('TRUST_RECEIPTS',self.values):
+                from ..growth.trends import learning, learning_options
+                from ..growth.trends.store import TrendStore
+                result['trend_learning'] = learning.report(cur,workspace_id,_p,self.clock(),store=TrendStore(self.hosted.connection_factory))
+                result['trend_learning']['choice_options'] = learning_options.choices(TrendStore(self.hosted.connection_factory),cur,
+                    workspace_id,_p,state,self.clock())
+            return result
 
     def hypothesis_decide(self, workspace_id, token, hypothesis_id, decision):
         """Owner review of observed hypotheses; Scout planning acceptance never changes voice."""
@@ -886,13 +932,13 @@ class CoworkerService:
                 plan["followupOf"] = {"jobId": outcome_job_id, "window": latest["window"], "action": "sequel", "metric": latest["metric"], "samples": latest["samples"]}
                 plan["hookStrategy"] = "Develop one original sequel using new creator-supplied evidence. " + plan["hookStrategy"]
             prior = next((s for s in state.get("sources", []) if (s.get("origin") or {}).get("executionPlan", {}).get("id") == plan["id"] and s.get("active")), None)
-            if prior:
-                return {"sourceId": prior["id"], "planId": plan["id"]}
             if (op["expiresAt"] <= now and outcome_job_id is None) or op.get("actionType") == "skip" or op["status"] == "dismissed":
                 raise AlphaError("This opportunity is no longer actionable.", 409)
             channel = next((c for c in (state.get("phase2") or {}).get("channels", []) if c["id"] == plan["account"] and not c.get("revoked")), None)
             if not channel or channel.get("platform") != plan["platform"]:
                 raise AlphaError("Choose a connected account in this workspace.", 409)
+            if prior:
+                return {"sourceId": prior["id"], "planId": plan["id"]}
             if plan.get("planningPreferences"):
                 with self.hosted.connection_factory() as db, db.cursor() as cur:
                     cur.execute("""SELECT id::text FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND status='supported'

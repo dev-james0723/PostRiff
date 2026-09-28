@@ -1,0 +1,105 @@
+{
+  "schema_version": "rafii.forecast.evidence-index.v1",
+  "archived_at": "2026-09-28T03:28:13.823340+00:00",
+  "status": "frozen_accepted_local_evidence",
+  "scope": "documentation_archive_only",
+  "artifacts": [
+    {
+      "bundle": "pure",
+      "kind": "receipt",
+      "path": "forecast-pure.json",
+      "source_path": "/private/tmp/trend-forecast-validation.json",
+      "bytes": 7105,
+      "sha256": "7395757196f52149e89f071b2e93d65c449a7b94835fcf4ce4e533bee21dbb08",
+      "copy_mode": "byte_exact"
+    },
+    {
+      "bundle": "pure",
+      "kind": "log",
+      "path": "forecast-pure.log",
+      "source_path": "/private/tmp/trend-forecast-validation.log",
+      "bytes": 4675,
+      "sha256": "0efa69f7ffad7ad02a3277b4baeee2fceed41201b840ed4eb93cc6d6da3167d1",
+      "copy_mode": "byte_exact"
+    },
+    {
+      "bundle": "admission-evaluation",
+      "kind": "receipt",
+      "path": "forecast-admission-evaluation.json",
+      "source_path": "/private/tmp/trend-forecast-admission-evaluation-validation.json",
+      "bytes": 9586,
+      "sha256": "a6fb57259bc539e60092507c9121839933ae7e87864f7b62c860ab796036cdda",
+      "copy_mode": "byte_exact"
+    },
+    {
+      "bundle": "admission-evaluation",
+      "kind": "log",
+      "path": "forecast-admission-evaluation.log",
+      "source_path": "/private/tmp/trend-forecast-admission-evaluation-validation.log",
+      "bytes": 8824,
+      "sha256": "f8f2330b6af8d05e4c45e292d0f71e243c525265996bf06d429614a5d94c6bcc",
+      "copy_mode": "byte_exact"
+    },
+    {
+      "bundle": "postgres",
+      "kind": "receipt",
+      "path": "forecast-postgres.json",
+      "source_path": "/private/tmp/trend-forecast-postgres-validation.json",
+      "bytes": 26843,
+      "sha256": "45f14d6b581d97b20908b1187677b3e1e4ca96f44d57ff9a84b18d7d7054ec24",
+      "copy_mode": "byte_exact"
+    },
+    {
+      "bundle": "postgres",
+      "kind": "log",
+      "path": "forecast-postgres.log",
+      "source_path": "/private/tmp/trend-forecast-postgres-final.log",
+      "bytes": 4758,
+      "sha256": "2d69111088d7b4a9e527ae8be909e9dd5c577e777d8237de67544f5874a0f893",
+      "copy_mode": "byte_exact"
+    }
+  ],
+  "readme": {
+    "path": "forecast-README.md",
+    "bytes": 5923,
+    "sha256": "6771fec7f862138e736abaee65aa69beb4bf8a7c5a5ef209cc3b42a929f09b60"
+  },
+  "runs": [
+    {
+      "bundle": "pure",
+      "tests": 30,
+      "real_postgres_tests": 0,
+      "skips": 0,
+      "source_guard_unchanged": true
+    },
+    {
+      "bundle": "admission-evaluation",
+      "tests": 47,
+      "real_postgres_tests": 0,
+      "skips": 0,
+      "source_guard_unchanged": true
+    },
+    {
+      "bundle": "postgres",
+      "tests": 15,
+      "real_postgres_tests": 14,
+      "pure_dsn_guard_tests": 1,
+      "skips": 0,
+      "source_guard_unchanged": true
+    }
+  ],
+  "claims": {
+    "synthetic_qualification_only": true,
+    "live_target_cohort_qualification": false,
+    "M3_complete": false,
+    "production_qualification": false,
+    "deployment": false,
+    "provider_model_calls": 0
+  },
+  "handoff": {
+    "final_portable_runner_exit_code": 0,
+    "final_postgres_server_stopped": true,
+    "port_55438_explicitly_released_to_parent": true
+  },
+  "preservation": "Receipts/logs copied byte-exact; internal temporary paths remain historical. Index maps their archive locations. No old failed logs copied."
+}

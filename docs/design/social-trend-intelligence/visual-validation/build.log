@@ -1,0 +1,92 @@
+
+> postriff-web@0.1.0 build
+> next build
+
+▲ Next.js 16.3.5 (Turbopack)
+✓ Running next.config.ts took 4.0s
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 5.6s
+  Running TypeScript ...
+  Finished TypeScript in 9.7s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/101) ...
+  Generating static pages using 11 workers (25/101)
+  Generating static pages using 11 workers (50/101)
+  Generating static pages using 11 workers (75/101)
+✓ Generating static pages using 11 workers (101/101) in 1446ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /app
+├ ƒ /app/account/api
+├ ƒ /app/account/billing
+├ ƒ /app/account/models
+├ ƒ /app/account/notifications
+├ ƒ /app/account/privacy
+├ ƒ /app/account/profile
+├ ƒ /app/agent
+├ ƒ /app/agent/[conversationId]
+├ ƒ /app/analytics
+├ ƒ /app/automations
+├ ƒ /app/calendar
+├ ƒ /app/channels
+├ ƒ /app/channels/connect
+├ ƒ /app/connectors/connect
+├ ƒ /app/help
+├ ƒ /app/help/[documentId]
+├ ƒ /app/ideas
+├ ƒ /app/inbox
+├ ƒ /app/library
+├ ƒ /app/overview
+├ ƒ /app/pipeline
+├ ƒ /app/queue
+├ ƒ /app/trends
+├ ƒ /app/weekly
+├ ƒ /app/workspace/audit
+├ ƒ /app/workspace/brand
+├ ƒ /app/workspace/members
+├ ƒ /app/workspace/memory
+├ ƒ /app/workspace/personalization
+├ ƒ /app/workspace/roles
+├ ○ /apple-icon
+├ ƒ /auth/callback
+├ ƒ /auth/reset
+├ ƒ /auth/sign-in
+├ ƒ /auth/sign-up
+├ ƒ /auth/verify
+├ ƒ /changelog
+├ ƒ /channels
+├ ƒ /channels/[slug]
+├ ƒ /channels/connect
+├ ƒ /connectors/connect
+├ ƒ /contact
+├ ƒ /data-deletion
+├ ƒ /dev/channel-bloom
+├ ƒ /dev/content-library
+├ ƒ /dev/language-dialog
+├ ƒ /dev/model-dialog
+├ ƒ /dev/post-previews
+├ ƒ /dev/preview-deck
+├ ƒ /docs
+├ ƒ /docs/[slug]
+├ ○ /icon
+├ ƒ /invite/[token]
+├ ○ /manifest.webmanifest
+├ ○ /opengraph-image
+├ ƒ /pricing
+├ ƒ /privacy
+├ ○ /robots.txt
+├ ƒ /security
+├ ○ /sitemap.xml
+├ ƒ /status
+├ ƒ /terms
+└ ○ /twitter-image
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

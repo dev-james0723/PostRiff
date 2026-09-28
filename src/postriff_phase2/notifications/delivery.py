@@ -98,7 +98,7 @@ class DeliveryWorker:
         this message on this channel (their preferences may have changed since it was planned)."""
         with self.connection_factory() as db, db.cursor() as cur:
             cur.execute("""SELECT e.event_type, e.payload, e.severity, e.expires_at IS NOT NULL AND e.expires_at < now(), coalesce(p.locale,''),
-                                  coalesce(w.state->'workspace'->>'name',''), e.grouping_key
+                                  coalesce(w.state->'workspace'->>'name',''), e.grouping_key, e.entity_type, e.entity_id
                            FROM public.pr_notification_events e LEFT JOIN public.pr_profiles p ON p.user_id=%s LEFT JOIN public.pr_workspaces w ON w.id=e.workspace_id
                            WHERE e.id::text=%s""", (row["userId"], row["eventId"]))
             event = cur.fetchone()
@@ -107,12 +107,21 @@ class DeliveryWorker:
                 cur.execute("SELECT 1 FROM public.pr_memberships WHERE workspace_id=%s AND user_id=%s AND status='active'", (row["workspaceId"], row["userId"]))
                 member = cur.fetchone() is not None
             opted_out = None
+            trend_current = True
+            if event is not None and event[7] == "trend_opportunity":
+                # Trend watches only: no new delivery authority or external-channel consent.
+                from ..growth.trends.notifications import delivery_eligibility
+                from ..growth.trends.store import TrendStore
+                verdict = delivery_eligibility(TrendStore(self.connection_factory), cursor=cur,
+                    workspace_id=row["workspaceId"], actor_id=row["userId"], entity_id=event[8],
+                    now=self.clock(), channel=channel)
+                trend_current = verdict["eligible"]
             if event is not None:
                 prefs = planner.effective_preferences(store.preference_rows(cur, row["userId"]), row["workspaceId"], catalog.spec(event[0])["category"])
                 opted_out = planner.opted_out(event[0], channel, mode, prefs, self.clock())
         if event is None:
             return None
-        return {"type": event[0], "payload": event[1] or {}, "severity": event[2], "expired": bool(event[3]), "locale": event[4] or "en",
+        return {"type": event[0], "payload": event[1] or {}, "severity": event[2], "expired": bool(event[3]) or not trend_current, "locale": event[4] or "en",
                 "workspaceName": event[5] or None, "grouping": event[6], "member": member, "optedOut": opted_out}
 
     def _ack_path(self, href, row):

@@ -1,0 +1,8 @@
+{
+  "path": "web/src/features/trends/momentum-curve.tsx",
+  "before_sha256": "4b80cfe960c1e46db56d5bb162ade09f2a037970509ed9b914c365d6866291f6",
+  "after_sha256": "c0b27353302f05a9659bafdb8b7a8e97222f5211e7667b64ca2f0772f77ed984",
+  "before_text": "Observed history only. No qualified forecast is available.",
+  "after_text": "Observed history only. Supported forecasts are shown separately.",
+  "scope": "Caption only, unchanged nodes/handlers/data/CSS"
+}

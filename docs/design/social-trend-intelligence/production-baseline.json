@@ -1,0 +1,42 @@
+{
+  "result": {
+    "deployment": {
+      "id": "dpl_H6UCQGc9VZJsJW6KzS6WneUCfadK",
+      "name": "postriff-phase2-private",
+      "url": "postriff-phase2-private-lynkjtee5-jamesau0723-6572s-projects.vercel.app",
+      "type": "LAMBDAS",
+      "state": "READY",
+      "createdAt": 1790547315116,
+      "creator": {
+        "uid": "ec4oryASfKgevRj8ZxZaxoLF",
+        "username": "jamesau0723-6572"
+      },
+      "project": {
+        "id": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+        "name": "postriff-phase2-private",
+        "framework": null
+      },
+      "meta": {
+        "githubCommitRef": "consumer-saas",
+        "githubCommitSha": "1afda4a0352986e62a8d423b9f34d565b2029c3e",
+        "githubCommitMessage": "Merge pull request #43 from dev-james0723/fix/rafii-phone-live-diagnostics\n\nAdd safe diagnostics for silent Rafii phone calls",
+        "githubRepo": "PostRiff",
+        "githubOrg": "dev-james0723"
+      },
+      "alias": [
+        "postriff-phase2-private.vercel.app",
+        "postriff-phase2-private-jamesau0723-6572s-projects.vercel.app",
+        "postriff-phase2-private-git-c-a436d2-jamesau0723-6572s-projects.vercel.app"
+      ],
+      "target": "production",
+      "regions": [
+        "iad1"
+      ],
+      "buildingAt": 1790547318299,
+      "ready": 1790547427823,
+      "readyState": "READY",
+      "source": "cli",
+      "aliasError": null
+    }
+  }
+}

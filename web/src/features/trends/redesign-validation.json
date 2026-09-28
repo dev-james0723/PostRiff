@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0",
+  "status": "VERIFIED_LOCAL_UI",
+  "recorded_at": "2026-09-28T00:43:35.417542+00:00",
+  "runtime_ui_sha256": "1a6630acb02851b49772524929d234ce2c1a868fdf78bb9a608bc455e152070c",
+  "runtime_files": {
+    "web/src/app/app/trends/page.tsx": "0b427a9c0d2b1782b832558988f77450b53be74d8563fdfd3d76deef76d0fbd6",
+    "web/src/features/coworker/nav.ts": "f666b69cf316c334316a303435389d740e3645857b4d0a4228b8a4ea7a148353",
+    "web/src/features/pipeline/edit-draft-dialog.tsx": "3016c5b95f88d95c7d3865a87c85142a8d2e61d31048e3fef4619e9cf114be3a",
+    "web/src/features/trends/api.ts": "f77cfa6661028ff6d279cf34857f1c09b8d476fff755451f551dbdd5862db448",
+    "web/src/features/trends/creator-language.ts": "e0e69c359329656035aeef624e81371ed69c1c99a79cb17613dc9b0b18e0fac7",
+    "web/src/features/trends/disclosure.tsx": "aad81c24f2a3439742e0b66b30f25aece04a9198763a1ea35cc152159d573388",
+    "web/src/features/trends/fit-details.tsx": "1aec3dc0726c29f875f3933fe4aef953ba1eae5b56ae93f97939cef87f7dbb7d",
+    "web/src/features/trends/hooks.ts": "68411f166d9d6c87bf9ce47f614e410c429bc2172fa306e2850f0f54647b8525",
+    "web/src/features/trends/lab-contract.ts": "534f3133edb5a1329dd0b5d9b16a19632417cc340d3a5ea0fe919a9e82af8064",
+    "web/src/features/trends/lab-panel.tsx": "b4a2425e5b2c9073b5e242ffa700a69c6f792731b06a5c460a54450aec589dd3",
+    "web/src/features/trends/opportunity-card.tsx": "a93a40cc58e91dc80be7441fa7b1367ba69c0649317d6134f72170698bfe64ba",
+    "web/src/features/trends/present.tsx": "4a07272a2bf7c6c8d09e71af7120ee6550ee064c37a7b301e376fdb40cb8d529",
+    "web/src/features/trends/signal-summary.tsx": "6f83f66a0b8e02554001533b3871cae9f9c84429310fd58050b181f6e872f07a",
+    "web/src/features/trends/trends-view.tsx": "578d7a1848b4e5b5f331d86ff51281e2f3d6eeaa96e1f65a83f70925b4303fcc",
+    "web/src/features/trends/trends.css": "c2ad410625203edfa128535f6f34044080a082f4e3634a1453b35d0410e269f9",
+    "web/src/features/trends/trust-contract.ts": "9c0387bc99e03621e6f3fc00fb7487b1437353b25f0e3d0887597eab42f56d7e",
+    "web/src/features/trends/trust-drawer.tsx": "d42e57fe696cae7dfae136885836438a78a50d39b73c8ea330e292970ed1bfc8",
+    "web/src/features/trends/watches.tsx": "cf0d118c6b9257f0c0d13c3dfb558635867621a158596d5d9e3e29924c868ec2",
+    "web/src/lib/coworker/trend-types.ts": "769ff475769498f4596344ce5e35318b958a048116ada6213316ac31dbe342a1"
+  },
+  "git_head_at_receipt": "4b86be665ebf2f6d8319cce3c32a10913e0d78bd",
+  "build": {
+    "dist": ".next-trend-live",
+    "reused": false,
+    "build_id": "dI89DgsYjWh6Uri5bxqcH",
+    "api_origin": "http://127.0.0.1:4458",
+    "log": "/tmp/trend-tier-c-final/build.log",
+    "mocked_fonts": false,
+    "scope_note": "Build preceded parent merge of origin/consumer-saas 17cb24a (Phone PR44); parent reports incoming web change only content/legal-shared.ts. UI files unchanged; parent final release build must cover merged global source."
+  },
+  "synthetic_browser": [
+    {
+      "path": "/tmp/trend-final-light/results.json",
+      "execution": "synthetic_intercepted_browser",
+      "checks": 67,
+      "color_scheme": "light",
+      "long_content": false,
+      "widths": [
+        1440,
+        390,
+        820
+      ],
+      "passed": true,
+      "sha256": "d04eb6085970697396d9e3c15fe53067f42ace8566542f44fcab907a84f04139"
+    },
+    {
+      "path": "/tmp/trend-final-light-long/results.json",
+      "execution": "synthetic_intercepted_browser",
+      "checks": 67,
+      "color_scheme": "light",
+      "long_content": true,
+      "widths": [
+        1440,
+        390,
+        820
+      ],
+      "passed": true,
+      "sha256": "0e1c058c684a05aedcc9f560443604186664976e90c087f0ef7660772d96d523"
+    },
+    {
+      "path": "/tmp/trend-final-dark-long/results.json",
+      "execution": "synthetic_intercepted_browser",
+      "checks": 67,
+      "color_scheme": "dark",
+      "long_content": true,
+      "widths": [
+        1440,
+        390,
+        820
+      ],
+      "passed": true,
+      "sha256": "280e087d9fe73ba7475646c1f8f6292d54afc21dc8b4b62ed26a3c55cc32604a"
+    }
+  ],
+  "real_api_browser": {
+    "path": "/tmp/trend-tier-c-final/browser-results.json",
+    "checks": 22,
+    "execution": "real_api_postgresql_synthetic_identity_and_seed",
+    "trend_api_interception": false,
+    "harness": "/tmp/trend-tier-c-final/harness-result.json",
+    "sha256": "71c8b620eb65a8590ed1f790dc13a10951dbc22a47ffcfe96bfb0cd9886eed29"
+  },
+  "pure_tests": {
+    "command": "node --test tests/trend-creator-language.test.cjs tests/trend-lab.test.cjs",
+    "tests": 6,
+    "passed": true
+  },
+  "contract_test": {
+    "command": "node tests/trend-contract.cjs",
+    "passed": true,
+    "schema_sha256": "35dc622e54be6917b1a8a9cb33198e07c6ad8bf25c3d9f94a58baa262a8746bb"
+  },
+  "typecheck": {
+    "command": "npm run typecheck -- --incremental false",
+    "passed": true,
+    "log": "/tmp/trend-final-typecheck.log"
+  },
+  "lint": {
+    "command": "./node_modules/.bin/oxlint src/features/trends src/lib/coworker/trend-types.ts src/app/app/trends src/features/coworker/nav.ts src/features/pipeline/edit-draft-dialog.tsx",
+    "files": 18,
+    "passed": true,
+    "log": "/tmp/trend-creator-final-lint.log"
+  },
+  "visual_inspection": {
+    "screenshots": "/tmp/trend-final-{light,light-long,dark-long}/{radar,trust,lab-diagnostics}-{1440,390,820}.png",
+    "reviewed": [
+      "all six light/dark long-content Radar width combinations",
+      "standard light Radar1440/390",
+      "mobile trust drawer with actual seeded receipt",
+      "light Lab390",
+      "dark long Lab820/1440",
+      "dark200percent viewport-only drawer"
+    ],
+    "zoom": "/tmp/trend-final-zoom-viewport/zoom-200.png",
+    "zoom_result": "/tmp/trend-final-zoom-viewport/results.json",
+    "zoom_capture_note": "Full-page fixed-drawer screenshot was an artifact of capture; final viewport-only screenshot verified. This test-only capture delta does not change the67 assertions or runtime UI."
+  },
+  "limits": [
+    "Local UI verification only, not deployment or M1/M2/M3 qualification.",
+    "Real API/DB browser scope: Radar -> receipt -> acceptance -> existing Ideas immediate and after reload; token/tenant/no-store/idempotency/no-egress.",
+    "Lab browser uses explicit intercepted fixtures; backend owner separately reports real PostgreSQL Lab/variant_edit tests. Do not call Lab a full real-API browser E2E.",
+    "Synthetic test identities/observations/destinations are labelled Demo data; no live provider/model accuracy or paid calls.",
+    "Watch wire contract has only trend_id, so its exact reference remains in a disclosure; no invented title.",
+    "Original transient Next font-loader failure and unavailable offending URL retained in VALIDATION.md; successful later builds do not prove a font-loader fix.",
+    "200percent uses820 physical/410 CSS metrics, not manual browser chrome zoom or human usability timing certification."
+  ],
+  "cleanup": {
+    "generated_tsconfig_entries_removed": true,
+    "no_commit": true,
+    "no_other_owners_reverted": true
+  },
+  "usage_cost": "unknown; no claimed savings"
+}

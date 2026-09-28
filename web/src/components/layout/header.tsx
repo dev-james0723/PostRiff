@@ -19,11 +19,12 @@ import { cn } from '@/lib/utils';
 export default function Header() {
   const access = useWorkspaceAccess();
   return (
-    <header className='rafii-panel sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 md:h-[3.75rem]'>
-      {/* The breadcrumb side shrinks (and its page name truncates) so the header never widens a 320px screen. */}
-      <div className='flex min-w-0 flex-1 items-center gap-2 px-3 sm:px-4 md:flex-initial'>
+    <header className='rafii-panel sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 max-[320px]:h-auto max-[320px]:flex-wrap max-[320px]:py-2 md:h-[3.75rem]'>
+      {/* Breadcrumbs truncate within their share of the row. Compact tablet spacing leaves
+          room for the current page without moving or shrinking the action targets. */}
+      <div className='flex min-w-0 flex-1 items-center gap-2 px-3 max-[320px]:basis-full sm:px-4 md:max-lg:gap-1 md:max-lg:pr-0 md:flex-initial'>
         <SidebarTrigger className='-ml-1' />
-        <Separator orientation='vertical' className='mr-2 h-4 data-vertical:self-center' />
+        <Separator orientation='vertical' className='mr-2 h-4 md:max-lg:mr-1 data-vertical:self-center' />
         <Breadcrumbs />
       </div>
       {/* Live publishing status. The track takes only the free space between the breadcrumbs and
@@ -34,7 +35,7 @@ export default function Header() {
           <LiveIsland />
         </div>
       </div>
-      <div className='flex shrink-0 items-center gap-1.5 px-3 sm:gap-2 sm:px-4'>
+      <div className='flex shrink-0 items-center gap-1.5 px-3 max-[320px]:min-w-0 max-[320px]:w-full max-[320px]:flex-wrap sm:gap-2 sm:px-4'>
         {/* One place to start a post: Home's composer (focused by ?new=1). Ideas captures sources. */}
         {checkAccess(access, { permission: 'edit' }) && (
           <Link aria-label='Create a new draft' href='/app?new=1' className={cn(buttonVariants({ variant: 'action', size: 'sm' }), 'gap-1')}>
@@ -42,9 +43,9 @@ export default function Header() {
             <span className='hidden sm:inline'>Create</span>
           </Link>
         )}
-        {/* The header keeps to one row at every width: the wide search field and the theme picker
-            appear only where they fit beside an open sidebar; below that the search icon opens the
-            same ⌘K palette, which also carries the theme actions. */}
+        {/* Below 320 CSS pixels, the breadcrumbs and actions wrap onto separate rows. The wide
+            search field and theme picker appear where they fit beside an open sidebar; below
+            that the search icon opens the same ⌘K palette, which also carries theme actions. */}
         <div className='hidden lg:flex'>
           <SearchInput />
         </div>

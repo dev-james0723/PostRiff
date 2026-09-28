@@ -1,0 +1,38 @@
+✔ actual Python projections: reviewed whitespace, proposed whitespace and synthetic qualified forecast parse (0.816666ms)
+✔ browser fixture refreshes only stored read time and preserves source timestamps (0.883458ms)
+✔ generated canonical schema agrees exactly (18.318625ms)
+✔ new schemas reject extra, private, unbounded and falsely qualified fields (4.183625ms)
+✔ whitespace rejects incoherent sample denominators, crossrefs, states, facts and timestamps (0.759625ms)
+✔ forecast rejects crossed intervals, insufficient calibration, target mismatch and future chronology (0.793375ms)
+✔ whitespace selection requires exact workspace/trend/receipt/platform and current read/retention (0.665583ms)
+✔ all feature flags default off, including trust receipts (0.091667ms)
+✔ available whitespace panel displays actual sample, contribution, times and authority limits (16.35025ms)
+✔ proposed panel preserves review reasons and never presents an admitted contribution (1.12675ms)
+✔ whitespace empty, error, loading, stale and disabled states remove stale claims (2.226166ms)
+✔ partial and long multilingual content stay text with explicit limitations (1.777667ms)
+✔ forecast never queries before toggle, when disabled, or for an unspecified platform binding (1.359292ms)
+✔ synthetic qualified forecast toggle renders a numeric table, calibration, version and real horizon only (1.796375ms)
+✔ forecast binding change, stale read, expiry, missing qualification and errors suppress numeric values (3.184708ms)
+✔ stored APIs encode IDs and use GET/no-store/auth/abort only; invalid forecast rejects (0.869542ms)
+✔ forecast bracket reads use actual endpoint and detect a changed receipt before displaying (0.473541ms)
+✔ whitespace disclosure preserves every field while keeping summary and contribution visible (2.533959ms)
+✔ forecast disclosure keeps estimates and target window visible while preserving detailed metadata (1.697ms)
+✔ no model/provider/mutation actions or observed timeline rewrites in panel source (0.214334ms)
+✔ six stable dimensions retain native units and exact semantic layers; never fabricate a radar scale (27.161916ms)
+✔ Unknown remains Unknown, zero is retained, and unavailable interpretation does not erase measurement (0.827ms)
+✔ pending, deleted, expired and revoked evidence cannot populate calculated DNA or permit creation (1.844167ms)
+✔ creation requires matching current receipt, eligible state and actual workspace fit (0.51575ms)
+✔ availability, representation and completeness stay independent; low breadth is not low activity (0.371833ms)
+✔ low calibration never promotes a public platform lifecycle (0.241958ms)
+✔ timeline retains exact timestamps and gaps; rejects mixed units and does not invent platform history (0.270458ms)
+✔ comparison preserves missing dimensions and declines numerical comparison across different definitions/windows (0.291042ms)
+✔ comparison requires matching scope and denominator before displaying a numeric difference (0.323916ms)
+✔ uncertain candidates and dismissed choices remain inspectable without enabling creation (0.262958ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1008.23925

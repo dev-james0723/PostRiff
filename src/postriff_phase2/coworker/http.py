@@ -90,6 +90,10 @@ def public(app, environ, start_response, method, path):
 
 def handle(app, environ, start_response, service, token, method, parts):
     """parts = ['api','workspaces',{id},<resource>, ...]."""
+    if len(parts) >= 5 and parts[3:5] == ["coworker", "trends"]:
+        from ..growth.trends.http import handle as trends_handle
+        runtime.ensure(service)
+        return trends_handle(app, environ, start_response, service.coworker.trends, parts[2], token, method, parts[5:])
     if str(token).startswith("prt_"):
         raise AlphaError("API tokens can't use Rafii coworker routes.", 403)
     runtime.ensure(service)

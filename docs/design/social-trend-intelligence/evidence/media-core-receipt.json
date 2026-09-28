@@ -1,0 +1,122 @@
+{
+  "started_at": "2026-09-28T02:30:53.511948+00:00",
+  "finished_at": "2026-09-28T02:31:12.900803+00:00",
+  "runs": [
+    {
+      "name": "runtime",
+      "command": [
+        "/Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python",
+        "-m",
+        "unittest",
+        "test_trend_media_runtime"
+      ],
+      "workdir": "/Users/ouxianxing/.codex/worktrees/social-trend-intelligence/James-Au-Studio",
+      "environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "src:tests"
+      },
+      "log": "/private/tmp/trend-media-jobs/runtime.log",
+      "log_sha256": "adddc0e81ecfe48e763c778bf0e0bcf06bc8dc545adba44e97671f200b8050aa",
+      "exit_code": 0,
+      "tests": 38,
+      "test_seconds": 3.257,
+      "skip_lines": 0,
+      "execution": "actual local generated-media processing; no network"
+    },
+    {
+      "name": "postgres",
+      "command": [
+        "/Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python",
+        "scripts/postriff_pg_suite.py",
+        "postgres_trend_media"
+      ],
+      "workdir": "/Users/ouxianxing/.codex/worktrees/social-trend-intelligence/James-Au-Studio",
+      "environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "src:tests"
+      },
+      "log": "/private/tmp/trend-media-jobs/postgres.log",
+      "log_sha256": "fd9b0f9fdc18da8095e3e2217b49f2361c8da4f53a317c167868df97c98df7f3",
+      "exit_code": 0,
+      "tests": 36,
+      "test_seconds": 13.435,
+      "skip_lines": 0,
+      "execution": "actual local SQL and generated media; synthetic grants/storage transport"
+    }
+  ],
+  "before_sha256": {
+    "src/postriff_phase2/growth/trends/media_jobs.py": "4c9fabfa548976245e6e8bc4c031465c4910dd02484a86f60cb42633ec4acbf0",
+    "src/postriff_phase2/growth/trends/media_runtime.py": "1a00e4e0aed9a07054299bcde020904a70fdb3ca5ad0fcacef6748e2c24ee95d",
+    "src/postriff_phase2/growth/trends/media_storage.py": "8454f9ec29fa2562793f77a045b3aa341501b742288646f0f442460ac9b45443",
+    "src/postriff_phase2/growth/trends/media_extraction.py": "eef0caf8df87a6b71d1b39bc1dda9b77b9d81f9e98534f591e9b541acb98cb51",
+    "src/postriff_phase2/growth/trends/jobs.py": "2641412aed44dcc525f1e9de6c47da40f688f62c1e59920e8be14779d97d1084",
+    "src/postriff_phase2/growth/trends/store.py": "7c989e2fae4ade8685ac29a915bae30851e9838c992d18d3ab0d7846b54ad6c1",
+    "src/postriff_phase2/growth/trends/retention.py": "bdcd814fd506dd5e44423dd64011a9bb5e2fbbdfbd9545310cde68d345261b0a",
+    "src/postriff_phase2/growth/trends/creative_patterns.py": "e535f21d305350010ec4ea36aeea6bb6924ef1aa48940d269178845bcc4f9433",
+    "src/postriff_phase2/growth/trends/pipeline.py": "0e2dc9a4d8d9899092017af3c1ee0682890be246cda53f0534cdddd3e5c422f9",
+    "src/postriff_phase2/growth/trends/config.py": "8cd4dfe8a9da365ef67663296603a1b8f27a2d059ac58f7e9be09ee4241aef0b",
+    "src/postriff_phase2/growth/trends/contracts.py": "d5e331e7fa878cbce0125234695d0272ae4ec91485966380cd6762b126084fb6",
+    "tests/test_trend_media_jobs.py": "b60b49d4d3da0ed91bd6d3d68bfc18430d7182a7b7b7a53c89548cd644d3eea3",
+    "tests/test_trend_media_runtime.py": "bf6ce002a92c6e49ad19c5eb1146635566c298063a3a9fdfbea7c24fab397933",
+    "tests/test_trend_media_storage.py": "f4e7448b16e0df2496cec881e607944ab67ae71505ab4b9fa7cc77c4e9c9d180",
+    "tests/phase2/postgres_trend_media.py": "2c71c2f0ec6f7e84289068d61391b265a6ee569c1a6daaeb5932bebe63208841",
+    "src/postriff_phase2/hosted_storage.py": "6fa597eff60efefadd690e5d212ed6628f20021bdfcae13617ec2814ba225d35",
+    "scripts/postriff_pg_suite.py": "1acaabfaa29e1851b2574ccade3ae3678777c6afc1fe7198a2eaf25a3024cd48",
+    "tests/phase2/rls.sql": "c501d2ffae7f1246fae199f1a3224cbbffc5d430b8bdedea0d682b530be6ca53",
+    "migrations/postriff/040_social_trend_intelligence.sql": "fbabec3c66efc22927e9c2974c3c08b6cda122a4272bf1c63dd50c7c13f5f9c0"
+  },
+  "after_sha256": {
+    "src/postriff_phase2/growth/trends/media_jobs.py": "4c9fabfa548976245e6e8bc4c031465c4910dd02484a86f60cb42633ec4acbf0",
+    "src/postriff_phase2/growth/trends/media_runtime.py": "1a00e4e0aed9a07054299bcde020904a70fdb3ca5ad0fcacef6748e2c24ee95d",
+    "src/postriff_phase2/growth/trends/media_storage.py": "8454f9ec29fa2562793f77a045b3aa341501b742288646f0f442460ac9b45443",
+    "src/postriff_phase2/growth/trends/media_extraction.py": "eef0caf8df87a6b71d1b39bc1dda9b77b9d81f9e98534f591e9b541acb98cb51",
+    "src/postriff_phase2/growth/trends/jobs.py": "2641412aed44dcc525f1e9de6c47da40f688f62c1e59920e8be14779d97d1084",
+    "src/postriff_phase2/growth/trends/store.py": "7c989e2fae4ade8685ac29a915bae30851e9838c992d18d3ab0d7846b54ad6c1",
+    "src/postriff_phase2/growth/trends/retention.py": "bdcd814fd506dd5e44423dd64011a9bb5e2fbbdfbd9545310cde68d345261b0a",
+    "src/postriff_phase2/growth/trends/creative_patterns.py": "e535f21d305350010ec4ea36aeea6bb6924ef1aa48940d269178845bcc4f9433",
+    "src/postriff_phase2/growth/trends/pipeline.py": "0e2dc9a4d8d9899092017af3c1ee0682890be246cda53f0534cdddd3e5c422f9",
+    "src/postriff_phase2/growth/trends/config.py": "8cd4dfe8a9da365ef67663296603a1b8f27a2d059ac58f7e9be09ee4241aef0b",
+    "src/postriff_phase2/growth/trends/contracts.py": "d5e331e7fa878cbce0125234695d0272ae4ec91485966380cd6762b126084fb6",
+    "tests/test_trend_media_jobs.py": "b60b49d4d3da0ed91bd6d3d68bfc18430d7182a7b7b7a53c89548cd644d3eea3",
+    "tests/test_trend_media_runtime.py": "bf6ce002a92c6e49ad19c5eb1146635566c298063a3a9fdfbea7c24fab397933",
+    "tests/test_trend_media_storage.py": "f4e7448b16e0df2496cec881e607944ab67ae71505ab4b9fa7cc77c4e9c9d180",
+    "tests/phase2/postgres_trend_media.py": "2c71c2f0ec6f7e84289068d61391b265a6ee569c1a6daaeb5932bebe63208841",
+    "src/postriff_phase2/hosted_storage.py": "6fa597eff60efefadd690e5d212ed6628f20021bdfcae13617ec2814ba225d35",
+    "scripts/postriff_pg_suite.py": "1acaabfaa29e1851b2574ccade3ae3678777c6afc1fe7198a2eaf25a3024cd48",
+    "tests/phase2/rls.sql": "c501d2ffae7f1246fae199f1a3224cbbffc5d430b8bdedea0d682b530be6ca53",
+    "migrations/postriff/040_social_trend_intelligence.sql": "fbabec3c66efc22927e9c2974c3c08b6cda122a4272bf1c63dd50c7c13f5f9c0"
+  },
+  "source_drift": [],
+  "executables": {
+    "ffmpeg": {
+      "path": "/opt/homebrew/bin/ffmpeg",
+      "sha256": "2c1e4f0b5b27615b98d6dcecec8eea0742816b417719fcbd69c312f7c95ba664"
+    },
+    "ffprobe": {
+      "path": "/opt/homebrew/bin/ffprobe",
+      "sha256": "773100ad6043372b5d9532f68f579c9eee934740ff1a882aca86fe27b2ae730b"
+    }
+  },
+  "historical_runtime_receipt": "/private/tmp/trend-media-runtime/receipt.json",
+  "limitations": [
+    "No live private-storage or provider/model calls.",
+    "Synthetic grants and deployment approval are fixtures, not production qualification.",
+    "ASR/OCR and visual/audio semantic qualification remain unavailable.",
+    "Worker/service/http/effects integration belongs to parent and is not proved by this coordinator suite."
+  ],
+  "runtime_delta": "After-callback timestamp/deadline/expiry checks; exact integerPTS rational time_base plus requested-time and output ordering checks. Six added regressions; original32 receipt is historical.",
+  "summary": {
+    "tests": 74,
+    "passed": 74,
+    "skips": 0,
+    "errors": 0,
+    "failures": 0,
+    "actual_postgres_tests": 25,
+    "other_local_tests": 49,
+    "all_recorded_sources_unchanged_during_checks": true,
+    "port_55438_released": true,
+    "release_evidence": "runner exited0; its server stopped; lsof found no listener"
+  },
+  "historical_runtime_sha256": "2e8d2804d59d5c7fb044b9b98fe2c5a6bf71ffda3385544946d9d149b3fbbe75",
+  "scope": "New media_jobs.py,media_storage.py,their two unit/PG test files and portable wrapper; authorized narrow media_runtime.py/test runtime repairs. No040/store/shared hosted_storage edits."
+}

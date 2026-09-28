@@ -1,0 +1,25 @@
+psql:/Users/ouxianxing/.codex/worktrees/social-trend-intelligence/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_trend_forecast.py
+test_actual_040_no003_restricted_role_and_direct_browser_denial (test_trend_forecast_postgres.ForecastPostgres.test_actual_040_no003_restricted_role_and_direct_browser_denial) ... ok
+test_actual_advanced_candidate_chunk_hydration_and_insufficient_evaluation (test_trend_forecast_postgres.ForecastPostgres.test_actual_advanced_candidate_chunk_hydration_and_insufficient_evaluation) ... ok
+test_actual_producer_rechecks_each_current_shared_grant_before_workspace_computation (test_trend_forecast_postgres.ForecastPostgres.test_actual_producer_rechecks_each_current_shared_grant_before_workspace_computation) ... ok
+test_current_policy_revocation_blocks_evaluation_and_admission_retry (test_trend_forecast_postgres.ForecastPostgres.test_current_policy_revocation_blocks_evaluation_and_admission_retry) ... ok
+test_exact_preregistered_candidate_refs_also_evaluate (test_trend_forecast_postgres.ForecastPostgres.test_exact_preregistered_candidate_refs_also_evaluate) ... ok
+test_foreign_scope_dependency_and_sealed_document_tamper_fail (test_trend_forecast_postgres.ForecastPostgres.test_foreign_scope_dependency_and_sealed_document_tamper_fail) ... ok
+test_late_preregistration_rejected_from_durable_timestamp (test_trend_forecast_postgres.ForecastPostgres.test_late_preregistration_rejected_from_durable_timestamp) ... ok
+test_method_downgrade_blocks_current_read_even_when_general_store_valid (test_trend_forecast_postgres.ForecastPostgres.test_method_downgrade_blocks_current_read_even_when_general_store_valid) ... ok
+test_missing_source_and_review_dag_edges_fail_closed (test_trend_forecast_postgres.ForecastPostgres.test_missing_source_and_review_dag_edges_fail_closed) ... ok
+test_preregistered_missing_slot_never_scores_favorable_subset (test_trend_forecast_postgres.ForecastPostgres.test_preregistered_missing_slot_never_scores_favorable_subset) ... ok
+test_raw_storage_rights_denied_without_revoking_aggregate_grants (test_trend_forecast_postgres.ForecastPostgres.test_raw_storage_rights_denied_without_revoking_aggregate_grants) ... ok
+test_synthetic_reviewed_positive_actual_evaluate_admit_persist_read_and_retry (test_trend_forecast_postgres.ForecastPostgres.test_synthetic_reviewed_positive_actual_evaluate_admit_persist_read_and_retry) ... ok
+test_tenant_and_reviewer_current_authority_are_required (test_trend_forecast_postgres.ForecastPostgres.test_tenant_and_reviewer_current_authority_are_required) ... ok
+test_thousand_bindings_roundtrip_real_chunks_without_truncating_or_granting_missing_sources (test_trend_forecast_postgres.ForecastPostgres.test_thousand_bindings_roundtrip_real_chunks_without_truncating_or_granting_missing_sources) ... ok
+test_exact_local_target_and_all_redirects_without_connect (test_trend_forecast_postgres.ForecastTargetGuard.test_exact_local_target_and_all_redirects_without_connect) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 13.634s
+
+OK
+{"captured_at": "2026-09-28T03:22:38.521116+00:00", "execution_state": "actual_disposable_postgresql_with_explicit_synthetic_reviewed_sql_fixtures", "postgres_version": "17.11 (Homebrew)", "python_version": "3.14.5 (main, May 10 2026, 10:21:34) [Clang 17.0.0 (clang-1700.6.4.2)]", "target": "127.0.0.1:55438/postgres", "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests:/private/tmp/rafii-trend-release-deps /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/postriff_pg_suite.py postgres_trend_forecast", "tests": 15, "failures": 0, "errors": 0, "skips": 0, "seconds": 15.576, "source_guard_unchanged": true, "provider_model_calls": 0, "limitations": ["All source activity and review records are synthetic; positive qualification is not live qualification", "No production registry, database, migrations, flags or deployment changed", "No M3 completion claim"], "coverage": ["Current040/no003; actual producer->chunked candidate; real evaluator and current registry", "Preregistered complete slots; actual rolling arithmetic; synthetic review->admission->persist->read->retry", "NOSUPERUSER NOBYPASSRLS runtime, browser SQL denial and authenticated tenant/reviewer gates", "Current revocation, raw-storage denial, method downgrade, late preregistration, missing DAG, chunk tamper"]}
+SOURCE_BOUND_RECEIPT /private/tmp/trend-forecast-postgres-validation.json
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_trend_forecast.py", "exitCode": 0, "seconds": 17.19}]}

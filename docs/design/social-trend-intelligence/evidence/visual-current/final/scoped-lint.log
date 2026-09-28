@@ -1,0 +1,47 @@
+
+  ! eslint(no-console): Unexpected console statement.
+    ,-[web/tests/visual-intelligence-browser.cjs:22:3]
+ 21 |   results.push({ name, pass: true, detail });
+ 22 |   console.log('PASS ' + name);
+    :   ^^^^^^^^^^^
+ 23 | };
+    `----
+  help: Supported methods are: warn, error.
+
+  ! eslint(no-console): Unexpected console statement.
+     ,-[web/tests/visual-intelligence-browser.cjs:750:15]
+ 749 |             .catch(async (e) => {
+ 750 |               console.log(
+     :               ^^^^^^^^^^^
+ 751 |                 'FOCUS DEBUG',
+     `----
+  help: Supported methods are: warn, error.
+
+  ! eslint(no-unmodified-loop-condition): 'completeLab' is not modified in this loop.
+      ,-[web/tests/visual-intelligence-browser.cjs:1027:46]
+ 1026 |             .fill('Unsaved revision changed during evaluation.');
+ 1027 |           for (let tries = 0; tries < 50 && !completeLab; tries++) await page.waitForTimeout(20);
+      :                                              ^^^^^^^^^^^
+ 1028 |           assert.ok(completeLab);
+      `----
+
+  ! unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`.
+     ,-[web/tests/visual-intelligence-browser.cjs:253:33]
+ 252 |             assert.deepEqual(
+ 253 |               Object.keys(body).sort(),
+     :                                 ^^^^
+ 254 |               [
+     `----
+  help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+
+  ! unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`.
+     ,-[web/tests/visual-intelligence-browser.cjs:261:17]
+ 260 |                 'idempotency_key'
+ 261 |               ].sort()
+     :                 ^^^^
+ 262 |             );
+     `----
+  help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+
+Found 5 warnings and 0 errors.
+Finished in 515ms on 2 files using 12 threads.

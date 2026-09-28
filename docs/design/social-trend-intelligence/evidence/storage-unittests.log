@@ -1,0 +1,13 @@
+test_aggregate_display_boundary_rejects_nested_excerpt_and_link (test_trend_jobs.TrendJobContracts.test_aggregate_display_boundary_rejects_nested_excerpt_and_link) ... ok
+test_continuation_indices_preserve_bounded_root_context (test_trend_jobs.TrendJobContracts.test_continuation_indices_preserve_bounded_root_context) ... ok
+test_continuation_indices_reject_ambiguous_or_unbounded_controls (test_trend_jobs.TrendJobContracts.test_continuation_indices_reject_ambiguous_or_unbounded_controls) ... ok
+test_cursor_partition_binds_instance_protocol_and_query (test_trend_jobs.TrendJobContracts.test_cursor_partition_binds_instance_protocol_and_query) ... ok
+test_ingestion_markers_keep_counts_without_account_identity (test_trend_jobs.TrendJobContracts.test_ingestion_markers_keep_counts_without_account_identity) ... ok
+test_job_controls_cannot_be_a_second_raw_source_store (test_trend_jobs.TrendJobContracts.test_job_controls_cannot_be_a_second_raw_source_store) ... ok
+test_microdollars_reject_float_bool_negative_overflow (test_trend_jobs.TrendJobContracts.test_microdollars_reject_float_bool_negative_overflow) ... ok
+test_payload_rejects_nonfinite_and_oversized_provider_data (test_trend_jobs.TrendJobContracts.test_payload_rejects_nonfinite_and_oversized_provider_data) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.015s
+
+OK

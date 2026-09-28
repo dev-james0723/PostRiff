@@ -1,0 +1,207 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "check": "pinned spec SHA256",
+      "passed": true
+    },
+    {
+      "check": "complete 2953-line source",
+      "passed": true
+    },
+    {
+      "check": "all 1771 stable IDs unique and retained",
+      "passed": true
+    },
+    {
+      "check": "IDs/order/source_section/source_lines/exact_requirement unchanged",
+      "passed": true
+    },
+    {
+      "check": "all exact source spans byte-equivalent",
+      "passed": true
+    },
+    {
+      "check": "no fabricated implementation state",
+      "passed": true
+    },
+    {
+      "check": "no implementation/production evidence fabricated",
+      "passed": true
+    },
+    {
+      "check": "every NOT_APPLICABLE has rationale and is nonmandatory",
+      "passed": true
+    },
+    {
+      "check": "exact external blocker/state consistency",
+      "passed": true
+    },
+    {
+      "check": "only curated genuine external gate rows blocked",
+      "passed": true
+    },
+    {
+      "check": "all WP00-WP18 and milestone assignments valid",
+      "passed": true
+    },
+    {
+      "check": "all 19 WP output/acceptance rows",
+      "passed": true
+    },
+    {
+      "check": "54 distinct T01-T32/O01-O22 with exact assertions",
+      "passed": true
+    },
+    {
+      "check": "all acceptance records have planned test array",
+      "passed": true
+    },
+    {
+      "check": "selected tests explicitly NOT_RUN and reference stable IDs",
+      "passed": true
+    },
+    {
+      "check": "dependency stable-ID links resolve",
+      "passed": true
+    },
+    {
+      "check": "entire section 25 verbatim including headings/blanks; original baseline coverage unchanged",
+      "passed": true
+    },
+    {
+      "check": "section 25 records remain meaningful mandatory",
+      "passed": true
+    },
+    {
+      "check": "every source line accounted",
+      "passed": true
+    },
+    {
+      "check": "independent case-insensitive MUST/SHALL occurrence coverage",
+      "passed": true
+    },
+    {
+      "check": "all broad normative triggers dispositioned",
+      "passed": true
+    },
+    {
+      "check": "four API-heading obligations recovered without replacing IDs",
+      "passed": true
+    },
+    {
+      "check": "supplemental exact source spans",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "source_sha256": "5664a50d744c95734d21dade7baf95145aa8ef14992d6ad11871c8a08828a328",
+  "baseline_sha256": "f00434ea4dc29ed4e293e64aaf95190925cb5bd67093bd2dfda99d3cf475f897",
+  "counts": {
+    "total_records": 1771,
+    "meaningful_requirements": 1617,
+    "meaningful_obligations_including_header_supplements": 1621,
+    "mandatory_meaningful_requirements": 1549,
+    "nonmandatory_meaningful_requirements": 68,
+    "not_applicable_records": 154,
+    "states": {
+      "NOT_APPLICABLE": 154,
+      "NOT_STARTED": 1607,
+      "BLOCKED_EXTERNAL": 10
+    },
+    "record_types": {
+      "provenance_or_example": 65,
+      "requirement": 1149,
+      "evidence_constraint": 1,
+      "context_intro": 2,
+      "table_header": 28,
+      "evidence_classification_contract": 5,
+      "scope_constraint": 1,
+      "structural_intro": 23,
+      "architecture_or_field_contract": 4,
+      "recommendation": 58,
+      "historical_observation": 6,
+      "architecture_constraint": 7,
+      "integration_constraint": 1,
+      "historical_gap": 14,
+      "requirement_group": 38,
+      "source_constraint": 14,
+      "illustrative_example": 12,
+      "schema_contract": 2,
+      "threat_context": 1,
+      "provenance": 2,
+      "qualification_constraint": 1,
+      "proposed_service_target": 3,
+      "external_qualification": 10,
+      "ui_contract": 1,
+      "release_precondition": 1,
+      "package_deliverable": 19,
+      "planning_assumption": 2,
+      "research_design_reference": 5,
+      "implementation_deliverable": 165,
+      "acceptance_criterion": 54,
+      "historical_task_scope": 1,
+      "release_gate": 37,
+      "prohibited_copy": 5,
+      "definition_of_done": 29,
+      "qualification_decision": 5
+    },
+    "qualification_candidates": 129,
+    "acceptance_T": 32,
+    "acceptance_O": 22,
+    "work_packages": 19,
+    "selected_test_entries": 540,
+    "selected_test_links": 1503,
+    "supplemental_contract_items": 87,
+    "supplemental_header_obligations": 4,
+    "section_25_records": 29,
+    "source_lines": 2953,
+    "unaccounted_lines": 0,
+    "line_dispositions": {
+      "heading": 210,
+      "blank": 759,
+      "not_applicable_context": 161,
+      "meaningful_requirement": 1791,
+      "table_separator": 28,
+      "supplemental_contract": 4
+    },
+    "trigger_occurrences": {
+      "GATE_ACCEPTANCE": 61,
+      "REQUIRED_REQUIRE": 105,
+      "PROHIBITION": 239,
+      "IMPERATIVE": 436,
+      "MUST": 77,
+      "SHALL": 1,
+      "SHOULD": 35
+    },
+    "work_package_primary": {
+      "WP00": 105,
+      "WP01": 154,
+      "WP02": 74,
+      "WP03": 56,
+      "WP04": 400,
+      "WP05": 43,
+      "WP06": 132,
+      "WP07": 118,
+      "WP08": 122,
+      "WP09": 232,
+      "WP10": 23,
+      "WP11": 16,
+      "WP12": 20,
+      "WP13": 25,
+      "WP14": 42,
+      "WP15": 22,
+      "WP16": 17,
+      "WP17": 6,
+      "WP18": 10
+    },
+    "milestone_primary": {
+      "M1": 1520,
+      "M2": 81,
+      "M3": 16
+    }
+  },
+  "execution_state": "OFFLINE_LEDGER_AUDIT_ONLY",
+  "managed_ledger_current_sha256": "f00434ea4dc29ed4e293e64aaf95190925cb5bd67093bd2dfda99d3cf475f897",
+  "managed_ledger_matches_pinned_baseline": true
+}
