@@ -2,6 +2,7 @@
 from copy import deepcopy
 from . import contracts, learning, opportunities
 from ...insights import INSIGHT_METRICS, DEFINITION_VERSION
+from ..follower_conversion import qualified, valid_choice
 from postriff_alpha.domain import AlphaError
 
 
@@ -29,14 +30,15 @@ def choices(store, cur, workspace_id, actor_id, state, now):
         prior=[c for c in saved if c.get('selection_digest')==binding['selection_digest'] and c.get('channel_id')==channel['id']
                and c.get('provider')==provider and c.get('definition_version')==DEFINITION_VERSION and c.get('confirmed') is True
                and c.get('metric') in INSIGHT_METRICS[provider] and c.get('window') in learning.WINDOWS
-               and c.get('objective') in learning.OBJECTIVES and c.get('denominator_metric') in (None,*INSIGHT_METRICS[provider])]
+               and c.get('objective') in learning.OBJECTIVES and valid_choice(c) and c.get('denominator_metric') in (None,*INSIGHT_METRICS[provider])]
         previous=deepcopy(prior[-1]) if prior else None
         if previous is not None and previous.get('denominator_metric') is None:
             previous.pop('denominator_metric',None)
         selected.append({'selection_digest':binding['selection_digest'],'source_id':source['id'],'source_label':'Saved trend idea',
             'channel_id':channel['id'],'channel_label':str(channel.get('name') or channel.get('label') or channel['platform'])[:200],
             'provider':provider,'metrics':list(INSIGHT_METRICS[provider]),'definition_version':DEFINITION_VERSION,
-            'windows':list(learning.WINDOWS),'objectives':sorted(learning.OBJECTIVES),
+            'windows':list(learning.WINDOWS),'objectives':sorted(o for o in learning.OBJECTIVES
+                if o != 'follower_conversion' or qualified(provider, DEFINITION_VERSION)),
             'saved_choice':previous})
         seen.add(binding['selection_digest'])
         if len(selected)>=20:break
@@ -44,7 +46,7 @@ def choices(store, cur, workspace_id, actor_id, state, now):
 
 
 def require_choice(options,payload):
-    if (not isinstance(payload,dict) or 'denominator_metric' in payload and payload['denominator_metric'] is None
+    if (not isinstance(payload,dict) or not valid_choice(payload) or 'denominator_metric' in payload and payload['denominator_metric'] is None
             or not any(all(payload.get(k)==o[k] for k in
             ('selection_digest','channel_id','provider','definition_version'))
             and payload.get('metric') in o['metrics'] and payload.get('denominator_metric') in (None,*o['metrics'])

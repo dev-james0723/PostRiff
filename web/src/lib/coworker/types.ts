@@ -20,6 +20,7 @@ export type CoworkerFlag =
   | 'RAFII_GROWTH_EXPERIMENTS_ENABLED';
 
 export interface CoworkerStatus {
+  trend_beta?: unknown;
   flags: Partial<Record<CoworkerFlag, boolean>>;
   notifications: { enabled: boolean; push?: boolean; email?: boolean; catalogVersion?: string | number };
   weekly: { recipes: number; weeks: number };

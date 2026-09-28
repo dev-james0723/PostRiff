@@ -3,6 +3,7 @@ definition version, observation/ingestion time, availability; present `Unavailab
 zero; rates with numerator/denominator; like-for-like cohorts; < 3 comparable → insufficient.
 """
 from fractions import Fraction
+import math
 from urllib.parse import quote, urlencode
 from postriff_alpha.domain import AlphaError
 from .providers import GRAPH_VERSION
@@ -57,7 +58,7 @@ def fetch_post_insights(transport, access_token, provider, provider_post_id):
             values = item.get("values") or []
             total = item.get("total_value", {}).get("value") if isinstance(item.get("total_value"), dict) else None
             value = total if total is not None else (values[0].get("value") if values and isinstance(values[0], dict) else None)
-            if name in metrics and type(value) in (int, float) and value >= 0:
+            if name in metrics and type(value) in (int, float) and math.isfinite(value) and value >= 0:
                 found[name] = value
     return {"status": response.get("status"), "found": found, "endpoint": endpoint}
 
@@ -69,7 +70,7 @@ def record_observations(cur, workspace_id, connection_id, provider, provider_pos
     extra_cols = ",read_offset,period_start" if read_offset is not None else ""
     extra_vals = ",%s,to_timestamp(%s)" if read_offset is not None else ""
     for metric in INSIGHT_METRICS[provider]:
-        available = metric in found
+        available = type(found.get(metric)) in (int, float) and math.isfinite(found[metric]) and found[metric] >= 0
         params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
         if read_offset is not None:
             params += [read_offset, period_start]
@@ -107,7 +108,7 @@ def latest_observations(cur, workspace_id, basis=None):
     offset = read_offset_column(cur)
     where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
     params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
-    cur.execute(f"SELECT DISTINCT ON (provider,provider_post_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,provider_post_id,metric,(availability='available') DESC,observed_at DESC", params)
+    cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
     return cur.fetchall()
 
 
@@ -117,13 +118,20 @@ def summary(cur, workspace_id, jobs, now, basis=None):
     rows = latest_observations(cur, workspace_id, basis)
     posts = {}
     for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset in rows:
-        post = posts.setdefault((provider, post_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
+        post = posts.setdefault((provider, connection_id, post_id, job_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
+        if value is None or not math.isfinite(float(value)) or value < 0:
+            availability = "unavailable"
         # readOffset says how long after publishing this value was read; +1h and +7d values are not like-for-like.
         post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed)}
-    job_index = {j.get("providerReference"): j for j in jobs if j.get("providerReference")}
+        post["metrics"][metric]["definitionVersion"] = version
+    job_index = {j.get("id"): j for j in jobs if j.get("id") and j.get("providerReference")}
     items = []
     for post in posts.values():
-        job = job_index.get(post["providerPostId"], {})
+        job = job_index.get(post["jobId"], {})
+        binding = job.get("manifest", {})
+        if (str(job.get("providerReference")) != post["providerPostId"] or binding.get("channelId") != post["connectionId"]
+                or str(binding.get("platform", "")).lower() != post["provider"]):
+            job = {}
         manifest = job.get("manifest", {})
         post["publishedState"] = job.get("state", "unknown")
         post["contentOrigin"] = "postriff_published" if job else "unknown"
@@ -131,13 +139,14 @@ def summary(cur, workspace_id, jobs, now, basis=None):
         language = manifest.get("payload", {}).get("language")
         post["language"] = locales.canonical(language) or language  # English and en are one cohort
         post["contentTypeId"] = manifest.get("contentType", {}).get("id")
-        post["cohort"] = {"provider": post["provider"], "language": post["language"], "contentTypeId": post["contentTypeId"], "definitionVersion": post["definitionVersion"]}
+        post["cohort"] = {"provider": post["provider"], "account": post["connectionId"], "window": basis,
+                          "language": post["language"], "contentTypeId": post["contentTypeId"], "definitionVersion": post["definitionVersion"]}
         engagement = post["metrics"].get("likes", {}).get("value")
         reach = (post["metrics"].get("reach") or post["metrics"].get("views") or {}).get("value")
         post["rates"] = {"likesPerView": rate(int(engagement) if engagement is not None else None, int(reach) if reach is not None else None)}
         items.append(post)
     # Connections without any observation are reported explicitly, never as zeros.
-    return {"posts": items, "families": FAMILIES, "basis": basis, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same provider, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
+    return {"posts": items, "families": FAMILIES, "basis": basis, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same account, provider, window, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
 
 
 def compare(posts, metric):

@@ -126,6 +126,9 @@ async function main() {
         if (p.endsWith('/coworker/status'))
           return send({
             flags,
+            trend_beta: { state: flags.RAFII_TREND_TRUST_RECEIPTS_ENABLED ? 'stored_radar' : 'feature_off',
+              radar_available: flags.RAFII_TREND_TRUST_RECEIPTS_ENABLED === true, acquisition: 'none',
+              metric_reads_enabled: false, follower_conversion: 'unavailable' },
             weekly: { recipes: 0, weeks: 0 },
             notifications: { enabled: false }
           });

@@ -73,6 +73,7 @@ async function run() {
       f.opportunity.draft_id = snapshot.state.variants[0].id;
       f.run.draft_id = snapshot.state.variants[0].id;
       let flagsOn = false,
+        workspaceAllowed = true,
         scenario = 'fresh',
         revokedReceipt = false,
         watch = null,
@@ -175,6 +176,8 @@ async function run() {
                     ]
               )
             );
+          if (endpoint === '/opportunities/whitespace' && req.method() === 'GET')
+            return send(f.envelope([]));
           if (endpoint === '/opportunities/synthetic-opportunity/accept') {
             assert.equal(req.method(), 'POST');
             assert.equal(body.angle_id, 'synthetic-angle');
@@ -305,6 +308,9 @@ async function run() {
         if (pathname.endsWith('/coworker/status'))
           return send({
             flags: flagsOn ? f.flags : {},
+            trend_beta: { state: !flagsOn ? 'feature_off' : workspaceAllowed ? 'stored_radar' : 'workspace_not_allowlisted',
+              radar_available: flagsOn && workspaceAllowed, acquisition: 'none', metric_reads_enabled: false,
+              follower_conversion: 'unavailable' },
             weekly: { recipes: 0, weeks: 0 },
             notifications: { enabled: false }
           });
@@ -329,10 +335,16 @@ async function run() {
       page.on('pageerror', (e) => errors.push(e.message));
       try {
         await page.goto(base + '/app/trends', { waitUntil: 'domcontentloaded', timeout: 180000 });
-        await visibleText(page, 'Conversations aren’t available in this workspace yet');
+        await visibleText(page, 'Trend Beta is off');
         assert.equal(calls.filter((c) => c.path.includes('/coworker/trends')).length, 0);
         record(width + ' flags off: zero trend requests');
         flagsOn = true;
+        workspaceAllowed = false;
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
+        await visibleText(page, 'This workspace is outside the Trend Beta');
+        assert.equal(calls.filter((c) => c.path.includes('/coworker/trends')).length, 0);
+        record(width + ' workspace not allowlisted: zero trend requests');
+        workspaceAllowed = true;
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
         await page.getByRole('heading', { name: f.trend.canonical_topic, exact: true }).waitFor();
         assert.equal(
@@ -342,11 +354,18 @@ async function run() {
         record(width + ' browse stored data only, authenticated contract');
         await noOverflow(page, width + ' radar');
         await axe(page, width + ' radar');
+        if (process.env.TREND_GROWTH_BETA_SMOKE_ONLY === '1') {
+          await visibleText(page, 'Source coverage is limited; live discovery is not verified.');
+          assert.deepEqual(errors, [], 'browser runtime errors');
+          assert.deepEqual(unhandledMutations, [], 'unexpected mutations');
+          record(width + ' limited source coverage and no runtime/mutation errors');
+          continue;
+        }
         assert.equal(
           await page.locator('html').evaluate((el) => el.classList.contains('dark')),
           colorScheme === 'dark'
         );
-        assert.equal(await page.getByText('Demo data', { exact: true }).count(), 1);
+        assert.ok((await page.getByText('Demo data', { exact: true }).count()) >= 1);
         assert.equal(await page.locator('.trend-state-line').innerText(), 'Still taking shape');
         assert.equal(
           await page

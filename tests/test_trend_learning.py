@@ -157,6 +157,8 @@ class LearningSQL(unittest.TestCase):
         self.metric(job, 0, self.now-10)
         self.assertEqual(self.view()["exposures"][0]["outcomes"][0]["reason"], "zero_denominator")
         self.metric(job, 100, self.now-5)
+        self.assertEqual(self.view()["exposures"][0]["outcomes"][0]["reason"], "mismatched_native_observations")
+        self.metric(job, 10, self.now-5, metric="replies")
         self.assertEqual(self.view()["exposures"][0]["outcomes"][0]["value"], .1)
 
     def test_current_rights_revocation_and_tenant_membership_are_read_gates(self):
@@ -189,6 +191,42 @@ class LearningSQL(unittest.TestCase):
             self.assertEqual(db.execute("SELECT count(*) FROM pr_strategy_hypotheses WHERE workspace_id=%s", (self.wid,)).fetchone()[0], 0)
         recent = min((o for e in result["exposures"] for o in e["outcomes"]), key=lambda o: self.now-o["publication"]["published_at"])
         self.assertGreater(recent["baseline"]["count"], 0)
+        self.assertGreaterEqual(recent["comparison"]["sample_count"], 5)
+        self.assertIsNotNone(recent["comparison"]["relative_value"])
+        self.assertFalse(recent["comparison"]["causal"])
+
+    def test_frozen_context_and_multiple_recommendations_never_claim_treatment(self):
+        job = self.publication(self.event("accept"))
+        job["manifest"]["trendLineage"][0]["context_digest"] = "different-context"
+        self.assertEqual(self.view()["outcome_states"], {})
+        job["manifest"]["trendLineage"][0]["context_digest"] = self.state["sources"][-1]["origin"]["trendLineage"]["context_digest"]
+        job["manifest"]["trendLineage"].append(copy.deepcopy(job["manifest"]["trendLineage"][0]))
+        result = self.view()
+        self.assertEqual(result["exposures"][0]["outcomes"][0]["treatment_state"], "unknown")
+        self.assertEqual(learning.hypotheses(result, self.now), [])
+
+    def test_tracking_is_read_only_exact_identity_and_current_rights(self):
+        from postriff_phase2.growth.trends import beta
+        from postriff_phase2.growth.metric_schedule import schedule
+        job = self.publication(self.event("accept"), value=0)
+        self.save()
+        with self.connect() as db, db.cursor() as cur:
+            cur.execute("INSERT INTO pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,'owned-account','analytics','Direct')", (self.wid,))
+            schedule(cur, self.wid, 'owned-account', 'threads', job['providerReference'], job['id'], job['verifiedAt'], 'verification')
+            cur.execute("UPDATE pr_metric_reads SET status='done' WHERE workspace_id=%s AND read_offset='24h'", (self.wid,))
+            def states(enabled=True):
+                result = beta.tracking(cur, self.wid, self.state, self.now, enabled=enabled)
+                return {h['window']: h['state'] for h in result['posts'][0]['horizons']}
+            self.assertEqual(states(), {'t0': 'scheduled', '1h': 'scheduled', '24h': 'measured', '7d': 'pending_horizon'})
+            self.assertEqual(set(states(False).values()), {'disabled'})
+            cur.execute("UPDATE pr_metric_observations SET connection_id='other-account' WHERE workspace_id=%s", (self.wid,))
+            self.assertEqual(states()['24h'], 'unavailable')
+            cur.execute("DELETE FROM pr_channel_capabilities WHERE workspace_id=%s", (self.wid,))
+            self.assertEqual(set(states().values()), {'rights_unavailable'})
+            self.state['phase2']['channels'][-1]['revoked'] = True
+            self.assertEqual(set(states().values()), {'disconnected'})
+            cur.execute("SELECT count(*) FROM pr_metric_reads WHERE workspace_id=%s", (self.wid,))
+            self.assertEqual(cur.fetchone()[0], 4)
 
     def test_persisted_hypotheses_recheck_current_rights_before_display_or_experiment(self):
         from postriff_phase2.coworker import performance
