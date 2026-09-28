@@ -80,7 +80,7 @@ def create(phone, call_ref):
         if notifications:
             notice = notifications.emit(cur, workspace_id=None, user_id=user, event_type='security.phone_call',
                 dedupe_key='phone-auth:' + challenge, grouping_key='phone-auth:' + challenge, expires_at=now + CHALLENGE_SECONDS,
-                payload={'title': 'Verify your current call', 'detail': 'Confirm this call with your passkey. If you did not call Rafii, ignore this request.',
+                payload={'title': 'Verify this Rafii agent call', 'detail': 'Tap to verify with Face ID, Touch ID, Windows Hello, or a security key. If you did not start it, do not approve.',
                          'href': '/app/phone/verify-call?challenge=' + challenge}, channel_filter={'in_app', 'push'})
             if not any(d.get('status') in ('pending', 'delivered') for d in notice.get('deliveries', [])):
                 cur.execute("UPDATE public.pr_phone_auth_challenges SET state='fallback' WHERE id=%s", (challenge,))

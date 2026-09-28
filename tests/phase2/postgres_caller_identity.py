@@ -262,10 +262,12 @@ assert call_auth.consume(phone,ref2,c2) is None
 notices=sql("SELECT e.payload,d.user_id::text,d.channel FROM pr_notification_events e JOIN pr_notification_deliveries d ON d.event_id=e.id WHERE e.dedupe_key=%s",'phone-auth:'+c2)
 assert notices and all(n[1]==u and n[2] in ('in_app','push') for n in notices)
 assert any(n[2]=='in_app' for n in notices)
+assert notices[0][0]['title']=='Verify this Rafii agent call'
+assert notices[0][0]['detail']=='Tap to verify with Face ID, Touch ID, Windows Hello, or a security key. If you did not start it, do not approve.'
 assert notices[0][0]['href']=='/app/phone/verify-call?challenge='+c2
 assert caller not in json.dumps(notices) and inbound.digest(phone,'caller',caller) not in json.dumps(notices)
 assert sql('SELECT count(*) FROM pr_notification_events WHERE dedupe_key=%s','phone-auth:'+c2)==[(1,)]
-print('PASS cross-action passkey-session replay rejection; transactional exact deep link; no code/caller/hash/private payload; no extra channels')
+print('PASS cross-action passkey-session replay rejection; exact-user biometric push deep link; no code/caller/hash/private payload; no extra channels')
 
 # HTTP through normal origin/token guards; uses the same service calls and no-store responses.
 app=create_app(service,phone)

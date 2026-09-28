@@ -23,8 +23,12 @@ Returning AI-agent calls now use two independent checks:
 1. A one-use Agent Pairing Code binds a caller route to the exact user and workspace. Caller ID can
    locate a pending route but never authorizes access.
 2. Every returning call creates a 90-second challenge. The signed-in user must complete a fresh
-   passkey ceremony. A separate memory-only Supabase client sends only the resulting access token
-   to that one approval action and then signs its local session out.
+   passkey ceremony. Rafii sends the exact paired user an in-app/Web Push notification whose link
+   opens that challenge and explicitly asks for Face ID, Touch ID, Windows Hello, or a security key.
+   Push requires that the user previously enabled notifications and has an active browser/PWA
+   subscription; the notification itself cannot approve a call. A separate memory-only Supabase
+   client sends only the resulting access token to that one approval action and then signs its local
+   session out.
 
 The backend verifies the token with Supabase, the exact user, signed `amr: passkey` time after the
 call challenge began, a session distinct from the normal app session, active membership, the exact
