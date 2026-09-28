@@ -566,7 +566,10 @@ function HomeWorkspace() {
       <div className='mx-auto grid w-full max-w-[1192px] gap-10 lg:grid-cols-[minmax(0,580px)_minmax(310px,1fr)] lg:gap-16 xl:gap-[88px]'>
         {/* Creation column */}
         <div className='flex min-w-0 flex-col gap-6'>
-          <GrowthHome />
+          {/* Growth loads after the workspace shell; reserve its measured mobile footprint so the composer never jumps when the query resolves. */}
+          <div className='min-h-[280px]'>
+            <GrowthHome />
+          </div>
           <div className='flex flex-col gap-3'>
             <h1 className='text-foreground text-[2.5rem] leading-[1.05] font-normal tracking-[-0.03em] md:text-[2.75rem] xl:text-[3.05rem]'>
               What’s the idea
