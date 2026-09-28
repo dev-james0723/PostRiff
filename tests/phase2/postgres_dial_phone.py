@@ -246,3 +246,15 @@ with TestClient(app) as client,api:
     print('PASS declined/voicemail guard: generic prompt only, no Live session or private workspace access')
 
 print('PASS Dial PostgreSQL acceptance; execution=synthetic providers and model, real local database and agent commands')
+
+# Failed setup checks never consume a fixed daily manual-call allowance. Exercise
+# request-time AND dispatch-time policy with the real SQL ledger, no provider POST.
+previous_posts=http.posts
+provider.transport=lambda *_args,**_kwargs:(403,{'code':'cloudflare_1010'})
+for attempt in range(7):
+    call=request('dial-network-retry-'+str(attempt))
+    assert call['state']=='failed',call
+    assert read(call['id'])['failure_class']=='provider_transport',read(call['id'])
+assert http.posts==previous_posts
+assert sql("SELECT count(*) FROM pr_phone_calls WHERE user_id=%s AND idempotency_key LIKE 'dial-network-retry-%%'",USER)==[(7,)]
+print('PASS seven same-day manual retries after network rejection; SQL dispatch, safe reason, no provider POST')

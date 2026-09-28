@@ -18,6 +18,7 @@ const EVENTS = [['publish.failed', 'Publication failed'], ['publish.uncertain', 
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const minutes = (value: string) => Number(value.split(':')[0]) * 60 + Number(value.split(':')[1]);
 const CHECK_STAGE: Record<string, string> = {
+  provider_transport: 'Dial’s network blocked Rafii’s API request before the calling service could check it. The connection configuration needs attention.',
   local_configuration: 'Rafii’s Dial settings are incomplete.',
   self_hosted_http: 'Dial did not accept the Self-Hosted status check.',
   self_hosted_access: 'Dial Self-Hosted access is not granted for this API key.',

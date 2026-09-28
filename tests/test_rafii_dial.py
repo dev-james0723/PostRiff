@@ -152,6 +152,41 @@ class DialTests(unittest.TestCase):
             self.assertEqual(self.provider._http('POST','/calls',{}),(402,{}))
         with self.assertRaises(ValueError):self.provider._http('GET','//evil.test')
 
+    def test_http_identifies_rafii_and_keeps_redirect_protection(self):
+        response=SimpleNamespace(status=200, read=lambda _limit:b'{"enabled":true}')
+        with patch('postriff_phase2.phone.providers.dial.build_opener') as opener:
+            opener.return_value.open.return_value.__enter__.return_value=response
+            self.assertEqual(self.provider._http('GET','/self-hosted'),(200,{'enabled':True}))
+            request=opener.return_value.open.call_args.args[0]
+            self.assertEqual(request.get_header('User-agent'),'Rafii/1.0')
+            self.assertEqual(request.get_header('Accept'),'application/json')
+            self.assertEqual(request.get_header('Authorization'),'Bearer '+VALUES['DIAL_API_KEY'])
+            self.assertEqual(request.full_url,'https://api.getdial.ai/api/v1/self-hosted')
+            self.assertEqual(type(opener.call_args.args[0]).__name__,'_NoRedirect')
+
+    def test_cloudflare_is_classified_without_exposing_bodies_or_retrying(self):
+        for raw,expected in [(b'error code: 1010\n',{'code':'cloudflare_1010'}),
+                             (b'{"error":"private +12025550123"}',{}),
+                             (b'error code: 1010 private',{}),
+                             (b'x'*500,{})]:
+            error=HTTPError('https://api.getdial.ai',403,'denied',{},io.BytesIO(raw))
+            with patch('postriff_phase2.phone.providers.dial.build_opener') as opener:
+                opener.return_value.open.side_effect=error
+                self.assertEqual(self.provider._http('GET','/self-hosted'),(403,expected))
+                self.assertEqual(opener.return_value.open.call_count,1)
+        for endpoint in ('/self-hosted','/numbers','/account','/calls'):
+            fixture=DialFixture()
+            def transport(method,path,fields=None,headers=None):
+                if path==endpoint:return 403,{'code':'cloudflare_1010'}
+                return fixture(method,path,fields,headers)
+            self.provider.transport=transport
+            with self.subTest(endpoint=endpoint):
+                receipt=self.provider.create_outbound_call(number='+12025550123',call_id=CALL,max_seconds=60)
+                self.assertEqual((receipt.state,receipt.failure),('failed','provider_transport'))
+                if endpoint!='/calls':
+                    self.assertEqual(self.provider.readiness()['stage'],'provider_transport')
+                    self.assertFalse(any(r[0]=='POST' for r in fixture.requests))
+
     def test_signed_raw_body_tamper_timestamp_duplicates_and_socket_identity(self):
         raw=b'{"id":"evt_test","type":"webhook.ping"}'
         header=sign(VALUES['DIAL_WEBHOOK_SIGNING_SECRET'],raw)
