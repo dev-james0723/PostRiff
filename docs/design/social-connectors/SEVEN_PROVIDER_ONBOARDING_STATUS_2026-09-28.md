@@ -40,6 +40,7 @@ App name: **Rafii**. Purpose: let a person connect their own social account, rev
 - 2026-09-28: Weibo Open Platform shows a sequence of developer verification, app creation, assisted integration testing, and review. The browser was not signed in to developer verification; the developer link returned to the public homepage. Weibo CLI/paid commercial APIs remain separate from a multi-user hosted OAuth contract.
 - 2026-09-28: `open.zhihu.com` was blocked by this browser before its portal could be inspected. No official production write contract was verified. Zhihu remains disabled for hosted OAuth and publishing.
 - 2026-09-28: `pixelfed.social` is reachable and displays an account login form; no Pixelfed account was available in the current session. Rafii's dynamic OAuth registration requires a user's chosen instance and actual account consent, followed by a controlled instance-specific compatibility/write check.
+- 2026-09-28: A read-only call through Rafii's DNS-pinned transport to `pixelfed.social` passed the public instance probe and reported `3.5.3 (compatible; Pixelfed 0.14.3)`. This is instance identity evidence only; OAuth consent, image/status compatibility and account-specific write remain untested.
 
 ## Local validation and release boundary
 
@@ -50,3 +51,4 @@ App name: **Rafii**. Purpose: let a person connect their own social account, rev
 - Local browser: `ui-simplification-browser.cjs` passed 64 checks against a real locally built Next app and disposable PostgreSQL harness, including shared connection status and no page/console errors. No authenticated provider OAuth/browser callback test could run without approved apps and grants.
 - Secret scan: `consumer_ready_secrets.py` passed: 2,132 files, 456 known findings, zero unexpected findings.
 - No provider app was registered, no provider credential was issued or installed, no review was submitted, no runtime approval flag was enabled, no live provider authorization or public post occurred. This branch is a candidate for CI review, not a production release.
+- After reconciling the newer `consumer-saas` head, the full Python suite passed 2,952 tests (261 skipped), Node 24 typecheck and zero-warning lint passed, and focused growth-beta/performance tests passed. Draft PR #70 contains the merge resolution and is pending CI.
