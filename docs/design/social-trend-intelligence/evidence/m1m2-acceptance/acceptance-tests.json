@@ -1,0 +1,79 @@
+{
+  "schema": "rafii.trend-m1m2-acceptance.v1",
+  "recorded_at": "2026-09-28T13:58:02.329553+00:00",
+  "execution_state": "actual_local_services_and_disposable_postgresql_with_explicit_synthetic_seeds",
+  "canonical_release_base": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
+  "working_head_before_candidate_commit": "822f25d21138be18dbcd0eb7d3d2bcb1baff87cc",
+  "offline": {
+    "tests": 1026,
+    "passed": 784,
+    "skipped_database_only": 242,
+    "failures": 0,
+    "errors": 0,
+    "raw_stderr_sha256": "febd0d20b0e6dbc87578c2b3fa1470b506ee2460649c7e86f6552000b7fc3b0e"
+  },
+  "disposable_postgresql": {
+    "tests": 584,
+    "passed": 584,
+    "failures": 0,
+    "errors": 0,
+    "groups": {
+      "advanced": 43,
+      "forecast": 15,
+      "frontier": 37,
+      "generation": 39,
+      "interpretation": 49,
+      "media": 51,
+      "pipeline": 14,
+      "planner": 53,
+      "services": 136,
+      "trust": 112,
+      "whitespace": 35
+    },
+    "repair": "frontier_control added to bounded dependency-authorized physical purge; affected frontier37 and trust112 rerun PASS"
+  },
+  "browser_to_database": {
+    "assertions": 108,
+    "viewports": [
+      1440,
+      768,
+      390,
+      430
+    ],
+    "status": "PASS",
+    "result": "browser/browser-results.json",
+    "api_interception": false
+  },
+  "strategy_browser_to_database": {
+    "assertions": 16,
+    "viewports": [
+      1440,
+      768,
+      390,
+      430
+    ],
+    "status": "PASS",
+    "result": "strategy/browser-results.json",
+    "synthetic_history_is_not_empirical_qualification": true
+  },
+  "provider_calls": 0,
+  "model_calls": 0,
+  "paid_external_spend_usd": 0,
+  "production_verified": false,
+  "source_hashes": {
+    "src/postriff_phase2/growth/trends/retention.py": "f78c167aa934afa2ddc83c74ba659df21bcacce06e93b1433df3ef6437902267",
+    "tests/test_trend_frontier.py": "9e474bdbe2a73ff115a2191f62ec60f8491130d694557eec74d99435614c73bf",
+    "tests/test_trend_metrics.py": "c3e1003e02f2370b168ef42c1508525614109d50686dfded3e0dc897d8a6a4ae",
+    "tests/test_trend_http.py": "7d913abdb2c5d851e8effcf42454b8aceb647093d52192808a2a893aa1eaa6f8",
+    "scripts/trend_browser.py": "bdfcea2b13464ba4c0c874df46f1f540ce8bcb7c2689940fbb42bb0e0642b58b",
+    "scripts/trend_strategy_browser.py": "11f96b72d92a89565f233b2ee56f2415ced958d8e2dc4c17b373a960c92b7b1f",
+    "web/tests/trend-live-api-browser.cjs": "fa21d29d69e7d683055c8dae82700ca3d8136e99af66667162ead7af900a7de6",
+    "web/tests/trend-strategy-live-api-browser.cjs": "93a1e0214fb57d91ce3c2254d3f0da603d8d9b60c308a704eaba8a311fe47eb6",
+    "migrations/postriff/040_social_trend_intelligence.sql": "fbabec3c66efc22927e9c2974c3c08b6cda122a4272bf1c63dd50c7c13f5f9c0"
+  },
+  "limitations": [
+    "Synthetic fixtures do not establish empirical language, forecast, angle or creator-outcome qualification.",
+    "Physical-device and manual VoiceOver acceptance remain open.",
+    "No provider, notification, competitor, activation or paid-model capability was enabled."
+  ]
+}

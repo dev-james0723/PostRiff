@@ -1,0 +1,69 @@
+{
+  "execution": "real_API_SQL_synthetic_history",
+  "results": [
+    {
+      "name": "1440 current support bound; missing/stale support and foreign tenant rejected",
+      "pass": true
+    },
+    {
+      "name": "1440 keyboard adoption persists through actual API, database and reload",
+      "pass": true
+    },
+    {
+      "name": "1440 no horizontal overflow or serious/critical axe findings",
+      "pass": true
+    },
+    {
+      "name": "1440 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors",
+      "pass": true
+    },
+    {
+      "name": "768 current support bound; missing/stale support and foreign tenant rejected",
+      "pass": true
+    },
+    {
+      "name": "768 keyboard adoption persists through actual API, database and reload",
+      "pass": true
+    },
+    {
+      "name": "768 no horizontal overflow or serious/critical axe findings",
+      "pass": true
+    },
+    {
+      "name": "768 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors",
+      "pass": true
+    },
+    {
+      "name": "390 current support bound; missing/stale support and foreign tenant rejected",
+      "pass": true
+    },
+    {
+      "name": "390 keyboard adoption persists through actual API, database and reload",
+      "pass": true
+    },
+    {
+      "name": "390 no horizontal overflow or serious/critical axe findings",
+      "pass": true
+    },
+    {
+      "name": "390 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors",
+      "pass": true
+    },
+    {
+      "name": "430 current support bound; missing/stale support and foreign tenant rejected",
+      "pass": true
+    },
+    {
+      "name": "430 keyboard adoption persists through actual API, database and reload",
+      "pass": true
+    },
+    {
+      "name": "430 no horizontal overflow or serious/critical axe findings",
+      "pass": true
+    },
+    {
+      "name": "430 revoked support disappears and cannot adopt or experiment; zero egress/runtime errors",
+      "pass": true
+    }
+  ]
+}

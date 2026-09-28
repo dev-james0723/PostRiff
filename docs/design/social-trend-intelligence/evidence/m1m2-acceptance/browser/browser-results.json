@@ -1,0 +1,1237 @@
+{
+  "execution": "real_api_postgresql_synthetic_identity_and_seed",
+  "trend_api_interception": false,
+  "results": [
+    {
+      "name": "1440 missing token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "1440 invalid token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "1440 foreign tenant list denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "1440 foreign tenant receipt denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "1440 foreign acceptance denied",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "1440 real stored list validates canonical Zod contract",
+      "pass": true
+    },
+    {
+      "name": "1440 real database receipt is currently verified",
+      "pass": true
+    },
+    {
+      "name": "1440 Radar opens real stored trust drawer",
+      "pass": true
+    },
+    {
+      "name": "1440 explicit angle request respects disabled model gate without provider calls",
+      "pass": true
+    },
+    {
+      "name": "1440 acceptance persists source and server lineage into existing Ideas after reload",
+      "pass": true
+    },
+    {
+      "name": "1440 actual acceptance replay retains one source",
+      "pass": true
+    },
+    {
+      "name": "1440 chat opens with bound source and receipt without sending",
+      "pass": true
+    },
+    {
+      "name": "1440 Weekly saves and preserves the explicit source on edit without drafting",
+      "pass": true
+    },
+    {
+      "name": "1440 campaign builder receives the saved goal and destination for review",
+      "pass": true
+    },
+    {
+      "name": "1440 zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "768 missing token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "768 invalid token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "768 foreign tenant list denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "768 foreign tenant receipt denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "768 foreign acceptance denied",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "768 real stored list validates canonical Zod contract",
+      "pass": true
+    },
+    {
+      "name": "768 real database receipt is currently verified",
+      "pass": true
+    },
+    {
+      "name": "768 Radar opens real stored trust drawer",
+      "pass": true
+    },
+    {
+      "name": "768 explicit angle request respects disabled model gate without provider calls",
+      "pass": true
+    },
+    {
+      "name": "768 acceptance persists source and server lineage into existing Ideas after reload",
+      "pass": true
+    },
+    {
+      "name": "768 actual acceptance replay retains one source",
+      "pass": true
+    },
+    {
+      "name": "768 chat opens with bound source and receipt without sending",
+      "pass": true
+    },
+    {
+      "name": "768 Weekly saves and preserves the explicit source on edit without drafting",
+      "pass": true
+    },
+    {
+      "name": "768 campaign builder receives the saved goal and destination for review",
+      "pass": true
+    },
+    {
+      "name": "768 zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "390 missing token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "390 invalid token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "390 foreign tenant list denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "390 foreign tenant receipt denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "390 foreign acceptance denied",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "390 real stored list validates canonical Zod contract",
+      "pass": true
+    },
+    {
+      "name": "390 real database receipt is currently verified",
+      "pass": true
+    },
+    {
+      "name": "390 Radar opens real stored trust drawer",
+      "pass": true
+    },
+    {
+      "name": "390 explicit angle request respects disabled model gate without provider calls",
+      "pass": true
+    },
+    {
+      "name": "390 acceptance persists source and server lineage into existing Ideas after reload",
+      "pass": true
+    },
+    {
+      "name": "390 actual acceptance replay retains one source",
+      "pass": true
+    },
+    {
+      "name": "390 chat opens with bound source and receipt without sending",
+      "pass": true
+    },
+    {
+      "name": "390 Weekly saves and preserves the explicit source on edit without drafting",
+      "pass": true
+    },
+    {
+      "name": "390 campaign builder receives the saved goal and destination for review",
+      "pass": true
+    },
+    {
+      "name": "390 zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "430 missing token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "430 invalid token denied",
+      "pass": true,
+      "detail": {
+        "status": 401,
+        "no_store": true
+      }
+    },
+    {
+      "name": "430 foreign tenant list denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "430 foreign tenant receipt denied",
+      "pass": true,
+      "detail": {
+        "status": 404,
+        "no_store": true
+      }
+    },
+    {
+      "name": "430 foreign acceptance denied",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "430 real stored list validates canonical Zod contract",
+      "pass": true
+    },
+    {
+      "name": "430 real database receipt is currently verified",
+      "pass": true
+    },
+    {
+      "name": "430 Radar opens real stored trust drawer",
+      "pass": true
+    },
+    {
+      "name": "430 explicit angle request respects disabled model gate without provider calls",
+      "pass": true
+    },
+    {
+      "name": "430 acceptance persists source and server lineage into existing Ideas after reload",
+      "pass": true
+    },
+    {
+      "name": "430 actual acceptance replay retains one source",
+      "pass": true
+    },
+    {
+      "name": "430 chat opens with bound source and receipt without sending",
+      "pass": true
+    },
+    {
+      "name": "430 Weekly saves and preserves the explicit source on edit without drafting",
+      "pass": true
+    },
+    {
+      "name": "430 campaign builder receives the saved goal and destination for review",
+      "pass": true
+    },
+    {
+      "name": "430 zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "1440 real Lab rejects unauthorized, unlinked and stale review inputs",
+      "pass": true
+    },
+    {
+      "name": "1440 server resolves accepted source and current saved draft into Lab without automatic evaluation",
+      "pass": true
+    },
+    {
+      "name": "1440 real durable Lab review freezes current inputs, returns exact diagnostic and replays one run",
+      "pass": true
+    },
+    {
+      "name": "1440 real Lab evidence and selective action are accessible in the existing editor",
+      "pass": true
+    },
+    {
+      "name": "1440 unsaved text invalidates a real Lab result without mutating the saved draft",
+      "pass": true
+    },
+    {
+      "name": "1440 Lab selectively saves via existing variant_edit, rechecks evidence, preserves lineage and persists revision 2 after reload",
+      "pass": true
+    },
+    {
+      "name": "1440 real concurrent variant_edit makes the old Lab apply fail 409 without overwriting revision 4, including after reload",
+      "pass": true
+    },
+    {
+      "name": "1440 real Lab zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "768 real Lab rejects unauthorized, unlinked and stale review inputs",
+      "pass": true
+    },
+    {
+      "name": "768 server resolves accepted source and current saved draft into Lab without automatic evaluation",
+      "pass": true
+    },
+    {
+      "name": "768 real durable Lab review freezes current inputs, returns exact diagnostic and replays one run",
+      "pass": true
+    },
+    {
+      "name": "768 real Lab evidence and selective action are accessible in the existing editor",
+      "pass": true
+    },
+    {
+      "name": "768 unsaved text invalidates a real Lab result without mutating the saved draft",
+      "pass": true
+    },
+    {
+      "name": "768 Lab selectively saves via existing variant_edit, rechecks evidence, preserves lineage and persists revision 2 after reload",
+      "pass": true
+    },
+    {
+      "name": "768 real concurrent variant_edit makes the old Lab apply fail 409 without overwriting revision 4, including after reload",
+      "pass": true
+    },
+    {
+      "name": "768 real Lab zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "390 real Lab rejects unauthorized, unlinked and stale review inputs",
+      "pass": true
+    },
+    {
+      "name": "390 server resolves accepted source and current saved draft into Lab without automatic evaluation",
+      "pass": true
+    },
+    {
+      "name": "390 real durable Lab review freezes current inputs, returns exact diagnostic and replays one run",
+      "pass": true
+    },
+    {
+      "name": "390 real Lab evidence and selective action are accessible in the existing editor",
+      "pass": true
+    },
+    {
+      "name": "390 unsaved text invalidates a real Lab result without mutating the saved draft",
+      "pass": true
+    },
+    {
+      "name": "390 Lab selectively saves via existing variant_edit, rechecks evidence, preserves lineage and persists revision 2 after reload",
+      "pass": true
+    },
+    {
+      "name": "390 real concurrent variant_edit makes the old Lab apply fail 409 without overwriting revision 4, including after reload",
+      "pass": true
+    },
+    {
+      "name": "390 real Lab zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "430 real Lab rejects unauthorized, unlinked and stale review inputs",
+      "pass": true
+    },
+    {
+      "name": "430 server resolves accepted source and current saved draft into Lab without automatic evaluation",
+      "pass": true
+    },
+    {
+      "name": "430 real durable Lab review freezes current inputs, returns exact diagnostic and replays one run",
+      "pass": true
+    },
+    {
+      "name": "430 real Lab evidence and selective action are accessible in the existing editor",
+      "pass": true
+    },
+    {
+      "name": "430 unsaved text invalidates a real Lab result without mutating the saved draft",
+      "pass": true
+    },
+    {
+      "name": "430 Lab selectively saves via existing variant_edit, rechecks evidence, preserves lineage and persists revision 2 after reload",
+      "pass": true
+    },
+    {
+      "name": "430 real concurrent variant_edit makes the old Lab apply fail 409 without overwriting revision 4, including after reload",
+      "pass": true
+    },
+    {
+      "name": "430 real Lab zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "1440 real visible exposure validates signed returned-page subset and replays one event",
+      "pass": true
+    },
+    {
+      "name": "1440 real exposure and dismissal reject foreign actor, invented candidates, text and stale revision",
+      "pass": true
+    },
+    {
+      "name": "1440 real keyboard dismissal links exposure, persists after reload and creates no source or draft",
+      "pass": true
+    },
+    {
+      "name": "1440 real dismissal has zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "768 real visible exposure validates signed returned-page subset and replays one event",
+      "pass": true
+    },
+    {
+      "name": "768 real exposure and dismissal reject foreign actor, invented candidates, text and stale revision",
+      "pass": true
+    },
+    {
+      "name": "768 real keyboard dismissal links exposure, persists after reload and creates no source or draft",
+      "pass": true
+    },
+    {
+      "name": "768 real dismissal has zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "390 real visible exposure validates signed returned-page subset and replays one event",
+      "pass": true
+    },
+    {
+      "name": "390 real exposure and dismissal reject foreign actor, invented candidates, text and stale revision",
+      "pass": true
+    },
+    {
+      "name": "390 real keyboard dismissal links exposure, persists after reload and creates no source or draft",
+      "pass": true
+    },
+    {
+      "name": "390 real dismissal has zero browser egress and runtime errors",
+      "pass": true
+    },
+    {
+      "name": "430 real visible exposure validates signed returned-page subset and replays one event",
+      "pass": true
+    },
+    {
+      "name": "430 real exposure and dismissal reject foreign actor, invented candidates, text and stale revision",
+      "pass": true
+    },
+    {
+      "name": "430 real keyboard dismissal links exposure, persists after reload and creates no source or draft",
+      "pass": true
+    },
+    {
+      "name": "430 real dismissal has zero browser egress and runtime errors",
+      "pass": true
+    }
+  ],
+  "traffic": [
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/1b01f757-8fc5-4048-b719-11bf11d6d015/receipts/3571d76f-c700-4ac9-a4b6-c7b79d7a35cb",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities/ee9f0b5b-bc27-485b-bf7f-2bbd62b26cc9/angles",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities/ee9f0b5b-bc27-485b-bf7f-2bbd62b26cc9/accept",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/b06b62f9-9eb7-4c8c-a2ac-9ebd351e3e7d/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/a2e3fb09-66cc-4999-bd23-1591b5288a3d/receipts/b5cb910e-7114-4bea-9ea4-52e3658211b8",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities/17541b9a-e1a2-4b78-a17c-2d72481c51b1/angles",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities/17541b9a-e1a2-4b78-a17c-2d72481c51b1/accept",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/c1b620af-bd33-4ffa-a708-2e3a013f2c68/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/28791ae7-0d36-4c96-9973-c8b7aa4be21e/receipts/716d7bee-238f-40b1-9416-94f3fd91c903",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities/0f116b2e-fbff-44b0-85b8-589df7327e2d/angles",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities/0f116b2e-fbff-44b0-85b8-589df7327e2d/accept",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/df4facb4-51fb-4224-b7a7-637e7b522e13/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/0970d272-1242-4e8a-b95f-fa87d7fe374e/receipts/9b83058c-4cea-4918-823b-3561c44e4efc",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities/7a48131b-7b84-43ae-81ba-65195029ff3d/angles",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities/7a48131b-7b84-43ae-81ba-65195029ff3d/accept",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/a46dcfbb-3b73-427b-85f4-489087d7252d/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/d35d2c4d-3f6d-4c77-bb13-6f07547a67b8/receipts/ca8ec69c-6b31-4dd0-bb55-a0e7d89c4ed1",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/actions",
+      "status": 200,
+      "cache": "no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/coworker/trends/d35d2c4d-3f6d-4c77-bb13-6f07547a67b8/receipts/ca8ec69c-6b31-4dd0-bb55-a0e7d89c4ed1",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/2dfae90b-8f0d-481d-bb52-0a6de12d66ba/actions",
+      "status": 409,
+      "cache": "no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/11ee32b6-e3a2-45de-a854-c035d8cd7504/receipts/d08ef115-1522-46c0-a898-2b8198ca70bc",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/actions",
+      "status": 200,
+      "cache": "no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/11ee32b6-e3a2-45de-a854-c035d8cd7504/receipts/d08ef115-1522-46c0-a898-2b8198ca70bc",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/7643219c-8637-4655-9938-f6d36b405b90/actions",
+      "status": 409,
+      "cache": "no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/f43e22bf-5ef6-42e1-9fdd-9957140f4835/receipts/9d472c83-9c95-4f39-887d-28859905c1d9",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/actions",
+      "status": 200,
+      "cache": "no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/coworker/trends/f43e22bf-5ef6-42e1-9fdd-9957140f4835/receipts/9d472c83-9c95-4f39-887d-28859905c1d9",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/41ae0aa7-d931-4bda-8325-61377c5985ca/actions",
+      "status": 409,
+      "cache": "no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/6eadc1ea-59d1-4c8c-ac69-85c411292e01/receipts/131badda-bf70-40e3-8217-7c471fcb3c00",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/actions",
+      "status": 200,
+      "cache": "no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunity-lab/runs",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/6eadc1ea-59d1-4c8c-ac69-85c411292e01/receipts/131badda-bf70-40e3-8217-7c471fcb3c00",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/2b5984f2-39f2-4dd7-a413-82dff0c4180b/actions",
+      "status": 409,
+      "cache": "no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "POST",
+      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities/312d87a0-df3b-4900-a2da-619fdad1c06f/dismiss",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 1440,
+      "method": "GET",
+      "path": "/api/workspaces/247ce8d4-4ac4-4f98-bd5d-b0a2c1aa520c/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "POST",
+      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities/815220d8-0569-42f1-9d78-8f55a06db9e1/dismiss",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 768,
+      "method": "GET",
+      "path": "/api/workspaces/7211ad10-ce2c-4ece-8041-e6c6fe91002b/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "POST",
+      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities/7b1099d5-551b-4c85-979e-c21367ce5fec/dismiss",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 390,
+      "method": "GET",
+      "path": "/api/workspaces/e124b6b0-6004-4108-9d33-9de07d16ded9/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/exposures",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "POST",
+      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities/b9208fe4-1577-4873-9584-2417d4a253be/dismiss",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends",
+      "status": 200,
+      "cache": "private, no-store"
+    },
+    {
+      "width": 430,
+      "method": "GET",
+      "path": "/api/workspaces/644ba1a9-fdcc-4b95-855c-7a52fbcbcc80/coworker/trends/opportunities",
+      "status": 200,
+      "cache": "private, no-store"
+    }
+  ]
+}

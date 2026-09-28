@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 from postriff_phase2.coworker import http as coworker_http
+from postriff_phase2.growth.trends.service import error
 from test_trend_service import make_service, WID, TID, RID, OID, assert_schema
 from test_trend_opportunities import PAYLOAD
 
@@ -53,6 +54,15 @@ class TrendHTTPTests(unittest.TestCase):
         self.assertEqual(self.request([TID])[0], 410)
         self.svc.values["RAFII_TREND_INTELLIGENCE_ENABLED"] = "0"
         self.assertEqual(self.request([])[0], 403)
+
+    def test_exact_safe_error_contract_never_reflects_private_input(self):
+        for status, code in ((400,"invalid_request"),(401,"unauthenticated"),(403,"forbidden"),(404,"not_found"),
+                             (410,"evidence_unavailable"),(409,"revision_conflict"),(429,"budget_or_rate_limited"),
+                             (503,"source_unavailable")):
+            with self.subTest(code=code), patch.object(self.svc,"list",side_effect=error(code,status)):
+                actual, payload=self.request([],query="private=SECRET")
+                self.assertEqual((actual,payload["code"]),(status,code))
+                self.assertNotIn("SECRET",json.dumps(payload))
 
     def test_mutations_exact_envelope_and_role(self):
         status, accepted = self.request(["opportunities", OID, "accept"], method="POST", payload=PAYLOAD)
