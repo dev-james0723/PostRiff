@@ -323,10 +323,10 @@ class TrendIntegrationTests(unittest.TestCase):
 
     def test_outcomes_use_approved_manifest_not_mutated_live_source(self):
         plan = {"id": "frozen-plan", "primaryObjective": "shareability", "platform": "Bluesky", "account": "channel-1", "opportunityId": OID}
-        job = {"id": "job-1", "state": "verified", "verifiedAt": NOW, "manifest": {"variantId": "draft-1", "channelId": "channel-1", "scoutLineage": [{"executionPlan": plan}]}}
+        job = {"id": "job-1", "state": "verified", "verifiedAt": NOW, "providerReference": "native-1", "manifest": {"variantId": "draft-1", "channelId": "channel-1", "platform": "Bluesky", "scoutLineage": [{"executionPlan": plan}]}}
         self.repo.state["phase2"]["jobs"] = [job]
         self.repo.state["variants"] = [{"id": "draft-1", "sourceIds": [], "scoutLineage": [{"executionPlan": {**plan, "id": "mutated-plan", "primaryObjective": "reach"}}]}]
-        post = {"jobId": "job-1", "platform": "Bluesky", "provider": "bluesky", "connectionId": "channel-1", "language": "en", "definitionVersion": "v1", "metrics": {}}
+        post = {"jobId": "job-1", "publishedState": "verified", "providerPostId": "native-1", "platform": "Bluesky", "provider": "bluesky", "connectionId": "channel-1", "language": "en", "definitionVersion": "v1", "metrics": {}}
         with patch("postriff_phase2.insights.summary", return_value={"posts": [post]}):
             rows = scout_outcomes.refresh(None, WID, self.repo.state, NOW)
         self.assertEqual({r["executionPlanId"] for r in rows}, {"frozen-plan"})

@@ -391,7 +391,7 @@ function RadarResults() {
   );
 }
 export function TrendsView() {
-  const { w, status, enabled } = useTrendContext();
+  const { w, status, beta, enabled } = useTrendContext();
   return (
     <PageContainer
       pageTitle='Social Trends Intel'
@@ -405,11 +405,20 @@ export function TrendsView() {
       ) : !enabled ? (
         <StateMessage
           kind='unsupported'
-          title='Conversations aren’t available in this workspace yet'
-          description='They’ll appear here when this feature is turned on.'
+          title={beta?.state === 'workspace_not_allowlisted' ? 'This workspace is outside the Trend Beta' :
+            beta?.state === 'feature_off' ? 'Trend Beta is off' : 'Trend availability could not be verified'}
+          description={beta?.state === 'workspace_not_allowlisted'
+            ? 'Stored conversations are available only to explicitly admitted workspaces.'
+            : beta?.state === 'feature_off' ? 'Conversations will appear here when the feature is enabled.'
+              : 'Try again later. No live discovery has been started.'}
         />
       ) : (
-        <RadarResults key={w} />
+        <>
+          <p className='text-muted-foreground mb-4 text-sm' data-trend-beta-status>
+            Beta · Stored conversations. Source coverage is limited; live discovery is not verified.
+          </p>
+          <RadarResults key={w} />
+        </>
       )}
     </PageContainer>
   );

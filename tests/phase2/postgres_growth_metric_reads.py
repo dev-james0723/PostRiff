@@ -297,4 +297,55 @@ assert by_job["job-p8"] == {"views": 70.0} and by_job["job-l"] == {"views": 5.0}
 assert trigger["p8"]["metrics"]["likes"]["value"] == 9.0 and trigger["p8"]["metrics"]["likes"]["readOffset"] == "1h"
 checks.append("cross-post consumers read every post at +24h and the strong-post trigger at +1h (legacy rows keep today's behaviour); learning notes compare jobs the same way")
 
+# A warm cron process can reclaim its own expired lease. Worker identity alone
+# must not let the earlier invocation write or release the newer attempt.
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, "threads", "same-worker-race", "job-race", now - 2, "verification", (("t0", 0),))
+first = next(r for r in scheduler.claim(100) if r['postId'] == 'same-worker-race')
+with connection() as db:
+    db.execute("UPDATE pr_metric_reads SET lease_until=now()-interval '1 second' WHERE id=%s", (first['id'],))
+second = next(r for r in scheduler.claim(100) if r['id'] == first['id'])
+assert scheduler.complete(first, {'state': 'done', 'found': {'views': 999}, 'endpoint': 'fixture'}) is False
+scheduler.release([first])
+with connection() as db:
+    assert db.execute("SELECT status,attempts FROM pr_metric_reads WHERE id=%s", (second['id'],)).fetchone() == ('claimed', second['attempts'])
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider_post_id='same-worker-race'").fetchone()[0] == 0
+checks.append('same-worker reclamation fences both late completion and stale release by attempt')
+
+with connection() as db:
+    db.execute("UPDATE pr_metric_reads SET lease_until=now()-interval '1 second' WHERE id=%s", (second['id'],))
+assert scheduler.complete(second, {'state': 'done', 'found': {'views': 999}, 'endpoint': 'fixture'}) is False
+checks.append('expired lease cannot append even before another worker reclaims it')
+
+third = next(r for r in scheduler.claim(100) if r['id'] == first['id'])
+with connection() as db:
+    db.execute("DELETE FROM pr_channel_capabilities WHERE workspace_id=%s AND connection_id=%s AND capability='analytics'", (wid, CONN))
+assert scheduler.complete(third, {'state': 'done', 'found': {'views': 999}, 'endpoint': 'fixture'}) is True
+with connection() as db:
+    assert db.execute("SELECT status FROM pr_metric_reads WHERE id=%s", (third['id'],)).fetchone()[0] == 'cancelled'
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider_post_id='same-worker-race'").fetchone()[0] == 0
+checks.append('revocation between provider read and commit cancels without appending observations')
+
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, 'threads', 'beta-fence', None, now - 10, 'backfill', (('backfill', 0),))
+old = next(r for r in scheduler.claim(100) if r['postId'] == 'beta-fence')
+with connection() as db:
+    db.execute("UPDATE pr_metric_reads SET lease_until=now()-interval '1 second' WHERE id=%s", (old['id'],))
+new = next(r for r in scheduler.claim(100) if r['postId'] == 'beta-fence')
+outcome = {'state': 'done', 'found': {'views': 999}, 'endpoint': 'fixture://insights'}
+assert scheduler.complete(old, outcome) is False, 'same-worker stale attempt must not append'
+scheduler.release([old])
+with connection() as db:
+    assert db.execute('SELECT status,attempts FROM pr_metric_reads WHERE id=%s', (new['id'],)).fetchone() == ('claimed', new['attempts'])
+    db.execute("UPDATE pr_metric_reads SET lease_until=now()-interval '1 second' WHERE id=%s", (new['id'],))
+assert scheduler.complete(new, outcome) is False, 'expired completion must not append'
+new = next(r for r in scheduler.claim(100) if r['postId'] == 'beta-fence')
+with connection() as db:
+    db.execute("UPDATE pr_channel_capabilities SET level='Unsupported' WHERE workspace_id=%s AND connection_id=%s AND capability='analytics'", (wid, CONN))
+assert scheduler.complete(new, outcome) is True
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider_post_id='beta-fence'").fetchone()[0] == 0
+    assert db.execute('SELECT status FROM pr_metric_reads WHERE id=%s', (new['id'],)).fetchone()[0] == 'cancelled'
+checks.append('same-worker generation and expiry fence completion/release; revocation during HTTP suppresses append')
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

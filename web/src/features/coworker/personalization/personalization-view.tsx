@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { useSnapshot } from '@/lib/api/hooks';
 import { useTrendContext } from '@/features/trends/hooks';
-import { performanceTrendLearningSchema, trendMetricChoiceInputSchema, type TrendLearning, type TrendLearningChoiceOption } from '@/lib/coworker/trend-types';
+import { performancePostTrackingSchema, performanceTrendLearningSchema, trendMetricChoiceInputSchema, type TrendLearning, type TrendLearningChoiceOption } from '@/lib/coworker/trend-types';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { StateMessage } from '@/components/rafii';
@@ -136,6 +136,7 @@ export function PersonalizationView() {
             <OverlaySection kind='brand' title='Brand' description='Who the brand is: audience, products, approved claims and vocabulary.' items={overlays.data.brand} isOwner={isOwner} />
             <StrategySection hypotheses={hypotheses} isOwner={isOwner} performanceNote={performance.data?.rules.note} measured={performance.data ? { posts: performance.data.posts, measured: performance.data.measured, unavailable: performance.data.unavailable } : null} />
             {performanceOn && <TrendLearningSection performance={performance} />}
+            {performanceOn && <PostTrackingSection performance={performance} />}
             {isOwner && (
               <Panel title='Reset' titleId='reset-heading' description='Start over without touching Rafii’s global writing rules, approvals or anything already scheduled.'>
                 <div className='flex flex-wrap gap-2'>
@@ -472,6 +473,24 @@ function TrendLearningSection({ performance }: { performance: ReturnType<typeof 
 
 const optionKey = (o: TrendLearningChoiceOption) => JSON.stringify([o.selection_digest, o.channel_id, o.source_id]);
 
+function PostTrackingSection({ performance }: { performance: ReturnType<typeof usePerformance> }) {
+  const parsed = performancePostTrackingSchema.safeParse(performance.data);
+  const tracking = parsed.success ? parsed.data.post_tracking : undefined;
+  const labels = { disabled: 'Tracking off', unsupported: 'Provider not supported', disconnected: 'Account disconnected', rights_unavailable: 'Analytics access unavailable', pending_horizon: 'Waiting for this window', unscheduled: 'Not scheduled', scheduled: 'Scheduled', pending: 'Reading in progress', measured: 'Native measurements available', unavailable: 'Measurement unavailable' };
+  return <Panel title='Post measurement tracking' titleId='post-tracking-heading' description='Native readings after verified publication: at publication, 1 hour, 24 hours and 7 days. Missing readings are never zero engagement.'>
+    {!tracking ? <p className='text-muted-foreground text-sm'>Tracking status is unavailable.</p> : <div className='flex min-w-0 flex-col gap-3' data-post-tracking>
+      {!tracking.enabled && <p className='text-sm'>Automatic metric reads are off.</p>}
+      <p className='text-muted-foreground text-xs'>Follower conversion is unavailable: no qualified native follows and profile visits pair is connected.</p>
+      {!tracking.posts.length && <p className='text-muted-foreground text-sm'>No verified publications in this report.</p>}
+      {tracking.posts.map((post) => <details key={post.job_id} className='min-w-0 text-sm'>
+        <summary className='rafii-focus cursor-pointer break-words rounded-md py-2'>{humanize(post.provider)} · {post.account} · {post.job_id}</summary>
+        <dl className='flex flex-col gap-2'>{post.horizons.map((h) => <div key={h.window} className='flex flex-wrap justify-between gap-2'><dt>{h.window === 't0' ? 'At publication' : h.window}</dt><dd>{labels[h.state]}</dd></div>)}</dl>
+      </details>)}
+      {tracking.truncated && <p className='text-muted-foreground text-xs'>This report includes up to 120 recent verified publications.</p>}
+    </div>}
+  </Panel>;
+}
+
 function TrendLearningReport({ report, context, canEdit, refresh }: {
   report: TrendLearning;
   context: ReturnType<typeof useTrendContext>;
@@ -524,6 +543,12 @@ function TrendLearningReport({ report, context, canEdit, refresh }: {
               {o.state === 'measured' && <p className='text-muted-foreground break-words text-xs'>Native counts: {Object.entries(o.native_values).map(([name, value]) => `${name}: ${value}`).join(' · ')}. Observed {formatDate(o.observed_at)}.</p>}
               {o.baseline && <p className='text-muted-foreground text-xs'>{o.baseline.count} earlier comparable publications. {o.baseline.median == null ? 'Comparison unavailable.' : `Descriptive median ${o.baseline.median}; median absolute deviation ${o.baseline.mad ?? 'unknown'}.`} {o.baseline.reason ? humanize(o.baseline.reason) : o.baseline.confounders?.map(humanize).join(' · ')}.</p>}
               {o.attribution && <p className='text-muted-foreground text-xs'>{humanize(o.attribution)}.</p>}
+              {o.comparison && <p className='text-muted-foreground break-words text-xs'>
+                {o.comparison.relative_value == null ? `Relative comparison unavailable: ${humanize(o.comparison.reason ?? 'unknown')}.` : `${(o.comparison.relative_value * 100).toFixed(1)}% relative to the earlier median (${o.comparison.sample_count} comparable publications).`}
+                {' '}Descriptive association; this does not show what caused the result.
+                {' '}Earlier publications below this result: {o.comparison.evidence_ids.join(', ') || 'none'}.
+                {' '}Earlier publications at or above this result: {o.comparison.counter_evidence_ids.join(', ') || 'none'}.
+              </p>}
             </Band>)}
           </details>)}
           <ul className='text-muted-foreground list-disc space-y-1 pl-5 text-xs'>{report.limitations.map((l, i) => <li key={i}>{l}</li>)}</ul>

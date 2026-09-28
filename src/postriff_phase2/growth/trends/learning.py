@@ -14,6 +14,7 @@ from . import contracts, opportunities
 from .exposures import creator_baseline
 from ...coworker import performance
 from ...insights import INSIGHT_METRICS
+from ..follower_conversion import valid_choice
 
 VERSION = "rafii.trend-learning.v1"
 WINDOWS = {"1h": 3600, "24h": 86400, "7d": 604800}
@@ -40,6 +41,8 @@ def record_metric_choice(state, actor_id, payload, now):
         raise ValueError("invalid_metric_choice")
     provider = payload["provider"]
     native = INSIGHT_METRICS.get(provider, ())
+    if not valid_choice(payload):
+        raise ValueError("follower_conversion_unavailable")
     if (payload["metric"] not in native or payload.get("denominator_metric") not in (None, *native)
             or payload["window"] not in WINDOWS or payload["objective"] not in OBJECTIVES
             or payload.get("denominator_metric") == payload["metric"]
@@ -76,7 +79,7 @@ def _choice(state, binding, manifest, published_at, window):
                 or not 0 < (_stamp(c.get("selected_at")) or 0) <= published_at):
             continue
         native = INSIGHT_METRICS.get(c["provider"], ())
-        if c.get("metric") not in native or c.get("denominator_metric") not in (None, *native) or c.get("metric") == c.get("denominator_metric"):
+        if not valid_choice(c) or c.get("metric") not in native or c.get("denominator_metric") not in (None, *native) or c.get("metric") == c.get("denominator_metric"):
             continue
         valid.append(c)
     return max(valid, key=lambda c: (_stamp(c["selected_at"]), c.get("id", ""))) if valid else None
@@ -105,9 +108,14 @@ def _metric(cur, wid, job, choice, now, published_at):
     values = [float(rows[n][1]) for n in names]
     if any(not math.isfinite(v) or v < 0 for v in values) or any(rows[n][2] != "count" for n in names):
         return {"state": "unavailable", "value": None, "reason": "incompatible_native_measurement"}
+    if len(values) == 2 and (rows[names[0]][4:6] != rows[names[1]][4:6]):
+        return {"state": "unavailable", "value": None, "reason": "mismatched_native_observations"}
     if len(values) == 2 and values[1] == 0:
         return {"state": "unavailable", "value": None, "reason": "zero_denominator"}
-    return {"state": "measured", "value": values[0] / values[1] if len(values) == 2 else values[0],
+    value = values[0] / values[1] if len(values) == 2 else values[0]
+    if not math.isfinite(value):
+        return {"state": "unavailable", "value": None, "reason": "incompatible_native_measurement"}
+    return {"state": "measured", "value": value,
             "native_values": dict(zip(names, values)), "unit": "ratio" if len(names) == 2 else "count",
             "observed_at": max(float(rows[n][4]) for n in names),
             "available_at": max(float(rows[n][5]) for n in names), "metric_receipts": [rows[n][6] for n in names]}
@@ -250,7 +258,8 @@ def report(cur, workspace_id, actor_id, now, *, store, window="24h", limit=100):
                     for b in bindings[:20]:
                         if (b.get("exposure_id") == p["exposure_id"] and b.get("opportunity_id") == p["opportunity_id"]
                                 and b.get("opportunity_revision") == p["opportunity_revision"]
-                                and b.get("trust_receipt_id") == p["trust_receipt_id"]):
+                                and b.get("trust_receipt_id") == p["trust_receipt_id"]
+                                and b.get("context_digest") == p.get("context_digest")):
                             native_key = (str(job_manifest.get("platform", "")).lower(), job_manifest.get("channelId"), job.get("providerReference"))
                             if native_counts[native_key] > 1:
                                 outcome = {"job_id": job.get("id"), "state": "ambiguous_native_publication", "value": None, "treatment_state": "unknown"}
@@ -292,6 +301,7 @@ def report(cur, workspace_id, actor_id, now, *, store, window="24h", limit=100):
                        "format": cohort["format"], "language": cohort["language"], "horizon_hours": WINDOWS[window] / 3600,
                        "metric_definition": contracts.digest(cohort)}, "outcomes": peers})
         target["baseline"] = {k: baseline[k] for k in ("count", "median", "mad", "state", "confounders")}
+        target["comparison"] = comparison(target, baseline, peers)
     return {"schema_version": VERSION, "as_of": opportunities.iso(now), "window": window,
         "denominator": {"exposures": len(exposures), **{k: totals[k] for k in ("accepted", "dismissed", "unaccepted", "unknown")},
                         **{k: unlinked[k] for k in ("accepted_without_exposure", "dismissed_without_exposure", "unknown_without_exposure")}},
@@ -311,16 +321,34 @@ def report(cur, workspace_id, actor_id, now, *, store, window="24h", limit=100):
             "Baselines use earlier available measured posts in this bounded retained sample; promotion must be explicitly absent."]}
 
 
+def comparison(target, baseline, peers):
+    """Descriptive relative difference, never estimated causal or follower lift."""
+    median = baseline.get("median")
+    reason = ("treatment_unknown" if target.get("treatment_state") != "unchanged" else
+              "promotion_unknown" if target.get("paid_promotion") is not False else
+              "insufficient_sample" if baseline["count"] < 5 else
+              "baseline_unavailable" if median is None or not math.isfinite(median) or median <= 0 else None)
+    relative = None if reason else target["value"] / median - 1
+    if relative is not None and not math.isfinite(relative):
+        relative, reason = None, "incompatible_native_measurement"
+    return {"relative_value": relative, "sample_count": baseline["count"], "reason": reason,
+            "evidence_ids": [p["post_id"] for p in peers if p["value"] < target["value"]],
+            "counter_evidence_ids": [p["post_id"] for p in peers if p["value"] >= target["value"]], "causal": False}
+
+
 def hypotheses(descriptor, now):
     """Adapt permitted measured unchanged publications into existing hypothesis logic.
 
     Return candidates for Performance.refresh's existing persistence/adoption flow;
     this function neither persists nor accepts them and creates no new learner.
     """
+    if descriptor.get("window") != "24h":
+        return []
     rows, seen = [], set()
     for e in descriptor.get("exposures", []):
         for o in e.get("outcomes", []):
             if (o.get("state") != "measured" or o.get("treatment_state") != "unchanged" or o.get("paid_promotion") is not False
+                    or o["cohort"].get("window") != "24h"
                     or o["job_id"] in seen or not all(o["cohort"].get(k) for k in ("account", "provider", "language", "format", "definition"))):
                 continue
             seen.add(o["job_id"])

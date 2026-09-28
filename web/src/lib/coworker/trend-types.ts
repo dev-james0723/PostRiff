@@ -505,6 +505,23 @@ export const trendLearningOutcomeStateSchema = z.enum([
 ]);
 const count = z.number().int().nonnegative();
 const finite = z.number().finite();
+export const trendBetaStatusSchema = z.strictObject({
+  state: z.enum(['feature_off', 'workspace_not_allowlisted', 'stored_radar']),
+  radar_available: z.boolean(), acquisition: z.enum(['none', 'unverified']),
+  metric_reads_enabled: z.boolean(), follower_conversion: z.literal('unavailable')
+});
+export const postTrackingSchema = z.strictObject({
+  enabled: z.boolean(), as_of: finite, truncated: z.boolean(),
+  posts: z.array(z.strictObject({
+    job_id: id, provider: text, account: id,
+    horizons: z.array(z.strictObject({
+      window: z.enum(['t0', '1h', '24h', '7d']),
+      state: z.enum(['disabled', 'unsupported', 'disconnected', 'rights_unavailable', 'pending_horizon', 'unscheduled', 'scheduled', 'pending', 'measured', 'unavailable']),
+      due_at: finite.nullable(), reason: text.nullable()
+    }))
+  })).max(120)
+});
+export const performancePostTrackingSchema = z.object({ post_tracking: postTrackingSchema.optional() });
 const learningOutcomeFields = {
   job_id: id,
   treatment_state: z.enum(['unknown', 'changed', 'unchanged']),
@@ -530,6 +547,10 @@ const learningOutcomeFields = {
   }).optional(),
   paid_promotion: z.boolean().nullable().optional(),
   attribution: z.literal('multiple_recommendations_in_one_publication').optional(),
+  comparison: z.strictObject({
+    relative_value: finite.nullable(), sample_count: count, reason: text.nullable(),
+    evidence_ids: strings, counter_evidence_ids: strings, causal: z.literal(false)
+  }).optional(),
   baseline: z.strictObject({
     count, median: finite.nullable(), mad: finite.nullable(),
     state: z.enum(['unknown', 'descriptive']), reason: text.optional(), confounders: strings.optional()

@@ -213,16 +213,15 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False, 
                             transport.prepare_code_input()
                             await transport.play_prompt('dial-inbound-retry')
                 if not call_id or not await transport.authorize_inbound():
-                    await transport.end_call()
                     if call_id:
-                        await asyncio.to_thread(phone.hangup, call_id, live_seconds=0, reason='declined')
+                        await asyncio.to_thread(phone.finish, call_id, 'declined', live_seconds=0)
+                    await transport.end_call()
                     return
             else:
                 call_id = await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta)
                 if not await transport.accept_call():
+                    await asyncio.to_thread(phone.finish, call_id, 'declined', live_seconds=0)
                     await transport.end_call()
-                    await asyncio.to_thread(phone.hangup, call_id, live_seconds=0, reason='declined')
-                    await asyncio.to_thread(phone.record_live_usage, call_id, 0)
                     return
                 await asyncio.to_thread(claim_dial_stream, provider, call_ref, meta, accepted=True)
             controller = await asyncio.to_thread(PhoneSessionController, phone, call_id)

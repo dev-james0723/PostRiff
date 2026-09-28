@@ -17,7 +17,7 @@ const pass = name => { results.push({ name, pass: true }); console.log('PASS', n
 function learningFixture() {
  const stamp = new Date().toISOString();
  const choice = {selection_digest:'synthetic-selection',channel_id:'synthetic-channel',provider:'threads',metric:'views',definition_version:'synthetic-native-v1',window:'24h',objective:'reach'};
- const option = {selection_digest:choice.selection_digest,source_id:'synthetic-source',source_label:'Saved trend idea',channel_id:choice.channel_id,channel_label:'Demo data: private account 🎵',provider:choice.provider,metrics:['views','likes','replies'],definition_version:choice.definition_version,windows:['1h','24h','7d'],objectives:['reach','shareability','conversation','follower_conversion','custom_metric'],saved_choice:null};
+ const option = {selection_digest:choice.selection_digest,source_id:'synthetic-source',source_label:'Saved trend idea',channel_id:choice.channel_id,channel_label:'Demo data: private account 🎵',provider:choice.provider,metrics:['views','likes','replies'],definition_version:choice.definition_version,windows:['1h','24h','7d'],objectives:['reach','shareability','conversation','custom_metric'],saved_choice:null};
  const report = {
   schema_version:'rafii.trend-learning.v1',as_of:stamp,window:'24h',
   denominator:{exposures:8,accepted:4,dismissed:1,unaccepted:2,unknown:1,accepted_without_exposure:2,dismissed_without_exposure:1,unknown_without_exposure:1},
@@ -179,7 +179,7 @@ async function browserChecks() {
     return send(fixtures().envelope(result));
    }
    if(p===prefix+'/overlays')return send({voice:[],brand:[],strategy:[]});
-   if(p===prefix+'/status')return send({flags,weekly:{recipes:0,weeks:0},notifications:{enabled:false}});
+   if(p===prefix+'/status')return send({flags,trend_beta:{state:'stored_radar',radar_available:true,acquisition:'none',metric_reads_enabled:false,follower_conversion:'unavailable'},weekly:{recipes:0,weeks:0},notifications:{enabled:false}});
    if(p==='/api/auth/config')return send({provider:'dev',execution:'dev-synthetic',flow:'dev'});
    if(p==='/api/bootstrap')return send({workspaceId:wid});
    if(p==='/api/catalog')return send({authMode:'dev',execution:'dev-synthetic',platforms:['Threads'],languages:['en'],presets:[],voices:[],phase2:true,templates:[],routes:[],profileMetadata:{}});
