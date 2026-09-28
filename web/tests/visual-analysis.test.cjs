@@ -73,10 +73,11 @@ function analysisFixtures({ workspace = 'synthetic-workspace', trend } = {}) {
   const base = fixtures();
   trend = clone(trend ?? base.trend);
   const asOf = new Date().toISOString();
-  const executables = [process.env.TREND_VISUAL_TEST_PYTHON, path.join(root, '.venv/bin/python'),
-    '/Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python'].filter(Boolean);
-  const executable = executables.find((p) => fs.existsSync(p));
-  assert.ok(executable, 'Python with existing project dependencies required; set TREND_VISUAL_TEST_PYTHON. No installs or DB calls.');
+  const localPython = path.join(root, '.venv/bin/python');
+  // CI installs the pinned dependencies into setup-python's PATH interpreter.
+  // An explicit override remains authoritative; a missing one fails below.
+  const executable = process.env.TREND_VISUAL_TEST_PYTHON ||
+    (fs.existsSync(localPython) ? localPython : 'python3');
   const result = spawnSync(executable, ['-c', python], { cwd: root, encoding: 'utf8',
     env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', PYTHONPATH: `${root}/src:${root}/tests` },
     input: JSON.stringify({ workspace, trend_id: trend.id, receipt_id: trend.trust_receipt_id, as_of: asOf }),
