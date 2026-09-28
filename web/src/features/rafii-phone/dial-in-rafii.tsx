@@ -1,12 +1,11 @@
 'use client';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import type { PhoneInboundCode, PhoneSettingsData } from '@/lib/phone/types';
-import { parseCreditLimit } from '@/features/agent/credit-limit';
 
 type Props = { conversationId?: string | null; onConversation?: (id: string) => void };
 
@@ -24,11 +23,9 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
   const [ticket, setTicket] = useState<PhoneInboundCode | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [limit, setLimit] = useState('');
   const [now, setNow] = useState(() => Date.now() / 1000);
   const mounted = useRef(true);
   const notified = useRef<string | null>(null);
-  const creditId = useId();
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (!ticket) return;
@@ -50,9 +47,8 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
       onConversation?.(call.conversationId);
     }
   }, [status.data?.call, onConversation, client, workspaceId]);
-  const maximum = parseCreditLimit(limit);
   const spending = inbound.spending;
-  const creditReady = !spending.usesCredits || (maximum !== null && maximum >= spending.ceilingMilliCredits && (spending.availableMilliCredits ?? 0) >= spending.ceilingMilliCredits);
+  const creditReady = !spending.usesCredits || ((spending.availableMilliCredits ?? 0) >= spending.ceilingMilliCredits);
   const seconds = ticket ? Math.max(0, Math.ceil(ticket.expiresAt - now)) : 0;
   const usable = Boolean(ticket?.code && seconds > 0 && (!status.data || status.data.state === 'ready') && !status.isError);
   useEffect(() => {
@@ -63,7 +59,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
     if (busy || !creditReady) return;
     setBusy(true); setError(''); setTicket(null);
     try {
-      const result = await api.phoneInboundCode(workspaceId, { conversationId, ...(spending.usesCredits && maximum !== null ? { maxMilliCredits: maximum } : {}) });
+      const result = await api.phoneInboundCode(workspaceId, { conversationId, ...(spending.usesCredits ? { useAvailableCredits: true } : {}) });
       if (mounted.current) { setNow(Date.now() / 1000); setTicket(result); }
     } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Couldn’t create a phone sign-in code.'); }
     finally { if (mounted.current) setBusy(false); }
@@ -80,8 +76,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
     <div className='mt-3 flex flex-col items-start gap-3'>
       <p>Call {inbound.phoneNumber} and enter a one-time code to reach your Rafii in this workspace. {conversationId ? 'Continue this conversation.' : 'A new conversation will appear here when you connect.'}</p>
       {spending.usesCredits && <>
-        <label htmlFor={creditId} className='flex flex-wrap items-center gap-2'>Maximum credits for your dial-in call<input id={creditId} aria-label='Maximum credits for your dial-in call' inputMode='decimal' value={limit} onChange={(e) => setLimit(e.target.value)} disabled={busy || usable} className='rafii-field min-h-11 w-28 rounded-lg px-3 text-base' placeholder='Set a limit' /></label>
-        <p className='text-muted-foreground text-xs'>Phone and voice time can hold up to {(Math.ceil(spending.ceilingMilliCredits / 100) / 10).toFixed(1)} credits when you connect. Rafii’s reasoning uses the remaining limit. Unused credits return after settlement; paid tasks keep their approval rules.</p>
+        <p className='text-muted-foreground text-xs'>Calling uses your available credits for phone time, voice and Rafii’s reasoning, reserved a minute at a time. Calls last up to one hour, or until there aren’t enough credits to continue. Unused credits return after settlement; provider account limits and paid-task approvals still apply.</p>
       </>}
       {usable && ticket ? <div className='w-full space-y-3 rounded-lg bg-muted/40 p-3'>
         <p className='text-xs'>Your one-time phone sign-in code</p>

@@ -8,7 +8,7 @@ import os
 
 from postriff_alpha.domain import AlphaError
 
-from . import contracts, inbound, store
+from . import contracts, inbound, resume, store
 from .diagnostics import report_failure
 from .session import PhoneSessionController, bridge
 from .providers.twilio import TwilioMediaTransport
@@ -141,7 +141,7 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             return
         await socket.accept()
         controller, transport, call_id = None, None, None
-        incoming = False
+        incoming = reconnecting = False
         try:
             import json
             async with asyncio.timeout(10):
@@ -152,12 +152,15 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             direction = meta.get('direction')
             if not (meta.get('type') == 'call_connected' and meta.get('call_id') == call_ref and
                     direction in ('outbound','inbound') and meta.get('to' if direction == 'inbound' else 'from') == provider.originating_number and
-                    meta.get('formats') == {'inbound':'mulaw_8000','outbound':'mulaw_8000'} and not meta.get('reconnect')):
+                    meta.get('formats') == {'inbound':'mulaw_8000','outbound':'mulaw_8000'} and type(meta.get('reconnect',False)) is bool):
                 raise AlphaError('Invalid Dial phone stream.', 403)
-            # Starts keepalive before DB/model initialization; never reinitialize a claimed call on reconnect.
+            # Keepalive precedes DB/model startup. Only a committed handoff admits a reconnect.
             incoming = direction == 'inbound'
-            transport = DialMediaTransport(socket, collect_code=incoming)
-            if incoming:
+            reconnecting = meta.get('reconnect') is True
+            transport = DialMediaTransport(socket, collect_code=incoming, require_acceptance=not reconnecting)
+            if reconnecting:
+                call_id = await asyncio.to_thread(resume.claim,phone,call_ref,meta)
+            elif incoming:
                 caller = meta.get('from')
                 if not isinstance(caller, str) or not 1 <= len(caller) <= 200:
                     raise AlphaError('Invalid Dial caller metadata.', 403)
@@ -207,7 +210,9 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
                 except Exception as failure:
                     report_failure(call_id, 'live_bridge', failure)
             try:
-                if transport:
+                if reconnecting and not call_id:
+                    pass  # A rejected competing reconnect cannot hang up the admitted stream.
+                elif transport:
                     await transport.end_call()
                 else:
                     await socket.send_json({'type':'end_call'})
@@ -218,7 +223,7 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
                 if controller is None:
                     await asyncio.to_thread(phone.record_live_usage, call_id, 0)
         finally:
-            if incoming:
+            if incoming and not (reconnecting and not call_id) and not (controller and controller.handed_off):
                 await asyncio.to_thread(inbound.ended, phone, call_ref)
             if transport:
                 await transport.close()

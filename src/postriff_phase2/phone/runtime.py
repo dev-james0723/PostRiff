@@ -35,7 +35,7 @@ def cron(hosted, max_items=10):
         inbound.cleanup(phone, cur)
         cur.execute('SELECT id::text,state FROM public.pr_phone_calls WHERE state IN (\'requested\',\'dialing\',\'ambiguous\',\'ringing\',\'ending\') ORDER BY requested_at LIMIT %s', (max_items,))
         work = cur.fetchall()
-        cur.execute('SELECT id::text FROM public.pr_phone_calls WHERE state IN (\'answered\',\'live\') AND answered_at+make_interval(secs=>max_seconds)<now() LIMIT %s', (max_items,))
+        cur.execute('SELECT id::text FROM public.pr_phone_calls WHERE state IN (\'answered\',\'live\') AND answered_at+make_interval(secs=>least(max_seconds,coalesce(funded_seconds,max_seconds)))<now() LIMIT %s', (max_items,))
         expired = [r[0] for r in cur.fetchall()]
     for call_id in expired:
         phone.hangup(call_id)

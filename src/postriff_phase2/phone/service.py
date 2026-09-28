@@ -198,7 +198,8 @@ class PhoneService:
                 configured=bool(self.provider and self.provider.configured and (not self.provider.real or self.config.telephony_rate > 0)),
                 live_configured=route.available and agent.cfg.enabled('RAFII_AGENT_V2_ENABLED'), flags=self.config.public(), event_type=event_type,
                 daily_calls=int(count if kind == 'explicit' else automatic), recent_equivalent=any(r[1] == reason and r[2] for r in recent),
-                active=any(r[0] not in contracts.TERMINAL for r in recent), reserved_cost=int(reserved), estimate=estimate, daily_budget=self.config.daily_budget,
+                active=any(r[0] not in contracts.TERMINAL for r in recent), reserved_cost=int(reserved), estimate=estimate,
+                daily_budget=self.config.daily_budget,
                 direction=direction)
             if blocker:
                 raise AlphaError(contracts.failure_message(blocker), 409, code=blocker)
@@ -215,6 +216,7 @@ class PhoneService:
                 conversation_id = cur.fetchone()[0]
             live_authority, tel_authority = billing.authorities(self, cur, workspace_id, principal, row[0],
                 maximum=payload.get('maxMilliCredits') if kind == 'explicit' else prefs['maxMilliCreditsPerCall'],
+                use_available=kind == 'explicit' and payload.get('useAvailableCredits') is True,
                 conversation_id=conversation_id, number_hash=identity['hash'], kind=kind, reason=reason, costs=(estimate_live, estimate_tel))
             call_id = str(uuid.uuid4())
             agent_style = style.load(cur, principal)
@@ -222,20 +224,23 @@ class PhoneService:
             artifact = {'voice': {'state': 'connecting', 'locale': locale, 'voice': voice, 'startedAt': now, 'transcript': [], 'transport': 'phone'}}
             if live_authority or tel_authority:
                 artifact['voice']['creditLimitMilliCredits'] = payload.get('maxMilliCredits') if kind == 'explicit' else prefs['maxMilliCreditsPerCall']
+                artifact['voice']['useAvailableCredits'] = kind == 'explicit' and payload.get('useAvailableCredits') is True
+            artifact['voice']['meterRates'] = [agent.cfg.live_usd_micro_per_minute, self.config.telephony_rate]
             cur.execute('INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,artifact) '
                         'VALUES(%s,%s,%s,\'running\',%s,\'quick\',%s,%s,%s,%s::jsonb) RETURNING id::text',
                         (conversation_id, workspace_id, principal, route.model, hashlib.sha256(call_id.encode()).hexdigest(), hashlib.sha256(b'phone-v1').hexdigest(), 'voice:phone:' + call_id, json.dumps(artifact)))
             run_id = cur.fetchone()[0]
             live_res = self.hosted.ledger.reserve(cur, workspace_id, principal, 'tool', estimate_live, 'phone-live:' + call_id, charge_batch=False,
-                         provider='openai', model=route.model, run_id=run_id, credit_authority=live_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds})
+                         provider='openai', model=route.model, run_id=run_id, credit_authority=live_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds, 'phoneCallId':call_id})
             tel_res = self.hosted.ledger.reserve(cur, workspace_id, principal, 'tool', estimate_tel, 'phone-tel:' + call_id, charge_batch=False,
-                         provider=self.provider.name, model='pstn', run_id=run_id, credit_authority=tel_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds})
+                         provider=self.provider.name, model='pstn', run_id=run_id, credit_authority=tel_authority, meta={'via': 'rafii_phone', 'capSeconds': self.config.cap_seconds, 'phoneCallId':call_id})
             artifact['voice']['reservationId'] = live_res['reservationId']
             cur.execute('UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id=%s', (json.dumps(artifact), run_id))
             cur.execute('INSERT INTO public.pr_phone_calls(id,user_id,workspace_id,conversation_id,voice_run_id,kind,reason_key,provider,state,idempotency_key,number_hash,max_seconds,'
                         'live_reservation_id,telephony_reservation_id,reserved_usd_micro,requested_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,\'requested\',%s,%s,%s,%s,%s,%s,to_timestamp(%s))',
                         (call_id, principal, workspace_id, conversation_id, run_id, kind, reason, self.provider.name, key, identity['hash'], self.config.cap_seconds,
                          live_res['reservationId'], tel_res['reservationId'], estimate, now))
+            cur.execute('UPDATE public.pr_phone_calls SET funded_seconds=60 WHERE id=%s', (call_id,))
             if _inbound:
                 cur.execute("UPDATE public.pr_phone_calls SET direction='inbound',state='answered',provider_call_ref=%s,"
                             'answered_at=to_timestamp(%s),media_claimed_at=to_timestamp(%s) WHERE id=%s', (_inbound[0], now, now, call_id))
@@ -290,9 +295,13 @@ class PhoneService:
 
     def finish(self, call_id, state, duration=None, *, live_seconds=None):
         with self.hosted.connection_factory() as db, db.cursor() as cur:
+            billing.lock_workspace(cur, call_id)
             value = store.call(cur, call_id, lock=True)
             if not value:
                 return
+            cur.execute("SELECT artifact->'voice'->'meterRates' FROM public.pr_agent_runs WHERE id=%s", (value['voice_run_id'],))
+            rates = cur.fetchone()
+            live_rate, tel_rate = (rates[0] if rates and rates[0] else [self.agent().cfg.live_usd_micro_per_minute,self.config.telephony_rate])
             if value['failure_class'] == 'live_failed':
                 state = 'failed'
             live_seconds = live_seconds if live_seconds is not None else value['live_usage_seconds']
@@ -300,14 +309,14 @@ class PhoneService:
                 if duration is not None:
                     # A signed final duration may follow our hang-up acknowledgment. Keep history and held usage reconciled.
                     seconds = min(value['max_seconds'],max(0,float(value['ended_at'] or self.clock())-float(value['answered_at'] or self.clock())))
-                    tel_cost = math.ceil(max(seconds,duration)/60)*self.config.telephony_rate
-                    self.hosted.ledger.settle(cur,value['workspace_id'],value['telephony_reservation_id'],'completed',tel_cost)
+                    tel_cost = math.ceil(max(seconds,duration)/60)*tel_rate
+                    billing.settle(self,cur,value,'telephony','completed',tel_cost)
                     cur.execute('UPDATE public.pr_phone_calls SET duration_seconds=%s,telephony_cost_usd_micro=coalesce(telephony_cost_usd_micro,%s) WHERE id=%s',(duration,tel_cost,call_id))
                 # Twilio's completed callback can arrive before GPT-Live's final usage event.
                 if live_seconds is not None and value['media_claimed_at']:
                     seconds = min(value['max_seconds'],max(0,float(value['ended_at'] or self.clock())-float(value['answered_at'] or self.clock())))
-                    cost = math.ceil(max(seconds+15,live_seconds)*self.agent().cfg.live_usd_micro_per_minute/60)
-                    self.hosted.ledger.settle(cur,value['workspace_id'],value['live_reservation_id'],'completed',cost)
+                    cost = math.ceil(max(seconds+15,live_seconds)*live_rate/60)
+                    billing.settle(self,cur,value,'live','completed',cost)
                     cur.execute('UPDATE public.pr_phone_calls SET live_cost_usd_micro=%s,live_usage_seconds=%s WHERE id=%s',(cost,live_seconds,call_id))
                 db.commit()
                 return
@@ -316,14 +325,14 @@ class PhoneService:
             store.set_state(cur, value, state, duration if duration is not None else math.ceil(seconds))
             # Provider duration can be larger than local observed duration; never reduce the charge from a client hint.
             tel_seconds = max(seconds, duration or 0)
-            tel_cost = math.ceil(tel_seconds/60)*self.config.telephony_rate
+            tel_cost = math.ceil(tel_seconds/60)*tel_rate
             tel_unknown = bool(self.provider and self.provider.real and value['provider_call_ref'] and duration is None
                                and state not in ('busy','declined','no_answer','cancelled'))
             billable_live = max(seconds + 15, live_seconds or 0) if value['media_claimed_at'] else 0
-            voice_cost = math.ceil(billable_live * self.agent().cfg.live_usd_micro_per_minute / 60)
+            voice_cost = math.ceil(billable_live * live_rate / 60)
             unknown = bool(value['media_claimed_at'] and live_seconds is None)
-            self.hosted.ledger.settle(cur, value['workspace_id'], value['live_reservation_id'], 'unknown' if unknown else 'completed', None if unknown else voice_cost)
-            self.hosted.ledger.settle(cur, value['workspace_id'], value['telephony_reservation_id'], 'unknown' if tel_unknown else 'completed', None if tel_unknown else tel_cost)
+            billing.settle(self, cur, value, 'live', 'unknown' if unknown else 'completed', None if unknown else voice_cost)
+            billing.settle(self, cur, value, 'telephony', 'unknown' if tel_unknown else 'completed', None if tel_unknown else tel_cost)
             cur.execute('UPDATE public.pr_phone_calls SET live_cost_usd_micro=%s,telephony_cost_usd_micro=%s,live_usage_seconds=%s,billing_basis=%s WHERE id=%s',
                         (None if unknown else voice_cost, None if tel_unknown else tel_cost, live_seconds, 'bounded estimate; provider duration rounded to whole minutes at configured rate ceiling, Live server clock', call_id))
             cur.execute('UPDATE public.pr_agent_runs SET status=%s,artifact=jsonb_set(artifact,\'{voice,state}\',%s::jsonb),updated_at=now() WHERE id=%s',
@@ -362,7 +371,7 @@ class PhoneService:
         cur.execute('SELECT state,reason_key FROM public.pr_phone_calls WHERE user_id=%s AND (NOT(state=ANY(%s)) OR requested_at>now()-interval \'5 minutes\')',
                     (principal,list(contracts.TERMINAL)))
         recent = cur.fetchall()
-        estimate = self.agent().cfg.live_usd_micro_per_minute*math.ceil((self.config.cap_seconds+15)/60)+self.config.telephony_rate*math.ceil(self.config.cap_seconds/60)
+        estimate = sum(billing.estimates(self))
         return {'prefs':prefs,'verified':bool(identity and identity['verified']),'membership':recipient['membership'].allows('edit'),
                 'configured':bool(self.provider and self.provider.configured),'live_configured':self.agent().cfg.route('voice_front_end',reason='phone attention').available
                     and self.agent().cfg.enabled('RAFII_AGENT_V2_ENABLED'),'flags':self.config.public(),'daily_calls':int(count),
@@ -393,13 +402,13 @@ class PhoneService:
                 identity = store.number(cur, value['user_id'])
                 prefs = store.prefs(cur, value['user_id'], value['workspace_id'])
             is_inbound = bool(current and current.get('direction') == 'inbound')
-            if not current or current['state'] not in ('answered','live'):
+            if not current or current['state'] not in ('answered','live') or current['media_generation'] != value['media_generation'] or current['media_resume_until']:
                 raise AlphaError('This phone session ended.', 409, code='phone_ended')
             if not is_inbound and (not identity or not identity['verified'] or identity['hash'] != current['number_hash'] or not prefs['enabled']):
                 raise AlphaError('This phone session ended.', 409, code='phone_ended')
             if not self.config.enabled('RAFII_PHONE_ENABLED') or not self.config.enabled('RAFII_PHONE_INBOUND_ENABLED' if is_inbound else 'RAFII_PHONE_OUTBOUND_ENABLED'):
                 raise AlphaError('Phone Mode is disabled.', 403)
-            if current['answered_at'] and self.clock() >= float(current['answered_at']) + current['max_seconds']:
+            if current['answered_at'] and self.clock() >= float(current['answered_at']) + min(current['max_seconds'], current['funded_seconds'] or current['max_seconds']):
                 raise AlphaError('The phone session reached its time limit.', 409, code='phone_expired')
         repository, capability = principal_repository(self.hosted, value['workspace_id'], value['user_id'], 'edit', check)
         scoped = copy.copy(self.hosted)

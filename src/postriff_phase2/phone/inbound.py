@@ -31,7 +31,7 @@ def require_available(phone):
 
 def issue(phone, workspace_id, token, payload):
     require_available(phone)
-    if not isinstance(payload, dict) or set(payload) - {'conversationId', 'maxMilliCredits'}:
+    if not isinstance(payload, dict) or set(payload) - {'conversationId', 'maxMilliCredits', 'useAvailableCredits'}:
         raise AlphaError('Send valid phone sign-in options.', 400)
     code = f'{secrets.randbelow(10 ** CODE_DIGITS):0{CODE_DIGITS}d}'
     now = phone.clock()
@@ -51,16 +51,16 @@ def issue(phone, workspace_id, token, payload):
         spending = billing.spending(phone, cur, workspace_id, direction='inbound')
         if maximum is not None and (type(maximum) is not int or not 0 <= maximum <= 100_000_000):
             raise AlphaError('Choose a valid call credit limit.', 400)
-        if spending['usesCredits'] and (type(maximum) is not int or maximum < spending['ceilingMilliCredits']):
+        if spending['usesCredits'] and payload.get('useAvailableCredits') is not True and (type(maximum) is not int or maximum < spending['ceilingMilliCredits']):
             raise AlphaError('Confirm a credit limit covering phone and voice time.', 402, code='phone_credit_limit')
         if spending['usesCredits'] and spending['availableMilliCredits'] < spending['ceilingMilliCredits']:
             raise AlphaError('Not enough available credits for this call.', 402, code='phone_credit_balance')
         # One outstanding code per person across workspaces. New code explicitly replaces the previous one.
         cur.execute('UPDATE public.pr_phone_inbound_codes SET revoked_at=to_timestamp(%s) '
                     'WHERE user_id=%s AND consumed_at IS NULL AND revoked_at IS NULL', (now, principal))
-        cur.execute('INSERT INTO public.pr_phone_inbound_codes(user_id,workspace_id,conversation_id,code_hash,maximum_millicredits,created_at,expires_at) '
-                    'VALUES(%s,%s,%s,%s,%s,to_timestamp(%s),to_timestamp(%s)) RETURNING id::text',
-                    (principal, workspace_id, conversation, digest(phone, 'code', code), maximum, now, now + CODE_SECONDS))
+        cur.execute('INSERT INTO public.pr_phone_inbound_codes(user_id,workspace_id,conversation_id,code_hash,maximum_millicredits,use_available_credits,created_at,expires_at) '
+                    'VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s),to_timestamp(%s)) RETURNING id::text',
+                    (principal, workspace_id, conversation, digest(phone, 'code', code), maximum, payload.get('useAvailableCredits') is True, now, now + CODE_SECONDS))
         code_id = cur.fetchone()[0]
     # Only this response contains the code. Never put it in call history, query responses or diagnostics.
     return {'id': code_id, 'code': code, 'expiresAt': now + CODE_SECONDS,
@@ -132,18 +132,18 @@ def authenticate(phone, call_ref, code):
         if not isinstance(code, str) or not re.fullmatch(r'[0-9]{12}', code):
             return None
         fingerprint = digest(phone, 'code', code)
-        cur.execute('SELECT user_id::text,workspace_id::text,conversation_id::text,maximum_millicredits '
+        cur.execute('SELECT user_id::text,workspace_id::text,conversation_id::text,maximum_millicredits,use_available_credits '
                     'FROM public.pr_phone_inbound_codes WHERE code_hash=%s AND consumed_at IS NULL '
                     'AND revoked_at IS NULL AND expires_at>to_timestamp(%s)', (fingerprint, now))
         ticket = cur.fetchone()
     if not ticket:
         return None
     from .runtime import principal_phone
-    user, workspace, conversation, maximum = ticket
+    user, workspace, conversation, maximum, use_available = ticket
     scoped, capability = principal_phone(phone, workspace, user)
     try:
         return scoped.request(workspace, capability, {'idempotencyKey': 'inbound:' + hashlib.sha256(call_ref.encode()).hexdigest(),
-            'conversationId': conversation, 'maxMilliCredits': maximum}, dispatch=False,
+            'conversationId': conversation, 'maxMilliCredits': maximum, 'useAvailableCredits':use_available}, dispatch=False,
             _inbound=(call_ref, fingerprint))['id']
     except AlphaError:
         return None  # Same public failure for unknown code, revoked membership, active call and insufficient budget.

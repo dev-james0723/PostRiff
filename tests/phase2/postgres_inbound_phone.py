@@ -123,10 +123,10 @@ begin('call_guesses')
 for _ in range(3): assert inbound.authenticate(phone, 'call_guesses', '0000') is None
 assert inbound.authenticate(phone, 'call_guesses', t['code']) is None
 u, w = new_user(); t = inbound.issue(phone, w, u, {})
-begin('call_budget'); phone.config.values['RAFII_PHONE_DAILY_USD_MICRO'] = '0'
+begin('call_budget'); sql("UPDATE pr_budgets SET stop_usd_micro=0 WHERE scope=%s", 'workspace:'+w)
 assert inbound.authenticate(phone, 'call_budget', t['code']) is None
 assert sql('SELECT count(*) FROM pr_phone_calls WHERE user_id=%s', u) == [(0,)]
-phone.config.values.pop('RAFII_PHONE_DAILY_USD_MICRO')
+approve_budgets(connection, w)
 u, w = new_user(); t = inbound.issue(phone, w, u, {})
 begin('call_race1'); begin('call_race2')
 with ThreadPoolExecutor(max_workers=2) as pool:
@@ -231,7 +231,13 @@ with TestClient(app) as client:
         with client.websocket_connect('/api/phone/dial/media/' + ref, headers={'X-Dial-Signature': sign(values['DIAL_AUDIO_SIGNING_SECRET'], ref.encode())}) as socket:
             socket.send_json({'type': 'call_connected', 'call_id': ref, 'direction': 'inbound', 'from': '+12025550199', 'to': '+12025550100',
                               'formats': {'inbound': 'mulaw_8000', 'outbound': 'mulaw_8000'}, **mutation})
-            assert socket.receive_json() == {'type': 'end_call'}
+            if mutation.get('reconnect'):
+                try:
+                    socket.receive_json();raise AssertionError('Rejected reconnect must close')
+                except WebSocketDisconnect:
+                    pass
+            else:
+                assert socket.receive_json() == {'type': 'end_call'}
     assert len(connections) == 1
 print('PASS signed inbound greeting/keypad → same real agent draft edit → audio reply; no publishing; no secret/audio before auth; final event dedupe and usage')
 

@@ -12,7 +12,8 @@ class PhoneConfig:
 
     @property
     def cap_seconds(self):
-        return min(600, max(60, int(self.values.get('RAFII_PHONE_MAX_SECONDS', 600))))
+        # Product maximum. The former 60-second test environment value is obsolete.
+        return 3600
 
     @property
     def telephony_rate(self):
