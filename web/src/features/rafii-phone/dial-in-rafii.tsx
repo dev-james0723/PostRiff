@@ -3,11 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { needsFreshSignIn } from '@/lib/auth/step-up';
+import { useSignInAgain } from '@/lib/auth/use-sign-in-again';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { usePhoneSettings } from '@/lib/phone/hooks';
 import type { PhoneInboundCode, PhoneSettingsData } from '@/lib/phone/types';
 
 type Props = { conversationId?: string | null; onConversation?: (id: string) => void };
+type DialInError = { message: string; requiresFreshSignIn: boolean };
 
 export function DialInRafii(props: Props) {
   const { workspaceId } = useWorkspace();
@@ -20,9 +23,11 @@ export function DialInRafii(props: Props) {
 function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: Props & { workspaceId: string; inbound: NonNullable<PhoneSettingsData['inbound']> }) {
   const { api } = useWorkspace();
   const client = useQueryClient();
+  const signInAgain = useSignInAgain();
   const [ticket, setTicket] = useState<PhoneInboundCode | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState<DialInError | null>(null);
   const [now, setNow] = useState(() => Date.now() / 1000);
   const mounted = useRef(true);
   const notified = useRef<string | null>(null);
@@ -57,19 +62,27 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
 
   async function generate() {
     if (busy || !creditReady) return;
-    setBusy(true); setError(''); setTicket(null);
+    setBusy(true); setError(null); setTicket(null);
     try {
       const result = await api.phoneInboundCode(workspaceId, { conversationId, ...(spending.usesCredits ? { useAvailableCredits: true } : {}) });
       if (mounted.current) { setNow(Date.now() / 1000); setTicket(result); }
-    } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Couldn’t create a phone sign-in code.'); }
+    } catch (err) {
+      if (mounted.current) setError({ message: err instanceof Error ? err.message : 'Couldn’t create a phone sign-in code.', requiresFreshSignIn: needsFreshSignIn(err) });
+    }
     finally { if (mounted.current) setBusy(false); }
   }
   async function cancel() {
     if (!ticket || busy) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(null);
     try { await api.phoneInboundRevoke(workspaceId, ticket.id); if (mounted.current) setTicket(null); }
-    catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Couldn’t cancel the code.'); }
+    catch (err) { if (mounted.current) setError({ message: err instanceof Error ? err.message : 'Couldn’t cancel the code.', requiresFreshSignIn: needsFreshSignIn(err) }); }
     finally { if (mounted.current) setBusy(false); }
+  }
+  async function reauthenticate() {
+    if (signingOut) return;
+    setSigningOut(true);
+    const navigating = await signInAgain();
+    if (!navigating && mounted.current) setSigningOut(false);
   }
   return <details aria-live='off' className='w-full rounded-xl border border-border/60 p-3 text-sm'>
     <summary className='rafii-focus min-h-11 cursor-pointer content-center font-medium'>Call Rafii by phone</summary>
@@ -90,7 +103,7 @@ function DialInPanel({ workspaceId, inbound, conversationId, onConversation }: P
         <Button variant='glass' size='sm' className='min-h-11' disabled={busy || !creditReady} onClick={() => void generate()}>{busy ? 'Creating code…' : 'Create phone sign-in code'}</Button>
       </>}
       <p className='text-muted-foreground text-xs'>Spoken codes are transcribed by OpenAI to verify this call; use the keypad if you prefer. The code lasts five minutes and works once. Creating a code sends no text and places no call. Your carrier may charge for the call.</p>
-      {error && <p className='text-destructive' role='alert'>{error}</p>}
+      {error && <p className='text-destructive' role='alert'>{error.requiresFreshSignIn ? <><button type='button' disabled={signingOut} className='rafii-focus cursor-pointer rounded-sm border-0 bg-transparent p-0 font-medium text-inherit underline underline-offset-4 disabled:cursor-wait disabled:opacity-70' onClick={() => void reauthenticate()}>{signingOut ? 'Signing out…' : 'Sign in again'}</button>{' '}to confirm this sensitive action.</> : error.message}</p>}
     </div>
   </details>;
 }
