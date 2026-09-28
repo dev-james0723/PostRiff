@@ -257,11 +257,26 @@ class PhoneService:
         self.finish(call_id, reason or ('completed' if value['answered_at'] else 'cancelled'), live_seconds=live_seconds)
         return {'ended': True}
 
+    def record_media_failure(self, call_id):
+        """Keep a voice failure visible even if the carrier's completed webhook wins the race."""
+        with self.hosted.connection_factory() as db, db.cursor() as cur:
+            value = store.call(cur, call_id, lock=True)
+            if not value:
+                return
+            cur.execute("UPDATE public.pr_phone_calls SET failure_class='live_failed', "
+                        "state=CASE WHEN state='completed' THEN 'failed' ELSE state END WHERE id=%s", (call_id,))
+            cur.execute("UPDATE public.pr_agent_runs SET status='failed', "
+                        "artifact=jsonb_set(artifact,'{voice,state}','\"failed\"'::jsonb),updated_at=now() WHERE id=%s",
+                        (value['voice_run_id'],))
+            db.commit()
+
     def finish(self, call_id, state, duration=None, *, live_seconds=None):
         with self.hosted.connection_factory() as db, db.cursor() as cur:
             value = store.call(cur, call_id, lock=True)
             if not value:
                 return
+            if value['failure_class'] == 'live_failed':
+                state = 'failed'
             live_seconds = live_seconds if live_seconds is not None else value['live_usage_seconds']
             if value['state'] in contracts.TERMINAL:
                 if duration is not None:

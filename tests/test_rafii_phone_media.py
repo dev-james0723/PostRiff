@@ -8,6 +8,9 @@ import unittest
 from unittest.mock import patch
 
 from openai import AsyncOpenAI
+from openai.types.live.instructions_append_event_param import InstructionsAppendEventParam
+from openai.types.live.commentary_append_event_param import CommentaryAppendEventParam
+from pydantic import TypeAdapter
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.server import serve
@@ -44,6 +47,8 @@ class MediaDiagnosticTest(unittest.TestCase):
         self.assertIn('"errorParam": "other"', output)
         self.assertIn('"phase": "unknown"', output)
         self.assertEqual(output.count(CALL_ID), 1)
+        self.assertEqual(metadata('live_event', event={'error': {'code': 'missing_required_parameter', 'param': 'delegation_id'}}),
+                         {'phase': 'live_event', 'errorCode': 'missing_required_parameter', 'errorParam': 'delegation_id'})
         self.assertEqual(metadata('live_event', event={'error': {'code': {'secret': PRIVATE}}}),
                          {'phase': 'live_event', 'errorCode': 'other'})
 
@@ -67,7 +72,9 @@ class Controller:
         self.call = {'workspace_id': 'local-workspace', 'kind': 'explicit', 'max_seconds': 10}
         self.capability = 'local-capability'
         self.runtime = SimpleNamespace(service=SimpleNamespace(get=lambda *_: None))
-        self.service = SimpleNamespace(hangup=self.hangup, finish=self.finish, record_live_usage=self.record)
+        self.media_failures = []
+        self.service = SimpleNamespace(hangup=self.hangup, finish=self.finish, record_live_usage=self.record,
+                                       record_media_failure=self.media_failures.append)
         self.started_ids, self.hangups, self.finishes, self.transcripts = [], [], [], []
         self.user_text = ''
 
@@ -126,12 +133,37 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(received[0]['type'], 'session.start')
         self.assertEqual(received[0]['session']['audio']['format'], {'type': 'audio/pcmu', 'rate': 8000})
         self.assertFalse(received[0]['session']['store'])
-        self.assertEqual(received[1]['type'], 'session.instructions.append')
+        TypeAdapter(InstructionsAppendEventParam).validate_python(received[1])
+        self.assertIsNone(received[1]['delegation_id'])
         self.assertEqual(received[2], {'type': 'session.input_audio.append', 'audio': AUDIO_IN})
         self.assertEqual(socket.outgoing, [{'event': 'media', 'streamSid': 'MZ-local', 'media': {'payload': AUDIO_OUT}}])
         self.assertEqual(controller.started_ids, ['local-live-session'])
         self.assertEqual(controller.hangups, [(CALL_ID, {'live_seconds': 2.5, 'reason': 'completed'})])
         self.assertEqual(controller.finishes, [(CALL_ID, 'completed', {'live_seconds': 2.5})])
+
+    async def test_delegation_failure_commentary_matches_required_nullable_sdk_field(self):
+        controller, socket, received = Controller(), Socket(), []
+        controller.last_input_at = 0
+        def unavailable(_event):
+            raise RuntimeError(PRIVATE)
+        controller.delegate = unavailable
+        async def server(ws):
+            await ws.recv()
+            await ws.send(json.dumps({'type': 'session.started', 'session': {'id': 'local-live-session'}}))
+            greeting = json.loads(await ws.recv())
+            TypeAdapter(InstructionsAppendEventParam).validate_python(greeting)
+            await ws.send(json.dumps({'type': 'session.delegation.created',
+                                      'delegation': {'id': 'local-delegation', 'target': 'client'}}))
+            received.append(json.loads(await ws.recv()))
+            await ws.send(json.dumps({'type': 'session.closed', 'usage': {'seconds': 1}}))
+        async with serve(server, '127.0.0.1', 0) as local:
+            port = local.sockets[0].getsockname()[1]
+            async with AsyncOpenAI(api_key='local-test', base_url=f'http://127.0.0.1:{port}/v1', max_retries=0) as client:
+                async with client.live.connect() as connection:
+                    await asyncio.wait_for(bridge(controller, TwilioMediaTransport(socket, 'MZ-local'), connection), 8)
+        TypeAdapter(CommentaryAppendEventParam).validate_python(received[0])
+        self.assertIsNone(received[0]['delegation_id'])
+        self.assertNotIn(PRIVATE, json.dumps(received))
 
     async def test_sdk_admission_error_has_safe_code_and_retains_unknown_usage(self):
         controller, socket = Controller(), Socket()
@@ -151,6 +183,7 @@ class LiveSDKMediaTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(controller.hangups, [(CALL_ID, {'live_seconds': None, 'reason': 'failed'})])
         self.assertEqual(socket.outgoing, [])
         self.assertEqual(controller.started_ids, [])
+        self.assertEqual(controller.media_failures, [CALL_ID])
 
     async def test_real_sdk_upgrade_rejection_is_reported_without_response_body(self):
         attempts = []
