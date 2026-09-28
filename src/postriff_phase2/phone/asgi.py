@@ -105,6 +105,10 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
             report_failure(call_id, phase, error)
             if controller:
                 controller.closed=True
+                try:
+                    await asyncio.to_thread(phone.record_media_failure, call_id)
+                except Exception as failure:
+                    report_failure(call_id, 'live_bridge', failure)
                 await asyncio.to_thread(phone.hangup,call_id,reason='failed')
         finally:
             try:
@@ -194,9 +198,14 @@ def create_app(hosted=None, phone=None, live_connect=None, *, media_only=False):
                 async with AsyncOpenAI(api_key=controller.runtime.cfg.credential('openai'),max_retries=0) as client:
                     async with client.live.connect() as connection:
                         await bridge(controller, transport, connection)
-        except Exception:
+        except Exception as error:
+            report_failure(call_id, 'live_bridge' if controller else 'stream_start', error)
             if controller:
                 controller.closed = True
+                try:
+                    await asyncio.to_thread(phone.record_media_failure, call_id)
+                except Exception as failure:
+                    report_failure(call_id, 'live_bridge', failure)
             try:
                 if transport:
                     await transport.end_call()

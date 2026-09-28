@@ -9,6 +9,9 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import patch
+from pydantic import TypeAdapter
+from openai.types.live.instructions_append_event_param import InstructionsAppendEventParam
+from openai.types.live.commentary_append_event_param import CommentaryAppendEventParam
 
 os.environ['OPENAI_AGENTS_DISABLE_TRACING']='1'
 import psycopg
@@ -124,6 +127,8 @@ class LiveWire:
     async def __anext__(self):return await self.queue.get()
     async def send(self,event):
         self.sent.append(event);kind=event['type']
+        if kind=='session.instructions.append': TypeAdapter(InstructionsAppendEventParam).validate_python(event)
+        if kind=='session.commentary.append': TypeAdapter(CommentaryAppendEventParam).validate_python(event)
         if kind=='session.start':await self.queue.put({'type':'session.started','session':{'id':'synthetic-dial-live'}})
         elif kind=='session.instructions.append':await self.queue.put({'type':'session.output_audio.delta','delta':base64.b64encode(b'fake-greeting').decode()})
         elif kind=='session.input_audio.append':
@@ -244,6 +249,20 @@ with TestClient(app) as client,api:
     assert value['state']=='declined' and value['media_claimed_at'] is None and value['live_usage_seconds']==0
     assert connect_count==before
     print('PASS declined/voicemail guard: generic prompt only, no Live session or private workspace access')
+
+# A carrier hang-up says nothing about voice success. Exercise both callback orders.
+for carrier_first in (True, False):
+    age();failed_call=request('dial-live-failure-'+str(carrier_first));fcid=failed_call['id']
+    sql("UPDATE pr_phone_calls SET state='live',answered_at=now(),media_claimed_at=now() WHERE id=%s",fcid)
+    if carrier_first: phone.finish(fcid,'completed',11,live_seconds=1)
+    phone.record_media_failure(fcid)
+    phone.finish(fcid,'completed',11,live_seconds=1)
+    assert read(fcid)['state']=='failed' and read(fcid)['failure_class']=='live_failed'
+    public=store.public_call(read(fcid))
+    assert 'phone connected' in public['failureMessage'].lower()
+    assert sql("SELECT status,artifact#>>'{voice,state}' FROM pr_agent_runs WHERE id=%s",read(fcid)['voice_run_id'])==[('failed','failed')]
+    assert read(fcid)['duration_seconds']==11 and read(fcid)['live_usage_seconds']==1
+print('PASS media failure survives carrier-completed callbacks in either order; duration and usage still reconcile')
 
 print('PASS Dial PostgreSQL acceptance; execution=synthetic providers and model, real local database and agent commands')
 

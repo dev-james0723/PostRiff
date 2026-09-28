@@ -23,6 +23,7 @@ FAILURE_MESSAGES = {
     'calling_off': 'Turn on Enable Call Rafii before calling.',
     'membership': 'You no longer have access to call Rafii in this workspace.',
     'provider_unavailable': 'The calling service is unavailable. Your verified number is saved.',
+    'live_failed': 'The phone connected, but Rafii’s voice connection failed. Please check the calling service before trying again.',
     'live_unavailable': 'Rafii’s voice service is unavailable. Your verified number is saved.',
     'call_active': 'A call is already in progress or its outcome is still being checked. Check recent calls.',
     'recent_equivalent': 'A similar automatic call was requested recently. Wait five minutes from that request before trying again.',

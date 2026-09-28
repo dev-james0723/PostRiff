@@ -154,7 +154,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
                 await connection.send(result)
         except Exception:
             if not controller.closed:
-                await connection.send({'type':'session.commentary.append','content':'The request could not be confirmed. Check this Rafii conversation before repeating it.'})
+                await connection.send({'type':'session.commentary.append','delegation_id':None,'content':'The request could not be confirmed. Check this Rafii conversation before repeating it.'})
 
     def dispatch(event):
         task = asyncio.create_task(delegation(event))
@@ -175,7 +175,7 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
             if kind == 'session.started':
                 await step('live_started', asyncio.to_thread(controller.started, event['session']['id']))
                 ready.set()
-                await step('live_greeting', connection.send({'type':'session.instructions.append', 'content':'Greet the caller now: ' + contracts.GREETING}))
+                await step('live_greeting', connection.send({'type':'session.instructions.append', 'delegation_id':None, 'content':'Greet the caller now: ' + contracts.GREETING}))
                 if controller.call['kind'] == 'scheduled':
                     controller.user_text = 'Give me a short weekly social-media briefing from this workspace: verified publications, performance, approvals and blockers. Do not publish or schedule anything.'
                     dispatch({'delegation':{'id':'scheduled-briefing','target':'client'}})
@@ -264,6 +264,11 @@ async def bridge(controller, transport: TelephonyMediaTransport, connection):
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+        if final_reason == 'failed':
+            try:
+                await asyncio.to_thread(controller.service.record_media_failure, controller.call_id)
+            except Exception as error:
+                report_failure(controller.call_id, 'live_bridge', error)
         # Dial's documented hang-up is a media frame. Ledger/REST confirmation still decides settlement.
         end_transport = getattr(transport, 'end_call', None)
         if end_transport:

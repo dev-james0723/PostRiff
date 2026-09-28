@@ -17,8 +17,8 @@ ERROR_CLASSES = frozenset(('TypeError', 'ValueError', 'KeyError', 'RuntimeError'
 ERROR_CODES = frozenset(('invalid_api_key', 'authentication_error', 'permission_denied',
     'insufficient_quota', 'rate_limit_exceeded', 'model_not_found', 'invalid_request_error',
     'server_error', 'context_length_exceeded', 'session_expired', 'phone_ended', 'phone_expired',
-    'stream_closed', 'invalid_value', 'invalid_argument', 'unknown_parameter', 'unsupported_value'))
-ERROR_PARAMS = frozenset(('model', 'session.model', 'audio.format', 'session.audio.format',
+    'stream_closed', 'missing_required_parameter', 'invalid_value', 'invalid_argument', 'unknown_parameter', 'unsupported_value'))
+ERROR_PARAMS = frozenset(('delegation_id', 'content', 'model', 'session.model', 'audio.format', 'session.audio.format',
     'session.audio.format.type', 'session.audio.format.rate', 'audio.output.voice',
     'session.audio.output.voice', 'instructions', 'session.instructions', 'input', 'session.input',
     'delegation', 'session.delegation', 'store', 'session.store'))
