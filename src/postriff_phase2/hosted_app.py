@@ -203,6 +203,9 @@ def runtime_from_environment(environ=None):
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values))
+    service.audience.sync_enabled = values.get("RAFII_INBOX_SYNC_ENABLED") == "1"
+    service.audience.reply_sender_enabled = values.get("RAFII_INBOX_REPLY_SEND_ENABLED") == "1"
+    service.audience.engagement_enabled = values.get("RAFII_ENGAGEMENT_COPILOT_ENABLED") == "1"
     from .learning_model import extractor_from_environment
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
@@ -219,7 +222,7 @@ def runtime_from_environment(environ=None):
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
             service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport)
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), audience=service.audience)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -564,6 +567,9 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                audience = getattr(service, "audience", None)
+                if audience is not None and getattr(audience, "sync_enabled", False):
+                    result["inboxSync"] = audience.scheduled_sync()
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()
@@ -736,8 +742,12 @@ class HostedApplication:
                     return self._json(start_response, 200, service.time_savings.calibrate(parts[2], token, self._body(environ)))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "audience":
                 audience = service.audience
+                if len(parts) == 5 and parts[4] == "sync" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, audience.sync(parts[2], token))
                 if len(parts) == 5 and parts[4] == "threads" and method == "GET":
-                    return self._json(start_response, 200, audience.threads(parts[2], token))
+                    return self._json(start_response, 200, audience.threads(parts[2], token,
+                        cursor=self._query_str(environ, "cursor"), limit=self._query_int(environ, "limit", 50)))
                 if len(parts) == 7 and parts[4] == "threads" and parts[6] == "reply-drafts" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 201, audience.draft_reply(parts[2], token, parts[5], body))

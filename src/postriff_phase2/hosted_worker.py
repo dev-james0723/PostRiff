@@ -11,6 +11,7 @@ from .contracts import digest
 from .outcomes import normalize_result, unknown
 from .permissions import Membership
 from .learning_service import record_published
+from .audience_worker import AudienceReplyWorker
 
 
 class DisabledHostedSocial:
@@ -23,7 +24,7 @@ class DisabledHostedSocial:
 
 
 class PostgresWorker:
-    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None):
+    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None, audience=None):
         self.connection_factory = connection_factory
         self.social = social or DisabledHostedSocial()
         self.clock = clock
@@ -31,6 +32,7 @@ class PostgresWorker:
         self.commands = HostedPhase2Commands(clock)
         # Optional server-side hook (e.g. native insights ingestion) run in the same transaction once verified.
         self.on_verified = on_verified
+        self.audience_replies = AudienceReplyWorker(audience) if audience is not None else None
 
     def _event(self, job, state, message):
         job["state"] = state
@@ -229,4 +231,7 @@ class PostgresWorker:
         started, processed = time.monotonic(), 0
         while processed < max_jobs and time.monotonic() - started < max_seconds and self.step():
             processed += 1
-        return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial)}
+        result = {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial)}
+        if self.audience_replies is not None:
+            result["inboxReplies"] = self.audience_replies.tick()
+        return result
