@@ -54,7 +54,7 @@ async function api(method,path,body) {
     await section.getByText('Phone ending 0123 · Verified',{exact:true}).waitFor();
     assert.equal((await section.innerText()).includes('+12025550123'),false,'Only masked phone after verification');
     await section.getByRole('switch',{name:'Enable Call Rafii',exact:true}).click();
-    const button=section.getByRole('button',{name:'Call Rafii',exact:true});
+    const button=section.getByRole('button',{name:'Have Rafii call me',exact:true});
     await button.waitFor();
     const spending=(await api('GET',`/api/workspaces/${wid}/phone`)).spending;
     if (spending?.usesCredits) {
