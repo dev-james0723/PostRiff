@@ -233,7 +233,10 @@ with TestClient(app) as client,api:
     before=connect_count
     with client.websocket_connect('/api/phone/dial/media/'+eref,headers=socket_headers(eref)) as socket:
         meta=connected(eref);meta['reconnect']=True;socket.send_json(meta)
-        assert socket.receive_json()=={'type':'end_call'}
+        try:
+            socket.receive_json();raise AssertionError('Rejected resume must close its socket')
+        except WebSocketDisconnect:
+            pass
     assert connect_count==before
     print('PASS cross-worker end signal, closed-call tool fencing and reconnect refuses duplicate sessions')
 
@@ -277,3 +280,37 @@ for attempt in range(7):
 assert http.posts==previous_posts
 assert sql("SELECT count(*) FROM pr_phone_calls WHERE user_id=%s AND idempotency_key LIKE 'dial-network-retry-%%'",USER)==[(7,)]
 print('PASS seven same-day manual retries after network rejection; SQL dispatch, safe reason, no provider POST')
+
+# Controlled media-function handoff keeps PSTN up and binds a fresh signed stream.
+http.ambiguous=False
+provider.transport=http
+phone.provider=provider
+age()
+h=request('resumable-hour-call');hid=h['id'];href=read(hid)['provider_call_ref']
+posts_before=http.posts
+with patch('postriff_phase2.phone.session.HANDOFF_SECONDS', .1), TestClient(app) as client:
+    with client.websocket_connect('/api/phone/dial/media/'+href,headers=socket_headers(href)) as socket:
+        socket.send_json(connected(href));socket.send_json({'type':'dtmf','digit':'1'})
+        try:
+            while True:
+                frame=socket.receive_json()
+                assert frame.get('type')!='end_call',frame
+        except WebSocketDisconnect:
+            pass
+assert read(hid)['state']=='live' and read(hid)['media_resume_until']
+assert read(hid)['media_usage_seconds']==4
+with TestClient(app) as client:
+    with client.websocket_connect('/api/phone/dial/media/'+href,headers=socket_headers(href)) as socket:
+        metadata=connected(href);metadata['reconnect']=True;socket.send_json(metadata)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline and read(hid)['media_generation']!=1:time.sleep(.02)
+        assert read(hid)['media_generation']==1
+        socket.send_json({'type':'ping_pong','timestamp':99})
+        assert socket.receive_json()=={'type':'ping_pong','timestamp':99}
+        # Resumption never repeats the greeting, press-1 prompt, delegation or outbound call.
+        assert not any(e['type']=='session.instructions.append' for e in wire.sent)
+        http.calls[href].update(status='completed',duration=8)
+        socket.send_json({'type':'call_ended'})
+        assert finished(hid)['live_usage_seconds']==8
+assert http.posts==posts_before
+print('PASS signed ASGI audio handoff/reconnect: same PSTN call and conversation, no new dial/acceptance/delegation, accumulated usage')

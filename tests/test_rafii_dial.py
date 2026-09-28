@@ -65,6 +65,16 @@ class DialTests(unittest.TestCase):
         self.assertEqual(request[2]['fromNumber'],VALUES['DIAL_PHONE_NUMBER'])
         self.assertNotIn('record',request[2])
 
+    def test_paid_account_allows_full_hour_not_legacy_ten_minutes(self):
+        def paid(method,path,fields=None,headers=None):
+            if path=='/account': return 200,{'limits':None,'maxCallDurationSeconds':600}
+            return self.http(method,path,fields,headers)
+        provider=DialProvider(VALUES,transport=paid)
+        self.assertEqual(provider.readiness()['maxSeconds'],3600)
+        provider.create_outbound_call(number='+12025550123',call_id=CALL,max_seconds=3600)
+        self.assertEqual(self.http.requests[-1][2]['maxCallDurationSeconds'],3600)
+        self.assertEqual(PhoneConfig({'RAFII_PHONE_MAX_SECONDS':'60'}).cap_seconds,3600)
+
     def test_managed_llm_wrong_url_or_formats_never_dial(self):
         for key,value in [('access','pending'),('enabled',False),('activeMode','llm'),('audio',{'wsUrl':'wss://other.test'})]:
             with self.subTest(key=key):

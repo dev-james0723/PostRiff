@@ -33,7 +33,7 @@ const CHECK_STAGE: Record<string, string> = {
   account_limit: 'Dial returned an unsupported call duration limit.',
 };
 function readinessMessage(result: PhoneProviderReadiness) {
-  if (result.ready) return 'Dial is ready to create a call. This check did not place one.';
+  if (result.ready) return `Dial is ready to create a call.${result.maxSeconds ? ` The provider allows up to ${Math.floor(result.maxSeconds / 60)} minutes per call.` : ''} This check did not place one.`;
   const detail = result.stage ? CHECK_STAGE[result.stage] : undefined;
   return `${detail || 'Dial calling setup needs attention.'}${result.httpStatus ? ` HTTP ${result.httpStatus}.` : ''} This check did not place a call.`;
 }
@@ -72,7 +72,7 @@ export function PhoneSettings() {
   const save = (patch: Partial<PhonePreferences>) => run(() => api.phonePreferences(workspaceId, patch));
   const toggle = (key: 'enabled' | 'proactiveCalls' | 'scheduledCalls' | 'fallbackToPush' | 'fallbackToEmail', text: string, disabled = false) =>
     <Label key={key} htmlFor={`phone-${key}`} className='flex min-h-11 items-center justify-between gap-3'><span id={`phone-${key}-label`}>{text}</span><Switch id={`phone-${key}`} aria-labelledby={`phone-${key}-label`} aria-label={text} checked={prefs[key]} disabled={busy || disabled} onCheckedChange={(value) => void save({ [key]: value })} /></Label>;
-  return <div id='phone-mode'><SettingsSection id='phone-mode' title='Call Rafii' description='The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to 10 minutes, and are never audio recorded. Text stays in this Rafii conversation.'>
+  return <div id='phone-mode'><SettingsSection id='phone-mode' title='Call Rafii' description='The same Rafii, on your telephone. Rafii identifies itself as an AI assistant. Calls use phone and voice credits, last up to one hour while credits or your plan’s calling allowance remain, subject to the provider’s account limit. Calls are never audio recorded. Text stays in this Rafii conversation.'>
     <div className='flex flex-col gap-4 text-sm'>
       {data.execution === 'fake' && <p>Local phone test. No telephone call or verification SMS is sent.</p>}
       <DialInRafii />

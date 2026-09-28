@@ -78,6 +78,9 @@ class Controller:
         self.started_ids, self.hangups, self.finishes, self.transcripts = [], [], [], []
         self.user_text = ''
 
+    def guard(self):
+        return self.runtime.service.get(self.call['workspace_id'],self.capability)
+
     def configuration(self):
         config = live.session_config('gpt-live-1', 'yue', 'marin', history='Synthetic previous conversation.')
         config['audio']['format'] = {'type': 'audio/pcmu', 'rate': 8000}

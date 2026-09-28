@@ -137,7 +137,7 @@ class DialProvider:
         status, account = self.transport('GET', '/account')
         if status != 200:
             return self._http_failure(status, account, 'account_http', 'provider_account')
-        limit = (account.get('limits') or {}).get('maxCallDurationSeconds', 600)
+        limit = (account.get('limits') or {}).get('maxCallDurationSeconds', 3600)
         if type(limit) is not int or not 60 <= limit <= 3600:
             return {'ready': False, 'reason': 'provider_account', 'stage': 'account_limit'}
         capabilities = lines[0].get('capabilities', [])
@@ -151,7 +151,7 @@ class DialProvider:
         # approved registration when Dial says 10DLC applies to the originating line.
         sms_ready = ('sms' in capabilities and 'imessage' not in capabilities and
                      registration_status in ('not_applicable', 'approved'))
-        return {'ready': True, 'maxSeconds': min(600, limit), 'smsReady': sms_ready,
+        return {'ready': True, 'maxSeconds': limit, 'smsReady': sms_ready,
                 'smsRegistration': registration_status}
 
     def _receipt(self, value, *, number=None, call_id=None, call_ref=None, direction='outbound'):

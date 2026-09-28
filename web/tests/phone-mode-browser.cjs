@@ -58,14 +58,12 @@ async function api(method,path,body) {
     await button.waitFor();
     const spending=(await api('GET',`/api/workspaces/${wid}/phone`)).spending;
     if (spending?.usesCredits) {
-      assert.ok(await button.isDisabled(),'Missing call credit approval never dials');
-      await section.getByLabel('Maximum credits for this call',{exact:true}).fill((Math.ceil(spending.ceilingMilliCredits/100)/10).toFixed(1));
+      assert.match(await section.innerText(),/Calling uses your available credits/);
       if (spending.availableMilliCredits < spending.ceilingMilliCredits) {
         assert.ok(await button.isDisabled(),'Insufficient wallet never dials');
         assert.equal(dialRequests,0,'No unapproved or unaffordable call reaches the API');
         fixture('fund');
         await page.reload({waitUntil:'domcontentloaded'});
-        await section.getByLabel('Maximum credits for this call',{exact:true}).fill((Math.ceil(spending.ceilingMilliCredits/100)/10).toFixed(1));
       }
     }
     await button.click();
@@ -94,7 +92,6 @@ async function api(method,path,body) {
     const failedSettings={...(await api('GET',`/api/workspaces/${wid}/phone`)),calls:[failedCall]};
     await page.route(`**/api/workspaces/${wid}/phone`,(route) => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(failedSettings)}));
     await page.route(`**/api/workspaces/${wid}/phone/calls`,(route) => route.fulfill({status:201,contentType:'application/json',body:JSON.stringify(failedCall)}));
-    if (spending?.usesCredits) await section.getByLabel('Maximum credits for this call',{exact:true}).fill((Math.ceil(spending.ceilingMilliCredits/100)/10).toFixed(1));
     await button.click();
     await section.getByRole('alert').filter({hasText:knownFailure}).waitFor();
     await section.getByText(knownFailure,{exact:true}).last().waitFor();

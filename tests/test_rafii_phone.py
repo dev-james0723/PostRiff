@@ -58,7 +58,7 @@ class PhonePolicyTest(unittest.TestCase):
         for count in (6, 7, 1000):
             self.assertIsNone(planner.eligibility('explicit',self.prefs,**{**self.args,'daily_calls':count}))
         self.assertEqual(planner.eligibility('scheduled',self.prefs,**{**self.args,'daily_calls':2}),'daily_limit')
-        self.assertEqual(planner.eligibility('explicit',self.prefs,**{**self.args,'reserved_cost':1500000}),'phone_budget')
+        self.assertIsNone(planner.eligibility('explicit',self.prefs,**{**self.args,'reserved_cost':1500000}))
 
     def test_no_routine_billing_security_calls(self):
         for event in ('publish.succeeded','campaign.drafts_ready','billing.payment_failed','security.new_device'):

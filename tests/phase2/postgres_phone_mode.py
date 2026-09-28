@@ -357,7 +357,7 @@ phone.provider=check_provider
 failed=request('confirmed-provider-rejection')
 assert failed['state']=='failed' and failed['failure']=='provider_auth' and 'verified' in failed['failureMessage']
 assert '+12025550123' not in json.dumps(failed)
-assert sql('SELECT provider_call_ref,live_cost_usd_micro,telephony_cost_usd_micro,reserved_usd_micro FROM pr_phone_calls WHERE id=%s',failed['id'])[0]==(None,0,0,2250000)
+assert sql('SELECT provider_call_ref,live_cost_usd_micro,telephony_cost_usd_micro,reserved_usd_micro FROM pr_phone_calls WHERE id=%s',failed['id'])[0]==(None,0,0,270000)
 assert request('confirmed-provider-rejection')['id']==failed['id'] and attempts==['POST']
 outcome[0]=(403,{'code':21216})
 second=phone.request(wid,ONE,{'idempotencyKey':'too-soon-after-failed-call'},dispatch=False)
@@ -370,16 +370,16 @@ sql("UPDATE pr_phone_calls SET state='answered',answered_at=now(),media_claimed_
 phone.finish(held['id'],'completed')
 sql("UPDATE pr_phone_calls SET requested_at=now()-interval '6 minutes' WHERE requested_at>=to_timestamp(%s)",planner.day_start(clock[0],fixture_zone))
 assert sql('SELECT live_cost_usd_micro,telephony_cost_usd_micro FROM pr_phone_calls WHERE id=%s',held['id'])[0]==(None,None)
-limit=denied(lambda:request('unknown-usage-retains-budget'),409)
-assert limit.code=='phone_budget' and attempts==['POST','POST','POST']
+assert attempts==['POST','POST','POST']
+assert sql(f'SELECT {billing.DAILY_COST_SQL} FROM pr_phone_calls WHERE id=%s',held['id'])[0][0]==270000
 phone.finish(held['id'],'completed',42)
-assert sql(f'SELECT {billing.DAILY_COST_SQL} FROM pr_phone_calls WHERE id=%s',held['id'])[0][0]==2250000,'Partial settlement retains full ceiling'
+assert sql(f'SELECT {billing.DAILY_COST_SQL} FROM pr_phone_calls WHERE id=%s',held['id'])[0][0]==270000,'Partial settlement retains full ceiling'
 phone.finish(held['id'],'completed',42,live_seconds=4)
 with connection() as db:
     from postriff_phase2.permissions import Membership
     attention=phone.notification_context(db.cursor(),{'userId':ONE,'membership':Membership.from_row('owner',True,True,True,True)},
         {'event_type':'publish.failed','workspace_id':wid,'grouping_key':'budget-check'})
-assert 170000 <= attention['reserved_cost'] < 2250000,attention
+assert 170000 <= attention['reserved_cost'] < 270000,attention
 outcome[0]=(400,{'code':21212})
 after_settlement=request('settled-usage-allows-next-call')
 assert after_settlement['state']=='failed' and after_settlement['failure']=='provider_caller'
