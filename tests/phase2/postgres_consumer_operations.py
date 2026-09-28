@@ -26,3 +26,23 @@ assert r['counts']['modelStuck']==1, r['counts']
 assert private not in json.dumps(r) and str(wid) not in json.dumps(r) and r['notificationDelivery']=='not_configured'
 with connection() as db:assert db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]==before
 print('PASS real DB operational counts; no external alert, no contents, no state mutation')
+
+# Production enables notifications v2, whose SUM(bigint) SMS cost is a PostgreSQL numeric
+# (Decimal in psycopg), including when there are no SMS rows. Exercise the actual cron
+# log and HTTP serialization with real aggregates and inert worker/provider steps.
+from types import SimpleNamespace
+from unittest.mock import patch
+from postriff_phase2.coworker import flags
+from postriff_phase2.hosted_app import HostedApplication
+from test_postriff_phase2_hosted import invoke
+flags.attach({'RAFII_NOTIFICATIONS_V2_ENABLED': '1'})
+service = SimpleNamespace(repository=SimpleNamespace(connection_factory=connection), run_reminders=lambda: {'sent': 0})
+app = HostedApplication(service, SimpleNamespace(tick=lambda: {'processed': 0}), {}, 'c' * 24)
+with patch('postriff_phase2.coworker.runtime.cron', return_value={'status': 'disabled'}):
+    status, _, body = invoke(app, 'GET', '/api/cron/worker', headers={'Authorization': 'Bearer ' + 'c' * 24})
+assert status == 200, (status, body)
+assert body['phone']['status'] == 'disabled'
+assert body['operations']['notificationDelivery'] == 'rafii_v2'
+assert body['operations']['sms']['knownCostUsdMicro24h'] == 0
+assert all(type(value) is int for value in body['operations']['sms'].values()), body['operations']['sms']
+print('PASS notifications-v2 PostgreSQL aggregates serialize through the complete cron log and HTTP response')
