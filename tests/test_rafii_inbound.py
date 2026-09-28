@@ -5,6 +5,8 @@ import json
 import unittest
 
 from postriff_phase2.phone.config import PhoneConfig
+from postriff_phase2.phone import inbound
+from postriff_phase2.phone.code_speech import RESERVE_USD_MICRO
 from postriff_phase2.phone.providers.dial import DialMediaTransport
 from postriff_phase2.deployment import isolated_environment
 
@@ -101,6 +103,18 @@ class InboundMediaTests(unittest.IsolatedAsyncioTestCase):
 
 
 class InboundDeploymentTests(unittest.TestCase):
+    def test_current_dial_rate_admits_sixth_greeting_then_stops_at_daily_boundary(self):
+        budget = 1_000_000
+        stale_rate = inbound.auth_exposure_usd_micro(5, 9, 170_000, RESERVE_USD_MICRO)
+        current_rate = inbound.auth_exposure_usd_micro(5, 9, 130_000, RESERVE_USD_MICRO)
+        after_another_failure = inbound.auth_exposure_usd_micro(6, 10, 130_000, RESERVE_USD_MICRO)
+        self.assertEqual(stale_rate, 1_120_000)
+        self.assertGreater(stale_rate, budget)
+        self.assertEqual(current_rate, 880_000)
+        self.assertLessEqual(current_rate, budget)
+        self.assertEqual(after_another_failure, 1_020_000)
+        self.assertGreater(after_another_failure, budget)
+
     def test_disabled_by_default_and_preview_rejects_enabled(self):
         from test_consumer_deployment import PreviewIsolation
         self.assertFalse(PhoneConfig().enabled('RAFII_PHONE_INBOUND_ENABLED'))
