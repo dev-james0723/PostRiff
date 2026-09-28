@@ -703,7 +703,7 @@ class LivePromptTest(unittest.TestCase):
         self.assertEqual(live.locale_and_voice({"locale": "klingon", "voice": "robot"}, chosen), ("yue", "cedar"), "an invalid value is ignored")
         self.assertEqual(live.locale_and_voice({}, None), ("auto", "marin"))
 
-    def start_voice(self, payload, stored=None, column=True):
+    def start_voice(self, payload, stored=None, column=True, name="James Au"):
         """VoiceSessions.start against stand-ins: a cursor answering the session SQL, a ledger, and a Live endpoint."""
         class Cursor:
             def __init__(self):
@@ -715,6 +715,8 @@ class LivePromptTest(unittest.TestCase):
                     if not column:
                         raise RuntimeError('column "agent_style" does not exist')
                     self._one = (stored or {},)
+                elif sql.startswith("SELECT display_name,locale"):
+                    self._one = (name, "en")
                 elif sql.startswith("INSERT INTO public.pr_conversations"):
                     self._one = ("conv-voice",)
                 elif sql.startswith("SELECT count(*)"):
@@ -759,6 +761,16 @@ class LivePromptTest(unittest.TestCase):
             return {"status": 201, "body": {"session": {"id": "live_1"}, "transport": {"sdp": "v=0\r\no=- answer\r\n"}}}
         started = live.VoiceSessions(runtime, transport=endpoint).start("ws-one", "t", {"sdp": "v=0\r\no=- offer\r\n", **payload})
         return started, sent[0], cursor.artifact
+
+    def test_browser_opening_is_personalized_and_all_saved_voices_reach_live(self):
+        from postriff_phase2.agent_runtime_v2 import style
+        for voice in style.VOICES:
+            started, session, artifact = self.start_voice({}, {"voice": voice})
+            self.assertIn('"James"', started['openingGreeting'])
+            self.assertEqual(session['audio']['output']['voice'], voice)
+            self.assertEqual(artifact['voice']['voice'], voice)
+        started, _, _ = self.start_voice({}, name='')
+        self.assertIn('without inventing a name', started['openingGreeting'])
 
     def test_a_call_uses_the_persons_style_unless_the_request_names_one(self):
         from postriff_phase2.agent_runtime_v2 import style as agent_style

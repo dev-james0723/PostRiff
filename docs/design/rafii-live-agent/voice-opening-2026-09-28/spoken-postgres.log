@@ -1,0 +1,16 @@
+psql:/Users/ouxianxing/.codex/worktrees/rafii-voice-greeting/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_inbound_phone.py
+/Users/ouxianxing/.codex/worktrees/rafii-voice-greeting/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "permission_denied", "phase": "stream_start"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "permission_denied", "phase": "stream_start"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_caller_limit", "phase": "inbound_admission"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_auth_budget", "phase": "inbound_admission"}
+rafii.phone.media.failure {"errorClass": "AlphaError", "errorCode": "inbound_auth_budget", "phase": "inbound_admission"}
+PASS account/conversation isolation, no SMS requirement, fresh login, one-use secret, scoped runtime revocation, no outbound egress
+PASS expired/revoked code, three guesses, budget rejection, concurrent replay has exactly one call and reservation set
+PASS signed ASGI code admission method: spoken, no star
+PASS signed inbound greeting/keypad → same real agent draft edit → audio reply; no publishing; no secret/audio before auth; final event dedupe and usage
+PASS server-only RLS, active-call exclusion/rollback, revoked membership, account deletion, disabled flag, shared caller/operator limits, retention cleanup
+PASS inbound phone integration: real local SQL/HTTP/WebSockets/agent; synthetic provider and model; zero paid calls
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_inbound_phone.py", "exitCode": 0, "seconds": 4.5}]}

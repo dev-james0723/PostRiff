@@ -180,6 +180,8 @@ class VoiceSessions:
             # How this person wants Rafii to sound (Contract 1): an explicit valid voice or locale in the request wins.
             style = agent_style.load(cur, principal)
             locale, voice = locale_and_voice(payload, style)
+            from .greeting import opening
+            opening_greeting = opening(cur, principal, locale)
             conversation_id = payload.get("conversationId")
             if conversation_id:
                 if not isinstance(conversation_id, str):
@@ -226,7 +228,7 @@ class VoiceSessions:
             ideas._insert_event(cur, workspace_id, voice_session_id, safe_event("run.started", agent="voice", model=route.model, modality="voice", locale=locale))
         # `locale` and `voice` are what this call actually uses (the request's, else the person's style); the voice session adopts them.
         return {"voiceSessionId": voice_session_id, "liveSessionId": live_id, "conversationId": conversation_id, "sdp": answer, "dataChannel": DATA_CHANNEL,
-                "model": route.model, "locale": locale, "voice": voice, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
+                "model": route.model, "locale": locale, "voice": voice, "openingGreeting": opening_greeting, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
 
     def _reap(self, cur, workspace_id, principal):
         """A tab closed mid-call (or a sign-out, which can't end it without a session) never ends its session. Any member's

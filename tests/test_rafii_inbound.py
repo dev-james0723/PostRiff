@@ -30,7 +30,7 @@ class InboundMediaTests(unittest.IsolatedAsyncioTestCase):
         try:
             await socket.event(type='media', payload=base64.b64encode(b'private speech before login').decode())
             await socket.event(type='ping_pong', timestamp=13)
-            for digit in '12*987654321012':
+            for digit in '12#987654321012*':
                 await socket.event(type='dtmf', digit=digit)
             self.assertEqual(await transport.read_code(timeout=.1), '987654321012')
             self.assertFalse(transport.accepted)
@@ -58,12 +58,31 @@ class InboundMediaTests(unittest.IsolatedAsyncioTestCase):
         socket = Socket()
         transport = DialMediaTransport(socket, collect_code=True)
         try:
-            for digit in '123#':
+            for digit in '123*':
                 await socket.event(type='dtmf', digit=digit)
             self.assertEqual(await transport.read_code(timeout=.1), '123')
             for _ in range(40):
                 await socket.event(type='dtmf', digit='1')
             await asyncio.wait_for(transport.stopped.wait(), .2)
+            self.assertFalse(transport.accepted)
+        finally:
+            await transport.close()
+
+    async def test_twelve_digits_wait_for_star_and_overlong_code_is_not_truncated(self):
+        socket = Socket()
+        transport = DialMediaTransport(socket, collect_code=True)
+        try:
+            pending = asyncio.create_task(transport.read_code(timeout=1))
+            for digit in '123456789012':
+                await socket.event(type='dtmf', digit=digit)
+            await asyncio.sleep(.02)
+            self.assertFalse(pending.done())
+            self.assertFalse(transport.accepted)
+            await socket.event(type='dtmf', digit='*')
+            self.assertEqual(await pending, '123456789012')
+            for digit in '1234567890129*':
+                await socket.event(type='dtmf', digit=digit)
+            self.assertEqual(len(await transport.read_code(timeout=.1)), 13)
             self.assertFalse(transport.accepted)
         finally:
             await transport.close()

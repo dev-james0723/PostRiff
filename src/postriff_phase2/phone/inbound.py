@@ -95,20 +95,22 @@ def status(phone, workspace_id, token, code_id):
 def begin(phone, call_ref, caller):
     """Called only after the provider signature and called number are verified. Shared DB rate limits."""
     require_available(phone)
+    from .code_speech import RESERVE_USD_MICRO
     now = phone.clock()
     caller_hash = digest(phone, 'caller', caller)
     with phone.hosted.connection_factory() as db, db.cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(hashtextextended('phone-inbound-admission',0))")
         cleanup(phone, cur)
         cur.execute('SELECT count(*) FILTER(WHERE started_at>to_timestamp(%s)),count(*) FILTER(WHERE call_id IS NULL),'
-                    'count(*) FILTER(WHERE caller_hash=%s AND started_at>to_timestamp(%s)) '
+                    'count(*) FILTER(WHERE caller_hash=%s AND started_at>to_timestamp(%s)),count(*) '
                     'FROM public.pr_phone_inbound_sessions WHERE started_at>to_timestamp(%s)',
                     (now - 3600, caller_hash, now - 600, now - 86400))
-        hourly, unauthenticated, same_caller = cur.fetchone()
+        hourly, unauthenticated, same_caller, total = cur.fetchone()
         # Authenticated calls already reserve their 45s greeting in billing.estimates.
         # Keep failed/unknown greetings here, but never charge funded greetings twice.
+        # The operator also reserves bounded STT for every admission, even if it later authenticates.
         reason = ('inbound_hourly_limit' if hourly >= 12 else 'inbound_caller_limit' if same_caller >= 3 else
-                  'inbound_auth_budget' if (unauthenticated + 1) * phone.config.telephony_rate > phone.config.inbound_auth_budget else None)
+                  'inbound_auth_budget' if (unauthenticated + 1) * phone.config.telephony_rate + (total + 1) * RESERVE_USD_MICRO > phone.config.inbound_auth_budget else None)
         if reason:
             from .diagnostics import report_failure
             report_failure(None, 'inbound_admission', AlphaError('Inbound admission unavailable.', 429, code=reason))

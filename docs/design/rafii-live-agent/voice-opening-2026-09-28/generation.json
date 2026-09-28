@@ -1,0 +1,20 @@
+{
+  "dial-acceptance": {
+    "state": "completed",
+    "fingerprint": "79464d03e859f738d4e8137e79a6b3d7bfaaf8160acc3f71ef9df169c35af84c",
+    "seconds": 5.9,
+    "sha256": "d04165a5566f0bbf5b13ff9a440117cc07612b6abf7bf4fff51df27c2a6d18ed"
+  },
+  "dial-inbound": {
+    "state": "completed",
+    "fingerprint": "6ec87aed28d981254645f171533c6501b29e80a0aff2dc0103beba5e85fd295f",
+    "seconds": 13.05,
+    "sha256": "ad127fdb2bf85c70c77eda86dbc11bcd6b1786ea6d36da6bdc123a3d38abfc49"
+  },
+  "dial-inbound-retry": {
+    "state": "completed",
+    "fingerprint": "2eb5e8c6fd2f3b8a16853d79211c78829a8d71a3ad64ac3b0ad00bd49555c252",
+    "seconds": 9.3,
+    "sha256": "818acee53570533f747185f67d9500e856c1dd54323c0fb73789ae6ff3e82aee"
+  }
+}

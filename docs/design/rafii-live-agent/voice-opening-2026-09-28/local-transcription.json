@@ -1,0 +1,14 @@
+{
+  "dial-acceptance": {
+    "text": " Hi, this is Rafi, your AI assistant. Press 1 to connect or simply hang up to decline.",
+    "validation": "offline cached Whisper tiny; machine transcription, not human audition"
+  },
+  "dial-inbound-retry": {
+    "text": " Sorry, that code did not connect. Say all 12 digits again, one at a time, then pause, or enter them on your keypad and press star.",
+    "validation": "offline cached Whisper tiny; machine transcription, not human audition"
+  },
+  "dial-inbound": {
+    "text": " Hi, welcome to Rafi, your AI assistant. Say your 12-digit phone sign-in code, one-digit at a time. Then pause, or enter all 12 digits on your keypad and press star. Press hash to start over.",
+    "validation": "offline cached Whisper tiny; machine transcription, not human audition"
+  }
+}

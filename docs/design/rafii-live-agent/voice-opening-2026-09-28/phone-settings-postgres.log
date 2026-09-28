@@ -1,0 +1,35 @@
+psql:/Users/ouxianxing/.codex/worktrees/rafii-voice-greeting/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_inbound_phone.py
+/Users/ouxianxing/.codex/worktrees/rafii-voice-greeting/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+PASS account/conversation isolation, no SMS requirement, fresh login, one-use secret, scoped runtime revocation, no outbound egress
+PASS expired/revoked code, three guesses, budget rejection, concurrent replay has exactly one call and reservation set
+Traceback (most recent call last):
+  File "/Users/ouxianxing/.codex/worktrees/rafii-voice-greeting/James-Au-Studio/tests/phase2/postgres_inbound_phone.py", line 202, in <module>
+    while socket.receive_json() != {'type': 'media', 'payload': base64.b64encode(b'hello').decode()}: pass
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/rafii-phone-env/lib/python3.12/site-packages/starlette/testclient.py", line 197, in receive_json
+    self._raise_on_close(message)
+  File "/private/tmp/rafii-phone-env/lib/python3.12/site-packages/starlette/testclient.py", line 150, in _raise_on_close
+    raise WebSocketDisconnect(code=message.get("code", 1000), reason=message.get("reason", ""))
+starlette.websockets.WebSocketDisconnect
+psql:/Users/ouxianxing/.codex/worktrees/rafii-voice-greeting/James-Au-Studio/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_phone_mode.py
+/Users/ouxianxing/.codex/worktrees/rafii-voice-greeting/James-Au-Studio/src/postriff_phase2/phone/asgi.py:52: StarletteDeprecationWarning: starlette.middleware.wsgi is deprecated and will be removed in a future release. Please refer to https://github.com/abersheeran/a2wsgi as a replacement.
+  from starlette.middleware.wsgi import WSGIMiddleware
+{"event": "agent_turn.aborted", "errorClass": "AlphaError", "traceId": "trace_f87970086b3dc4f1540428fb65e17bf9"}
+PASS verified encrypted identity, verification rate/attempts, cross-account disclosure
+PASS six saved Settings voices and authenticated first name reach phone Live configuration
+PASS text/browser/phone continuity; real second-draft edit; verified speakable result; publish approval; closed-call capability
+PASS ambiguous create reconciliation, single dial, duplicate and out-of-order signed events
+PASS membership/opt-out fencing, weekly schedule parser and exactly-once cron slot
+PASS Notification V2 phone outbox opt-in/single delivery/daily cap; routine and non-deadline approvals never call; fallback; phone payload redaction
+PASS signed ASGI audio roundtrip → actual draft visible through web API → verified spoken result; interruption; publish approval; uncertain hangup fences redial; signed final duration and usage reconciliation
+PASS hangup during backend work: next mutation denied, exact phone-owned run cancelled, saved draft preserved
+PASS confirmed provider errors masked; immediate explicit retry/idempotency; zero-cost failures release daily capacity at request and delivery; unknown/partial holds retained; actual costs shared with notification policy
+PASS credit-mode call approval, exact component holds, bounded shared Manager spend/unknown holds/releases, retry idempotency, release and standing automatic-call limit
+PASS PostgreSQL grants and RLS: client roles cannot read identity/call/delegation tables
+PASS custom phone rule review, same-post threshold, single fake call, spoken topic and edit revocation
+PASS number revocation and account-deletion cascades with global egress disabled
+{"execution": "local fake transport + actual Rafii runtime and PostgreSQL", "status": "PASS", "realCalls": 0}
+{"execution": "local-db; synthetic external services", "results": [{"script": "tests/phase2/postgres_inbound_phone.py", "exitCode": 1, "seconds": 49.93}, {"script": "tests/phase2/postgres_phone_mode.py", "exitCode": 0, "seconds": 5.36}]}

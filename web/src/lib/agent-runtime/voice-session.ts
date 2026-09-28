@@ -20,6 +20,7 @@
  * `session.closed` and the connection state — never timers.
  */
 import { useSyncExternalStore } from 'react';
+import { voiceOpening } from './voice-opening';
 import { ApiError } from '@/lib/api/client';
 import type { SiteAgentPageContext } from '@/lib/site-agent/types';
 import type { AgentApi } from './client';
@@ -102,6 +103,7 @@ let snapshot: VoiceSnapshot = IDLE;
 const listeners = new Set<() => void>();
 let transport: LiveTransport | null = null;
 let host: VoiceHost | null = null;
+let opening: ReturnType<typeof voiceOpening> | null = null;
 let unsubscribe: (() => void)[] = [];
 let levelTimer: ReturnType<typeof setInterval> | null = null;
 let lastInputAt = 0;
@@ -425,9 +427,11 @@ function onLiveEvent(event: LiveEvent) {
   switch (event.type) {
     case 'session.started':
       set({ state: 'live', error: null });
+      opening?.started();
       break;
     case 'session.input_transcript.delta': {
       const delta = String(event.delta ?? '');
+      if (SPOKEN.test(delta)) opening?.cancel();
       lastInputAt = Date.now();
       // Speaking again after a goodbye keeps the call on.
       if (hangUp && SPOKEN.test(delta)) cancelHangUp();
@@ -506,6 +510,7 @@ async function flushTranscript(includeOpen = false) {
 }
 
 async function finish(reason: string, usageSeconds: number | null) {
+  opening?.cancel();
   const current = host;
   const sessionId = snapshot.voiceSessionId;
   if (levelTimer) clearInterval(levelTimer);
@@ -535,7 +540,7 @@ export const voiceSession = {
   subscribe,
 
   /** Start Voice Mode in this conversation (a user gesture must call this: browsers require it for the microphone). */
-  async start(next: VoiceHost) {
+  async start(next: VoiceHost, resuming = false) {
     if (snapshot.state === 'connecting' || snapshot.state === 'live') return;
     host = next;
     lastDelegatedSeq = nextSeq;
@@ -549,6 +554,7 @@ export const voiceSession = {
     set({ ...IDLE, state: 'connecting', workspaceId: next.workspaceId, conversationId: next.conversationId, locale: next.locale ?? 'auto' });
     const live = createTransport();
     transport = live;
+    opening = voiceOpening(send, resuming);
     unsubscribe = [
       live.onEvent(onLiveEvent),
       live.onState((state) => {
@@ -569,6 +575,7 @@ export const voiceSession = {
           void next.api.voiceEnd(next.workspaceId, started.voiceSessionId, { reason: 'user_ended', usageSeconds: 0 }).catch(() => undefined);
           throw new VoiceTransportError('negotiation_failed', 'Voice Mode was ended.');
         }
+        opening?.prepared(started.openingGreeting);
         // The server settles the call's language (the person's style when none was picked); requests use the same one.
         set({ voiceSessionId: started.voiceSessionId, conversationId: started.conversationId, locale: started.locale || snapshot.locale });
         if (started.conversationId !== next.conversationId) next.onConversation(started.conversationId);
@@ -605,6 +612,7 @@ export const voiceSession = {
   },
 
   async end() {
+    opening?.cancel();
     hangUp = null;
     if (!transport || snapshot.state === 'ending') {
       if (snapshot.state !== 'idle') set({ state: 'ended' });
@@ -645,7 +653,7 @@ export const voiceSession = {
     set({ state: 'idle', voiceSessionId: null });
     // A new Live session in the same conversation (and language): the server gives it the conversation so far;
     // approvals live on the server.
-    await voiceSession.start({ ...previous, conversationId: snapshot.conversationId, locale: snapshot.locale });
+    await voiceSession.start({ ...previous, conversationId: snapshot.conversationId, locale: snapshot.locale }, true);
   },
 
   setMicMuted(muted: boolean) {
